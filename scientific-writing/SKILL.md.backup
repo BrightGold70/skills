@@ -1,0 +1,570 @@
+---
+name: scientific-writing
+description: Comprehensive scientific and medical manuscript writing skill. Features IMRAD structure, 5 workflow modes (plan-outline, write, review, switch-venue, switch-language), humanization to remove AI patterns, diagram integration, citation management, and reporting guidelines (CONSORT/STROBE/PRISMA). For research papers, journal submissions, and academic writing.
+---
+
+# Scientific Writing
+
+A comprehensive skill for writing scientific manuscripts with precision, clarity, and human-like prose. Integrates academic workflows, medical writing standards, AI pattern removal, and diagram creation.
+
+## Overview
+
+This skill combines:
+- **Academic workflows** (plan-outline, write, review, switch-venue, switch-language)
+- **Medical AI writing standards** (clinical validation, ethics compliance)
+- **Humanization** (remove 24 AI writing patterns)
+- **Diagram integration** (draw.io for scientific figures)
+- **IMRAD structure** (Introduction, Methods, Results, And Discussion)
+- **Citation management** (APA, AMA, Vancouver, Chicago, IEEE)
+- **Reporting guidelines** (CONSORT, STROBE, PRISMA, STARD, TRIPOD)
+
+**Critical Principle: Always write in full paragraphs with flowing prose. Never submit bullet points in the final manuscript.**
+
+---
+
+## Core Workflow Modes
+
+### 1. `plan-outline` (概要规划)
+
+**Purpose**: Generate paper outline and content structure.
+
+**Process**:
+1. Identify one-sentence core contribution
+2. Build IMRAD structure around central narrative
+3. Plan figures and tables as the backbone
+4. Determine target journal and reporting guidelines
+
+**Output**: Structured outline with:
+- Section breakdown
+- Key points per section
+- Planned figures/tables
+- Citation placeholders
+
+### 2. `write` (章节写作与整合)
+
+**Purpose**: Draft sections with active delivery and consistency.
+
+**Features**:
+- **Two-stage process**: 
+  - Stage 1: Create bullet-point outline
+  - Stage 2: Convert to full flowing prose
+- **Auto-adapt**: Adjust content depth for venue (e.g., NeurIPS 9 pages, ICML 8 pages)
+- **Citation integration**: Natural incorporation of references
+- **Field-specific terminology**: Match discipline conventions
+
+**After Writing - Mandatory Humanization**:
+```
+After completing any draft, ALWAYS run humanization to remove AI patterns:
+- Remove inflated significance language
+- Fix superficial -ing phrases
+- Replace vague attributions with specific sources
+- Eliminate promotional/advertising tone
+- Remove filler transitions
+- Vary sentence structure naturally
+```
+
+### 3. `review` (多审稿人评审)
+
+**Purpose**: Simulate multi-reviewer critique.
+
+**Process**:
+- Simulate 2-3 reviewers with different perspectives
+- Check: Originality, methodology, statistics, clarity, ethics
+- Generate structured review with actionable feedback
+- Output: `review.md` with revision suggestions
+
+### 4. `switch-venue` (渠道切换)
+
+**Purpose**: Adapt manuscript for different journals/conferences.
+
+**Adjustments**:
+- Page limits and section structure
+- Citation format (APA → AMA → Vancouver)
+- Abstract style (structured vs. unstructured)
+- Ethical statements requirements
+- Figure/table specifications
+- Broader Impact or Limitations sections
+
+### 5. `switch-language` (语言切换)
+
+**Purpose**: Toggle between English and Chinese writing.
+
+**English Mode**:
+- Concise, direct prose
+- Avoid over-decoration
+- Active voice preferred
+- Simple constructions (is/are/has)
+
+**Chinese Mode** (中文模式):
+- Follow Chinese copywriting guidelines
+- Proper spacing between Chinese and English
+- Full-width punctuation
+- Natural Chinese academic tone
+
+---
+
+## Writing Process: Two-Stage Method
+
+### Stage 1: Create Section Outlines with Key Points
+
+Create structured outline with bullet points:
+- Main arguments or findings
+- Key studies to cite
+- Data points and statistics
+- Logical flow markers
+
+**Example outline (Introduction):**
+```
+- Background: AI in drug discovery gaining traction
+  * Cite recent reviews (Smith 2023, Jones 2024)
+  * Traditional methods slow and expensive
+- Gap: Limited application to rare diseases
+  * Only 2 prior studies (Lee 2022, Chen 2023)
+- Our approach: Transfer learning
+- Study objectives: Validate on 3 datasets
+```
+
+### Stage 2: Convert to Full Paragraphs
+
+Transform bullets into flowing prose:
+1. **Complete sentences** with subjects, verbs, objects
+2. **Add transitions** (however, moreover, subsequently)
+3. **Integrate citations** naturally within sentences
+4. **Expand context** that bullets omit
+5. **Ensure logical flow** within paragraphs
+6. **Vary sentence structure** for engagement
+
+**Example prose:**
+```
+Artificial intelligence approaches have gained significant traction in drug 
+discovery pipelines over the past decade (Smith, 2023; Jones, 2024). While 
+these computational methods show promise for accelerating therapeutic 
+candidate identification, traditional experimental approaches remain slow 
+and resource-intensive. However, AI application to rare diseases has been 
+limited, with only two prior studies demonstrating proof-of-concept results 
+(Lee, 2022; Chen, 2023). The primary obstacle has been the scarcity of 
+training data for conditions affecting small patient populations.
+```
+
+---
+
+## Humanization: Remove AI Writing Patterns
+
+### 24 Patterns to Detect and Fix
+
+#### Content Patterns
+
+**1. Significance Inflation**
+- ❌ "marking a pivotal moment in the evolution of..."
+- ✅ "was established in 1989 to collect regional statistics"
+
+**2. Notability Name-Dropping**
+- ❌ "cited in NYT, BBC, FT, and The Hindu"
+- ✅ "In a 2024 NYT interview, she argued..."
+
+**3. Superficial -ing Phrases**
+- ❌ "symbolizing... reflecting... showcasing..."
+- ✅ Remove or expand with actual sources
+
+**4. Promotional Language**
+- ❌ "nestled within the breathtaking region"
+- ✅ "is a town in the Gonder region"
+
+**5. Vague Attributions**
+- ❌ "Experts believe it plays a crucial role"
+- ✅ "according to a 2019 survey by..."
+
+**6. Formulaic Challenges Sections**
+- ❌ "Despite challenges... continues to thrive"
+- ✅ Specific facts about actual challenges
+
+#### Language Patterns
+
+**7. AI Vocabulary Overuse**
+- ❌ "Additionally... testament... landscape... showcasing"
+- ✅ "also... remain common"
+
+**8. Copula Avoidance**
+- ❌ "serves as... features... boasts"
+- ✅ "is... has"
+
+**9. Negative Parallelisms**
+- ❌ "It's not just X, it's Y"
+- ✅ State directly
+
+**10. Rule of Three**
+- ❌ "innovation, inspiration, and insights"
+- ✅ Natural number of items
+
+**11. Synonym Cycling**
+- ❌ "protagonist... main character... central figure... hero"
+- ✅ "protagonist" (repeat when clearest)
+
+**12. False Ranges**
+- ❌ "from X to Y, from A to B"
+- ✅ List topics directly
+
+#### Style Patterns
+
+**13. Em Dash Overuse**
+- ❌ "institutions—not the people—yet this continues—"
+- ✅ Use commas or periods
+
+**14. Boldface Overuse**
+- ❌ "**OKRs**, **KPIs**, **BMC**"
+- ✅ "OKRs, KPIs, BMC"
+
+**15. Inline-Header Lists**
+- ❌ "**Performance:** Performance improved"
+- ✅ Convert to prose
+
+**16. Title Case in Headings**
+- ❌ "Strategic Negotiations And Partnerships"
+- ✅ "Strategic negotiations and partnerships"
+
+**17. Emojis**
+- ❌ "🚀 Launch Phase: 💡 Key Insight:"
+- ✅ Remove emojis
+
+**18. Curly Quotes**
+- ❌ `said "the project"`
+- ✅ `said "the project"`
+
+#### Communication Patterns
+
+**19. Chatbot Artifacts**
+- ❌ "I hope this helps! Let me know if..."
+- ✅ Remove entirely
+
+**20. Knowledge-Cutoff Disclaimers**
+- ❌ "While details are limited in available sources..."
+- ✅ Find sources or remove
+
+**21. Sycophantic Tone**
+- ❌ "Great question! You're absolutely right!"
+- ✅ Respond directly
+
+#### Filler and Hedging
+
+**22. Filler Phrases**
+- ❌ "In order to", "Due to the fact that"
+- ✅ "To", "Because"
+
+**23. Excessive Hedging**
+- ❌ "could potentially possibly"
+- ✅ "may"
+
+**24. Generic Positive Conclusions**
+- ❌ "The future looks bright"
+- ✅ Specific plans or facts
+
+---
+
+## IMRAD Structure
+
+### Introduction
+- Establish research problem importance
+- Review relevant literature systematically
+- Identify knowledge gaps
+- State clear research questions/hypotheses
+- Explain study novelty and significance
+
+### Methods
+- Detailed participant/sample descriptions
+- Clear procedural documentation
+- Statistical methods with justification
+- Equipment and materials specifications
+- Ethical approval and consent statements
+
+### Results
+- Logical flow from primary to secondary outcomes
+- Integration with figures and tables
+- Statistical significance with effect sizes
+- Objective reporting without interpretation
+
+### Discussion
+- Relate results to research questions
+- Compare with existing literature
+- Acknowledge limitations honestly
+- Propose mechanistic explanations
+- Suggest practical implications and future research
+
+---
+
+## Citation Styles
+
+**AMA (American Medical Association)**
+- Numbered superscript citations
+- Common in medicine
+
+**Vancouver**
+- Numbered citations in square brackets
+- Biomedical standard
+
+**APA (American Psychological Association)**
+- Author-date in-text citations
+- Common in social sciences
+
+**Chicago**
+- Notes-bibliography or author-date
+- Humanities and sciences
+
+**IEEE**
+- Numbered square brackets
+- Engineering and computer science
+
+---
+
+## Reporting Guidelines
+
+**CONSORT**: Randomized controlled trials
+**STROBE**: Observational studies
+**PRISMA**: Systematic reviews and meta-analyses
+**STARD**: Diagnostic accuracy studies
+**TRIPOD**: Prediction model studies
+**ARRIVE**: Animal research
+**CARE**: Case reports
+**SQUIRE**: Quality improvement studies
+**SPIRIT**: Study protocols
+**CHEERS**: Economic evaluations
+
+---
+
+## Diagram Integration
+
+### Creating Scientific Figures
+
+Use drawio-skills to create publication-ready diagrams:
+
+```bash
+# Create workflow diagram
+/drawio create a CONSORT flowchart for clinical trial participant flow
+
+# Create architecture diagram
+/drawio create system architecture for ML pipeline with data flow
+
+# Replicate from existing figure
+/drawio replicate [upload image of existing figure]
+```
+
+### Figure Requirements
+- **Minimum**: 3-4 figures per paper
+- **Graphical Abstract**: Visual summary of entire paper
+- **Study Design**: CONSORT/STROBE/PRISMA flowcharts
+- **Results**: Data visualization (bar charts, line graphs, box plots)
+- **Conceptual**: Mechanism diagrams, workflow illustrations
+
+### Figure Types
+- Bar graphs: Comparing discrete categories
+- Line graphs: Trends over time
+- Scatterplots: Correlations
+- Box plots: Distributions and outliers
+- Heatmaps: Matrices and patterns
+- Flowcharts: Study design, participant flow
+
+---
+
+## Medical AI Writing Standards
+
+### Clinical Validation Check
+- Dataset partitioning (external validation included?)
+- Statistical methods appropriate (p-value, CI)
+- Metrics: Sensitivity, Specificity, AUC, F1
+- Reference standard clearly defined
+
+### Ethics Compliance Check
+- IRB approval mentioned
+- Patient informed consent documented
+- Data anonymization procedures
+- Potential biases acknowledged
+
+### Med-AI Narrative Structure
+1. **Clinical Context**: Current standard of care
+2. **Gap**: Unmet clinical need or limitation
+3. **Innovation**: How AI addresses the gap
+4. **Clinical Impact**: Potential benefit to patients
+
+---
+
+## Field-Specific Terminology
+
+### Biomedical Sciences
+- Precise anatomical terminology
+- ICD/DSM/SNOMED-CT nomenclature
+- Generic drug names first
+- "Patients" (clinical), "participants" (community)
+- HGVS nomenclature for genetic variants
+
+### Molecular Biology
+- Italics for gene symbols: *TP53*
+- Regular font for proteins: p53
+- Full organism names at first mention
+- Standard genetic notation: +/+, +/-, -/-
+
+### Chemistry
+- IUPAC nomenclature
+- Concentrations: mM, μM, nM
+
+---
+
+## Best Practices Summary
+
+1. **Always write in full paragraphs** - Never submit bullet points
+2. **Use two-stage process** - Outline first, then prose
+3. **Humanize after writing** - Remove all 24 AI patterns
+4. **Follow IMRAD** - Standard scientific structure
+5. **Apply reporting guidelines** - CONSORT/STROBE/PRISMA
+6. **Use proper citations** - Match journal requirements
+7. **Create effective figures** - Self-explanatory with captions
+8. **Maintain field terminology** - Match your discipline
+9. **Be concise and clear** - Short sentences, precise language
+10. **Check consistency** - Terminology, abbreviations, notation
+
+---
+
+## Common Pitfalls to Avoid
+
+**Top Rejection Reasons:**
+1. Inappropriate or insufficient statistics
+2. Over-interpretation of results
+3. Poorly described methods
+4. Small or biased samples
+5. Poor writing quality
+6. Inadequate literature review
+7. Unclear figures/tables
+8. Failure to follow reporting guidelines
+
+**Writing Quality Issues:**
+- Mixing tenses inappropriately
+- Excessive jargon or undefined acronyms
+- Missing transitions between sections
+- Inconsistent notation
+
+---
+
+## Workflow for Manuscript Development
+
+**Stage 1: Planning**
+1. Identify target journal and review guidelines
+2. Determine reporting guideline
+3. Outline IMRAD structure
+4. Plan figures and tables
+
+**Stage 2: Drafting** (Two-stage for each section)
+1. Write Methods (easiest first)
+2. Draft Results (describe figures objectively)
+3. Compose Discussion (interpret findings)
+4. Write Introduction (set up research question)
+5. Craft Abstract (synthesize complete story)
+6. Create Title (concise and descriptive)
+
+**Stage 3: Humanization**
+1. Check all 24 AI patterns
+2. Remove inflated language
+3. Add specific sources
+4. Vary sentence structure
+5. Ensure natural flow
+
+**Stage 4: Revision**
+1. Check logical flow throughout
+2. Verify consistency
+3. Ensure figures self-explanatory
+4. Confirm reporting guidelines
+5. Verify citations accurate
+6. Proofread for clarity
+
+**Stage 5: Final Preparation**
+1. Format per journal requirements
+2. Prepare supplementary materials
+3. Write cover letter
+4. Complete submission checklists
+5. Gather required statements
+
+---
+
+## Integration with Other Skills
+
+This skill works with:
+- **content-research-writer**: General writing and research
+- **humanizer**: Remove AI patterns (24 patterns)
+- **drawio-skills**: Create scientific diagrams
+- **NotebookLM**: Query research sources
+- **docx-processing**: Create Word documents
+
+---
+
+## Examples
+
+### Example 1: Introduction (Outline → Prose)
+
+**Outline:**
+```
+- Background: CML treatment with TKIs
+  * Imatinib revolutionized treatment (Druker et al., 2001)
+  * 2nd-gen TKIs improved responses but toxic
+- Gap: Need better first-line options
+  * T315I mutation resistant
+- New approach: Asciminib (STAMP inhibitor)
+- Study objectives: Compare asciminib vs standard TKIs
+```
+
+**Prose:**
+```
+The introduction of tyrosine kinase inhibitors (TKIs) revolutionized the 
+treatment of chronic myeloid leukemia (CML), with imatinib first demonstrating 
+the potential for targeted therapy in this disease (Druker et al., 2001). 
+Subsequent second-generation TKIs improved molecular response rates but introduced 
+new challenges, including cardiovascular toxicity and intolerance in a subset 
+of patients. Despite these advances, significant unmet needs remain, particularly 
+for patients with the T315I gatekeeper mutation who are resistant to most 
+available TKIs.
+
+Asciminib represents a novel therapeutic approach as a first-in-class STAMP 
+(Specifically Targeting the ABL Myristoyl Pocket) inhibitor. Unlike ATP-competitive 
+TKIs, asciminib binds allosterically to the myristoyl pocket of the BCR-ABL1 
+protein, a mechanism that not only circumvents resistance mutations in the 
+ATP-binding site but also demonstrates activity against the T315I mutation. 
+This distinct mechanism, combined with a favorable safety profile, positions 
+asciminib as a promising candidate for first-line CML therapy.
+```
+
+### Example 2: Results (Bad vs. Good)
+
+**Poor (AI-sounding with bullet points):**
+```
+The results were significant. Key findings include:
+- MMR rate: 67.7% vs 49.0%
+- p-value: <0.001
+- Follow-up: 48 weeks
+```
+
+**Good (humanized prose):**
+```
+At 48 weeks, the major molecular response (MMR) rate was significantly higher 
+in the asciminib group compared to the standard TKI group (67.7% vs. 49.0%; 
+p < 0.001). This difference was consistent across predefined subgroups, 
+including age, Sokal risk score, and baseline disease burden.
+```
+
+---
+
+## References
+
+**Reporting Guidelines:**
+- CONSORT: http://www.consort-statement.org/
+- STROBE: https://www.strobe-statement.org/
+- PRISMA: http://www.prisma-statement.org/
+
+**Citation Styles:**
+- AMA Manual of Style: https://www.amamanualofstyle.com/
+- APA Publication Manual: https://apastyle.apa.org/
+- Vancouver Style: https://www.nlm.nih.gov/bsd/uniform_requirements.html
+
+**Writing Resources:**
+- Wikipedia: Signs of AI writing
+- Strunk & White: The Elements of Style
+- Booth et al.: The Craft of Research
+
+---
+
+*Enhanced scientific writing skill integrating academic workflows, medical AI standards, humanization (24 AI patterns), and diagram creation.*
