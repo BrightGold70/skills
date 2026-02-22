@@ -1,0 +1,587 @@
+{
+  "project_id": "project_asciminib_chronic_myeloid_leukemia_first-line_syst",
+  "topic": "asciminib chronic myeloid leukemia first-line systematic review",
+  "notebook_id": null,
+  "created_at": "2026-02-13T14:06:00.697976",
+  "updated_at": "2026-02-13T14:10:51.906301",
+  "queries": [
+    {
+      "query": "asciminib chronic myeloid leukemia first-line systematic review",
+      "databases": [
+        "PubMed"
+      ],
+      "max_results": 25,
+      "timestamp": "2026-02-13T14:10:51.905379",
+      "articles_found": [
+        "41674449",
+        "41670862",
+        "41177700",
+        "41123847",
+        "41098098",
+        "41563782",
+        "41553485",
+        "41496472",
+        "40883153",
+        "41457437",
+        "41488007",
+        "41397287",
+        "41486652",
+        "41376561",
+        "41376545",
+        "41469338",
+        "41171015",
+        "41307931",
+        "41275251",
+        "41341405",
+        "41333204",
+        "41269256",
+        "41282616",
+        "40694315",
+        "41598268",
+        "40920588",
+        "41274296"
+      ]
+    }
+  ],
+  "articles": {
+    "41674449": {
+      "pmid": "41674449",
+      "title": "Second- and Third-Generation BCR-ABL Tyrosine Kinase Inhibitors and the Risk of Pulmonary Arterial Hypertension: A Prevalent New-User Design.",
+      "authors": [
+        "Jambon-Barbara C",
+        "Suissa S",
+        "Dell'Aniello S",
+        "Hlavaty A",
+        "Cracowski JL",
+        "Chaumais MC",
+        "Humbert M",
+        "Montani D",
+        "Khouri C"
+      ],
+      "journal": "Circulation",
+      "year": "2026",
+      "abstract": "BCR-ABL tyrosine kinase inhibitors (TKIs) have been increasingly linked to pulmonary arterial hypertension (PAH) since 2009, although supporting evidence is limited. Our objective was to evaluate the risk of PAH associated with second- and third-generation BCR-ABL TKIs compared with imatinib in adults. We employed a prevalent new-user design that emulates a randomized trial within the French national health care database population between 2008 and 2024. Thus, subjects initiating a second- and t",
+      "doi": "10.1161/CIRCULATIONAHA.125.077764"
+    },
+    "41670862": {
+      "pmid": "41670862",
+      "title": "Leveraging Model-Informed Drug Development to Predict Asciminib Efficacy in Second-Line Treatment of Chronic Myeloid Leukemia in Chronic Phase.",
+      "authors": [
+        "Sy SKB",
+        "Yoon DY",
+        "Yang Y",
+        "Darstein C",
+        "Dasgupta K",
+        "Kapoor S",
+        "Wu S",
+        "Kawakita Y",
+        "Hoch M",
+        "Grosch K"
+      ],
+      "journal": "Clinical pharmacokinetics",
+      "year": "2026",
+      "abstract": "The efficacy of asciminib was proven in newly diagnosed (first-line, 1L) patients with Philadelphia-positive chronic myeloid leukemia in chronic phase (Ph+ CML-CP) and in patients treated with at least two prior tyrosine kinase inhibitors (third-line, 3L+). Given that no randomized controlled trial has been conducted for second-line (2L) patients with CML, this analysis aims to infer the efficacy of asciminib in the 2L setting using the 80 mg once-daily dosing regimen and to support the use of a",
+      "doi": "10.1007/s40262-025-01616-y"
+    },
+    "41177700": {
+      "pmid": "41177700",
+      "title": "Pregnancy-Related Adverse Events with Tyrosine Kinase Inhibitor Use in Chronic Myeloid Leukemia: A FAERS Pharmacovigilance Analysis (2001-2024).",
+      "authors": [
+        "Faisal MS",
+        "Rehman AU",
+        "Mohsin A",
+        "Mushtaq H",
+        "Rehman WU",
+        "Rehman MU",
+        "Javed H",
+        "Mohsin F",
+        "Shaukat MT",
+        "Maryam B",
+        "Ammar Al Osama M",
+        "Fazal S"
+      ],
+      "journal": "Clinical lymphoma, myeloma & leukemia",
+      "year": "2026",
+      "abstract": "Tyrosine kinase inhibitors (TKIs) are essential therapies for chronic myeloid leukemia (CML), yet their safety during pregnancy remains poorly characterized. We aimed to address this gap by providing pharmacovigilance data using the FDA Adverse Event Reporting System (FAERS). We conducted a comprehensive pharmacovigilance analysis of pregnancy-related adverse events (AEs) reported to FAERS between January 2001 and December 2024. Reports involving female patients exposed to imatinib, dasatinib, n",
+      "doi": "10.1016/j.clml.2025.10.002"
+    },
+    "41123847": {
+      "pmid": "41123847",
+      "title": "Assessment of Pharmacokinetic Drug Interaction of Asciminib with Atorvastatin in Healthy Participants.",
+      "authors": [
+        "Hoch M",
+        "Weis W",
+        "Huth F",
+        "Jamalapuram S",
+        "Quinlan M",
+        "Bandaru A",
+        "Bellibas SE",
+        "Mirkou A",
+        "Kapoor S",
+        "Kakar S"
+      ],
+      "journal": "Clinical pharmacology in drug development",
+      "year": "2026",
+      "abstract": "Asciminib is the first BCR::ABL1 inhibitor that Specifically Targets the ABL Myristoyl Pocket (STAMP) in patients with chronic myeloid leukemia. This phase 1, two-treatment-period, drug-drug interaction study evaluated the effect of steady-state asciminib on the pharmacokinetics of atorvastatin. A single dose of atorvastatin (20\u00a0mg) was administered on day 1 (period 1: days 1-4). On days 5-11 (period 2: days 5-12), 80\u00a0mg asciminib was administered once daily, with a single dose of atorvastatin c",
+      "doi": "10.1002/cpdd.1611"
+    },
+    "41098098": {
+      "pmid": "41098098",
+      "title": {
+        "i": "BCR::ABL1",
+        "#text": "Primary asciminib resistance in a chronic myeloid leukemia patient with the atypical  e13a3 transcript: a case study."
+      },
+      "authors": [
+        "Jung BK",
+        "Wei\u00dfmann S",
+        "Schock C",
+        "Meggendorfer M",
+        "Haferlach T",
+        "Dicker F"
+      ],
+      "journal": "Haematologica",
+      "year": "2026",
+      "abstract": "",
+      "doi": "10.3324/haematol.2025.288776"
+    },
+    "41563782": {
+      "pmid": "41563782",
+      "title": "Advances of next-generation STAMP inhibitors in chronic myeloid leukemia.",
+      "authors": [
+        "Costa A",
+        "Breccia M"
+      ],
+      "journal": "Expert opinion on investigational drugs",
+      "year": "2026",
+      "abstract": "Specifically Targeting the ABL1 Myristoyl Pocket inhibitors (STAMPi) have reshaped the management of chronic myeloid leukemia (CML). Yet, major challenges remain, including resistance and compound mutations, cross-intolerance, and long-term toxicities. Asciminib has shown efficacy in heavily pretreated patients and in the first-line setting, but resistance and limited benefit after ponatinib highlight the need for new therapeutic options. This review summarizes preclinical and early clinical evi",
+      "doi": "10.1080/13543784.2026.2618980"
+    },
+    "41553485": {
+      "pmid": "41553485",
+      "title": "Influence of pharmacokinetics-related polymorphisms on asciminib exposure in patients with Japanese chronic myeloid leukemia.",
+      "authors": [
+        "Takahashi N",
+        "Akamine Y",
+        "Miura M"
+      ],
+      "journal": "European journal of clinical pharmacology",
+      "year": "2026",
+      "abstract": "The effects of polymorphisms in CYP3A4, UGT2B7, ABCB1, ABCG2, ABCC2, NR1I2, and AHR genes on asciminib exposure were evaluated in Japanese patients with chronic myeloid leukemia. Plasma concentrations of asciminib (40\u00a0mg twice daily [BID] or 80\u00a0mg once daily [QD]) were measured by high-performance liquid chromatography. Statistical analysis was performed using SPSS (P\u2009<\u20090.05). For both regimens, the median asciminib area under the concentration-time curve (AUC) was significantly higher in female",
+      "doi": "10.1007/s00228-025-03981-w"
+    },
+    "41496472": {
+      "pmid": "41496472",
+      "title": "Specifically targeting the ABL myristoyl pocket: STAMP inhibitors for chronic myeloid leukemia.",
+      "authors": [
+        "Ureshino H",
+        "Kimura S"
+      ],
+      "journal": "Expert review of hematology",
+      "year": "2026",
+      "abstract": "Chronic myeloid leukemia (CML) has been transformed by ATP-competitive BCR:ABL1 tyrosine kinase inhibitors (TKIs); however, resistance, intolerance, and long-term toxicity remain clinically relevant challenges, particularly in patients requiring prolonged therapy or multiple treatment lines. Asciminib, the first-in-class Specifically Targeting the ABL Myristoyl Pocket (STAMP) inhibitor, represents a paradigm shift by restoring physiologic ABL1 autoinhibition through allosteric binding. This Spec",
+      "doi": "10.1080/17474086.2026.2614391"
+    },
+    "40883153": {
+      "pmid": "40883153",
+      "title": "Management of Chronic Myeloid Leukemia During Pregnancy: Review of Evidence and Treatment Algorithm.",
+      "authors": [
+        "Haddad FG",
+        "Croden J",
+        "Sasaki K",
+        "Issa GC",
+        "Pemmaraju N",
+        "Kantarjian H",
+        "Jabbour E"
+      ],
+      "journal": "Clinical lymphoma, myeloma & leukemia",
+      "year": "2026",
+      "abstract": "Philadelphia chromosome-positive chronic myeloid leukemia (CML) during pregnancy is rare, with an annual incidence of 1 per 100,000 pregnancies. Managing CML in pregnancy is challenging due to concerns about the teratogenicity of the BCR::ABL1 tyrosine kinase inhibitors (TKIs). While some pregnant patients with chronic-phase CML may be managed with close monitoring and no therapy, others, particularly those diagnosed in the first trimester, may require treatment to prevent disease progression an",
+      "doi": "10.1016/j.clml.2025.07.017"
+    },
+    "41457437": {
+      "pmid": "41457437",
+      "title": "Addressing unmet needs in chronic myeloid leukemia in chronic phase treated with two or more tyrosine kinase inhibitors: insights from literature and Indian clinical practice.",
+      "authors": [
+        "Nag A",
+        "Sharma V",
+        "Gundeti S",
+        "Bagal B",
+        "Baul SN",
+        "Bhattacharya J",
+        "Jain R",
+        "Jena RK",
+        "Kumar S",
+        "Malhotra H",
+        "Saini K",
+        "Sharma LM",
+        "Shetty D",
+        "Verma SP",
+        "Yadav S",
+        "Nair V"
+      ],
+      "journal": "Expert review of hematology",
+      "year": "2025",
+      "abstract": "Chronic myeloid leukemia (CML) is a myeloproliferative disorder, usually diagnosed in its chronic phase (CP), often requiring life-long therapy. Despite the effectiveness of targeted therapy with tyrosine kinase inhibitors (TKIs), resistance or intolerance may occur, requiring a switch. The probability of achieving guideline-recommended cytogenetic and molecular responses declines from first (1\u2009L) to second (2\u2009L) and subsequent lines. About half of the patients receiving third line TKI treatment",
+      "doi": "10.1080/17474086.2025.2610281"
+    },
+    "41488007": {
+      "pmid": "41488007",
+      "title": "Association of fibronectin 1 deregulation with tyrosine kinase inhibitor resistance in chronic myeloid leukemia.",
+      "authors": [
+        "Tiedemann L",
+        "Gorantla SP",
+        "Ahlf P",
+        "Schmidt LS",
+        "Pott C",
+        "Litterst M",
+        "Waetzig V",
+        "Nagel I",
+        "Ruemenapp J",
+        "von Bubnoff N",
+        "Cascorbi I",
+        "Kaehler M"
+      ],
+      "journal": "Frontiers in cell and developmental biology",
+      "year": "2025",
+      "abstract": "Therapy of chronic myeloid leukemia (CML) with tyrosine kinase inhibitors (TKIs) targeting the  kinase has become a paradigm for precision oncology. Despite the tremendous success of this strategy, with an overall long-term survival rate of 83%, approximately 25% of CML patients experience therapy failure within 5\u00a0years of treatment. TKI resistance is multifaceted, involving mutations in , but also BCR::ABL1-independent mechanisms. Among them, deregulation of cell adhesion and motility of CML ce",
+      "doi": "10.3389/fcell.2025.1725857"
+    },
+    "41397287": {
+      "pmid": "41397287",
+      "title": "Asciminib Demonstrates Superior Efficacy and Safety in Newly Diagnosed Chronic Myeloid Leukemia in the ASC4FIRST Trial.",
+      "authors": [
+        "Cortes JE",
+        "Hughes TP",
+        "Wang J",
+        "Kim DW",
+        "Kim DDH",
+        "Mayer J",
+        "Goh YT",
+        "le Coutre P",
+        "Etienne G",
+        "Kim I",
+        "Andorsky D",
+        "Bombaci F",
+        "Issa GC",
+        "Takahashi N",
+        "Kapoor S",
+        "Jinwal R",
+        "Malek K",
+        "McCulloch T",
+        "Yau L",
+        "Larson RA",
+        "Hochhaus A"
+      ],
+      "journal": "Blood",
+      "year": "2025",
+      "abstract": "Many patients receiving frontline tyrosine kinase inhibitors (TKIs) for chronic phase chronic myeloid leukemia (CML-CP) experience inadequate disease control and/or adverse events (AEs) that impair quality of life. Treatments offering optimal efficacy, safety, and tolerability will support long-term therapy. In the primary analysis from ASC4FIRST, a phase 3 randomized trial comparing asciminib with investigator-selected TKIs (IS-TKIs) in newly diagnosed CML-CP, asciminib demonstrated superior ef",
+      "doi": "10.1182/blood.2025029210"
+    },
+    "41486652": {
+      "pmid": "41486652",
+      "title": "[Guideline for the diagnosis and treatment of chronic myeloid leukemia in China (2025)].",
+      "authors": [],
+      "journal": "Zhonghua xue ye xue za zhi = Zhonghua xueyexue zazhi",
+      "year": "2025",
+      "abstract": "The guideline for the diagnosis and treatment of chronic myeloid leukemia (CML) in China (2025 edition) has been revised based on its 2020 version, incorporating advances in the field of CML diagnosis and treatment over the past 5 years. With reference to the revised 2022 International Consensus Criteria, the threshold for lymphoblasts in lymphoid blast transformation is clearly defined. The EUTOS Long-Term Survival score is recommended to evaluate the patient's risk status at diagnosis. Meanwhi",
+      "doi": "10.3760/cma.j.cn121090-20250923-00437"
+    },
+    "41376561": {
+      "pmid": "41376561",
+      "title": "Is there a best frontline therapy in chronic myeloid leukemia?",
+      "authors": [
+        "Jain AG",
+        "Dalgetty M",
+        "Cortes JE"
+      ],
+      "journal": "Haematologica",
+      "year": "2025",
+      "abstract": "The management of chronic myeloid leukemia in chronic phase (CML-CP) was transfigured with the introduction of imatinib in 2001. Since then, four other tyrosine kinase inhibitors (TKIs), dasatinib, nilotinib, bosutinib and most recently asciminib, have garnered approval for frontline management of CML-CP. The second generation TKIs (2G-TKIs) and asciminib have all been shown to be significantly superior to imatinib in attaining molecular responses, and asciminib possibly superior to 2G-TKIs. Wit",
+      "doi": "10.3324/haematol.2025.287813"
+    },
+    "41376545": {
+      "pmid": "41376545",
+      "title": "Combined asciminib and olverembatinib in blast-phase chronic myeloid leukemia.",
+      "authors": [
+        "Cheng F",
+        "Li W"
+      ],
+      "journal": "Haematologica",
+      "year": "2025",
+      "abstract": "Not available.",
+      "doi": "10.3324/haematol.2025.289085"
+    },
+    "41469338": {
+      "pmid": "41469338",
+      "title": "MUTATIONAL STATUS AND TREATMENT EFFICACY IN PATIENTS WITH CHRONIC MYELOID LEUKEMIA.",
+      "authors": [
+        "Dyagil IS",
+        "Bazyka DA",
+        "Kirieieva IV",
+        "Panchenko VV",
+        "Zvarich LM",
+        "Syvak LA",
+        "Sholoiko VV"
+      ],
+      "journal": "Problemy radiatsiinoi medytsyny ta radiobiolohii",
+      "year": "2025",
+      "abstract": "The use of targeted therapy for chronic myeloid leukemia (CML) - tyrosine kinase inhibitors (TKIs) - has led to significant success in the treatment of patients with CML. The life expectancy of patients with newly diagnosed CML is almost equal to that of the general population. A significant proportion of patients on TKI therapy achieve stable and long'term remission, and after two or more years, it is possible to safely discontinue therapy. The increase in patient life expectancy has contribute",
+      "doi": "10.33145/2304-8336-2025-30-18-31"
+    },
+    "41171015": {
+      "pmid": "41171015",
+      "title": "Treatment of chronic myeloid leukemia chronic phase patients in third-line setting and beyond: recommendations from a Belgian expert panel in 2025.",
+      "authors": [
+        "Vandenberghe P",
+        "Mazure D",
+        "Vertenoeil G",
+        "Havelange V",
+        "Salaroli A"
+      ],
+      "journal": "Hematology (Amsterdam, Netherlands)",
+      "year": "2025",
+      "abstract": "Tyrosine kinase inhibitors (TKIs) have revolutionized the therapy of chronic myeloid leukemia (CML) in chronic phase, opening up the perspective of a normal life expectancy for most patients and of treatment-free remission for some of them. However, intolerance or resistance may necessitate treatment modifications. A panel of five Belgian experts reviewed the treatment options in Belgium in 2025 for patients with chronic phase CML with resistance or intolerance to at least two lines of therapy. ",
+      "doi": "10.1080/16078454.2025.2569898"
+    },
+    "41307931": {
+      "pmid": "41307931",
+      "title": "Yeung DT, Shanmuganathan N, Reynolds J, et al; Australasian Leukaemia and Lymphoma Group. Asciminib monotherapy as frontline treatment of chronic-phase chronic myeloid leukemia: results from the ASCEND study. Blood. 2024;144(19):1993-2001.",
+      "authors": [],
+      "journal": "Blood",
+      "year": "2025",
+      "abstract": "",
+      "doi": "10.1182/blood.2025031951"
+    },
+    "41275251": {
+      "pmid": "41275251",
+      "title": "Development and validation of a UPLC-MS/MS method for the quantification of asciminib and its pharmacokinetic interaction and metabolic stability with shikonin.",
+      "authors": [
+        "Zhou C",
+        "Xia H",
+        "Hu Y",
+        "Chen X",
+        "Zou Q",
+        "Xu X",
+        "Jiang ZL"
+      ],
+      "journal": "BMC pharmacology & toxicology",
+      "year": "2025",
+      "abstract": "Asciminib has been approved for use in patients with chronic myeloid leukemia (CML) in the chronic phase. Shikonin has multiple pharmacological effects and is a mixed inhibitor of CYP450 enzymes. In clinical practice, the combination of asciminib and shikonin may lead to drug interactions. This study developed and validated a highly efficient and accurate ultra-performance liquid chromatography-tandem mass spectrometry (UPLC-MS/MS) method for the quantitative determination of asciminib and inves",
+      "doi": "10.1186/s40360-025-01049-0"
+    },
+    "41341405": {
+      "pmid": "41341405",
+      "title": "GIMEMA survey on the management of chronic myeloid leukemia patients in the third line and beyond: insights from Italian hematologists.",
+      "authors": [
+        "Breccia M",
+        "Piciocchi A",
+        "Abruzzese E",
+        "Cilloni D",
+        "Castagnetti F",
+        "Messina M",
+        "Soddu S",
+        "Scappini B",
+        "Markovic U",
+        "Annunziata M",
+        "Malato A",
+        "Binotto G",
+        "Mulas O",
+        "Bonifacio M",
+        "Fazi P",
+        "Pane F"
+      ],
+      "journal": "Frontiers in oncology",
+      "year": "2025",
+      "abstract": "Approximately one-third of chronic myeloid leukemia (CML) patients may develop resistance and/or intolerance to the current therapies and need to switch to later lines of treatment. However, how to choose a later line of therapy is still a matter of discussion. A survey was performed by the Gruppo Italiano Malattie Ematologiche dell'Adulto (GIMEMA) to understand how the scenario has changed after the introduction of the first allosteric inhibitor, asciminib, in later lines. The GIMEMA survey aim",
+      "doi": "10.3389/fonc.2025.1697569"
+    },
+    "41333204": {
+      "pmid": "41333204",
+      "title": "Longitudinal analysis of usage and public awareness of tyrosine kinase inhibitors for CML.",
+      "authors": [
+        "Schroer AE",
+        "Javadi T",
+        "Mehta A",
+        "Torlak F",
+        "McFarland JR",
+        "Kumar G",
+        "da Silva AL",
+        "Benjamin J",
+        "Choudhary MM",
+        "Sadeghi A",
+        "le Coutre P",
+        "Blaha MJ",
+        "Berning P",
+        "Dzaye O"
+      ],
+      "journal": "Frontiers in oncology",
+      "year": "2025",
+      "abstract": "The treatment landscape of chronic myeloid leukemia (CML) has evolved with the introduction of second- and third-generation tyrosine kinase inhibitors (TKIs), oCering potential advantages over imatinib. We analyzed prescription trends and public awareness of TKIs to assess the adoption of newer agents. Monthly US prescription data from the IQVIA National Prescription Audit (NPA) and Google Trends search volumes from March 1, 2017, to November 31, 2024, were analyzed for visual and quantitative t",
+      "doi": "10.3389/fonc.2025.1711453"
+    },
+    "41269256": {
+      "pmid": "41269256",
+      "title": "Development and Validation of a Novel High-Performance Liquid Chromatography Assay with Ultraviolet Detection for Determination of Asciminib in Human Plasma.",
+      "authors": [
+        "Miura M",
+        "Takahashi N"
+      ],
+      "journal": "Journal of chromatographic science",
+      "year": "2025",
+      "abstract": "A rapid, simple and highly sensitive stability-indicating high-performance liquid chromatography (HPLC) method was developed and validated for the estimation of asciminib in human plasma. Plasma samples (100\u00a0\u03bcL) were processed by solid-phase extraction. Chromatographic separation was performed using a CAPCELL PAK C18 MGII column (4.6\u2009\u00d7\u2009250\u00a0mm, 5\u00a0\u03bcm); the mobile phase consisted of 0.5% potassium dihydrogen phosphate (KH2PO4, pH\u00a03.5): acetonitrile: methanol (50:45:5, v/v/v) at a flow rate of 0.5\u00a0m",
+      "doi": "10.1093/chromsci/bmaf056"
+    },
+    "41282616": {
+      "pmid": "41282616",
+      "title": "In-depth analysis for TKI-driven real-world management of 201 CML patients using TFR.",
+      "authors": [
+        "Micu ML",
+        "Cira SF",
+        "Zdrenghea M",
+        "Bojan A",
+        "Parvu A",
+        "Torok-Vistai T",
+        "Vasilache A",
+        "Urian L",
+        "Anamaria B",
+        "Jimbu LI",
+        "Santa ME",
+        "Lighezan D",
+        "Tigu AB",
+        "Ivancuta A",
+        "Trifa A",
+        "Selicean EC",
+        "Dima D",
+        "Ioana Codru\u021ba R",
+        "Tomuleasa C"
+      ],
+      "journal": "Frontiers in pharmacology",
+      "year": "2025",
+      "abstract": "Tyrosine-kinase inhibitors (TKIs) have reshaped chronic myeloid leukemia (CML) outcomes, but real-world data from Eastern Europe remain scarce. We retrospectively analyzed 201 adult patients with CML managed at the Cluj-Napoca Department of Haematology (January 2001-December 2024). A semi-automated pipeline utilizing a Large Language Model was developed to extract structured data from unstructured medical discharge report text, with all patient identifiers removed to ensure anonymity. We capture",
+      "doi": "10.3389/fphar.2025.1673056"
+    },
+    "40694315": {
+      "pmid": "40694315",
+      "title": "Cardiovascular toxicity from tyrosine kinase inhibitors in chronic myeloid leukemia with severe dilated cardiomyopathy.",
+      "authors": [
+        "Hayashino K",
+        "Mochizuki N",
+        "Kawatsuki A",
+        "Fujiwara Y",
+        "Kobayashi H",
+        "Yamasaki T",
+        "Asano T",
+        "Kubonishi S",
+        "Hiramatsu Y"
+      ],
+      "journal": "International journal of hematology",
+      "year": "2025",
+      "abstract": "Tyrosine kinase inhibitors (TKIs) have significantly improved the prognosis of patients with chronic myeloid leukemia (CML). However, few patients maintain remission after discontinuing TKIs, and most require long-term treatment. Prolonged use of TKIs is associated with an increased risk of cardiovascular events (CVEs), particularly in patients with pre-existing cardiovascular comorbidities. We present the case of a 37-year-old man with a decade-long history of severe dilated cardiomyopathy that",
+      "doi": "10.1007/s12185-025-04041-w"
+    },
+    "41598268": {
+      "pmid": "41598268",
+      "title": "Adverse Respiratory Reactions to Tyrosine Kinase Inhibitors: A Disproportionality Analysis of Spontaneous Reports from European Countries.",
+      "authors": [
+        "Ammendolia I",
+        "Mannucci C",
+        "Esposito E",
+        "Calapai G",
+        "Curr\u00f2 M",
+        "Midiri P",
+        "Mondello C",
+        "Cancellieri A",
+        "Cardia L",
+        "Calapai F"
+      ],
+      "journal": "Life (Basel, Switzerland)",
+      "year": "2026",
+      "abstract": "The tyrosine kinase inhibitors (TKIs) asciminib, bosutinib, dasatinib, imatinib, nilotinib, and ponatinib have been approved for chronic myelogenous leukemia (CML) therapy. However, pharmacovigilance reports associated with these drugs are neither consistent nor homogenous, with reports of pulmonary toxicity, which could limit their utilization. To better clarify TKIs' pulmonary risk, we used the European database EudraVigilance to conduct a study on adverse events suspected to be caused by the ",
+      "doi": "10.3390/life16010113"
+    },
+    "40920588": {
+      "pmid": "40920588",
+      "title": "Histopathologic and Clinical Characteristics of Cutaneous Toxicities of Tyrosine Kinase Inhibitors: Insights Into Pathologic Mechanisms From a Retrospective Cohort.",
+      "authors": [
+        "Nykaza I",
+        "Platero-Portillo T",
+        "Berman E",
+        "Geyer MB",
+        "Park JH",
+        "Linos K",
+        "Markova A"
+      ],
+      "journal": "The American Journal of dermatopathology",
+      "year": "2025",
+      "abstract": "Dermatologic adverse events (dAEs) are prevalent with BCR-ABL tyrosine kinase inhibitors (TKIs), affecting quality of life and treatment adherence. Despite their prevalence, underlying mechanisms of toxicity remain unclear. We sought to characterize dAEs across TKI generations to elucidate mechanisms driving toxicities. Retrospective cohort study of patients receiving imatinib, dasatinib, nilotinib, bosutinib, ponatinib, and asciminib at Memorial Sloan Kettering Cancer Center between 2001 and 20",
+      "doi": "10.1097/DAD.0000000000003125"
+    },
+    "41274296": {
+      "pmid": "41274296",
+      "title": "Catch-up growth after switch to asciminib in a twin with chronic myeloid leukaemia.",
+      "authors": [
+        "Sembill S",
+        "Marx M",
+        "Eikelberg I",
+        "H\u00f6fs M",
+        "Fuhrmann T",
+        "Karow A",
+        "Imschweiler T",
+        "Niehues T",
+        "Wotschofsky Z",
+        "Krumbholz M",
+        "Reinhardt D",
+        "Suttorp M",
+        "Woelfle J",
+        "Metzler M"
+      ],
+      "journal": "Lancet (London, England)",
+      "year": "2025",
+      "abstract": "",
+      "doi": "10.1016/S0140-6736(25)01732-5"
+    }
+  },
+  "manuscript_versions": [
+    {
+      "version": 1,
+      "title": "asciminib chronic myeloid leukemia first-line systematic review",
+      "word_count": 1257,
+      "sources": [
+        "41674449",
+        "41670862",
+        "41177700",
+        "41123847",
+        "41098098",
+        "41563782",
+        "41553485",
+        "41496472",
+        "40883153",
+        "41457437",
+        "41488007",
+        "41397287",
+        "41486652",
+        "41376561",
+        "41376545",
+        "41469338",
+        "41171015",
+        "41307931",
+        "41275251",
+        "41341405",
+        "41333204",
+        "41269256",
+        "41282616",
+        "40694315",
+        "41598268",
+        "40920588",
+        "41274296"
+      ],
+      "timestamp": "2026-02-13T14:10:51.906300",
+      "notes": "Initial draft - 2026-02-13"
+    }
+  ],
+  "related_notebooks": [],
+  "metadata": {
+    "journal": "blood_research",
+    "time_period": "5y"
+  }
+}

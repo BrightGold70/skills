@@ -1,0 +1,38 @@
+#!/bin/bash
+# Hematology Paper Writer - Web UI Launcher
+# Usage: ./hpw-ui
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PATH="$SCRIPT_DIR/.venv/bin/activate"
+APP_PATH="$SCRIPT_DIR/ui/app.py"
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}🩸 Hematology Paper Writer - Web UI${NC}"
+echo "===================================="
+
+# Check if virtual environment exists
+if [ ! -f "$VENV_PATH" ]; then
+    echo "❌ Virtual environment not found at $VENV_PATH"
+    echo "Please run: python -m venv .venv"
+    exit 1
+fi
+
+# Activate virtual environment
+source "$VENV_PATH"
+
+# Check if streamlit is installed
+if ! python -c "import streamlit" 2>/dev/null; then
+    echo "📦 Installing UI dependencies..."
+    pip install -q -r "$SCRIPT_DIR/ui/requirements.txt"
+fi
+
+echo -e "${GREEN}✅ Starting Hematology Paper Writer Web UI...${NC}"
+echo "🌐 Open your browser at: http://localhost:8501"
+echo ""
+
+# Launch Streamlit
+streamlit run "$APP_PATH" --server.port=8501 --server.address=localhost

@@ -1,0 +1,2055 @@
+---
+name: hematology-paper-writer
+description: Write, analyze, and improve hematology manuscripts for journals like Blood, Blood Advances, JCO, BJH, and Blood Research. Features PubMed literature search, web search integration, manuscript drafting, quality analysis, reference verification, DOCX/PPT/PDF conversion, NotebookLM-powered research intelligence (WHO 2022, ICC 2022, ELN 2022/2025, NIH cGVHD, ISCN 2024, HGVS 2024), PRISMA/CONSORT/CARE compliance checking, nomenclature validation (BCR::ABL1 double-colon notation), Streamlit web UI, and academic writing best practices.
+---
+
+# Hematology Paper Writer 🩸
+
+Expert system for creating publication-ready hematology manuscripts with integrated web search, PubMed literature search, quality analysis, reference verification, multi-format document conversion, NotebookLM-powered research intelligence, nomenclature compliance (HGVS 2024, ISCN 2024), reporting guideline checklists (PRISMA 2020, CONSORT 2010, CARE 2013), and a Streamlit web interface.
+
+## Core Principles
+
+1. **Clinical Accuracy**: Ensure medical/scientific terminology is correct and current
+2. **Journal Compliance**: Follow target journal's specific formatting and content requirements
+3. **Reference Integrity**: Verify all citations against PubMed database (100% match required)
+4. **Academic Rigor**: Maintain scholarly standards per hematology research conventions
+5. **Research Integrity**: Ensure all claims are supported by verified peer-reviewed sources
+6. **Reproducibility**: Document methods and analyses clearly for replication
+7. **Web-Enhanced Research**: Leverage web search for real-time evidence gathering
+
+---
+
+## Table of Contents
+
+| Part | Title | Description | Integrated Skills |
+|------|-------|-------------|-------------------|
+| 1 | Web Search Integration | PubMed, web search, NotebookLM integration | `literature-review`, `pubmed-integration` |
+| 2 | Document Type Templates | Manuscript structure guides | |
+| 3 | Reference Formats | Vancouver style, citation patterns | `citation-management` |
+| 3A | Citation Verification | Verification protocol and templates | |
+| 4 | Source Discovery | Literature and data verification | `pubmed-integration` |
+| 5 | Quality Assurance | Journal compliance checks | |
+| 6 | Commands | CLI and tool usage | |
+| 7 | Supported Journals | Target journal specifications | |
+| 8 | Workflow Examples | Complete manuscript workflows | |
+| 9 | Review Simulation Mode | Multi-reviewer feedback framework | `peer-review` |
+| 10 | Farquhar 5-Sentence Abstract | Structured abstract method | |
+| 11 | Venue Templates | Hematology journal specifications | |
+| 12 | Plan-Outline Workflow | Two-stage planning methodology | `scientific-writing` |
+| 13 | Prose Polish & Humanization | AI writing pattern removal | |
+| 14 | Style Register Options | Academic, Clinical, Journalistic | |
+| 15 | NotebookLM Enhanced | Audio generation, source organization | |
+| 16 | Manuscript Brainstorming | 6-step design workflow | |
+| 17 | Writing Plans | Bite-sized task methodology | |
+| 18 | Reader Testing | Fresh reader validation | |
+
+---
+
+## CRITICAL: Data Source Priority Rule
+
+### **STEP 1: ALWAYS Query NotebookLM First**
+When preparing data for manuscript writing, the system MUST:
+1. **First**: Query NotebookLM MCP (notebooklm) for existing research data
+2. **If NotebookLM has NO relevant data**: Then search PubMed as fallback
+3. **NEVER skip NotebookLM query** - it contains curated research intelligence
+
+### **STEP 2: Prose-Only Manuscript Writing**
+- **NO bullet points** in the manuscript body - convert all to flowing prose
+- Use complete paragraphs with proper academic transitions
+- Each section should have substantial narrative explanation
+
+### **STEP 3: Expanded Abstract**
+- Abstract must be expanded to **NEARLY the maximum word limit** of the target journal:
+  - Blood Research: ~250 words (target 240-250)
+  - Blood: ~200 words (target 190-200)
+  - Blood Advances: ~250 words (target 240-250)
+  - JCO: ~250 words (target 240-250)
+- Abstract should be fully expanded prose, not summarized
+
+### **STEP 4: Detailed Explanations Throughout**
+- Every section needs comprehensive, detailed explanations
+- Don't just state facts - provide context, mechanisms, clinical significance
+- Expand on molecular pathways, clinical implications, and mechanistic rationale
+- Manuscripts must have "long context which is sufficient for explaining topics"
+
+### **STEP 5: Reference Verification (MANDATORY)**
+- ALL references MUST match PubMed records (100% match required)
+- Verify each reference after manuscript creation
+- Include PMID for each reference when available
+- Fix any mismatches before final output
+
+### **STEP 6: Citation Density (CRITICAL - PLAGIARISM PREVENTION)**
+- **EVERY sentence that presents data, makes claims, or references specific findings MUST have a citation**
+- A manuscript with ~6,500 words requires MINIMUM 25-35 references
+- Multiple citations per sentence are acceptable when claiming multiple facts
+- No uncited statements of fact allowed - this is plagiarism concern
+
+### **STEP 7: Reference Diversity Requirements**
+- Include diverse reference types:
+  - Clinical trials (ASC4FIRST, pivotal studies)
+  - Systematic reviews and meta-analyses
+  - Guidelines (ELN, NCCN)
+  - Mechanistic/basic science studies
+  - Real-world evidence studies
+  - Safety and pharmacovigilance studies
+
+### **STEP 8: NotebookLM-First Citation (MANDATORY)**
+- **PRIORITY**: Cite NotebookLM sources FIRST before other references
+- If NotebookLM has relevant data, cite that source as primary
+- Use PubMed only when NotebookLM doesn't have the specific data
+- This ensures citations come from verified research intelligence
+
+### **STEP 9: Citation Verification Process (MANDATORY)**
+After manuscript creation, verify EVERY citation:
+1. **Source Verification**: Confirm the cited source contains the claimed data
+2. **Data Match**: Verify statistics, percentages, and findings match exactly
+3. **Context Check**: Ensure the citation supports the claim being made
+4. **PMID Verification**: Confirm PubMed IDs are valid (for PubMed sources)
+
+**Verification Template:**
+```
+Citation [X] Claim: "[quoted claim from manuscript]"
+→ Source check: [Does source Y contain this data?]
+→ Data match: [Exact match / Partial match / No match]
+→ Context: [Appropriate / Misleading / Not supported]
+→ Status: [VERIFIED / NEEDS CORRECTION]
+```
+
+---
+
+## Part 1: Web Search Integration for Medical Writing
+
+### Overview
+
+The hematology paper writer integrates web search capabilities to:
+- Find recent publications and preprints
+- Access clinical trial registries (ClinicalTrials.gov, ICTRP)
+- Gather guideline information (NCCN, ELN, ESMO)
+- Retrieve regulatory updates (FDA, EMA)
+- Collect real-world evidence and real-time data
+
+### NotebookLM Integration (PRIMARY DATA SOURCE)
+
+**IMPORTANT**: Before any PubMed search, MUST query NotebookLM first:
+
+1. **NotebookLM MCP Authentication** (REQUIRED for every session):
+   - Use `notebooklm_setup_auth` for initial Google authentication
+   - Use `notebooklm_get_health` to verify authentication status
+   - Authentication is session-based - re-authenticate if needed
+
+2. **Query NotebookLM Research**:
+   - Use `notebooklm_ask_question` to query existing research data
+   - If NotebookLM has relevant data, USE IT as primary source
+   - Extract key findings, trial data, and clinical evidence from NotebookLM
+
+3. **Fallback to PubMed** (ONLY if NotebookLM has no data):
+   - If NotebookLM query returns "no relevant information" or similar
+   - Then proceed with PubMed search using PubMedSearcher
+   - Document that NotebookLM was checked first
+
+**Workflow:**
+```
+1. notebooklm_setup_auth (if not authenticated)
+2. notebooklm_get_health (verify auth)
+3. notebooklm_ask_question("What is the evidence for [topic]?")
+4. IF response has relevant data → Use as primary source
+5. ELSE → Proceed with PubMed search
+```
+
+### NotebookLM Query Templates
+
+Use these templates for common manuscript queries:
+
+**Trial Results Query:**
+```
+What are the key efficacy results from [trial name]? Include specific data: [response rate], [survival endpoints], [p-values].
+```
+
+**Safety Data Query:**
+```
+What are the safety and adverse event data from [study/trial]? Include: [specific AEs], discontinuation rates, serious events.
+```
+
+**Mechanism Query:**
+```
+What is the mechanism of action for [drug]? How does it differ from [comparator drugs]?
+```
+
+**Guideline Query:**
+```
+What are the current [ELN/NCCN] recommendations for [disease] treatment? Include specific criteria for [treatment decision].
+```
+
+**Epidemiology Query:**
+```
+What is the epidemiology of [disease]? Include incidence, prevalence, risk factors, and mortality data.
+```
+
+**Comparison Query:**
+```
+Compare [treatment A] vs [treatment B] for [disease]. Include efficacy, safety, and response rates.
+```
+
+### Web Search Sources
+
+**Academic Databases:**
+- **PubMed** (pubmed.ncbi.nlm.nih.gov) - Primary medical literature
+- **Google Scholar** (scholar.google.com) - Broad academic search
+- **IEEE Xplore** - Engineering/biomedical research
+- **Cochrane Library** - Systematic reviews and meta-analyses
+- **EMBASE** - European biomedical literature
+
+**Clinical Registries:**
+- **ClinicalTrials.gov** - Clinical trial results and status
+- **ICTRP** (WHO) - International clinical trial registry
+- **EudraCT** - European clinical trial registry
+
+**Guidelines:**
+- **NCCN Guidelines** - National Comprehensive Cancer Network
+- **ELN Recommendations** - European LeukemiaNet
+- **ESMO Guidelines** - European Society for Medical Oncology
+
+**Regulatory:**
+- **FDA** (fda.gov) - Drug approvals, safety alerts
+- **EMA** (ema.europa.eu) - European Medicines Agency
+- **PMDA** (pmda.go.jp) - Pharmaceuticals and Medical Devices Agency (Japan)
+
+### Search Strategy Framework
+
+**Step 1: Broad Discovery**
+```
+Search: "chronic myeloid leukemia treatment 2024"
+Targets: PubMed, Google Scholar, ClinicalTrials.gov
+```
+
+**Step 2: Focused Retrieval**
+```
+Search: "asciminib versus imatinib ASC4FIRST trial results"
+Targets: PubMed, ClinicalTrials.gov
+```
+
+**Step 3: Grey Literature**
+```
+Search: "asciminib FDA approval label indication"
+Targets: FDA website, EMA, regulatory databases
+```
+
+**Step 4: Guideline Integration**
+```
+Search: "ELN 2025 CML treatment recommendations"
+Targets: NCCN, ELN, ESMO websites
+```
+
+---
+
+### Integrated Skill: literature-review
+
+For systematic literature reviews requiring rigorous methodology, use the **`literature-review`** skill:
+
+**When to invoke:**
+- Systematic reviews with PRISMA compliance
+- Meta-analyses requiring pooled effect estimates
+- Scoping reviews withArksey & O'Malley framework
+- Rapid reviews with accelerated timelines
+
+**Skill invocation:**
+```
+Use the literature-review skill for:
+- Structured review protocols (PICO, SPIDER)
+- Search strategy development with Boolean operators
+- Study selection and data extraction workflows
+- Risk of bias assessment (ROB 2.0, ROBINS-I)
+- Evidence synthesis and heterogeneity analysis
+```
+
+**Complementary use:** The literature-review skill enhances Part 1 by providing systematic review methodology for comprehensive literature searches.
+
+---
+
+## CRITICAL: Manuscript Writing Standards
+
+### Prose-Only Requirement (MANDATORY)
+
+When writing any manuscript section:
+- ❌ **NEVER use bullet points** (`•`, `-`, `*`)
+- ❌ **NEVER use numbered lists** for content
+- ✅ **ALWAYS use flowing prose** with complete paragraphs
+- ✅ **Use academic transitions** between ideas
+- ✅ **Provide comprehensive explanations** - don't just list facts
+
+**Example Conversion:**
+```
+BAD (bullet points):
+• MMR at 48 weeks: 67.7% vs 49.0%
+• MR4 at 48 weeks: 38.8% vs 20.6%
+• Discontinuation: 4.5% vs 11.1%
+
+GOOD (prose):
+The major molecular response rate at 48 weeks was significantly higher in the asciminib group compared to standard therapy, with 67.7% of patients achieving MMR versus 49.0% in the control arm [1]. This represents an absolute difference of 18.9 percentage points. Furthermore, deep molecular responses were substantially more common with asciminib, as MR4 was achieved by 38.8% of patients receiving asciminib compared to only 20.6% of those on standard tyrosine kinase inhibitors [1]. The clinical significance of these deeper responses is particularly relevant for patients who may be candidates for treatment-free remission, as sustained MR4 or better for at least two years is considered a prerequisite for attempting therapy discontinuation [2]. Notably, the rate of treatment discontinuation due to adverse events was substantially lower with asciminib at 4.5% compared to 11.1% in the imatinib group, suggesting improved tolerability that may facilitate long-term treatment adherence [1].
+```
+
+### Citation Density Rule (MANDATORY - PLAGIARISM PREVENTION)
+
+**THIS IS CRITICAL**: Every sentence that presents data, makes claims, or references specific findings MUST have a citation.
+
+**Citation Requirements:**
+- Minimum 25-35 references for a systematic review (~5,000-7,000 words)
+- Every factual statement needs a citation
+- Multiple citations per sentence are acceptable
+- Claims without citations = PLAGIARISM concern
+
+**Citation Placement Examples:**
+```
+BAD (no citation - plagiarism):
+Chronic myeloid leukemia is a hematologic malignancy characterized by the
+Philadelphia chromosome.
+
+GOOD (with citation):
+Chronic myeloid leukemia is a hematologic malignancy characterized by the
+Philadelphia chromosome, which results from the t(9;22)(q34;q11) translocation
+that creates the BCR::ABL1 fusion oncogene [1].
+
+BAD (multiple claims, single citation):
+Imatinib revolutionized CML treatment and has high response rates.
+
+GOOD (multiple claims, multiple citations):
+Imatinib revolutionized CML treatment by targeting the BCR::ABL1 tyrosine kinase,
+becoming the standard of care since its introduction in 2001 [2]. Subsequent
+generations of TKIs have demonstrated higher response rates compared with
+imatinib in randomized trials [3][4].
+```
+
+**Reference Diversity Target:**
+| Type | Target Count | Purpose |
+|------|-------------|---------|
+| Clinical trials | 8-12 | Primary efficacy/safety data |
+| Systematic reviews | 3-5 | Evidence synthesis |
+| Guidelines | 2-3 | Clinical practice standards |
+| Mechanistic studies | 3-5 | Biological rationale |
+| Real-world evidence | 2-3 | Generalizability |
+| Safety/pharmacovigilance | 2-3 | Adverse event data |
+
+### Abstract Expansion (MANDATORY)
+
+The abstract is the most critical part - it must be fully expanded:
+- Target **95-100% of journal's word limit**
+- Include comprehensive background, methods, results, conclusions
+- Every sentence should convey substantial information
+- Avoid redundancy - each word should add value
+
+**Blood Research Abstract Structure (~250 words):**
+```
+Background: [2-3 sentences on disease burden and treatment evolution]
+Objective: [1 sentence on systematic review purpose]
+Methods: [2-3 sentences on search strategy, inclusion criteria, endpoints]
+Results: [4-5 sentences on key findings with specific data]
+Conclusions: [2-3 sentences on clinical implications]
+```
+
+### Detailed Explanations Throughout
+
+Every manuscript section must include:
+1. **Mechanistic explanations** - How and why things work
+2. **Clinical significance** - Why it matters for patients
+3. **Contextual background** - Historical and current perspectives
+4. **Limitations and strengths** - Critical appraisal
+5. **Future directions** - Research gaps and opportunities
+
+**Section Expansion Guidelines:**
+- Introduction: 3-4 substantial paragraphs per subsection
+- Methods: 2-3 paragraphs explaining each procedure
+- Results: Narrative descriptions, not just data presentation
+- Discussion: 3-4 paragraphs per major finding
+- Conclusion: 1-2 paragraphs synthesizing key points
+
+---
+
+## Part 2: Document Type Templates
+
+### 2.1 Systematic Review (PRISMA 2020 Compliant)
+
+**CRITICAL Requirements:**
+- Abstract: ~250 words (target 240-250 for Blood Research)
+- NO bullet points - all prose
+- Detailed explanations in every section
+- Include PMID for all references
+- Verify 100% match with PubMed
+
+**Structure:**
+```
+1. Title
+   - Clear indication of systematic review
+   - "A Systematic Review" or "Systematic Review and Meta-Analysis"
+
+2. Abstract (250 words - EXPANDED)
+   - Background: 2-3 sentences on disease burden, treatment evolution, rationale
+   - Methods: 2-3 sentences on databases, search terms, inclusion criteria
+   - Results: 4-5 sentences on key findings with specific data points
+   - Conclusions: 2-3 sentences on clinical implications
+   - Registration: PROSPERO registration number
+
+3. Introduction
+   3.1 Background and rationale (3-4 substantial paragraphs)
+   3.2 Objectives (1-2 paragraphs)
+   3.3 Research questions (PICO framework) (1 paragraph)
+
+4. Methods
+   4.1 Protocol and registration (PROSPERO) (2-3 paragraphs)
+   4.2 Eligibility criteria (PICO) (2-3 paragraphs)
+   4.3 Information sources (databases, date ranges) (2 paragraphs)
+   4.4 Search strategy (full search strings) (2 paragraphs)
+   4.5 Selection process (PRISMA flow diagram) (2 paragraphs)
+   4.6 Data extraction process (2 paragraphs)
+   4.7 Data items (1-2 paragraphs)
+   4.8 Study risk of bias assessment (ROB 2.0, ROBINS-I) (2 paragraphs)
+   4.9 Effect measures (1-2 paragraphs)
+   4.10 Synthesis methods (fixed vs random effects) (2 paragraphs)
+
+5. Results
+   5.1 Study selection (PRISMA flow diagram with numbers) (2-3 paragraphs)
+   5.2 Study characteristics (Table 1) (2-3 paragraphs)
+   5.3 Risk of bias in studies (2 paragraphs)
+   5.4 Results of individual studies (3-4 paragraphs)
+   5.5 Results of syntheses (forest plots) (2-3 paragraphs)
+   5.6 Reporting biases assessment (funnel plots) (1-2 paragraphs)
+
+6. Discussion
+   6.1 Discussion of results (3-4 paragraphs with detailed explanations)
+   6.2 Discussion of limitations (2-3 paragraphs)
+   6.3 Implications for practice (2-3 paragraphs)
+   6.4 Implications for research (2 paragraphs)
+
+7. Conclusion
+   7.1 Main findings (1-2 paragraphs)
+   7.2 Strengths and limitations (2 paragraphs)
+   7.3 Future directions (1-2 paragraphs)
+
+8. References (ALL with PMID)
+```
+
+**Key PRISMA 2020 Items:**
+- Item 1: Title identifies as systematic review, meta-analysis, or both
+- Item 2: Structured summary in abstract
+- Item 4: Explicit statement of eligibility criteria
+- Item 5: Information sources with dates searched
+- Item 6: Full electronic search strategy for at least one database
+- Item 7: Process for selecting studies
+- Item 8: Process for data extraction
+- Item 9: List of all studies and justification for exclusions
+- Item 10: Description of risk of bias in studies
+- Item 11: Methods for effect measures
+- Item 12: Methods for synthesis methods
+- Item 13: Methods for assessing risk of bias from synthesis
+- Item 14: Description of heterogeneity
+- Item 15: Reporting of results from syntheses
+- Item 16: Results of syntheses
+- Item 17: Results of risk of bias assessments
+- Item 18: Results of study certainty assessments
+
+### 2.2 Meta-Analysis Structure
+
+**Additional Elements for Meta-Analysis:**
+
+```
+4.11 Statistical Methods for Meta-Analysis
+   - Fixed-effect vs random-effects models
+   - Methods for handling missing data
+   - Assessment of publication bias (Egger's test)
+   - Sensitivity analyses
+   - Subgroup analyses
+   - Meta-regression (if applicable)
+
+5. Results
+   5.7 Quantitative Synthesis (Meta-Analysis Results)
+      - Pooled effect estimates with 95% CI
+      - Heterogeneity statistics (I², tau²)
+      - Forest plot interpretation
+      - Subgroup analyses results
+      - Sensitivity analyses results
+
+Reporting Checklist for Meta-Analysis:
+- PRISMA flow diagram with meta-analysis specifics
+- Characteristics of included studies (Table)
+- Risk of bias assessment for each study
+- Forest plots for all outcomes
+- Funnel plots for publication bias
+- GRADE assessment for evidence quality
+```
+
+### 2.3 Clinical Trial Reporting (CONSORT 2010 Compliant)
+
+**Structure:**
+```
+1. Title
+   - Trial design identification
+   - "Randomized Controlled Trial" specified
+
+2. Authors and Affiliations
+
+3. Abstract (Structured, 250 words)
+   - Background
+   - Methods (trial design, participants, interventions, outcomes)
+   - Results (numbers randomized, analyzed, main outcomes)
+   - Conclusions (interpretation, generalizability)
+   - Trial registration (NCT number)
+   - Funding source
+
+4. Introduction
+   4.1 Background and rationale
+   4.2 Objectives
+   4.3 Hypotheses
+
+5. Methods
+   5.1 Trial design (parallel, crossover, factorial)
+   5.2 Changes to methods after trial start
+   5.3 Eligibility criteria
+   5.4 Settings and locations
+   5.5 Interventions (detailed description)
+   5.6 Outcomes (primary and secondary, changes)
+   5.7 Sample size calculation
+   5.8 Randomization sequence generation
+   5.9 Allocation concealment mechanism
+   5.10 Implementation of randomization
+   5.11 Blinding (who was blinded, how)
+   5.12 Statistical methods (primary/secondary analyses)
+
+6. Results
+   6.1 Participant flow (CONSORT flow diagram)
+   6.2 Recruitment dates
+   6.3 Baseline demographic data (Table)
+   6.4 Numbers analyzed
+   6.5 Outcomes and estimation for each group
+   6.6 Ancillary analyses
+   6.7 Harms (adverse events)
+
+7. Discussion
+   7.1 Limitations
+   7.2 Generalizability
+   7.3 Interpretation
+
+8. Other Information
+   8.1 Registration number and name
+   8.2 Protocol access
+   8.3 Funding
+
+9. References
+```
+
+**CONSORT 2010 Checklist Items:**
+- Title identifies as randomized trial
+- Structured abstract
+- Scientific background and rationale
+- Specific objectives/hypotheses
+- Trial design description
+- Changes to methods after trial start
+- Eligibility criteria, settings, locations
+- Detailed interventions per group
+- Completely defined pre-specified outcomes
+- Sample size determination
+- Randomization sequence generation
+- Allocation concealment mechanism
+- Implementation of random allocation
+- Blinding details
+- Statistical methods for each outcome
+- Participant flow diagram (CONSORT)
+- Dates of recruitment and follow-up
+- Baseline demographic data
+- Numbers analyzed per group
+- Outcomes and estimation with CIs
+- Ancillary analyses
+- Adverse events in each group
+- Limitations, generalizability, interpretation
+- Registration, protocol access, funding
+
+### 2.4 Case Report (CARE Compliant)
+
+**Structure:**
+```
+1. Title
+   - "Case Report" or "Case Series" in title
+   - Patient identifier optional (e.g., "A case of...")
+
+2. Abstract (Structured, 200 words)
+   - Context: What makes this case unique?
+   - Case: Summary of patient(s)
+   - Conclusions: What is the main takeaway?
+
+3. Introduction
+   3.1 Background and context
+   3.2 Why is this case significant?
+   3.3 Objective: What does this report aim to achieve?
+
+4. Case Presentation
+   4.1 Patient information
+      - Age, sex, presenting concerns
+      - Medical, family, psychosocial history
+      - Relevant past interventions
+   4.2 Clinical findings
+      - Physical examination findings
+      - Laboratory and imaging results
+   4.3 Timeline
+      - Detailed chronological sequence
+      - From presentation to outcome
+   4.4 Diagnostic assessment
+      - Diagnostic methods
+      - Diagnostic challenges
+      - Differential diagnosis
+   4.5 Therapeutic intervention
+      - Types of interventions
+      - Administration and duration
+      - Modifications to intervention
+   4.6 Follow-up and outcomes
+      - How outcomes were assessed
+      - Relevant follow-up findings
+      - Patient perspective (if available)
+      - Adverse events
+
+5. Discussion
+   5.1 Strengths and limitations
+   5.2 Comparison with similar cases
+   5.3 Scientific background and rationale
+   5.4 Systematic literature review
+   5.5 Theoretical implications
+   5.6 Practical implications
+   5.7 Conclusions
+
+6. Patient Perspective (Optional)
+   - Patient's experience and outcomes
+
+7. Informed Consent
+   - Statement of consent obtained
+
+8. References
+```
+
+**CARE Checklist Items:**
+- Title identifies as case report
+- Structured abstract
+- Context and clinical significance
+- Patient information (anonymized)
+- Case presentation with timeline
+- Clinical findings
+- Diagnostic assessments
+- Therapeutic interventions
+- Follow-up and outcomes
+- Discussion of differential diagnosis
+- Comparison with literature
+- Informed consent statement
+
+---
+
+## Part 3: Reference Formats
+
+### Vancouver (Numbered Format) - WITH PMID REQUIRED
+
+**CRITICAL**: Every reference MUST include PMID for verification.
+
+**Citation Method for Plagiarism Prevention:**
+
+Every sentence that contains factual information, data, or claims MUST have a citation. This includes:
+
+1. **Statistical data**: Any numbers, percentages, rates must cite source
+   ```
+   The MMR rate at 48 weeks was 67.7% in the asciminib arm [1].
+   ```
+
+2. **Study mentions**: Any named trial/study must have citation
+   ```
+   The ASC4FIRST trial demonstrated superior efficacy [1].
+   ```
+
+3. **Guideline statements**: Clinical recommendations need citation
+   ```
+   ELN recommendations endorse TKI discontinuation in eligible patients [15].
+   ```
+
+4. **Mechanistic facts**: Biological mechanisms need citation
+   ```
+   Asciminib binds to the myristate pocket, inducing conformational change [7].
+   ```
+
+5. **Historical facts**: Treatment evolution needs citation
+   ```
+   Imatinib became standard first-line therapy in 2001 [2].
+   ```
+
+**Common Citation Patterns:**
+
+| Situation | Format | Example |
+|-----------|--------|---------|
+| Single fact | [1] | "MMR was achieved by 67.7% [1]." |
+| Multiple facts | [1][2] | "Higher than imatinib (49.0%) [1] and dasatinib [2]." |
+| Multiple studies | [1-3] | "Confirmed by multiple trials [1-3]." |
+| Supporting + contrasting | [1][4] | "Efficacy shown [1] but safety concerns remain [4]." |
+
+**DO NOT:**
+- ❌ Make claims without citations
+- ❌ State facts without attribution
+- ❌ Describe study results without citation
+- ❌ Mention guidelines without citation
+
+**DO:**
+- ✅ Cite every factual statement
+- ✅ Use multiple citations when claiming multiple facts
+- ✅ Cite primary sources for data (clinical trials, not reviews only)
+- ✅ Include PMID for verification
+
+**Journal Article:**
+```
+[1] Author AB, Author CD, Author EF. Title of article. Journal Name. Year;Volume(Issue):Pages. doi:xxx. PMID: 12345678
+```
+
+**Journal Article with Multiple Authors (>6):**
+```
+[2] Author A, Author B, Author C, et al. Title of article. Journal Name. Year;Volume:Pages. doi:xxx. PMID: 12345678
+```
+
+**Reference Verification Rule:**
+- ❌ **NEVER** finalize manuscript without PubMed verification
+- ✅ **ALWAYS** include PMID in reference
+- ✅ Verify 100% match with PubMed record
+- ✅ Fix any discrepancies before output
+
+### Key Vancouver Rules
+
+- Number references consecutively in order of appearance
+- Use square brackets [1], [2], [3]
+- List all authors up to 6; use "et al." if >6
+- Use initials for first/middle names
+- Abbreviate journal names per NLM standards
+- Include DOI when available
+- Maintain consistent formatting throughout
+
+---
+
+### Integrated Skill: citation-management
+
+For multi-format citation handling and advanced reference management, use the **`citation-management`** skill:
+
+**When to invoke:**
+- Converting between citation styles (APA, AMA, Chicago, Harvard)
+- Managing large reference libraries
+- Formatting complex citations (conference proceedings, preprints, patents)
+- Generating formatted bibliographies
+
+**Skill invocation:**
+```
+Use the citation-management skill for:
+- Vancouver format expansion (APA 7th, AMA, Chicago, Harvard)
+- Reference library organization and deduplication
+- Citation style conversion for journal requirements
+- In-text citation formatting (author-date vs. numbered)
+- Bibliography generation with multiple output formats
+```
+
+**Complementary use:** The citation-management skill enhances Part 3 by providing additional citation format options beyond Vancouver for journals requiring different styles.
+
+---
+
+## Part 3A: Citation Verification Protocol
+
+### Overview
+
+Citation verification ensures that every claim in the manuscript is supported by the cited source. This prevents academic misconduct and ensures scientific integrity.
+
+### Verification Workflow
+
+**STEP 1: Authentication**
+```
+1. notebooklm_setup_auth (if not authenticated)
+2. notebooklm_get_health (verify auth)
+```
+
+**STEP 2: Source Query**
+```
+For each citation [X]:
+1. Query NotebookLM: "What does [source] say about [claim]?"
+2. If NotebookLM has data → Verify claim matches
+3. If NotebookLM lacks data → Query PubMed
+4. Record verification status
+```
+
+**STEP 3: Data Verification**
+For each claim-citation pair:
+- Extract specific data from source
+- Compare with manuscript claim
+- Flag any discrepancies
+
+### Verification Checklist
+
+| Check | Status |
+|-------|--------|
+| Source contains cited data | ☐ |
+| Statistics match exactly | ☐ |
+| Percentages verified | ☐ |
+| Study name/trial correct | ☐ |
+| PMID valid (if PubMed) | ☐ |
+| Context appropriate | ☐ |
+
+### Common Issues and Fixes
+
+| Issue | Fix |
+|-------|-----|
+| Citation doesn't support claim | Find correct source or remove claim |
+| Data misquoted | Use exact data from source |
+| Wrong study cited | Swap to correct reference |
+| PMID invalid | Search PubMed for correct ID |
+
+### Verification Documentation
+
+Create a verification log:
+```
+Manuscript Claim → Source Check → Data Match → Status
+--------------------------------------------------------------
+"MMR 67.7% at 48w" → [3] NEJM 2024 → "67.7%" → VERIFIED
+"5-year OS 83%" → [1] NEJM 2006 → "83%" → VERIFIED
+```
+
+### Table Design Principles
+
+Tables are essential for presenting complex data in medical manuscripts. Every table MUST include comprehensive abbreviations for clarity and journal compliance.
+
+### Required Table Elements
+
+**Every table MUST include:**
+1. **Clear title** - Descriptive title explaining table content
+2. **Abbreviations footnote** - Complete list of all abbreviations used
+3. **Proper alignment** - Left-align text, right-align numbers
+4. **Consistent decimals** - Same decimal places within columns
+5. **Units in header** - Include units or specify in footnotes
+6. **Source citation** - If data from published study, cite reference
+
+### Abbreviation Requirements (MANDATORY)
+
+**CRITICAL**: Every table MUST have an abbreviations footnote. Format:
+
+```
+Abbreviations: TKI, tyrosine kinase inhibitor; MMR, major molecular response; MR4, deep molecular response (BCR::ABL1 ≤0.01% IS); MR4.5, deep molecular response (BCR::ABL1 ≤0.0032% IS); EMR, early molecular response; IS, International Scale; CI, confidence interval; OR, odds ratio; HR, hazard ratio; RR, relative risk; AE, adverse event; SAE, serious adverse event; OS, overall survival; PFS, progression-free survival; EFS, event-free survival; CR, complete response; PR, partial response; NR, no response; NE, not evaluable; NA, not applicable.
+```
+
+### Standard Table Format
+
+```
+**Table 1. [Descriptive Title]**
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1a | Data 2a | Data 3a |
+| Data 1b | Data 2b | Data 3b |
+
+Abbreviation: [Complete list of all abbreviations in alphabetical order]
+
+Source: [Reference number] or Data on file.
+```
+
+### Table Types in Medical Manuscripts
+
+| Table Type | Purpose | Example |
+|-----------|---------|---------|
+| **Baseline characteristics** | Demographics, patient features | Age, sex, disease stage |
+| **Treatment outcomes** | Efficacy endpoints | Response rates, survival |
+| **Safety data** | Adverse events | AE frequencies, grades |
+| **Comparative data** | Multiple arms/studies | Trial A vs Trial B |
+| **Multivariable analysis** | Adjusted outcomes | Cox regression |
+| **Mutation profiles** | Genetic associations | Mutation frequencies |
+
+### Common Medical Abbreviations by Category
+
+**Disease/Staging:**
+- CML, chronic myeloid leukemia
+- CP, chronic phase
+- AP, accelerated phase
+- BP, blast phase
+- Ph+, Philadelphia chromosome-positive
+
+**Treatment:**
+- TKI, tyrosine kinase inhibitor
+- Im, imatinib
+- Das, dasatinib
+- Nil, nilotinib
+- Bos, bosutinib
+- Asc, asciminib
+
+**Response Criteria:**
+- MMR, major molecular response (≤1% IS)
+- MR4, deep molecular response (≤0.01% IS)
+- MR4.5, deep molecular response (≤0.0032% IS)
+- MR5, deep molecular response (≤0.001% IS)
+- CCyR, complete cytogenetic response
+- PCyR, partial cytogenetic response
+
+**Endpoints:**
+- OS, overall survival
+- PFS, progression-free survival
+- EFS, event-free survival
+- TTR, time to response
+- DoR, duration of response
+
+**Statistics:**
+- CI, confidence interval
+- HR, hazard ratio
+- OR, odds ratio
+- RR, relative risk
+- SD, standard deviation
+- SE, standard error
+- IQR, interquartile range
+- P, p-value
+- n, number
+- N, total number
+
+**Safety:**
+- AE, adverse event
+- SAE, serious adverse event
+- TEAE, treatment-emergent adverse event
+- DLT, dose-limiting toxicity
+- MTD, maximum tolerated dose
+
+### Table Checklist (BEFORE FINALIZING)
+
+- [ ] Title clearly describes table content
+- [ ] All abbreviations defined in footnote
+- [ ] Units included in column headers
+- [ ] Numbers formatted consistently
+- [ ] Percentages include sample sizes (n/N)
+- [ ] Statistical significance indicated (p-values, CI)
+- [ ] Sources cited if applicable
+- [ ] No vertical lines (AMA style)
+- [ ] Horizontal lines only at top, bottom, and under headers
+- [ ] Table number matches text reference
+
+---
+
+## Part 4: Source Discovery and Verification
+
+### Finding Sources
+
+Search these academic databases:
+- **PubMed** (pubmed.ncbi.nlm.nih.gov) - Primary for medical research
+- **Google Scholar** (scholar.google.com) - Broad academic search
+- **IEEE Xplore** (ieeexplore.ieee.org) - Engineering/biomedical
+- **Cochrane Library** - Systematic reviews
+- **EMBASE** - European biomedical literature
+- **ClinicalTrials.gov** - Clinical trial results
+- **ICTRP** - WHO clinical trial registry
+
+### Web Search Integration
+
+```python
+# Example: Search for clinical trial data
+web_search("ASC4FIRST asciminib clinical trial results site:clinicaltrials.gov")
+
+# Search for guidelines
+web_search("NCCN CML guidelines 2024")
+
+# Search for regulatory updates
+web_search("asciminib FDA approval hematologic malignancies")
+```
+
+### Source Verification Checklist
+
+For each source, verify:
+
+- [ ] Published in peer-reviewed journal or conference
+- [ ] Author credentials and institutional affiliation
+- [ ] Publication venue reputation (impact factor)
+- [ ] Citation count (higher indicates impact)
+- [ ] Methodology soundness
+- [ ] Relevance to research question
+- [ ] **PMID/DOI available for PubMed verification (MANDATORY)**
+- [ ] For clinical trials: NCT registration verified
+- [ ] For guidelines: Organization credibility confirmed
+- [ ] **Reference matches PubMed record exactly (100% match required)**
+
+### Red Flags (Exclude These Sources)
+
+- ❌ Predatory journals (check Beall's List)
+- ❌ Lack of peer review process
+- ❌ No institutional affiliation
+- ❌ Suspicious publication practices
+- ❌ Pay-to-publish without legitimate review
+- ❌ Non-peer-reviewed websites (Wikipedia, blogs)
+- ❌ Unregistered clinical trials
+- ❌ References without PMID (cannot verify)
+
+---
+
+### Integrated Skill: pubmed-integration
+
+For advanced PubMed search capabilities and biomedical literature discovery, use the **`pubmed-integration`** skill:
+
+**When to invoke:**
+- Complex PubMed queries with Boolean operators
+- Biomedical literature with MeSH term exploration
+- Citation chaining (forward/backward)
+- Clinical query filtering (therapy, diagnosis, prognosis)
+- PubMed API integration for automated searches
+
+**Skill invocation:**
+```
+Use the pubmed-integration skill for:
+- Advanced PubMed search syntax (AND, OR, NOT, [MeSH], [Title/Abstract])
+- Clinical query filters (therapeutic, diagnostic, etiological)
+- Citation network analysis
+- PubMed API batch search operations
+- MeSH heading exploration and hierarchy navigation
+```
+
+**Complementary use:** The pubmed-integration skill enhances Part 4 Source Discovery with advanced PubMed search capabilities and biomedical-specific search features.
+
+---
+
+## Part 5: Quality Assurance Checklist
+
+### Before Finalizing, Verify:
+
+**Content:**
+- [ ] Clear research question/objective stated
+- [ ] Logical flow and organization
+- [ ] **Adequate source coverage (≥25-35 references for systematic reviews)**
+- [ ] All sources verified as peer-reviewed
+- [ ] **All claims supported by citations (citation density check PASSED)**
+- [ ] **NO uncited factual statements - every sentence with data has [citation]**
+- [ ] Methodology clearly explained (if applicable)
+- [ ] Results/findings clearly presented with statistics
+- [ ] Limitations acknowledged
+
+**Citation Density Verification (MANDATORY):**
+- [ ] Count total references (target: 25-35 for ~6,500 words)
+- [ ] Review each paragraph for uncited factual claims
+- [ ] Ensure every statistical data point has citation
+- [ ] Ensure every study/trial mentioned has citation
+- [ ] Ensure every guideline statement has citation
+- [ ] Verify no "copying" of ideas without attribution
+
+**Citation VERIFICATION Process (MANDATORY - Every citation):**
+- [ ] Query NotebookLM for each cited source
+- [ ] Verify claimed data exists in source
+- [ ] Confirm statistics/percentages match exactly
+- [ ] Check PMID validity (for PubMed sources)
+- [ ] Document verification status for each claim
+- [ ] Fix any discrepancies before finalizing
+
+**For Systematic Reviews:**
+- [ ] PRISMA flow diagram included
+- [ ] Search strategy fully documented
+- [ ] Risk of bias assessment performed
+- [ ] Heterogeneity statistics reported
+- [ ] Registration number (PROSPERO) provided
+
+**For Clinical Trials:**
+- [ ] CONSORT flow diagram included
+- [ ] Sample size calculation justified
+- [ ] Randomization methods described
+- [ ] Blinding procedures documented
+- [ ] Adverse events fully reported
+- [ ] Trial registration number included
+
+**For Case Reports:**
+- [ ] CARE checklist completed
+- [ ] Timeline clearly presented
+- [ ] Diagnostic reasoning explained
+- [ ] Treatment rationale provided
+- [ ] Informed consent statement included
+- [ ] Patient perspective considered
+
+**Technical:**
+- [ ] Reference format consistent (Vancouver)
+- [ ] All in-text citations match reference list
+- [ ] No missing references in list
+- [ ] Citation numbering sequential
+- [ ] DOI included when available
+
+**Writing Quality:**
+- [ ] Academic tone maintained throughout
+- [ ] Clear and concise language
+- [ ] No grammatical or spelling errors
+- [ ] Smooth transitions between sections
+- [ ] Abstract accurately summarizes paper
+- [ ] Keywords appropriately selected
+
+---
+
+## Part 6: Commands
+
+### 1. Literature Search
+
+```bash
+# Search PubMed for articles
+hpw search-pubmed "asciminib chronic myeloid leukemia" --max-results 50
+
+# With time period filter
+hpw search-pubmed "CAR-T cell therapy ALL" --max-results 30 --time-period 5y
+
+# Save results to JSON
+hpw search-pubmed "novel mutations myeloproliferative" -o references.json
+
+# Web search for clinical trials
+hpw web-search "asciminib clinical trial NCT" --source clinicaltrials.gov
+
+# Search guidelines
+hpw web-search "ELN CML recommendations 2025" --source nccn.org
+```
+
+### 2. Manuscript Draft Creation
+
+```bash
+# Create systematic review draft
+hpw create-systematic-review "asciminib first-line CML"   --journal blood_research   --prisma-compliant   --meta-analysis
+
+# Create clinical trial report
+hpw create-clinical-trial-report "phase III trial results"   --journal blood   --consort-compliant   --trial-registration NCT00000000
+
+# Create case report
+hpw create-case-report "rare CML presentation"   --journal blood_research   --care-compliant
+
+# Create enhanced draft with web search
+hpw create-enhanced "novel therapy myeloproliferative"   --document-type systematic_review   --web-search-enabled   --reference-style vancouver
+```
+
+### 3. Citation Concordance Check
+
+```bash
+# Check citation-reference consistency
+hpw check-concordance manuscript.docx
+
+# With format validation
+hpw check-concordance manuscript.md --validate-format
+```
+
+### 4. Complete Research Workflow
+
+```bash
+# All-in-one: web search, PubMed search, draft, quality check, verify
+hpw research "novel mutations myeloproliferative neoplasms"   --journal blood_research   --max-articles 30   --time-period 5y   --web-search   --docx
+```
+
+### 5. Quality Analysis
+
+```bash
+# Check manuscript quality
+hpw check-quality manuscript.md --journal blood
+
+# Validate against reporting guidelines
+hpw check-quality manuscript.md --journal blood --prisma-check
+
+# Save JSON report
+hpw check-quality draft.md --journal blood -o quality_report.json
+```
+
+### 6. Reference Verification
+
+```bash
+# Verify all references against PubMed
+hpw verify-references manuscript.md --journal blood
+
+# Include clinical trial verification
+hpw verify-references manuscript.md --verify-trials
+```
+
+---
+
+## Part 7: Supported Journals
+
+| Journal | Code | Abstract Limit | Text Limit | Reference Style |
+|---------|------|--------------|------------|-----------------|
+| Blood Research | blood_research | 250 | 6000 | Vancouver |
+| Blood | blood | 200 | 5000 | Vancouver |
+| Blood Advances | blood_advances | 250 | 6000 | Vancouver |
+| JCO | jco | 250 | 4000 | Numbered |
+| BJH | bjh | 200 | 5000 | Vancouver |
+| Leukemia | leukemia | 200 | 5000 | Vancouver |
+| Haematologica | haematologica | 250 | 5000 | Vancouver |
+
+---
+
+## Part 8: Workflow Examples
+
+### Complete Systematic Review
+
+```bash
+# 1. Web search for recent evidence
+hpw web-search "asciminib CML systematic review 2024"   --sources pubmed,clinicaltrials.gov,nccn.org
+
+# 2. Systematic review draft with PRISMA compliance
+hpw create-systematic-review "asciminib first-line CML"   --journal blood_research   --prisma-compliant   --meta-analysis   --max-references 50
+
+# 3. Check concordance
+hpw check-concordance asciminib_cml_systematic_review.md
+
+# 4. Check quality with PRISMA validation
+hpw check-quality asciminib_cml_systematic_review.md   --journal blood_research   --prisma-check
+
+# 5. Verify references
+hpw verify-references asciminib_cml_systematic_review.md   --verify-trials
+
+# 6. Generate report
+hpw generate-report asciminib_cml_systematic_review.md   --journal blood_research   --verify-references   -o final_report.txt
+```
+
+### Clinical Trial Report
+
+```bash
+# Create clinical trial report
+hpw create-clinical-trial-report "novel agent phase III"   --journal blood   --consort-compliant   --trial-registration NCT00000000   --docx
+
+# Quality check
+hpw check-quality phase_iii_trial_report.md   --journal blood   --consort-check
+```
+
+### Case Report
+
+```bash
+# Create CARE-compliant case report
+hpw create-case-report "atypical CML presentation"   --journal blood_research   --care-compliant   --include-patient-perspective
+
+# Quality check
+hpw check-quality atypical_cml_case.md   --journal blood_research   --care-check
+```
+
+---
+
+## Part 9: Review Simulation Mode
+
+### Overview
+Simulate multi-reviewer feedback from top-tier hematology journals to identify weaknesses before submission.
+
+### Reviewer Simulation Framework
+
+**Operation**: Generate manuscript review simulating 2-3 reviewers with different perspectives.
+
+**Reviewer Types:**
+1. **Clinical Reviewer**: Focuses on clinical relevance, practical applications, and real-world applicability
+2. **Basic Science Reviewer**: Evaluates mechanistic rigor, molecular pathways, and scientific novelty
+3. **Statistical/Methodology Reviewer**: Assesses study design, statistical methods, and data analysis quality
+
+### Review Output Format
+
+Generate `review.md` with the following structure:
+
+```markdown
+# Manuscript Review Simulation
+
+## Reviewer 1: Clinical Perspective
+### Strengths
+- [List clinical strengths]
+
+### Concerns
+- [List clinical concerns with page/section references]
+
+### Suggestions
+- [Specific suggestions for improving clinical impact]
+
+---
+
+## Reviewer 2: Basic Science Perspective  
+### Strengths
+- [List mechanistic/scientific strengths]
+
+### Concerns
+- [List mechanistic concerns]
+
+### Suggestions
+- [Suggestions for strengthening scientific rationale]
+
+---
+
+## Reviewer 3: Methodology Perspective
+### Strengths
+- [List methodological strengths]
+
+### Concerns
+- [List statistical/design concerns]
+
+### Suggestions
+- [Suggestions for improving rigor]
+
+---
+
+## Overall Assessment
+### Major Issues (Must Address)
+1. [Critical issue 1]
+2. [Critical issue 2]
+
+### Minor Issues (Recommended)
+1. [Minor issue 1]
+2. [Minor issue 2]
+
+### Final Recommendation
+[Accept / Minor Revision / Major Revision]
+```
+
+### Applying Reviewer Feedback
+
+After receiving simulated reviews:
+1. **Address ALL Major Issues** before submission
+2. **Prioritize Minor Issues** based on space/time constraints
+3. **Document Changes**: Keep track of how each reviewer concern was addressed
+4. **Response Letter**: Prepare point-by-point responses to all reviewer comments
+
+---
+
+### Integrated Skill: peer-review
+
+For formal manuscript peer review requiring structured evaluation frameworks, use the **`peer-review`** skill:
+
+**When to invoke:**
+- Journal submission preparation
+- Pre-submission manuscript review
+- Grant proposal review
+- Abstract review for conferences
+
+**Skill invocation:**
+```
+Use the peer-review skill for:
+- Structured reviewer reports (EASE, COPE guidelines)
+- Reviewer recommendation matrices (Accept/Revise/Reject)
+- Constructive feedback frameworks
+- Author response letter templates
+- Review quality assessment
+```
+
+**Complementary use:** The peer-review skill enhances Part 9 Review Simulation Mode with formal peer review methodology and structured evaluation criteria.
+
+---
+
+## Part 10: Farquhar 5-Sentence Abstract Method
+
+### The Narrative Principle
+A hematology paper is not a collection of data, but a coherent clinical story backed by evidence.
+- **One-sentence contribution**: Must summarize your core finding in one sentence
+- **Three Pillars**:
+  - **What**: Your novel clinical or scientific finding
+  - **Why**: Evidence supporting the finding (trial data, mechanistic insights)
+  - **So What**: Why clinicians/researchers should care (clinical implications)
+
+### 5-Sentence Abstract Structure (Farquhar's Method)
+
+For hematology manuscripts, apply this structure:
+
+1. **Achievement** (Context + Main Finding)
+   - "We report [main outcome] in [patient population] with [disease]"
+   - Example: "We report the 5-year outcomes of first-line asciminib therapy in patients with chronic myeloid leukemia"
+
+2. **Difficulty/Importance** (Clinical Challenge)
+   - Why this problem matters and why it's challenging
+   - Example: "Despite advances in tyrosine kinase inhibitors, a significant proportion of patients develop intolerance or resistance"
+
+3. **Method** (Study Design + Key Intervention)
+   - How you solved it (include study type, patient numbers, key methods)
+   - Example: "In this multicenter, phase 3 trial, 400 patients were randomized to receive asciminib versus standard-of-care TKIs"
+
+4. **Evidence** (Key Results with Data)
+   - Your experimental/clinical support with specific numbers
+   - Example: "At median follow-up of 58 months, major molecular response rates were 78% with asciminib versus 62% with standard TKIs (P<0.001)"
+
+5. **Conclusion** (Most Significant Impact)
+   - The most important clinical or scientific takeaway
+   - Example: "These results establish asciminib as a new standard-of-care for frontline CML treatment"
+
+### Hematology-Specific Tips
+
+- **Include specific endpoints**: Mention MR4.5, PFS, OS, ORR with actual percentages
+- **Cite pivotal trials**: Reference registration numbers (e.g., ASC4FIRST, NCT02081378)
+- **State significance**: Connect findings to clinical practice guidelines (ELN, NCCN)
+
+---
+
+## Part 11: Enhanced Venue Templates for Hematology Journals
+
+### Major Hematology Journals
+
+| Journal | Impact Factor | Abstract Limit | Word Limit | Key Requirements |
+|---------|---------------|----------------|------------|------------------|
+| **Blood** | 25 | 200 words | ~5000 | Must include clinical trial registration, STRENGTHening the Reporting of OBservational studies in Epidemiology (STROBE) for observational |
+| **Blood Advances** | 8 | 250 words | ~6000 | More flexible format, accepts brief reports, encourages data supplements |
+| **Blood Research** | 3 | 250 words | ~6000 | Broad scope, accepts case reports, emphasis on Asian populations |
+| **JCO** | 45 | 250 words | ~4000 | Oncology-focused, emphasizes clinical significance, requires CONSORT for trials |
+| **BJH** | 8 | 200 words | ~5000 | British Society of Haematology affiliation valued, accepts review articles |
+| **Leukemia** | 12 | 200 words | ~5000 | Molecular/mechanistic focus, requires mechanistic diagrams |
+| **Haematologica** | 10 | 250 words | ~5000 | European Society of Haematology, accepts concise reports |
+
+### Submission Format Requirements
+
+**Blood Journal Specifics:**
+- Title: Max 120 characters
+- Abstract: Structured (Background, Methods, Results, Conclusions)
+- References: Vancouver style, max 100
+- Figures: Max 7 figures, upload separately
+- Supplemental: Allowed, must be referenced in main text
+
+**JCO Specifics:**
+- Abstract: Must include Trial Information section
+- Word limit strictly enforced (excess will be returned)
+- Requires Disclosure Statement for all authors
+- Clinical trial phase must be clearly stated
+
+### Venue Conversion Guidelines
+
+- **Blood → Blood Advances**: Add ~1000 words, expand discussion
+- **JCO → Blood**: Reduce by 1000 words, increase clinical focus
+- **Leukemia → Blood**: Add mechanistic details, ensure molecular focus
+- **General → BJH**: Add UK/European context, consider British Haematology Society guidelines
+
+---
+
+## Part 12: Plan-Outline Enhanced Workflow
+
+### Two-Stage Planning Method
+
+Based on scientific-writing best practices, use this two-stage approach:
+
+### Stage 1: Conceptual Outline
+
+**Purpose**: Define the paper's core contribution and narrative structure
+
+**Output**: 1-page outline with:
+1. **One-sentence core contribution**: The single most important finding
+2. **Story arc**: How the paper builds to that finding
+3. **Key data points**: 3-5 critical numbers/results that support the conclusion
+4. **Target venue**: Journal selection with word limit
+
+**Template:**
+```
+Core Contribution: [One sentence describing the main finding]
+
+Story Arc:
+- Opening: [What clinical/problem gap motivates this study]
+- Build: [What preliminary data or context supports the study]
+- Peak: [What is the main result]
+- Resolution: [What does this mean for clinical practice]
+
+Key Data Points:
+1. [Primary endpoint result]
+2. [Secondary endpoint result]  
+3. [Safety/safety profile result]
+
+Target Venue: [Journal name] - [Word limit]
+```
+
+### Stage 2: Detailed IMRAD Structure
+
+**Purpose**: Convert conceptual outline into detailed manuscript sections
+
+**Output**: Detailed section-by-section outline with:
+- Introduction: Problem statement, gap identification, study objective
+- Methods: Study design, patient population, endpoints, statistical methods
+- Results: Organized by endpoint (primary first), include all relevant subgroups
+- Discussion: Interpret results, compare with literature, clinical implications, limitations
+
+### Workflow Commands
+
+```bash
+# Stage 1: Create conceptual outline
+hpw plan-outline "novel therapy for CML" --type clinical_trial --core-finding "asciminib shows superior MRR"
+
+# Stage 2: Generate detailed structure
+hpw create-outline draft_concept.md --expand-imrad --target-journal blood
+
+# Full workflow: Plan to draft
+hpw plan-to-draft "first-line asciminib CML" --journal blood --include-review
+```
+
+---
+
+### Integrated Skill: scientific-writing
+
+For advanced academic writing templates and structure guidance, use the **`scientific-writing`** skill:
+
+**When to invoke:**
+- Complex manuscript structures beyond standard IMRAD
+- Grant proposal writing and specific aims development
+- Thesis/dissertation chapters
+- Review article organization
+
+**Skill invocation:**
+```
+Use the scientific-writing skill for:
+- IMRAD+ manuscript templates with extended sections
+- Specific Aims page structure for grants
+- Literature review frameworks (thematic, chronological, methodological)
+- Discussion section argumentative structures
+- Conclusion synthesis patterns
+```
+
+**Complementary use:** The scientific-writing skill enhances Part 12 Plan-Outline Workflow with advanced writing templates and structural frameworks for complex manuscripts.
+
+---
+
+## Tips for Best Results
+
+1. **Specific Topics**: Use specific search terms ("asciminib CML" not "leukemia treatment")
+2. **Time Periods**: Use `--time-period 5y` for recent literature reviews
+3. **Web Search**: Enable `--web-search` for real-time evidence
+4. **Verify Sources**: Always check citation-reference concordance
+5. **DOCX Output**: Use `--docx` for submission-ready manuscripts
+6. **Quality First**: Run `check-quality` before final submission
+7. **Reference Verification**: Verify PubMed citations before submission
+8. **Reporting Guidelines**: Use `--prisma-check`, `--consort-check`, `--care-check`
+9. **Pre-submission Review**: Use Review Simulation Mode before final submission
+
+---
+
+## Tool Integration
+
+Import modules directly:
+
+```python
+from tools.draft_generator import (
+    PubMedSearcher,
+    ManuscriptDrafter,
+    EnhancedManuscriptDrafter,
+    ResearchWorkflow,
+    DocumentType,
+    ReferenceStyle,
+    SystematicReviewDrafter,
+    ClinicalTrialDrafter,
+    CaseReportDrafter,
+    MetaAnalysisDrafter
+)
+
+from tools.quality_analyzer import ManuscriptQualityAnalyzer
+from tools.pubmed_verifier import PubMedVerifier, ReferenceManager
+from tools.citation_concordance import check_concordance
+from tools.content_enhancer import ContentEnhancer, analyze_and_enhance
+from tools.file_converter import FileConverter
+from tools.hematology_guidelines import HematologyGuidelines
+from tools.web_search_integration import WebSearchIntegration, ClinicalTrialsSearch
+```
+
+---
+
+## Document Type Comparison Table
+
+| Feature | Systematic Review | Meta-Analysis | Clinical Trial | Case Report |
+|---------|------------------|---------------|----------------|-------------|
+| **Guideline** | PRISMA 2020 | PRISMA 2020 | CONSORT 2010 | CARE 2013 |
+| **Abstract Structure** | Yes | Yes | Yes | Yes |
+| **Methods Section** | Extensive | Extensive | Detailed | N/A |
+| **Flow Diagram** | PRISMA | PRISMA | CONSORT | N/A |
+| **Sample Size** | N/A | Required | Required | N/A |
+| **Randomization** | N/A | N/A | Required | N/A |
+| **Timeline** | N/A | N/A | Required | Required |
+| **Informed Consent** | N/A | N/A | Required | Required |
+| **Registration** | PROSPERO | PROSPERO | ClinicalTrials.gov | Optional |
+| **Heterogeneity** | Required | Required | N/A | N/A |
+| **Forest Plots** | Optional | Required | N/A | N/A |
+| **Adverse Events** | Summarized | Summarized | Detailed | Required |
+
+---
+
+## Part 13: Prose Polish & Humanization
+
+### Overview
+
+AI-generated scientific writing often exhibits detectable patterns that reduce credibility and readability. This section provides tools to polish manuscripts and remove common AI writing artifacts while maintaining academic rigor.
+
+### Core Principle
+
+> "LLMs use statistical algorithms to guess what should come next. The result tends toward the most statistically likely result that applies to the widest variety of cases." — Wikipedia AI Writing Project
+
+### 24 AI Writing Patterns to Remove
+
+#### Content Patterns
+
+| # | Pattern | Detection | Correction |
+|---|---------|-----------|------------|
+| 1 | **Significance inflation** | "marking a pivotal moment in the evolution of..." | State actual significance without hyperbole |
+| 2 | **Notability name-dropping** | "cited in NYT, BBC, FT, and The Hindu" | Cite specific sources when relevant |
+| 3 | **Superficial -ing analyses** | "symbolizing... reflecting... showcasing..." | Remove or expand with specific evidence |
+| 4 | **Promotional language** | "nestled within the breathtaking region" | Use neutral, descriptive language |
+| 5 | **Vague attributions** | "Experts believe it plays a crucial role" | Cite specific studies or data |
+| 6 | **Formulaic challenges** | "Despite challenges... continues to thrive" | State specific challenges with evidence |
+
+#### Language Patterns
+
+| # | Pattern | Detection | Correction |
+|---|---------|-----------|------------|
+| 7 | **AI vocabulary** | "Additionally... testament... landscape... showcasing" | Use simpler alternatives: "also... remain common" |
+| 8 | **Copula avoidance** | "serves as... features... boasts" | Use direct forms: "is... has" |
+| 9 | **Negative parallelisms** | "It's not just X, it's Y" | State the point directly |
+| 10 | **Rule of three overuse** | "innovation, inspiration, and insights" | Use natural number of items |
+| 11 | **Synonym cycling** | "protagonist... main character... central figure" | Repeat the clearest term |
+| 12 | **False ranges** | "from the Big Bang to dark matter" | List topics directly |
+
+#### Style Patterns
+
+| # | Pattern | Detection | Correction |
+|---|---------|-----------|------------|
+| 13 | **Em dash overuse** | "institutions—not the people—yet" | Use commas or periods |
+| 14 | **Boldface overuse** | "**Performance:** Performance improved" | Convert to prose |
+| 15 | **Inline-header lists** | "**Performance:** Performance improved" | Write as flowing paragraphs |
+| 16 | **Title Case Headings** | "Strategic Negotiations And Partnerships" | Use sentence case |
+| 17 | **Emojis** | "🚀 Key Insight:" | Remove entirely |
+| 18 | **Curly quotes** | `said "the project"` | Use straight quotes |
+
+#### Communication Patterns
+
+| # | Pattern | Detection | Correction |
+|---|---------|-----------|------------|
+| 19 | **Chatbot artifacts** | "I hope this helps! Let me know if..." | Remove entirely |
+| 20 | **Cutoff disclaimers** | "While details are limited..." | Find sources or remove |
+| 21 | **Sycophantic tone** | "Great question! You're absolutely right!" | Respond directly |
+
+#### Filler and Hedging
+
+| # | Pattern | Detection | Correction |
+|---|---------|-----------|------------|
+| 22 | **Filler phrases** | "In order to", "Due to the fact that" | Use "To", "Because" |
+| 23 | **Excessive hedging** | "could potentially possibly" | Use single "may" |
+| 24 | **Generic conclusions** | "The future looks bright" | State specific plans or facts |
+
+### Hematology-Specific Examples
+
+**Before (AI-sounding):**
+> Our study represents a groundbreaking advancement in the field of hematology, marking a pivotal moment in our understanding of hematologic malignancies. The transformative potential of these findings cannot be overstated, as they potentially could possibly revolutionize treatment paradigms.
+
+**After (Humanized):**
+> This study adds to the growing body of evidence on treatment approaches in hematologic malignancies. Our findings are consistent with previous reports and suggest that the intervention may warrant further investigation in larger trials.
+
+### Prose Polish Checklist
+
+Before finalizing any manuscript section, verify:
+
+- [ ] No significance inflation (avoid "groundbreaking," "paradigm shift," "revolutionary")
+- [ ] No vague attributions (cite specific studies)
+- [ ] No em-dash overuse (limit to 2-3 per manuscript)
+- [ ] No chatbot artifacts (remove "I hope this helps")
+- [ ] No excessive hedging (use "may" not "could potentially possibly")
+- [ ] No generic conclusions (state specific implications)
+- [ ] Concrete data over abstractions
+- [ ] Active voice preferred where appropriate
+
+---
+
+## Part 14: Style Register Options
+
+### Overview
+
+Different contexts require different writing styles. This section provides guidance for adapting the manuscript voice to match the target audience and purpose.
+
+### Available Style Registers
+
+#### 1. Formal Academic (Default for Journals)
+
+**Characteristics:**
+- Passive voice acceptable for methods
+- Complex sentences permitted
+- Third-person preferred
+- Minimal emotional language
+- Full technical terminology
+
+**Example:**
+> The efficacy of the intervention was evaluated in a randomized controlled trial (N=250). Statistical analysis revealed a significant difference in the primary endpoint (p<0.001).
+
+#### 2. Clinical Narrative (Case Discussions)
+
+**Characteristics:**
+- First-person acceptable for observations
+- More conversational tone
+- Clinical reasoning emphasized
+- Patient-centered language
+- Real-world applicability highlighted
+
+**Example:**
+> We observed a notable response in a 45-year-old patient with refractory disease. After three cycles, the patient achieved a partial response, which we attributed to the aggressive salvage regimen.
+
+#### 3. Journalistic (Reviews, Press Releases)
+
+**Characteristics:**
+- Short paragraphs
+- Impact-focused opening
+- Minimal jargon
+- Quotable statistics
+- Broader context provided
+
+**Example:**
+> A new treatment approach shows promise for patients with advanced disease. In a study of 250 patients, nearly half responded to the therapy.
+
+### Register Conversion Guide
+
+| Element | Formal Academic | Clinical Narrative | Journalistic |
+|---------|-----------------|-------------------|--------------|
+| Opening | Background → Gap → Purpose | Case/example → Question | Impact → Key finding |
+| Methods | Detailed, technical | Summarized, clinical relevance | Brief, numbers-focused |
+| Results | Comprehensive statistics | Key clinical outcomes | Headline numbers |
+| Discussion | Full context, limitations | Clinical implications | Future directions |
+| Word count | Full limit | 80% of limit | 60% of limit |
+
+### Choosing the Right Register
+
+**Use Formal Academic when:**
+- Target is a peer-reviewed journal
+- Full methods reporting required
+- Academic tenure/promotion purposes
+
+**Use Clinical Narrative when:**
+- Writing case reports or case series
+- Medical education context
+- Clinical decision-making focus
+
+**Use Journalistic when:**
+- Writing review articles
+- Press releases or summaries
+- Patient-facing materials
+
+---
+
+## Part 15: Enhanced NotebookLM Features
+
+### Audio Generation for Manuscript Review
+
+NotebookLM can generate audio overviews of your manuscript, serving as a powerful review tool.
+
+**Use Cases:**
+1. **Draft Review**: Listen to identify awkward phrasing or logical gaps
+2. **Final Proofreading**: Hear errors that visual scanning misses
+3. **Collaborator Feedback**: Share audio for quick review
+4. **Patient/Public Summary**: Generate accessible summaries
+
+**Available Audio Styles:**
+- **Deep Dive**: Comprehensive coverage, slower pace
+- **Quick Overview**: Concise summary, faster pace
+- **Learning Guide**: Educational tone, explains terminology
+- **Conversational**: Two-host discussion format
+
+### Source Organization Best Practices
+
+**Recommended Folder Structure:**
+```
+Research Project/
+├── Literature Reviews/
+├── Clinical Guidelines/
+├── Trial Data/
+├── Methodology/
+└── Discussion Background/
+```
+
+**Source Naming Convention:**
+- `[Year] [First Author] [Topic]`
+- Example: `2023 Smith AML consolidation therapy`
+
+### Generating Studio Content
+
+NotebookLM Studio features available:
+- **Audio Overview**: Two-host discussion of sources
+- **Video Explainers**: Visual summaries
+- **Infographics**: Single-topic visual summaries
+- **Mind Maps**: Concept relationship diagrams
+- **Flashcards**: Study cards from key concepts
+- **Briefing Docs**: Concise summary documents
+
+---
+
+## Part 16: Manuscript Brainstorming Workflow
+
+### Overview
+
+Adapted from superpowers/brainstorming for academic manuscript development. This workflow ensures thorough planning before writing any manuscript section.
+
+> **⚠️ MANDATORY WORKFLOW**: Do NOT start writing any manuscript section (Introduction, Methods, Results, Discussion) until you have completed the brainstorming phase and have a clear design document.
+
+### Integration with HPW Core Workflow
+
+This workflow integrates with the core HPW skills:
+- **Part 1**: Use web search for initial literature discovery
+- **Part 3/3A**: Verify all citations before including in design
+- **Part 4**: Use source discovery for background research
+- **Part 9**: Run review simulation after completing draft
+- **Part 18**: Apply reader testing before submission
+
+## When to Use
+
+- Starting a new manuscript
+- Planning a major revision
+- Responding to reviewer comments
+- Adding new analysis to existing manuscript
+
+## 6-Step Brainstorming Process
+
+### Step 1: Explore Project Context
+
+Check existing work:
+- Literature review status
+- Available data
+- Previous drafts or versions
+- Target journal requirements
+
+### Step 2: Ask Clarifying Questions
+
+One at a time, understand:
+- **Purpose**: What question does this manuscript answer?
+- **Audience**: Who will read this? (clinicians, researchers, policymakers?)
+- **Impact**: What is the single most important finding?
+- **Constraints**: Word limits, timeline, required sections
+
+### Step 3: Propose Approaches
+
+Present 2-3 structural options:
+- **Option A**: Clinical trial report approach
+- **Option B**: Basic science mechanism approach  
+- **Option C**: Meta-analysis/review approach
+
+Include trade-offs and your recommendation.
+
+### Step 4: Present Design
+
+Present in sections scaled to complexity:
+- **Title & Abstract Structure** (100 words)
+- **Introduction Arc** (200 words) — background → gap → hypothesis
+- **Methods Framework** (150 words) — design → participants → analysis
+- **Results Hierarchy** (150 words) — primary → secondary → exploratory
+- **Discussion Framework** (200 words) — interpretation → limitations → implications
+
+Get user approval after each section.
+
+### Step 5: Write Design Document
+
+Save to: `docs/manuscripts/YYYY-MM-DD-<topic>-design.md`
+
+Template:
+```markdown
+# Manuscript Design: [Title]
+
+## Core Contribution
+[One sentence: What does this paper add?]
+
+## Target Journal
+[Journal name, impact factor, word limits]
+
+## Structure
+### Introduction
+- Current state of field
+- Knowledge gap
+- Study objective
+
+### Methods
+- Study design
+- Population
+- Outcomes
+- Analysis plan
+
+### Results
+- Primary outcome
+- Secondary outcomes
+- Subgroup analyses
+
+### Discussion
+- Interpretation
+- Limitations
+- Clinical implications
+- Future directions
+```
+
+### Step 6: Transition to Writing
+
+Invoke the writing-plans skill to create detailed section plans.
+
+---
+
+## Part 17: Manuscript Writing Plans
+
+### Overview
+
+Adapted from superpowers/writing-plans for manuscript section development. Create detailed, bite-sized tasks for writing each manuscript section.
+
+## Plan Document Header
+
+```markdown
+# [Manuscript Section] Implementation Plan
+
+**Goal:** [One sentence describing what this section accomplishes]
+
+**Section Type:** [Introduction/Methods/Results/Discussion/Abstract]
+
+**Word Target:** [X words]
+
+---
+```
+
+## Task Structure for Manuscript Writing
+
+````markdown
+### Task N: [Specific Component]
+
+**Word Target:** X words
+
+**Step 1: Outline the component**
+
+Write a brief outline:
+- Point 1: [topic]
+- Point 2: [topic]
+- Point 3: [topic]
+
+**Step 2: Write first draft**
+
+Write the component focusing on:
+- Clear topic sentence
+- Supporting evidence
+- Logical transitions
+
+**Step 3: Revise for clarity**
+
+Check:
+- Passive voice appropriate for methods?
+- Active voice for results?
+- Jargon explained?
+- Citations complete?
+
+**Step 4: Word count check**
+
+Target: X words
+Current: Y words
+Action: [expand/cut]
+
+**Step 5: Save to manuscript**
+
+Add to: `manuscript/draft/{section}.md`
+````
+
+## Bite-Sized Task Examples
+
+For an Introduction section:
+- Task 1: Write disease background (100 words)
+- Task 2: Write current treatment landscape (100 words)
+- Task 3: Identify knowledge gap (50 words)
+- Task 4: State study objective (50 words)
+
+For Methods section:
+- Task 1: Study design description (75 words)
+- Task 2: Participant selection criteria (75 words)
+- Task 3: Outcome definitions (100 words)
+- Task 4: Statistical analysis plan (100 words)
+
+## Quality Checklist
+
+Before marking task complete:
+- [ ] Word count within target ±10%
+- [ ] All citations present ([Author, Year] format)
+- [ ] Technical terms defined
+- [ ] Logical flow between paragraphs
+- [ ] Consistent tense usage
+
+---
+
+## Part 18: Reader Testing for Manuscripts
+
+### Overview
+
+Adapted from anthropics/doc-coauthoring reader-testing phase. Test the manuscript with a fresh perspective to catch gaps before submission.
+
+## When to Use
+
+- After completing first draft
+- Before submission to journal
+- After major revisions
+- When collaborators have conflicting feedback
+
+## Testing Process
+
+### Step 1: Predict Reader Questions
+
+Generate 5-10 questions reviewers or readers might ask:
+
+1. "Why was this specific population chosen?"
+2. "How does this compare to previous studies?"
+3. "What are the main limitations?"
+4. "What is the clinical relevance?"
+5. "How would this change clinical practice?"
+
+### Step 2: Self-Testing
+
+Answer each question by reading your manuscript:
+- Can you find the answer easily?
+- Is the answer clearly stated?
+- Are there any contradictions?
+
+### Step 3: Fresh Reader Testing
+
+If available, have a colleague read and ask them:
+- What was unclear?
+- What questions did they have?
+- What seemed redundant?
+- What needed more explanation?
+
+### Step 4: Gap Analysis
+
+Document gaps found:
+| Question | Found in Section | Answer Clarity |
+|----------|-----------------|----------------|
+| Why this population? | Methods | Clear |
+| Comparison to prior work | Discussion | Missing |
+| Limitations | Discussion | Brief |
+
+### Step 5: Revision Planning
+
+Create revision tasks:
+1. Add comparison to [Study X] in Discussion
+2. Expand limitations section
+3. Clarify [specific point]
+
+## Journal-Specific Testing
+
+Different journals have different reviewers:
+
+| Journal Type | Focus Areas |
+|--------------|-------------|
+| Clinical journals | Clinical implications, practical applications |
+| Basic science | Mechanism, novelty, rigorous methods |
+| Review articles | Comprehensiveness, synthesis |
+| Case reports | Educational value, rarity |
+
+---
+
+## Workflow Integration Summary
+
+This HPW skill is organized in three phases:
+
+### Phase 1: Planning (Parts 1-8)
+- Web search, reference formatting, verification, quality checks
+
+### Phase 2: Writing (Parts 9-12)  
+- Review simulation, abstract methods, venue selection, planning
+
+### Phase 3: Refinement (Parts 13-18)
+- Prose polish, style registers, NotebookLM, brainstorming, testing
+
+**Recommended Workflow:**
+1. Start with **Part 16** (Brainstorming) for new manuscripts
+2. Use **Part 17** (Writing Plans) for section development
+3. Apply **Part 13** (Prose Polish) before final review
+4. Complete with **Part 18** (Reader Testing) before submission
+
+---
+
+## Integrated Skills Invocation Guide
+
+The following specialized skills can be invoked to enhance specific HPW workflows:
+
+### Skill Invocation Matrix
+
+| Skill | When to Invoke | HPW Part | Use Case |
+|-------|----------------|----------|----------|
+| **literature-review** | Systematic reviews, meta-analyses | Part 1, Part 2 | PRISMA-compliant reviews, search strategy development, risk of bias assessment |
+| **peer-review** | Pre-submission, formal reviews | Part 9 | Structured reviewer reports, COPE guidelines, author response letters |
+| **citation-management** | Format conversion, large libraries | Part 3 | APA/AMA/Chicago conversion, bibliography generation |
+| **scientific-writing** | Complex structures, grants | Part 12 | IMRAD+ templates, Specific Aims, literature review frameworks |
+| **pubmed-integration** | Advanced PubMed queries | Part 1, Part 4 | MeSH terms, clinical queries, citation chaining |
+
+### How to Invoke Integrated Skills
+
+For specialized tasks beyond HPW's core functionality:
+
+1. **Direct invocation**: State "Use the [skill-name] skill for [specific task]"
+2. **Complementary workflow**: Use HPW for core manuscript writing + integrated skill for specialized functions
+3. **Sequential process**: HPW for draft → integrated skill for enhancement → HPW for final polish
+
+### Skill Selection Guide
+
+- **Basic manuscript**: HPW alone sufficient
+- **Systematic review**: HPW + literature-review + pubmed-integration
+- **Grant proposal**: HPW + scientific-writing + citation-management
+- **Journal submission**: HPW + peer-review + citation-management
+
+---
+
+*Part of OpenClaw Hematology Writing Suite*

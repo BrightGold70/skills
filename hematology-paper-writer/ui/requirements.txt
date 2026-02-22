@@ -1,0 +1,9 @@
+# UI Requirements for Hematology Paper Writer
+# Install with: pip install -r ui/requirements.txt
+
+streamlit>=1.28.0
+plotly>=5.15.0
+pandas>=2.0.0
+Pillow>=10.0.0
+watchdog>=3.0.0
+streamlit-file-browser>=2.0

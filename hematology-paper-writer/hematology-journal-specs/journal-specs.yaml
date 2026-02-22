@@ -1,0 +1,195 @@
+# Hematology Journal Specifications
+# Comprehensive formatting and submission guidelines for major hematology journals
+
+journals:
+  Blood:
+    full_name: "Blood"
+    publisher: "American Society of Hematology"
+    impact_factor: ~25
+    manuscript_formatting:
+      font: "Times New Roman"
+      font_size: 12
+      line_spacing: "double"
+      margins: 1  # inch
+      line_numbering: true
+    word_limit: 4500
+    abstract:
+      limit: 250
+      keywords_limit: 5
+    reference_style: "Vancouver"
+    required_sections:
+      - title_page
+      - abstract
+      - key_points
+      - introduction
+      - methods
+      - results
+      - discussion
+      - acknowledgments
+      - references
+      - tables
+      - figures
+    key_points:
+      required: true
+      bullet_count: 3-5
+    specific_requirements:
+      safety_reporting: true
+      trial_registration: true  # required for clinical trials
+      author_contributions: true
+      conflict_of_interest: true
+      supplementary_materials: true
+    email_format: "correspondingauthor@institution.edu"
+    submission_url: "https://submit.bloodjournal.org"
+    notes: |
+      Premier hematology journal. Strict adherence to reporting guidelines required.
+      Adverse events must be reported in detail for clinical studies.
+
+  Blood_Advances:
+    full_name: "Blood Advances"
+    publisher: "American Society of Hematology"
+    impact_factor: ~7
+    manuscript_formatting:
+      font: "Times New Roman"
+      font_size: 12
+      line_spacing: "double"
+      margins: 1
+      line_numbering: true
+    word_limit: 4500
+    abstract:
+      limit: 250
+      keywords_limit: 5
+    reference_style: "Vancouver"
+    required_sections:
+      - title_page
+      - abstract
+      - key_points
+      - introduction
+      - methods
+      - results
+      - discussion
+      - acknowledgments
+      - references
+      - tables
+      - figures
+    key_points:
+      required: true
+      bullet_count: 3-5
+    specific_requirements:
+      online_only: true
+      figure_limit: "unlimited"
+      page_charges: false
+      open_access: true  # hybrid model
+      safety_reporting: true
+      trial_registration: true
+      author_contributions: true
+      conflict_of_interest: true
+    email_format: "correspondingauthor@institution.edu"
+    submission_url: "https://submit.bloodadvances.org"
+    notes: |
+      Open-access companion journal to Blood. More accessible but still rigorous.
+      All articles available free online. No page charges.
+
+  JCO:
+    full_name: "Journal of Clinical Oncology"
+    publisher: "American Society of Clinical Oncology"
+    impact_factor: ~45
+    manuscript_formatting:
+      font: "Times New Roman"
+      font_size: 12
+      line_spacing: "double"
+      margins: 1
+      line_numbering: true
+    word_limit: 4000
+    abstract:
+      limit: 250
+      keywords_limit: 5
+    reference_style: "Vancouver"
+    required_sections:
+      - title_page
+      - abstract
+      - introduction
+      - methods
+      - results
+      - discussion
+      - acknowledgments
+      - author_contributions
+      - references
+      - tables
+      - figures
+      - CONSORT_diagram  # for clinical trials
+    specific_requirements:
+      statistical_reporting: "JCO guidelines"
+      CONSORT: true  # required for clinical trials
+      clinical_trial_registry: true
+      author_contributions: true
+      conflict_of_interest: true
+    email_format: "correspondingauthor@institution.edu"
+    submission_url: "https://jco.msubmit.net"
+    notes: |
+      Highest impact oncology journal. Extremely rigorous statistical standards.
+      Clinical trials require CONSORT diagram and trial registration.
+      Rapid publication for significant clinical findings.
+
+  British_Journal_of_Haematology:
+    full_name: "British Journal of Haematology"
+    publisher: "British Society for Haematology"
+    impact_factor: ~8
+    manuscript_formatting:
+      font: "Times New Roman"  # or "Arial"
+      font_size: 11
+      line_spacing: "double"
+      margins: 1
+      line_numbering: false
+    word_limit: 5000
+    abstract:
+      limit: 200
+      keywords_limit: 5
+    reference_style: "Vancouver"
+    units: "SI units required"
+    gene_nomenclature: "HGVS format"
+    required_sections:
+      - title_page
+      - abstract
+      - introduction
+      - methods
+      - results
+      - discussion
+      - acknowledgments
+      - references
+      - tables
+      - figures
+    specific_requirements:
+      SI_units: true  # mandatory
+      gene_nomenclature: "HGVS/ISCN"
+      statistics: "BASHH guidelines"
+      conflict_of_interest: true
+      author_contributions: true
+    email_format: "correspondingauthor@institution.edu"
+    submission_url: "https://mc.manuscriptcentral.com/bjh"
+    notes: |
+      UK-based hematology journal. Strict SI unit requirements.
+      Gene nomenclature must follow HGVS/ISCN standards.
+      Statistics should follow BASHH guidelines.
+
+# Reference formatting templates
+reference_templates:
+  vancouver:
+    journal_article: "{authors}. {title}. {journal} {year};{volume}:{pages}."
+    book: "{authors}. {title}. {city}: {publisher}; {year}."
+    chapter: "{authors}. {title}. In: {editor}, ed. {book_title}. {city}: {publisher}; {year}:{pages}."
+    online: "{authors}. {title}. {journal} {year};{volume}:{pages}. DOI:{doi}"
+
+# General compliance check items
+compliance_checklist:
+  - title_present
+  - abstract_present
+  - keywords_present
+  - references_formatted
+  - tables_labeled
+  - figures_labeled
+  - author_contributions
+  - conflict_of_interest
+  - funding_acknowledged
+  - trial_registered  # if applicable
+  - word_count_ok
+  - abstract_length_ok
