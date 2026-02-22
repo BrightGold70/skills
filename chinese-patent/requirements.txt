@@ -1,0 +1,3 @@
+# Optional: for scripts that generate figures (e.g. generate_figure_example.py)
+matplotlib>=3.5
+playwright>=1.30.0

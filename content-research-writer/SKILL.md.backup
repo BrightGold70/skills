@@ -1,0 +1,78 @@
+---
+name: content-research-writer
+description: Assists in writing high-quality content by conducting research, adding citations, improving hooks, iterating on outlines, and providing real-time feedback on each section.
+---
+
+# Content Research Writer
+
+This skill acts as your writing partner, helping research, outline, draft, and refine content.
+
+## When to Use This Skill
+
+- Writing blog posts, articles, or newsletters
+- Creating educational content or tutorials
+- Drafting thought leadership pieces
+- Researching and writing case studies
+- Producing technical documentation with sources
+- Writing with proper citations and references
+
+## What This Skill Does
+
+1. **Collaborative Outlining**: Helps structure ideas into coherent outlines
+2. **Research Assistance**: Finds relevant information and adds citations
+3. **Hook Improvement**: Strengthens opening to capture attention
+4. **Section Feedback**: Reviews each section as you write
+5. **Voice Preservation**: Maintains writing style and tone
+6. **Citation Management**: Adds and formats references properly
+7. **Iterative Refinement**: Improves through multiple drafts
+
+## How to Use
+
+### Basic Workflow
+
+1. **Start with an outline**:
+```
+Help me create an outline for an article about [topic]
+```
+
+2. **Research and add citations**:
+```
+Research [specific topic] and add citations to my outline
+```
+
+3. **Improve the hook**:
+```
+Here's my introduction. Help me make the hook more compelling.
+```
+
+4. **Get section feedback**:
+```
+I just finished the "Why This Matters" section. Review it and give feedback.
+```
+
+5. **Refine and polish**:
+```
+Review the full draft for flow, clarity, and consistency.
+```
+
+## Instructions
+
+1. **Understand the Writing Project**
+   - What is the topic and target audience?
+   - What's the desired length and format?
+   - Any specific sources or references to include?
+
+2. **Research Phase**
+   - Use web search for current information
+   - Find credible sources and statistics
+   - Add proper citations in consistent format
+
+3. **Drafting Phase**
+   - Follow the outline structure
+   - Write in the user's voice
+   - Include examples and evidence
+
+4. **Review Phase**
+   - Check for clarity and flow
+   - Verify all claims have sources
+   - Ensure consistent tone throughout
