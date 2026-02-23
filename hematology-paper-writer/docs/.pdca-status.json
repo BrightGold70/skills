@@ -1,0 +1,60 @@
+{
+  "project": "hematology-paper-writer",
+  "active_features": {
+    "hpw-recipe3-upgrade": {
+      "current_phase": "report",
+      "status": "completed",
+      "last_updated": "2026-02-23"
+    }
+  },
+  "history": [
+    {
+      "feature": "hpw-skill-improvements",
+      "phase": "plan",
+      "status": "completed",
+      "timestamp": "2026-02-23T00:36:26Z"
+    },
+    {
+      "feature": "hpw-skill-improvements",
+      "phase": "design",
+      "status": "completed",
+      "timestamp": "2026-02-23T00:40:32Z"
+    },
+    {
+      "feature": "hpw-skill-improvements",
+      "phase": "analyze",
+      "status": "completed",
+      "timestamp": "2026-02-23T00:51:57Z"
+    },
+    {
+      "feature": "hpw-skill-improvements",
+      "phase": "report",
+      "status": "completed",
+      "timestamp": "2026-02-23T00:52:16Z"
+    },
+    {
+      "feature": "hpw-recipe3-upgrade",
+      "phase": "plan",
+      "status": "completed",
+      "timestamp": "2026-02-23T10:02:00Z"
+    },
+    {
+      "feature": "hpw-recipe3-upgrade",
+      "phase": "design",
+      "status": "completed",
+      "timestamp": "2026-02-23T10:05:00Z"
+    },
+    {
+      "feature": "hpw-recipe3-upgrade",
+      "phase": "analyze",
+      "status": "completed",
+      "timestamp": "2026-02-23T10:08:00Z"
+    },
+    {
+      "feature": "hpw-recipe3-upgrade",
+      "phase": "report",
+      "status": "completed",
+      "timestamp": "2026-02-23T10:12:00Z"
+    }
+  ]
+}
