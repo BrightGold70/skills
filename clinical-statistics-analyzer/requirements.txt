@@ -1,0 +1,5 @@
+python-docx
+PyPDF2
+biopython
+lxml
+typing_extensions

@@ -1,0 +1,255 @@
+excel_header,crf_var,crf_expr
+Case number/동의서,,
+Name,name,Name (initial)
+Birthday,birth,Birthday (DD-MM-YYYY)
+Age,ab_,Antibacterial agents used *
+Gender,gender,Gender
+Diagnosis,diag,Diagnosis
+Current diagnosis made by,diag,Diagnosis
+Date of admission,adm,Admission
+Date of first diagnosis,diag,Diagnosis
+Karnofsky performance status at the time of diagnosis,perf_,Performance
+ECOG performance status at the time of diagnosis,perf_,Performance
+Chromosomal findings at diagnosis,diag,Diagnosis
+Specify the result of cytogenetic test at diagnosis,diag,Diagnosis
+FLT3 ITD,FLT3ITD,FLT3 ITD
+FLT3 TKD,FLT3TKD,FLT3 TKD
+NPM1,NPM1,NPM1
+Biallelic CEBPA,CEBPA,Biallelic CEBPA
+RUNX1,RUNX1,RUNX1
+ASXL1,,
+TP53,TP53,TP53
+Other NGS,NGS,Other NGS mutations
+AML Diagnosis,diag,Diagnosis
+AML with recurrent genetics,aml_gen,AML with recurrent genetics
+AML with multilneage dyplasia,age,Age
+"AML and MDS, therapy-related",aml_mds,"AML and MDS, therapy-related"
+AML not otherwise categorized,aml_noc,AML not otherwise categorized
+Aute leukemia of ambiguous lineage,age,Age
+Relapse occurred,rel,Relapse occurred?
+Date of relapse,date_,Date of relapse (DD-MM-YYYY)
+Karnofsky performance status at the time of diagnosis,perf_,Performance
+ECOG,ECOG1,ECOG performance status at the time of diagnosis?
+Hemoglobin,hb,Hemoglobin
+RBC,rbc,RBC
+Reticulocyte,reti,Reticulocyte
+WBC,wbc_,Amount of transfused WBC
+Neutrophil,neut,Neutrophil
+Lymphocyte,lymph,Lymphocyte
+Blast,blast,Blast
+Platelet,plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+Date,Final_date_,Final date of gilteritinib (YYYY-MM-DD)
+Cellularity,cellular,Cellularity
+Myeloblast,blast,Blast
+Promyelocyte,promyel,Promyelocyte
+Lymphoblast,blast,Blast
+Monoblast,blast,Blast
+Chromosomal findings at diagnosis,diag,Diagnosis
+Specify the result of cytogenetic test at diagnosis,diag,Diagnosis
+FLT3 ITD,FLT3ITD,FLT3 ITD
+FLT3 TKD,FLT3TKD,FLT3 TKD
+NPM1,NPM1,NPM1
+Biallelic CEBPA,CEBPA,Biallelic CEBPA
+RUNX1,RUNX1,RUNX1
+TP53,TP53,TP53
+Other NGS,NGS,Other NGS mutations
+Primary ref AML,,
+Date of refractory,date_,Date of refractory (DD-MM-YYYY)
+Karnofsky performance status at the time of diagnosis,perf_,Performance
+ECOG,ECOG1,ECOG performance status at the time of diagnosis?
+Hemoglobin,hb,Hemoglobin
+RBC,rbc,RBC
+Reticulocyte,reti,Reticulocyte
+WBC,wbc_,Amount of transfused WBC
+Neutrophil,neut,Neutrophil
+Lymphocyte,lymph,Lymphocyte
+Blast,blast,Blast
+Platelet,plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+Date,Final_date_,Final date of gilteritinib (YYYY-MM-DD)
+Cellularity,cellular,Cellularity
+Myeloblast,blast,Blast
+Promyelocyte,promyel,Promyelocyte
+Lymphoblast,blast,Blast
+Monoblast,blast,Blast
+Chromosomal findings at diagnosis,diag,Diagnosis
+Specify the result of cytogenetic test at diagnosis,diag,Diagnosis
+FLT3 ITD,FLT3ITD,FLT3 ITD
+FLT3 TKD,FLT3TKD,FLT3 TKD
+NPM1,NPM1,NPM1
+Biallelic CEBPA,CEBPA,Biallelic CEBPA
+RUNX1,RUNX1,RUNX1
+TP53,TP53,TP53
+Other NGS,NGS,Other NGS mutations
+﻿Initial salvage chemotherapy,age,Age
+﻿Low-dose cytarabine,Sal1,Initial salvage chemotherapy   0. Unknown or not done  1. FLAG-Ida  2. Low-dose cytarabine
+﻿Gilteritinib monotherapy,Gilt_,Performed gilteritinib monotherapy ?
+﻿Hematopoietic cell transplantation,HCT,Hematopoietic cell transplantation  0. Unknown or not done  4. HCT
+﻿Gilteritinib maintenance therapy after HCT,Maintenance,Gilteritinib maintenance therapy after HCT  0. Unknown or not done  5. Gilteritinib maintenance therapy
+Induction Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Date,Final_date_,Final date of gilteritinib (YYYY-MM-DD)
+Days of treatment,d_eri1,Days of treatment
+PB blast,blast,Blast
+PB platelet,plt,Platelet
+PB Hb,eri1_hb,PB Hb
+BM cellularity,cellular,Cellularity
+BM blasts,blast,Blast
+Response of FLAG-I,Rspn_FLAG_I1,Response of FLAG-Ida induction 1
+Treatment failure,fail_i1,Treatment failure
+Induction Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Date,Final_date_,Final date of gilteritinib (YYYY-MM-DD)
+Days of treatment,d_eri1,Days of treatment
+PB blast,blast,Blast
+PB platelet,plt,Platelet
+PB Hb,eri1_hb,PB Hb
+BM cellularity,cellular,Cellularity
+BM blasts,blast,Blast
+Response of FLAG-I,Rspn_FLAG_I1,Response of FLAG-Ida induction 1
+Treatment failure,fail_i1,Treatment failure
+Consolidationction Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Induction Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Consolidation Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Consolidation Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Treatment Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Response of FLAG-I,Rspn_FLAG_I1,Response of FLAG-Ida induction 1
+Treatment failure,fail_i1,Treatment failure
+Treatment Date,,
+Performed,Induction_,Performed
+Days required for the recovery of ANC more than 500/mm3,anc5_,Days required for the recovery of ANC more than 500/mm3
+Days required for the recovery of ANC more than 1000/mm3,,
+"Days required for the recovery of platelet more than 50,000/mm3",plt5_,"Days required for the recovery of platelet more than 50,000/mm3 without transfusion support"
+"Days required for the recovery of platelet more than 100,000/mm3",plt10_,"Days required for the recovery of platelet more than 100,000/mm3 without transfusion support"
+Febrile neutropenia,fn_,Febrile neutropenia
+Duration of Febrile neutropenia,fn_,Febrile neutropenia
+Causative organism of febrile neutropenia,fn_,Febrile neutropenia
+Antibacterial,ab_,Antibacterial agents used *
+Antifungal,af_,Antifungal agents used *
+Antiviral,av_,Antiviral agents used *
+transfused PC,pc_,Amount of transfused PC §
+transfused PRC,prc_,Amount of transfused PRC
+transfused WBC,wbc_,Amount of transfused WBC
+Others,commt_,Others
+Response of Gilt,Rspn_Gilt,Response of Gilteritinib monotherapy
+Treatment failure,fail_i1,Treatment failure
+Best Response of study,,
+Date of Best response after study,,
+﻿Another salvage treatment,age,Age
+Specify,chrom,* Specify the result of cytogenetic test at diagnosis
+Early stopping consolidation,,
+Cause of stopping SAPPHIRE-G?,c_s_SAPPHIRE,Cause of Stopping SAPPHIRE-G
+Stem cell transplantation performed,Induction_,Performed
+Date of stem cell transplantation,sct,Stem cell transplantation
+﻿Maintenance Gilteritinib,Gilt_Maint_,Maintenance Gilteritinib after SCT
+﻿Starting date of maintenance gilteritinib,Gilt_Maint_date,Starting date of maintenance gilteritinib (YYYY-MM-DD)
+﻿Starting dose of maintenance gilteritinib,Star_dose_Gilt_Maint,Starting dose of maintenance gilteritinib (mg/day)
+﻿Stopping date of maintenance gilteritinip,,
+﻿Final dose of maintenance gilteritinibip,,
+Date of relapse after SAPPHIRE-G,Date_rel_ SAPPHIRE,Date of relapse after SAPPHIRE-G (YYYY-MM-DD)
+Date of last follow-up,last fu date,Date of last follow-up (YYYY-MM-DD)
+Patient alive,alive,- Patient alive?
+Date of death,death date,- Date of death (YYYY-MM-DD)
+Cause of death,,
+﻿Disease status at last follow-up,alstatus,Disease status at last follow-up

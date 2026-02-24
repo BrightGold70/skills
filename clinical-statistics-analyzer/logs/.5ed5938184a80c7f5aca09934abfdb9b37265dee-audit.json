@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/logs/.5ed5938184a80c7f5aca09934abfdb9b37265dee-audit.json",
+    "files": [
+        {
+            "date": 1771900589537,
+            "name": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/logs/error-2026-02-24.log",
+            "hash": "30cfcbf02db96677e0cee62d646f8587d621a60d5347ae188fedd5dde1bec742"
+        }
+    ],
+    "hashType": "sha256"
+}
