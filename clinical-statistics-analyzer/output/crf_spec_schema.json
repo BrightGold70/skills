@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CRF Specification Schema",
+  "description": "JSON schema for Case Report Form specifications",
+  "type": "object",
+  "required": ["crf_spec"],
+  "properties": {
+    "crf_spec": {
+      "type": "object",
+      "properties": {
+        "study_id": {
+          "type": "string",
+          "description": "Associated study identifier"
+        },
+        "version": {
+          "type": "string",
+          "description": "CRF version"
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "label", "type"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Machine-readable variable name"
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable label"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["string", "numeric", "categorical", "date", "datetime"],
+                "description": "Data type"
+              },
+              "required": {
+                "type": "boolean",
+                "description": "Is this field required"
+              },
+              "values": {
+                "type": "array",
+                "description": "Valid values for categorical variables",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "code": {"type": "integer"},
+                    "label": {"type": "string"}
+                  }
+                }
+              },
+              "range": {
+                "type": "object",
+                "description": "Valid range for numeric variables",
+                "properties": {
+                  "min": {"type": "number"},
+                  "max": {"type": "number"}
+                }
+              },
+              "unit": {
+                "type": "string",
+                "description": "Unit of measurement"
+              },
+              "category": {
+                "type": "string",
+                "description": "Variable category (e.g., 'demographic', 'lab', 'treatment')"
+              }
+            }
+          }
+        },
+        "date_fields": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of date variable names"
+        },
+        "id_fields": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of identifier variable names"
+        },
+        "value_ranges": {
+          "type": "object",
+          "description": "Custom value ranges for specific variables",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "min": {"type": "number"},
+              "max": {"type": "number"},
+              "units": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

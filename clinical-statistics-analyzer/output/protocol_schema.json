@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Clinical Trial Protocol Schema",
+  "description": "JSON schema for clinical trial protocol specifications",
+  "type": "object",
+  "required": ["protocol"],
+  "properties": {
+    "protocol": {
+      "type": "object",
+      "required": ["study_id", "title", "phase", "design"],
+      "properties": {
+        "study_id": {
+          "type": "string",
+          "description": "Unique study identifier"
+        },
+        "title": {
+          "type": "string",
+          "description": "Full study title"
+        },
+        "phase": {
+          "type": "string",
+          "enum": ["I", "II", "III", "IV"],
+          "description": "Clinical trial phase"
+        },
+        "design": {
+          "type": "string",
+          "description": "Study design description"
+        },
+        "population": {
+          "type": "string",
+          "description": "Target patient population"
+        },
+        "endpoints": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "object",
+              "properties": {
+                "type": {"type": "string"},
+                "definition": {"type": "string"}
+              }
+            },
+            "secondary": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {"type": "string"},
+                  "definition": {"type": "string"}
+                }
+              }
+            },
+            "exploratory": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        },
+        "treatment_arms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string"},
+              "eligible": {"type": "string"},
+              "description": {"type": "string"}
+            }
+          }
+        },
+        "inclusion_criteria": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "exclusion_criteria": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "sample_size": {
+          "type": "integer",
+          "description": "Planned number of subjects"
+        },
+        "duration": {
+          "type": "object",
+          "properties": {
+            "start": {"type": "string", "format": "date"},
+            "end": {"type": "string", "format": "date"}
+          }
+        }
+      }
+    }
+  }
+}

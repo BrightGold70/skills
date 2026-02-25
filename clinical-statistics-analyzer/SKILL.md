@@ -7,6 +7,15 @@ description: Comprehensive statistical analysis skill for hematological clinical
 
 This skill orchestrates multiple specialized sub-skills and the R MCP server (`rmcp`) to perform rigorous, publication-ready statistical analyses for clinical trials in hematology.
 
+## Path Structure (IMPORTANT)
+
+- **Skill Scripts**: `/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/`
+- **Output/Products**: `/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer/`
+
+When working with this skill:
+1. All Python/R scripts should be in the skill's `scripts/` folder
+2. All outputs (parsed data, reports, tables, figures) should be saved to the Dropbox `Paper/Clinical_statistics_analyzer/` folder
+
 ## Core Capabilities
 
 1. **Baseline Characteristics ("Table 1")**:
@@ -25,7 +34,7 @@ This skill orchestrates multiple specialized sub-skills and the R MCP server (`r
 3. **Safety Summaries**:
    - Generates adverse event (AE) and toxicity tables based on Common Terminology Criteria for Adverse Events (CTCAE).
    - Evaluates specific toxicities using univariate and multivariate logistic regression analysis to adjust for confounding clinical factors and baselines.
-   - Defaults to reporting events with ≥10% frequency, with capabilities to adjust the threshold as specified.
+   - Defaults to reporting events with >=10% frequency, with capabilities to adjust the threshold as specified.
 
 4. **Survival & Time-to-Event Analysis**:
    - **Survival Graphs**: Generates Kaplan-Meier plots with integrated log-rank test p-values and 95% CIs. Endpoints include Overall Survival (OS), Progression-Free Survival (PFS), Leukemia-Free Survival (LFS), Event-Free Survival (EFS), and GVHD-free & relapse-free survival (GRFS).
@@ -40,25 +49,35 @@ This skill orchestrates multiple specialized sub-skills and the R MCP server (`r
    - Extracts clinical factor metadata and variable structures from CRFs (often in DOCX or PDF format) using the `docx` or `pdf` skills.
    - Maps raw dataset columns to their specific clinical/hematological definitions as dictated by the trial's CRF, ensuring accurate subgroup analysis and table generation.
 
-7. **Trial Phase Specific Workflows**:
+7. **Protocol/CRF Validation Framework**:
+   - Parse clinical trial protocols (DOCX/PDF) to extract endpoints, treatment arms, sample size
+   - Parse CRF specifications (DOCX/XLSX) to extract variable definitions, valid ranges
+   - Validate patient data against protocol and CRF specifications
+   - Generate validation reports (JSON/HTML)
+
+8. **Trial Phase Specific Workflows**:
    - **Phase 1**: Dose finding (3+3, CRM), Safety/Toxicity analysis, Maximum Tolerated Dose (MTD), target population appropriate for safety bounds.
    - **Phase 2**: Efficacy, Simon's two-stage designs (Optimal & Minimax sample sizes), biomarker associations.
    - **Phase 3**: Randomized Controlled Trials (RCTs), superiority/non-inferiority margins, stratified randomization, power analysis for time-to-event endpoints.
 
-8. **Longitudinal Visualization**:
+9. **Longitudinal Visualization**:
    - Generates treatment pathway visualizations (Swimmer Plots, Sankey Diagrams, Sunburst Charts, Heatmaps) to track medication changes, treatment switching, and adherence.
    - Leverages R packages like `ggsankey`, `patientProfilesVis`, and `ggplot2` via `rmcp`, addressing implementation challenges such as overlapping treatments and time normalization (days since start of treatment).
 
-9. **Bundled Analysis Scripts**:
-   - For all core tabular and plotting operations, this skill bundles native scripts under the `scripts/` directory natively inside this skill's root folder (`~/.config/opencode/skill/clinical-statistics-analyzer/scripts/`).
-   - You MUST utilize these predefined scripts for:
-     - CRF parsing (`01_parse_crf.py`)
-     - Table 1 Generation (`02_table1.R`)
-     - Efficacy Analysis (`03_efficacy.R`)
-     - Survival Analysis (`04_survival.R`)
-     - Safety Analysis (`05_safety.R`)
-     - Mock Data Generation (`generate_mock.py`)
-   - Any parsed CRF metadata and processed inputs must be automatically directed to the designated `data/` folder inside the Dropbox project path (`/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer/data/`).
+10. **Bundled Analysis Scripts**:
+    - All scripts are located in: `~/.config/opencode/skill/clinical-statistics-analyzer/scripts/`
+    - **Protocol/CRF Parsing Scripts**:
+      - `06_parse_protocol.py` - Parse clinical trial protocol documents (DOCX/PDF)
+      - `07_parse_crf_spec.py` - Parse CRF specification documents (DOCX/XLSX)
+      - `08_parse_data.py` - Parse patient data files (XLSX/CSV/SPSS/JSON)
+      - `09_validate.py` - Validate data against protocol/CRF specifications
+    - **Statistical Analysis Scripts**:
+      - `01_parse_crf.py` - CRF parsing
+      - `02_table1.R` - Table 1 Generation
+      - `03_efficacy.R` - Efficacy Analysis
+      - `04_survival.R` - Survival Analysis
+      - `05_safety.R` - Safety Analysis
+      - `generate_mock.py` - Mock Data Generation
 
 ## Integrated Skills & Dependencies
 
@@ -89,7 +108,7 @@ When asked to analyze clinical trial data, follow these steps sequentially:
 ### 2. Baseline & Safety Analysis
 
 - **Table 1**: Use `mcp_rmcp_execute_r_analysis` or standard terminal execution to run the bundled `scripts/02_table1.R` script on the dataset to create the baseline characteristics table. The script will save the `.docx` to the Dropbox `Tables/` folder.
-- **Safety Sumary**: Run the `scripts/05_safety.R` script to calculate AE frequencies and create a summary table reporting events occurring in ≥10% of patients (or as requested). It saves a `.docx` summary in the Dropbox `Tables/` folder.
+- **Safety Sumary**: Run the `scripts/05_safety.R` script to calculate AE frequencies and create a summary table reporting events occurring in >=10% of patients (or as requested). It saves a `.docx` summary in the Dropbox `Tables/` folder.
 
 ### 3. Efficacy & Subgroup Analysis
 

@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Validation Rules Schema",
+  "description": "JSON schema for validation rules configuration",
+  "type": "object",
+  "properties": {
+    "validation_rules": {
+      "type": "object",
+      "properties": {
+        "completeness": {
+          "type": "object",
+          "properties": {
+            "required_fields": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "List of required field names"
+            },
+            "missing_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Maximum allowed missing percentage"
+            },
+            "unique_fields": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Fields that must be unique"
+            }
+          }
+        },
+        "temporal": {
+          "type": "object",
+          "properties": {
+            "date_sequences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field1": {"type": "string"},
+                  "field2": {"type": "string"},
+                  "operator": {"type": "string", "enum": ["<", "<=", "=="]}
+                }
+              }
+            },
+            "calculated_fields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "computed": {"type": "string"},
+                  "formula": {"type": "string"},
+                  "source": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "value_range": {
+          "type": "object",
+          "properties": {
+            "numeric_ranges": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "min": {"type": "number"},
+                  "max": {"type": "number"}
+                }
+              }
+            },
+            "categorical_values": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {"type": "integer"}
+              }
+            },
+            "clinical_thresholds": {
+              "type": "object",
+              "properties": {
+                "qtc_max": {"type": "number", "default": 480},
+                "age_min": {"type": "number", "default": 0},
+                "age_max": {"type": "number", "default": 120}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
