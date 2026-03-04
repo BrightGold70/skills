@@ -1,0 +1,68 @@
+{
+  "version": "2.0",
+  "description": "Common fields shared across all hematological trials",
+  "sections": {
+    "demographics": {
+      "description": "Patient identification and demographics",
+      "fields": [
+        {"crf_field": "Case number", "variable": "case_no", "type": "string", "extraction_method": "regex", "required": true, "patterns": ["([A-Z]+-\\d{3})", "([A-Z]{2,4}-\\d{3})"]},
+        {"crf_field": "Name (initial)", "variable": "name", "type": "string", "extraction_method": "ocr"},
+        {"crf_field": "Birthday", "variable": "birth", "type": "date", "extraction_method": "template", "required": true, "patterns": ["(\\d{1,2}[-\\/]\\d{1,2}[-\\/]\\d{2,4})"]},
+        {"crf_field": "Age", "variable": "age", "type": "numeric", "extraction_method": "template", "required": true, "patterns": ["(?:Age|나이|세)[:\\s]*(\\d+)", "(\\d+)\\s*(?:세|years?|yr)"]},
+        {"crf_field": "Gender", "variable": "gender", "type": "categorical", "extraction_method": "template", "sps_code": true, "patterns": ["(?:Gender|Sex|성별)[:\\s]*(Male|Female|남성|여성|M|F|남|여)", "([MF]ale)?"]}
+      ]
+    },
+    "laboratory": {
+      "description": "Laboratory values at diagnosis",
+      "fields": [
+        {"crf_field": "Karnofsky performance status", "variable": "perf1", "type": "numeric", "extraction_method": "template", "patterns": ["Karnofsky[:\\s]*(\\d+)", "(\\d+)\\s*%"]},
+        {"crf_field": "ECOG performance status", "variable": "ECOG1", "type": "numeric", "extraction_method": "template", "patterns": ["ECOG[:\\s]*(\\d)", "Grade[:\\s]*(\\d)"]},
+        {"crf_field": "WBC at diagnosis", "variable": "wbc1", "type": "numeric", "extraction_method": "regex", "patterns": ["WBC[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Hemoglobin", "variable": "hb1", "type": "numeric", "extraction_method": "regex", "patterns": ["Hb|Hemoglobin[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Platelet count", "variable": "plt1", "type": "numeric", "extraction_method": "regex", "patterns": ["Platelet|plt[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Bone marrow blast %", "variable": "blast1", "type": "numeric", "extraction_method": "regex", "patterns": ["Blast|blast[:\\s]*(\\d+\\.?\\d*)"]}
+      ]
+    },
+    "dates": {
+      "description": "Key dates",
+      "fields": [
+        {"crf_field": "Date of last follow-up", "variable": "date_last_fu", "type": "date", "extraction_method": "ocr"}
+      ]
+    },
+    "adverse_events": {
+      "description": "Adverse events (populated by disease overlays)",
+      "fields": []
+    },
+    "outcomes": {
+      "description": "Patient follow-up and survival",
+      "fields": [
+        {"crf_field": "Survival status", "variable": "alive", "type": "categorical", "extraction_method": "template", "required": true, "sps_code": true, "patterns": ["(?:Survival status|alive)[:\\s]*(Alive|Dead|생존|사망|Yes|No)", "(Alive|Dead|생존|사망)"]},
+        {"crf_field": "Date of death", "variable": "date_death", "type": "date", "extraction_method": "ocr"},
+        {"crf_field": "Cause of death", "variable": "cause_death", "type": "categorical", "extraction_method": "llm"},
+        {"crf_field": "Relapse", "variable": "relapse", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "Relapse date", "variable": "relapse_date", "type": "date", "extraction_method": "ocr"},
+        {"crf_field": "HCT performed", "variable": "hct_done", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "HCT date", "variable": "hct_date", "type": "date", "extraction_method": "ocr"}
+      ]
+    }
+  },
+  "column_mapping": {
+    "case_no": "Patient_ID",
+    "age": "Age",
+    "gender": "Sex",
+    "perf1": "Karnofsky",
+    "ECOG1": "ECOG",
+    "wbc1": "WBC",
+    "hb1": "Hemoglobin",
+    "plt1": "Platelet",
+    "blast1": "BM_Blast",
+    "date_last_fu": "Last_FU_Date",
+    "date_death": "Death_Date"
+  },
+  "derived_columns": {},
+  "spss_value_mapping": {
+    "gender": {"1": "Male", "2": "Female", "Male": 1, "Female": 2, "남성": 1, "여성": 2, "M": 1, "F": 2},
+    "alive": {"0": "Unknown", "1": "Survival", "2": "Dead", "Alive": 1, "Dead": 2, "생존": 1, "사망": 2, "Yes": 1, "No": 2}
+  },
+  "required_fields": ["case_no", "age", "gender", "alive"]
+}

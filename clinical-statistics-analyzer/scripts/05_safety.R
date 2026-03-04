@@ -14,7 +14,8 @@ if(length(args) < 1) {
 input_data_path <- args[1]
 freq_threshold <- ifelse(length(args) >= 2, as.numeric(args[2]), 0.10) # default 10%
 
-output_dir <- "/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer"
+output_dir <- Sys.getenv("CSA_OUTPUT_DIR", "")
+if (output_dir == "") stop("CSA_OUTPUT_DIR not set. Export it first: export CSA_OUTPUT_DIR=/path/to/output")
 tables_dir <- file.path(output_dir, "Tables")
 if(!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
 

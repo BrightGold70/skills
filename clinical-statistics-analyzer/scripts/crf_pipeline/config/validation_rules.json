@@ -1,0 +1,178 @@
+{
+  "version": "2.0",
+  "description": "Shared and disease-specific CRF validation rules",
+  "range_checks": {
+    "age": {"min": 0, "max": 120, "unit": "years"},
+    "wbc1": {"min": 0, "max": 500, "unit": "x10^9/L"},
+    "hb1": {"min": 5, "max": 20, "unit": "g/dL"},
+    "plt1": {"min": 0, "max": 1000, "unit": "x10^9/L"},
+    "blast1": {"min": 0, "max": 100, "unit": "%"},
+    "perf1": {"min": 0, "max": 100, "unit": "Karnofsky score"},
+    "ECOG1": {"min": 0, "max": 5, "unit": "ECOG grade"},
+    "grade_i": {"min": 0, "max": 4, "unit": "CTCAE grade"},
+    "grade_c1": {"min": 0, "max": 4, "unit": "CTCAE grade"},
+    "grade_c2": {"min": 0, "max": 4, "unit": "CTCAE grade"},
+    "grade_ld": {"min": 0, "max": 4, "unit": "CTCAE grade"},
+    "anc5_i": {"min": 0, "max": 365, "unit": "days"},
+    "anc10_i": {"min": 0, "max": 365, "unit": "days"},
+    "plt5_i": {"min": 0, "max": 365, "unit": "days"},
+    "plt10_i": {"min": 0, "max": 365, "unit": "days"},
+    "bcr_abl_baseline": {"min": 0, "max": 100, "unit": "%"},
+    "bcr_abl_3m": {"min": 0, "max": 100, "unit": "%"},
+    "bcr_abl_6m": {"min": 0, "max": 100, "unit": "%"},
+    "bcr_abl_12m": {"min": 0, "max": 100, "unit": "%"},
+    "ipss": {"min": 0, "max": 3.5, "unit": "IPSS score"},
+    "ipss_r": {"min": 0, "max": 10, "unit": "IPSS-R score"},
+    "ring_sidero_pct": {"min": 0, "max": 100, "unit": "%"},
+    "ferritin": {"min": 0, "max": 100000, "unit": "ng/mL"},
+    "rbc_units_8w": {"min": 0, "max": 50, "unit": "units"},
+    "engraft_anc_days": {"min": 0, "max": 100, "unit": "days"},
+    "engraft_plt_days": {"min": 0, "max": 180, "unit": "days"},
+    "chimerism_d30": {"min": 0, "max": 100, "unit": "%"},
+    "chimerism_d100": {"min": 0, "max": 100, "unit": "%"},
+    "cd34_dose": {"min": 0, "max": 50, "unit": "x10^6/kg"},
+    "agvhd_grade": {"min": 0, "max": 4, "unit": "grade"},
+    "tbi_dose": {"min": 0, "max": 20, "unit": "Gy"},
+    "tox_hemat_grade": {"min": 0, "max": 4, "unit": "CTCAE grade"},
+    "sokal_score": {"min": 0, "max": 5, "unit": "Sokal"},
+    "tki_dose": {"min": 0, "max": 1000, "unit": "mg"}
+  },
+  "consistency_rules": [
+    {
+      "id": "CR001",
+      "description": "If CR achieved, CR date must be present",
+      "condition": "cr_achieved in ['Yes', 'CR']",
+      "require": "cr_date is not null",
+      "severity": "error"
+    },
+    {
+      "id": "CR002",
+      "description": "If patient is dead, death date must be present",
+      "condition": "alive in ['Dead', '\uc0ac\ub9dd']",
+      "require": "date_death is not null",
+      "severity": "error"
+    },
+    {
+      "id": "CR003",
+      "description": "If age < 18, flag as potential pediatric case",
+      "condition": "age < 18",
+      "severity": "warning"
+    },
+    {
+      "id": "CR004",
+      "description": "Death date must be after diagnosis date",
+      "condition": "date_death is not null",
+      "require": "date_death >= reg_date",
+      "severity": "error"
+    },
+    {
+      "id": "CR005",
+      "description": "CR date must be after induction date",
+      "condition": "cr_date is not null",
+      "require": "cr_date >= induction_date",
+      "severity": "error"
+    },
+    {
+      "id": "CR006",
+      "description": "HCT date must be after CR date if both present",
+      "condition": "hct_date is not null and cr_date is not null",
+      "require": "hct_date >= cr_date",
+      "severity": "error"
+    },
+    {
+      "id": "CR007",
+      "description": "Relapse date must be after CR date",
+      "condition": "relapse_date is not null",
+      "require": "relapse_date >= cr_date",
+      "severity": "error"
+    }
+  ],
+  "disease_specific_rules": {
+    "aml": [
+      {
+        "id": "AML-R01",
+        "description": "Blast% required at diagnosis for AML",
+        "require": "blast1 is not null",
+        "severity": "error"
+      },
+      {
+        "id": "AML-R02",
+        "description": "Cytogenetic risk requires cytogenetics result",
+        "condition": "cytogenetic_risk is not null",
+        "require": "cytogene is not null",
+        "severity": "warning"
+      }
+    ],
+    "cml": [
+      {
+        "id": "CML-R01",
+        "description": "BCR-ABL% required at diagnosis for CML",
+        "require": "bcr_abl_baseline is not null",
+        "severity": "error"
+      },
+      {
+        "id": "CML-R02",
+        "description": "TKI therapy required for CML",
+        "require": "tki_first_line is not null",
+        "severity": "error"
+      }
+    ],
+    "mds": [
+      {
+        "id": "MDS-R01",
+        "description": "IPSS-R score required for MDS",
+        "require": "ipss_r is not null",
+        "severity": "error"
+      },
+      {
+        "id": "MDS-R02",
+        "description": "Transfusion status required for MDS",
+        "require": "transfusion_dependent is not null",
+        "severity": "error"
+      }
+    ],
+    "hct": [
+      {
+        "id": "HCT-R01",
+        "description": "Conditioning regimen required for HCT",
+        "require": "conditioning is not null",
+        "severity": "error"
+      },
+      {
+        "id": "HCT-R02",
+        "description": "Donor type required for HCT",
+        "require": "donor_type is not null",
+        "severity": "error"
+      },
+      {
+        "id": "HCT-R03",
+        "description": "Engraftment date must be after HCT date",
+        "condition": "engraft_anc_date is not null",
+        "require": "engraft_anc_date >= hct_date",
+        "severity": "error"
+      }
+    ]
+  },
+  "required_fields": [
+    "case_no", "age", "gender", "alive"
+  ],
+  "categorical_values": {
+    "gender": ["Male", "Female", "\ub0a8\uc131", "\uc5ec\uc131", "M", "F", "m", "f"],
+    "alive": ["Alive", "Dead", "\uc0dd\uc874", "\uc0ac\ub9dd", "A", "D", "a", "d"],
+    "cr_achieved": ["Yes", "No", "CR", "CRi", "PR", "NR", "SD", "PD", "\uc608", "\uc544\ub2c8\uc624", "Y", "N"],
+    "FLT3ITD": ["Positive", "Negative", "\uc591\uc131", "\uc74c\uc131", "Pos", "Neg", "+", "-"],
+    "FLT3TKD": ["Positive", "Negative", "\uc591\uc131", "\uc74c\uc131", "Pos", "Neg", "+", "-"],
+    "NPM1": ["Positive", "Negative", "\uc591\uc131", "\uc74c\uc131", "Pos", "Neg", "+", "-"],
+    "CEBPA": ["Positive", "Negative", "\uc591\uc131", "\uc74c\uc131", "Pos", "Neg", "+", "-"],
+    "cytogenetic_risk": ["Favorable", "Intermediate", "Poor", "\uc591\ud638", "\uc911\uac04", "\ubd88\ub7c9", "F", "I", "P"],
+    "donor_type": ["MSD", "MUD", "MMUD", "Haplo", "CB", "\ud615\uc81c", "\ube44\ud608\uc5f0", "\ubc18\uc77c\uce58", "\uc81c\ub300\ud608"],
+    "conditioning_intensity": ["MAC", "RIC", "NMA"],
+    "stem_cell_source": ["PBSC", "BM", "CB"],
+    "cgvhd_severity": ["Mild", "Moderate", "Severe", "\uacbd\uc99d", "\uc911\ub4f1\uc99d", "\uc911\uc99d"],
+    "sokal_risk": ["Low", "Intermediate", "High"],
+    "cml_phase_dx": ["Chronic Phase", "Accelerated Phase", "Blast Crisis", "CP", "AP", "BC"],
+    "ipss_r_risk": ["Very Low", "Low", "Intermediate", "High", "Very High"],
+    "mds_response": ["CR", "mCR", "PR", "HI", "SD", "Failure", "PD"],
+    "transfusion_dependent": ["Yes", "No", "dependent", "independent", "\uc608", "\uc544\ub2c8\uc624"]
+  }
+}

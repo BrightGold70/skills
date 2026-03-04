@@ -10,11 +10,19 @@ This skill orchestrates multiple specialized sub-skills and the R MCP server (`r
 ## Path Structure (IMPORTANT)
 
 - **Skill Scripts**: `/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/`
-- **Output/Products**: `/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer/`
+- **Output/Products**: Set via environment variables (no hardcoded paths)
+
+### Environment Variables (Required)
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `CSA_OUTPUT_DIR` | Base output directory for R scripts (Tables/, Figures/) | `export CSA_OUTPUT_DIR=/path/to/output` |
+| `CRF_OUTPUT_DIR` | Output directory for CRF pipeline (Python) | `export CRF_OUTPUT_DIR=/path/to/output` |
 
 When working with this skill:
 1. All Python/R scripts should be in the skill's `scripts/` folder
-2. All outputs (parsed data, reports, tables, figures) should be saved to the Dropbox `Paper/Clinical_statistics_analyzer/` folder
+2. All outputs (parsed data, reports, tables, figures) are saved to directories specified by `CSA_OUTPUT_DIR` / `CRF_OUTPUT_DIR`
+3. Scripts will error with a helpful message if the required env var is not set
 
 ## Core Capabilities
 
@@ -66,18 +74,44 @@ When working with this skill:
 
 10. **Bundled Analysis Scripts**:
     - All scripts are located in: `~/.config/opencode/skill/clinical-statistics-analyzer/scripts/`
-    - **Protocol/CRF Parsing Scripts**:
-      - `06_parse_protocol.py` - Parse clinical trial protocol documents (DOCX/PDF)
-      - `07_parse_crf_spec.py` - Parse CRF specification documents (DOCX/XLSX)
-      - `08_parse_data.py` - Parse patient data files (XLSX/CSV/SPSS/JSON)
-      - `09_validate.py` - Validate data against protocol/CRF specifications
+    - **CRF Pipeline** (`scripts/crf_pipeline/`, v3.0.0):
+      - Unified Python package for CRF extraction, document parsing, and data validation
+      - Run via: `python -m scripts.crf_pipeline <subcommand>`
+      - Subcommands: `run` (full pipeline), `parse-crf`, `parse-protocol`, `parse-data`, `validate`, `run-analysis` (end-to-end transform + R analysis)
+      - Supports AML, CML, MDS, HCT via layered JSON config (common + disease overlay + study overrides)
+      - Parsers: `CRFParser`, `ProtocolParser`, `CRFSpecParser`, `DataParser`, `PatientDataParser`
+      - Validators: `TemporalValidator`, `RuleValidator`, `SchemaValidator`
+      - **Analysis Orchestrator** (`orchestrator.py`): Chains data transformation with R script execution
+        - `run-analysis <data_file> -d <disease> [-o <output_dir>] [--skip-validation] [--scripts <list>]`
+        - Flow: load data → parse → validate → transform (derive + rename) → run R scripts → summary JSON
+        - Config-driven variable mapping: CRF variable names → R-expected column names (per disease)
+        - Derived columns: date arithmetic (time-to-event), categorical recoding, numeric binning
+        - Disease-aware R script routing via `config/analysis_profiles.json`
+        - Exit codes: 0=success, 1=partial (some R scripts failed), 2=pipeline failure
     - **Statistical Analysis Scripts**:
-      - `01_parse_crf.py` - CRF parsing
-      - `02_table1.R` - Table 1 Generation
-      - `03_efficacy.R` - Efficacy Analysis
-      - `04_survival.R` - Survival Analysis
-      - `05_safety.R` - Safety Analysis
-      - `generate_mock.py` - Mock Data Generation
+       - `02_table1.R` - Table 1 Generation
+       - `03_efficacy.R` - Efficacy Analysis
+       - `04_survival.R` - Survival Analysis (KM, Cox w/ `cox.zph()` PH testing, competing risks, Fine-Gray GRFS); supports `--disease aml/cml/hct` CLI arg
+       - `05_safety.R` - Safety Analysis
+       - `generate_mock.py` - Mock Data Generation
+     - **Disease-Specific Analysis Modules**:
+       - `20_aml_eln_risk.R` - **AML**: ELN 2022 risk stratification (Favorable/Intermediate/Adverse); full molecular/cytogenetic criteria per Döhner et al. 2022; CLI: `Rscript 20_aml_eln_risk.R <dataset>` → .docx table + .eps bar chart
+       - `21_aml_composite_response.R` - **AML**: cCR composite response (CR+CRi+CRh+MLFS) per ELN 2022; Wilson score 95% CIs; response hierarchy; waterfall + bar plots; CLI: `Rscript 21_aml_composite_response.R <dataset> [cycle]` → .docx + .eps
+       - `22_cml_tfr_analysis.R` - **CML**: BCR-ABL kinetics (log10 IS trajectories + cohort median), ELN 2020 milestone table (3/6/12/18 mo with ±1.5 mo window), TFR KM + Cox with `cox.zph()` PH test; CLI: `Rscript 22_cml_tfr_analysis.R <dataset> [--tfr-only]` → .docx + .eps
+       - `23_cml_scores.R` - **CML**: Sokal (1984), Hasford (1998), ELTS (2016) score calculation from raw variables; flexible column mapping; risk distribution table; concordance table; KM by risk group; CLI: `Rscript 23_cml_scores.R <dataset>` → .docx + .eps
+       - `24_hct_gvhd_analysis.R` - **HCT**: aGVHD Grade II-IV/III-IV cumulative incidence (Fine-Gray, NIH 2014), cGVHD CI + severity table, GRFS (Fine-Gray or KM fallback), engraftment kinetics (ANC + platelet histograms); CLI: `Rscript 24_hct_gvhd_analysis.R <dataset> [--no-engraftment]` → .docx + .eps
+       - `25_aml_phase1_boin.R` - **AML Phase 1**: BOIN (Bayesian Optimal Interval, Liu & Yuan 2015) dose-finding from scratch; λ_e/λ_d boundaries with overdose control (posterior beta); Monte Carlo OC simulation (1000 trials × 4 scenarios); CLI: `Rscript 25_aml_phase1_boin.R [target_dlt] [n_doses] [cohort_size] [n_trials]` → .docx + .eps
+    - **Sample Size & Power Calculations**:
+      - `10_sample_size.R` - Sample size for binary/continuous/survival endpoints with sensitivity analysis
+    - **Phase-Specific Designs**:
+      - `11_phase1_dose_finding.R` - 3+3 and CRM dose-finding designs for Phase 1
+      - `12_phase2_simon.R` - Simon two-stage (Optimal/Minimax) designs for Phase 2
+    - **Advanced Visualizations**:
+      - `14_forest_plot.R` - Subgroup analysis forest plots with HR, 95% CI, interaction p-values
+      - `15_swimmer_plot.R` - Patient-level treatment response visualization
+      - `16_sankey.R` - Treatment flow Sankey diagrams
+    - **Report Generation**:
+      - `17_generate_csr.py` - Automated Clinical Study Report generation
 
 ## Integrated Skills & Dependencies
 
@@ -98,17 +132,17 @@ When asked to analyze clinical trial data, follow these steps sequentially:
 
 ### 1. Planning, Contextual Review & Project Initialization
 
-- **Project Folder Setup**: Automatically orchestrate and create a project-specific folder structure under `/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer` to systematically store raw inputs, reference CRFs, and generated outputs/reports.
+- **Project Folder Setup**: Automatically orchestrate and create a project-specific folder structure under the `CSA_OUTPUT_DIR` directory to systematically store raw inputs, reference CRFs, and generated outputs/reports.
 - **Data Import**: Load the dataset into the analytical environment. Natively parse multiple formats: use `readxl` for Excel (`.xlsx`), `haven` for SPSS (`.sav`), or base R functions for R data (`.RData`/`.rds`) via RMCP.
 - Understand the trial phase, endpoints, and data structure.
-- If provided with a Case Report Form (CRF) in DOCX or PDF format, execute the bundled `scripts/01_parse_crf.py` via Python or standard terminal to extract data variable definitions. Save the mapping (`crf_mapping.json`) to the Dropbox project's `data/` folder (`/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer/data/`). Map the raw dataset to the clinical factors for accurate analysis.
+- If provided with a Case Report Form (CRF) in DOCX or PDF format, use the CRF pipeline: `python -m scripts.crf_pipeline parse-crf <crf_doc> -o <output.json>` to extract data variable definitions. Save the mapping (`crf_mapping.json`) to the `data/` subfolder under `CRF_OUTPUT_DIR`. Map the raw dataset to the clinical factors for accurate analysis.
 - Construct queries using **clinicaltrials-database** and **pubmed-database** to review comparable trials, ensuring the planned statistical methodologies align with current hematology standards.
 - Evaluate the required target population: perform formal sample size calculations (e.g., via R's `pwr` or custom survival design packages in RMCP) powered to the primary endpoint depending on the specific trial Phase (1, 2, or 3).
 
 ### 2. Baseline & Safety Analysis
 
-- **Table 1**: Use `mcp_rmcp_execute_r_analysis` or standard terminal execution to run the bundled `scripts/02_table1.R` script on the dataset to create the baseline characteristics table. The script will save the `.docx` to the Dropbox `Tables/` folder.
-- **Safety Sumary**: Run the `scripts/05_safety.R` script to calculate AE frequencies and create a summary table reporting events occurring in >=10% of patients (or as requested). It saves a `.docx` summary in the Dropbox `Tables/` folder.
+- **Table 1**: Use `mcp_rmcp_execute_r_analysis` or standard terminal execution to run the bundled `scripts/02_table1.R` script on the dataset to create the baseline characteristics table. The script saves the `.docx` to `$CSA_OUTPUT_DIR/Tables/`.
+- **Safety Summary**: Run the `scripts/05_safety.R` script to calculate AE frequencies and create a summary table reporting events occurring in >=10% of patients (or as requested). It saves a `.docx` summary to `$CSA_OUTPUT_DIR/Tables/`.
 
 ### 3. Efficacy & Subgroup Analysis
 
@@ -123,14 +157,15 @@ When asked to analyze clinical trial data, follow these steps sequentially:
 
 ### 4. Survival & Competing Risks
 
-- **Survival**: Run the bundled `scripts/04_survival.R` script to produce Kaplan-Meier survival curves using `survival` and `survminer` packages. Explicitly include 95% confidence intervals (`conf.int = TRUE`) and log-rank p-values (`pval = TRUE`) directly on the plots, saved to the Dropbox `Figures/` directory. Use for endpoints like OS, PFS, or GRFS.
+- **Survival**: Run the bundled `scripts/04_survival.R` script to produce Kaplan-Meier survival curves using `survival` and `survminer` packages. Explicitly include 95% confidence intervals (`conf.int = TRUE`) and log-rank p-values (`pval = TRUE`) directly on the plots, saved to `$CSA_OUTPUT_DIR/Figures/`. Use for endpoints like OS, PFS, or GRFS.
 - If analyzing relapse, GVHD, or specific events with competing mortality, execute competing risk analyses using R's `cmprsk` to plot cumulative incidence functions.
 
 ### 5. Review, Reporting & Longitudinal Visualization
 
 - Evaluate statistical output (Akaike/Bayesian info criteria, residual analysis).
-- **Longitudinal Visualization**: Create Swimmer Plots, Sankey Diagrams, Sunburst Charts, or Heatmaps to visualize patient treatment pathways over time (e.g., first-line to second-line therapies) using `ggsankey` or `patientProfilesVis` via `mcp_rmcp_execute_r_analysis`. Save these visualizations directly to the Dropbox project folder as `.eps` files.
+- **Longitudinal Visualization**: Create Swimmer Plots, Sankey Diagrams, Sunburst Charts, or Heatmaps to visualize patient treatment pathways over time (e.g., first-line to second-line therapies) using `ggsankey` or `patientProfilesVis` via `mcp_rmcp_execute_r_analysis`. Save these visualizations to `$CSA_OUTPUT_DIR/Figures/` as `.eps` files.
 - **Reporting**: Compile statistical outputs and visualizations (mandating **.docx** for tables and **.eps** for plots) and feed them into the **clinical-reports** skill to generate ICH-E3 structured Clinical Study Reports (CSR), Case Reports (CARE), SAE narratives, or standard clinical documents. Use **academic-writing** guidelines to ensure outputs are formatted correctly in IEEE reference style for final IMRAD reports.
+  - **AML/FLT3 Context**: When structuring reports for FLT3-mutated AML trials (e.g., SAPPHIRE-G), strictly report cCR definitions (CR + CRi + CRp), detail survival analysis considering immortal time bias from HCT, and highlight specific subgroup interactions (e.g., NPM1/FLT3 status, prior therapies) in the results sections.
 - Ensure all references are retrieved using real querying rather than hallucinations.
 
 ## Key Guidelines

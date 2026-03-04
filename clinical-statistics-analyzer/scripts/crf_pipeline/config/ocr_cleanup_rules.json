@@ -1,0 +1,7 @@
+{
+  "version": "2.0",
+  "description": "OCR noise correction patterns for scanned CRF documents",
+  "remove_chars": ["_", "!", "@", "#", "$", "%", "^", "&", "*", "~", "`", "\u2022"],
+  "replace_pairs": [["O", "0"], ["o", "0"], ["l", "1"], ["I", "1"], ["S", "5"], ["s", "5"]],
+  "normalize_whitespace": true
+}

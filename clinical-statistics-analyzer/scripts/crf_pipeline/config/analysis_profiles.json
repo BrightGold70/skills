@@ -1,0 +1,225 @@
+{
+  "version": "1.0",
+  "description": "R script routing per disease type for the analysis orchestrator",
+  "profiles": {
+    "aml": {
+      "scripts": [
+        {
+          "name": "02_table1.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Table1_Baseline_Characteristics.docx"],
+          "description": "Baseline characteristics table"
+        },
+        {
+          "name": "05_safety.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Safety_Summary_Table.docx"],
+          "description": "Adverse event safety summary"
+        },
+        {
+          "name": "03_efficacy.R",
+          "args": ["{dataset}", "{outcome_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["Efficacy_Table.docx", "Forest_Efficacy.eps"],
+          "description": "Efficacy analysis with response rates"
+        },
+        {
+          "name": "04_survival.R",
+          "args": ["{dataset}", "{time_var}", "{status_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["KM_OS.eps", "KM_PFS.eps"],
+          "description": "Kaplan-Meier survival analysis",
+          "run_variants": [
+            {"time_var": "OS_months", "status_var": "OS_status", "suffix": "OS"},
+            {"time_var": "PFS_months", "status_var": "PFS_status", "suffix": "PFS"}
+          ]
+        },
+        {
+          "name": "20_aml_eln_risk.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["AML_ELN2022_Risk.docx", "AML_ELN2022_Risk.eps"],
+          "description": "AML ELN 2022 risk stratification"
+        },
+        {
+          "name": "21_aml_composite_response.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["AML_Composite_Response.docx", "AML_Composite_Waterfall.eps"],
+          "description": "AML composite response analysis"
+        }
+      ],
+      "default_time_var": "OS_months",
+      "default_status_var": "OS_status",
+      "default_outcome_var": "Response_numeric"
+    },
+    "cml": {
+      "scripts": [
+        {
+          "name": "02_table1.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Table1_Baseline_Characteristics.docx"],
+          "description": "Baseline characteristics table"
+        },
+        {
+          "name": "05_safety.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Safety_Summary_Table.docx"],
+          "description": "Adverse event safety summary"
+        },
+        {
+          "name": "03_efficacy.R",
+          "args": ["{dataset}", "{outcome_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["Efficacy_Table.docx"],
+          "description": "Efficacy analysis with molecular response"
+        },
+        {
+          "name": "04_survival.R",
+          "args": ["{dataset}", "{time_var}", "{status_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["KM_OS.eps", "KM_PFS.eps"],
+          "description": "Kaplan-Meier survival analysis",
+          "run_variants": [
+            {"time_var": "OS_months", "status_var": "OS_status", "suffix": "OS"},
+            {"time_var": "PFS_months", "status_var": "PFS_status", "suffix": "PFS"}
+          ]
+        },
+        {
+          "name": "22_cml_tfr_analysis.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_TFR_KM.docx", "CML_BCR_ABL_Kinetics.eps"],
+          "description": "CML TFR and BCR-ABL kinetics analysis"
+        },
+        {
+          "name": "23_cml_scores.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_Scores.docx", "CML_Scores_KM.eps"],
+          "description": "CML prognostic scoring systems"
+        },
+        {
+          "name": "26_cml_eln_milestones.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_ELN2020_Milestones.docx", "CML_ELN2020_Milestones_Heatmap.eps"],
+          "description": "CML ELN 2020 milestone classification at 3/6/12/18 months"
+        },
+        {
+          "name": "27_cml_waterfall.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_Waterfall_BCR_ABL.eps", "CML_Response_Depth.docx"],
+          "description": "CML BCR-ABL waterfall plot showing log10 reduction"
+        },
+        {
+          "name": "28_cml_resistance.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_Resistance_Mutations.docx", "CML_Resistance_Timeline.eps"],
+          "description": "ABL1 kinase domain resistance mutation tracking"
+        },
+        {
+          "name": "29_cml_tfr_deep.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["CML_TFR_Deep_Analysis.docx", "CML_TFR_Relapse_Kinetics.eps", "CML_TFR_MMR_Loss_KM.eps", "CML_TFR_MMR_Loss_CI.eps"],
+          "description": "Deep TFR analysis with relapse kinetics and competing risks"
+        }
+      ],
+      "default_time_var": "OS_months",
+      "default_status_var": "OS_status",
+      "default_outcome_var": "MMR_achieved"
+    },
+    "mds": {
+      "scripts": [
+        {
+          "name": "02_table1.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Table1_Baseline_Characteristics.docx"],
+          "description": "Baseline characteristics table"
+        },
+        {
+          "name": "05_safety.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Safety_Summary_Table.docx"],
+          "description": "Adverse event safety summary"
+        },
+        {
+          "name": "03_efficacy.R",
+          "args": ["{dataset}", "{outcome_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["Efficacy_Table.docx"],
+          "description": "Efficacy analysis with IWG 2006 response"
+        },
+        {
+          "name": "04_survival.R",
+          "args": ["{dataset}", "{time_var}", "{status_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["KM_OS.eps", "KM_PFS.eps"],
+          "description": "Kaplan-Meier survival analysis",
+          "run_variants": [
+            {"time_var": "OS_months", "status_var": "OS_status", "suffix": "OS"},
+            {"time_var": "PFS_months", "status_var": "PFS_status", "suffix": "PFS"}
+          ]
+        }
+      ],
+      "default_time_var": "OS_months",
+      "default_status_var": "OS_status",
+      "default_outcome_var": "IWG_Response"
+    },
+    "hct": {
+      "scripts": [
+        {
+          "name": "02_table1.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Table1_Baseline_Characteristics.docx"],
+          "description": "Baseline characteristics table"
+        },
+        {
+          "name": "05_safety.R",
+          "args": ["{dataset}"],
+          "required": true,
+          "expected_outputs": ["Safety_Summary_Table.docx"],
+          "description": "Adverse event safety summary"
+        },
+        {
+          "name": "03_efficacy.R",
+          "args": ["{dataset}", "{outcome_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["Efficacy_Table.docx"],
+          "description": "Efficacy analysis"
+        },
+        {
+          "name": "04_survival.R",
+          "args": ["{dataset}", "{time_var}", "{status_var}", "--disease", "{disease}"],
+          "required": true,
+          "expected_outputs": ["KM_OS.eps", "KM_PFS.eps"],
+          "description": "Kaplan-Meier survival analysis",
+          "run_variants": [
+            {"time_var": "OS_months", "status_var": "OS_status", "suffix": "OS"},
+            {"time_var": "PFS_months", "status_var": "PFS_status", "suffix": "PFS"}
+          ]
+        },
+        {
+          "name": "24_hct_gvhd_analysis.R",
+          "args": ["{dataset}"],
+          "required": false,
+          "expected_outputs": ["HCT_GVHD.docx", "HCT_GVHD_CI.eps", "HCT_GRFS.eps"],
+          "description": "HCT GVHD and GRFS analysis"
+        }
+      ],
+      "default_time_var": "OS_months",
+      "default_status_var": "OS_status",
+      "default_outcome_var": "Response"
+    }
+  }
+}

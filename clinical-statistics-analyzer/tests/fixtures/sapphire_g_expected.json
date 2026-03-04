@@ -1,0 +1,23 @@
+{
+  "n_patients": 27,
+  "transform_checks": {
+    "columns_present": [
+      "Patient_ID", "Age", "Sex", "Treatment", "OS_months", "OS_status",
+      "Response", "Response_numeric", "CR", "CR_numeric", "cCR", "cCR_numeric",
+      "Best_Response", "FLT3_ITD", "NPM1_mut", "Hemoglobin", "WBC", "Platelet",
+      "Age_group", "Treatment_Label", "Diagnosis_Label", "PFS_months"
+    ],
+    "sex_distribution": {"Male": 15, "Female": 12},
+    "treatment_distribution": {"ICT": 17, "LIT": 9, "Unknown": 1},
+    "response_counts": {
+      "ORR": 21,
+      "CR": 9,
+      "cCR": 21
+    }
+  },
+  "r_script_checks": {
+    "02_table1.R": {"exit_code": 0, "output_file": "Table1_Baseline_Characteristics.docx"},
+    "03_efficacy.R": {"exit_code": 0, "output_file": "Efficacy_Response_numeric_Analysis.docx"},
+    "04_survival.R": {"exit_code": 0, "output_file": "KM_Plot_OS_months.eps"}
+  }
+}

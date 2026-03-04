@@ -12,7 +12,8 @@ if(length(args) == 0) {
 }
 
 input_data_path <- args[1]
-output_dir <- "/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Clinical_statistics_analyzer"
+output_dir <- Sys.getenv("CSA_OUTPUT_DIR", "")
+if (output_dir == "") stop("CSA_OUTPUT_DIR not set. Export it first: export CSA_OUTPUT_DIR=/path/to/output")
 data_dir <- file.path(output_dir, "data")
 tables_dir <- file.path(output_dir, "Tables")
 

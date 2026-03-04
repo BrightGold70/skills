@@ -2027,13 +2027,13 @@ This section outlines how to combine external skills sequentially to achieve spe
 ### Recipe 1: The AI-Assisted Meta-Analysis
 **Focus:** Systematic identification of literature, quantitative pooling, and structured manuscript drafting.
 1. **Literature Discovery (`pubmed-integration` + `literature-review`)**: Execute PICO searches and export PMIDs for RCTs.
-2. **Quantitative Synthesis (`statistical-analysis`)**: Provide data to calculate I², perform fixed/random-effects, and prepare Forest Plot inputs.
+2. **Quantitative Synthesis (`clinical-statistics-analyzer`)**: Provide data to calculate I², perform fixed/random-effects, and prepare Forest Plot inputs (uses R scripts: `forest_plot.R`, `efficacy.R`).
 3. **Manuscript Generation (HPW)**: Use Systematic Review Drafter (PRISMA template). Ensure prose-only results explicitly cite pooled data.
 4. **Verification & Formatting (`citation-management`)**: Auto-format bibliography to target journal style.
 
 ### Recipe 2: The Clinical Trial / Cohort Report
 **Focus:** Transforming raw clinical/observational data into a CONSORT-compliant manuscript.
-1. **Exploratory Data Analysis (`statistical-analysis`)**: Read dataset, run assumption checks, and calculate primary endpoints (Log-rank, T-tests, Cox regression).
+1. **Exploratory Data Analysis (`clinical-statistics-analyzer`)**: Read dataset, run assumption checks, and calculate primary endpoints (Log-rank, T-tests, Cox regression — uses R scripts: `survival.R`, `efficacy.R`, `table1.R`).
 2. **Trial Manuscript Drafting (HPW)**: Pass verified statistics to Clinical Trial Drafter adhering to CONSORT guidelines.
 3. **Baseline Consistency Check (`notebooklm` / `pubmed-integration`)**: Query latest standards (e.g., ELN) to ensure survival statistics align with or are contextualized against benchmarks.
 

@@ -1,0 +1,98 @@
+{
+  "version": "2.0",
+  "disease": "mds",
+  "description": "MDS-specific fields overlaying common_fields",
+  "sections": {
+    "disease_info": {
+      "description": "MDS diagnosis information",
+      "fields": [
+        {"crf_field": "Diagnosis", "variable": "diag", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "WHO 2022 subtype", "variable": "mds_subtype", "type": "categorical", "extraction_method": "llm", "sps_code": true, "values": ["MDS-5q", "MDS-SF3B1", "MDS-LB", "MDS-h", "MDS-IB1", "MDS-IB2", "MDS-bTP53", "MDS/AML"]}
+      ]
+    },
+    "risk_scores": {
+      "description": "MDS prognostic scoring systems",
+      "fields": [
+        {"crf_field": "IPSS score", "variable": "ipss", "type": "numeric", "extraction_method": "regex", "patterns": ["IPSS[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "IPSS risk group", "variable": "ipss_risk", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Low", "INT-1", "INT-2", "High", "저위험", "중간-1", "중간-2", "고위험"]},
+        {"crf_field": "IPSS-R score", "variable": "ipss_r", "type": "numeric", "extraction_method": "regex", "required": true, "patterns": ["IPSS-R[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "IPSS-R risk group", "variable": "ipss_r_risk", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Very Low", "Low", "Intermediate", "High", "Very High"]},
+        {"crf_field": "IPSS-M score", "variable": "ipss_m", "type": "numeric", "extraction_method": "regex", "patterns": ["IPSS-M[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "IPSS-M risk group", "variable": "ipss_m_risk", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Very Low", "Low", "Moderate Low", "Moderate High", "High", "Very High"]}
+      ]
+    },
+    "molecular_markers": {
+      "description": "MDS molecular markers and cytogenetics",
+      "fields": [
+        {"crf_field": "Cytogenetic findings", "variable": "cytogene", "type": "text", "extraction_method": "llm"},
+        {"crf_field": "Cytogenetic risk (IPSS-R)", "variable": "cytogenetic_risk_r", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Very Good", "Good", "Intermediate", "Poor", "Very Poor"]},
+        {"crf_field": "Ring sideroblasts %", "variable": "ring_sidero_pct", "type": "numeric", "extraction_method": "regex", "patterns": ["[Rr]ing.*sidero[:\\s]*(\\d+\\.?\\d*)", "(\\d+\\.?\\d*)\\s*%\\s*(?:RS|ring)"]},
+        {"crf_field": "SF3B1 mutation", "variable": "sf3b1", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"]},
+        {"crf_field": "TP53 mutation", "variable": "tp53", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"], "patterns": ["TP53[:\\s]*(Positive|Negative|양성|음성|\\+|\\-)"]},
+        {"crf_field": "ASXL1 mutation", "variable": "asxl1_mds", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"]},
+        {"crf_field": "RUNX1 mutation", "variable": "runx1", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"]},
+        {"crf_field": "EZH2 mutation", "variable": "ezh2", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"]},
+        {"crf_field": "Number of mutations", "variable": "n_mutations", "type": "numeric", "extraction_method": "regex"}
+      ]
+    },
+    "transfusion": {
+      "description": "MDS transfusion data",
+      "fields": [
+        {"crf_field": "Transfusion dependent", "variable": "transfusion_dependent", "type": "categorical", "extraction_method": "template", "sps_code": true, "required": true, "values": ["Yes", "No", "예", "아니오"], "patterns": ["[Tt]ransfusion[:\\s]*(dependent|independent|Yes|No|예|아니오)"]},
+        {"crf_field": "RBC units/8 weeks", "variable": "rbc_units_8w", "type": "numeric", "extraction_method": "regex", "patterns": ["RBC[:\\s]*(\\d+)\\s*(?:units|U)"]},
+        {"crf_field": "Platelet transfusions/8 weeks", "variable": "plt_units_8w", "type": "numeric", "extraction_method": "regex"},
+        {"crf_field": "Ferritin level", "variable": "ferritin", "type": "numeric", "extraction_method": "regex", "patterns": ["[Ff]erritin[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Erythropoietin level", "variable": "epo_level", "type": "numeric", "extraction_method": "regex", "patterns": ["EPO[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Transfusion independence achieved", "variable": "ti_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]}
+      ]
+    },
+    "treatment": {
+      "description": "MDS treatment details",
+      "fields": [
+        {"crf_field": "Primary treatment", "variable": "primary_treatment", "type": "categorical", "extraction_method": "template", "sps_code": true, "required": true, "values": ["Azacitidine", "Decitabine", "Lenalidomide", "ESA", "Luspatercept", "BSC", "HCT", "아자시티딘", "데시타빈"]},
+        {"crf_field": "Treatment start date", "variable": "treatment_start_date", "type": "date", "extraction_method": "ocr"},
+        {"crf_field": "Number of HMA cycles", "variable": "hma_cycles", "type": "numeric", "extraction_method": "regex", "patterns": ["(\\d+)\\s*(?:cycles?|주기)"]},
+        {"crf_field": "ESA used", "variable": "esa_used", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Iron chelation", "variable": "iron_chelation", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Luspatercept used", "variable": "luspatercept", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]}
+      ]
+    },
+    "response": {
+      "description": "MDS IWG 2006 response assessment",
+      "fields": [
+        {"crf_field": "Overall response", "variable": "mds_response", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["CR", "mCR", "PR", "HI", "SD", "Failure", "PD"], "patterns": ["(?:Response|반응)[:\\s]*(CR|mCR|PR|HI|SD|Failure|PD)"]},
+        {"crf_field": "Hematologic Improvement - Erythroid", "variable": "hi_e", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Hematologic Improvement - Platelet", "variable": "hi_p", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Hematologic Improvement - Neutrophil", "variable": "hi_n", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Best response", "variable": "best_response_mds", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["CR", "mCR", "PR", "HI", "SD", "Failure"]},
+        {"crf_field": "AML transformation", "variable": "aml_transform", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"], "patterns": ["AML[:\\s]*(Yes|No|transform|progression|예|아니오)"]},
+        {"crf_field": "AML transformation date", "variable": "aml_transform_date", "type": "date", "extraction_method": "ocr"}
+      ]
+    }
+  },
+  "spss_value_mapping": {
+    "mds_subtype": {"MDS-5q": 1, "MDS-SF3B1": 2, "MDS-LB": 3, "MDS-h": 4, "MDS-IB1": 5, "MDS-IB2": 6, "MDS-bTP53": 7, "MDS/AML": 8, "1": "MDS-5q", "2": "MDS-SF3B1", "3": "MDS-LB", "4": "MDS-h", "5": "MDS-IB1", "6": "MDS-IB2", "7": "MDS-bTP53", "8": "MDS/AML"},
+    "ipss_risk": {"Low": 1, "INT-1": 2, "INT-2": 3, "High": 4, "저위험": 1, "중간-1": 2, "중간-2": 3, "고위험": 4, "1": "Low", "2": "INT-1", "3": "INT-2", "4": "High"},
+    "ipss_r_risk": {"Very Low": 1, "Low": 2, "Intermediate": 3, "High": 4, "Very High": 5, "1": "Very Low", "2": "Low", "3": "Intermediate", "4": "High", "5": "Very High"},
+    "ipss_m_risk": {"Very Low": 1, "Low": 2, "Moderate Low": 3, "Moderate High": 4, "High": 5, "Very High": 6, "1": "Very Low", "2": "Low", "3": "Moderate Low", "4": "Moderate High", "5": "High", "6": "Very High"},
+    "cytogenetic_risk_r": {"Very Good": 1, "Good": 2, "Intermediate": 3, "Poor": 4, "Very Poor": 5, "1": "Very Good", "2": "Good", "3": "Intermediate", "4": "Poor", "5": "Very Poor"},
+    "sf3b1": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "tp53": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "asxl1_mds": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "runx1": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "ezh2": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "transfusion_dependent": {"Yes": 1, "No": 2, "dependent": 1, "independent": 2, "예": 1, "아니오": 2, "1": "Yes", "2": "No"},
+    "ti_achieved": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "primary_treatment": {"Azacitidine": 1, "Decitabine": 2, "Lenalidomide": 3, "ESA": 4, "Luspatercept": 5, "BSC": 6, "HCT": 7, "아자시티딘": 1, "데시타빈": 2, "1": "Azacitidine", "2": "Decitabine", "3": "Lenalidomide", "4": "ESA", "5": "Luspatercept", "6": "BSC", "7": "HCT"},
+    "esa_used": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "iron_chelation": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "luspatercept": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "mds_response": {"CR": 1, "mCR": 2, "PR": 3, "HI": 4, "SD": 5, "Failure": 6, "PD": 7, "1": "CR", "2": "mCR", "3": "PR", "4": "HI", "5": "SD", "6": "Failure", "7": "PD"},
+    "best_response_mds": {"CR": 1, "mCR": 2, "PR": 3, "HI": 4, "SD": 5, "Failure": 6, "1": "CR", "2": "mCR", "3": "PR", "4": "HI", "5": "SD", "6": "Failure"},
+    "hi_e": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "hi_p": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "hi_n": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "aml_transform": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"}
+  },
+  "required_fields": ["diag", "ipss_r", "transfusion_dependent", "primary_treatment"]
+}

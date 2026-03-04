@@ -130,6 +130,75 @@ journals:
       Clinical trials require CONSORT diagram and trial registration.
       Rapid publication for significant clinical findings.
 
+  Blood_Research:
+    full_name: "Blood Research"
+    publisher: "Springer Nature (on behalf of Korean Society of Hematology)"
+    impact_factor: ~2.8
+    access: "Gold Open Access (APC covered by Korean Society of Hematology)"
+    manuscript_formatting:
+      font: "Times New Roman"
+      font_size: 12
+      line_spacing: "double"
+      line_numbering: true
+    article_types:
+      original_article:
+        word_limit: 3500
+        abstract:
+          limit: 250
+          style: "Structured (Purpose, Methods, Results, Conclusion)"
+        reference_limit: 30
+        figures_tables: "No hard cap; standard parsimony applies"
+      review_article:
+        word_limit: 5000
+        abstract:
+          limit: 250
+          style: "Unstructured"
+        reference_limit: 150
+    abstract:
+      limit: 250
+      keywords_min: 4
+      keywords_max: 6
+    reference_style: "Vancouver (numbered in square brackets [1])"
+    doi_required: true
+    required_sections:
+      - title_page
+      - abstract
+      - introduction
+      - materials_and_methods
+      - results
+      - discussion
+      - acknowledgments
+      - references
+      - tables
+      - figure_legends
+      - figures
+    mandatory_declarations:
+      - competing_interests
+      - funding_information
+      - ethical_approval
+      - informed_consent
+      - author_contributions  # CRediT encouraged
+      - data_availability_statement
+    figure_formats:
+      preferred: ["EPS", "TIFF"]
+      acceptable: ["MS Office"]
+      resolution_line_art: "1200 dpi"
+      resolution_halftone: "300 dpi"
+      color_model: "RGB 8-bit"
+      color_charges: false
+    specific_requirements:
+      orcid: true  # required for corresponding author
+      ai_disclosure: true  # LLM use must be documented in Methods
+      trial_registration: true
+      data_sharing_policy: "Type 3 (data available upon reasonable request)"
+    submission_url: "https://submission.springernature.com/new-submission/44313/3"
+    journal_home: "https://www.bloodresearch.or.kr/"
+    notes: |
+      Official journal of the Korean Society of Hematology.
+      Fully open access with APC covered by the Society — no author cost.
+      Strong focus on translational hematology research; review articles
+      should emphasize translational impact in a 'Review Highlights' summary.
+
   British_Journal_of_Haematology:
     full_name: "British Journal of Haematology"
     publisher: "British Society for Haematology"
@@ -170,6 +239,83 @@ journals:
       UK-based hematology journal. Strict SI unit requirements.
       Gene nomenclature must follow HGVS/ISCN standards.
       Statistics should follow BASHH guidelines.
+
+  Haematologica:
+    full_name: "Haematologica"
+    publisher: "Ferrata Storti Foundation / European Hematology Association (EHA)"
+    impact_factor: ~8.2
+    access: "Gold Open Access"
+    language: "American English"
+    article_types:
+      original_article:
+        word_limit: 4000
+        abstract:
+          limit: 250
+          style: "Unstructured"
+        reference_limit: 50
+        figures_tables_limit: 8
+        methods_limit: "500 words in main text (detailed methods to Supplementary)"
+        required_sections:
+          - title_page
+          - abstract
+          - introduction
+          - methods
+          - results
+          - discussion
+          - data_availability_statement
+          - references
+      review_article:
+        word_limit: 5000
+        abstract:
+          limit: 250
+          style: "Unstructured"
+        reference_limit: 100
+        author_limit: 3
+        required_sections:
+          - title_page
+          - abstract
+          - introduction
+          - body_text
+          - references
+      letter_to_editor:
+        word_limit: 1500
+        reference_limit: 15
+        figures_tables_limit: 3
+    reference_style: "Vancouver/NLM (ICMJE)"
+    reference_format:
+      citation_style: "Numbered superscript"
+      authors: "List all if ≤6; first 3 + 'et al.' if >6"
+      journal_abbreviations: "MEDLINE style"
+    gene_nomenclature:
+      genes: "Italic + All Capitals (e.g., ABL1)"
+      proteins: "Roman + All Capitals (e.g., ABL1)"
+      drug_names: "Generic names only"
+    specific_requirements:
+      trial_registration: true
+      orcid: true
+      ai_disclosure: true
+      preprints: "Allowed (BioRxiv/MedRxiv); must be disclosed in cover letter"
+      supplementary_data: "Merged into single PDF (max 30MB)"
+      reporting_guidelines:
+        clinical_trials: "CONSORT"
+        observational: "STROBE"
+        meta_analyses: "PRISMA"
+    fees:
+      submission_fee: "€70 (non-refundable for uninvited papers)"
+      apc: "~€2,500 for original articles (check current rates)"
+    submission_url: "https://haematologica.org/submitandtrack"
+    notes: |
+      Gold open access; EHA official journal. Sentence-style titles required
+      (title must describe the main finding). Methods section capped at 500 words
+      in main text — move detailed methods to Supplementary Data.
+      Authorship for review articles typically limited to 3 authors.
+
+  Leukemia:
+    full_name: "Leukemia"
+    publisher: "Springer Nature"
+    impact_factor: ~12.8
+    notes: |
+      Pending: guidelines to be added once lookup completes.
 
 # Reference formatting templates
 reference_templates:

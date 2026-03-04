@@ -1,0 +1,113 @@
+{
+  "version": "2.0",
+  "disease": "aml",
+  "description": "AML-specific fields overlaying common_fields",
+  "sections": {
+    "disease_info": {
+      "description": "AML diagnosis information",
+      "fields": [
+        {"crf_field": "Diagnosis", "variable": "diag", "type": "categorical", "extraction_method": "template"}
+      ]
+    },
+    "molecular_markers": {
+      "description": "AML molecular markers at diagnosis",
+      "fields": [
+        {"crf_field": "Cytogenetic findings", "variable": "cytogene", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "Cytogenetic risk", "variable": "cytogenetic_risk", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "FLT3 ITD", "variable": "FLT3ITD", "type": "categorical", "extraction_method": "template", "sps_code": true, "patterns": ["FLT3[- ]ITD[:\\s]*(Positive|Negative|양성|음성|Yes|No|\\+|\\-)", "(Positive|Negative|양성|음성)"]},
+        {"crf_field": "FLT3 TKD", "variable": "FLT3TKD", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "NPM1", "variable": "NPM1", "type": "categorical", "extraction_method": "template", "sps_code": true, "patterns": ["NPM1[:\\s]*(Positive|Negative|양성|음성|Yes|No|\\+|\\-)", "(Positive|Negative|양성|음성)"]},
+        {"crf_field": "CEBPA", "variable": "CEBPA", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "IDH1/2", "variable": "IDH", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "ASXL1", "variable": "ASXL1", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "DNMT3A", "variable": "DNMT3A", "type": "categorical", "extraction_method": "template"}
+      ]
+    },
+    "treatment": {
+      "description": "AML treatment details",
+      "fields": [
+        {"crf_field": "Induction chemotherapy", "variable": "induction_ct", "type": "categorical", "extraction_method": "template", "sps_code": true, "required": true},
+        {"crf_field": "Induction date", "variable": "induction_date", "type": "date", "extraction_method": "ocr"},
+        {"crf_field": "Consolidation 1", "variable": "consol_c1", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "Consolidation 2", "variable": "consol_c2", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "LDAraC", "variable": "ld_arac", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "Treatment group", "variable": "treat_group", "type": "categorical", "extraction_method": "derived"}
+      ]
+    },
+    "response": {
+      "description": "AML response assessment",
+      "fields": [
+        {"crf_field": "CR achieved", "variable": "cr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "patterns": ["(?:CR achieved|Response)[:\\s]*(CR|PR|NR|Yes|No|예|아니오)", "(CR|PR|NR|Yes|No)"]},
+        {"crf_field": "CR date", "variable": "cr_date", "type": "date", "extraction_method": "ocr", "patterns": ["CR date[:\\s]*(\\d{1,2}[-\\/]\\d{1,2}[-\\/]\\d{2,4})"]},
+        {"crf_field": "MRD Status", "variable": "mrd_status", "type": "categorical", "extraction_method": "llm", "values": ["Positive", "Negative", "Not assessed"]},
+        {"crf_field": "Best response", "variable": "Rspn_Best", "type": "categorical", "extraction_method": "template", "patterns": ["Best response[:\\s]*(CR|CRi|PR|NR|SD|PD)"]}
+      ]
+    },
+    "toxicity": {
+      "description": "AML treatment toxicity",
+      "fields": [
+        {"crf_field": "Induction - Max grade", "variable": "grade_i", "type": "numeric", "extraction_method": "template", "patterns": ["Grade[:\\s]*(\\d)", "Max grade[:\\s]*(\\d)"]},
+        {"crf_field": "Induction - ANC >500", "variable": "anc5_i", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "Induction - ANC >1000", "variable": "anc10_i", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "Induction - Platelet >5K", "variable": "plt5_i", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "Induction - Platelet >10K", "variable": "plt10_i", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "Induction - Infections", "variable": "c_fn_i", "type": "text", "extraction_method": "llm"},
+        {"crf_field": "Induction - Antibiotics", "variable": "ab_i", "type": "text", "extraction_method": "llm"},
+        {"crf_field": "Consolidation 1 - Max grade", "variable": "grade_c1", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "Consolidation 2 - Max grade", "variable": "grade_c2", "type": "numeric", "extraction_method": "template"},
+        {"crf_field": "LDAraC - Max grade", "variable": "grade_ld", "type": "numeric", "extraction_method": "template"}
+      ]
+    }
+  },
+  "column_mapping": {
+    "induction_ct": "Treatment",
+    "cr_achieved": "Response",
+    "Rspn_Best": "Best_Response",
+    "cytogenetic_risk": "Cytogenetic_Risk",
+    "FLT3ITD": "FLT3_ITD",
+    "FLT3TKD": "FLT3_TKD",
+    "NPM1": "NPM1_mut",
+    "CEBPA": "CEBPA_mut",
+    "induction_date": "Treatment_Start_Date"
+  },
+  "derived_columns": {
+    "OS_months": {
+      "type": "date_diff_months",
+      "from": "induction_date",
+      "to": "date_death",
+      "censor": "date_last_fu"
+    },
+    "PFS_months": {
+      "type": "date_diff_months",
+      "from": "induction_date",
+      "to": "relapse_date",
+      "censor": "date_last_fu"
+    },
+    "OS_status": {
+      "type": "recode",
+      "source": "alive",
+      "mapping": {"1": 0, "2": 1, "Survival": 0, "Dead": 1, "Alive": 0}
+    },
+    "PFS_status": {
+      "type": "recode",
+      "source": "relapse",
+      "mapping": {"Yes": 1, "No": 0, "1": 1, "2": 0}
+    },
+    "Age_group": {
+      "type": "bin",
+      "source": "age",
+      "bins": [0, 60, 200],
+      "labels": ["<60", ">=60"]
+    }
+  },
+  "spss_value_mapping": {
+    "FLT3ITD": {"0": "unknown", "1": "positive", "2": "negative", "Positive": 1, "positive": 1, "POSITIVE": 1, "양성": 1, "Negative": 2, "negative": 2, "NEGATIVE": 2, "음성": 2, "Yes": 1, "No": 2, "+": 1, "-": 2},
+    "FLT3TKD": {"0": "unknown", "1": "positive", "2": "negative", "Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "Yes": 1, "No": 2},
+    "NPM1": {"0": "unknown", "1": "positive", "2": "negative", "Positive": 1, "positive": 1, "Negative": 2, "negative": 2, "양성": 1, "음성": 2, "Yes": 1, "No": 2, "+": 1, "-": 2},
+    "CEBPA": {"0": "unknown", "1": "positive", "2": "negative", "Positive": 1, "Negative": 2, "양성": 1, "음성": 2},
+    "cr_achieved": {"1": "Morphologic leukemia-free", "2": "CR", "3": "CRh", "4": "CRi", "5": "CRp", "6": "CRc", "7": "CRm", "8": "PR", "9": "Treatment failure", "CR": 2, "Yes": 2, "예": 2, "No": 9, "아니오": 9},
+    "induction_ct": {"1": "AD(Dauno 45mg/m2)", "2": "AD(Dauno 90mg/m2)", "3": "AI", "AD 45": 1, "AD 90": 2, "AI": 3},
+    "diag": {"1": "Primary refractory AML", "2": "Early relapsed AML", "3": "Multiple relapsed AML", "4": "Others"}
+  },
+  "required_fields": ["diag", "induction_ct"]
+}

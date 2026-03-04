@@ -1,0 +1,104 @@
+{
+  "version": "2.0",
+  "disease": "aml",
+  "description": "SAPPHIRE-G study: AML FLT3+ relapsed/refractory, Gilteritinib-based salvage",
+  "sections": {
+    "disease_info": {
+      "description": "AML diagnosis information",
+      "fields": [
+        {"crf_field": "Diagnosis", "variable": "diag", "type": "categorical", "extraction_method": "template"}
+      ]
+    },
+    "molecular_markers": {
+      "description": "AML molecular markers",
+      "fields": [
+        {"crf_field": "FLT3 ITD", "variable": "FLT3ITD", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "FLT3 TKD", "variable": "FLT3TKD", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "NPM1", "variable": "NPM1", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "CEBPA", "variable": "CEBPA", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "RUNX1", "variable": "RUNX1", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "TP53", "variable": "TP53", "type": "categorical", "extraction_method": "template", "sps_code": true}
+      ]
+    },
+    "treatment": {
+      "description": "SAPPHIRE-G salvage treatment",
+      "fields": [
+        {"crf_field": "Salvage regimen", "variable": "Sal1", "type": "categorical", "extraction_method": "template", "sps_code": true, "required": true}
+      ]
+    },
+    "response": {
+      "description": "Response assessment",
+      "fields": [
+        {"crf_field": "Best response", "variable": "Rspn_Best", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "CR flag", "variable": "CR", "type": "categorical", "extraction_method": "derived", "sps_code": true},
+        {"crf_field": "cCR flag", "variable": "cCR", "type": "categorical", "extraction_method": "derived", "sps_code": true},
+        {"crf_field": "ORR flag", "variable": "ORR", "type": "categorical", "extraction_method": "derived", "sps_code": true}
+      ]
+    }
+  },
+  "column_mapping": {
+    "case_no": "Patient_ID",
+    "age": "Age",
+    "gender": "Sex",
+    "Sal1": "Treatment",
+    "Rspn_Best": "Best_Response",
+    "ORR": "Response",
+    "FLT3ITD": "FLT3_ITD",
+    "FLT3TKD": "FLT3_TKD",
+    "NPM1": "NPM1_mut",
+    "CEBPA": "CEBPA_mut",
+    "RUNX1": "RUNX1_mut",
+    "TP53": "TP53_mut",
+    "ECOG1": "ECOG",
+    "hb_Rel": "Hemoglobin",
+    "wbc_Rel": "WBC",
+    "plt_Rel": "Platelet",
+    "blast_Rel": "BM_Blast",
+    "PFS_month": "PFS_months"
+  },
+  "derived_columns": {
+    "OS_status": {
+      "type": "recode",
+      "source": "alive",
+      "mapping": {"1": 0, "2": 1, "0": null, "Survival": 0, "Dead": 1, "Unknown": null}
+    },
+    "Treatment_Label": {
+      "type": "recode",
+      "source": "Sal1",
+      "mapping": {"1": "ICT", "2": "LIT", "1.0": "ICT", "2.0": "LIT", "0": "Unknown", "0.0": "Unknown"}
+    },
+    "Diagnosis_Label": {
+      "type": "recode",
+      "source": "diag",
+      "mapping": {"1": "Primary refractory", "2": "Early relapse", "3": "Multiple relapse", "1.0": "Primary refractory", "2.0": "Early relapse", "3.0": "Multiple relapse"}
+    },
+    "Age_group": {
+      "type": "bin",
+      "source": "age",
+      "bins": [0, 60, 200],
+      "labels": ["<60", ">=60"]
+    },
+    "PFS_status": {
+      "type": "recode",
+      "source": "alive",
+      "mapping": {"1": 0, "2": 1, "0": null, "Survival": 0, "Dead": 1, "Unknown": null}
+    }
+  },
+  "spss_value_mapping": {
+    "Sal1": {"0.0": "Unknown", "1.0": "ICT", "2.0": "LIT", "ICT": 1, "LIT": 2},
+    "gender": {"1.0": "Male", "2.0": "Female", "Male": 1, "Female": 2},
+    "FLT3ITD": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "FLT3TKD": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "NPM1": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "CEBPA": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "RUNX1": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "TP53": {"0.0": "Unknown", "1.0": "Positive", "2.0": "Negative"},
+    "Rspn_Best": {"1.0": "MLFS", "2.0": "CR", "3.0": "CRh", "4.0": "CRi", "5.0": "CRp", "6.0": "CRc", "7.0": "CRm", "8.0": "PR", "9.0": "Treatment failure"},
+    "CR": {"1.0": "CR", "2.0": "Non-CR"},
+    "cCR": {"1.0": "cCR", "2.0": "Non-cCR"},
+    "ORR": {"1.0": "ORR", "2.0": "Non-ORR"},
+    "diag": {"1.0": "Primary refractory", "2.0": "Early relapse", "3.0": "Multiple relapse", "4.0": "Others"},
+    "alive": {"0": "Unknown", "1": "Survival", "2": "Dead"}
+  },
+  "required_fields": ["diag", "Sal1"]
+}

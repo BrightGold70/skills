@@ -1,0 +1,136 @@
+{
+  "version": "2.0",
+  "disease": "cml",
+  "description": "CML-specific fields overlaying common_fields",
+  "sections": {
+    "disease_info": {
+      "description": "CML diagnosis information",
+      "fields": [
+        {"crf_field": "Diagnosis", "variable": "diag", "type": "categorical", "extraction_method": "template"},
+        {"crf_field": "CML Phase at diagnosis", "variable": "cml_phase_dx", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Chronic Phase", "Accelerated Phase", "Blast Crisis", "만성기", "가속기", "급성전환기", "CP", "AP", "BC"]}
+      ]
+    },
+    "molecular_markers": {
+      "description": "CML molecular and cytogenetic markers",
+      "fields": [
+        {"crf_field": "BCR-ABL transcript type", "variable": "bcr_abl_type", "type": "categorical", "extraction_method": "template", "values": ["e13a2", "e14a2", "e1a2", "p210", "p190", "p230"], "patterns": ["BCR-ABL[:\\s]*(e1[34]a2|p[12][19]0|p230)"]},
+        {"crf_field": "BCR-ABL % at baseline", "variable": "bcr_abl_baseline", "type": "numeric", "extraction_method": "regex", "required": true, "patterns": ["BCR-ABL[%:\\s]*(\\d+\\.?\\d*)", "(\\d+\\.?\\d*)\\s*%\\s*(?:IS|international)"]},
+        {"crf_field": "BCR-ABL % at 3 months", "variable": "bcr_abl_3m", "type": "numeric", "extraction_method": "regex", "patterns": ["3\\s*(?:mon|mo|개월)[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "BCR-ABL % at 6 months", "variable": "bcr_abl_6m", "type": "numeric", "extraction_method": "regex", "patterns": ["6\\s*(?:mon|mo|개월)[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "BCR-ABL % at 12 months", "variable": "bcr_abl_12m", "type": "numeric", "extraction_method": "regex", "patterns": ["12\\s*(?:mon|mo|개월)[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "BCR-ABL % at 18 months", "variable": "bcr_abl_18m", "type": "numeric", "extraction_method": "regex"},
+        {"crf_field": "BCR-ABL % at 24 months", "variable": "bcr_abl_24m", "type": "numeric", "extraction_method": "regex"},
+        {"crf_field": "Philadelphia chromosome", "variable": "ph_positive", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Positive", "Negative", "양성", "음성"], "patterns": ["Ph[:\\s]*(\\+|\\-|Positive|Negative|양성|음성)"]},
+        {"crf_field": "Additional cytogenetic abnormalities", "variable": "aca", "type": "text", "extraction_method": "llm"}
+      ]
+    },
+    "risk_scores": {
+      "description": "CML prognostic scoring systems",
+      "fields": [
+        {"crf_field": "Sokal score", "variable": "sokal_score", "type": "numeric", "extraction_method": "regex", "patterns": ["Sokal[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "Sokal risk", "variable": "sokal_risk", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Low", "Intermediate", "High", "저위험", "중위험", "고위험"]},
+        {"crf_field": "Hasford score", "variable": "hasford_score", "type": "numeric", "extraction_method": "regex", "patterns": ["Hasford[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "EUTOS score", "variable": "eutos_score", "type": "numeric", "extraction_method": "regex", "patterns": ["EUTOS[:\\s]*(\\d+\\.?\\d*)"]},
+        {"crf_field": "ELTS score", "variable": "elts_score", "type": "numeric", "extraction_method": "regex", "patterns": ["ELTS[:\\s]*(\\d+\\.?\\d*)"]}
+      ]
+    },
+    "treatment": {
+      "description": "CML TKI therapy details",
+      "fields": [
+        {"crf_field": "First-line TKI", "variable": "tki_first_line", "type": "categorical", "extraction_method": "template", "sps_code": true, "required": true, "values": ["Imatinib", "Dasatinib", "Nilotinib", "Bosutinib", "Ponatinib", "이매티닙", "다사티닙", "닐로티닙"]},
+        {"crf_field": "TKI start date", "variable": "tki_start_date", "type": "date", "extraction_method": "ocr"},
+        {"crf_field": "TKI dose (mg)", "variable": "tki_dose", "type": "numeric", "extraction_method": "regex", "patterns": ["(?:dose|mg)[:\\s]*(\\d+)"]},
+        {"crf_field": "Second-line TKI", "variable": "tki_second_line", "type": "categorical", "extraction_method": "template", "sps_code": true},
+        {"crf_field": "TKI switch reason", "variable": "tki_switch_reason", "type": "categorical", "extraction_method": "llm", "values": ["Resistance", "Intolerance", "Suboptimal response", "Loss of response"]},
+        {"crf_field": "TKI discontinuation attempted", "variable": "tki_disc_attempted", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "TFR achieved", "variable": "tfr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]}
+      ]
+    },
+    "response": {
+      "description": "CML molecular and cytogenetic response assessment",
+      "fields": [
+        {"crf_field": "Complete Hematologic Response", "variable": "chr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No", "CHR"], "patterns": ["CHR[:\\s]*(Yes|No|Achieved|Not achieved|예|아니오)"]},
+        {"crf_field": "Complete Cytogenetic Response", "variable": "ccyr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No", "CCyR"], "patterns": ["CCyR[:\\s]*(Yes|No|Achieved|예|아니오)"]},
+        {"crf_field": "Major Molecular Response", "variable": "mmr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No", "MMR"], "patterns": ["MMR[:\\s]*(Yes|No|Achieved|예|아니오)"]},
+        {"crf_field": "Deep Molecular Response", "variable": "dmr_achieved", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No", "MR4", "MR4.5", "MR5"]},
+        {"crf_field": "Time to CCyR (months)", "variable": "time_to_ccyr", "type": "numeric", "extraction_method": "regex"},
+        {"crf_field": "Time to MMR (months)", "variable": "time_to_mmr", "type": "numeric", "extraction_method": "regex"},
+        {"crf_field": "CML transformation", "variable": "cml_transform", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["AP", "BC", "None"]}
+      ]
+    },
+    "toxicity": {
+      "description": "CML TKI-related toxicity",
+      "fields": [
+        {"crf_field": "Hematologic toxicity grade", "variable": "tox_hemat_grade", "type": "numeric", "extraction_method": "template", "patterns": ["[Hh]emat.*[Gg]rade[:\\s]*(\\d)"]},
+        {"crf_field": "Pleural effusion", "variable": "tox_pleural_eff", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Cardiovascular events", "variable": "tox_cv_events", "type": "categorical", "extraction_method": "llm"},
+        {"crf_field": "Dose reduction required", "variable": "tki_dose_reduction", "type": "categorical", "extraction_method": "template", "sps_code": true, "values": ["Yes", "No"]},
+        {"crf_field": "Treatment interruption (days)", "variable": "tki_interruption_days", "type": "numeric", "extraction_method": "regex"}
+      ]
+    }
+  },
+  "column_mapping": {
+    "tki_first_line": "Treatment",
+    "mmr_achieved": "MMR_achieved",
+    "ccyr_achieved": "CCyR_achieved",
+    "dmr_achieved": "DMR_achieved",
+    "cml_phase_dx": "CML_Phase",
+    "sokal_risk": "Sokal_Risk",
+    "tki_start_date": "Treatment_Start_Date",
+    "bcr_abl_baseline": "bcr_abl_baseline",
+    "bcr_abl_3m": "bcr_abl_3m",
+    "bcr_abl_6m": "bcr_abl_6m",
+    "bcr_abl_12m": "bcr_abl_12m",
+    "bcr_abl_18m": "bcr_abl_18m",
+    "bcr_abl_24m": "bcr_abl_24m",
+    "resistance_mutation": "resistance_mutation",
+    "resistance_date": "resistance_date",
+    "tfr_start_date": "tfr_start_date",
+    "mmr_loss_date": "mmr_loss_date",
+    "mr4_duration_months": "mr4_duration_months",
+    "tfr_restart_date": "tfr_restart_date",
+    "tfr_restart_reason": "tfr_restart_reason"
+  },
+  "derived_columns": {
+    "OS_months": {
+      "type": "date_diff_months",
+      "from": "tki_start_date",
+      "to": "date_death",
+      "censor": "date_last_fu"
+    },
+    "PFS_months": {
+      "type": "date_diff_months",
+      "from": "tki_start_date",
+      "to": "relapse_date",
+      "censor": "date_last_fu"
+    },
+    "OS_status": {
+      "type": "recode",
+      "source": "alive",
+      "mapping": {"1": 0, "2": 1, "Survival": 0, "Dead": 1, "Alive": 0}
+    },
+    "Age_group": {
+      "type": "bin",
+      "source": "age",
+      "bins": [0, 60, 200],
+      "labels": ["<60", ">=60"]
+    }
+  },
+  "spss_value_mapping": {
+    "cml_phase_dx": {"Chronic Phase": 1, "Accelerated Phase": 2, "Blast Crisis": 3, "만성기": 1, "가속기": 2, "급성전환기": 3, "CP": 1, "AP": 2, "BC": 3, "1": "Chronic Phase", "2": "Accelerated Phase", "3": "Blast Crisis"},
+    "ph_positive": {"Positive": 1, "Negative": 2, "양성": 1, "음성": 2, "1": "Positive", "2": "Negative"},
+    "sokal_risk": {"Low": 1, "Intermediate": 2, "High": 3, "저위험": 1, "중위험": 2, "고위험": 3, "1": "Low", "2": "Intermediate", "3": "High"},
+    "tki_first_line": {"Imatinib": 1, "Dasatinib": 2, "Nilotinib": 3, "Bosutinib": 4, "Ponatinib": 5, "이매티닙": 1, "다사티닙": 2, "닐로티닙": 3, "1": "Imatinib", "2": "Dasatinib", "3": "Nilotinib", "4": "Bosutinib", "5": "Ponatinib"},
+    "tki_second_line": {"Imatinib": 1, "Dasatinib": 2, "Nilotinib": 3, "Bosutinib": 4, "Ponatinib": 5, "1": "Imatinib", "2": "Dasatinib", "3": "Nilotinib", "4": "Bosutinib", "5": "Ponatinib"},
+    "chr_achieved": {"Yes": 1, "No": 2, "CHR": 1, "예": 1, "아니오": 2, "1": "Yes", "2": "No"},
+    "ccyr_achieved": {"Yes": 1, "No": 2, "CCyR": 1, "예": 1, "아니오": 2, "1": "Yes", "2": "No"},
+    "mmr_achieved": {"Yes": 1, "No": 2, "MMR": 1, "예": 1, "아니오": 2, "1": "Yes", "2": "No"},
+    "dmr_achieved": {"Yes": 1, "No": 2, "MR4": 3, "MR4.5": 4, "MR5": 5, "1": "Yes", "2": "No", "3": "MR4", "4": "MR4.5", "5": "MR5"},
+    "tox_pleural_eff": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "tki_dose_reduction": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "tki_disc_attempted": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "tfr_achieved": {"Yes": 1, "No": 2, "1": "Yes", "2": "No"},
+    "cml_transform": {"None": 0, "AP": 1, "BC": 2, "0": "None", "1": "AP", "2": "BC"}
+  },
+  "required_fields": ["diag", "bcr_abl_baseline", "tki_first_line"]
+}

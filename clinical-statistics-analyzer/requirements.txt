@@ -1,5 +1,14 @@
 python-docx
-PyPDF2
+pypdf
 biopython
 lxml
 typing_extensions
+PyMuPDF
+pytesseract
+pdf2image
+pdfplumber
+openpyxl
+pyreadstat
+pandas
+jsonschema
+thefuzz
