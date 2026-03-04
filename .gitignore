@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+
+# R
+Rplots.pdf
+.Rhistory
+.RData
+
+# Claude Code / OMC / bkit
+.claude/
+.omc/
+.bkit/
+
+# PDCA docs (local planning artifacts)
+docs/.pdca-status.json
+docs/.pdca-snapshots/
+docs/.bkit-memory.json
+
+# Logs
+logs/*.log
+logs/.*.json
+
+# OS
+.DS_Store
+Thumbs.db
