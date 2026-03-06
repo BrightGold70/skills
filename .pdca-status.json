@@ -1,6 +1,6 @@
 {
   "claude-forge-install": {
-    "phase": "design",
+    "phase": "do",
     "plan": {
       "status": "completed",
       "path": "docs/01-plan/features/claude-forge-install.plan.md",
@@ -12,7 +12,8 @@
       "completedAt": "2026-03-06"
     },
     "do": {
-      "status": "pending"
+      "status": "completed",
+      "completedAt": "2026-03-06"
     },
     "check": {
       "status": "pending"
