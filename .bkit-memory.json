@@ -1,8 +1,8 @@
 {
   "currentFeature": "hemasuite-personal-distribution",
-  "phase": "do-complete",
+  "phase": "check",
   "level": "dynamic",
-  "matchRate": 0,
+  "matchRate": 93,
   "iterationCount": 0,
   "startedAt": "2026-03-07",
   "lastUpdated": "2026-03-07"
