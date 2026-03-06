@@ -921,7 +921,27 @@ Connect CSA analysis outputs (Tables/, Figures/, hpw_manifest.json) to HPW manus
 
 Configure R/Python paths, default journal, output directory, theme.
 
-### Task 4.4: macOS Native Integration
+### Task 4.4: Splash Screen During Sidecar Boot
+
+**Files:**
+- Create: `hemasuite/src/splash.html`
+- Modify: `hemasuite/src-tauri/src/main.rs`
+
+**Step 1: Create splash.html**
+
+Minimal loading screen shown while Python sidecar starts (~2-4s).
+
+**Step 2: Modify Tauri setup to show splash first**
+
+In `main.rs`, load `splash.html` initially. Spawn a background thread that polls `http://127.0.0.1:9720/health`. Once healthy, send a Tauri event to the frontend to navigate to the React app.
+
+**Step 3: Commit**
+
+```bash
+git commit -m "feat: add splash screen during sidecar startup"
+```
+
+### Task 4.5: macOS Native Integration
 
 - App icon and menu bar
 - Keyboard shortcuts (Cmd+N, Cmd+O, Cmd+S)
@@ -938,12 +958,65 @@ pnpm tauri build
 # Produces: hemasuite/src-tauri/target/release/bundle/dmg/HemaSuite.dmg
 ```
 
-### Task 5.2: Code Signing & Notarization
+### Task 5.2: Entitlements & R Dylib Signing
+
+**Files:**
+- Create: `hemasuite/src-tauri/Entitlements.plist`
+- Create: `hemasuite/scripts/sign-r-dylibs.sh`
+
+**Step 1: Create Entitlements.plist**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.network.client</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+</dict>
+</plist>
+```
+
+**Step 2: Create R dylib signing script**
 
 ```bash
-# Sign with Developer ID
+#!/bin/bash
+# hemasuite/scripts/sign-r-dylibs.sh
+# Signs all R runtime dylibs individually (required for notarization).
+set -euo pipefail
+
+APP_PATH="${1:-hemasuite/src-tauri/target/release/bundle/macos/HemaSuite.app}"
+IDENTITY="${2:-Developer ID Application: ...}"
+ENTITLEMENTS="hemasuite/src-tauri/Entitlements.plist"
+
+echo "Signing R dylibs in $APP_PATH..."
+find "$APP_PATH/Contents/Resources/r-runtime" \
+  \( -name "*.dylib" -o -name "*.so" \) | while read -r lib; do
+  codesign --force --sign "$IDENTITY" \
+    --entitlements "$ENTITLEMENTS" --timestamp "$lib"
+done
+echo "R dylib signing complete."
+```
+
+**Step 3: Commit**
+
+```bash
+git commit -m "feat: add Entitlements.plist and R dylib signing script"
+```
+
+### Task 5.3: Code Signing & Notarization
+
+```bash
+# Sign R dylibs first (must happen before app signing)
+bash hemasuite/scripts/sign-r-dylibs.sh
+
+# Sign the full app with Developer ID
 codesign --deep --force --verify --verbose \
   --sign "Developer ID Application: ..." \
+  --entitlements hemasuite/src-tauri/Entitlements.plist \
   "HemaSuite.app"
 
 # Notarize
@@ -951,7 +1024,7 @@ xcrun notarytool submit HemaSuite.dmg \
   --apple-id "..." --team-id "..." --password "..."
 ```
 
-### Task 5.3: Auto-Update Configuration
+### Task 5.4: Auto-Update Configuration
 
 Configure Tauri Updater plugin with update server URL.
 
@@ -965,7 +1038,7 @@ Configure Tauri Updater plugin with update server URL.
 | 1 | 1.1-1.4 | Python Sidecar (FastAPI + HPW/CSA APIs) |
 | 2 | 2.1-2.4 | React Frontend (Layout + Views) |
 | 3 | 3.1-3.2 | R/Python Bundling |
-| 4 | 4.1-4.4 | Integration & Polish |
-| 5 | 5.1-5.3 | Build & Distribution |
+| 4 | 4.1-4.5 | Integration & Polish (+ Splash Screen) |
+| 5 | 5.1-5.4 | Build & Distribution (+ Entitlements & R Dylib Signing) |
 
-Total: 18 tasks across 6 phases.
+Total: 20 tasks across 6 phases.

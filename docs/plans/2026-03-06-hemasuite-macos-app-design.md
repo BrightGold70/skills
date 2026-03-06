@@ -148,15 +148,69 @@ survival, survminer, ggplot2, flextable, officer, cmprsk, BOIN, forestplot, ggal
 
 All patient data stored **locally only**. No external transmission.
 
+## Startup Experience
+
+### Splash Screen
+
+During sidecar boot (~2-4 seconds), show a lightweight splash screen:
+
+```
++-----------------------------------------------+
+|                                               |
+|              HemaSuite                        |
+|     Clinical Research Suite                   |
+|                                               |
+|            [spinner]                          |
+|       Starting up...                          |
+|                                               |
++-----------------------------------------------+
+```
+
+Implementation: Tauri `setup()` hook loads a local `splash.html` in the WebView while polling the sidecar `/health` endpoint. Once healthy, navigate to the React app.
+
 ## Deployment
 
 | Item | Method |
 |------|--------|
-| Code signing | Apple Developer ID |
+| Code signing | Apple Developer ID (per-binary + deep) |
 | Notarization | notarytool |
 | Distribution | DMG + GitHub Releases (or internal server) |
 | Updates | Tauri Updater plugin (auto-update) |
 | Minimum macOS | 13 (Ventura) |
+| Architecture | Universal binary (arm64 + x86_64) |
+
+### Entitlements (Hardened Runtime)
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.network.client</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+</dict>
+</plist>
+```
+
+- `allow-unsigned-executable-memory`: Required for Python runtime JIT
+- `disable-library-validation`: Required for bundled R dylibs (unsigned by Apple)
+- `network.client`: PubMed/web search in online mode
+
+### R Dylib Signing
+
+Bundled R runtime contains unsigned dylibs that must be individually signed before notarization:
+
+```bash
+# Sign each dylib in the R bundle
+find HemaSuite.app/Contents/Resources/r-runtime -name "*.dylib" -o -name "*.so" | \
+  xargs -I {} codesign --force --sign "Developer ID Application: ..." \
+    --entitlements Entitlements.plist --timestamp {}
+```
+
+This is a known high-complexity step — R.framework dylibs are not Apple-signed and require per-file codesigning for Gatekeeper acceptance.
 
 ## Testing Strategy
 
@@ -188,3 +242,4 @@ All patient data stored **locally only**. No external transmission.
 3. **FastAPI over direct IPC** — Clean separation, existing HPW/CSA code runs unchanged
 4. **Bundled R over Python-only** — CSA's 28 R scripts are production-tested; rewriting in Python would introduce regression risk
 5. **Project-based data** — Each project is self-contained for portability and backup
+6. **Tauri+React over PyInstaller+Streamlit** — Supersedes `hpw-csa-macos-app` plan. PyInstaller+Streamlit bundling is fragile (hidden imports, version lock-in). Tauri's sidecar pattern provides cleaner separation and built-in distribution tooling (signing, notarization, auto-update). See `docs/01-plan/features/hpw-csa-macos-app.plan.md` for the superseded approach.
