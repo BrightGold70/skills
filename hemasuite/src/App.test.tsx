@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 
@@ -10,7 +10,25 @@ vi.mock("./hooks/useSidecarHealth", () => ({
 import { useSidecarHealth } from "./hooks/useSidecarHealth";
 const mockUseSidecarHealth = vi.mocked(useSidecarHealth);
 
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => { store[key] = value; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+
 describe("App", () => {
+  beforeEach(() => {
+    Object.defineProperty(globalThis, "localStorage", { value: localStorageMock, writable: true });
+    localStorageMock.clear();
+    // Dismiss first-launch dialog by default so existing tests aren't affected
+    localStorageMock.setItem("hemasuite-first-launch-dismissed", "true");
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

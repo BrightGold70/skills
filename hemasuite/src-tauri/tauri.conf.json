@@ -46,12 +46,5 @@
       "icons/icon.ico"
     ]
   },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://releases.hemasuite.app/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "REPLACE_WITH_REAL_PUBKEY_FROM_TAURI_SIGNER"
-    }
-  }
+  "plugins": {}
 }

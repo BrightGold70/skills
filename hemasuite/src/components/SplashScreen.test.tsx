@@ -22,4 +22,11 @@ describe("SplashScreen", () => {
     render(<SplashScreen />);
     expect(screen.getByText(/starting/i)).toBeInTheDocument();
   });
+
+  it("displays developer credit", () => {
+    render(<SplashScreen />);
+    expect(
+      screen.getByText("Developed by Hawk Kim, M.D., Ph.D.")
+    ).toBeInTheDocument();
+  });
 });

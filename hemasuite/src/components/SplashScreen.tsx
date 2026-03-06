@@ -8,6 +8,9 @@ export function SplashScreen() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-blue-400" />
         </div>
         <p className="text-slate-500 text-sm">Starting up...</p>
+        <p className="text-slate-600 text-xs mt-8 tracking-wide">
+          Developed by Hawk Kim, M.D., Ph.D.
+        </p>
       </div>
     </div>
   );
