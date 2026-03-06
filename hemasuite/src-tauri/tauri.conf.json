@@ -31,8 +31,8 @@
     "resources": [
       "sidecar/*.py",
       "sidecar/routers/*.py",
-      "resources/python/**",
-      "resources/r-runtime/**"
+      "resources/python/",
+      "resources/r-runtime/"
     ],
     "macOS": {
       "entitlements": "Entitlements.plist",
