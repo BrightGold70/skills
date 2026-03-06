@@ -1,6 +1,6 @@
 ---
 name: clinical-statistics-analyzer
-description: Comprehensive statistical analysis skill for hematological clinical trials (Phases 1-3). Integrates RMCP for R-based computing, Python statistical libraries, academic writing standards, biometric sequence analysis, pubmed-database, and clinicaltrials-database to provide an end-to-end workflow from trial design to reporting.
+description: End-to-end statistical analysis for hematological clinical trials (AML, CML, MDS, HCT; Phases 1-3). Features R-based computation via RMCP, a unified CRF extraction and validation pipeline (v3.0), disease-specific analysis modules (AML ELN 2022 risk stratification, AML composite response, AML Phase 1 BOIN dose-finding, CML BCR-ABL kinetics and ELN 2020 milestones, HCT GVHD cumulative incidence and GRFS via Fine-Gray), Kaplan-Meier and Cox survival analysis, competing risks, sample size/power calculations, protocol/CRF validation, and publication-ready outputs (.docx tables, .eps figures). Use when asked to analyze clinical trial data, generate Table 1, perform survival analysis, calculate sample size, extract CRF variables, validate trial data, or produce any hematology trial statistical output. Outputs hpw_manifest.json for integration with hematology-paper-writer.
 ---
 
 # Clinical Statistics Analyzer For Hematology Trials

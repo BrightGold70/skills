@@ -8,6 +8,35 @@ library(broom)
 library(flextable)
 library(officer)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if(length(args) < 2) {
   stop("Usage: Rscript 03_efficacy.R <dataset_path> <outcome_variable> [--disease <aml|cml|mds|hct>]")
@@ -167,3 +196,20 @@ tryCatch({
 })
 
 cat("Efficacy analysis complete.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  safe_rate <- function(col) if (col %in% names(df)) round(mean(df[[col]] %in% c(1, TRUE, "1", "Yes"), na.rm=TRUE)*100, 1) else NULL
+  orr_val <- if (outcome_var %in% names(df)) round(mean(df[[outcome_var]] %in% c(1, TRUE, "1", "Yes"), na.rm=TRUE)*100, 1) else NULL
+  write_stats_json(
+    key_statistics = list(
+      n_total = nrow(df),
+      orr     = if (!is.null(orr_val)) list(value=orr_val, unit="percent") else NULL,
+      cr_rate = { v <- safe_rate("CR");  if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      pr_rate = { v <- safe_rate("PR");  if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      sd_rate = { v <- safe_rate("SD");  if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      pd_rate = { v <- safe_rate("PD");  if (!is.null(v)) list(value=v, unit="percent") else NULL }
+    ),
+    analysis_notes = list(ci_method = "Wilson score interval")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

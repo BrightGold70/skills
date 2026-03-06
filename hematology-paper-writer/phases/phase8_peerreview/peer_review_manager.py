@@ -193,6 +193,7 @@ class PeerReviewManager:
         journal_name: str,
         editor_name: str,
         comments: Optional[List[ReviewerComment]] = None,
+        nlm_context: str = "",
     ) -> ResponseLetter:
         if comments is None:
             comments = self.comments
@@ -223,6 +224,11 @@ class PeerReviewManager:
         letter_body.append("")
         letter_body.append(f"Dear {editor_name.split()[0]},")
         letter_body.append("")
+        if nlm_context:
+            letter_body.append("[NLM Literature Context — for authors' reference when drafting responses]")
+            letter_body.append(f"{nlm_context[:800]}")
+            letter_body.append("[End NLM context]")
+            letter_body.append("")
         letter_body.append(
             "We thank the reviewers for their thoughtful comments and constructive feedback."
         )
@@ -331,6 +337,53 @@ class PeerReviewManager:
             "addressed": sum(1 for c in self.comments if c.addressed),
             "pending": sum(1 for c in self.comments if not c.addressed),
         }
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase8(
+    project_name: str,
+    project_dir,
+    manuscript_text: str = "",
+    journal: str = "",
+    study_type: str = "cohort",
+) -> None:
+    """
+    Invoke scientific skills for Phase 8 (Peer Review).
+
+    Runs PeerReviewer (generate structured comments) and CriticalThinker
+    (evaluate logical quality) and persists results to SkillContext.
+    Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        manuscript_text: Full manuscript text to review
+        journal: Target journal for scope-specific comments
+        study_type: rct | cohort | retrospective | case_series | systematic_review
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, PeerReviewer, CriticalThinker
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        if manuscript_text:
+            PeerReviewer(context=ctx).review(
+                text=manuscript_text,
+                journal=journal,
+                study_type=study_type,
+            )
+            CriticalThinker(context=ctx).evaluate(
+                text=manuscript_text,
+                study_type=study_type,
+                focus="all",
+            )
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 8 skill integration failed: %s", exc)
 
 
 if __name__ == "__main__":

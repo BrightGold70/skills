@@ -16,6 +16,35 @@ suppressPackageStartupMessages({
   library(haven)
 })
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) == 0) {
   stop("Usage: Rscript 23_cml_scores.R <dataset_path>")
@@ -214,3 +243,28 @@ if(!is.null(col_os_time) && !is.null(col_os_stat)) {
 }
 
 cat("CML Scoring script completed successfully.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  grp_pct <- function(score_col, grp) {
+    if (!score_col %in% names(df)) return(NULL)
+    valid <- df[[score_col]][!is.na(df[[score_col]])]
+    if (length(valid) == 0) return(NULL)
+    round(mean(as.character(valid) == grp) * 100, 1)
+  }
+  write_stats_json(
+    key_statistics = list(
+      n_total             = nrow(df),
+      sokal_high_pct      = { v <- grp_pct("Sokal_Risk",   "High"); if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      sokal_low_pct       = { v <- grp_pct("Sokal_Risk",   "Low");  if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      elts_high_pct       = { v <- grp_pct("ELTS_Risk",    "High"); if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      elts_low_pct        = { v <- grp_pct("ELTS_Risk",    "Low");  if (!is.null(v)) list(value=v, unit="percent") else NULL },
+      hasford_high_pct    = { v <- grp_pct("Hasford_Risk", "High"); if (!is.null(v)) list(value=v, unit="percent") else NULL }
+    ),
+    analysis_notes   = list(
+      scores     = "Sokal, Hasford, ELTS",
+      reference  = "Hasford J et al. J Natl Cancer Inst 1998; Pfirrmann M et al. Leukemia 2016"
+    ),
+    disease_specific = list(disease = "CML", endpoint = "prognostic_scores")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

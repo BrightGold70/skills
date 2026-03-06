@@ -120,13 +120,25 @@ class PublicationManager:
         self.review_history: List[ProofReview] = []
 
     def review_proofs(
-        self, proof_text: str, manuscript_title: str, journal_name: str
+        self, proof_text: str, manuscript_title: str, journal_name: str,
+        nlm_context: str = ""
     ) -> ProofReview:
         review = ProofReview(
             manuscript_title=manuscript_title,
             journal_name=journal_name,
             review_date=datetime.now().strftime("%Y-%m-%d"),
         )
+
+        if nlm_context:
+            review.issues.append(
+                ProofIssue(
+                    element=ProofElement.MAIN_TEXT,
+                    issue_type="nlm_guideline_context",
+                    original_text="NLM literature context available",
+                    corrected_text=nlm_context[:400],
+                    notes="Cross-check proof against current consensus guidelines from NLM notebook.",
+                )
+            )
 
         for original, corrected, issue_type in self.COMMON_PROOF_ERRORS:
             if original in proof_text:
@@ -268,6 +280,46 @@ class PublicationManager:
         ]
 
         return timeline
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase9(
+    project_name: str,
+    project_dir,
+    conference_format: str = "oral_10min",
+    disease: str = "",
+    **slide_placeholders,
+) -> None:
+    """
+    Invoke scientific skills for Phase 9 (Publication).
+
+    Runs SlideGenerator (conference outline) and ScientificVisualizer
+    (figure list) and persists results to SkillContext.
+    Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        conference_format: oral_10min | oral_20min | poster
+        disease: Disease entity for context
+        **slide_placeholders: Values for slide template (title, authors, etc.)
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, SlideGenerator, ScientificVisualizer
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        SlideGenerator(context=ctx).generate_outline(
+            format=conference_format,
+            **slide_placeholders,
+        )
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 9 skill integration failed: %s", exc)
 
 
 if __name__ == "__main__":

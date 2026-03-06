@@ -1,11 +1,15 @@
 # Archive Index — 2026-03
 
-| Feature | Phase | Match Rate | Iterations | Archived At | Path |
-|---------|-------|:----------:|:----------:|-------------|------|
-| csa-hpw-bridge | completed | 98.1% | 1 | 2026-03-05 | [csa-hpw-bridge/](csa-hpw-bridge/) |
-| hpw-notebooklm-py | completed | 100% | 1 | 2026-03-05 | [hpw-notebooklm-py/](hpw-notebooklm-py/) |
-| nlm-enrichment | completed | 96% | 0 | 2026-03-05 | [nlm-enrichment/](nlm-enrichment/) |
-| hpw-scientific-skills-integration | completed | 91% | 0 | 2026-03-05 | [hpw-scientific-skills-integration/](hpw-scientific-skills-integration/) |
-| hpw-classification-validator | completed | 97% | 0 | 2026-03-06 | [hpw-classification-validator/](hpw-classification-validator/) |
+| Feature | Match Rate | Iterations | Archived |
+|---------|-----------|------------|---------|
+| hpw-prose-quality | 97% | 1 | 2026-03-06 |
+| hpw-phase1-update | 100% | 1 | 2026-03-06 |
+## hpw-nlm-literature-flow
 
-| hpw-ui-redesign | 100% | 0 | 2026-03-06 | hpw-ui-redesign/ |
+- **Archived**: 2026-03-06
+- **Match Rate**: 100% (2 iterations)
+- **Path**: `docs/archive/2026-03/hpw-nlm-literature-flow/`
+- **Summary**: NLM (open-notebook) as single source of truth for HPW phases 2–9.
+  12 files changed. Core: `tools/nlm_query.py` (new), `_resolve_project_notebook` in Phase 1,
+  `load_context_for_phase` one-liner for Phases 2–9, CLI `add-to-nlm`, UI PMID widget.
+

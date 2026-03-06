@@ -13,6 +13,35 @@ suppressPackageStartupMessages({
   library(haven)
 })
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Function to safely load data based on extension
 load_data <- function(filepath) {
   if (!file.exists(filepath)) {
@@ -275,3 +304,20 @@ write.csv(df, data_path, row.names = FALSE)
 cat("Classified dataset saved to:", data_path, "\n")
 
 cat("ELN 2022 Risk classification successfully completed.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  eln_tbl <- table(df$ELN2022_Risk)
+  n_tot   <- nrow(df)
+  pct_grp <- function(grp) if (grp %in% names(eln_tbl)) round(eln_tbl[[grp]] / n_tot * 100, 1) else NULL
+  write_stats_json(
+    key_statistics = list(
+      n_total              = n_tot,
+      eln_favorable_pct    = if (!is.null(pct_grp("Favorable")))    list(value = pct_grp("Favorable"),    unit = "percent") else NULL,
+      eln_intermediate_pct = if (!is.null(pct_grp("Intermediate"))) list(value = pct_grp("Intermediate"), unit = "percent") else NULL,
+      eln_adverse_pct      = if (!is.null(pct_grp("Adverse")))      list(value = pct_grp("Adverse"),      unit = "percent") else NULL
+    ),
+    analysis_notes   = list(reference = "Döhner H et al. Blood. 2022;140(12):1345-1377"),
+    disease_specific = list(disease = "AML", classification = "ELN 2022")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

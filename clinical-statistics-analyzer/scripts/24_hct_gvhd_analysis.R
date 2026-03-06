@@ -15,6 +15,35 @@ library(readxl)
 library(tidyr)
 library(survminer)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 1) {
   stop("Usage: Rscript 24_hct_gvhd_analysis.R <dataset_path> [--no-engraftment]")
@@ -413,3 +442,28 @@ print(doc_outcomes, target = docx_out)
 cat("HCT outcomes summary saved to:", docx_out, "\n")
 
 cat("\nHCT GVHD and transplant outcomes analysis complete.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  get_outcome_rate <- function(label) {
+    row <- outcomes_table[outcomes_table$Endpoint == label, ]
+    if (nrow(row) == 0 || is.na(row$Rate_Pct[1])) return(NULL)
+    list(value = row$Rate_Pct[1], unit = "percent", n_events = row$N_Events[1])
+  }
+  write_stats_json(
+    key_statistics = list(
+      n_total               = nrow(df),
+      agvhd_grade2_4_rate   = get_outcome_rate("aGVHD Grade II-IV"),
+      agvhd_grade3_4_rate   = get_outcome_rate("aGVHD Grade III-IV"),
+      cgvhd_any_rate        = get_outcome_rate("cGVHD (any)"),
+      cgvhd_mod_severe_rate = get_outcome_rate("cGVHD (mod-severe)"),
+      graft_failure_rate    = get_outcome_rate("Graft Failure"),
+      grfs_event_rate       = get_outcome_rate("GRFS Event")
+    ),
+    analysis_notes   = list(
+      cgvhd_criteria = "NIH 2014",
+      grfs_definition = "Grade III-IV aGVHD, moderate-severe cGVHD, relapse, or death"
+    ),
+    disease_specific = list(disease = "HCT", endpoint = "GVHD_GRFS")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

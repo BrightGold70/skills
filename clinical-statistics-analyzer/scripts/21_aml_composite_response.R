@@ -11,6 +11,35 @@ library(officer)
 library(flextable)
 library(readxl)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 1) {
   stop("Usage: Rscript 21_aml_composite_response.R <dataset_path> [cycle_number]")
@@ -282,3 +311,29 @@ ggsave(eps_bar, plot = p_bar, device = "eps", width = 8, height = 6)
 cat("Response bar chart saved to:", eps_bar, "\n")
 
 cat("\nAML composite response analysis complete.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  get_rate <- function(label) {
+    row <- summary_df[summary_df$Response == label, ]
+    if (nrow(row) == 0 || is.na(row$Percent[1])) return(NULL)
+    list(value = row$Percent[1], unit = "percent",
+         ci_lower = row$CI_95_low[1], ci_upper = row$CI_95_high[1])
+  }
+  write_stats_json(
+    key_statistics = list(
+      n_total       = n_total,
+      ccr_rate      = get_rate("cCR (CR+CRi+CRh+MLFS)"),
+      cr_rate       = get_rate("CR"),
+      mrd_neg_rate  = get_rate("CR MRD-negative"),
+      pr_rate       = get_rate("PR"),
+      pd_nr_rate    = get_rate("PD/NR")
+    ),
+    analysis_notes   = list(
+      ci_method  = "Wilson score interval",
+      cycle      = cycle_label,
+      reference  = "Döhner H et al. Blood 2022 ELN recommendations"
+    ),
+    disease_specific = list(disease = "AML", endpoint = "composite_response_ELN2022")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

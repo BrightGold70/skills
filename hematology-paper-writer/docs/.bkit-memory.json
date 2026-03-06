@@ -6,8 +6,11 @@
     "level": "Dynamic"
   },
   "currentFeature": "hpw-classification-validator",
-  "phase": "plan",
-  "matchRate": null,
-  "iterationCount": 0,
-  "updatedAt": "2026-03-05"
+  "phase": "archived",
+  "matchRate": 100,
+  "iterationCount": 2,
+  "updatedAt": "2026-03-06T09:02:54.114772+00:00",
+  "feature": "hpw-nlm-literature-flow",
+  "completedAt": "2026-03-06T09:04:26.816467+00:00",
+  "archivedAt": "2026-03-06T09:05:33.219391+00:00"
 }

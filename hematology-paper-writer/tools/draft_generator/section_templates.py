@@ -24,22 +24,11 @@ Despite advances in therapeutic options over the past two decades, several unmet
 
 ### 1.2 Objectives
 
-This systematic review addresses the following objectives:
+This systematic review was conducted to evaluate the efficacy and safety of [intervention] compared with [comparator] in patients with [condition]. The primary objective was to determine [primary endpoint] at [assessment timepoint] in this population. Secondary objectives included characterizing [secondary objective 1], evaluating [secondary objective 2], and assessing the safety profile of [intervention] including the incidence and severity of adverse events, treatment discontinuation rates, and dose modification requirements. These objectives were pre-specified in the registered protocol prior to data collection.
 
-**Primary Objective:**
-To evaluate the efficacy and safety of [intervention] compared to [comparator] in patients with [condition].
+### 1.3 Research Question
 
-**Secondary Objectives:**
-1. To characterize the dose-response relationship
-2. To identify patient subgroups who may derive differential benefit
-3. To assess long-term outcomes
-
-### 1.3 Research Question (PICO Framework)
-
-**Population:** Adults and children with [specific condition]
-**Intervention:** [Intervention name] at [dose/schedule]
-**Comparison:** Standard of care, placebo, or alternative treatment
-**Outcome:** [Primary and secondary outcomes]
+This systematic review evaluated the efficacy and safety of [intervention] at any approved dose in adults with [condition], compared with [comparator] or best available care, with [primary endpoint] as the primary outcome. The population of interest comprised adults aged 18 years or older with a confirmed diagnosis of [condition] according to current diagnostic criteria. Secondary outcomes included [secondary outcome 1], [secondary outcome 2], [secondary outcome 3], and overall survival. This PICO framework was defined a priori and remained unchanged throughout the review process.
 """,
 
     "2. Methods": """
@@ -49,59 +38,33 @@ This systematic review was conducted and reported in accordance with the PRISMA 
 
 ### 2.1 Eligibility Criteria
 
-**Inclusion Criteria:**
-- Randomized controlled trials and high-quality observational studies
-- Adults with [condition]
-- [Intervention] versus [comparator]
-- Studies reporting efficacy or safety outcomes
+We included randomized controlled trials and prospective cohort studies enrolling adults aged 18 years or older with a confirmed diagnosis of [condition] according to current diagnostic criteria. Eligible studies were required to evaluate [intervention] at any approved or investigational dose as monotherapy or combination therapy, administered in comparison with [comparator], placebo, or best available care, and to report at least one pre-specified efficacy or safety endpoint with a minimum follow-up of [minimum follow-up]. Studies published in peer-reviewed journals in any language were eligible for inclusion, provided that a full-text version or complete translation could be obtained.
 
-**Exclusion Criteria:**
-- Case reports and case series with <10 participants
-- Animal or laboratory studies
-- Studies with high risk of bias
+We excluded case reports and case series enrolling fewer than 20 participants, given the limited statistical precision of estimates derived from such studies. Animal studies, in vitro experiments, pharmacokinetic studies without clinical outcomes, and conference abstracts without an accompanying peer-reviewed full-text publication were not eligible. Duplicate publications reporting data from the same patient cohort were excluded; in cases of overlapping study populations, the publication with the longest follow-up or largest sample size was retained.
 
 ### 2.2 Information Sources
 
-Electronic databases searched from inception through [date]:
-- PubMed/MEDLINE
-- Embase
-- Cochrane Central Register of Controlled Trials
-- Web of Science
-
-Grey literature:
-- ClinicalTrials.gov
-- WHO ICTRP
-- Conference proceedings
+We conducted a systematic search of PubMed/MEDLINE, Embase, Cochrane Central Register of Controlled Trials (CENTRAL), and Web of Science Core Collection from inception through [date], with no date or language restrictions applied. Grey literature was systematically searched through ClinicalTrials.gov and the WHO International Clinical Trials Registry Platform (ICTRP) to capture data from completed and ongoing registered trials. Conference proceedings from the American Society of Hematology (ASH), European Hematology Association (EHA), and American Society of Clinical Oncology (ASCO) annual meetings from the preceding five years were hand-searched for relevant abstracts subsequently published as full-text articles. Reference lists of all included studies and pertinent systematic reviews were manually screened to identify additional eligible publications not captured by the electronic database search.
 
 ### 2.3 Search Strategy
 
-The search strategy was developed in consultation with a librarian. Full search strings are provided in Supplementary Material.
-
-**Example PubMed Search:**
-```
-(exp [Topic]/) AND (exp [Intervention]/) AND (random$.ti,ab. OR placebo$.ti,ab.)
-```
+The search strategy was developed in collaboration with a health sciences librarian with expertise in systematic review methodology, and was peer-reviewed by a second librarian using the Peer Review of Electronic Search Strategies (PRESS) checklist. The search combined controlled vocabulary terms (MeSH for PubMed/MEDLINE; Emtree for Embase) with free-text terms for [condition] and [intervention]. Boolean operators and truncation symbols were adapted to each database's syntax. Full search strings for all databases are provided in Supplementary Appendix 1.
 
 ### 2.4 Selection Process
 
-Two independent reviewers screened titles and abstracts, then full texts. Discrepancies were resolved through discussion. The PRISMA flow diagram documents the selection process.
+Two independent reviewers screened all titles and abstracts identified by the search against the pre-specified eligibility criteria using a standardized screening form in [software]. Full-text articles were retrieved for all potentially eligible records and independently assessed for inclusion by both reviewers. Discrepancies at either the title/abstract or full-text screening stage were resolved through discussion, and where consensus could not be reached, a third independent reviewer adjudicated. Inter-rater reliability at the full-text screening stage was calculated using Cohen's kappa coefficient. The complete study selection process is documented in a PRISMA 2020 flow diagram (Figure 1).
 
 ### 2.5 Data Extraction
 
-Two reviewers extracted data using standardized forms including:
-- Study characteristics and methodology
-- Participant demographics
-- Intervention details
-- Outcome data and effect estimates
-- Adverse events
+Two reviewers independently extracted data from each included study using a standardized extraction form developed and piloted prior to data collection. Extracted items included study characteristics (design, setting, enrollment period), participant demographics and disease characteristics at baseline, intervention details (dose, schedule, duration), primary and secondary outcome data with effect estimates and confidence intervals, and adverse event data stratified by grade. Discrepancies in extracted data were resolved by consensus or by consulting the original publication. Where data required for analysis were not reported in the manuscript, corresponding authors were contacted by electronic mail.
 
 ### 2.6 Risk of Bias Assessment
 
-Risk of bias in randomized trials was assessed using the Cochrane RoB 2.0 tool [2]. Non-randomized studies were assessed using ROBINS-I [3].
+Risk of bias in randomized controlled trials was assessed using the revised Cochrane risk-of-bias tool (RoB 2.0) [2], which evaluates bias arising from the randomization process, deviations from intended interventions, missing outcome data, measurement of the outcome, and selection of the reported result. Non-randomized studies of interventions were assessed using the ROBINS-I tool [3], which evaluates confounding, selection bias, classification bias, and reporting bias. Each domain was rated as low, moderate, serious, or critical risk of bias. Two reviewers independently assessed each study, with disagreements resolved by consensus.
 
 ### 2.7 Synthesis Methods
 
-A narrative synthesis was performed for all outcomes. Meta-analysis was conducted when ≥2 studies reported sufficient data using random-effects models. Heterogeneity was quantified using I² statistics.
+A narrative synthesis was performed for all outcomes, organized by outcome type and study design. Quantitative meta-analysis was conducted where two or more studies reported the same outcome with sufficient data using a random-effects model with the DerSimonian-Laird estimator. Effect estimates are presented as risk ratios or mean differences with 95% confidence intervals. Statistical heterogeneity was quantified using the I² statistic and Cochran's Q test; I² values greater than 50% were considered indicative of substantial heterogeneity. Pre-specified subgroup analyses were performed to explore potential sources of heterogeneity. Publication bias was assessed using funnel plot asymmetry and Egger's test where ten or more studies contributed to a pooled estimate.
 """,
 
     "3. Results": """

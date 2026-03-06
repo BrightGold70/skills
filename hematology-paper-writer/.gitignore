@@ -1,0 +1,12 @@
+# NotebookLM notebook IDs (contains private Google NotebookLM IDs)
+tools/notebooklm_config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Logs
+logs/
+*.log

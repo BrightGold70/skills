@@ -18,6 +18,8 @@ from .nomenclature_checker import (
 )
 from .enhanced_editor import EnhancedEditor, ContextSearcher, SectionEnhancer
 from .notebooklm_integration import NotebookLMIntegration
+from .statistical_bridge import StatisticalBridge, ManifestError, ManifestVersionError
+from .protocol_parser import ProtocolParser
 
 __all__ = [
     "ManuscriptQualityAnalyzer",
@@ -36,4 +38,8 @@ __all__ = [
     "ContextSearcher",
     "SectionEnhancer",
     "NotebookLMIntegration",
+    "StatisticalBridge",
+    "ManifestError",
+    "ManifestVersionError",
+    "ProtocolParser",
 ]

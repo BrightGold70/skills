@@ -560,6 +560,79 @@ def cmd_search_pubmed(args):
         searcher.close()
 
 
+def _resolve_statistical_bridge(args):
+    """Phase C: Return StatisticalBridge if CSA manifest available, else None."""
+    import os
+    from pathlib import Path as _Path
+    try:
+        from tools.statistical_bridge import StatisticalBridge
+    except ImportError:
+        return None
+
+    csa_dir = _Path(args.csa_output) if getattr(args, "csa_output", None) else None
+    if csa_dir is None:
+        csa_env = os.environ.get("CSA_OUTPUT_DIR")
+        if csa_env:
+            csa_dir = _Path(csa_env)
+
+    if csa_dir and (csa_dir / "hpw_manifest.json").exists():
+        try:
+            return StatisticalBridge(csa_dir / "hpw_manifest.json")
+        except Exception as exc:
+            print(f"Warning: Could not load statistical bridge: {exc}")
+            return None
+
+    data_file = getattr(args, "data_file", None)
+    if data_file and not getattr(args, "skip_csa", False):
+        answer = input(
+            f"No CSA manifest found. Run statistical analysis on '{data_file}'? [y/N] "
+        ).strip().lower()
+        if answer == "y":
+            out = csa_dir or _Path("csa_output")
+            exit_code = _run_csa_subprocess(
+                _Path(data_file),
+                getattr(args, "disease", "") or "",
+                out,
+            )
+            if exit_code in (0, 1) and (out / "hpw_manifest.json").exists():
+                try:
+                    return StatisticalBridge(out / "hpw_manifest.json")
+                except Exception:
+                    pass
+    return None
+
+
+def _run_csa_subprocess(data_file, disease: str, output_dir) -> int:
+    """Phase C: Run CSA run-analysis subprocess. Returns exit code."""
+    import os, sys, subprocess
+    from pathlib import Path as _Path
+
+    csa_skill_dir = os.environ.get("CSA_SKILL_DIR")
+    if not csa_skill_dir:
+        print("Error: CSA_SKILL_DIR environment variable not set.")
+        print("  Set it to the clinical-statistics-analyzer skill root directory.")
+        return 2
+
+    _Path(output_dir).mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable, "-m", "scripts.crf_pipeline", "run-analysis",
+        str(data_file),
+    ]
+    if disease:
+        cmd.extend(["-d", disease])
+    cmd.extend(["-o", str(output_dir)])
+
+    print(f"Running CSA: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=csa_skill_dir)
+    if result.returncode == 0:
+        print("CSA analysis completed successfully.")
+    elif result.returncode == 1:
+        print("Warning: CSA analysis completed with partial results.")
+    else:
+        print("Error: CSA analysis failed (exit code 2).")
+    return result.returncode
+
+
 def cmd_create_draft(args):
     """Create a manuscript draft from research topic."""
     from tools.draft_generator import ManuscriptDrafter, Journal, JOURNAL_GUIDELINES
@@ -605,8 +678,12 @@ def cmd_create_draft(args):
     print("Creating manuscript draft...")
     drafter = ManuscriptDrafter(journal_enum)
 
+    bridge = _resolve_statistical_bridge(args)
+    if bridge and bridge.is_available:
+        print(f"Statistical bridge loaded: {bridge.disease.upper()}, {len(bridge.scripts_run)} scripts run")
+
     manuscript = drafter.create_draft(
-        topic=args.topic, articles=articles, study_type=args.study_type
+        topic=args.topic, articles=articles, study_type=args.study_type, bridge=bridge
     )
 
     # Save manuscript
@@ -721,6 +798,44 @@ def cmd_research(args):
 
     journal = args.journal if args.journal else "blood_research"
 
+    bridge = _resolve_statistical_bridge(args)
+    if bridge and bridge.is_available:
+        print(
+            f"Statistical bridge loaded: {bridge.disease.upper()}, "
+            f"{len(bridge.scripts_run)} R scripts, "
+            f"{len(bridge.get_table_references())} tables, "
+            f"{len(bridge.get_figure_references())} figures"
+        )
+        print()
+
+    # ── Phase 1 pipeline: NotebookLM → MeSH PubMed → literature_seed ────────
+    project_dir = args.output_dir or "."
+    try:
+        from phases.phase1_topic.topic_development import integrate_skills_phase1
+
+        phase1_result = integrate_skills_phase1(
+            project_name=args.topic[:50],
+            project_dir=project_dir,
+            topic=args.topic,
+            disease=getattr(args, "disease", "") or "",
+            intervention=getattr(args, "intervention", "") or "",
+            max_pubmed_results=args.max_articles,
+            manual_selection=getattr(args, "manual_selection", False),
+        )
+        n = phase1_result.get("pubmed_count", 0)
+        if n:
+            print(
+                f"Phase 1: {n} articles retrieved "
+                f"(seed → {project_dir}/literature_seed.json)"
+            )
+        if phase1_result.get("notebook_id"):
+            print(f"Phase 1: NotebookLM notebook created — {phase1_result['notebook_id']}")
+        for w in phase1_result.get("warnings", []):
+            print(f"  [warn] {w}")
+        print()
+    except Exception as _exc:
+        print(f"[warn] Phase 1 pipeline skipped: {_exc}\n")
+
     workflow = ResearchWorkflow(journal=journal, pubmed_api_key=args.api_key)
 
     result = workflow.run(
@@ -729,7 +844,7 @@ def cmd_research(args):
         time_period=getattr(args, "time_period", "all"),
         use_repeat=not getattr(args, "no_repeat", False),
         include_web_search=args.web_search,
-        output_dir=args.output_dir or ".",
+        output_dir=project_dir,
     )
 
     # Save JSON report
@@ -831,6 +946,35 @@ def cmd_check_quality(args):
         with open(args.json, "w") as f:
             json.dump(report, f, indent=2)
         print(f"\n{OutputFormatter.success(f'JSON report saved to: {args.json}')}")
+
+    # CSA numeric cross-verification (Phase D)
+    csa_output = getattr(args, "csa_output", None)
+    if csa_output:
+        from pathlib import Path as _Path
+        from tools.statistical_bridge import StatisticalBridge
+        from phases.phase4_7_prose.prose_verifier import AcademicProseVerifier
+
+        manifest = _Path(csa_output) / "hpw_manifest.json"
+        if manifest.exists():
+            csa_bridge = StatisticalBridge(manifest)
+            verifier = AcademicProseVerifier()
+            csa_result = verifier.verify_against_csa(
+                csa_bridge,
+                manuscript,
+                strictness=getattr(args, "csa_strictness", "warn"),
+            )
+            print(f"\n{OutputFormatter.section('CSA Numeric Cross-Check')}")
+            status = "PASSED" if csa_result["passed"] else "ISSUES DETECTED"
+            print(
+                f"Status: {status} | Disease: {csa_result['bridge_disease'].upper()} | "
+                f"Discrepancies: {csa_result['issue_count']}"
+            )
+            for issue in csa_result["issues"][:10]:
+                print(f"  • {issue}")
+        else:
+            print(
+                f"\n{OutputFormatter.warning(f'CSA manifest not found: {manifest}')}"
+            )
 
     return 0 if quality_score.overall_score >= 0.7 else 1
 
@@ -1365,6 +1509,17 @@ def build_parser():
     quality_parser.add_argument(
         "--json", metavar="FILE", help="Save results as JSON to FILE"
     )
+    quality_parser.add_argument(
+        "--csa-output",
+        metavar="DIR",
+        help="CSA output directory containing hpw_manifest.json for numeric verification",
+    )
+    quality_parser.add_argument(
+        "--csa-strictness",
+        choices=["off", "warn", "strict"],
+        default="warn",
+        help="Strictness for CSA numeric cross-check (default: warn)",
+    )
 
     # verify-references command
     verify_parser = subparsers.add_parser(
@@ -1530,6 +1685,26 @@ def build_parser():
         help="Run quality check after creating draft",
     )
     draft_parser.add_argument("--api-key", help="NCBI API key for literature search")
+    draft_parser.add_argument(
+        "--disease",
+        choices=["aml", "cml", "mds", "hct"],
+        help="Disease code for CSA bridge",
+    )
+    draft_parser.add_argument(
+        "--data-file",
+        metavar="FILE",
+        help="Path to clinical data file for CSA auto-trigger",
+    )
+    draft_parser.add_argument(
+        "--csa-output",
+        metavar="DIR",
+        help="Directory containing CSA hpw_manifest.json (or output dir for auto-run)",
+    )
+    draft_parser.add_argument(
+        "--skip-csa",
+        action="store_true",
+        help="Skip CSA statistical bridge even if data-file is provided",
+    )
 
     # systematic-review command
     sr_parser = subparsers.add_parser(
@@ -1665,6 +1840,24 @@ def build_parser():
         "--json", metavar="FILE", help="Save workflow report as JSON"
     )
     research_parser.add_argument("--api-key", help="NCBI API key for PubMed searches")
+    research_parser.add_argument(
+        "--disease",
+        metavar="DISEASE",
+        help="Disease entity (AML, CML, MDS, GVHD, ALL, MPN, HCT) — enables MeSH-anchored PubMed query",
+    )
+    research_parser.add_argument(
+        "--intervention",
+        metavar="DRUG",
+        help="Primary intervention/drug — enables drug-specific MeSH terms in query",
+    )
+    research_parser.add_argument(
+        "--manual-selection",
+        action="store_true",
+        help=(
+            "Mark all found articles as unselected; review literature_seed.json "
+            "before draft creation to pick relevant articles"
+        ),
+    )
 
     # notebooklm command
     notebooklm_parser = subparsers.add_parser(
@@ -1833,7 +2026,245 @@ def build_parser():
         help="Enable reference permission workflow for non-PubMed sources",
     )
 
+    # hypothesis command
+    hypothesis_parser = subparsers.add_parser(
+        "hypothesis",
+        help="Generate research hypotheses for a topic using HypothesisGenerator skill",
+    )
+    hypothesis_parser.add_argument("topic", help="Research topic (e.g., 'venetoclax in AML')")
+    hypothesis_parser.add_argument(
+        "--disease",
+        default="",
+        help="Disease entity context (e.g., aml, cml, mds)",
+    )
+    hypothesis_parser.add_argument(
+        "--n",
+        type=int,
+        default=3,
+        help="Number of hypotheses to generate (default: 3)",
+    )
+    hypothesis_parser.add_argument(
+        "--project",
+        default=None,
+        help="Project name for SkillContext persistence",
+    )
+    hypothesis_parser.add_argument(
+        "--no-context",
+        action="store_true",
+        help="Skip SkillContext persistence",
+    )
+
+    # brainstorm command
+    brainstorm_parser = subparsers.add_parser(
+        "brainstorm",
+        help="Brainstorm research directions using ScientificBrainstormer skill",
+    )
+    brainstorm_parser.add_argument("topic", help="Research topic to brainstorm")
+    brainstorm_parser.add_argument(
+        "--method",
+        choices=["scamper", "six-hats", "free"],
+        default="free",
+        help="Brainstorming method (default: free)",
+    )
+    brainstorm_parser.add_argument(
+        "--disease",
+        default="",
+        help="Disease entity context",
+    )
+    brainstorm_parser.add_argument(
+        "--project",
+        default=None,
+        help="Project name for SkillContext persistence",
+    )
+    brainstorm_parser.add_argument(
+        "--no-context",
+        action="store_true",
+        help="Skip SkillContext persistence",
+    )
+
+    # visualize-figure command
+    visualize_parser = subparsers.add_parser(
+        "visualize-figure",
+        help="Generate a figure description using ScientificVisualizer skill",
+    )
+    visualize_parser.add_argument(
+        "figure_type",
+        choices=["kaplan_meier", "bar_chart", "forest_plot", "waterfall", "swimmer", "consort"],
+        help="Figure type",
+    )
+    visualize_parser.add_argument(
+        "--title",
+        default="",
+        help="Figure title",
+    )
+    visualize_parser.add_argument(
+        "--n-patients",
+        default="",
+        dest="n_patients",
+        help="Number of patients (e.g., 120)",
+    )
+    visualize_parser.add_argument(
+        "--disease",
+        default="",
+        help="Disease entity",
+    )
+    visualize_parser.add_argument(
+        "--endpoint",
+        default="",
+        help="Primary endpoint",
+    )
+    visualize_parser.add_argument(
+        "--project",
+        default=None,
+        help="Project name for SkillContext persistence",
+    )
+    visualize_parser.add_argument(
+        "--no-context",
+        action="store_true",
+        help="Skip SkillContext persistence",
+    )
+
+    # grant-draft command
+    grant_parser = subparsers.add_parser(
+        "grant-draft",
+        help="Draft a grant application section using GrantWriter skill",
+    )
+    grant_parser.add_argument(
+        "section",
+        choices=["specific_aims", "significance", "innovation", "approach", "human_subjects"],
+        help="Grant section to draft",
+    )
+    grant_parser.add_argument(
+        "--project",
+        default=None,
+        help="Project name for SkillContext persistence",
+    )
+    grant_parser.add_argument(
+        "--no-context",
+        action="store_true",
+        help="Skip SkillContext persistence",
+    )
+
+
+    # load-protocol
+    protocol_parser = subparsers.add_parser(
+        "load-protocol",
+        help="Load protocol document and extract seeds for manuscript drafting",
+    )
+    protocol_parser.add_argument(
+        "file_path",
+        help="Path to protocol document (.docx or .pdf)",
+    )
+    protocol_parser.add_argument(
+        "--project",
+        required=True,
+        help="Project name (creates project folder if not exists)",
+    )
+    protocol_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Override default output directory",
+    )
+    protocol_parser.add_argument(
+        "--no-refs",
+        action="store_true",
+        help="Skip reference import",
+    )
+    protocol_parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip PubMed verification of references",
+    )
+
+    # add-to-nlm command
+    add_nlm_parser = subparsers.add_parser(
+        "add-to-nlm",
+        help="Add a PubMed article to the project NLM notebook",
+    )
+    add_nlm_parser.add_argument("--pmid", required=True, help="PubMed ID to add")
+    add_nlm_parser.add_argument(
+        "--project-dir",
+        default=".",
+        help="Project directory containing research_topic.json (default: .)",
+    )
+
     return parser
+
+
+
+def cmd_load_protocol(args):
+    """Load and extract a clinical study protocol document."""
+    from tools.protocol_parser import ProtocolParser
+
+    base_dir = Path(
+        args.output_dir
+        or os.path.expanduser(
+            "~/Library/CloudStorage/Dropbox/Paper/Hematology_paper_writer"
+        )
+    )
+    project_dir = base_dir / args.project
+
+    print(f"Loading protocol: {args.file_path}")
+    import time
+    t0 = time.time()
+
+    parser = ProtocolParser(str(project_dir))
+    result = parser.load_and_extract(
+        args.file_path,
+        import_refs=not args.no_refs,
+        verify_refs=not args.no_verify,
+        verbose=True,
+    )
+
+    elapsed = time.time() - t0
+    print(f"Done in {elapsed:.1f}s")
+
+    if result.warnings:
+        for w in result.warnings:
+            print(f"  ⚠ {w}")
+
+    return 0
+
+
+def cmd_add_to_nlm(args):
+    """Add a PubMed article to the project NLM notebook and update research_topic.json."""
+    import datetime
+    import json as _json
+    from pathlib import Path as _Path
+
+    project_dir = _Path(args.project_dir)
+    topic_path = project_dir / "research_topic.json"
+
+    if not topic_path.exists():
+        print(f"ERROR: research_topic.json not found in {project_dir}. Run Phase 1 first.")
+        return 1
+
+    data = _json.loads(topic_path.read_text())
+    nlm_block = data.get("nlm", {})
+    notebook_id = nlm_block.get("notebook_id")
+
+    if not notebook_id:
+        print("ERROR: No NLM notebook linked in research_topic.json. Run Phase 1 first.")
+        return 1
+
+    from tools.notebooklm_integration import NotebookLMIntegration
+
+    nlm = NotebookLMIntegration()
+    pmid = args.pmid.strip()
+    ok = nlm.add_source_pmid(notebook_id, pmid)
+
+    if ok:
+        pmids = nlm_block.setdefault("pmids_added", [])
+        if pmid not in pmids:
+            pmids.append(pmid)
+        nlm_block["last_synced"] = datetime.datetime.utcnow().isoformat()
+        data["nlm"] = nlm_block
+        topic_path.write_text(_json.dumps(data, indent=2, ensure_ascii=False))
+        print(f"PMID {pmid} added to NLM notebook {notebook_id}.")
+        return 0
+    else:
+        print(f"ERROR: Failed to add PMID {pmid}. Is open-notebook running at http://localhost:5055?")
+        return 1
 
 
 def cmd_search_web(args):
@@ -1948,6 +2379,142 @@ def cmd_search_web(args):
 
 
 # ============================================================================
+# Scientific Skills Commands
+# ============================================================================
+
+
+def _get_skills_context(args):
+    """Load SkillContext from project dir, or return a transient context."""
+    from tools.skills import SkillContext
+
+    project = getattr(args, "project", None)
+    if project and not getattr(args, "no_context", False):
+        project_dir = Path.cwd()
+        return SkillContext.load(project, project_dir), project_dir
+    name = project or "transient"
+    return SkillContext(project_name=name), None
+
+
+def cmd_hypothesis(args):
+    """Generate research hypotheses using HypothesisGenerator."""
+    from tools.skills import HypothesisGenerator
+
+    OutputFormatter.header("Hypothesis Generator")
+    ctx, project_dir = _get_skills_context(args)
+
+    gen = HypothesisGenerator(context=ctx)
+    hypotheses = gen.generate(topic=args.topic, disease=args.disease, n=args.n)
+
+    if not hypotheses:
+        print("No hypotheses generated.")
+        return 1
+
+    print(f"Topic: {args.topic}")
+    if args.disease:
+        print(f"Disease: {args.disease}")
+    print()
+    for i, h in enumerate(hypotheses, 1):
+        print(f"{i}. {h}")
+
+    if project_dir:
+        ctx.save(project_dir)
+        print(f"\nContext saved to: {project_dir}/project_notebooks/{ctx.project_name}.skills_context.json")
+
+    return 0
+
+
+def cmd_brainstorm(args):
+    """Brainstorm research directions using ScientificBrainstormer."""
+    from tools.skills import ScientificBrainstormer
+
+    OutputFormatter.header("Scientific Brainstormer")
+    ctx, project_dir = _get_skills_context(args)
+
+    brainstormer = ScientificBrainstormer(context=ctx)
+    ideas = brainstormer.brainstorm(
+        topic=args.topic,
+        method=args.method,
+        disease=getattr(args, "disease", ""),
+    )
+
+    if not ideas:
+        print("No ideas generated.")
+        return 1
+
+    print(f"Topic: {args.topic}")
+    print(f"Method: {args.method}")
+    print()
+    for i, idea in enumerate(ideas, 1):
+        print(f"{i}. {idea}")
+
+    if project_dir:
+        ctx.save(project_dir)
+        print(f"\nContext saved to: {project_dir}/project_notebooks/{ctx.project_name}.skills_context.json")
+
+    return 0
+
+
+def cmd_visualize_figure(args):
+    """Generate a figure description using ScientificVisualizer."""
+    from tools.skills import ScientificVisualizer
+
+    OutputFormatter.header("Scientific Visualizer")
+    ctx, project_dir = _get_skills_context(args)
+
+    placeholders = {}
+    if args.title:
+        placeholders["title"] = args.title
+    if args.n_patients:
+        placeholders["n_patients"] = args.n_patients
+    if args.disease:
+        placeholders["disease"] = args.disease
+    if args.endpoint:
+        placeholders["endpoint"] = args.endpoint
+
+    viz = ScientificVisualizer(context=ctx)
+    description = viz.describe_figure(args.figure_type, **placeholders)
+
+    if not description:
+        print("No description generated.")
+        return 1
+
+    print(f"Figure type: {args.figure_type}")
+    print()
+    print(description)
+
+    if project_dir:
+        ctx.save(project_dir)
+        print(f"\nContext saved ({len(ctx.figure_descriptions)} figure(s) total).")
+
+    return 0
+
+
+def cmd_grant_draft(args):
+    """Draft a grant section using GrantWriter."""
+    from tools.skills import GrantWriter
+
+    OutputFormatter.header("Grant Writer")
+    ctx, project_dir = _get_skills_context(args)
+
+    writer = GrantWriter(context=ctx)
+    text = writer.write_section(args.section)
+
+    if not text:
+        print("No content generated.")
+        return 1
+
+    print(f"Section: {args.section}")
+    print()
+    print(text)
+
+    if project_dir:
+        ctx.save(project_dir)
+        print(f"\nContext saved to: {project_dir}/project_notebooks/{ctx.project_name}.skills_context.json")
+
+    return 0
+
+
+# ============================================================================
 # Main Entry Point
 # ============================================================================
 
@@ -1973,6 +2540,12 @@ def main():
         "check-concordance": cmd_check_concordance,
         "notebooklm": cmd_notebooklm,
         "project-notebook": cmd_project_notebook,
+        "hypothesis": cmd_hypothesis,
+        "brainstorm": cmd_brainstorm,
+        "visualize-figure": cmd_visualize_figure,
+        "grant-draft": cmd_grant_draft,
+        "load-protocol": cmd_load_protocol,
+        "add-to-nlm": cmd_add_to_nlm,
     }
 
     command_func = commands.get(args.command)

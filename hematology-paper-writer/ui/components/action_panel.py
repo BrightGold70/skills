@@ -51,6 +51,10 @@ class ActionPanel:
         elif current_phase == 9:
             self._render_resubmission_actions()
 
+        # Add PMID to NLM — available for phases >= 2
+        if current_phase >= 2:
+            self._render_add_pmid_widget()
+
         st.divider()
 
         # Common actions (always available)
@@ -62,6 +66,50 @@ class ActionPanel:
         if "notebooklm_integration" not in st.session_state:
             st.session_state.notebooklm_integration = NotebookLMIntegration()
         return st.session_state.notebooklm_integration
+
+    def _render_add_pmid_widget(self):
+        """Render 'Add PMID to NLM' widget for phases >= 2."""
+        import datetime
+        import json as _json
+        from pathlib import Path as _Path
+
+        research_topic = st.session_state.get("research_topic", {})
+        nlm_block = research_topic.get("nlm", {}) if isinstance(research_topic, dict) else {}
+        notebook_id = nlm_block.get("notebook_id")
+
+        if not notebook_id:
+            return  # Phase 1 not yet completed — no notebook to add to
+
+        with st.expander("Add PMID to NLM Notebook"):
+            pmid = st.text_input(
+                "PubMed ID",
+                key="add_pmid_input",
+                placeholder="e.g. 38234567",
+            )
+            if st.button("Add to NLM", key="add_pmid_btn") and pmid:
+                nlm = NotebookLMIntegration()
+                ok = nlm.add_source_pmid(notebook_id, pmid.strip())
+                if ok:
+                    pmids = nlm_block.setdefault("pmids_added", [])
+                    if pmid not in pmids:
+                        pmids.append(pmid)
+                    nlm_block["last_synced"] = datetime.datetime.utcnow().isoformat()
+                    if isinstance(research_topic, dict):
+                        research_topic["nlm"] = nlm_block
+                        st.session_state["research_topic"] = research_topic
+                    # Persist to disk
+                    project_dir = _Path(st.session_state.get("project_dir", "."))
+                    tp = project_dir / "research_topic.json"
+                    if tp.exists():
+                        data = _json.loads(tp.read_text())
+                        data["nlm"] = nlm_block
+                        tp.write_text(_json.dumps(data, indent=2, ensure_ascii=False))
+                    st.success(f"PMID {pmid} added to NLM notebook.")
+                else:
+                    st.warning(
+                        "Failed to add PMID. "
+                        "Is open-notebook running at http://localhost:5055?"
+                    )
 
     def _render_query_modal(self):
         """Render modal for NotebookLM queries."""
@@ -165,9 +213,104 @@ class ActionPanel:
         if st.button("🔍 Literature Search", use_container_width=True):
             st.session_state.show_literature_search = True
 
+        # Show article selection panel when seed file exists
+        self._render_literature_selection()
+
         st.markdown("**Validation**")
         if st.button("✅ Validate Research Question", use_container_width=True):
             st.info("Validating against current classifications...")
+
+    def _render_literature_selection(self):
+        """
+        Manual article selection panel for literature_seed.json.
+
+        Shown when show_literature_search=True and literature_seed.json
+        exists in the current project directory. Lets the user deselect
+        irrelevant articles before Phase 4 draft generation loads the seed.
+        """
+        import json
+        from pathlib import Path
+
+        project_dir = st.session_state.get("project_dir", ".")
+        seed_path = Path(project_dir) / "literature_seed.json"
+
+        if not seed_path.exists():
+            if st.session_state.get("show_literature_search"):
+                st.info(
+                    "No literature_seed.json found. "
+                    "Run `hpw research <topic> --disease <DISEASE>` first, "
+                    "or use the CLI to trigger Phase 1."
+                )
+            return
+
+        try:
+            seeds = json.loads(seed_path.read_text())
+        except Exception:
+            return
+
+        if not seeds:
+            return
+
+        with st.expander(
+            f"📚 Literature Review — {len(seeds)} articles found "
+            f"({sum(1 for s in seeds if s.get('selected', True))} selected)",
+            expanded=st.session_state.get("show_literature_search", False),
+        ):
+            st.caption(
+                "Deselect irrelevant articles before generating your manuscript draft. "
+                "Only selected articles will be used as references in Phase 4."
+            )
+
+            # Sort by relevance_score descending for display
+            seeds_sorted = sorted(
+                seeds, key=lambda s: s.get("relevance_score", 0), reverse=True
+            )
+            changed = False
+            for i, article in enumerate(seeds_sorted):
+                col1, col2 = st.columns([0.08, 0.92])
+                with col1:
+                    new_val = st.checkbox(
+                        "",
+                        value=article.get("selected", True),
+                        key=f"seed_sel_{article.get('pmid', i)}",
+                        label_visibility="collapsed",
+                    )
+                    if new_val != article.get("selected", True):
+                        article["selected"] = new_val
+                        changed = True
+                with col2:
+                    score = article.get("relevance_score", 0)
+                    score_bar = "█" * int(score * 10) + "░" * (10 - int(score * 10))
+                    authors = article.get("authors", [])
+                    author_str = authors[0] if authors else "Unknown"
+                    if len(authors) > 1:
+                        author_str += f" et al."
+                    st.markdown(
+                        f"**{article.get('title', 'No title')}**  \n"
+                        f"{author_str} · {article.get('journal', '')} "
+                        f"({article.get('year', '')}) · "
+                        f"PMID {article.get('pmid', '—')}  \n"
+                        f"Relevance `{score_bar}` {score:.0%}"
+                    )
+
+            if changed:
+                # Persist updated selections back to seed file
+                try:
+                    # Re-merge: update the original (unsorted) list
+                    pmid_to_sel = {
+                        a.get("pmid"): a.get("selected", True) for a in seeds_sorted
+                    }
+                    for orig in seeds:
+                        pmid = orig.get("pmid")
+                        if pmid in pmid_to_sel:
+                            orig["selected"] = pmid_to_sel[pmid]
+                    seed_path.write_text(json.dumps(seeds, indent=2, ensure_ascii=False))
+                    st.toast("Article selection saved.", icon="✅")
+                except Exception as e:
+                    st.warning(f"Could not save selections: {e}")
+
+            n_sel = sum(1 for s in seeds if s.get("selected", True))
+            st.info(f"{n_sel} / {len(seeds)} articles selected for Phase 4 draft.")
 
     def _render_design_actions(self):
         """Actions for Phase 2: Research Design."""

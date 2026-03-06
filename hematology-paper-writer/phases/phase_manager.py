@@ -88,6 +88,14 @@ class ManuscriptMetadata:
     created_at: datetime = field(default_factory=datetime.now)
     last_modified: datetime = field(default_factory=datetime.now)
 
+    # CSA integration — all optional for backward compatibility
+    csa_output_dir: Optional[Path] = None    # path to CSA_OUTPUT_DIR for this project
+    csa_data_file: Optional[Path] = None     # raw data file used for CSA run
+    disease: Optional[str] = None            # "aml" | "cml" | "mds" | "hct"
+
+    # Scientific skills integration — optional for backward compatibility
+    skills_context_path: Optional[str] = None  # relative path to .skills_context.json
+
 
 class PhaseManager:
     """
@@ -388,7 +396,13 @@ class PhaseManager:
                     data = json.load(f)
 
                 if "metadata" in data:
-                    self.metadata = ManuscriptMetadata(**data["metadata"])
+                    meta_dict = data["metadata"]
+                    # Convert Path fields (stored as strings in JSON)
+                    if meta_dict.get("csa_output_dir"):
+                        meta_dict["csa_output_dir"] = Path(meta_dict["csa_output_dir"])
+                    if meta_dict.get("csa_data_file"):
+                        meta_dict["csa_data_file"] = Path(meta_dict["csa_data_file"])
+                    self.metadata = ManuscriptMetadata(**meta_dict)
 
                 self.phase_history = []
                 for phase_data in data.get("phase_history", []):
@@ -445,6 +459,10 @@ class PhaseManager:
                 "keywords": self.metadata.keywords,
                 "created_at": self.metadata.created_at.isoformat(),
                 "last_modified": datetime.now().isoformat(),
+                "csa_output_dir": str(self.metadata.csa_output_dir) if self.metadata.csa_output_dir else None,
+                "csa_data_file": str(self.metadata.csa_data_file) if self.metadata.csa_data_file else None,
+                "disease": self.metadata.disease,
+                "skills_context_path": self.metadata.skills_context_path,
             },
             "current_phase": self.current_phase.value if self.current_phase else None,
             "phase_history": [],

@@ -166,7 +166,8 @@ class ManuscriptDrafter:
         topic: str,
         articles: List[Any],
         study_type: str = "observational",
-        custom_sections: Optional[Dict[str, str]] = None
+        custom_sections: Optional[Dict[str, str]] = None,
+        bridge: Optional[Any] = None,
     ) -> str:
         """
         Create a manuscript draft based on research data.
@@ -189,8 +190,8 @@ class ManuscriptDrafter:
         # Generate sections
         data.abstract = self._generate_abstract(topic, study_type)
         data.introduction = self._generate_introduction(topic, common_themes, articles)
-        data.methods = self._generate_methods(study_type)
-        data.results = self._generate_results(topic, study_type, articles)
+        data.methods = self._generate_methods(study_type, bridge)
+        data.results = self._generate_results(topic, study_type, articles, bridge)
         data.discussion = self._generate_discussion(topic, common_themes, key_findings)
         
         # Generate references
@@ -265,8 +266,20 @@ This manuscript examines {topic.lower()}. Through comprehensive analysis, we ide
         
         return "\n".join(intro_parts)
     
-    def _generate_methods(self, study_type: str) -> str:
+    def _generate_methods(self, study_type: str, bridge: Optional[Any] = None) -> str:
         """Generate methods section."""
+        # Statistical Analysis paragraph — use bridge if available (Phase B)
+        if bridge is not None and getattr(bridge, "is_available", False):
+            stat_analysis = bridge.generate_methods_paragraph()
+        else:
+            stat_analysis = (
+                "Statistical analysis was performed using appropriate software. "
+                "Continuous variables were compared using parametric/non-parametric tests. "
+                "Categorical variables were analyzed using chi-square or Fisher's exact test. "
+                "Survival analysis was conducted using Kaplan-Meier method. "
+                "P-value < 0.05 was considered statistically significant."
+            )
+
         methods_parts = [
             "## Methods",
             "",
@@ -286,39 +299,56 @@ This manuscript examines {topic.lower()}. Through comprehensive analysis, we ide
             "",
             "### Statistical Analysis",
             "",
-            "Statistical analysis was performed using appropriate software.",
-            "Continuous variables were compared using parametric/non-parametric tests.",
-            "Categorical variables were analyzed using chi-square or Fisher's exact test.",
-            "Survival analysis was conducted using Kaplan-Meier method.",
-            f"P-value < 0.05 was considered statistically significant."
+            stat_analysis,
         ]
-        
+
         return "\n".join(methods_parts)
     
-    def _generate_results(self, topic: str, study_type: str, articles: List[Any]) -> str:
-        """Generate results section."""
+    def _generate_results(
+        self,
+        topic: str,
+        study_type: str,
+        articles: List[Any],
+        bridge: Optional[Any] = None,
+    ) -> str:
+        """Generate results section, injecting bridge prose where available (Phase B)."""
+        _PENDING = "[PENDING — run statistical analysis]"
+
+        # Fetch bridge prose if available
+        bridge_prose: Dict[str, str] = {}
+        if bridge is not None and getattr(bridge, "is_available", False):
+            bridge_prose = bridge.generate_results_prose()
+
         results_parts = [
             "## Results",
             "",
             "### Patient Characteristics",
             "",
-            f"A total of [N] patients were included in this analysis of {topic.lower()}.",
+            bridge_prose.get(
+                "baseline",
+                f"A total of [N] patients were included in this analysis of {topic.lower()}.",
+            ),
             "",
             "### Clinical Outcomes",
             "",
-            "The primary endpoints were assessed as follows:",
-            "- Primary endpoint 1: [result]",
-            "- Primary endpoint 2: [result]",
+            bridge_prose.get("efficacy", _PENDING),
             "",
             "### Survival Analysis",
             "",
-            "Overall survival and progression-free survival were evaluated.",
+            bridge_prose.get(
+                "survival",
+                "Overall survival and progression-free survival were evaluated.",
+            ),
+            "",
+            "### Safety",
+            "",
+            bridge_prose.get("safety", _PENDING),
             "",
             "### Subgroup Analysis",
             "",
-            "Predefined subgroup analyses were conducted."
+            "Predefined subgroup analyses were conducted.",
         ]
-        
+
         return "\n".join(results_parts)
     
     def _generate_discussion(self, topic: str, themes: List[str], findings: Dict[str, str]) -> str:

@@ -117,8 +117,30 @@ class ResearchWorkflow:
         print("📚 STEP 1: LITERATURE SEARCH")
         print("-" * 50)
 
-        articles = self._search_literature(topic, max_articles, time_period, use_repeat)
+        # Load from Phase 1 literature_seed.json first (avoids redundant PubMed call)
+        articles = self._load_from_seed(output_dir)
+        if articles:
+            print(f"  Using {len(articles)} selected articles from literature_seed.json")
+        else:
+            articles = self._search_literature(topic, max_articles, time_period, use_repeat)
         result.articles_found = len(articles)
+
+        # Query project NLM notebook for phase-specific literature context
+        nlm_context = ""
+        try:
+            from tools.nlm_query import load_context_for_phase
+            nlm_context = load_context_for_phase("phase4_draft", output_dir)
+            if nlm_context:
+                print(f"  NLM context loaded ({len(nlm_context)} chars)")
+            else:
+                import sys
+                print(
+                    "[HPW] NLM context unavailable for Phase 4 — "
+                    "proceeding without curated literature context.",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
 
         if articles:
             print(f"✅ Found {len(articles)} relevant articles from PubMed")
@@ -148,6 +170,13 @@ class ResearchWorkflow:
 
         drafter = ManuscriptDrafter(self.journal_enum)
         manuscript_text = drafter.create_draft(topic, articles)
+
+        # Prepend NLM literature context as a front-matter comment block
+        if nlm_context:
+            manuscript_text = (
+                "<!-- NLM Literature Context (Phase 4) -->\n"
+                f"<!--\n{nlm_context[:1500]}\n-->\n\n"
+            ) + manuscript_text
 
         # Save manuscript
         timestamp = datetime.now().strftime("%Y%m%d%H%M")
@@ -262,6 +291,42 @@ class ResearchWorkflow:
         print("=" * 70)
 
         return result
+
+    def _load_from_seed(self, output_dir: str) -> List[Any]:
+        """
+        Load selected articles from Phase 1's literature_seed.json.
+
+        Returns a list of duck-typed article objects compatible with
+        ManuscriptDrafter.create_draft() — same attributes as PubMedArticle.
+        Returns an empty list if the file doesn't exist or has no selected articles,
+        so the caller falls back to a live PubMed search.
+        """
+        try:
+            from phases.phase1_topic.topic_development import TopicDevelopmentManager
+
+            seeds = TopicDevelopmentManager.load_literature_seed(output_dir)
+            selected = [s for s in seeds if s.selected]
+            if not selected:
+                return []
+
+            class _SeedArticle:
+                """Minimal PubMedArticle-compatible wrapper around LiteratureSeed."""
+
+                def __init__(self, seed):
+                    self.title = seed.title
+                    self.authors = seed.authors
+                    self.journal = seed.journal
+                    self.year = str(seed.year)
+                    self.abstract = seed.abstract
+                    self.pmid = seed.pmid
+                    # Fields expected by some drafter paths
+                    self.doi = ""
+                    self.keywords = []
+                    self.mesh_terms = []
+
+            return [_SeedArticle(s) for s in selected]
+        except Exception:
+            return []
 
     def _search_literature(
         self,

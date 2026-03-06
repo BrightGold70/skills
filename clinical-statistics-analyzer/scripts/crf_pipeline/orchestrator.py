@@ -1,5 +1,7 @@
 """Analysis orchestrator: chains data transformation with R script execution."""
 
+import datetime
+import fnmatch
 import json
 import logging
 import os
@@ -94,6 +96,46 @@ class AnalysisOrchestrator:
         script_filter: Optional list of script names to run (default: all for disease).
     """
 
+    # Maps each R script to its expected output filenames (fnmatch patterns).
+    # Used by _write_hpw_manifest to populate source_script for tables/figures.
+    _OUTPUT_SCRIPT_MAP: Dict[str, List[str]] = {
+        "02_table1.R":                 ["Table1_Baseline_Characteristics.docx"],
+        "03_efficacy.R":               ["Efficacy_*.docx", "ForestPlot_*.eps"],
+        "04_survival.R":               ["KM_Plot_*.eps", "Cox_*_Analysis.csv",
+                                        "Cumulative_Incidence_*.eps", "CoxZPH_*.csv",
+                                        "FineGray_*.csv", "TimeDependent_Cox_*.csv"],
+        "05_safety.R":                 ["Safety_Summary_Table.docx"],
+        "10_sample_size.R":            ["SampleSize_*.docx", "SampleSize_*.csv"],
+        "11_phase1_dose_finding.R":    ["Phase1_DoseFinding*.docx", "Phase1_*.eps"],
+        "12_phase2_simon.R":           ["Simon_TwoStage*.docx"],
+        "14_forest_plot.R":            ["ForestPlot_*.eps"],
+        "15_swimmer_plot.R":           ["Swimmer_*.eps"],
+        "16_sankey.R":                 ["Sankey_*.eps"],
+        "20_aml_eln_risk.R":           ["AML_ELN2022_Risk_Stratification.docx",
+                                        "AML_ELN2022_Risk_Distribution.eps"],
+        "21_aml_composite_response.R": ["AML_Composite_Response_Cycle*.docx",
+                                        "AML_Waterfall_Cycle*.eps",
+                                        "AML_Response_Bar_Cycle*.eps"],
+        "22_cml_tfr_analysis.R":       ["CML_TFR_Summary.docx",
+                                        "CML_ELN_Milestone_Assessment.docx",
+                                        "CML_TFR_Cox_Model.docx",
+                                        "CML_BCR_ABL_Kinetics.eps",
+                                        "CML_TFR_KaplanMeier.eps"],
+        "23_cml_scores.R":             ["CML_Scores_Summary.docx",
+                                        "CML_Scores_Concordance.docx",
+                                        "KM_Sokal.eps", "KM_ELTS.eps", "KM_Hasford.eps"],
+        "24_hct_gvhd_analysis.R":      ["HCT_Outcomes_Summary.docx",
+                                        "HCT_cGVHD_Severity.docx",
+                                        "HCT_aGVHD_CumulativeIncidence.eps",
+                                        "HCT_cGVHD_CumulativeIncidence.eps",
+                                        "HCT_GRFS_CumulativeIncidence.eps",
+                                        "HCT_GRFS_KaplanMeier.eps",
+                                        "HCT_Engraftment_Kinetics.eps"],
+        "25_aml_phase1_boin.R":        ["BOIN_Decision_Boundaries.docx",
+                                        "BOIN_Operating_Characteristics.docx",
+                                        "BOIN_Isotoxicity_Curve.eps"],
+    }
+
     def __init__(
         self,
         config_dir: str,
@@ -101,10 +143,13 @@ class AnalysisOrchestrator:
         output_dir: str,
         scripts_dir: Optional[str] = None,
         script_filter: Optional[List[str]] = None,
+        study_args: Optional[Dict[str, str]] = None,
     ):
         self.disease = disease
         self.output_dir = Path(output_dir)
         self.script_filter = script_filter
+        # Study-level metadata passed through to hpw_manifest.json
+        self.study_args: Dict[str, str] = study_args or {}
 
         # Resolve scripts directory (default: scripts/ relative to crf_pipeline/)
         if scripts_dir:
@@ -618,6 +663,15 @@ class AnalysisOrchestrator:
 
         # Save summary report
         self._save_summary(result)
+        self._write_hpw_manifest(result)
+
+        # Scientific skills post-analysis hook (fail-silent — never breaks pipeline)
+        try:
+            from .skills_integration import integrate_skills_post_analysis
+            _study_name = self.study_args.get("study_name", self.disease)
+            integrate_skills_post_analysis(result, self.output_dir, _study_name)
+        except Exception as _skills_exc:
+            logger.debug("Skills integration skipped: %s", _skills_exc)
 
         # Step 5: Post-processing (journal themes, PDF, HTML, mini-CSR)
         if any([journal, generate_pdf, generate_html, generate_csr]):
@@ -654,6 +708,14 @@ class AnalysisOrchestrator:
 
         return result
 
+    def _script_for_file(self, filename: str) -> str:
+        """Return the script name that produces *filename*, or empty string."""
+        for script, patterns in self._OUTPUT_SCRIPT_MAP.items():
+            for pat in patterns:
+                if fnmatch.fnmatch(filename, pat):
+                    return script
+        return ""
+
     def _save_summary(self, result: AnalysisResult) -> None:
         """Save a JSON summary report of the analysis run."""
         summary_path = self.output_dir / "analysis_summary.json"
@@ -663,3 +725,169 @@ class AnalysisOrchestrator:
             logger.info("Saved analysis summary: %s", summary_path)
         except Exception as e:
             logger.error("Failed to save summary: %s", e)
+
+    def _write_hpw_manifest(self, result: AnalysisResult) -> None:
+        """Write hpw_manifest.json for HPW consumption after analysis run."""
+        # Successful script names (basename only)
+        scripts_run = [
+            Path(sr.script).name
+            for sr in result.script_results
+            if sr.success
+        ]
+
+        # R version
+        r_version = "unknown"
+        try:
+            r_proc = subprocess.run(
+                ["Rscript", "--version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            line = (r_proc.stdout or r_proc.stderr).split("\n")[0]
+            # "R scripting front-end version 4.3.1 (2023-06-16)"
+            r_version = next(
+                (p for p in line.split() if p and p[0].isdigit()), "unknown"
+            )
+        except Exception:
+            pass
+
+        # R packages: infer from scripts that ran
+        _script_packages: Dict[str, List[str]] = {
+            "02_table1.R":                 ["table1", "flextable", "officer"],
+            "03_efficacy.R":               ["flextable", "officer", "forestplot"],
+            "04_survival.R":               ["survival", "survminer", "cmprsk", "broom"],
+            "05_safety.R":                 ["flextable", "officer"],
+            "06_response.R":               ["flextable", "officer"],
+            "07_competing_risks.R":        ["cmprsk"],
+            "10_sample_size.R":            ["pwr", "flextable", "officer"],
+            "11_phase1_dose_finding.R":    ["flextable", "officer"],
+            "12_phase2_simon.R":           ["flextable", "officer"],
+            "14_forest_plot.R":            ["forestplot", "ggplot2"],
+            "15_swimmer_plot.R":           ["ggplot2", "patientProfilesVis"],
+            "16_sankey.R":                 ["ggsankey", "ggplot2"],
+            "20_aml_eln_risk.R":           ["dplyr", "flextable", "officer", "ggplot2"],
+            "21_aml_composite_response.R": ["dplyr", "ggplot2", "flextable", "officer"],
+            "22_cml_tfr_analysis.R":       ["survival", "survminer", "flextable", "officer", "broom"],
+            "23_cml_scores.R":             ["survival", "survminer", "flextable", "officer"],
+            "24_hct_gvhd_analysis.R":      ["survival", "cmprsk", "survminer", "flextable", "officer"],
+            "25_aml_phase1_boin.R":        ["flextable", "officer", "ggplot2"],
+        }
+        r_packages_set: set = set()
+        for s in scripts_run:
+            r_packages_set.update(_script_packages.get(s, []))
+        r_packages = sorted(r_packages_set)
+
+        # Scan Tables/*.docx
+        tables = []
+        tables_dir = self.output_dir / "Tables"
+        if tables_dir.exists():
+            for docx in sorted(tables_dir.glob("*.docx")):
+                stem = docx.stem.lower()
+                if "table1" in stem or "baseline" in stem:
+                    ttype, tid = "table1", "table1"
+                elif "efficacy" in stem or "response" in stem:
+                    ttype, tid = "efficacy", "table_efficacy"
+                elif "safety" in stem or "adverse" in stem or stem.startswith("ae"):
+                    ttype, tid = "safety", "table_safety"
+                else:
+                    ttype = "other"
+                    tid = f"table_{docx.stem.lower().replace(' ', '_')}"
+                tables.append({
+                    "id": tid,
+                    "label": f"Table. {docx.stem.replace('_', ' ')}",
+                    "path": str(docx.relative_to(self.output_dir)),
+                    "type": ttype,
+                    "source_script": self._script_for_file(docx.name),
+                })
+
+        # Scan Figures/*.eps
+        figures = []
+        figures_dir = self.output_dir / "Figures"
+        if figures_dir.exists():
+            for eps in sorted(figures_dir.glob("*.eps")):
+                stem = eps.stem.lower()
+                if "os" in stem or "overall" in stem or ("km" in stem and "pfs" not in stem):
+                    ftype, fid = "km_os", "fig_os_km"
+                elif "pfs" in stem or "efs" in stem:
+                    ftype, fid = "km_pfs", "fig_pfs_km"
+                elif "forest" in stem or "subgroup" in stem:
+                    ftype, fid = "forest_plot", "fig_forest"
+                elif "swimmer" in stem:
+                    ftype, fid = "swimmer", "fig_swimmer"
+                elif "waterfall" in stem:
+                    ftype, fid = "waterfall", "fig_waterfall"
+                else:
+                    ftype = "other"
+                    fid = f"fig_{eps.stem.lower().replace(' ', '_')}"
+                figures.append({
+                    "id": fid,
+                    "label": f"Figure. {eps.stem.replace('_', ' ')}",
+                    "path": str(eps.relative_to(self.output_dir)),
+                    "type": ftype,
+                    "source_script": self._script_for_file(eps.name),
+                })
+
+        # Collect key_statistics from companion data/*_stats.json files
+        key_statistics: dict = {}
+        disease_specific: dict = {}
+        analysis_notes: dict = {}
+        data_dir = self.output_dir / "data"
+        if data_dir.exists():
+            for stats_file in sorted(data_dir.glob("*_stats.json")):
+                try:
+                    with open(stats_file, encoding="utf-8") as f:
+                        stats_data = json.load(f)
+                    key_statistics.update(stats_data.get("key_statistics", {}))
+                    disease_specific.update(stats_data.get("disease_specific", {}))
+                    analysis_notes.update(stats_data.get("analysis_notes", {}))
+                except Exception as exc:
+                    logger.warning("Could not read stats file %s: %s", stats_file, exc)
+
+        # Build study_context from study_args set at init time
+        study_context: Dict[str, str] = {}
+        if self.study_args:
+            for key in ("study_name", "protocol_id", "trial_phase", "sponsor", "data_cutoff_date"):
+                if key in self.study_args and self.study_args[key]:
+                    study_context[key] = self.study_args[key]
+            # Also accept legacy "data_cutoff" key and map to canonical name
+            if "data_cutoff" in self.study_args and "data_cutoff_date" not in study_context:
+                study_context["data_cutoff_date"] = self.study_args["data_cutoff"]
+        study_context["disease"] = result.disease or self.disease
+        if key_statistics.get("n_total") is not None:
+            study_context["n_enrolled"] = str(int(key_statistics["n_total"]
+                if isinstance(key_statistics["n_total"], (int, float))
+                else key_statistics["n_total"].get("value", 0)))
+
+        # Promote any numeric stats from disease_specific into key_statistics
+        # so that StatisticalBridge.get_stat() can access them uniformly.
+        for ds_key, ds_val in disease_specific.items():
+            if isinstance(ds_val, dict):
+                for stat_key, stat_val in ds_val.items():
+                    if stat_key not in key_statistics and isinstance(stat_val, (int, float, dict)):
+                        key_statistics[stat_key] = stat_val
+            # Scalar disease_specific values that look like stats (numeric)
+            elif isinstance(ds_val, (int, float)) and ds_key not in key_statistics:
+                key_statistics[ds_key] = ds_val
+
+        manifest = {
+            "schema_version": "1.0",
+            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "disease": result.disease or self.disease,
+            "csa_skill_version": "3.0.0",
+            "r_version": r_version,
+            "scripts_run": scripts_run,
+            "r_packages": r_packages,
+            "tables": tables,
+            "figures": figures,
+            "key_statistics": key_statistics,
+            "disease_specific": disease_specific,
+            "analysis_notes": analysis_notes,
+            "study_context": study_context,
+        }
+
+        manifest_path = self.output_dir / "hpw_manifest.json"
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2, default=str)
+            logger.info("Saved HPW manifest: %s", manifest_path)
+        except Exception as exc:
+            logger.error("Failed to save HPW manifest: %s", exc)

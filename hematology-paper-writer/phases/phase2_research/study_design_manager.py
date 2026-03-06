@@ -164,6 +164,81 @@ class StudyDesignManager:
     def __init__(self):
         self.current_design: Optional[StudyDesign] = None
         self.design_history: List[StudyDesign] = []
+        self.nlm_context: str = ""  # populated by load_phase1_topic()
+
+    def load_phase1_topic(self, project_dir) -> Optional[Dict[str, Any]]:
+        """
+        Load Phase 1's research_topic.json and pre-populate the current design.
+
+        Call this at the start of Phase 2 so that PICO, disease entity,
+        study type, and primary endpoint are carried forward automatically
+        instead of being re-entered.
+
+        Args:
+            project_dir: HPW project directory (same as used in Phase 1).
+
+        Returns:
+            Dict with keys ``pico``, ``disease_entity``, ``study_type``,
+            ``primary_endpoint``, ``title`` if file found; else None.
+        """
+        from pathlib import Path
+        import json
+
+        path = Path(project_dir) / "research_topic.json"
+        if not path.exists():
+            return None
+
+        data = json.loads(path.read_text())
+        pico = data.get("pico", {})
+        study_type_val = data.get("study_type", "therapeutic")
+
+        # Map study_type string back to StudyDesignType
+        _type_map = {
+            "therapeutic": StudyDesignType.COHORT_STUDY,
+            "prognostic": StudyDesignType.COHORT_STUDY,
+            "diagnostic": StudyDesignType.CROSS_SECTIONAL,
+            "classification": StudyDesignType.CROSS_SECTIONAL,
+            "gvhd": StudyDesignType.COHORT_STUDY,
+        }
+        design_type = _type_map.get(study_type_val, StudyDesignType.COHORT_STUDY)
+
+        # Pre-populate current_design if not already set
+        if self.current_design is None:
+            self.current_design = StudyDesign(
+                design_type=design_type,
+                title=data.get("title", ""),
+                primary_objective=(
+                    f"To investigate {pico.get('Intervention', '')} "
+                    f"in {pico.get('Population', '')}"
+                ).strip(),
+                primary_endpoint=pico.get("Outcome", ""),
+            )
+            if data.get("keywords"):
+                # Store as quality control reference
+                self.current_design.quality_control_measures = data["keywords"][:3]
+
+        # Query project NLM notebook for phase-specific literature context
+        try:
+            from tools.nlm_query import load_context_for_phase
+            self.nlm_context = load_context_for_phase("phase2", project_dir)
+            if not self.nlm_context:
+                import sys
+                print(
+                    "[HPW] NLM context unavailable for Phase 2 — "
+                    "proceeding without curated literature context.",
+                    file=sys.stderr,
+                )
+        except Exception:
+            self.nlm_context = ""
+
+        return {
+            "pico": pico,
+            "disease_entity": data.get("disease_entity", ""),
+            "study_type": study_type_val,
+            "primary_endpoint": pico.get("Outcome", ""),
+            "title": data.get("title", ""),
+            "nlm_context": self.nlm_context,
+        }
 
     def create_classification_study_design(
         self,
@@ -297,6 +372,14 @@ class StudyDesignManager:
             ]
         )
 
+        if self.nlm_context:
+            lines = [
+                "<!-- NLM Literature Context -->",
+                self.nlm_context,
+                "<!-- End NLM Context -->",
+                "",
+            ] + lines
+
         return "\n".join(lines)
 
 
@@ -315,3 +398,52 @@ if __name__ == "__main__":
     print("Data Elements Required:")
     for category, elements in manager.get_classification_data_elements().items():
         print(f"  {category}: {len(elements)} elements")
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase2(
+    project_name: str,
+    project_dir,
+    study_type: str,
+    data_description: str = "",
+    primary_endpoint: str = "",
+    sample_size: int = 0,
+) -> None:
+    """
+    Invoke scientific skills for Phase 2 (Research Design).
+
+    Runs StatisticalAnalyst and HypothesisGenerator (refine) and persists
+    results to SkillContext. Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        study_type: rct | cohort | systematic_review | retrospective | phase1
+        data_description: Brief description of the study data/population
+        primary_endpoint: Primary endpoint (e.g., "OS", "CR rate")
+        sample_size: Estimated sample size (0 if unknown)
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, StatisticalAnalyst, ScientificSchematist
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        StatisticalAnalyst(context=ctx).analyze(
+            data_description=data_description,
+            study_type=study_type,
+            primary_endpoint=primary_endpoint,
+            sample_size=sample_size,
+        )
+        # ScientificSchematist available from Week 4 onwards
+        try:
+            from tools.skills import ScientificSchematist
+            ScientificSchematist(context=ctx).generate_diagram(ctx.study_design)
+        except ImportError:
+            pass
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 2 skill integration failed: %s", exc)

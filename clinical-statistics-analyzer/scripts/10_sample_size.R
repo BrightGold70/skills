@@ -8,6 +8,35 @@ library(flextable)
 library(officer)
 library(dplyr)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 # ==============================================================================
 # COMMAND LINE ARGUMENTS
 # ==============================================================================
@@ -393,3 +422,35 @@ write.csv(sens_df, file.path(tables_dir, paste0("SampleSize_", endpoint_type, "_
           row.names = FALSE)
 
 cat("Done.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  stats_list <- list(
+    n_total          = results$main$n_total,
+    n_adjusted       = n_adjusted,
+    alpha            = results$main$alpha,
+    power            = results$main$power,
+    endpoint_type    = endpoint_type
+  )
+  if (endpoint_type == "binary") {
+    stats_list$effect_size_or <- round(results$main$OR, 2)
+    stats_list$p1             <- round(results$main$p1, 3)
+    stats_list$p2             <- round(results$main$p2, 3)
+  } else if (endpoint_type == "continuous") {
+    stats_list$effect_size_d  <- round(results$main$effect_size_d, 2)
+  } else if (endpoint_type == "survival") {
+    stats_list$hazard_ratio    <- round(results$main$hazard_ratio, 2)
+    stats_list$events_required <- results$main$events_required
+  }
+  write_stats_json(
+    key_statistics = stats_list,
+    analysis_notes = list(
+      dropout_adjustment = "10%",
+      formula            = switch(endpoint_type,
+        binary   = "Two-proportion chi-square (pwr.2p.test)",
+        continuous = "Two-sample t-test (pwr.t.test)",
+        survival = "Log-rank / Schoenfeld formula"
+      )
+    )
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

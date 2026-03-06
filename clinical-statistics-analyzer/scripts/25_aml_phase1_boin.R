@@ -10,6 +10,35 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 target_dlt <- if (length(args) >= 1) as.numeric(args[1]) else 0.25
 n_doses    <- if (length(args) >= 2) as.integer(args[2]) else 6
@@ -226,3 +255,28 @@ print(p)
 invisible(dev.off())
 
 cat(paste0("BOIN analysis complete. Outputs saved to ", out_dir, "/\n"))
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  # Identify dose with highest MTD selection probability across all scenarios
+  best_dose_row <- final_results[final_results$Dose_Level != "None", ]
+  top_dose <- if (nrow(best_dose_row) > 0) {
+    best_dose_row$Dose_Level[which.max(best_dose_row$MTD_Selection_Prob)]
+  } else { NULL }
+  write_stats_json(
+    key_statistics = list(
+      target_dlt_rate    = target_dlt,
+      lambda_e           = round(lambda_e, 4),
+      lambda_d           = round(lambda_d, 4),
+      n_doses            = n_doses,
+      n_simulated_trials = n_trials,
+      top_mtd_dose       = if (!is.null(top_dose)) top_dose else NULL
+    ),
+    analysis_notes   = list(
+      method    = "BOIN (Bayesian Optimal Interval)",
+      reference = "Liu & Yuan. Stat Med. 2015;34(26):3301-3315",
+      cohort_size = cohort_size
+    ),
+    disease_specific = list(disease = "AML", endpoint = "phase1_BOIN_MTD")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

@@ -63,7 +63,7 @@ class ManuscriptUpdater:
         self.update_history: List[UpdateReport] = []
 
     def update_classification_terminology(
-        self, text: str, target_system: str = "WHO 2022"
+        self, text: str, target_system: str = "WHO 2022", nlm_context: str = ""
     ) -> UpdateReport:
         report = UpdateReport()
         updated_text = text
@@ -106,6 +106,12 @@ class ManuscriptUpdater:
                 )
 
         report.updated_text = updated_text
+        if nlm_context:
+            report.issues_found.append({
+                "type": "nlm_context_available",
+                "issue": "NLM literature context available for gap identification",
+                "suggestion": nlm_context[:500],
+            })
         self.update_history.append(report)
         return report
 
@@ -283,6 +289,42 @@ class ManuscriptUpdater:
 
         lines.append("=" * 60)
         return "\n".join(lines)
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase4_5(
+    project_name: str,
+    project_dir,
+    text: str = "",
+    disease: str = "",
+) -> None:
+    """
+    Invoke scientific skills for Phase 4.5 (Manuscript Updating).
+
+    Runs AcademicWriter (language upgrade) and persists results to
+    SkillContext. Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        text: Manuscript text to upgrade
+        disease: Disease entity for context (aml, cml, mds, hct)
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, AcademicWriter
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        if text:
+            upgraded = AcademicWriter(context=ctx).upgrade_language(text)
+            ctx.draft_sections["updated"] = upgraded
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 4.5 skill integration failed: %s", exc)
 
 
 if __name__ == "__main__":

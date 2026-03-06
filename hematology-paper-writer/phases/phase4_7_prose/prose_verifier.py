@@ -4,7 +4,7 @@ Detects and helps eliminate outline-style writing in favor of flowing prose.
 """
 
 import re
-from typing import List, Dict, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -88,6 +88,34 @@ class AcademicProseVerifier:
             "issues": self.issues,
             "statistics": self._calculate_statistics(text, paragraphs),
             "recommendations": self._generate_recommendations(),
+        }
+
+    def verify_against_csa(
+        self,
+        bridge: Any,
+        text: str,
+        strictness: str = "warn",
+    ) -> Dict:
+        """
+        Cross-reference manuscript statistics against CSA key_statistics.
+        Uses StatisticalBridge.verify_manuscript_statistics() to detect
+        numeric discrepancies between manuscript text and verified statistics.
+
+        Args:
+            bridge: StatisticalBridge instance with loaded manifest
+            text: Full manuscript text to verify
+            strictness: "off" | "warn" | "strict"
+
+        Returns:
+            Dict with issues, issue_count, passed, disease, strictness
+        """
+        issues = bridge.verify_manuscript_statistics(text, strictness=strictness)
+        return {
+            "passed": len(issues) == 0,
+            "issue_count": len(issues),
+            "issues": issues,
+            "bridge_disease": bridge.disease,
+            "strictness": strictness,
         }
 
     def _check_for_lists(self, lines: List[str]):
@@ -383,10 +411,89 @@ A well-developed paragraph should have:
         return "\n".join(lines)
 
 
-def verify_prose(text: str) -> Dict:
+def verify_prose(text: str, nlm_context: str = "") -> Dict:
     """Convenience function to verify prose in text."""
     verifier = AcademicProseVerifier()
-    return verifier.verify_manuscript(text)
+    result = verifier.verify_manuscript(text)
+    result["nlm_context"] = nlm_context
+    result["literature_context"] = nlm_context  # alias for UI rendering
+    if nlm_context:
+        result.setdefault("notes", []).append(
+            "NLM literature context loaded — verify claims against curated sources above."
+        )
+    return result
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase4_7(
+    project_name: str,
+    project_dir,
+    text: str = "",
+) -> None:
+    """
+    Invoke scientific skills for Phase 4.7 (Prose Verification).
+
+    Runs CriticalThinker (quality scoring) on the manuscript text and persists
+    results to SkillContext. Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        text: Manuscript text to evaluate
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, CriticalThinker
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        if text:
+            CriticalThinker(context=ctx).evaluate(text=text, focus="fallacies")
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 4.7 skill integration failed: %s", exc)
+
+
+def integrate_skills_phase4_7_classification(
+    project_name: str,
+    project_dir,
+    text: str = "",
+) -> None:
+    """
+    Check manuscript text for classification nomenclature issues using
+    ClassificationValidator. Appends any issues to SkillContext.prose_issues.
+    Fails silently on any error.
+
+    Checks performed:
+    - WHO 2022 / ICC 2022 citation presence when AML mentioned
+    - BCR::ABL1 double-colon notation (not BCR-ABL or BCR/ABL)
+    - ELN year qualifier (2022 AML, 2025 CML)
+    - NIH 2014 citation for chronic GVHD
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        text: Full manuscript text to scan
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, ClassificationValidator
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        if text:
+            ClassificationValidator(context=ctx).check_classification_nomenclature(text)
+
+        ctx.save(Path(project_dir))
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Phase 4.7 classification skill integration failed: %s", exc
+        )
 
 
 def check_paragraph_prose_quality(paragraph: str) -> Dict:
@@ -397,9 +504,9 @@ def check_paragraph_prose_quality(paragraph: str) -> Dict:
 
     checks = {
         "has_topic_sentence": len(sentences) > 0,
-        "has_sufficient_length": len(sentences) >= 3,
-        "has_development": len(sentences) >= 2,
-        "has_conclusion": len(sentences) >= 3,
+        "has_sufficient_length": len(sentences) >= 5,   # PEEL: min 5 sentences
+        "has_development": len(sentences) >= 3,
+        "has_conclusion": len(sentences) >= 5,
         "no_bullets": not bool(verifier.BULLET_PATTERN.match(paragraph)),
         "no_numbering": not bool(verifier.NUMBERED_PATTERN.match(paragraph)),
     }
@@ -409,3 +516,86 @@ def check_paragraph_prose_quality(paragraph: str) -> Dict:
     checks["word_count"] = len(paragraph.split())
 
     return checks
+
+
+# Section-level word count floors by document type and section name.
+_SECTION_WORD_FLOORS: dict[str, dict[str, int]] = {
+    "systematic_review": {
+        "abstract": 220,
+        "introduction": 600,
+        "methods": 800,
+        "results": 900,
+        "discussion": 900,
+        "conclusion": 150,
+    },
+    "original_research": {
+        "abstract": 180,
+        "introduction": 500,
+        "methods": 700,
+        "results": 800,
+        "discussion": 800,
+        "conclusion": 100,
+    },
+    "case_report": {
+        "abstract": 150,
+        "introduction": 200,
+        "case_presentation": 400,
+        "discussion": 600,
+        "conclusion": 80,
+    },
+}
+
+
+def check_section_word_count(
+    section_text: str,
+    section_name: str,
+    document_type: str = "systematic_review",
+) -> dict:
+    """
+    Validate that a manuscript section meets the minimum word count floor.
+
+    Args:
+        section_text: Full text of the section (including heading if present)
+        section_name: Section identifier — "introduction", "methods", "results",
+                      "discussion", "abstract", "conclusion", "case_presentation"
+        document_type: "systematic_review" | "original_research" | "case_report"
+
+    Returns:
+        dict with keys: section, document_type, word_count, floor, shortfall,
+                        passed (bool), message
+    """
+    try:
+        floors = _SECTION_WORD_FLOORS.get(document_type, _SECTION_WORD_FLOORS["systematic_review"])
+        floor = floors.get(section_name.lower(), 0)
+        word_count = len(section_text.split())
+        shortfall = max(0, floor - word_count)
+        passed = word_count >= floor
+
+        if passed:
+            message = f"Section '{section_name}' meets word floor ({word_count} >= {floor})."
+        else:
+            message = (
+                f"Section '{section_name}' is below the word floor: "
+                f"{word_count} words (floor: {floor}; shortfall: {shortfall} words). "
+                f"Expand with additional paragraphs following Medical PEEL structure."
+            )
+
+        return {
+            "section": section_name,
+            "document_type": document_type,
+            "word_count": word_count,
+            "floor": floor,
+            "shortfall": shortfall,
+            "passed": passed,
+            "message": message,
+        }
+    except Exception:
+        return {
+            "section": section_name,
+            "document_type": document_type,
+            "word_count": 0,
+            "floor": 0,
+            "shortfall": 0,
+            "passed": False,
+            "message": f"check_section_word_count failed for section '{section_name}'",
+        }

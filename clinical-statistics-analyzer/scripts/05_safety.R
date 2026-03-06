@@ -6,6 +6,35 @@ library(tidyr)
 library(flextable)
 library(officer)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if(length(args) < 1) {
   stop("Usage: Rscript 05_safety.R <dataset_path> [frequency_threshold]")
@@ -59,3 +88,31 @@ if(length(ae_cols) > 0) {
 } else {
   cat("No columns matching 'AE_' or 'Tox_' were found to summarize.\n")
 }
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  stats_list <- list(n_total = nrow(df))
+  grade_col <- intersect(c("Grade", "AE_Grade", "Toxicity_Grade", "CTCAE_Grade"), names(df))[1]
+  if (!is.na(grade_col)) {
+    g <- suppressWarnings(as.numeric(df[[grade_col]]))
+    stats_list$ae_any_rate        <- list(value=round(mean(g > 0, na.rm=TRUE)*100, 1), unit="percent")
+    stats_list$ae_grade3plus_rate <- list(value=round(mean(g >= 3, na.rm=TRUE)*100, 1), unit="percent")
+    stats_list$ae_grade4plus_rate <- list(value=round(mean(g >= 4, na.rm=TRUE)*100, 1), unit="percent")
+    stats_list$ae_fatal_rate      <- list(value=round(mean(g >= 5, na.rm=TRUE)*100, 1), unit="percent")
+  }
+  disc_col <- intersect(c("Discontinued", "Discontinuation", "Drug_Discontinued"), names(df))[1]
+  if (!is.na(disc_col)) {
+    stats_list$discontinuation_rate <- list(value=round(mean(df[[disc_col]] %in% c(1,TRUE,"1","Yes"), na.rm=TRUE)*100, 1), unit="percent")
+  }
+  dose_col <- intersect(c("DoseReduction", "Dose_Reduction", "Dose_Reduced"), names(df))[1]
+  if (!is.na(dose_col)) {
+    stats_list$dose_reduction_rate <- list(value=round(mean(df[[dose_col]] %in% c(1,TRUE,"1","Yes"), na.rm=TRUE)*100, 1), unit="percent")
+  }
+  write_stats_json(
+    key_statistics = stats_list,
+    analysis_notes = list(
+      ctcae_version = "CTCAE v5.0",
+      threshold     = paste0("AEs reported in >=", freq_threshold*100, "% of patients")
+    )
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

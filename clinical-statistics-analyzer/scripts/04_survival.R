@@ -5,6 +5,35 @@ library(survival)
 library(survminer)
 library(cmprsk)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 # NEW: Modified to accept optional 4th argument [disease]
 if(length(args) < 3) {
@@ -185,3 +214,38 @@ if (!(is_grfs && "grfs_competing" %in% names(df))) {
 }
 
 cat("Survival analysis script completed.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  stats_list <- list(n_total = nrow(df))
+  if (exists("fit")) {
+    sm <- summary(fit)$table
+    if (!is.null(sm) && "median" %in% colnames(sm)) {
+      med_val <- round(as.numeric(sm[1, "median"]), 1)
+      lo_val  <- round(as.numeric(sm[1, "0.95LCL"]), 1)
+      hi_val  <- round(as.numeric(sm[1, "0.95UCL"]), 1)
+      stats_list[[paste0(time_var, "_median_months")]] <- list(value=med_val, unit="months", ci_lower=lo_val, ci_upper=hi_val)
+      if (grepl("^(os|OS|overall|Overall)", time_var)) {
+        stats_list$os_median_months <- list(value=med_val, unit="months", ci_lower=lo_val, ci_upper=hi_val)
+      } else if (grepl("^(pfs|PFS|prog|relapse)", time_var)) {
+        stats_list$pfs_median_months <- list(value=med_val, unit="months", ci_lower=lo_val, ci_upper=hi_val)
+      }
+    }
+  }
+  if (exists("cox_summary") && is.data.frame(cox_summary) && nrow(cox_summary) > 0) {
+    hr_key <- if (grepl("^(pfs|PFS)", time_var)) "pfs_hr" else "os_hr"
+    stats_list[[hr_key]] <- list(
+      value    = round(cox_summary$estimate[1], 2),
+      ci_lower = round(cox_summary$conf.low[1], 2),
+      ci_upper = round(cox_summary$conf.high[1], 2),
+      p_value  = round(cox_summary$p.value[1], 3)
+    )
+  }
+  write_stats_json(
+    key_statistics = stats_list,
+    analysis_notes = list(
+      survival_model = "Kaplan-Meier; Cox proportional hazards regression",
+      ph_assumption  = "cox.zph tested (see CoxZPH CSV output)"
+    )
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

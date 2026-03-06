@@ -681,7 +681,7 @@ This systematic review was conducted and reported in accordance with the PRISMA 
 
 ### 2.1 Search Strategy
 
-A comprehensive literature search was performed across PubMed, Embase, and Cochrane Central Register of Controlled Trials (CENTRAL) from inception through December 2024. Search terms included combinations of "asciminib," "chronic myeloid leukemia," "BCR-ABL1," "first-line treatment," and "efficacy." The search was limited to human studies published in English. Additional studies were identified through citation tracking of included articles.
+A comprehensive literature search was performed across PubMed, Embase, and Cochrane Central Register of Controlled Trials (CENTRAL) from inception through December 2024. Search terms included combinations of "asciminib," "chronic myeloid leukemia," "BCR::ABL1," "first-line treatment," and "efficacy." The search was limited to human studies published in English. Additional studies were identified through citation tracking of included articles.
 
 ### 2.2 Inclusion Criteria
 
@@ -720,7 +720,7 @@ The initial search yielded 204 records, of which 74 full-text articles were asse
 
 ### 3.2 Efficacy Outcomes
 
-The primary efficacy endpoint of major molecular response (MMR; BCR-ABL1 ≤0.1% IS) was assessed across included studies. At 48 weeks, asciminib demonstrated MMR rates of 67.7% compared to 49.0% with standard-of-care TKIs in the ASC4FIRST trial (Table 2).
+The primary efficacy endpoint of major molecular response (MMR; BCR::ABL1 ≤0.1% IS) was assessed across included studies. At 48 weeks, asciminib demonstrated MMR rates of 67.7% compared to 49.0% with standard-of-care TKIs in the ASC4FIRST trial (Table 2).
 
 **Table 2. Key Efficacy Outcomes at 48 and 96 Weeks (ASC4FIRST Trial)**
 
@@ -879,7 +879,7 @@ Data extraction was performed independently by two reviewers using standardized 
 **Patient Characteristics:**
 - Age, sex distribution
 - Sokal/ELTS risk score distribution
-- Baseline BCR-ABL1 levels
+- Baseline BCR::ABL1 levels
 
 **Efficacy Outcomes:**
 - Molecular response rates (MMR, MR4, MR4.5) at defined timepoints
@@ -969,7 +969,7 @@ Treatment-emergent adverse events (TEAEs) occurred in 89.4% of asciminib-treated
 
 **Hematologic Toxicities**
 
-Hematologic adverse events were the most common with asciminib, including thrombocytopenia (20.8% any grade, 10.9% grade ≥3), neutropenia (16.3% any grade, 11.9% grade ≥3), and anemia (14.0% any grade, 3.5% grade ≥3)[13]. These events were manageable with dose modifications and were consistent with the expected class effect of BCR-ABL1 inhibition.
+Hematologic adverse events were the most common with asciminib, including thrombocytopenia (20.8% any grade, 10.9% grade ≥3), neutropenia (16.3% any grade, 11.9% grade ≥3), and anemia (14.0% any grade, 3.5% grade ≥3)[13]. These events were manageable with dose modifications and were consistent with the expected class effect of BCR::ABL1 inhibition.
 
 **Non-Hematologic Adverse Events**
 
@@ -2762,6 +2762,54 @@ def create_enhanced_manuscript(
     )
 
     return drafter.create_manuscript(title, sources, custom_sections, keywords)
+
+
+
+# ── Classification Skills Integration (additive, opt-in) ──────────────────────
+
+def integrate_skills_phase4_classification(
+    project_name: str,
+    project_dir,
+    disease: str = "",
+    n_patients: int = 0,
+) -> None:
+    """
+    Generate classification methods paragraph and append to draft_sections.
+
+    Reads disease from SkillContext.classification_result["disease"] if not
+    provided. Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        disease: "AML"|"CML"|"HCT" -- overrides context value if supplied
+        n_patients: Cohort size for inclusion in prose (0 = omit)
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, ClassificationValidator
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+
+        resolved_disease = (
+            disease.upper().strip()
+            or str(ctx.classification_result.get("disease", "")).upper()
+        )
+        if not resolved_disease:
+            return
+
+        resolved_n = n_patients or int(ctx.classification_result.get("n_patients", 0))
+        ClassificationValidator(context=ctx).generate_methods_paragraph(
+            disease=resolved_disease, n_patients=resolved_n
+        )
+
+        ctx.save(Path(project_dir))
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Phase 4 classification skill integration failed: %s", exc
+        )
 
 
 if __name__ == "__main__":

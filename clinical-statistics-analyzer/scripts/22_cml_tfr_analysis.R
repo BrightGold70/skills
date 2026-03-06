@@ -14,6 +14,35 @@ library(flextable)
 library(readxl)
 library(tidyr)
 
+# ── write_stats_json: emit machine-readable statistics for HPW consumption ────
+write_stats_json <- function(
+  key_statistics   = list(),
+  analysis_notes   = list(),
+  disease_specific = list(),
+  script_stem      = NULL,
+  output_dir       = Sys.getenv("CSA_OUTPUT_DIR")
+) {
+  if (nchar(output_dir) == 0) {
+    message("CSA_OUTPUT_DIR not set; skipping stats JSON"); return(invisible(NULL))
+  }
+  if (is.null(script_stem)) {
+    args_all  <- commandArgs(trailingOnly = FALSE)
+    file_arg  <- grep("--file=", args_all, value = TRUE)
+    script_stem <- if (length(file_arg) > 0) tools::file_path_sans_ext(basename(sub("--file=", "", file_arg[1]))) else "unknown"
+  }
+  key_statistics   <- Filter(Negate(is.null), key_statistics)
+  disease_specific <- Filter(Negate(is.null), disease_specific)
+  payload <- list(key_statistics = key_statistics, analysis_notes = analysis_notes)
+  if (length(disease_specific) > 0) payload$disease_specific <- disease_specific
+  out_dir  <- file.path(output_dir, "data")
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_path <- file.path(out_dir, paste0(script_stem, "_stats.json"))
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, pretty = TRUE, null = "null")
+  message("[write_stats_json] Written: ", out_path)
+  invisible(out_path)
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 1) {
   stop("Usage: Rscript 22_cml_tfr_analysis.R <dataset_path> [--tfr-only]")
@@ -301,3 +330,36 @@ print(doc_rates, target = file.path(tables_dir, "CML_TFR_Summary.docx"))
 cat("TFR summary table saved to:", file.path(tables_dir, "CML_TFR_Summary.docx"), "\n")
 
 cat("\nCML TFR analysis complete.\n")
+
+# ── Emit stats sidecar ────────────────────────────────────────────────────────
+tryCatch({
+  stats_list <- list(n_total = nrow(df))
+  # TFR rates from tfr_summary_rows if available
+  if (exists("tfr_summary_rows") && is.data.frame(tfr_summary_rows)) {
+    get_tfr <- function(mo) {
+      row <- tfr_summary_rows[tfr_summary_rows$Timepoint == paste0(mo, " months") &
+                              tfr_summary_rows$Strata == "All", ]
+      if (nrow(row) == 0) return(NULL)
+      list(value = row$TFR_Rate[1], unit = "percent",
+           ci_lower = row$CI_Low[1], ci_upper = row$CI_High[1])
+    }
+    stats_list$tfr_12mo <- get_tfr(12)
+    stats_list$tfr_24mo <- get_tfr(24)
+    stats_list$tfr_36mo <- get_tfr(36)
+  }
+  # ELN milestone rates if available
+  if (exists("milestone_summary") && is.data.frame(milestone_summary)) {
+    get_ms <- function(label) {
+      row <- milestone_summary[grepl(label, milestone_summary$Milestone, fixed = TRUE), ]
+      if (nrow(row) == 0 || is.na(row$Pct_Met[1])) return(NULL)
+      list(value = row$Pct_Met[1], unit = "percent", n_evaluable = row$N_Evaluable[1])
+    }
+    stats_list$mmr_12mo  <- get_ms("12 months")
+    stats_list$mr4_18mo  <- get_ms("18 months")
+  }
+  write_stats_json(
+    key_statistics   = stats_list,
+    analysis_notes   = list(reference = "Hochhaus A et al. ELN recommendations 2020"),
+    disease_specific = list(disease = "CML", endpoint = "TFR_ELN2020")
+  )
+}, error = function(e) message("[write_stats_json] Skipped (error): ", e$message))

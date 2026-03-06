@@ -276,7 +276,7 @@ class JournalStrategyManager:
         return [j for j in self.journals if j.category == category]
 
     def recommend_journal_strategy(
-        self, manuscript_info: Dict[str, Any]
+        self, manuscript_info: Dict[str, Any], project_dir=None
     ) -> Dict[str, Any]:
         keywords = manuscript_info.get("keywords", [])
         manuscript_type = manuscript_info.get("type", "")
@@ -293,6 +293,21 @@ class JournalStrategyManager:
         category = category_map.get(target_category)
         matches = self.match_manuscript_to_journal(manuscript_type, keywords, category)
 
+        nlm_context = manuscript_info.get("nlm_context", "")
+        if not nlm_context and project_dir is not None:
+            try:
+                from tools.nlm_query import load_context_for_phase
+                nlm_context = load_context_for_phase("phase3", project_dir)
+                if not nlm_context:
+                    import sys
+                    print(
+                        "[HPW WARNING] NLM context unavailable for Phase 3 (journal strategy). "
+                        "Start open-notebook at http://localhost:5055 to enable.",
+                        file=sys.stderr,
+                    )
+            except Exception:
+                pass
+
         return {
             "top_matches": [
                 {
@@ -308,8 +323,70 @@ class JournalStrategyManager:
                 "Consider impact factor vs. acceptance rate",
                 "Match manuscript scope to journal scope",
                 "Check word count and reference limits",
+                *(
+                    ["NLM literature context loaded — use curated evidence to strengthen novelty argument"]
+                    if nlm_context else
+                    ["NLM context unavailable — start open-notebook at http://localhost:5055 for curated journal scope analysis"]
+                ),
             ],
+            "nlm_context": nlm_context,
         }
+
+
+# ── Scientific Skills Integration (additive, opt-in) ──────────────────────────
+
+def integrate_skills_phase3(
+    project_name: str,
+    project_dir,
+    manuscript_keywords: list | None = None,
+    manuscript_type: str = "cohort",
+    disease: str = "",
+) -> None:
+    """
+    Invoke scientific skills for Phase 3 (Journal Strategy).
+
+    Runs ContentResearcher (gap identification) and persists results to
+    SkillContext. Fails silently on any error.
+
+    Args:
+        project_name: Manuscript project name
+        project_dir: Project directory (Path or str)
+        manuscript_keywords: Keywords for journal scope matching
+        manuscript_type: Manuscript type (cohort, rct, systematic_review, etc.)
+        disease: Disease entity (aml, cml, mds, hct)
+    """
+    try:
+        from pathlib import Path
+        from tools.skills import SkillContext, ContentResearcher
+
+        ctx = SkillContext.load(project_name, Path(project_dir))
+        topic = f"{disease.upper()} {manuscript_type}" if disease else manuscript_type
+
+        ContentResearcher(context=ctx).identify_gaps(
+            topic=topic,
+            disease=disease,
+        )
+
+        # Query project NLM notebook for journal novelty/scope context
+        try:
+            from tools.nlm_query import load_context_for_phase
+            nlm_context = load_context_for_phase("phase3", Path(project_dir))
+            if nlm_context:
+                ctx.nlm_context_phase3 = nlm_context  # type: ignore[attr-defined]
+            else:
+                import sys
+                print(
+                    "[HPW WARNING] NLM context unavailable for Phase 3 (journal strategy). "
+                    "Start open-notebook at http://localhost:5055 to enable.",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
+
+        ctx.save(Path(project_dir))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Phase 3 skill integration failed: %s", exc)
 
 
 if __name__ == "__main__":

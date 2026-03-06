@@ -208,12 +208,24 @@ def handle_run_analysis(args):
     if args.scripts:
         script_filter = [s.strip() for s in args.scripts.split(",")]
 
+    # Collect optional study metadata
+    study_args = {
+        k: v for k, v in {
+            "study_name":  getattr(args, "study_name",  None),
+            "protocol_id": getattr(args, "protocol_id", None),
+            "trial_phase": getattr(args, "trial_phase", None),
+            "sponsor":     getattr(args, "sponsor",     None),
+            "data_cutoff": getattr(args, "data_cutoff", None),
+        }.items() if v is not None
+    }
+
     orchestrator = AnalysisOrchestrator(
         config_dir=config_dir,
         disease=args.disease,
         output_dir=output_dir,
         scripts_dir=args.scripts_dir,
         script_filter=script_filter,
+        study_args=study_args or None,
     )
 
     result = orchestrator.run_full(
@@ -259,6 +271,140 @@ def handle_run_analysis(args):
         sys.exit(1)
     else:
         sys.exit(2)
+
+
+# ── Scientific skills CLI handlers ───────────────────────────────────────────
+
+def handle_hypothesis(args):
+    """Generate null/alternative/exploratory hypotheses for a disease and endpoint."""
+    from .skills import CSASkillContext, HypothesisGenerator
+
+    output_dir = Path(args.output_dir or os.environ.get("CSA_OUTPUT_DIR", "."))
+    study_name = args.study_name or args.disease
+    ctx = CSASkillContext.load(study_name, output_dir)
+    ctx.disease = args.disease
+
+    hyps = HypothesisGenerator(context=ctx).generate(
+        disease=args.disease,
+        treatment=args.treatment or "the study treatment",
+        endpoint=args.endpoint or "",
+        comparator=args.comparator or "standard of care",
+    )
+    ctx.save(output_dir)
+
+    print(f"\nHypotheses for {args.disease.upper()} — {args.endpoint or 'primary endpoint'}:")
+    for i, h in enumerate(hyps, 1):
+        print(f"\n  {i}. {h}")
+
+
+def handle_analyze_plan(args):
+    """Generate statistical analysis plan and assumption warnings."""
+    from .skills import CSASkillContext, StatisticalAnalyst, CriticalThinker
+
+    output_dir = Path(args.output_dir or os.environ.get("CSA_OUTPUT_DIR", "."))
+    study_name = args.study_name or args.disease
+    ctx = CSASkillContext.load(study_name, output_dir)
+    ctx.disease = args.disease
+
+    n = args.n or 0
+    if not n and getattr(args, "data", None):
+        try:
+            from .parsers.data_parser import DataParser
+            df = DataParser().get_dataframe(args.data)
+            n = len(df)
+            print(f"  Auto-detected n={n} from {args.data}")
+        except Exception:
+            pass
+    StatisticalAnalyst(context=ctx).analyze(
+        disease=args.disease,
+        primary_endpoint=args.endpoint or "",
+        study_type=args.study_type or "retrospective",
+        n=n,
+    )
+    CriticalThinker(context=ctx).check_assumptions(
+        disease=args.disease,
+        study_type=args.study_type or "retrospective",
+        n=n,
+    )
+    ctx.save(output_dir)
+
+    plan = ctx.statistical_plan
+    print(f"\nStatistical Analysis Plan — {args.disease.upper()}")
+    print(f"  Study type:    {plan.get('study_type')}")
+    print(f"  Endpoint:      {plan.get('primary_endpoint')}")
+    print(f"  Guideline:     {plan.get('reporting_guideline')}")
+    print(f"\n  Methods:")
+    for m in plan.get("methods", []):
+        print(f"    - {m}")
+    if ctx.assumption_warnings:
+        print(f"\n  Assumption Warnings ({len(ctx.assumption_warnings)}):")
+        for w in ctx.assumption_warnings:
+            print(f"    ! {w[:120]}")
+
+
+def handle_interpret_results(args):
+    """Read R output files and extract key_statistics into sidecar JSON."""
+    from .skills import CSASkillContext, ROutputInterpreter, ELNGuidelineMapper
+
+    output_dir = Path(args.output_dir or os.environ.get("CSA_OUTPUT_DIR", "."))
+    study_name = args.study_name or args.disease
+    ctx = CSASkillContext.load(study_name, output_dir)
+    ctx.disease = args.disease
+
+    ROutputInterpreter(context=ctx).interpret(output_dir)
+    ELNGuidelineMapper(context=ctx).map(output_dir)
+    ctx.save(output_dir)
+
+    print(f"\nExtracted key_statistics ({len(ctx.key_statistics)} keys):")
+    for k, v in sorted(ctx.key_statistics.items()):
+        val = v.get("value") if isinstance(v, dict) else v
+        unit = v.get("unit", "") if isinstance(v, dict) else ""
+        print(f"  {k}: {val} {unit or ''}".rstrip())
+
+    if ctx.eln_annotations:
+        print(f"\nELN/NIH Annotations ({len(ctx.eln_annotations)}):")
+        for k, ann in sorted(ctx.eln_annotations.items()):
+            print(f"  {k}: {ann[:80]}")
+
+
+def handle_draft_methods(args):
+    """Generate Methods section prose from the stored statistical plan."""
+    from .skills import CSASkillContext, StatisticalAnalyst, ScientificWriter
+
+    output_dir = Path(args.output_dir or os.environ.get("CSA_OUTPUT_DIR", "."))
+    study_name = args.study_name or args.disease
+    ctx = CSASkillContext.load(study_name, output_dir)
+    ctx.disease = args.disease
+
+    if not ctx.statistical_plan:
+        StatisticalAnalyst(context=ctx).analyze(disease=args.disease)
+
+    prose = ScientificWriter(context=ctx).draft_methods()
+    ctx.save(output_dir)
+
+    print(f"\nMethods Section ({len(prose)} chars):\n")
+    print(prose)
+
+
+def handle_review_assumptions(args):
+    """Flag statistical assumption risks before running R scripts."""
+    from .skills import CSASkillContext, CriticalThinker
+
+    output_dir = Path(args.output_dir or os.environ.get("CSA_OUTPUT_DIR", "."))
+    study_name = args.study_name or args.disease
+    ctx = CSASkillContext.load(study_name, output_dir)
+    ctx.disease = args.disease
+
+    warnings = CriticalThinker(context=ctx).check_assumptions(
+        disease=args.disease,
+        study_type=args.study_type or "retrospective",
+        n=args.n or 0,
+    )
+    ctx.save(output_dir)
+
+    print(f"\nAssumption Review — {args.disease.upper()} ({len(warnings)} warnings):")
+    for i, w in enumerate(warnings, 1):
+        print(f"\n  {i}. {w}")
 
 
 def main():
@@ -369,6 +515,79 @@ def main():
                               help="Generate interactive HTML dashboard")
     analysis_cmd.add_argument("--no-csr", action="store_true",
                               help="Skip mini-CSR report generation")
+    # Study-level metadata for hpw_manifest.json / StatisticalBridge
+    analysis_cmd.add_argument("--study-name", default=None,
+                              help="Study name (e.g. 'SAPPHIRE-G')")
+    analysis_cmd.add_argument("--protocol-id", default=None,
+                              help="Protocol identifier (e.g. 'SGPG-2024-001')")
+    analysis_cmd.add_argument("--trial-phase", default=None,
+                              choices=["Phase 1", "Phase 1b", "Phase 2", "Phase 3", "Phase 4"],
+                              help="Trial phase")
+    analysis_cmd.add_argument("--sponsor", default=None,
+                              help="Sponsor name")
+    analysis_cmd.add_argument("--data-cutoff", default=None,
+                              help="Data cutoff date (YYYY-MM-DD)")
+
+    # ── Scientific skills subcommands ─────────────────────────────────────────
+
+    _disease_choices = ["aml", "cml", "mds", "hct"]
+    _study_type_choices = ["retrospective", "rct", "phase1", "cohort"]
+
+    # hypothesis
+    hyp_cmd = subparsers.add_parser(
+        "hypothesis",
+        help="Generate null/alternative/exploratory hypotheses for a disease",
+    )
+    hyp_cmd.add_argument("-d", "--disease", choices=_disease_choices, required=True)
+    hyp_cmd.add_argument("--endpoint", default="", help="Primary endpoint (e.g. 'OS', 'CR rate')")
+    hyp_cmd.add_argument("--treatment", default="", help="Treatment name")
+    hyp_cmd.add_argument("--comparator", default="", help="Comparator arm")
+    hyp_cmd.add_argument("-o", "--output-dir", default=None)
+    hyp_cmd.add_argument("--study-name", default=None)
+
+    # analyze-plan
+    plan_cmd = subparsers.add_parser(
+        "analyze-plan",
+        help="Generate statistical analysis plan and assumption warnings",
+    )
+    plan_cmd.add_argument("-d", "--disease", choices=_disease_choices, required=True)
+    plan_cmd.add_argument("--study-type", choices=_study_type_choices, default="retrospective")
+    plan_cmd.add_argument("--endpoint", default="", help="Primary endpoint")
+    plan_cmd.add_argument("--n", type=int, default=0, help="Estimated sample size")
+    plan_cmd.add_argument("--data", default=None, metavar="PATH",
+                          help="Patient data file (.csv/.xlsx/.sav) for sample size auto-detection")
+    plan_cmd.add_argument("-o", "--output-dir", default=None)
+    plan_cmd.add_argument("--study-name", default=None)
+
+    # interpret-results
+    interp_cmd = subparsers.add_parser(
+        "interpret-results",
+        help="Read R output files and extract key_statistics into sidecar JSON",
+    )
+    interp_cmd.add_argument("-d", "--disease", choices=_disease_choices, required=True)
+    interp_cmd.add_argument("-o", "--output-dir", default=None,
+                            help="Output directory with R results (or CSA_OUTPUT_DIR)")
+    interp_cmd.add_argument("--study-name", default=None)
+
+    # draft-methods
+    meth_cmd = subparsers.add_parser(
+        "draft-methods",
+        help="Generate Methods section prose from stored statistical plan",
+    )
+    meth_cmd.add_argument("-d", "--disease", choices=_disease_choices, required=True)
+    meth_cmd.add_argument("-o", "--output-dir", default=None)
+    meth_cmd.add_argument("--study-name", default=None)
+
+    # review-assumptions
+    rev_cmd = subparsers.add_parser(
+        "review-assumptions",
+        help="Flag statistical assumption risks before running R scripts",
+    )
+    rev_cmd.add_argument("-d", "--disease", choices=_disease_choices, required=True)
+    rev_cmd.add_argument("--study-type", choices=_study_type_choices, default="retrospective")
+    rev_cmd.add_argument("--n", type=int, default=0, help="Sample size")
+    rev_cmd.add_argument("-o", "--output-dir", default=None)
+    rev_cmd.add_argument("--study-name", default=None)
 
     args = parser.parse_args()
 
@@ -381,6 +600,12 @@ def main():
         "parse-data": handle_parse_data,
         "validate": handle_validate,
         "run-analysis": handle_run_analysis,
+        # Scientific skills
+        "hypothesis":        handle_hypothesis,
+        "analyze-plan":      handle_analyze_plan,
+        "interpret-results": handle_interpret_results,
+        "draft-methods":     handle_draft_methods,
+        "review-assumptions":handle_review_assumptions,
     }
 
     handlers[args.command](args)

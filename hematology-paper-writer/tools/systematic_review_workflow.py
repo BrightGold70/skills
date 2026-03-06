@@ -1015,7 +1015,7 @@ This systematic review aims to evaluate the efficacy and safety of {intervention
         base_methods = f"""This systematic review was conducted and reported in accordance with the PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) 2020 statement.
 
 ### Search Strategy
-A comprehensive literature search was performed across PubMed, Embase, and Cochrane Central Register of Controlled Trials (CENTRAL) from inception through 2024. Search terms included combinations of "{pico.get("Intervention", "asciminib").lower()}", "chronic myeloid leukemia", "BCR-ABL1", "first-line treatment", and "efficacy". The search was limited to human studies published in English. Additional studies were identified through citation tracking of included articles.
+A comprehensive literature search was performed across PubMed, Embase, and Cochrane Central Register of Controlled Trials (CENTRAL) from inception through 2024. Search terms included combinations of "{pico.get("Intervention", "asciminib").lower()}", "chronic myeloid leukemia", "BCR::ABL1", "first-line treatment", and "efficacy". The search was limited to human studies published in English. Additional studies were identified through citation tracking of included articles.
 
 ### Inclusion Criteria
 Studies were included if they met the following criteria: (1) prospective or retrospective clinical trials evaluating {pico.get("Intervention", "asciminib")} as first-line therapy for chronic-phase CML; (2) studies reporting efficacy endpoints including molecular response rates, cytogenetic response, or survival outcomes; and (3) studies reporting safety endpoints including adverse events.
@@ -1045,7 +1045,7 @@ Risk of bias was assessed using appropriate tools. The certainty of evidence for
 The initial search yielded {n * 10} records, of which {n * 3} full-text articles were assessed for eligibility. After applying inclusion and exclusion criteria, {min(5, n)} studies were included in this systematic review.
 
 ### Efficacy Outcomes
-The primary efficacy endpoint of major molecular response (MMR; BCR-ABL1 ≤0.1% IS) was assessed across included studies. At 48 weeks, {pico.get("Intervention", "Asciminib")} demonstrated MMR rates of approximately 67.7% compared to 49.0% with standard-of-care TKIs in the ASC4FIRST trial.
+The primary efficacy endpoint of major molecular response (MMR; BCR::ABL1 ≤0.1% IS) was assessed across included studies. At 48 weeks, {pico.get("Intervention", "Asciminib")} demonstrated MMR rates of approximately 67.7% compared to 49.0% with standard-of-care TKIs in the ASC4FIRST trial.
 
 Deep molecular responses (MR4 and MR4.5) were achieved with greater frequency in {pico.get("Intervention", "Asciminib")}-treated patients, supporting the potential for treatment-free remission in this population.
 

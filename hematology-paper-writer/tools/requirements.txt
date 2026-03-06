@@ -3,3 +3,4 @@ requests>=2.31.0
 xmltodict>=0.13.0
 python-Levenshtein>=0.21.0
 tqdm>=4.66.0
+notebooklm-py[browser]>=0.1.0

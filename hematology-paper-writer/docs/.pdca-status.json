@@ -10,7 +10,7 @@
     "phase4_7_prose",
     "hematology-paper-writer"
   ],
-  "primaryFeature": "hpw-classification-validator",
+  "primaryFeature": "hpw-nlm-literature-flow",
   "features": {
     "csa-hpw-bridge": {
       "phase": "archived",
@@ -129,6 +129,21 @@
       "startedAt": "2026-03-05T00:00:00.000Z",
       "archivedAt": "2026-03-05T00:00:00.000Z",
       "archivedTo": "docs/archive/2026-03/hpw-scientific-skills-integration/"
+    },
+    "hpw-nlm-literature-flow": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {
+        "plan": "docs/01-plan/features/hpw-nlm-literature-flow.plan.md",
+        "design": "docs/02-design/features/hpw-nlm-literature-flow.design.md"
+      },
+      "timestamps": {
+        "started": "2026-03-06T00:00:00.000Z",
+        "lastUpdated": "2026-03-06T02:00:00.000Z"
+      }
     }
   },
   "pipeline": {
@@ -316,5 +331,29 @@
       "phase": "do",
       "action": "updated"
     }
-  ]
+  ],
+  "hpw-prose-quality": {
+    "phase": "archived",
+    "matchRate": 97,
+    "iterationCount": 1,
+    "startedAt": "2026-03-06T00:00:00Z",
+    "archivedAt": "2026-03-06T07:19:05Z",
+    "archivedTo": "docs/archive/2026-03/hpw-prose-quality/"
+  },
+  "hpw-phase1-update": {
+    "phase": "archived",
+    "matchRate": 100,
+    "iterationCount": 1,
+    "startedAt": "2026-03-06T00:00:00Z",
+    "archivedAt": "2026-03-06T08:26:27Z",
+    "archivedTo": "docs/archive/2026-03/hpw-phase1-update/"
+  },
+  "hpw-nlm-literature-flow": {
+    "phase": "archived",
+    "matchRate": 100,
+    "iterationCount": 2,
+    "startedAt": "2026-03-06T09:02:54.114772+00:00",
+    "archivedAt": "2026-03-06T09:05:33.219391+00:00",
+    "archivedTo": "docs/archive/2026-03/hpw-nlm-literature-flow/"
+  }
 }

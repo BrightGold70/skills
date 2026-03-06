@@ -1,0 +1,894 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-03-04T07:29:37.980Z",
+  "activeFeatures": [
+    "pipeline-e2e-improvements",
+    "crf-pipeline-overhaul",
+    "crf_pipeline",
+    "parsers",
+    "validators",
+    "extractors",
+    "config",
+    "tests",
+    "transformers",
+    "pipeline-e2e-improvements gap analysis"
+  ],
+  "primaryFeature": "csa-hpw-stats-pipeline",
+  "features": {
+    "csa-hpw-stats-pipeline": {
+      "phase": "archived",
+      "matchRate": 98,
+      "iterationCount": 2,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/csa-hpw-stats-pipeline/"
+    },
+    "csa-scientific-skills-integration": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterationCount": 1,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/csa-scientific-skills-integration/"
+    },
+    "pipeline-e2e-improvements": {
+      "phase": "completed",
+      "startedAt": "2026-03-04T07:00:00.000Z",
+      "completedAt": "2026-03-04T07:45:00.000Z",
+      "planPath": "docs/01-plan/features/pipeline-e2e-improvements.plan.md",
+      "designPath": "docs/02-design/features/pipeline-e2e-improvements.design.md",
+      "analysisPath": "docs/03-analysis/pipeline-e2e-improvements.analysis.md",
+      "reportPath": "docs/04-report/pipeline-e2e-improvements.report.md",
+      "matchRate": 95.1,
+      "iterationCount": 0,
+      "requirements": [
+        "FR-01",
+        "FR-02",
+        "FR-03",
+        "FR-04",
+        "FR-05",
+        "FR-06",
+        "FR-07"
+      ],
+      "validationSource": "SAPPHIRE-G AML study (27 patients, SPSS .sav)",
+      "manuscriptConcordance": "12/14 exact match",
+      "testResults": {
+        "e2eTests": 15,
+        "regressionTests": 54,
+        "passed": 69,
+        "failed": 0
+      }
+    },
+    "crf-pipeline-overhaul": {
+      "phase": "completed",
+      "startedAt": "2026-03-03T09:00:00.000Z",
+      "planPath": "docs/01-plan/features/crf-pipeline-overhaul.plan.md",
+      "designPath": "docs/02-design/features/crf-pipeline-overhaul.design.md",
+      "analysisPath": "docs/03-analysis/crf-pipeline-overhaul.analysis.md",
+      "reportPath": "docs/04-report/crf-pipeline-overhaul.report.md",
+      "supersedes": "crf-data-collection-pipeline",
+      "matchRate": 98.9,
+      "iterationCount": 0,
+      "completedPhase": "phase5",
+      "phase1Analysis": {
+        "matchRate": 94,
+        "tasksFullyMatched": 5,
+        "tasksWithDeviations": 1,
+        "tasksNotStarted": 0,
+        "gaps": {
+          "missing": 1,
+          "added": 3,
+          "changed": 2
+        }
+      },
+      "phase2Analysis": {
+        "matchRate": 99.5,
+        "totalItems": 212,
+        "matchedItems": 211,
+        "partialItems": 1,
+        "tasksFullyMatched": 11,
+        "tasksWithPartials": 1,
+        "tasksNotStarted": 0,
+        "aheadOfSchedule": [
+          "Phase 3 LLM Extractor"
+        ],
+        "addedFeatures": 8
+      },
+      "phase3Summary": {
+        "tasksTotal": 5,
+        "tasksCompletedInPhase2": 4,
+        "tasksCompletedInPhase3": 1,
+        "details": {
+          "3.1_LLMExtractor": "completed_phase2",
+          "3.2_prompt_templates": "completed_phase2",
+          "3.3_batch_extraction": "completed_phase2",
+          "3.4_wire_into_chain": "completed_phase2",
+          "3.5_llm_ocr_correction": "completed_phase3"
+        }
+      },
+      "phase4Summary": {
+        "tasksTotal": 5,
+        "tasksCompleted": 5,
+        "details": {
+          "4.1_cml_fields": "completed",
+          "4.2_mds_fields": "completed",
+          "4.3_hct_fields": "completed",
+          "4.4_disease_validation_rules": "completed",
+          "4.5_config_testing": "completed"
+        },
+        "fieldCounts": {
+          "aml": 44,
+          "cml": 49,
+          "mds": 50,
+          "hct": 57
+        },
+        "filesAdded": 3,
+        "totalPackageFiles": 41
+      },
+      "phase5Summary": {
+        "tasksTotal": 5,
+        "tasksCompleted": 5,
+        "details": {
+          "5.1_confidence_scoring": "completed",
+          "5.2_schema_validator": "completed",
+          "5.3_unit_tests": "completed",
+          "5.4_regression_tests": "completed",
+          "5.5_quality_report_breakdown": "completed"
+        },
+        "testResults": {
+          "totalTests": 94,
+          "passed": 92,
+          "skipped": 2,
+          "failed": 0
+        },
+        "filesAdded": 9,
+        "configBugsFixed": 3,
+        "totalPackageFiles": 43
+      }
+    },
+    "crf_pipeline": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-03T11:03:54.152Z",
+        "lastUpdated": "2026-03-04T06:56:42.720Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/orchestrator.py"
+    },
+    "parsers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-03T11:03:54.641Z",
+        "lastUpdated": "2026-03-03T22:50:31.303Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/parsers/crf_spec_parser.py"
+    },
+    "validators": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-03T11:05:35.364Z",
+        "lastUpdated": "2026-03-03T22:50:10.425Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/validators/temporal_validator.py"
+    },
+    "extractors": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-03T22:50:19.595Z",
+        "lastUpdated": "2026-03-03T22:50:25.720Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/extractors/llm_extractor.py"
+    },
+    "config": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-03T22:50:29.410Z",
+        "lastUpdated": "2026-03-04T04:40:12.453Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/config/loader.py"
+    },
+    "tests": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T02:49:20.863Z",
+        "lastUpdated": "2026-03-04T07:09:29.343Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/tests/test_sapphire_g_e2e.py"
+    },
+    "transformers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T04:37:48.414Z",
+        "lastUpdated": "2026-03-04T07:08:44.899Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/transformers/value_recoder.py"
+    },
+    "csa-v31-output-quality-cml": {
+      "phase": "archived",
+      "matchRate": 97.6,
+      "iterationCount": 0,
+      "startedAt": "2026-03-04T06:00:00.000Z",
+      "archivedAt": "2026-03-04T05:55:00.000Z",
+      "archivedTo": "docs/archive/2026-03/csa-v31-output-quality-cml/"
+    },
+    "pipeline-e2e-improvements gap analysis": {
+      "phase": "act",
+      "phaseNumber": 5,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T07:29:37.979Z",
+        "lastUpdated": "2026-03-04T07:29:37.980Z"
+      },
+      "previousPhase": "check",
+      "autoAdvanced": true
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-03T06:53:30.759Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-03-04T07:29:37.980Z"
+  },
+  "history": [
+    {
+      "action": "plan_created",
+      "feature": "crf-pipeline-overhaul",
+      "timestamp": "2026-03-03T09:00:00.000Z",
+      "note": "Comprehensive overhaul plan from brainstorming session. Supersedes crf-data-collection-pipeline."
+    },
+    {
+      "action": "design_created",
+      "feature": "crf-pipeline-overhaul",
+      "timestamp": "2026-03-03T09:30:00.000Z",
+      "note": "Detailed design with module interfaces, data flow diagrams, config schemas, extraction chain, validation rules, and test plan."
+    },
+    {
+      "timestamp": "2026-03-03T10:00:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "check",
+      "action": "phase1_analysis_completed",
+      "note": "Phase 1 gap analysis: 94% match rate (47/50 items). 5/6 tasks fully matched."
+    },
+    {
+      "timestamp": "2026-03-03T10:30:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "completed",
+      "action": "phase1_report_generated",
+      "note": "Phase 1 completion report generated. Match rate 94% (>= 90%). Ready for Phase 2."
+    },
+    {
+      "timestamp": "2026-03-03T10:45:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "do",
+      "action": "phase2_implementation_completed",
+      "note": "Phase 2 crf_pipeline/ package created. 37 files (34 Python + 4 JSON). All imports verified."
+    },
+    {
+      "timestamp": "2026-03-03T11:00:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "check",
+      "action": "phase2_analysis_completed",
+      "note": "Phase 2 gap analysis: 99.5% match rate (211/212 items). 11/12 tasks fully matched. Task 2.12 partial (Dropbox fallback path). LLM Extractor implemented ahead of Phase 3."
+    },
+    {
+      "timestamp": "2026-03-03T11:30:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "do",
+      "action": "phase3_implementation_completed",
+      "note": "Phase 3 Claude API Integration complete. Tasks 3.1-3.4 were implemented in Phase 2 (ahead of schedule). Task 3.5 LLM-assisted OCR correction added."
+    },
+    {
+      "timestamp": "2026-03-03T12:00:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "do",
+      "action": "phase4_implementation_completed",
+      "note": "Phase 4 Cross-Disease Configs complete. 3 new config files (cml_fields.json, mds_fields.json, hct_fields.json). Disease-specific validation rules. 41 total files."
+    },
+    {
+      "timestamp": "2026-03-03T13:00:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "do",
+      "action": "phase5_implementation_completed",
+      "note": "Phase 5 Quality & Testing complete. SchemaValidator created. QualityReporter enhanced with per-method/section confidence breakdown. 7 test files (92 passed, 2 skipped). Tests found and fixed 3 config bugs (demographics section merge, SPSS mapping, duplicate hct_date). 43 total package files."
+    },
+    {
+      "timestamp": "2026-03-03T14:00:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "check",
+      "action": "final_analysis_completed",
+      "note": "Final gap analysis (Phases 1-5): 98.9% match rate (357/361 items). Phase 3: 23/23 (100%), Phase 4: 38/38 (100%), Phase 5: 38/38 (100%). 17/18 FRs complete. 15+ features added beyond design. 92 tests pass, 0 failures. Ready for completion report."
+    },
+    {
+      "timestamp": "2026-03-03T14:30:00.000Z",
+      "feature": "crf-pipeline-overhaul",
+      "phase": "completed",
+      "action": "final_report_generated",
+      "note": "Final completion report generated. 98.9% match rate. 0 iterations needed. All 5 phases complete. Ready for archival."
+    },
+    {
+      "timestamp": "2026-03-03T11:03:54.152Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:03:54.641Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:24.182Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:24.576Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:35.364Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:39.131Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:45.076Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:50.990Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:05:51.842Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:06:29.757Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T11:09:24.821Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:28.229Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:33.486Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:44.212Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:50.632Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:54.371Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:57.382Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:49:59.562Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:00.112Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:04.287Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:05.769Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:07.729Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:10.425Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:13.127Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:14.014Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:17.020Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:19.449Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:19.595Z",
+      "feature": "extractors",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:25.720Z",
+      "feature": "extractors",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:26.230Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:27.295Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:29.410Z",
+      "feature": "config",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:31.303Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:34.091Z",
+      "feature": "config",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:37.197Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:38.046Z",
+      "feature": "config",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:42.063Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:42.966Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:50:44.236Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T22:58:16.547Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:30:39.967Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:30:44.243Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:30:45.373Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:49:20.863Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:50:22.600Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:50:28.274Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:54:57.499Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:55:09.773Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:57:54.647Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:58:00.107Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T02:58:41.110Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:37:48.414Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:37:51.706Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:37:57.053Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:38:14.499Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:38:25.284Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:39:45.670Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:40:12.453Z",
+      "feature": "config",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:40:24.207Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:40:34.790Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:41:20.315Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T04:42:03.435Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "action": "plan_created",
+      "feature": "csa-v31-output-quality-cml",
+      "timestamp": "2026-03-04T06:00:00.000Z",
+      "note": "v3.1 plan: Output Quality (journal templates, mini-CSR, PDF, HTML dashboards) + CML Expansion (4 new R scripts: 26-29). Based on improvement roadmap brainstorming session."
+    },
+    {
+      "action": "design_created",
+      "feature": "csa-v31-output-quality-cml",
+      "timestamp": "2026-03-04T06:30:00.000Z",
+      "note": "v3.1 design: Module interfaces for JournalThemes, PDFExporter, ReportGenerator (ICH-E3 lite), HTMLExporter. CML R scripts 26-29 specs (milestones, waterfall, resistance, TFR deep). journal_templates.json schema. 4-phase implementation order. ~20 new tests planned."
+    },
+    {
+      "timestamp": "2026-03-04T05:29:37.098Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:30:00.011Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:33:26.395Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:34:04.084Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:34:11.828Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:34:27.001Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:36:22.822Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:36:26.058Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:36:27.876Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:38:27.853Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:38:48.738Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:38:50.014Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:39:00.553Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T05:55:00.000Z",
+      "feature": "csa-v31-output-quality-cml",
+      "phase": "archived",
+      "action": "archived",
+      "note": "Archived to docs/archive/2026-03/csa-v31-output-quality-cml/. Match rate 97.6%, 0 iterations. Summary preserved."
+    },
+    {
+      "action": "plan_created",
+      "feature": "pipeline-e2e-improvements",
+      "timestamp": "2026-03-04T07:00:00.000Z",
+      "note": "Plan created from SAPPHIRE-G E2E test findings. 7 FRs: SPSS value label handling, analysis_profiles args fix, R script bug fixes, graceful degradation, PFS analysis, E2E test suite. 12/14 manuscript concordance achieved."
+    },
+    {
+      "timestamp": "2026-03-04T06:55:27.983Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T06:56:19.731Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T06:56:36.033Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T06:56:42.720Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T07:00:17.065Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T07:08:44.899Z",
+      "feature": "transformers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T07:09:29.343Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T07:29:37.980Z",
+      "feature": "pipeline-e2e-improvements gap analysis",
+      "phase": "act",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T07:45:00.000Z",
+      "feature": "pipeline-e2e-improvements",
+      "phase": "completed",
+      "action": "report_generated",
+      "note": "Completion report generated. 95.1% match rate (77/81 items). 0 iterations needed. All 7 FRs implemented. 15 E2E + 54 regression tests passing."
+    },
+    {
+      "timestamp": "2026-03-05T00:00:00.000Z",
+      "feature": "csa-hpw-stats-pipeline",
+      "phase": "archived",
+      "action": "archived",
+      "note": "Archived to docs/archive/2026-03/csa-hpw-stats-pipeline/. Match rate 98%, 2 iterations, 50/50 tests. Summary preserved."
+    },
+    {
+      "timestamp": "2026-03-05T00:00:00.000Z",
+      "feature": "csa-scientific-skills-integration",
+      "phase": "archived",
+      "action": "archived",
+      "note": "Archived to docs/archive/2026-03/csa-scientific-skills-integration/. Match rate 100%, 1 iteration, 44/44 tests. 8 skill classes, fixes key_statistics gap. Summary preserved."
+    }
+  ]
+}
