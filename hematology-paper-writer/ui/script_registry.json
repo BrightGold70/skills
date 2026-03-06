@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "modules": {
+    "AML": {
+      "label": "AML (Acute Myeloid Leukemia)",
+      "scripts": {
+        "table1_aml": {
+          "label": "Table 1 — Patient Characteristics",
+          "file": "scripts/02_table1.R",
+          "params": [
+            {"key": "dataset",  "label": "Dataset file",     "type": "file_picker", "protocol_key": null, "required": true},
+            {"key": "disease",  "label": "Disease",          "type": "text",        "protocol_key": "disease_keywords", "default": "AML"}
+          ]
+        },
+        "eln_risk": {
+          "label": "ELN Risk Stratification",
+          "file": "scripts/20_aml_eln_risk.R",
+          "params": [
+            {"key": "dataset",   "label": "Dataset file",    "type": "file_picker", "protocol_key": null, "required": true},
+            {"key": "eln_year",  "label": "ELN version",     "type": "dropdown",    "options": ["2022", "2017", "2010"], "default": "2022"}
+          ]
+        },
+        "composite_response": {
+          "label": "AML Composite Response",
+          "file": "scripts/21_aml_composite_response.R",
+          "params": [
+            {"key": "dataset",  "label": "Dataset file",     "type": "file_picker", "protocol_key": null, "required": true},
+            {"key": "population","label": "Analysis population","type": "dropdown", "options": ["ITT","mITT","PP"], "default": "ITT", "protocol_key": "analysis_population"}
+          ]
+        },
+        "boin_design": {
+          "label": "Phase I — BOIN Design",
+          "file": "scripts/25_aml_phase1_boin.R",
+          "params": [
+            {"key": "target_tox",  "label": "Target toxicity rate", "type": "number", "min": 0.1, "max": 0.5, "default": 0.3,  "protocol_key": null},
+            {"key": "n_doses",     "label": "Number of dose levels", "type": "number", "min": 2,   "max": 10,  "default": 5,    "protocol_key": null},
+            {"key": "cohort_size", "label": "Cohort size",           "type": "number", "min": 1,   "max": 6,   "default": 3,    "protocol_key": null}
+          ]
+        }
+      }
+    },
+    "CML": {
+      "label": "CML (Chronic Myeloid Leukemia)",
+      "scripts": {
+        "tfr_analysis": {
+          "label": "Treatment-Free Remission Analysis",
+          "file": "scripts/22_cml_tfr_analysis.R",
+          "params": [
+            {"key": "dataset",       "label": "Dataset file",        "type": "file_picker", "required": true},
+            {"key": "landmark_mos",  "label": "Landmark (months)",   "type": "number", "default": 12, "protocol_key": null},
+            {"key": "molecular_resp","label": "Molecular response",  "type": "dropdown", "options": ["MR4", "MR4.5", "CMR"], "default": "MR4.5"}
+          ]
+        },
+        "cml_scores": {
+          "label": "CML Risk Scores (Sokal/EUTOS/ELTS)",
+          "file": "scripts/23_cml_scores.R",
+          "params": [
+            {"key": "dataset", "label": "Dataset file", "type": "file_picker", "required": true},
+            {"key": "scores",  "label": "Score systems", "type": "multiselect", "options": ["Sokal", "EUTOS", "ELTS"], "default": ["Sokal", "ELTS"]}
+          ]
+        }
+      }
+    },
+    "HCT": {
+      "label": "HCT (Hematopoietic Cell Transplantation)",
+      "scripts": {
+        "gvhd_analysis": {
+          "label": "GVHD Analysis",
+          "file": "scripts/24_hct_gvhd_analysis.R",
+          "params": [
+            {"key": "dataset",        "label": "Dataset file",     "type": "file_picker", "required": true},
+            {"key": "gvhd_grade_sys", "label": "Grading system",   "type": "dropdown", "options": ["MAGIC", "Glucksberg", "IBMTR"], "default": "MAGIC"},
+            {"key": "landmark_day",   "label": "Landmark day",     "type": "number", "default": 100, "protocol_key": null}
+          ]
+        }
+      }
+    },
+    "Safety": {
+      "label": "Safety Analysis",
+      "scripts": {
+        "safety_summary": {
+          "label": "Table 5 — Safety Summary",
+          "file": "scripts/05_safety.R",
+          "params": [
+            {"key": "dataset",       "label": "Dataset file",   "type": "file_picker", "required": true},
+            {"key": "ctcae_version", "label": "CTCAE version",  "type": "dropdown", "options": ["5.0", "4.03"], "default": "5.0"}
+          ]
+        }
+      }
+    }
+  }
+}

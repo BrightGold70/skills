@@ -1,0 +1,254 @@
+{
+  "phases": {
+    "0": {
+      "label": "Research Intelligence",
+      "icon": "🔍",
+      "command": "search-pubmed",
+      "description": "Search PubMed for relevant literature",
+      "widgets": [
+        {
+          "key": "query",
+          "type": "text",
+          "label": "Search query",
+          "required": true,
+          "placeholder": "e.g. asciminib CML T315I mutation"
+        },
+        {
+          "key": "--max-results",
+          "type": "number",
+          "label": "Max results",
+          "default": 50,
+          "min": 5,
+          "max": 200
+        },
+        {
+          "key": "--time-period",
+          "type": "dropdown",
+          "label": "Time period",
+          "options": ["1y", "2y", "5y", "10y", "all"],
+          "default": "5y"
+        }
+      ]
+    },
+    "1": {
+      "label": "Topic Development",
+      "icon": "💡",
+      "command": "research",
+      "description": "Full research workflow: PubMed search → outline → draft",
+      "widgets": [
+        {
+          "key": "topic",
+          "type": "text",
+          "label": "Research topic",
+          "required": true,
+          "placeholder": "e.g. Asciminib for CML in chronic phase"
+        },
+        {
+          "key": "--journal",
+          "type": "dropdown",
+          "label": "Target journal",
+          "options": ["blood_research", "blood", "blood_advances", "jco", "bjh", "leukemia", "haematologica"],
+          "default": "blood_research"
+        },
+        {
+          "key": "--max-results",
+          "type": "number",
+          "label": "Max PubMed results",
+          "default": 50,
+          "min": 10,
+          "max": 200
+        }
+      ]
+    },
+    "2": {
+      "label": "Research Design",
+      "icon": "📐",
+      "command": null,
+      "description": "Study methodology planning. Upload your protocol document in Phase 1 to auto-populate SAP parameters.",
+      "widgets": []
+    },
+    "3": {
+      "label": "Journal Strategy",
+      "icon": "📰",
+      "command": null,
+      "description": "Target journal selection and fit analysis. Use Phase 1 research output to guide journal choice.",
+      "widgets": []
+    },
+    "4": {
+      "label": "Manuscript Drafting",
+      "icon": "✍️",
+      "command": "create-draft",
+      "description": "Generate full manuscript draft",
+      "widgets": [
+        {
+          "key": "topic",
+          "type": "text",
+          "label": "Manuscript topic",
+          "required": true,
+          "placeholder": "e.g. Asciminib in chronic phase CML: a systematic review"
+        },
+        {
+          "key": "--journal",
+          "type": "dropdown",
+          "label": "Target journal",
+          "options": ["blood_research", "blood", "blood_advances", "jco", "bjh", "leukemia", "haematologica"],
+          "default": "blood_research"
+        },
+        {
+          "key": "--document-type",
+          "type": "dropdown",
+          "label": "Document type",
+          "options": ["original", "review", "meta-analysis", "case-report", "letter"],
+          "default": "review"
+        },
+        {
+          "key": "--disease",
+          "type": "dropdown",
+          "label": "Disease",
+          "options": ["AML", "CML", "MDS", "HCT", "ALL", "NHL", "MM", "Other"],
+          "default": "CML"
+        },
+        {
+          "key": "--word-limit",
+          "type": "number",
+          "label": "Word limit",
+          "default": 3500,
+          "min": 1000,
+          "max": 8000
+        },
+        {
+          "key": "--max-results",
+          "type": "number",
+          "label": "Max PubMed results",
+          "default": 50,
+          "min": 10,
+          "max": 200
+        },
+        {
+          "key": "--docx",
+          "type": "toggle",
+          "label": "Export DOCX",
+          "default": true
+        },
+        {
+          "key": "--import-refs",
+          "type": "toggle",
+          "label": "Import references",
+          "default": true
+        }
+      ]
+    },
+    "5": {
+      "label": "Publication Prep",
+      "icon": "✅",
+      "command": "check-quality",
+      "description": "Quality check and IMRaD compliance verification",
+      "widgets": [
+        {
+          "key": "manuscript",
+          "type": "file_picker",
+          "label": "Manuscript file",
+          "required": true
+        },
+        {
+          "key": "--journal",
+          "type": "dropdown",
+          "label": "Journal",
+          "options": ["blood_research", "blood", "blood_advances", "jco", "bjh", "leukemia", "haematologica"],
+          "default": "blood_research"
+        },
+        {
+          "key": "--verify-references",
+          "type": "toggle",
+          "label": "Verify references against PubMed",
+          "default": false
+        }
+      ]
+    },
+    "6": {
+      "label": "Submission",
+      "icon": "📤",
+      "command": "generate-report",
+      "description": "Generate submission report with compliance checklist",
+      "widgets": [
+        {
+          "key": "manuscript",
+          "type": "file_picker",
+          "label": "Manuscript file",
+          "required": true
+        },
+        {
+          "key": "--verify-references",
+          "type": "toggle",
+          "label": "Verify references",
+          "default": true
+        }
+      ]
+    },
+    "7": {
+      "label": "Peer Review",
+      "icon": "👥",
+      "command": "edit-manuscript",
+      "description": "Edit manuscript based on reviewer feedback",
+      "widgets": [
+        {
+          "key": "manuscript",
+          "type": "file_picker",
+          "label": "Manuscript file",
+          "required": true
+        },
+        {
+          "key": "--journal",
+          "type": "dropdown",
+          "label": "Journal",
+          "options": ["blood_research", "blood", "blood_advances", "jco", "bjh", "leukemia", "haematologica"],
+          "default": "blood_research"
+        }
+      ]
+    },
+    "8": {
+      "label": "Publication",
+      "icon": "📢",
+      "command": "verify-references",
+      "description": "Final reference verification before publication",
+      "widgets": [
+        {
+          "key": "manuscript",
+          "type": "file_picker",
+          "label": "Manuscript file",
+          "required": true
+        }
+      ]
+    },
+    "9": {
+      "label": "Resubmission",
+      "icon": "🔄",
+      "command": "research",
+      "description": "Resubmit to alternative journal — reruns research workflow with new target",
+      "widgets": [
+        {
+          "key": "topic",
+          "type": "text",
+          "label": "Research topic",
+          "required": true,
+          "placeholder": "e.g. Asciminib in chronic phase CML"
+        },
+        {
+          "key": "--journal",
+          "type": "dropdown",
+          "label": "Alternative journal",
+          "options": ["blood_research", "blood", "blood_advances", "jco", "bjh", "leukemia", "haematologica"],
+          "default": "blood_advances"
+        },
+        {
+          "key": "--max-results",
+          "type": "number",
+          "label": "Max PubMed results",
+          "default": 50,
+          "min": 10,
+          "max": 200
+        }
+      ]
+    }
+  }
+}

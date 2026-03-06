@@ -1,0 +1,8 @@
+{
+  "hpw_base_dir": "/Users/kimhawk/Library/CloudStorage/Dropbox/Paper/Hematology_paper_writer",
+  "hpw_port": 8501,
+  "csa_port": 8502,
+  "manifest_poll_interval_s": 10,
+  "log_max_lines": 200,
+  "phase_registry": "phase_registry.json"
+}

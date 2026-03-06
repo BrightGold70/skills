@@ -1,11 +1,145 @@
 {
-  "project": "hematology-paper-writer",
-  "active_features": {
-    "hpw-recipe3-upgrade": {
-      "current_phase": "report",
-      "status": "completed",
-      "last_updated": "2026-02-23"
+  "version": "2.0",
+  "lastUpdated": "2026-03-05T00:00:00.000Z",
+  "activeFeatures": [
+    "hpw-classification-validator",
+    "tools",
+    "phases",
+    "crf_pipeline",
+    "draft_generator",
+    "phase4_7_prose",
+    "hematology-paper-writer"
+  ],
+  "primaryFeature": "hpw-classification-validator",
+  "features": {
+    "csa-hpw-bridge": {
+      "phase": "archived",
+      "matchRate": 98.1,
+      "iterationCount": 1,
+      "startedAt": "2026-03-04T23:06:06.155Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/csa-hpw-bridge/"
+    },
+    "tools": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T22:48:32.385Z",
+        "lastUpdated": "2026-03-04T22:48:48.102Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/hematology-paper-writer/tools/__init__.py"
+    },
+    "phases": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T22:48:41.717Z",
+        "lastUpdated": "2026-03-04T23:16:16.553Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/hematology-paper-writer/phases/phase_manager.py"
+    },
+    "crf_pipeline": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T22:48:53.311Z",
+        "lastUpdated": "2026-03-04T22:49:24.888Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/clinical-statistics-analyzer/scripts/crf_pipeline/orchestrator.py"
+    },
+    "draft_generator": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T23:04:03.010Z",
+        "lastUpdated": "2026-03-04T23:04:41.588Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/hematology-paper-writer/tools/draft_generator/manuscript_drafter.py"
+    },
+    "phase4_7_prose": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T23:04:09.243Z",
+        "lastUpdated": "2026-03-04T23:16:23.711Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/hematology-paper-writer/phases/phase4_7_prose/prose_verifier.py"
+    },
+    "hematology-paper-writer": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-04T23:05:03.680Z",
+        "lastUpdated": "2026-03-04T23:16:29.909Z"
+      },
+      "lastFile": "/Users/kimhawk/.config/opencode/skill/hematology-paper-writer/cli.py"
+    },
+    "hpw-notebooklm-py": {
+      "phase": "archived",
+      "matchRate": 100,
+      "iterationCount": 1,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/hpw-notebooklm-py/"
+    },
+    "nlm-enrichment": {
+      "phase": "archived",
+      "matchRate": 96,
+      "iterationCount": 0,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/nlm-enrichment/"
+    },
+    "hpw-classification-validator": {
+      "phase": "archived",
+      "matchRate": 97,
+      "iterationCount": 0,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-06T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/hpw-classification-validator/"
+    },
+    "hpw-scientific-skills-integration": {
+      "phase": "archived",
+      "matchRate": 91,
+      "iterationCount": 0,
+      "startedAt": "2026-03-05T00:00:00.000Z",
+      "archivedAt": "2026-03-05T00:00:00.000Z",
+      "archivedTo": "docs/archive/2026-03/hpw-scientific-skills-integration/"
     }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-04T08:10:55.201Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-03-04T23:16:29.909Z"
   },
   "history": [
     {
@@ -55,6 +189,132 @@
       "phase": "report",
       "status": "completed",
       "timestamp": "2026-02-23T10:12:00Z"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:32.385Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:38.437Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:41.717Z",
+      "feature": "phases",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:48.102Z",
+      "feature": "tools",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:53.311Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:48:59.388Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T22:49:24.888Z",
+      "feature": "crf_pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:04:03.010Z",
+      "feature": "draft_generator",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:04:09.243Z",
+      "feature": "phase4_7_prose",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:04:18.755Z",
+      "feature": "draft_generator",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:04:29.798Z",
+      "feature": "draft_generator",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:04:41.588Z",
+      "feature": "draft_generator",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:05:03.680Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:06:59.291Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:07:07.908Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:07:14.546Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:07:34.175Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:16:10.520Z",
+      "feature": "phases",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:16:16.553Z",
+      "feature": "phases",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:16:23.711Z",
+      "feature": "phase4_7_prose",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-04T23:16:29.909Z",
+      "feature": "hematology-paper-writer",
+      "phase": "do",
+      "action": "updated"
     }
   ]
 }
