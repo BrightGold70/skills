@@ -1,32 +1,10 @@
 {
   "claude-forge-install": {
-    "phase": "completed",
+    "phase": "archived",
     "matchRate": 100,
     "iterationCount": 1,
-    "plan": {
-      "status": "completed",
-      "path": "docs/01-plan/features/claude-forge-install.plan.md",
-      "completedAt": "2026-03-06"
-    },
-    "design": {
-      "status": "completed",
-      "path": "docs/02-design/features/claude-forge-install.design.md",
-      "completedAt": "2026-03-06"
-    },
-    "do": {
-      "status": "completed",
-      "completedAt": "2026-03-06"
-    },
-    "check": {
-      "status": "completed",
-      "path": "docs/03-analysis/claude-forge-install.analysis.md",
-      "matchRate": 100,
-      "completedAt": "2026-03-06"
-    },
-    "report": {
-      "status": "completed",
-      "path": "docs/04-report/features/claude-forge-install.report.md",
-      "completedAt": "2026-03-06"
-    }
+    "startedAt": "2026-03-06T00:00:00Z",
+    "archivedAt": "2026-03-06T20:45:00Z",
+    "archivedTo": "docs/archive/2026-03/claude-forge-install/"
   }
 }
