@@ -19,9 +19,9 @@
 | 2 | ✅ Complete | `1be6f82` | Tailwind v4, MainLayout, HpwEditor, CsaDashboard |
 | 3 | ✅ Complete | | R/Python bundling, lib.rs updated for bundled runtimes |
 | 4 | ✅ Complete | | Projects, HPW-CSA, Settings (4.1-4.3), Splash Screen, macOS Native Menu (4.4-4.5, TDD) |
-| 5 | ⏳ Not started | | Build & distribution |
+| 5 | ✅ Complete | | Build & distribution (TDD: config, entitlements, signing, auto-update) |
 
-**Overall: 17/20 tasks (85%)**
+**Overall: 20/20 tasks (100%)**
 
 ---
 

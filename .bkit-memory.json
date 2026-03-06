@@ -1,6 +1,7 @@
 {
   "currentFeature": "hemasuite-macos-app",
-  "phase": "do",
+  "phase": "check",
   "level": "dynamic",
+  "matchRate": 85,
   "lastUpdated": "2026-03-06"
 }
