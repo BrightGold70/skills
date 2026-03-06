@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routers.hpw import router as hpw_router
 from routers.csa import router as csa_router
+from routers.projects import router as projects_router
+from routers.settings import router as settings_router
 
 app = FastAPI(title="HemaSuite Sidecar")
 
@@ -22,6 +24,8 @@ app.add_middleware(
 
 app.include_router(hpw_router)
 app.include_router(csa_router)
+app.include_router(projects_router)
+app.include_router(settings_router)
 
 
 @app.get("/health")

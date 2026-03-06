@@ -18,10 +18,10 @@
 | 1 | ✅ Complete | `9c64a64` | FastAPI sidecar, HPW/CSA APIs, 5 tests passing |
 | 2 | ✅ Complete | `1be6f82` | Tailwind v4, MainLayout, HpwEditor, CsaDashboard |
 | 3 | ✅ Complete | | R/Python bundling, lib.rs updated for bundled runtimes |
-| 4 | ⏳ Not started | | Integration & polish |
+| 4 | 🔄 Partial (4.1-4.3) | | Projects API+UI, HPW-CSA integration, Settings API+UI (TDD) |
 | 5 | ⏳ Not started | | Build & distribution |
 
-**Overall: 12/20 tasks (60%)**
+**Overall: 15/20 tasks (75%)**
 
 ---
 
