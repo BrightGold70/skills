@@ -1,7 +1,10 @@
-# Plan: HPW + CSA Standalone macOS App
+# Plan: HPW + CSA Standalone macOS App [SUPERSEDED]
+
+> **SUPERSEDED** by `hemasuite-macos-app` (Tauri 2 + React architecture).
+> See: `docs/plans/2026-03-06-hemasuite-macos-app-design.md`
 
 **Feature**: `hpw-csa-macos-app`
-**Phase**: Plan
+**Phase**: Plan (superseded)
 **Created**: 2026-03-06
 **Depends on**: `hpw-csa-unified-ui-v2` (completed, 100%)
 
