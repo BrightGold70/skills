@@ -8,7 +8,7 @@
     "archivedTo": "docs/archive/2026-03/claude-forge-install/"
   },
   "hemasuite-macos-app": {
-    "phase": "design",
+    "phase": "do",
     "matchRate": null,
     "iterationCount": 0,
     "startedAt": "2026-03-06T00:00:00Z",
