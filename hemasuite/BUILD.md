@@ -22,30 +22,18 @@ pnpm tauri dev
 
 ## Production Build
 
-### Build only (no signing)
-
 ```bash
-./scripts/build-and-sign.sh --dry-run
-# Output: src-tauri/target/release/bundle/macos/HemaSuite.app
-# Output: src-tauri/target/release/bundle/dmg/HemaSuite_0.1.0_*.dmg
+./scripts/build-dmg.sh
+# Output: dist/HemaSuite-0.1.0.dmg
 ```
 
-### Full signed + notarized build
-
-```bash
-export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-export APPLE_ID="your@email.com"
-export APPLE_TEAM_ID="TEAMID"
-export APPLE_APP_PASSWORD="app-specific-password"
-
-./scripts/build-and-sign.sh
-```
+This runs `pnpm tauri build --release`, ad-hoc signs with `codesign -s -`, and creates a .dmg via `create-dmg`.
 
 ## Build Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/build-and-sign.sh` | Unified build, sign, notarize pipeline |
+| `scripts/build-dmg.sh` | Build, ad-hoc sign, create .dmg |
 | `scripts/sign-r-dylibs.sh` | Per-file codesign for R/Python dylibs |
 | `scripts/bundle-python.sh` | Bundle standalone Python runtime |
 | `scripts/bundle-r.sh` | Bundle R runtime with packages |
@@ -53,23 +41,34 @@ export APPLE_APP_PASSWORD="app-specific-password"
 ## Code Signing Flow
 
 ```
-pnpm tauri build
+pnpm tauri build --release
     |
     v
 sign-r-dylibs.sh  (sign each .dylib/.so individually)
     |
     v
-codesign --deep    (sign full .app bundle)
+codesign -s -      (ad-hoc sign full .app bundle)
     |
     v
-codesign DMG       (sign disk image)
-    |
-    v
-notarytool submit  (Apple notarization)
-    |
-    v
-stapler staple     (embed notarization ticket)
+create-dmg         (package into .dmg with drag-to-Applications)
 ```
+
+No Apple Developer ID or notarization needed for personal distribution.
+Recipients bypass Gatekeeper via right-click > Open (once), or use USB delivery (no quarantine).
+
+## Troubleshooting
+
+### Build fails with "no signing identity found"
+Ad-hoc signing (`codesign -s -`) doesn't need a certificate. If you see this error, ensure `build-dmg.sh` uses `-s -` not `-s "Developer ID..."`.
+
+### R dylibs fail to load at runtime
+Ensure `Entitlements.plist` includes `allow-unsigned-executable-memory` and `disable-library-validation`. These are required for bundled R's JIT and unsigned .so files.
+
+### DMG creation fails
+Install `create-dmg`: `brew install create-dmg`
+
+### App crashes on first launch
+Bundled runtimes load on first launch (10-30 seconds). If it crashes, check Console.app for sidecar errors — the Python venv or R_HOME path may be incorrect.
 
 ## Entitlements
 
@@ -88,13 +87,6 @@ The app bundles (~623MB total):
 - **Python runtime** (~74MB): `resources/python/`
 - **R runtime** (~549MB): `resources/r-runtime/`
 - **Sidecar code**: `sidecar/*.py`, `sidecar/routers/*.py`
-
-## Auto-Update
-
-Configured via `tauri.conf.json` plugins.updater. Before first release:
-1. Generate signing keypair: `tauri signer generate`
-2. Update `pubkey` in tauri.conf.json
-3. Deploy update server at configured endpoint
 
 ## Running Tests
 
