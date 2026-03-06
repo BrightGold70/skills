@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};

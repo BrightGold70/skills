@@ -1,15 +1,16 @@
-import { useState } from "react";
 import { Sidebar } from "../components/Sidebar";
 import { HpwEditor } from "../views/HpwEditor";
 import { CsaDashboard } from "../views/CsaDashboard";
+import { PipelineMonitor } from "../views/PipelineMonitor";
 import { ProjectManager } from "../views/ProjectManager";
 import { SettingsView } from "../views/SettingsView";
-
-type Tab = "projects" | "hpw" | "csa" | "pipeline" | "settings";
+import { useProjectStore, type Tab } from "../stores/projectStore";
 
 export function MainLayout() {
-  const [activeTab, setActiveTab] = useState<Tab>("hpw");
-  const [activePhase, setActivePhase] = useState(0);
+  const activeTab = useProjectStore((s) => s.activeTab);
+  const setActiveTab = useProjectStore((s) => s.setTab);
+  const activePhase = useProjectStore((s) => s.activePhase);
+  const setActivePhase = useProjectStore((s) => s.setPhase);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -43,9 +44,7 @@ export function MainLayout() {
           {activeTab === "projects" && <ProjectManager />}
           {activeTab === "hpw" && <HpwEditor />}
           {activeTab === "csa" && <CsaDashboard />}
-          {activeTab === "pipeline" && (
-            <div className="text-gray-500">Pipeline Monitor (coming soon)</div>
-          )}
+          {activeTab === "pipeline" && <PipelineMonitor />}
           {activeTab === "settings" && <SettingsView />}
         </div>
       </main>

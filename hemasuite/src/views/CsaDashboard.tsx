@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../hooks/useApi";
+import { ResultChart, tryParseChartData } from "../components/ResultChart";
 
 interface Script {
   name: string;
@@ -66,11 +67,17 @@ export function CsaDashboard() {
       {running && (
         <div className="text-sm text-gray-500">Running {running}...</div>
       )}
-      {result && (
-        <pre className="mt-4 p-4 bg-gray-900 text-green-400 rounded-lg text-xs overflow-auto max-h-64">
-          {result.stdout || result.stderr}
-        </pre>
-      )}
+      {result && (() => {
+        const chartData = tryParseChartData(result.stdout);
+        if (chartData) {
+          return <ResultChart data={chartData} />;
+        }
+        return (
+          <pre className="mt-4 p-4 bg-gray-900 text-green-400 rounded-lg text-xs overflow-auto max-h-64">
+            {result.stdout || result.stderr}
+          </pre>
+        );
+      })()}
     </div>
   );
 }

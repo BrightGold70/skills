@@ -41,7 +41,8 @@ fi
 # ─── Step 2: Build the app with Tauri ───────────────────────────────────────
 echo "==> Building HemaSuite..."
 cd "$PROJECT_DIR"
-pnpm tauri build
+TAURI_BUILD_TARGET="${TAURI_BUILD_TARGET:-universal-apple-darwin}"
+pnpm tauri build --target "$TAURI_BUILD_TARGET"
 
 APP_PATH="src-tauri/target/release/bundle/macos/HemaSuite.app"
 DMG_PATH="src-tauri/target/release/bundle/dmg/HemaSuite_0.1.0_$(uname -m).dmg"

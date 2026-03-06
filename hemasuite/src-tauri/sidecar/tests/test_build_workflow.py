@@ -52,3 +52,8 @@ class TestBuildScript:
     def test_build_script_uses_strict_mode(self):
         content = self.script_path.read_text()
         assert "set -euo pipefail" in content
+
+    def test_build_script_supports_universal_binary(self):
+        """Build script must default to universal-apple-darwin target."""
+        content = self.script_path.read_text()
+        assert "universal-apple-darwin" in content
