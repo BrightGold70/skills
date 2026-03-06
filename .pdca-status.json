@@ -1,6 +1,8 @@
 {
   "claude-forge-install": {
-    "phase": "do",
+    "phase": "check",
+    "matchRate": 100,
+    "iterationCount": 1,
     "plan": {
       "status": "completed",
       "path": "docs/01-plan/features/claude-forge-install.plan.md",
@@ -16,7 +18,10 @@
       "completedAt": "2026-03-06"
     },
     "check": {
-      "status": "pending"
+      "status": "completed",
+      "path": "docs/03-analysis/claude-forge-install.analysis.md",
+      "matchRate": 100,
+      "completedAt": "2026-03-06"
     }
   }
 }
