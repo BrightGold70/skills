@@ -1,7 +1,11 @@
 {
   "currentFeature": "hemasuite-macos-app",
-  "phase": "check",
+  "phase": "archived",
   "level": "dynamic",
-  "matchRate": 85,
+  "matchRate": 100,
+  "iterationCount": 1,
+  "startedAt": "2026-03-06",
+  "archivedAt": "2026-03-06",
+  "archivedTo": "docs/archive/2026-03/hemasuite-macos-app/",
   "lastUpdated": "2026-03-06"
 }
