@@ -28,10 +28,10 @@ describe("useMenuEvents", () => {
 
   it("calls onNewProject when new-project event fires", async () => {
     let capturedCallback: ((event: unknown) => void) | undefined;
-    mockListen.mockImplementation(async (_event, cb) => {
+    mockListen.mockImplementation((async (_event: any, cb: any) => {
       capturedCallback = cb as (event: unknown) => void;
-      return vi.fn();
-    });
+      return () => {};
+    }) as any);
 
     const handlers = { onNewProject: vi.fn(), onOpenProject: vi.fn(), onSave: vi.fn() };
     renderHook(() => useMenuEvents(handlers));
@@ -42,10 +42,10 @@ describe("useMenuEvents", () => {
 
   it("calls onOpenProject when open-project event fires", async () => {
     let capturedCallback: ((event: unknown) => void) | undefined;
-    mockListen.mockImplementation(async (_event, cb) => {
+    mockListen.mockImplementation((async (_event: any, cb: any) => {
       capturedCallback = cb as (event: unknown) => void;
-      return vi.fn();
-    });
+      return () => {};
+    }) as any);
 
     const handlers = { onNewProject: vi.fn(), onOpenProject: vi.fn(), onSave: vi.fn() };
     renderHook(() => useMenuEvents(handlers));
@@ -56,10 +56,10 @@ describe("useMenuEvents", () => {
 
   it("calls onSave when save event fires", async () => {
     let capturedCallback: ((event: unknown) => void) | undefined;
-    mockListen.mockImplementation(async (_event, cb) => {
+    mockListen.mockImplementation((async (_event: any, cb: any) => {
       capturedCallback = cb as (event: unknown) => void;
-      return vi.fn();
-    });
+      return () => {};
+    }) as any);
 
     const handlers = { onNewProject: vi.fn(), onOpenProject: vi.fn(), onSave: vi.fn() };
     renderHook(() => useMenuEvents(handlers));

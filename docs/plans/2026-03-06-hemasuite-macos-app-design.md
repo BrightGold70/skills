@@ -166,7 +166,24 @@ During sidecar boot (~2-4 seconds), show a lightweight splash screen:
 +-----------------------------------------------+
 ```
 
-Implementation: Tauri `setup()` hook loads a local `splash.html` in the WebView while polling the sidecar `/health` endpoint. Once healthy, navigate to the React app.
+Implementation (completed Phase 4.4):
+- **Rust layer**: `include_str!("splash.html")` embedded at compile time, written to temp file, loaded as `file://` URL in a decorationless splash window. Background thread polls sidecar via `TcpStream::connect("127.0.0.1:9720")` every 500ms (max 30s). On success, shows main window and closes splash.
+- **React layer**: `useSidecarHealth` hook polls `/health` via `fetch()` with recursive `setTimeout`. `App.tsx` gates `<MainLayout />` behind `ready` state, showing `<SplashScreen />` until sidecar responds.
+- **Dual splash**: Native Rust splash visible during WebView boot; React splash visible during sidecar boot.
+
+### macOS Native Menu (Phase 4.5)
+
+| Menu | Items | Shortcut |
+|------|-------|----------|
+| File | New Project | Cmd+N |
+| File | Open Project | Cmd+O |
+| File | Save | Cmd+S |
+| Edit | Undo, Redo, Cut, Copy, Paste, Select All | Standard |
+| View | HPW Editor | Cmd+1 |
+| View | CSA Dashboard | Cmd+2 |
+| View | Pipeline | Cmd+3 |
+
+Implementation: Rust `MenuBuilder` + `SubmenuBuilder` + `MenuItemBuilder` with `CmdOrCtrl` accelerators. `on_menu_event` emits event payload to frontend via `app_handle.emit("menu-event", id)`. React `useMenuEvents` hook listens and dispatches to handler functions.
 
 ## Deployment
 
