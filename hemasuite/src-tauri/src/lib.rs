@@ -33,13 +33,38 @@ pub fn run() {
             };
 
             if working_dir.join("server.py").exists() {
-                // Try venv python first, then system python3
+                let resource_dir = app.path().resource_dir().unwrap_or_default();
+
+                // Resolve Python: bundled > venv > system
+                let bundled_python = resource_dir.join("resources/python/bin/python3");
                 let venv_python = working_dir.join(".venv/bin/python");
-                let python = if venv_python.exists() {
+                let python = if bundled_python.exists() {
+                    bundled_python.to_string_lossy().to_string()
+                } else if venv_python.exists() {
                     venv_python.to_string_lossy().to_string()
                 } else {
                     "python3".to_string()
                 };
+
+                // Resolve Rscript: bundled > system
+                let bundled_rscript = resource_dir.join("resources/r-runtime/bin/Rscript");
+                let rscript = if bundled_rscript.exists() {
+                    bundled_rscript.to_string_lossy().to_string()
+                } else {
+                    "Rscript".to_string()
+                };
+
+                // Set env vars for sidecar to find HPW, CSA, and R
+                let skills_root = std::env::var("HEMASUITE_SKILLS_ROOT")
+                    .unwrap_or_else(|_| {
+                        // Default: parent of the hemasuite project
+                        std::env::current_dir()
+                            .unwrap_or_default()
+                            .parent()
+                            .unwrap_or(std::path::Path::new("."))
+                            .to_string_lossy()
+                            .to_string()
+                    });
 
                 match Command::new(&python)
                     .args([
@@ -52,6 +77,9 @@ pub fn run() {
                         "9720",
                     ])
                     .current_dir(&working_dir)
+                    .env("RSCRIPT_PATH", &rscript)
+                    .env("HPW_PATH", format!("{}/hematology-paper-writer", skills_root))
+                    .env("CSA_PATH", format!("{}/clinical-statistics-analyzer", skills_root))
                     .spawn()
                 {
                     Ok(child) => {

@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Python sidecar
+src-tauri/sidecar/.venv/
+
+# Bundled runtimes (large, built locally)
+src-tauri/resources/python/
+src-tauri/resources/r-runtime/
+src-tauri/sidecar/__pycache__/
+src-tauri/sidecar/tests/__pycache__/
+src-tauri/sidecar/.pytest_cache/
+*.pyc
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

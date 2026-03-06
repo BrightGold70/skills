@@ -10,6 +10,21 @@
 
 ---
 
+## Progress Tracking (2026-03-06)
+
+| Phase | Status | Commits | Notes |
+|-------|--------|---------|-------|
+| 0 | ✅ Complete | `c6702c2` | Rust 1.93.1, Tauri CLI 2.10.1, pnpm 10.30.3 |
+| 1 | ✅ Complete | `9c64a64` | FastAPI sidecar, HPW/CSA APIs, 5 tests passing |
+| 2 | ✅ Complete | `1be6f82` | Tailwind v4, MainLayout, HpwEditor, CsaDashboard |
+| 3 | ✅ Complete | | R/Python bundling, lib.rs updated for bundled runtimes |
+| 4 | ⏳ Not started | | Integration & polish |
+| 5 | ⏳ Not started | | Build & distribution |
+
+**Overall: 12/20 tasks (60%)**
+
+---
+
 ## Phase 0: Environment Setup
 
 ### Task 0.1: Update Rust Toolchain
