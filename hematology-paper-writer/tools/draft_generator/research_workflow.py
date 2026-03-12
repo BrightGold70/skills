@@ -320,9 +320,12 @@ class ResearchWorkflow:
                     self.abstract = seed.abstract
                     self.pmid = seed.pmid
                     # Fields expected by some drafter paths
-                    self.doi = ""
-                    self.keywords = []
-                    self.mesh_terms = []
+                    self.doi = getattr(seed, "doi", "")
+                    self.keywords = getattr(seed, "keywords", [])
+                    self.mesh_terms = getattr(seed, "mesh_terms", [])
+                    self.volume = getattr(seed, "volume", "")
+                    self.issue = getattr(seed, "issue", "")
+                    self.pages = getattr(seed, "pages", "")
 
             return [_SeedArticle(s) for s in selected]
         except Exception:
@@ -353,6 +356,7 @@ class ResearchWorkflow:
     def _search_web(self, topic: str, require_permission: bool = False) -> List[Dict]:
         """Search the web for additional information using Tavily."""
         try:
+            import os
             from tools.draft_generator.tavily_searcher import TavilySearcher
 
             api_key = self.tavily_api_key or os.environ.get("TAVILY_API_KEY")
