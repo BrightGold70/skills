@@ -1,0 +1,26 @@
+{
+  "skill_name": "handoff",
+  "evals": [
+    {
+      "id": 1,
+      "name": "partial-bugfix-unverified-tests",
+      "prompt": "Treat the following MOCK_TRANSCRIPT as the conversation context you just had in this session. You are now at the end of that session and the user has said:\n\n/handoff\n\n--- MOCK_TRANSCRIPT ---\nUser: the /login endpoint is returning 500s in staging. can you look into it?\nAssistant: [investigates] Found it — validateJWT() in src/auth/middleware.ts:87 was throwing on the new token format. Replaced the manual verification with @auth/jwt-verify.\nUser: cool, does it work?\nAssistant: Unit tests pass. I did NOT run the integration suite (packages/integration-tests) because it needs the staging Redis instance and we don't have credentials in this shell.\nUser: ok\n--- END MOCK_TRANSCRIPT ---\n\nProject root: /tmp/mock-repo (treat as a git repo on branch fix/jwt-validation, with src/auth/middleware.ts modified and uncommitted).",
+      "files": [],
+      "expected_output": "Creates docs/handoffs/<date>-<slug>.md with all 5 required sections. Flags unverified integration tests explicitly. Names the specific file path src/auth/middleware.ts:87. Notes the branch fix/jwt-validation."
+    },
+    {
+      "id": 2,
+      "name": "mid-refactor-blocked-on-infra",
+      "prompt": "/handoff\n\nSession context (treat as the prior conversation): We spent this session migrating the caching layer from Redis 6 to Redis 7. Completed the client-side changes in packages/cache/src/client.ts (new connection pooling API). Added compatibility shims in packages/cache/src/compat.ts. Tests pass locally against Redis 6 but we can't validate Redis 7 behavior because our dev environment doesn't have a Redis 7 cluster — infra team owns that and hasn't provisioned it yet. Branch: refactor/redis-7-migration. Uncommitted: 2 modified files, 1 new file.",
+      "files": [],
+      "expected_output": "Blocked item clearly identifies 'Redis 7 cluster not provisioned, infra team owns' as the blocker. Next steps include either chasing infra team or the concrete code work that can continue in parallel. Branch name reflected in resume commands."
+    },
+    {
+      "id": 3,
+      "name": "multi-file-feature-pending-instrumentation",
+      "prompt": "wrap up this session and leave notes so i can pick it up monday\n\n[Session just completed: Added webhook retry logic for Stripe billing events. Implemented exponential backoff in src/billing/webhook.ts (new retryWithBackoff function at line ~120). Added 4 unit test cases in src/billing/webhook.test.ts covering success, retry, max-retry-exceeded, and non-retriable errors. Still TODO: hook up datadog metrics for retry counts (haven't touched src/monitoring/metrics.ts yet), and update the ops runbook at docs/ops/billing-runbook.md. Branch: feat/stripe-webhook-retry, 2 files modified.]",
+      "files": [],
+      "expected_output": "Handoff file created. Next Steps are concrete with file paths (src/monitoring/metrics.ts for datadog hookup, docs/ops/billing-runbook.md for runbook update). Session Summary is 2-5 sentences, no padding. Touched files listed in Context section."
+    }
+  ]
+}
