@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use this skill in two modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear. Use this skill whether or not the exact word "handoff" appears, and prefer read mode over write mode when the user's phrasing is about *picking up* rather than *closing out*.
+description: Use this skill in three modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList. LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session.
 ---
 
 # Handoff
@@ -13,8 +13,9 @@ Before doing anything else, decide which mode applies:
 
 - **WRITE** if the user is closing out, summarizing, wrapping up, or invoking `/handoff` plain. Skip to **§ Audience** and follow the write-mode flow through to "Commit and push".
 - **READ** if the user is loading, resuming, or asking where you left off — especially the first message after `/clear`. Follow **§ Reading a handoff (resume mode)** below and STOP at the report-back step. Do **not** fall through into write mode, and do **not** run the "Commit and push" finale (that's write-mode only).
+- **LEARN** if the user wants to record OR retrieve a single durable cross-session learning *outside* a full handoff context — phrases like "save this learning", "remember this for next time", "log this gotcha", "search past learnings for X". Jump to **§ LEARN mode — single-shot durable learning** below and STOP after the script invocation. Do **not** write a handoff doc, do **not** run "Commit and push" — LEARN is a one-shot append/query against `docs/learnings.md`, no doc artifact and no automated commit.
 
-If genuinely ambiguous (rare — usually phrasing is clear), ask one short question: "Read the latest handoff, or create a new one?" Don't guess and don't do both.
+If genuinely ambiguous (rare — usually phrasing is clear), ask one short question: "Read the latest handoff, create a new one, or just log/search a learning?" Don't guess and don't do more than one mode.
 
 ---
 
@@ -115,6 +116,89 @@ Then **stop**. Do not pre-emptively run any of the Next Steps. Wait for the user
 - Don't run the write-mode "Commit and push" finale. The user hasn't authorized commits in this session yet.
 - Don't read more than the one handoff doc unless the user asks. Earlier handoffs are git history, not active state.
 - Don't try to "fix" divergences silently (e.g., switching branches, stashing changes, recreating missing files). Surface them and let the user decide.
+
+---
+
+## LEARN mode — single-shot durable learning
+
+Goal: in 1 tool call, append (or search) a single durable cross-session
+learning to `<project>/docs/learnings.md` via the bundled `scripts/learn.py`.
+No handoff doc, no commit-and-push, no TodoList changes — pure side effect
+on the project-local learnings file.
+
+Use this mode when the user wants to capture or query *one* lesson without
+the full session-closeout ceremony. Common phrasings: "save this learning",
+"remember this for next time", "log this gotcha", "capture this pattern",
+"add to learnings", "search past learnings for X", "what learnings do we
+have on Y". The §"Persist durable learnings" section below the Audience
+section covers the same script — that section runs as a finale-step inside
+WRITE mode; LEARN mode runs the same script standalone.
+
+### Step 1: Distill the kernel
+
+Read what the user wants to capture. If they pasted a paragraph or a
+log excerpt, distill it down to ≤200 chars of generalizable kernel —
+the "X looks like Y but is actually Z" essence, NOT the full event
+narrative. The script warns above 250 chars but won't reject; over-long
+patterns dilute search quality across all future sessions.
+
+If the user's intent is **search** rather than capture, skip distillation
+and run the search command instead.
+
+### Step 2: Pick category + tags
+
+- **Category** is one of `gotcha` / `solution` / `pattern` (script enforces):
+  - `gotcha` — failure pattern with reusable diagnostic value ("X reproduces deterministically when Y; misdiagnosed as Z")
+  - `solution` — working fix that codifies a pattern ("use singleton + reload on NaN" — the pattern, not "fixed today")
+  - `pattern` — architectural shape worth remembering ("OrderedDict + popitem(last=False) for LRU eviction")
+- **Tags** are comma-separated, lowercase, hyphenated. Convention: include
+  `handoff:<date>-<slug>` to cross-reference the originating session's
+  handoff doc if one exists; use `session:<date>` if no handoff was written.
+  Add domain tags (`lightrag`, `auth`, `migrations`, etc.) to make future
+  topical searches grep-friendly.
+
+### Step 3: Invoke the bundled script
+
+```bash
+# Capture
+python ~/.claude/skills/handoff/scripts/learn.py add \
+  "<≤200-char kernel>" \
+  --category gotcha|solution|pattern \
+  --tags "domain1,domain2,handoff:2026-04-30-foo"
+
+# Search
+python ~/.claude/skills/handoff/scripts/learn.py search "<term>"
+```
+
+Same-day exact-pattern duplicates are silently skipped (idempotent — safe
+to re-invoke). The script writes to `<project>/docs/learnings.md` (newest
+on top, one line per entry, tags backtick-quoted for grep cleanliness).
+
+### Step 4: Report and stop
+
+For an `add` invocation, report the line that was appended (or skipped
+as duplicate) and the file path. Three lines max:
+
+```
+Logged to docs/learnings.md (line 1):
+- 2026-04-30 · gotcha · `lightrag,nan-embed` — qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2 poisons)
+```
+
+For a `search` invocation, just relay the script's output (it already
+prints "N match(es)" + the matching lines).
+
+Then **stop**. No commit, no push, no handoff doc. The file change is
+already on disk; the user can review or discard. If the project is a git
+repo and the user later runs WRITE mode, the new learnings.md entries
+will ride along in the handoff commit naturally — no separate commit
+needed for LEARN-mode operations.
+
+### LEARN-mode don'ts
+
+- Don't write a handoff doc. LEARN is one-shot append/query, not a session-close ceremony.
+- Don't commit or push automatically. The user invoked LEARN to record knowledge, not to publish a snapshot — if they want it on the remote immediately, they'll say so.
+- Don't update `~/.claude/handoffs/INDEX.md`. The index tracks handoff docs; learnings live in their own file and are searched directly via grep or `learn.py search`.
+- Don't paraphrase the user's intent into a different category if the wording is ambiguous. Ask: "gotcha (failure pattern), solution (working fix), or pattern (architectural shape)?" — one short question is cheaper than a mis-categorized entry that grep-searches won't find later.
 
 ---
 
@@ -280,11 +364,20 @@ Recently closed (this session-cluster):
 
 Report to the user in one or two lines: the file path, and the essential shape of the handoff (e.g., "Wrote `docs/handoffs/2026-04-24-auth-jwt-refactor.md` — 3 next steps, 1 blocker on Redis version upgrade"). Do not recap the file's contents; the user can open it.
 
-## Persist durable learnings to `/learn` (when available)
+## Persist durable learnings to `docs/learnings.md`
 
-Before commit, push **durable** learnings into the `/learn` skill so they survive as cross-session searchable knowledge — not just narrative bullets buried in one handoff doc. The Key Learnings section in the handoff is point-in-time; `/learn` is the project-local persistent layer that future sessions can `grep` without re-reading every old handoff.
+Before commit, push **durable** learnings into the project-local
+`docs/learnings.md` so they survive as cross-session searchable knowledge —
+not just narrative bullets buried in one handoff doc. The Key Learnings
+section in the handoff is point-in-time; `docs/learnings.md` is the
+persistent layer that future sessions can `grep` without re-reading every
+old handoff.
 
-**Detection**: Skip this step entirely if `/learn` isn't in the available skills list — it's an optional layer, not a hard dependency. If present, proceed.
+**Mechanism — bundled, no external dependency**: this skill ships its own
+`scripts/learn.py` that handles append, dedup, and search against
+`<project>/docs/learnings.md`. There is no external `/learn` skill or
+plugin to install — invoke the bundled script directly via Bash. The
+script is self-contained (Python stdlib only, no third-party deps).
 
 **What to push (durable signal):**
 
@@ -299,9 +392,32 @@ Before commit, push **durable** learnings into the `/learn` skill so they surviv
 - Single-event observations without a generalizable lesson
 - Anything already documented in a tech note / rules file the project owns
 
-**How to invoke**: use the Skill tool to call `/learn` for each durable bullet. The skill accepts `add "pattern" --category <gotcha|solution|pattern> --tags "comma,separated"`. One call per learning. Keep the pattern text under ~200 chars — `/learn` is for the kernel, not the explanation. Cross-reference: include the handoff filename in the tags so future searches can pull the full story (e.g., `--tags "lightrag,nan-embed,handoff:2026-04-28-rebuild"`).
+**How to invoke**: shell out to the bundled script — one call per durable
+learning. Keep the pattern text under ~200 chars (the script warns above
+250 but won't reject). Always include `handoff:<date>-<slug>` as one of
+the tags so future readers can pull the full narrative from the
+originating handoff doc:
 
-**Boundary with Key Learnings in the handoff doc**: keep both. Key Learnings remain in the handoff (narrative context, full sentences, why-it-mattered framing). `/learn` entries are the kernel of each — short, searchable, generalizable. They're written from the same source material but serve different audiences (current handoff reader vs. cross-session grep).
+```bash
+python ~/.claude/skills/handoff/scripts/learn.py add \
+  "qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2 poisons)" \
+  --category gotcha \
+  --tags "lightrag,nan-embed,handoff:2026-04-28-rebuild"
+```
+
+The script writes one line per entry to `<project>/docs/learnings.md`,
+newest entries at the top, tags backtick-quoted so `grep` can match the
+tag-list cleanly without false positives from prose mentions. Same-day
+exact-pattern duplicates are silently skipped (idempotent).
+
+**Search later sessions** with either:
+
+```bash
+grep <term> docs/learnings.md                                       # plain grep
+python ~/.claude/skills/handoff/scripts/learn.py search <term>     # case-insensitive entry-only
+```
+
+**Boundary with Key Learnings in the handoff doc**: keep both. Key Learnings remain in the handoff (narrative context, full sentences, why-it-mattered framing). `docs/learnings.md` entries are the kernel of each — short, searchable, generalizable. They're written from the same source material but serve different audiences (current handoff reader vs. cross-session grep).
 
 If unsure whether something is durable, default to **not** pushing — over-pushing dilutes search quality. Better to lose a marginal entry than poison the cross-session index.
 
