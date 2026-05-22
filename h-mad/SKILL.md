@@ -16,15 +16,32 @@ H-MAD = **Hawk Multi-Agents Development** — reusable across all of Hawk's proj
 
 | Invocation | What you do |
 |---|---|
-| `/h-mad bootstrap` | One-time per project: create `docs/` structure + `.h-mad/invariants.md` skeleton. See "Bootstrap action" below. Idempotent — safe to re-run. |
-| `/h-mad "<feature>"` | Smart-resume. Run `h_mad_resume_decision.py`; act per the returned token. |
-| `/h-mad do "<feature>"` | Force-start Phase 5. Run `h_mad_do_preconditions.py` first; refuse if non-zero. |
-| `/h-mad status [<feature>]` | Read-only. Print state from `docs/.bkit-memory.json`. Surface stale `phase = "step5"` flags (heuristic: `autonomous_entry_ts > 60min` ago AND `halt_reason = null`). |
+| `/h-mad "<feature>"` | Auto-bootstrap if needed (see §"First-run auto-bootstrap"), then smart-resume via `h_mad_resume_decision.py`; act per the returned token. |
+| `/h-mad do "<feature>"` | Auto-bootstrap if needed. Force-start Phase 5. Run `h_mad_do_preconditions.py` first; refuse if non-zero. |
+| `/h-mad status [<feature>]` | Auto-bootstrap if needed. Read-only. Print state from `docs/.bkit-memory.json`. Surface stale `phase = "step5"` flags (heuristic: `autonomous_entry_ts > 60min` ago AND `halt_reason = null`). |
 | `/h-mad reset "<feature>"` | Clear `orchestrator_state[<feature>]`. Do NOT delete docs or revert git. |
+| `/h-mad bootstrap` | Explicit bootstrap (idempotent re-run, or inspect scaffold before invoking on a feature). Not required as a first step — feature invocations auto-bootstrap. |
+
+## First-run auto-bootstrap
+
+Before running any feature-level command (`/h-mad "<feature>"`, `/h-mad do "<feature>"`, `/h-mad status`), check whether the current project root has been bootstrapped:
+
+- `<project>/.h-mad/invariants.md` exists
+- `<project>/docs/.bkit-memory.json` exists
+
+If **either** is missing, run the Bootstrap action below silently, then surface a single inline notice:
+
+> "Project not bootstrapped for /h-mad — auto-bootstrapped now. Customize `.h-mad/invariants.md` with your project's Axis B invariants before Phase 3 audit-plan dispatches (currently contains the HemaSuite worked example as a starting point)."
+
+Then proceed with the original command (resume_decision / preconditions / status). The user gets to Phase 1 brainstorm with zero extra steps; they have all of Phases 1–2 to edit `.h-mad/invariants.md` before Phase 3's audit cycles fire.
+
+Auto-bootstrap is idempotent — re-running it on an already-bootstrapped project is a no-op (every step is `[ -f ... ] || ...` guarded). Skip the notice when nothing changed.
+
+Refuse `/h-mad reset "<feature>"` if the project isn't bootstrapped — there's nothing to reset. Surface "Run /h-mad bootstrap or invoke /h-mad on a feature first."
 
 ## Bootstrap action
 
-When user invokes `/h-mad bootstrap` (no feature arg), set up the current project to use the orchestrator. The skill is globally installed; each consuming project needs a few directories + a state file. Run from current project root (`pwd` at invocation):
+Bootstrap fires either explicitly (`/h-mad bootstrap`) or implicitly (first feature-level invocation on an unbootstrapped project — see §"First-run auto-bootstrap"). The skill is globally installed; each consuming project needs a few directories + a state file. Run from current project root (`pwd` at invocation):
 
 1. **Create docs structure** (mkdir -p; safe to re-run):
    ```bash
