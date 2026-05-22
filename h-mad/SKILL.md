@@ -94,7 +94,7 @@ See `references/phase-table.md` for the full table. Summary:
 4. **Design + Audit-Design** — invoke `/pdca design`; wait for v1.0. Auto-cycle `/pdca audit-design` (adversarial + cross-doc). Handle back-propagation: if design revision changes plan decision, return to Phase 3 to re-clean plan-audit, then re-enter Phase 4 audit from cycle 1.
 5. **Implementation (autonomous)** — see Phase 5 sub-section below.
 6. **Verification (autonomous)** — invoke `/pdca analyze`; if match < 90%, `/pdca iterate` (5-cycle cap); loop until ≥90% AND 100% test pass. Phase 6a-prime is an architectural review pass before /pdca analyze.
-7. **Closure (autonomous)** — `/pdca report`, `/pdca archive`, `git add -A && git commit`, `git push origin main`.
+7. **Closure (autonomous)** — `python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py record --feature <feature>` (append cycle counts to `.h-mad/telemetry.jsonl`), then `/pdca report`, `/pdca archive`, `git add -A && git commit`, `git push origin main`. Telemetry record happens BEFORE archive (archive may clear the feature's state entry). Failure of the record step is non-fatal — log + continue.
 
 ## Phase 5 (Implementation) sub-steps
 
@@ -162,6 +162,40 @@ If `<PROJECT_ROOT>/.h-mad/invariants.md` is missing, halt with `<phase>:no_proje
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
 - `h_mad_emit_marker.sh` — `[H-MAD]` log marker writer
 - `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2)
+- `h_mad_telemetry.py` — Phase 7 record + ad-hoc summary of per-feature cycle counts
+
+## Telemetry
+
+Each successful Phase 7 closure appends one JSON-line entry to `<PROJECT>/.h-mad/telemetry.jsonl` so workflow-shape drift is observable across features. Schema:
+
+```json
+{
+  "feature": "<slug>",
+  "started_ts": "2026-05-22T15:32:01Z",
+  "completed_ts": "2026-05-22T19:47:11Z",
+  "elapsed_min": 255.2,
+  "audit_cycles": {"plan": 2, "design": 1, "impl_plan": 1},
+  "iterate_cycles": 0,
+  "last_completed_phase": 7,
+  "halt_reason": null,
+  "schema_version": 1
+}
+```
+
+The orchestrator invokes `h_mad_telemetry.py record --feature <slug>` in Phase 7 (before `/pdca archive`). If the script exits non-zero (state missing, feature key absent), log and continue — telemetry is best-effort, never blocks closure.
+
+Operator can inspect any time:
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py summary
+```
+
+Default thresholds for drift signals:
+- `audit_cycles.*` > 3 → "plan/design quality drift" warning
+- `iterate_cycles` > 3 → "implementation drift" warning
+
+These are heuristics, not gates. They flag when a feature ran more audit/iterate loops than the 1–2 norm — usually a signal that the upstream artifact (plan, design, or impl-plan) needs more rigor before dispatch, not that the workflow itself is broken.
+
+Telemetry file lives under `.h-mad/` to keep it adjacent to `invariants.md`; gitignore at project discretion.
 
 ## Prompt templates (all in ~/.claude/skills/h-mad/references/)
 
