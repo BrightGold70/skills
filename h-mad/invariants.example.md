@@ -55,8 +55,8 @@ Greppability conventions for runtime tracing.
 
 ## HemaSuite worked example (delete this section in your project)
 
-For reference — this is what HemaSuite's `.h-mad/invariants.md` would look like
-(currently inlined into the audit-prompt.template.md):
+For reference — this is HemaSuite's actual `.h-mad/invariants.md` shape (see
+`<HemaSuite>/.h-mad/invariants.md`):
 
 ### Unified-facade routing
 - Every citation op → `UnifiedReferenceEngine`

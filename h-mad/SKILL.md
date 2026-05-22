@@ -1,6 +1,6 @@
 ---
 name: h-mad
-description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workflow end-to-end. Project-agnostic methodology; loads project-specific Axis B invariants from the audit-prompt template. Use when user invokes /h-mad "<feature>", /h-mad do "<feature>", /h-mad status, or /h-mad reset "<feature>".
+description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workflow end-to-end. Project-agnostic methodology; splices project-specific Axis B invariants from `<PROJECT_ROOT>/.h-mad/invariants.md` into the audit-prompt template at dispatch time. Use when user invokes /h-mad "<feature>", /h-mad do "<feature>", /h-mad status, or /h-mad reset "<feature>".
 ---
 
 # /h-mad — 7-phase H-MAD Orchestrator (v2.2)
@@ -120,6 +120,23 @@ See `references/failure-recovery.md` for per-phase failure modes + recovery hint
 ## State schema
 
 See `references/state-schema.md` for the full `orchestrator_state.<feature>` shape (v2.2: `phase ∈ {step5, step6, step7, null}`; `audit_cycles` includes `impl_plan` key).
+
+## Audit prompt assembly
+
+At every audit dispatch (Phases 3, 4, 5b) and Phase 6a-prime architectural review, the orchestrator builds the agy prompt by splicing two files:
+
+1. **Skeleton** (project-agnostic, lives in this skill): `~/.claude/skills/h-mad/audit-prompt.template.md`
+2. **Project Axis B invariants** (project-specific, lives in the consuming repo): `<PROJECT_ROOT>/.h-mad/invariants.md`
+
+Splice procedure:
+1. Read both files.
+2. Replace `<INLINE_TARGET_DOC>` with the target plan/design/impl-plan body.
+3. Replace `<INLINE_PAIRED_PLAN>` / `<INLINE_PAIRED_DESIGN>` for design/impl-plan audits respectively (omit lines when not applicable).
+4. Replace `<INLINE_PROJECT_INVARIANTS>` with the **body** of the project's `invariants.md` (drop the file's own header/frontmatter — keep just the rubric content).
+5. Stage at `/tmp/audit_<feature>_<phase>_cycle<N>.txt`.
+6. Dispatch agy via cmux file-indirection (`cmux send --surface <N> "Use view_file to read /tmp/audit_... and execute"` + `send-key enter`).
+
+If `<PROJECT_ROOT>/.h-mad/invariants.md` is missing, halt with `<phase>:no_project_invariants` and surface `/h-mad bootstrap` as the recovery hint.
 
 ## Helper scripts (all in ~/.claude/skills/h-mad/scripts/)
 
