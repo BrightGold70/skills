@@ -16,10 +16,44 @@ H-MAD = **Hawk Multi-Agents Development** — reusable across all of Hawk's proj
 
 | Invocation | What you do |
 |---|---|
+| `/h-mad bootstrap` | One-time per project: create `docs/` structure + `.h-mad/invariants.md` skeleton. See "Bootstrap action" below. Idempotent — safe to re-run. |
 | `/h-mad "<feature>"` | Smart-resume. Run `h_mad_resume_decision.py`; act per the returned token. |
 | `/h-mad do "<feature>"` | Force-start Phase 5. Run `h_mad_do_preconditions.py` first; refuse if non-zero. |
 | `/h-mad status [<feature>]` | Read-only. Print state from `docs/.bkit-memory.json`. Surface stale `phase = "step5"` flags (heuristic: `autonomous_entry_ts > 60min` ago AND `halt_reason = null`). |
 | `/h-mad reset "<feature>"` | Clear `orchestrator_state[<feature>]`. Do NOT delete docs or revert git. |
+
+## Bootstrap action
+
+When user invokes `/h-mad bootstrap` (no feature arg), set up the current project to use the orchestrator. The skill is globally installed; each consuming project needs a few directories + a state file. Run from current project root (`pwd` at invocation):
+
+1. **Create docs structure** (mkdir -p; safe to re-run):
+   ```bash
+   mkdir -p docs/01-plan/features docs/02-design/features docs/03-analysis docs/04-report/features docs/archive .h-mad
+   ```
+
+2. **Create `docs/.bkit-memory.json` if missing**:
+   ```bash
+   [ -f docs/.bkit-memory.json ] || cat > docs/.bkit-memory.json <<'EOF'
+   {
+     "version": 1,
+     "orchestrator_state": {}
+   }
+   EOF
+   ```
+
+3. **Copy invariants example to `.h-mad/invariants.md` if missing**:
+   ```bash
+   [ -f .h-mad/invariants.md ] || cp ~/.claude/skills/h-mad/invariants.example.md .h-mad/invariants.md
+   ```
+
+4. **Surface customize-this notice**:
+   > "Bootstrap complete. Customize `.h-mad/invariants.md` with your project's Axis B invariants (currently contains HemaSuite worked example — replace with your own rules). The orchestrator inlines this file as the Axis B rubric for plan/design/impl-plan audits and the Phase 6a-prime architectural review."
+
+5. **Optionally suggest** `.gitignore` additions if user wants `docs/.bkit-memory.json` out of git (it contains in-flight orchestrator state).
+
+Bootstrap does NOT touch existing files, modify git config, install the skill itself, or author plan/design/impl-plan docs (those are Phases 3, 4, 5a).
+
+After bootstrap, the project is ready for `/h-mad "<feature>"` to begin Phase 1 brainstorm.
 
 ## Decision routing (for `/h-mad "<feature>"`)
 
