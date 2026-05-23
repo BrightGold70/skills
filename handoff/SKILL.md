@@ -5,60 +5,52 @@ description: Use this skill in three modes. WRITE mode — create a session hand
 
 # Handoff
 
-A handoff is the bridge between two sessions: WRITE the doc when ending a session, READ it when starting the next one. Both modes live in this skill because they share the same artifact and the same goal — a clean, fast resume.
-
 ## Mode routing — decide first
 
-Before doing anything else, decide which mode applies:
+Before doing anything else, identify which mode applies:
 
-- **WRITE** if the user is closing out, summarizing, wrapping up, or invoking `/handoff` plain. Skip to **§ Audience** and follow the write-mode flow through to "Commit and push".
-- **READ** if the user is loading, resuming, or asking where you left off — especially the first message after `/clear`. Follow **§ Reading a handoff (resume mode)** below and STOP at the report-back step. Do **not** fall through into write mode, and do **not** run the "Commit and push" finale (that's write-mode only).
-- **LEARN** if the user wants to record OR retrieve a single durable cross-session learning *outside* a full handoff context — phrases like "save this learning", "remember this for next time", "log this gotcha", "search past learnings for X". Jump to **§ LEARN mode — single-shot durable learning** below and STOP after the script invocation. Do **not** write a handoff doc, do **not** run "Commit and push" — LEARN is a one-shot append/query against `docs/learnings.md`, no doc artifact and no automated commit.
+| Phrase / context | Mode |
+|---|---|
+| `/handoff`, "wrap up", "session summary", "close out", "document what we did", "leave notes" | **WRITE** |
+| "read handoff", "resume", "where did we leave off", "pick up where we left off", "continue from last session", invoked right after `/clear` | **READ** |
+| "save this learning", "remember this", "log this gotcha", "capture this pattern", "add to learnings", "search past learnings" | **LEARN** |
 
-If genuinely ambiguous (rare — usually phrasing is clear), ask one short question: "Read the latest handoff, create a new one, or just log/search a learning?" Don't guess and don't do more than one mode.
+If ambiguous, default to **WRITE** for session-end invocations and **READ** for session-start ones.
+
+---
+
+## WRITE mode flags
+
+Parse flags from the invocation before doing anything else. Flags apply only to WRITE mode.
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--dry-run` | off | Draft the doc and print to stdout; do not save, commit, or run scout. Stop after drafting. |
+| `--skip-scout` | off | Skip the automation-scout phase entirely. |
+| `--skip-learnings` | off | Skip the "Persist durable learnings" phase. |
 
 ---
 
 ## Reading a handoff (resume mode)
 
-Goal: in 3–5 tool calls, restore enough state that the user can pick item 1 from "Next Steps" and start. No transcript replay, no preamble.
-
 ### Step 1: Locate the doc
 
-If the user is in a clear project context (CWD is inside a project), search **project-local** first; the index is a secondary lookup for cross-project queries.
+Check, in order:
 
-```bash
-ls -1 <project>/docs/handoffs/ 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}-' | sort | tail -1
-```
+1. **Explicit path in the user's message** — if they paste or type a path, use it.
+2. **`docs/handoffs/` in the current project** — list files, sort by name (ISO date prefix), take the newest. Confirm with the user if there are multiple candidates with different slugs.
+3. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
 
-Pick the **newest by ISO date in filename** (filenames are `YYYY-MM-DD-<slug>.md` so a lexicographic sort works). If multiple files share the newest date, take the last alphabetically — that's the latest `-2`/`-3` suffix from same-day handoffs. Auto-pick without asking; the user can always say "use the previous one".
-
-**Use the index** (`~/.claude/handoffs/INDEX.md`) when:
-
-- The user asks generically ("read my latest handoff", "where was I last working") without naming a project — the first line of the index is the answer regardless of which project it points to.
-- The CWD is a parent of multiple projects and the user gave no further hint — fall back to the index instead of asking.
-- The user references a topic but not a project ("the lightrag handoff", "that auth thing from last week") — `grep <topic> ~/.claude/handoffs/INDEX.md` is the lookup.
-
-The index entries carry absolute paths, so once you've found the right entry, just read that path directly.
-
-**Legacy fallback**: if `<project>/docs/handoffs/` is empty for the current project AND nothing in the index matches, check `<project>/.claude/handoff.md` (older single-file pattern some repos used). If that's also empty, tell the user no handoff was found and offer to (a) check a different project, (b) start fresh, or (c) write one for the work just done.
-
-If the CWD is a parent of multiple projects (e.g., `~/Coding/`) and the user named no specific project AND the index is empty, ask which subdirectory before searching — don't guess.
-
-**Worktree paths**: if the resolved handoff path contains `.claude/worktrees/<name>/`, the doc was written from inside a git worktree. Note both paths — the worktree root (`<repo>/.claude/worktrees/<name>/`) and the parent repo (`<repo>/`) — because each has independent branch/working-tree state and the user's CWD may be in either. Step 3 reconciles both.
+If no handoff is found after these checks, tell the user ("No handoff found for this project — nothing to resume from") and stop. Don't fabricate a handoff.
 
 ### Step 2: Read it
 
-Read the whole doc. It's intentionally short. Pay attention to:
-
-- **Branch** — is it the current branch? If not, surface that before any other action.
-- **Date** — compute today − doc date. Sub-day = fresh, treat in-flight claims as live. Days-old = "currently running" PIDs are almost certainly dead; treat the doc as a historical snapshot and reconcile aggressively.
-- **Next Steps** — the ordered list. Item 1 is what the user starts with.
-- **Open / Blocked Items** — these become TodoList entries.
-- **In-Flight Processes** (if present) — PIDs, log paths, ETAs for long-running work that was alive when the handoff was written. The single most load-bearing piece of state for a fresh-resume; check liveness in Step 3.
-- **Uncommitted changes** line — the doc's claim about working-tree state.
-- **Files touched** — useful for verifying paths still exist.
-- **Worktree path** (if cited at the top of the doc) — the handoff may span a worktree and its parent repo; both trees need reconciliation.
+Read the handoff file in full. Do not summarize or paraphrase — internalize it. The relevant sections are:
+- **Session Summary** — what was in flight
+- **Next Steps** — the ordered action queue
+- **Open / Blocked Items** — unresolved state
+- **In-Flight Processes** — any live PIDs or background jobs
+- **Context for Next Session** — branch, files, resume commands
 
 ### Step 3: Reconcile with reality (silent verification)
 
@@ -85,65 +77,46 @@ If the doc's Next Steps reference a file that the reconciliation pass flagged as
 
 ### Step 5: Report back and stop
 
-Lead with the essential trio: **handoff path, branch + tree state, todos restored**. Add a "Next:" line with the verbatim Next Step 1 (and its cited path/command). Keep the body to one screen — the user is mid-context-switch, not reading a status report.
-
-For a simple resume (single tree, no live processes, fresh handoff), three lines are enough:
+After reconciliation and TodoList restore, give the user a brief resume report:
 
 ```
-Resumed from docs/handoffs/2026-04-28-foo.md.
-Branch: main (matches handoff). Working tree: clean. TodoList: 4 tasks restored.
-Next: <verbatim text of Next Step 1, with its file path>.
+## Session resumed
+
+**Handoff:** docs/handoffs/2026-04-30-lightrag-guideline-rag.md
+**Branch:** main (matches)
+**Uncommitted changes:** 2 files (matches handoff)
+
+**Divergences:**
+- PID 37219 (compile_guidelines_db): exited — log mtime 3h ago. Treat as complete; verify output.
+- `protocol/sections/background.md` cited in Next Steps — file not found (may have been renamed).
+
+**Todos restored:** 4 items. Starting at:
+1. Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)
 ```
 
-For a non-trivial resume (multi-tree, live process, partial state, days-old), add tight bullet lines for each significant piece of state — these belong above "Next:" so the user sees them before they read the action:
-
-```
-Resumed from <path-to-handoff>. Handoff: 3h old, written today.
-Worktree branch: main (matches). Origin branch: feat/x (deferred-cleanup, expected).
-Working tree: 1 file modified (matches handoff's documented absolute-path swap).
-In-flight: PID 37219 still running, 2h 24m elapsed (handoff snapshot 2h 16m → on trajectory).
-TodoList: 6 tasks restored.
-Next: <verbatim text of Next Step 1>.
-```
-
-Prefix any actual divergences (state that contradicts the handoff) with "⚠" so the user can spot them at a glance — not the merely-noteworthy bullets above. If the handoff is days old, lead with that ("Handoff: 8 days old — treat in-flight claims as historical") so the user adjusts expectations before reading the rest.
-
-Then **stop**. Do not pre-emptively run any of the Next Steps. Wait for the user to say go (they may want to revise an item, skip ahead, or take a different direction the handoff didn't anticipate).
+Then stop. Don't start executing tasks — the user reads the report and decides what to do first.
 
 ### Read-mode don'ts
 
-- Don't re-write or update the handoff doc as part of resuming. The doc is a historical artifact; if state has changed, that goes in the *next* handoff.
-- Don't run the write-mode "Commit and push" finale. The user hasn't authorized commits in this session yet.
-- Don't read more than the one handoff doc unless the user asks. Earlier handoffs are git history, not active state.
-- Don't try to "fix" divergences silently (e.g., switching branches, stashing changes, recreating missing files). Surface them and let the user decide.
+- Don't rewrite or update the handoff doc in read mode — it's a historical record.
+- Don't run tests or builds as part of reconciliation.
+- Don't assume the in-flight process is still running if the doc is >4h old.
 
 ---
 
 ## LEARN mode — single-shot durable learning
 
-Goal: in 1 tool call, append (or search) a single durable cross-session
-learning to `<project>/docs/learnings.md` via the bundled `scripts/learn.py`.
-No handoff doc, no commit-and-push, no TodoList changes — pure side effect
-on the project-local learnings file.
-
-Use this mode when the user wants to capture or query *one* lesson without
-the full session-closeout ceremony. Common phrasings: "save this learning",
-"remember this for next time", "log this gotcha", "capture this pattern",
-"add to learnings", "search past learnings for X", "what learnings do we
-have on Y". The §"Persist durable learnings" section below the Audience
-section covers the same script — that section runs as a finale-step inside
-WRITE mode; LEARN mode runs the same script standalone.
+Capture a single non-obvious finding, pattern, or gotcha so it survives future `/clear` calls and new sessions. This is lighter than a full handoff — one learning, one command, done.
 
 ### Step 1: Distill the kernel
 
-Read what the user wants to capture. If they pasted a paragraph or a
-log excerpt, distill it down to ≤200 chars of generalizable kernel —
-the "X looks like Y but is actually Z" essence, NOT the full event
-narrative. The script warns above 250 chars but won't reject; over-long
-patterns dilute search quality across all future sessions.
+From the user's description (or the conversation context if they invoked LEARN without a message), extract:
 
-If the user's intent is **search** rather than capture, skip distillation
-and run the search command instead.
+- The **pattern** — a ≤200-character statement of the reusable finding. It should read like a fact, not a story ("qwen3-embedding NaN's on long inputs — substitute random unit vector, not zero vector; L2-norm poisons downstream embeddings").
+- The **category**: `gotcha` (failure pattern with diagnostic value) / `solution` (working fix that codifies a pattern) / `pattern` (architectural shape worth remembering).
+- **Tags**: comma-separated lowercase. Include `handoff:<date>-<slug>` if a handoff was written this session; `session:<date>` otherwise. Add domain tags to make future grep searches find it.
+
+If the user gave enough detail to fill all three, skip to Step 3. If not, ask one clarifying question (category or the exact pattern — whichever is ambiguous).
 
 ### Step 2: Pick category + tags
 
@@ -176,62 +149,45 @@ on top, one line per entry, tags backtick-quoted for grep cleanliness).
 
 ### Step 4: Report and stop
 
-For an `add` invocation, report the line that was appended (or skipped
-as duplicate) and the file path. Three lines max:
-
 ```
-Logged to docs/learnings.md (line 1):
-- 2026-04-30 · gotcha · `lightrag,nan-embed` — qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2 poisons)
+Learning saved to docs/learnings.md:
+  2026-04-30 · gotcha · `lightrag,nan-embed` — qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2-norm poisons)
 ```
 
-For a `search` invocation, just relay the script's output (it already
-prints "N match(es)" + the matching lines).
-
-Then **stop**. No commit, no push, no handoff doc. The file change is
-already on disk; the user can review or discard. If the project is a git
-repo and the user later runs WRITE mode, the new learnings.md entries
-will ride along in the handoff commit naturally — no separate commit
-needed for LEARN-mode operations.
+Then stop — this is a single-shot operation, not a gateway to more work.
 
 ### LEARN-mode don'ts
 
-- Don't write a handoff doc. LEARN is one-shot append/query, not a session-close ceremony.
-- Don't commit or push automatically. The user invoked LEARN to record knowledge, not to publish a snapshot — if they want it on the remote immediately, they'll say so.
-- Don't update `~/.claude/handoffs/INDEX.md`. The index tracks handoff docs; learnings live in their own file and are searched directly via grep or `learn.py search`.
-- Don't paraphrase the user's intent into a different category if the wording is ambiguous. Ask: "gotcha (failure pattern), solution (working fix), or pattern (architectural shape)?" — one short question is cheaper than a mis-categorized entry that grep-searches won't find later.
+- Don't write learnings inline into the handoff doc (that's WRITE mode's job with the "Persist durable learnings" step — LEARN mode writes *only* to `docs/learnings.md`).
+- Don't add more than one learning per LEARN invocation — if the user has several, tell them and invoke LEARN once per learning.
+- Don't pad the kernel past 200 characters to sound thorough — shorter is better.
 
 ---
 
 ## Audience
 
-The reader is a future Claude Code session opening with a fresh context — not a human teammate. That means:
+Write as if future-you is the reader: someone who knows the project deeply but has zero memory of this specific session. They've just typed `/clear`, opened a new Claude Code window, and are about to ask "where were we?". The handoff is their only briefing.
 
-- Cite file paths and line numbers, not prose descriptions.
-- Include exact commands to resume work (branch checkout, server start, env setup).
-- Don't assume prior conversation context — state things plainly.
-- Skip the narrative glue ("great session", "we discussed..."); future-you doesn't need morale or preamble.
+---
 
 ## Where to save
 
-Handoffs always live **project-local** at `<project>/docs/handoffs/YYYY-MM-DD-<slug>.md`. They version with the project's code, ship in PRs with the session commit, and survive `~/.claude/` resets. The previous problem ("where did I put yesterday's handoff?") is solved by a **central index** at `~/.claude/handoffs/INDEX.md` that maps every handoff to its absolute path. With the index, one `grep` finds anything across every project — without splitting storage.
-
 ### Filename rules
 
-- **Date** is today, in the project's local timezone.
-- **Slug** is short kebab-case describing the session focus (3–6 words). Examples: `lightrag-qwen36-upgrade`, `auth-jwt-refactor`, `billing-webhook-retry`.
-- Create `<project>/docs/handoffs/` if it doesn't exist.
-- If a file with the same slug already exists for today, append `-2`, `-3`, etc.
+```
+docs/handoffs/YYYY-MM-DD-<slug>.md
+```
 
-If you can't confidently identify the project root (e.g., the CWD is a folder containing multiple unrelated projects), ask the user which subdirectory to use before proceeding. Don't guess — a handoff dropped in the wrong repo is worse than a delayed one.
+- `YYYY-MM-DD` — today's date in ISO format (use `date +%Y-%m-%d` if unsure).
+- `<slug>` — 2–4 lowercase words from the session's main topic, hyphenated. Derive from the feature name, PDCA feature slug, or issue/ticket if one exists.
+- Examples: `2026-04-30-lightrag-guideline-rag.md`, `2026-05-01-protocol-daemon-fix.md`
 
 ### Project slug derivation
 
-Used for the index entry and the read-mode locator. In order — first that resolves wins:
-
-1. **Git remote**: `git remote get-url origin 2>/dev/null` → strip protocol/host/`.git` → take the last path segment. Examples: `git@github.com:BrightGold70/HemaSuite.git` → `HemaSuite`; `https://gitlab.com/team/web/frontend.git` → `frontend`.
-2. **Project root basename**: `basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`. Used when there's no remote (local-only repo) or no git at all.
-
-Slug derivation should not surface to the user unless ambiguous. Two projects with the same basename (e.g., two `frontend/` dirs from different orgs) are disambiguated by the git remote step in (1); if neither has a remote, treat it as ambiguous and ask.
+The `<project-slug>` field in the INDEX.md entry should match the project's canonical name:
+- If a `hpw`/`csa`/similar CLI name exists — use it.
+- Otherwise use the git repo name (last segment of `git remote get-url origin`, minus `.git`).
+- Fall back to the directory name if no remote.
 
 ### Update the central index
 
@@ -249,6 +205,8 @@ Create the file with a `# Handoffs Index\n\nNewest first. Format: ISO date · pr
 
 The reason this matters: project-local handoffs are great for versioning and PRs but bad for "what did I work on across all my projects last month" — the index is what makes that question answerable in one command (`head ~/.claude/handoffs/INDEX.md` for recent, `grep <topic> ~/.claude/handoffs/INDEX.md` for search).
 
+---
+
 ## Gather context before drafting
 
 Before you write anything, collect these in parallel:
@@ -263,13 +221,21 @@ Before you write anything, collect these in parallel:
 
    If not a git repo, skip silently — don't mention it.
 4. **Plan backlog state** — if the project keeps plan docs in a structured directory (common patterns: `docs/01-plan/features/*.plan.md`, `docs/plans/`, `specs/`), do a fast scan to surface what's still unimplemented:
-   - List the plan files and `command grep` their frontmatter for `status:` (Draft / Deferred / In-progress / Complete) and `gate:` / `blocked_by:`.
+   - List the plan files and `grep` their frontmatter for `status:` (Draft / Deferred / In-progress / Complete) and `gate:` / `blocked_by:`.
    - Check whether each plan has a corresponding `docs/04-report/features/<name>.report.md` (or equivalent). A plan without a report is a candidate "unimplemented" entry; cross-check the codebase or session for evidence it actually shipped before flagging.
    - Skip silently if the project has no such structure. Don't fabricate one. The point is to surface backlog signal that already exists, not invent a tracking system.
 5. **Live processes** — if the session launched any long-running background work that's still alive at the moment of writing (multi-hour ingests, soak tests, build pipelines, daemons started for testing): capture PID, the exact command (one line), the log path, started-at, elapsed, and a one-line "what to verify on exit". This populates the **In-Flight Processes** section. Skip silently if nothing is in flight — most sessions don't have any. The check costs nothing (`ps -p $! -o pid,etime` for each backgrounded job, or `pgrep -f <substring>` for processes the operator launched manually) and the value to a future resume is enormous: without it, the next session has to reverse-engineer "is this still going?" from log mtimes and ambiguous output.
 6. **Worktree state** — if `git rev-parse --show-toplevel` returns a path containing `.claude/worktrees/<name>/`, the session ran in a worktree. Also capture the parent repo's branch (`git -C <parent> rev-parse --abbrev-ref HEAD`) so the handoff names both. The worktree's "to resume" `cd` should point at the worktree root, not the parent.
+7. **Session observations** — if `~/.claude/homunculus/observations.jsonl` exists, read the last 50 lines. These structured observations often surface gotchas not explicit in the conversation. Use them to enrich Key Learnings extraction. Skip silently if absent.
+   ```bash
+   OBS_FILE="$HOME/.claude/homunculus/observations.jsonl"
+   [ -f "$OBS_FILE" ] && tail -50 "$OBS_FILE"
+   ```
+8. **Proactive follow-ups** — after scanning plan backlog (item 4), look for plan items with `status: Draft` or `status: In-progress` that were NOT mentioned in the session. Append them to Next Steps as `[suggested]` items — concrete (cite the plan file path), brief, ≤3 items. The goal is a warm start for the next session, not a backlog dump. Skip if no plan structure exists.
 
 Do **not** run tests, builds, or long-running commands just to populate the handoff. Use what was already observed in the session. If something wasn't verified, the handoff should say so — that's load-bearing information.
+
+---
 
 ## Required template
 
@@ -308,13 +274,11 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 
 ## In-Flight Processes
 
-<Include this section ONLY when the session is handing off long-running work that's still alive at the moment of writing — a multi-hour ingest, a soak/burn-in test, a build pipeline, a streaming job. Omit entirely otherwise. The point is to make resume mechanical: the next session can `ps -p <PID>` and `ls -la <log>` and instantly know whether to monitor, harvest results, or abandon.
-
-For each in-flight process, list: PID, command (one line), log path, started-at (HH:MM), elapsed at handoff time, ETA, expected exit signal (a log line, a file appearing, a process exit), and what to verify on completion. If the user resumes hours or days later, this section's mtime/PID checks tell them immediately whether the work is still alive.>
+<Include this section ONLY when the session is handing off long-running work that's still alive at the moment of writing — a multi-hour ingest, a soak/burn-in test, a build pipeline, a streaming job. Omit entirely otherwise.>
 
 | PID | Command | Log | Started | Elapsed @ handoff | ETA | What to check on exit |
 |---|---|---|---|---|---|---|
-| 37219 | `nohup .venv/bin/python -m scripts.compile_guidelines_db --batch ...` | `/tmp/hpw_logs/facets_ingest_20260429-1129.log` | 11:29 | 2h 16m (13/34 entries) | ~3-4h more | `yq '.documents \| length' MANIFEST.yaml` ≥ 55; grep `errors=` in log == 0 |
+| 37219 | `nohup python -m scripts.foo --batch ...` | `/tmp/foo.log` | 11:29 | 2h 16m | ~3-4h more | `grep errors= /tmp/foo.log == 0` |
 
 ## Context for Next Session
 
@@ -324,7 +288,7 @@ For each in-flight process, list: PID, command (one line), log path, started-at 
 
 **Worktree** (include only if the session ran in a git worktree, not the parent repo):
 - Worktree root: `<repo>/.claude/worktrees/<name>/` — branch: `<branch>`
-- Parent repo: `<repo>/` — branch: `<branch>` (note any deferred-cleanup state)
+- Parent repo: `<repo>/` — branch: `<branch>`
 
 **Uncommitted changes:** <one-line summary from `git status`, or "none">
 
@@ -336,146 +300,119 @@ git checkout <branch>
 \`\`\`
 
 **Related docs:**
-- <links to design docs, plans, issues referenced in the session>
-
-## Unimplemented Plans Backlog
-
-<Include this section ONLY if the project has a plan-tracking directory (e.g., `docs/01-plan/features/`). Otherwise omit entirely — do not write "None" for projects that don't use plan docs at all.
-
-When kept: a small table of plans not yet shipped, so future-you can pick one up without re-discovering the backlog. For each: file path, project (if monorepo), state (Draft / In-progress / Deferred / Blocked), and a one-line note about prereqs, gates, or what's needed to start. Also list plans that closed during this session-cluster so the recently-shipped context isn't lost. Keep this lean — link to plans, don't summarize them.>
-
-| # | Plan | Project | State | Notes |
-|---|---|---|---|---|
-| 1 | `path/to/some-plan.plan.md` | <project> | Draft, ready | <prereqs / 1-line scope> |
-| 2 | `path/to/other-plan.plan.md` | <project> | Deferred | <gate condition> |
-
-Recently closed (this session-cluster):
-- ✅ <plan name> — <report path>
+- <links to design docs, plan files, or external references the next session will need>
 ```
+
+---
 
 ## Writing guidance
 
-- **Cite, don't describe.** "Refactored auth middleware" is useless. "Replaced `validateJWT` in `src/auth/middleware.ts:87` with `@auth/jwt-verify` — old version is in git if rollback needed" is useful. The reason is that future-you can navigate to a path; prose forces re-reading the transcript.
-- **Next Steps must be actionable.** If an item reads like a goal ("improve test coverage"), rewrite it as the first concrete action ("add test for `parseInvoice` NaN case in `src/billing/invoice.test.ts`"). Goals are for plans; Next Steps are for picking up tools.
-- **Flag unverified work loudly.** If a fix was applied but not run, say so: "Patched X in `foo.ts:12`; did not re-run integration suite — verify before merging." Silently shipping "done" for unverified work is the single most common way handoffs mislead the next session.
-- **Keep each section tight.** A handoff is a map, not a transcript. If Session Summary is longer than 5 sentences, trim it.
+- **Session Summary**: 2–5 sentences max. Outcome-first (done/partial/blocked). No narrative.
+- **Key Learnings**: non-obvious only. If a fresh reader could derive it from the code or git log, omit it.
+- **Next Steps**: concrete + ordered. Each item must have a file path or a command. Vague actions ("look at the auth module") are not Next Steps.
+- **Open / Blocked Items**: name blockers explicitly. "Blocked on X" is useful. "In progress" alone is not.
+- **In-Flight Processes**: omit if nothing is alive. If present, every row needs all seven columns.
+- **Context for Next Session**: the resume command should work. Test it mentally — if a future session ran exactly those commands in that order, would they be in the right state?
+
+---
 
 ## After writing
 
-Report to the user in one or two lines: the file path, and the essential shape of the handoff (e.g., "Wrote `docs/handoffs/2026-04-24-auth-jwt-refactor.md` — 3 next steps, 1 blocker on Redis version upgrade"). Do not recap the file's contents; the user can open it.
+If `--dry-run` was set: print the drafted doc to stdout and **stop here**. Do not save, commit, or run scout.
+
+1. Save the file to `docs/handoffs/YYYY-MM-DD-<slug>.md` in the project root.
+2. Update `~/.claude/handoffs/INDEX.md` (one-line entry, newest first — see §"Update the central index").
+3. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
+4. Proceed to §"Automation scout" unless `--skip-scout` was set.
+5. Proceed to §"Commit and push".
+
+---
 
 ## Persist durable learnings to `docs/learnings.md`
 
-Before commit, push **durable** learnings into the project-local
-`docs/learnings.md` so they survive as cross-session searchable knowledge —
-not just narrative bullets buried in one handoff doc. The Key Learnings
-section in the handoff is point-in-time; `docs/learnings.md` is the
-persistent layer that future sessions can `grep` without re-reading every
-old handoff.
+After the handoff doc is saved, extract learnings that should survive future sessions — not in the handoff (which is ephemeral session context), but in the project's `docs/learnings.md` (which is a permanent, grepped, living record).
 
-**Mechanism — bundled, no external dependency**: this skill ships its own
-`scripts/learn.py` that handles append, dedup, and search against
-`<project>/docs/learnings.md`. There is no external `/learn` skill or
-plugin to install — invoke the bundled script directly via Bash. The
-script is self-contained (Python stdlib only, no third-party deps).
+**What to extract**: any item from Key Learnings that is:
+- A reusable pattern (applies next time this kind of work comes up)
+- A non-obvious gotcha (would a fresh Claude session make the same mistake?)
+- A stable architectural decision (why something was done a certain way)
 
-**What to push (durable signal):**
+**What to skip**: items that are session-specific ("we decided to defer X"), already in the code/docs ("see CLAUDE.md §F-12"), or too vague to be actionable.
 
-- Gotchas with reusable diagnostic value: "X looks like Y but is actually Z" insights, runner/library-state degradation patterns, API contract drifts that mask deeper bugs
-- Solutions that codify a pattern: "use singleton calls + reload on NaN" (the pattern), not "fixed E9-R1 today" (the event)
-- Recurring conventions or constraints just discovered: file-format quirks, version traps, environment-specific gotchas
-
-**What NOT to push (session-specific noise):**
-
-- Status updates ("rebuild PID 85062 finished")
-- Sequence-of-events narration ("first X, then Y, then Z")
-- Single-event observations without a generalizable lesson
-- Anything already documented in a tech note / rules file the project owns
-
-**How to invoke**: shell out to the bundled script — one call per durable
-learning. Keep the pattern text under ~200 chars (the script warns above
-250 but won't reject). Always include `handoff:<date>-<slug>` as one of
-the tags so future readers can pull the full narrative from the
-originating handoff doc:
+For each qualifying learning:
 
 ```bash
 python ~/.claude/skills/handoff/scripts/learn.py add \
-  "qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2 poisons)" \
-  --category gotcha \
-  --tags "lightrag,nan-embed,handoff:2026-04-28-rebuild"
+  "<≤200-char kernel>" \
+  --category gotcha|solution|pattern \
+  --tags "domain1,domain2,handoff:YYYY-MM-DD-<slug>"
 ```
 
-The script writes one line per entry to `<project>/docs/learnings.md`,
-newest entries at the top, tags backtick-quoted so `grep` can match the
-tag-list cleanly without false positives from prose mentions. Same-day
-exact-pattern duplicates are silently skipped (idempotent).
+Always include `handoff:<date>-<slug>` as a tag so the learning is cross-referenced to this session.
 
-**Search later sessions** with either:
+---
 
-```bash
-grep <term> docs/learnings.md                                       # plain grep
-python ~/.claude/skills/handoff/scripts/learn.py search <term>     # case-insensitive entry-only
+## Automation scout
+
+Scan this session's work for repeated patterns worth capturing as skills. Runs after learnings are persisted, before committing. Skip entirely if `--skip-scout` was set.
+
+### How to run
+
+Spawn an `oh-my-claudecode:explore` subagent with this prompt. If subagents are unavailable, run inline.
+
+> Review the git diff from this session (`git diff HEAD~10..HEAD`) and the conversation. Find: command pipelines the user retyped multiple times, multi-step workflows done manually without a shortcut, patterns that recurred ≥2 times, or any sequence that felt like "there should be a skill for this." For each candidate write one bullet: pattern name, recurrence count, one-line description. Cap at 5 candidates. Output plain bullets — no headers.
+
+### Where to write
+
+Append to `docs/skill-candidates.md` (create with `# Skill Candidates` header if absent):
+
+```markdown
+## YYYY-MM-DD — <session-slug>
+
+- **<pattern>**: <description> — recurrence: N — candidate: yes/maybe/no
 ```
 
-**Boundary with Key Learnings in the handoff doc**: keep both. Key Learnings remain in the handoff (narrative context, full sentences, why-it-mattered framing). `docs/learnings.md` entries are the kernel of each — short, searchable, generalizable. They're written from the same source material but serve different audiences (current handoff reader vs. cross-session grep).
+If zero candidates found, write: `## YYYY-MM-DD — <slug> — no candidates`.
 
-If unsure whether something is durable, default to **not** pushing — over-pushing dilutes search quality. Better to lose a marginal entry than poison the cross-session index.
+---
 
 ## Commit and push (default finale)
 
-After the handoff is written and the index is updated, commit all session work — including the handoff doc — and push to the project's default branch. The handoff lives in the project repo (`docs/handoffs/`) so it ships in the same commit as the code it describes; this keeps a future-you reading the handoff confident that every path/line cited in it exists on the remote.
-
-Do **not** commit `~/.claude/handoffs/INDEX.md` — that's user-global state outside any repo. The project's commit only contains project-local content.
-
-Skip silently if the project isn't a git repo, or if the user has explicitly opted out ("don't commit" / "I'll push it myself"). The user invoking `/handoff` is the authorization for this step; the working tree state is what's about to ship.
-
-The reason this lives in the handoff skill (not as a separate manual step) is that handoffs are session boundaries — leaving uncommitted work behind defeats the point of the doc. A future-you reading the handoff will reference paths and line numbers that may not exist on the remote yet; commit+push closes that gap.
+After the handoff doc is written and learnings are persisted, commit and push unless the user explicitly says not to.
 
 ### Pre-flight (run before staging)
 
-Run `git status --short` and read the output before staging anything. Two filter passes:
-
-1. **Refuse to auto-stage secrets.** Block files matching `.env*` (allow `.env.example`, `.env.sample`, `.env.template`), `*credentials*`, `*secret*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`, `*.pfx`. If any appear in `git status`, surface them to the user and ask whether to include — don't guess. The cost of accidentally pushing a secret to a shared branch is very high.
-2. **Warn on noisy artifacts.** Generated dirs (`__pycache__/`, `node_modules/`, `dist/`, `build/`, `.venv/`, `target/`, `.next/`, `.cache/`) and large binaries (>10 MB) usually shouldn't ship. If `git status` shows them as untracked, mention them and ask before staging — they may indicate a missing `.gitignore` entry.
-
-If pre-flight passes, proceed.
+```bash
+git status --short          # confirm only handoff + learnings files are staged
+git diff --stat HEAD        # sanity-check scope
+```
 
 ### Commit
 
-Use a HEREDOC for the commit message (`-m "..."` mangles newlines). Compose a subject tied to the session topic — typically a one-line summary of what shipped, not just "handoff". Body: 2-4 lines describing the actual changes; the handoff doc is the long-form, the commit body is the short-form for git log readers.
-
 ```bash
-git add -A      # only after pre-flight passes; otherwise add specific files
+git add docs/handoffs/YYYY-MM-DD-<slug>.md docs/learnings.md
+git add docs/skill-candidates.md 2>/dev/null || true   # only if scout ran
+git commit -m "chore(handoff): YYYY-MM-DD <slug>
 
-git commit -m "$(cat <<'EOF'
-<type>: <one-line session outcome>
-
-<2-4 line body — what changed and why, not a play-by-play>
-
-🤖 Co-Authored-By: Claude <model-id> <noreply@anthropic.com>
-EOF
-)"
+Session closeout: <one-line summary from Session Summary>."
 ```
 
-The `<type>:` prefix should match the project's convention (`feat:`, `docs:`, `fix:`, etc. for conventional-commits projects; whatever style `git log --oneline -10` shows for others).
+Do not use `git add -A` — only stage the handoff and learnings files.
 
 ### Push
-
-Detect the default branch from the remote — don't hardcode `main`, since plenty of repos use `master`, `develop`, `trunk`, or feature-branch workflows. The current branch is usually right; only switch branches if the user explicitly asked to.
 
 ```bash
 git push origin HEAD
 ```
 
-If `git push` fails because there's no upstream tracking, surface the failure and ask whether to set up tracking (`git push -u origin HEAD`) rather than guessing.
-
 ### Verify
 
-After the push, run `git log --oneline -3` and `git status --short` so the user (and future-you) can see the new commit hash and confirm the working tree is clean.
+```bash
+git log --oneline -3    # confirm commit landed
+```
 
 ### Don't
 
-- Force-push to a shared branch unless the user explicitly asked.
-- Skip pre-commit hooks (`--no-verify`, `--no-gpg-sign`) without operator approval — if a hook fails, fix the underlying issue and retry, don't bypass.
-- Stage and commit secrets that the pre-flight flagged. If the user insists, ask them to confirm by name once more.
-- Amend an existing commit when adding the handoff. Always create a new commit — handoffs are timestamped session markers, not edits to prior work.
+- Don't amend or force-push.
+- Don't stage unrelated changes that were open before the handoff.
+- Don't push if the user said "don't commit" or the repo is in a detached HEAD state.
