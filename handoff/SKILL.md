@@ -137,11 +137,16 @@ If the user gave enough detail to fill all three, skip to Step 3. If not, ask on
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
   "<≤200-char kernel>" \
   --category gotcha|solution|pattern \
+  --confidence 0.3|0.5|0.7|0.9 \
   --tags "domain1,domain2,handoff:2026-04-30-foo"
 
 # Search
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" search "<term>"
 ```
+
+**Confidence guide**: `0.3` = single observation, unvalidated · `0.5` = observed 2-3×
+or user confirmed once · `0.7` = repeatedly seen, no contradictions (default) ·
+`0.9` = core pattern, multiple independent confirmations. Omit `--confidence` to use 0.7.
 
 Same-day exact-pattern duplicates are silently skipped (idempotent — safe
 to re-invoke). The script writes to `<project>/docs/learnings.md` (newest
@@ -231,6 +236,12 @@ Before you write anything, collect these in parallel:
    OBS_FILE="$HOME/.claude/homunculus/observations.jsonl"
    [ -f "$OBS_FILE" ] && tail -50 "$OBS_FILE"
    ```
+   After reading, scan inline for these patterns (no external tools needed):
+   - **User corrections**: a tool call followed immediately by user rephrasing the request ("no, do X instead", "wrong approach", "revert that") → `gotcha`, suggest confidence 0.5
+   - **Error resolutions**: failed command (error output / non-zero exit) followed by successful alternative in the same session → `solution`, suggest confidence 0.7
+   - **Repeated workflows**: same command or sequence appearing ≥3 times in the transcript → `pattern`, suggest confidence 0.7
+
+   For each pattern detected, add a candidate learning to Key Learnings with the detected category and suggested confidence noted inline (e.g., `[suggested gotcha, 0.5]`). These become inputs to the "Persist durable learnings" step — the user can confirm or discard via the handoff doc.
 8. **Proactive follow-ups** — after scanning plan backlog (item 4), look for plan items with `status: Draft` or `status: In-progress` that were NOT mentioned in the session. Append them to Next Steps as `[suggested]` items — concrete (cite the plan file path), brief, ≤3 items. The goal is a warm start for the next session, not a backlog dump. Skip if no plan structure exists.
 
 Do **not** run tests, builds, or long-running commands just to populate the handoff. Use what was already observed in the session. If something wasn't verified, the handoff should say so — that's load-bearing information.
@@ -345,8 +356,13 @@ For each qualifying learning:
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
   "<≤200-char kernel>" \
   --category gotcha|solution|pattern \
+  --confidence 0.7 \
   --tags "domain1,domain2,handoff:YYYY-MM-DD-<slug>"
 ```
+
+Pick confidence based on the evidence: `0.3` for single-session observations not yet
+re-confirmed · `0.5` for corrected-once or 2-3 occurrences · `0.7` for repeatedly seen
+(safe default) · `0.9` for well-established patterns with no contradictions.
 
 Always include `handoff:<date>-<slug>` as a tag so the learning is cross-referenced to this session.
 
@@ -373,6 +389,35 @@ Append to `docs/skill-candidates.md` (create with `# Skill Candidates` header if
 ```
 
 If zero candidates found, write: `## YYYY-MM-DD — <slug> — no candidates`.
+
+### Evolution bridge (opt-in)
+
+After writing to `docs/skill-candidates.md`, check whether
+`~/.claude/homunculus/evolved/skills/` exists. If it does **and** any candidate
+has `recurrence: N` where N ≥ 3 **and** `candidate: yes`, write a minimal stub
+there so the pattern is visible to continuous-learning-v2 if installed:
+
+For each qualifying candidate, create
+`~/.claude/homunculus/evolved/skills/<pattern-slug>.md`:
+
+```markdown
+---
+name: <pattern-slug>
+description: <one-line description from candidate>
+source: handoff-scout
+recurrence: N
+session: YYYY-MM-DD
+---
+
+# <Pattern Name>
+
+Candidate graduated from `docs/skill-candidates.md` via handoff automation scout.
+Recurrence: N sessions. Promote to a full skill when the pattern stabilises further.
+```
+
+Skip silently if `~/.claude/homunculus/evolved/` does not exist — this bridge
+is opt-in for users who have continuous-learning-v2 installed. Do not create
+the directory; just skip.
 
 ---
 
