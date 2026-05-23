@@ -358,9 +358,9 @@ Scan this session's work for repeated patterns worth capturing as skills. Runs a
 
 ### How to run
 
-Spawn an `oh-my-claudecode:explore` subagent with this prompt. If subagents are unavailable, run inline.
+Run this analysis inline (no external agent or plugin required). If a read-only subagent is available, spawn one for isolation — but the inline path is the default.
 
-> Review the git diff from this session (`git diff HEAD~10..HEAD`) and the conversation. Find: command pipelines the user retyped multiple times, multi-step workflows done manually without a shortcut, patterns that recurred ≥2 times, or any sequence that felt like "there should be a skill for this." For each candidate write one bullet: pattern name, recurrence count, one-line description. Cap at 5 candidates. Output plain bullets — no headers.
+Review `git diff HEAD~10..HEAD` and the conversation. Find: command pipelines the user retyped multiple times, multi-step workflows done manually without a shortcut, patterns that recurred ≥2 times, or any sequence that felt like "there should be a skill for this." For each candidate: pattern name, recurrence count, one-line description. Cap at 5 candidates.
 
 ### Where to write
 
