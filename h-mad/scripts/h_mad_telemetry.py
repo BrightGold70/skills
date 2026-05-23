@@ -3,11 +3,11 @@
 
 Telemetry rows live at <PROJECT>/.h-mad/telemetry.jsonl (one JSON object per line,
 newest appended last). The orchestrator calls `record` from Phase 7 closure
-(before /pdca archive); operators can call `summary` anytime to inspect drift.
+(before Phase 7 archive); operators can call `summary` anytime to inspect drift.
 
 Usage:
   python3 h_mad_telemetry.py record --feature <slug> [--state PATH] [--out PATH]
-  python3 h_mad_telemetry.py summary [--in PATH] [--limit N]
+  python3 h_mad_telemetry.py summary [--input PATH] [--limit N]
 
 Exit codes:
   0 = success
@@ -23,64 +23,66 @@ import sys
 from datetime import datetime, timezone
 
 
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _elapsed_min(started: str | None, completed: str) -> float | None:
-    if not started:
-        return None
-    try:
-        t0 = datetime.fromisoformat(started.replace("Z", "+00:00"))
-        t1 = datetime.fromisoformat(completed.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return round((t1 - t0).total_seconds() / 60.0, 1)
-
-
 def cmd_record(args: argparse.Namespace) -> int:
     state_path = pathlib.Path(args.state)
     out_path = pathlib.Path(args.out)
-    try:
-        state = json.loads(state_path.read_text())
-    except FileNotFoundError:
-        sys.stderr.write(f"state file not found: {state_path}\n")
-        return 3
-    except json.JSONDecodeError as exc:
-        sys.stderr.write(f"malformed state file: {exc}\n")
-        return 3
 
-    feat_state = state.get("orchestrator_state", {}).get(args.feature)
-    if feat_state is None:
-        sys.stderr.write(f"feature not found in orchestrator_state: {args.feature}\n")
+    if not state_path.is_file():
+        print(f"WARN: state file not found at {state_path} — skipping telemetry record", file=sys.stderr)
         return 2
 
-    completed_ts = _utcnow_iso()
-    started_ts = feat_state.get("started_ts")
-    entry = {
+    try:
+        state = json.loads(state_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARN: malformed state file: {e} — skipping telemetry record", file=sys.stderr)
+        return 3
+
+    orchestrator_state = state.get("orchestrator_state") or {}
+    feat_state = orchestrator_state.get(args.feature)
+    if not feat_state:
+        print(f"WARN: feature '{args.feature}' not found in state — skipping telemetry record", file=sys.stderr)
+        return 2
+
+    audit_cycles = feat_state.get("audit_cycles") or {}
+    row = {
         "feature": args.feature,
-        "started_ts": started_ts,
-        "completed_ts": completed_ts,
-        "elapsed_min": _elapsed_min(started_ts, completed_ts),
-        "audit_cycles": feat_state.get("audit_cycles", {}) or {},
+        "recorded_ts": datetime.now(timezone.utc).isoformat(),
+        "started_ts": feat_state.get("started_ts"),
+        "last_completed_phase": feat_state.get("last_completed_phase", 0),
+        "audit_cycles": {
+            "plan": audit_cycles.get("plan", 0),
+            "design": audit_cycles.get("design", 0),
+            "impl_plan": audit_cycles.get("impl_plan", 0),
+        },
         "iterate_cycles": feat_state.get("iterate_cycles", 0),
-        "last_completed_phase": feat_state.get("last_completed_phase"),
         "halt_reason": feat_state.get("halt_reason"),
-        "schema_version": 1,
     }
+
+    # Compute elapsed if started_ts is available
+    if row["started_ts"]:
+        try:
+            start = datetime.fromisoformat(row["started_ts"].replace("Z", "+00:00"))
+            elapsed = datetime.now(timezone.utc) - start
+            row["elapsed_min"] = round(elapsed.total_seconds() / 60, 1)
+        except (ValueError, TypeError):
+            pass
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry) + "\n")
-    print(f"recorded: {entry['feature']} → {out_path}")
+    with out_path.open("a") as f:
+        f.write(json.dumps(row) + "\n")
+
+    print(f"Telemetry recorded to {out_path}: feature={args.feature}, "
+          f"audit_cycles={row['audit_cycles']}, iterate_cycles={row['iterate_cycles']}")
     return 0
 
 
 def cmd_summary(args: argparse.Namespace) -> int:
     in_path = pathlib.Path(args.input)
     if not in_path.is_file():
-        print(f"no telemetry yet ({in_path}).")
+        print(f"No telemetry file at {in_path}")
         return 0
-    rows: list[dict] = []
+
+    rows = []
     for line in in_path.read_text().splitlines():
         line = line.strip()
         if not line:
@@ -89,25 +91,26 @@ def cmd_summary(args: argparse.Namespace) -> int:
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             continue
+
     if not rows:
-        print("no telemetry entries.")
+        print("No telemetry rows found.")
         return 0
 
     tail = rows[-args.limit:]
-    header = f"{'feature':<35} {'plan':>4} {'des':>4} {'impl':>4} {'iter':>4} {'min':>6} {'status':<10}"
-    print(header)
-    print("-" * len(header))
+    print(f"=== /h-mad telemetry — last {len(tail)} of {len(rows)} records ===\n")
+    print(f"{'feature':<30} {'phase':>5} {'plan_a':>6} {'des_a':>6} {'impl_a':>6} {'iter':>5} {'elapsed':>8}")
+    print("-" * 75)
     for r in tail:
         ac = r.get("audit_cycles") or {}
-        plan = int(ac.get("plan", 0) or 0)
-        design = int(ac.get("design", 0) or 0)
-        impl = int(ac.get("impl_plan", 0) or 0)
-        it = int(r.get("iterate_cycles", 0) or 0)
-        elapsed = r.get("elapsed_min")
-        elapsed_s = f"{elapsed:.0f}" if isinstance(elapsed, (int, float)) else "?"
-        status = "halted" if r.get("halt_reason") else "complete"
-        feat = str(r.get("feature", "?"))[:34]
-        print(f"{feat:<35} {plan:>4} {design:>4} {impl:>4} {it:>4} {elapsed_s:>6} {status:<10}")
+        print(
+            f"{r.get('feature', '?'):<30}"
+            f"{r.get('last_completed_phase', 0):>5}"
+            f"{ac.get('plan', 0):>7}"
+            f"{ac.get('design', 0):>7}"
+            f"{ac.get('impl_plan', 0):>7}"
+            f"{r.get('iterate_cycles', 0):>6}"
+            f"{str(r.get('elapsed_min', '?')) + 'm':>9}"
+        )
 
     n_high_audit = sum(
         1 for r in tail

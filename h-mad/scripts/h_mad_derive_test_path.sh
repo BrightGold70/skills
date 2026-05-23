@@ -11,15 +11,10 @@ PROD_PATH="${1:-}"
 [ -z "$PROD_PATH" ] && exit 0
 
 # Non-.py files → empty
-case "$PROD_PATH" in
-  *.py) ;;
-  *) exit 0 ;;
-esac
+[[ "$PROD_PATH" != *.py ]] && exit 0
 
 # Test files themselves → empty (caller shouldn't ask)
-case "$PROD_PATH" in
-  *test_*.py|*/tests/*|*conftest*) exit 0 ;;
-esac
+[[ "$PROD_PATH" == *test_* || "$PROD_PATH" == */tests/* || "$PROD_PATH" == *conftest* ]] && exit 0
 
 # Extract project root
 case "$PROD_PATH" in
@@ -40,8 +35,7 @@ INTERNAL="${PROD_PATH#${PROJECT}/}"
 MOD_BASENAME=$(basename "$INTERNAL" .py)
 
 # Skip top-level __init__.py and similar
-case "$MOD_BASENAME" in
-  __init__|__main__) exit 0 ;;
-esac
+[ "$MOD_BASENAME" = "__init__" ] && exit 0
+[ "$MOD_BASENAME" = "__main__" ] && exit 0
 
 echo "${PROJECT}/tests/test_${MOD_BASENAME}.py"

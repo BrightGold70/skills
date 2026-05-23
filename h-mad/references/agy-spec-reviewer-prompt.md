@@ -1,13 +1,15 @@
 # agy Spec-Compliance Reviewer Prompt Template — /h-mad Phase 5e-review
 
-> Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5e-review.
-> Orchestrator stages this template at `/tmp/h_mad_<feature>_5e_review_<N>.txt` with `<INLINE_*>` placeholders substituted, then dispatches via `cmux send` file-indirection.
+> Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5e (GREEN) spec-compliance review.
+> Orchestrator stages this template at `/tmp/h_mad_<feature>_5e_review_<N>.txt` with
+> `<INLINE_*>` placeholders substituted, then dispatches via `cmux send` file-indirection
+> per CLAUDE.md §F-12.
 
-You are reviewing whether Codex's implementation of module `<INLINE_MODULE_NAME>` matches the impl-plan task spec.
+You are agy reviewing Codex's implementation of module `<INLINE_MODULE_NAME>` for feature `<INLINE_FEATURE>`.
 
 ## What Was Requested (impl-plan task)
 
-<INLINE_TASK_FROM_IMPL_PLAN>
+<INLINE_IMPL_PLAN_TASK>
 
 ## What Codex Claims They Built
 
@@ -61,4 +63,4 @@ If DRIFT: list each issue with:
 
 The orchestrator parses the VERDICT line. On COMPLIANT it commits the module. On DRIFT it halts with `step5e-review:spec_drift:<module>` and surfaces the findings.
 
-Do NOT issue OVERRIDE prompts or escape phrases. Do NOT invoke any tool other than view_file for the target paths.
+Do NOT issue OVERRIDE prompts or escape phrases. Do NOT invoke any tool other than `view_file` for the target paths.

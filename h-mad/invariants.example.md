@@ -1,10 +1,9 @@
 # H-MAD Project Invariants — Axis B Rubric (Template)
 
-> Copy this file to `<PROJECT_ROOT>/.h-mad/invariants.md` and customize for your project.
-> The /h-mad orchestrator inlines this file's content as **Axis B** of the audit rubric
-> when dispatching agy for plan/design/impl-plan audits (Phases 3, 4, 5b) and the
-> architectural review (Phase 6a-prime). Any violation of an invariant listed here is
-> auto-classified `must-fix` — agy cannot downgrade.
+> Copy this file to `<PROJECT_ROOT>/.h-mad/invariants.md` and replace the
+> generic categories + HemaSuite worked example with your own project's rules.
+> The `/h-mad` orchestrator inlines this file verbatim as the Axis B rubric
+> for all plan, design, and impl-plan audits.
 
 ## What goes in this file
 
@@ -20,89 +19,79 @@ is mandatory, and what the violation looks like.
 ## Generic categories (rename to fit your project)
 
 ### Unified-facade routing
-
-Operations that must go through a single canonical entry point rather than direct calls.
-
-- Every `<concern A>` operation MUST route through `<UnifiedXxxModule>`. Direct calls to legacy `<old_module>` are forbidden.
-- Every `<concern B>` operation MUST route through `<UnifiedYyyFacade>`.
+- All external calls to subsystem X MUST go through `<FacadeClass>`. Direct
+  instantiation of `<ConcreteImpl>` outside `<FacadeClass>` is a violation.
 
 ### Data-source priority
-
-Order-of-fallback rules for external data sources.
-
-- `<primary source>` first; fall back to `<secondary source>` only when `<primary>` returns no result.
-- No path that uses `<secondary>` while claiming `<primary>` is the source.
+- Data source A is authoritative. Data source B is fallback only — never called
+  when source A has data.
 
 ### Hard rules from the project's CLAUDE.md (or equivalent)
-
-If your project documents numbered hard rules, list them here verbatim or by reference.
-
-- Hard Rule N: `<exact wording>` — violation = must-fix.
+- [Copy your project's hard rules from CLAUDE.md here — e.g. path safety, stats
+  from R only, NLM subprocess gateway, etc.]
 
 ### Pipeline guarantees
-
-Architectural invariants enforced by specific helper modules that future code must respect.
-
-- Any change touching `<pipeline-X>` MUST cite the helper module + logger marker (e.g., `[X-GUARD] <feature> <op> <decision>`).
+- [List invariants about output guarantees, idempotency, atomicity, etc.]
 
 ### Logger markers
-
-Greppability conventions for runtime tracing.
-
-- Per-feature log lines use the marker `[<PROJECT>] <feature> phase<N> <decision>` and are written via `<emit-marker-script>`.
+- All async/background operations MUST emit `[<MODULE>]` log markers so
+  failures are diagnosable from logs alone.
 
 ---
 
 ## HemaSuite worked example (delete this section in your project)
 
-For reference — this is HemaSuite's actual `.h-mad/invariants.md` shape (see
-`<HemaSuite>/.h-mad/invariants.md`):
+> The following is a filled-out Axis B rubric for the HemaSuite project.
+> It exists to show what a completed invariants.md looks like. Delete it
+> and replace with your own project's rules.
 
 ### Unified-facade routing
-- Every citation op → `UnifiedReferenceEngine`
-- Every parallel I/O → `UnifiedParallelEngine`
-- Every evidence/NLM op → `KnowledgeOrchestrator`
-- Every agent call → `UnifiedAgentDaemon`
-- Every NLM subprocess → `tools/nlm_cli.py`
-- Every figure → `UnifiedFigureEngine`
-- Every table → `UnifiedTableEngine`
-- Every entry-point → `UnifiedLauncher`
+- All evidence-retrieval calls (PubMed search, NLM query, guideline lookup)
+  MUST go through `KnowledgeOrchestrator`. Direct instantiation of
+  `PubMedClient`, `NLMClient`, or `GuidelineDB` outside `KnowledgeOrchestrator`
+  is a violation.
+- All reference operations (add, retrieve, format citation, verify) MUST go
+  through `UnifiedReferenceEngine`. Direct calls to `EndNoteAdapter` or
+  `CitationFormatter` outside `URE` are violations.
 
 ### Data-source priority
-- NLM first, PubMed fallback only when NLM has no relevant data
+- NotebookLM is authoritative for clinical evidence. PubMed is fallback only.
+  Any design that calls PubMed when NLM has relevant data violates data-source
+  priority.
 
 ### NLM-Hard-Dependency
-- NLM-touching paths MUST produce NLM-grounded output OR halt clean
-- "Skip NLM if down" is a violation
+- All NotebookLM CLI interactions MUST go through `tools/nlm_cli.py`. Direct
+  invocation of the `nlm` binary from any other module is a violation.
 
 ### KO ownership of NLM lifecycle
-- `notebook_id` must NOT be passed outside `KnowledgeOrchestrator`
+- `KnowledgeOrchestrator` owns NLM session lifecycle (init, query, teardown).
+  No other module may call `nlm_cli.py` independently.
 
 ### Hard Rule 5 (stats)
-- No p-values, CIs, or test statistics generated textually — must come from R/CSA computation
+- All p-values and confidence intervals MUST originate from R computation via
+  `clinical-statistics-analyzer`. Generating statistical values textually is a
+  violation.
 
 ### Pipeline-guarantee citations
-- Any change touching `scaffold-echo-guard`, `nlm-hard-dependency`, `lightrag-*` (model-config / filter-enforcement), or `review-round Hard-Rule-8` pipelines must cite the helper module and logger marker
+- All manuscript sections with factual claims MUST cite a PMID present in
+  the project's `data/references.enl` library. Uncited factual claims are
+  a violation.
 
 ---
 
 ## How agy uses this file
 
-When dispatched for an audit, the orchestrator inlines this file's body (Generic
-Categories section + your custom additions, MINUS the worked example) as the
-"Axis B" rubric in the audit-prompt template. agy then:
-
-1. Reads the plan/design/impl-plan target document.
-2. Flags any line/section that violates an Axis B invariant as **must-fix**.
-3. Cannot downgrade Axis B violations to should-fix or nit.
-4. Returns audit output with `axis: B` + `invariant: <tag>` per finding.
-
-The pass-gate (`## Must-fix` count = 0) blocks phase advancement until all Axis B
-violations are resolved or operator-overridden.
+agy reads this file verbatim as the Axis B section of the audit rubric. Any
+finding that violates an Axis B rule is auto-classified as `## Must-fix`
+regardless of how minor it looks — you cannot downgrade an Axis B violation
+to Should-fix or Nit.
 
 ## Tips
 
-- **Be specific.** "Use the unified module" is too vague. "Citation operations MUST route through `UnifiedReferenceEngine.process()`; direct calls to `endnote_writer.write_refs()` are forbidden" is the right shape.
-- **Cite the source.** If an invariant comes from a numbered Hard Rule in your CLAUDE.md, reference it by number so reviewers can verify the wording.
-- **Keep it tight.** Aim for 5–15 invariants. More than that suggests you've conflated Axis A (generic quality) with Axis B (project-specific architecture). Move the Axis A items out.
-- **Update over time.** As your project's architecture evolves, edit this file. The skill picks up the latest version at dispatch time.
+- Keep invariants short (1-2 sentences each).
+- Use negative phrasing ("MUST NOT", "is a violation") rather than positive
+  ("should", "ideally") — auditors pattern-match on violations, not ideals.
+- If a rule has exceptions, state them inline ("except during unit tests that
+  mock the facade").
+- Don't list invariants that are obvious from the code structure — only rules
+  that an auditor might not know without domain context.

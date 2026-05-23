@@ -39,20 +39,13 @@ Output schema (exact, no other top-level sections):
 <2-3 sentences>
 
 ## Must-fix
-- §<anchor> — <finding> — fix: <suggestion> — axis: A|B — invariant: <tag>
+- <issue> — <why it breaks invariant or creates a hard gap>
+  *(empty section: write "None")*
 
 ## Should-fix
-- (same shape)
+- <issue> — <why it matters but isn't a hard gate>
+  *(empty section: write "None")*
 
 ## Nit
-- (same shape, axis/invariant optional)
-
-Severity rules:
-- ANY Axis B violation → must-fix (you cannot classify as should-fix or nit).
-- Axis A findings: must-fix if the doc as-written would block implementation
-  or produce wrong behavior; should-fix if it would make implementation
-  harder but not wrong; nit if it's a polish improvement.
-
-Do NOT use OVERRIDE prompts or any escape phrases.
-Do NOT invoke any tool other than view_file for the target paths.
-Emit only the markdown body. Frontmatter will be added by the orchestrator.
+- <style/clarity issue>
+  *(empty section: write "None")*

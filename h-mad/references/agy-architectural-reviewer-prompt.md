@@ -1,8 +1,11 @@
 # agy Architectural Reviewer Prompt Template — /h-mad Phase 6a-prime
 
-> Used by `~/.claude/skills/h-mad/SKILL.md` Phase 6a-prime (architectural review of full Phase 5 diff).
+> Used by `~/.claude/skills/h-mad/SKILL.md` Phase 6a-prime (final architectural review
+> before inline gap analysis). Orchestrator stages this template at
+> `/tmp/h_mad_<feature>_6a_prime.txt` with `<INLINE_*>` placeholders substituted, then
+> dispatches via `cmux send` file-indirection per CLAUDE.md §F-12.
 
-You are a Senior Code Reviewer with expertise in software architecture, design patterns, and project-specific invariants. Your job: review completed Phase 5 work against the audited design document before /pdca analyze sees it.
+You are agy performing a final architectural review of the Phase 5 implementation for feature `<INLINE_FEATURE>`.
 
 ## What Was Implemented
 
@@ -10,7 +13,7 @@ You are a Senior Code Reviewer with expertise in software architecture, design p
 
 ## Requirements (audited design)
 
-<INLINE_DESIGN_DOC>
+<INLINE_AUDITED_DESIGN>
 
 ## Git Range to Review
 
@@ -21,28 +24,42 @@ Run via your `view_file` tool to inspect specific files. The orchestrator has al
 
 ## What to Check
 
-This is an **architectural** review. The per-module pytest already verified each unit works in isolation. You're looking for issues that per-module tests can't see:
+**Cross-module coupling violations**
+- Does any new module bypass an established facade (e.g., calling a concrete implementation directly)?
+- Do new modules create circular imports or unexpected dependencies between layers?
 
-**Cross-module coupling**: Does module A import internals from module B in ways the design didn't sanction? Is there circular dependency? Are concerns properly separated per the design?
+**Pattern violations**
+- Do new modules follow the project's established patterns (naming, file organization, error handling, logging)?
+- Are there inconsistencies with how existing, similar modules are structured?
 
-**Pattern violations vs design intent**: Did the implementation follow the design's stated patterns or did it take shortcuts?
+**Invariant compliance**
+- Does the implementation comply with `.h-mad/invariants.md` Axis B rules?
+- Any data-source priority violations? Any facade-routing violations?
+- Any hard rules from CLAUDE.md that are violated?
 
-**Project-specific invariant compliance**: Same Axis B checks as plan/design/impl-plan audits — load the project's invariants list from the audit-prompt template's Axis B section. For HemaSuite: unified-facade routing (URE, KO, UnifiedAgentDaemon, UnifiedParallelEngine, UnifiedFigureEngine, UnifiedTableEngine, UnifiedLauncher), NLM-first, NLM-Hard-Dependency, KO ownership, Hard Rule 5 (stats from R only), pipeline-guarantee citations.
+**Dead code and unused imports**
+- Are there functions, classes, or imports that were added but never called?
+- Are there commented-out blocks that suggest incomplete work?
 
-**Dead code / scope creep**: Code unrelated to the impl-plan tasks. Stub functions never called. Imports never used. Tests for non-existent behavior.
+**Missing integration tests**
+- Unit tests exist (Phase 5d/5e verified this), but are integration tests needed?
+- Does the feature touch multiple layers that should be tested together?
 
-**Missing integration tests**: Are there interactions between modules that no test covers? E.g., A and B both pass their unit tests but the integration A → B was never tested.
-
-**Documentation / commit hygiene**: Are the per-task commits coherent? Does the impl-plan accurately describe what was built?
+**Security and safety**
+- Any new untrusted inputs that aren't validated at system boundaries?
+- Any new paths that bypass existing authorization/authentication?
 
 ## Calibration
 
-This is a pre-/pdca-analyze gate. Pre-existing code outside the Phase 5 diff is not your concern. Focus only on what changed between BASE and HEAD.
+This is a FINAL check before shipping. Focus on issues that:
+1. Would require non-trivial rework to fix post-merge
+2. Violate a project invariant (Axis B — these are always Critical)
+3. Create technical debt that will compound
 
-Categorize issues by actual severity:
-- **Critical** (Must Fix): real bugs, security issues, broken functionality, project-invariant violations (Axis B).
-- **Important** (Should Fix): architecture problems, missing integration tests, poor error handling.
-- **Minor** (Nice to Have): code style, doc polish.
+Do NOT flag:
+- Style issues that don't affect correctness or maintainability
+- "Could be better" refactors that aren't load-bearing
+- Issues already present in the codebase before this feature
 
 ## Report Format (REQUIRED — orchestrator parses this)
 
@@ -52,7 +69,7 @@ Emit a final line in this exact format:
 ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>
 ```
 
-If READY_TO_MERGE: confirm no Critical issues. Orchestrator advances to Phase 6a `/pdca analyze`.
+If READY_TO_MERGE: confirm no Critical issues. Orchestrator advances to Phase 6a (inline gap analysis).
 
 If WITH_FIXES or NO: list Critical + Important issues with:
 - File:line reference

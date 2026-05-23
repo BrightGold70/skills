@@ -1,7 +1,9 @@
 # Codex Implementer Prompt Template — /h-mad Phase 5d / 5e
 
 > Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5d (RED) and 5e (GREEN).
-> Orchestrator stages this template at `/tmp/h_mad_<feature>_<phase>_<N>.txt` with `<INLINE_*>` placeholders substituted, then dispatches via `cmux send` file-indirection per CLAUDE.md §F-12.
+> Orchestrator stages this template at `/tmp/h_mad_<feature>_<phase>_<N>.txt` with
+> `<INLINE_*>` placeholders substituted, then dispatches via `cmux send` file-indirection
+> per CLAUDE.md §F-12.
 
 You are Codex implementing module `<INLINE_MODULE_NAME>` for feature `<INLINE_FEATURE>`.
 
@@ -37,31 +39,23 @@ For GREEN phase (5e): implement the minimal code to make the failing tests pass.
 
 ## Code Organization
 
-You reason best about code you can hold in context at once. Keep this in mind:
-- Follow the file structure dictated by the impl-plan task
-- Each file one clear responsibility
-- Follow existing patterns in the codebase (read neighboring files if unsure)
-- Don't restructure things outside your task
+Follow the project's existing patterns:
+- Match file organization, naming conventions, and import style of adjacent modules.
+- Don't create new abstractions unless the task explicitly requires them.
+- Don't over-engineer: implement exactly what the task specifies.
 
 ## When You're in Over Your Head
 
-It is always OK to stop and report BLOCKED. Bad work is worse than no work.
-
-STOP and report BLOCKED when:
-- Architectural decisions with multiple valid approaches that the impl-plan doesn't disambiguate
-- Need to understand code beyond what was provided
-- Uncertain whether your approach is correct
-- Task involves restructuring existing code in ways the plan didn't anticipate
+If you hit a blocker (missing dependency, conflicting requirement, ambiguous spec), report `STATUS: BLOCKED` with a specific description. Do not silently produce partial work.
 
 ## Before Reporting Back: Self-Review
 
-Review your work with fresh eyes:
-- **Completeness**: Did I fully implement the task? Edge cases handled?
-- **Quality**: Names clear? Code clean?
-- **Discipline**: Followed YAGNI? Followed existing patterns?
-- **Testing**: Tests verify behavior? Followed TDD (RED before GREEN)?
-
-Fix any issues during self-review before reporting.
+Before reporting status, re-read the task description and verify:
+- [ ] Every acceptance criterion has a corresponding test
+- [ ] Every test that should fail (RED) is actually failing
+- [ ] Every test that should pass (GREEN) is actually passing
+- [ ] No production code was modified during RED phase
+- [ ] No tests were weakened to force GREEN
 
 ## Report Format (REQUIRED — orchestrator parses this)
 

@@ -28,30 +28,28 @@ Per-feature state under top-level key `orchestrator_state`. Pre-existing bkit fi
 
 ## Field semantics (v2.2)
 
-| Field | Type | Purpose |
+| Field | Type | Description |
 |---|---|---|
-| `feature` | string | Slug (matches key) |
-| `started_ts` | ISO 8601 | When `/h-mad "<feature>"` first ran |
-| `last_completed_phase` | int 0–7 | Highest phase that passed its gate (v2.2: was 0–9 in v1) |
-| `current_phase` | int 0–7 | Phase currently in progress |
-| `phase` | enum `step5 \| step6 \| step7 \| null` | Hook-readable tag. Only `step5` arms hook. (v2.2: was step7/step8/step9 in v1) |
-| `autonomous_entry_ts` | ISO 8601 \| null | Set on Phase 5 entry; enables future watchdog |
-| `audit_cycles.plan` / `.design` / `.impl_plan` | int ≥ 0 | Per-phase cycle count for 5-cap. (v2.2: `impl_plan` key NEW for Phase 5b) |
-| `iterate_cycles` | int ≥ 0 | Phase 6b cap |
-| `production_paths_needing_red_tests` | array of strings | Captured by writing-plans parse; hook allowlist hint (deferred) |
-| `halt_reason` | string \| null | `<phase>:<sub-step>:<short-description>` |
-| `halt_ts` | ISO 8601 \| null | Populated alongside halt_reason |
-| `last_marker` | string | Most recent `[H-MAD]` log line |
+| `feature` | string | Feature slug (matches key in `orchestrator_state`) |
+| `started_ts` | ISO datetime | When Phase 1 was entered |
+| `last_completed_phase` | int 0–7 | Last phase that passed its gate |
+| `current_phase` | int 0–7 | Phase currently executing (same as last_completed_phase+1 during normal flow) |
+| `phase` | `"step5"` \| `"step6"` \| `"step7"` \| `null` | Hook-arm flag. Non-null = TDD gate active. Set to `null` on phase completion or halt. |
+| `autonomous_entry_ts` | ISO datetime \| null | When Phase 5 autonomous block was entered. Used by `/h-mad status` stale-flag heuristic. |
+| `audit_cycles` | object | Count of audit iterations consumed per doc type. Keys: `plan`, `design`, `impl_plan`. |
+| `iterate_cycles` | int | Count of inline iterate cycles consumed in Phase 6b. |
+| `production_paths_needing_red_tests` | string[] | Paths that still need failing tests (populated by 5d, cleared by 5e). |
+| `halt_reason` | string \| null | `"<phase>:<sub>:<desc>"` when halted; null otherwise. |
+| `halt_ts` | ISO datetime \| null | When halt occurred. |
+| `last_marker` | string | Last `[H-MAD]` marker emitted. |
 
 ## Concurrency rule
 
-Only ONE feature can have `phase = "step5"` at a time. If user tries `/h-mad do "<feature>"` for a second feature while another is in Phase 5, refuse with explicit error.
-
-Other phases (manual) can be in-flight for multiple features simultaneously.
+Only one feature may have `phase != null` at a time per machine. The PreToolUse TDD gate hook checks ALL features in `orchestrator_state` for a non-null `phase` — if any is active, it arms for that feature. Running two features through Phase 5 concurrently is not supported.
 
 ## Validation
 
-Schema lives at `scripts/h_mad_state_schema.json`. Validate before writing:
+Schema lives at `~/.claude/skills/h-mad/scripts/h_mad_state_schema.json`. Validate before writing:
 
 ```bash
 python3 -c "
