@@ -134,13 +134,13 @@ If the user gave enough detail to fill all three, skip to Step 3. If not, ask on
 
 ```bash
 # Capture
-python "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
   "<≤200-char kernel>" \
   --category gotcha|solution|pattern \
   --tags "domain1,domain2,handoff:2026-04-30-foo"
 
 # Search
-python "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" search "<term>"
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" search "<term>"
 ```
 
 Same-day exact-pattern duplicates are silently skipped (idempotent — safe
@@ -342,7 +342,7 @@ After the handoff doc is saved, extract learnings that should survive future ses
 For each qualifying learning:
 
 ```bash
-python "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
   "<≤200-char kernel>" \
   --category gotcha|solution|pattern \
   --tags "domain1,domain2,handoff:YYYY-MM-DD-<slug>"
