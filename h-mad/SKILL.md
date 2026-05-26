@@ -72,7 +72,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 1. **Brainstorm** — run inline brainstorm protocol (`references/inline-protocols.md §Phase 1`). Output: `docs/01-plan/features/<feature>-brainstorm.md`. Wait for user approval.
 2. **Specify** — run inline spec protocol (`references/inline-protocols.md §Phase 2`). Output: `docs/01-plan/features/<feature>.spec.md`. Wait for user approval.
-3. **Plan + Audit-Plan** — run inline plan generation (`references/inline-protocols.md §Phase 3`). Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan via agy → awk gate → if must-fix > 0, surface bullets + wait for user revision → re-audit. Exit when must-fix = 0 OR halt at 5-cycle cap.
+3. **Plan + Audit-Plan** — run inline plan generation (`references/inline-protocols.md §Phase 3`). Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan via agy → awk gate → if must-fix > 0 OR should-fix > 0, surface bullets + wait for user revision → re-audit. **Exit ONLY when both must-fix = 0 AND should-fix = 0.** No cycle cap — the rationale is that if errors are already known (whether breakage-level or improvement-level), shipping them is worse than burning more cycles. Operator escape at any cycle: author `.audit.v<N+1>.md` with `## Acknowledged-not-fixed` section listing the should-fix items the operator chooses to defer, commit `[audit-override]`, and the gate treats those items as cleared.
 4. **Design + Audit-Design** — run inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3. Back-propagation: if design revision invalidates a plan decision, return to Phase 3 to re-clean, then re-enter Phase 4 audit from cycle 1.
 5. **Implementation (autonomous)** — see Phase 5 sub-section below.
 6. **Verification (autonomous)** — run inline gap analysis (`references/inline-protocols.md §Phase 6`). If match rate < 90%, run inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. Loop until ≥90% AND 100% test pass. Phase 6a-prime is an agy architectural review before gap analysis.
@@ -81,7 +81,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 ## Phase 5 (Implementation) sub-steps
 
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
-- **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0, regenerate impl-plan with must-fix bullets appended; cycle until 0 OR 5-cycle cap → halt `step5b:impl_plan_audit_max_cycles`.
+- **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
 - **5d** — RED dispatch via cmux (see `references/codex-implementer-prompt.md`). Verify Codex + agy panes alive (`cmux tree --all`); refuse if missing → halt `step5d:no_<agent>_pane`. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
 - **5e** — GREEN dispatch via cmux (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
@@ -144,11 +144,11 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
    ```
 8. Capture: `cmux read-screen --surface <agy-surface> --lines 50`.
 9. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
-10. Run awk gate:
+10. Run awk gate — counts bullets in BOTH `## Must-fix` AND `## Should-fix` sections (Acknowledged-not-fixed override: items listed under `## Acknowledged-not-fixed` in a sidecar `.audit.v<N+1>.md` are excluded from the count by the operator):
     ```bash
-    awk '/^## Must-fix/{f=1;next} /^## /{f=0} f && /^- /{c++} END{exit (c>0)}' <audit-file>
+    awk '/^## Must-fix/{f=1;next} /^## Should-fix/{f=1;next} /^## /{f=0} f && /^- /{c++} END{exit (c>0)}' <audit-file>
     ```
-    Exit 0 = gate passes. Exit 1 = gate fails (must-fix > 0).
+    Exit 0 = gate passes (must-fix=0 AND should-fix=0). Exit 1 = gate fails (at least one must-fix or should-fix item remains). Nits never block.
 
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 

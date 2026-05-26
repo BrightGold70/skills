@@ -16,14 +16,11 @@
 |---|---|---|---|
 | 1–2 | User declines | `<phase>:user_declined` | "Edit artifact; re-run `/h-mad "<feature>"`" |
 | 3 | Inline plan generation failed | `step3:plan_gen_failed` | "Inspect error; re-run Phase 3" |
-| 3 | 5 audit cycles, must-fix > 0 | `step3:audit_max_cycles` | "Operator override: author `.audit.v6.md` with `## Acknowledged-not-fixed`; commit `[audit-override]`; re-run" |
 | 3, 4, 5 | Cmux pane not alive | `<phase>:no_<agent>_pane` | "Launch agent in cmux (`cmux split-window --command 'codex'` or `cmux split-window --command 'agy --dangerously-skip-permissions'`); re-run" |
 | 3, 4 | agy dispatch fail (cmux 400) | `<phase>:agy_dispatch_failed` | "Restart agy pane per CLAUDE.md §F-12; re-run" |
 | 4 | Inline design generation failed | `step4:design_gen_failed` | "Inspect error; re-run Phase 4" |
-| 4 | 5 audit cycles, must-fix > 0 | `step4:audit_max_cycles` | (same as Phase 3) |
 | 4 | Back-propagation loop ≥ 3 times | `step4:back_prop_max` | "Manual review; revise both plan and design; re-run" |
 | 5a | Impl-plan generation failed | `step5a:impl_plan_gen_failed` | "Inspect error; re-run Phase 5a" |
-| 5b | impl-plan audit must-fix > 0 after 5 cycles | `step5b:impl_plan_audit_max_cycles` | "Operator override: author `.impl-plan.audit.v6.md` with `## Acknowledged-not-fixed`; commit `[audit-override]`; re-run" |
 | 5c | Baseline branch failed | `step5c:branch_failed:<stderr>` | "Inspect git error; re-run" |
 | 5d | RED tests don't all fail | `step5d:red_not_all_failing` | "Codex's tests passed without implementation — likely test bugs; review; re-run" |
 | 5e | GREEN unreachable after 3 retries | `step5e:green_unreachable:<module>` | "Inspect failed module; fix Codex prompt or implement manually; re-run" |

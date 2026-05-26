@@ -4,8 +4,8 @@
 |---|---|---|---|---|
 | 1 | Brainstorm | Inline brainstorm protocol (`references/inline-protocols.md §Phase 1`). Output: `docs/01-plan/features/<feature>-brainstorm.md`. Prompt to advance. | User approves | Manual |
 | 2 | Specify | Inline spec protocol (`references/inline-protocols.md §Phase 2`). Output: `docs/01-plan/features/<feature>.spec.md`. Prompt. | User approves | Manual |
-| 3 | Plan + Audit-Plan | Inline plan generation (`references/inline-protocols.md §Phase 3`). Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0. Auto-cycle: audit-plan via agy → awk gate → if must-fix > 0, surface bullets + wait for user revision → re-audit. Exit when must-fix = 0. | Plan exists AND latest `.plan.audit.vN.md` must-fix=0 | Manual (per audit cycle) |
-| 4 | Design + Audit-Design | Inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3. Back-propagation: if design fix invalidates a plan decision, return to Phase 3 for re-clean, then re-enter Phase 4 audit from cycle 1. | Design exists AND latest `.design.audit.vN.md` must-fix=0 AND plan unchanged-since-last-audit | Manual (per audit cycle) — **last user touchpoint** |
+| 3 | Plan + Audit-Plan | Inline plan generation (`references/inline-protocols.md §Phase 3`). Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0. Auto-cycle: audit-plan via agy → awk gate → if must-fix > 0 OR should-fix > 0, surface bullets + wait for user revision → re-audit. **Exit only when must-fix = 0 AND should-fix = 0. No cycle cap.** Operator may halt at any cycle via `## Acknowledged-not-fixed` override. | Plan exists AND latest `.plan.audit.vN.md` must-fix=0 AND should-fix=0 (or remaining items in `## Acknowledged-not-fixed`) | Manual (per audit cycle) |
+| 4 | Design + Audit-Design | Inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3 (must-fix=0 AND should-fix=0; no cycle cap). Back-propagation: if design fix invalidates a plan decision, return to Phase 3 for re-clean, then re-enter Phase 4 audit from cycle 1. | Design exists AND latest `.design.audit.vN.md` must-fix=0 AND should-fix=0 AND plan unchanged-since-last-audit | Manual (per audit cycle) — **last user touchpoint** |
 | **5** | **Implementation** | Autonomous sub-steps 5a–5g (see SKILL.md §Phase 5). | All RED→GREEN; impl-plan audit must-fix=0; zero hook violations | **Autonomous** |
 | **6** | **Verification** | Autonomous: 6a-prime (agy architectural review), 6a (inline gap analysis), 6b (inline iterate). | Architectural review READY_TO_MERGE; match rate ≥90% AND 100% test pass | **Autonomous** |
 | **7** | **Closure** | Autonomous: 7a (telemetry), 7b (inline report), 7c (inline archive), 7d (commit), 7e (push). | Push to origin/main succeeds | **Autonomous** |
@@ -28,11 +28,13 @@
 
 | Cycle type | Cap | Halt reason on exhaust |
 |---|---|---|
-| Plan audit | 5 | `step3:audit_max_cycles` |
-| Design audit | 5 | `step4:audit_max_cycles` |
-| Impl-plan audit | 5 | `step5b:impl_plan_audit_max_cycles` |
+| Plan audit | none (loop until must-fix=0 AND should-fix=0; operator escape via `## Acknowledged-not-fixed`) | n/a |
+| Design audit | none (same as Plan audit) | n/a |
+| Impl-plan audit | none (same as Plan audit) | n/a |
 | Codex GREEN retries | 3 | `step5e:green_unreachable:<module>` |
 | Verification iterate | 5 | `step6:iterate_max_cycles` |
+
+The audit-cycle caps were removed 2026-05-26 per operator request: if errors are already known (must-fix OR should-fix), shipping is worse than burning more cycles. The 5-cap halts (`step3:audit_max_cycles`, `step4:audit_max_cycles`, `step5b:impl_plan_audit_max_cycles`) are deprecated; equivalents in `failure-recovery.md` have been removed. Phase 6 iterate's 5-cap stays — that's a different concept (match-rate convergence, not audit findings).
 
 ## Logger marker
 
