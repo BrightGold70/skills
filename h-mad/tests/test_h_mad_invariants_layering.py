@@ -6,7 +6,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_DIR = REPO_ROOT / "h-mad"
 TEMPLATE = SKILL_DIR / "audit-prompt.template.md"
 BASE = SKILL_DIR / "invariants.base.md"
+EXAMPLE = SKILL_DIR / "invariants.example.md"
 SCRIPT_DIR = SKILL_DIR / "scripts"
+
+_BASE_RULE_HEADINGS = (
+    "Audit-gate signal discipline",
+    "Single-source contract",
+    "Standalone / no plugin dependency",
+    "No new external dependency",
+    "Doc-template superset compliance",
+    "Operator-override preservation",
+    "Backward compatibility",
+    "Marker discipline",
+)
 
 sys.path.insert(0, str(SCRIPT_DIR))
 from h_mad_audit_gate import classify  # noqa: E402
@@ -80,3 +92,17 @@ def test_operator_sidecar_excludes_base_layer_item():
     result = classify(text, acknowledged={"base: marker discipline not emitted on halt"})
     assert result["must_count"] == 0
     assert result["verdict"] == "PASS"
+
+
+def test_example_does_not_duplicate_base_rule_headings():
+    # AC-7.1 / AC-9.6: the domain example must not re-teach base workflow rules
+    example = EXAMPLE.read_text(encoding="utf-8")
+    heading_lines = {
+        line.lstrip("#").strip()
+        for line in example.splitlines()
+        if line.startswith("## ") or line.startswith("### ")
+    }
+    for base_heading in _BASE_RULE_HEADINGS:
+        assert base_heading not in heading_lines, (
+            f"invariants.example.md duplicates base rule heading: {base_heading}"
+        )

@@ -2,16 +2,19 @@
 
 > Copy this file to `<PROJECT_ROOT>/.h-mad/invariants.md` and replace the
 > generic categories + HemaSuite worked example with your own project's rules.
-> The `/h-mad` orchestrator inlines this file verbatim as the Axis B rubric
-> for all plan, design, and impl-plan audits.
+> The `/h-mad` orchestrator inlines this file verbatim as the **project (domain)**
+> portion of the Axis B rubric for all plan, design, and impl-plan audits.
 
 ## What goes in this file
 
-Each invariant is a **project-specific rule** that the audit must enforce as a hard
-gate. The audit-prompt template already covers **Axis A** (generic adversarial
-review: contradictions, gaps, weak claims, scope creep, untestable acceptance
-criteria) — you don't need to repeat those here. Axis B is exclusively about your
-project's load-bearing architectural rules.
+Put only your project's **domain-specific** load-bearing rules here. The
+**workflow-universal** rules (audit-gate signal discipline, single-source
+contract, no-plugin-dependency, doc-template superset compliance,
+operator-override preservation, backward-compatibility, marker discipline) live in
+the skill-shipped `invariants.base.md` and are inlined automatically **before**
+this file — do **not** repeat them here. The audit-prompt template also covers
+**Axis A** (generic adversarial review) — don't repeat that either. This file is
+exclusively your project's domain rules.
 
 Format: one short bullet per invariant. Be specific about which module/facade/rule
 is mandatory, and what the violation looks like.
@@ -33,9 +36,9 @@ is mandatory, and what the violation looks like.
 ### Pipeline guarantees
 - [List invariants about output guarantees, idempotency, atomicity, etc.]
 
-### Logger markers
-- All async/background operations MUST emit `[<MODULE>]` log markers so
-  failures are diagnosable from logs alone.
+> Note: a generic "emit `[MODULE]` log markers" rule is NOT listed here — marker
+> discipline is a workflow-universal rule and already lives in `invariants.base.md`.
+> Only add a marker rule here if your project needs a *domain-specific* extension of it.
 
 ---
 
