@@ -22,6 +22,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```markdown
    # Brainstorm: <feature>
 
+   ## Executive Summary
+   <One-sentence summary of the problem and preferred direction>
+
    ## Problem Statement
    <1-2 sentences: what's broken or missing and for whom>
 
@@ -42,6 +45,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    ## Open Questions
    - <question that needs resolution before or during spec>
+
+   ## Version History
+   - v1.0: Initial brainstorm draft.
    ```
 
 3. Save to `docs/01-plan/features/<feature>-brainstorm.md`.
@@ -62,6 +68,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    ```markdown
    # Spec: <feature>
+
+   ## Executive Summary
+   <One-sentence summary of the feature contract>
 
    ## Goal
    <One sentence: what this feature achieves for the user or system>
@@ -88,6 +97,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    ## Assumptions
    - <things assumed true for this spec to hold>
+
+   ## Version History
+   - v1.0: Initial specification draft.
    ```
 
 3. Save to `docs/01-plan/features/<feature>.spec.md`.
@@ -109,24 +121,39 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```markdown
    # Plan: <feature>
 
+   ## Executive Summary
+   <One-sentence summary of the plan and expected outcome>
+
    ## Overview
    <2-3 sentences: what we're building and why it matters now>
+
+   ## Scope
+   <The in-scope system boundaries and user-visible behavior>
 
    ## Goals
    - <goal 1 — maps to FR-N in spec>
    - <goal 2 — maps to FR-N in spec>
 
+   ## Requirements
+   - <FR-N: requirement this plan satisfies>
+
    ## Implementation Strategy
    <Which layers change, what patterns we'll follow, what we deliberately won't touch>
+
+   ## Architecture Considerations
+   <Architectural constraints, integration points, and tradeoffs to preserve>
 
    ## Deliverables
    | Deliverable | Type | Satisfies |
    |---|---|---|
    | <name> | module / API / schema / CLI flag / UI | FR-N |
 
-   ## Risks
+   ## Risks and Mitigation
    | Risk | Impact | Mitigation |
    |---|---|---|
+
+   ## Convention Prerequisites
+   <Project conventions, branch prerequisites, or workflow gates required before implementation>
 
    ## Success Criteria
    - All ACs in spec pass automated tests
@@ -134,6 +161,12 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    ## Out-of-Scope (confirmed from spec)
    - <carry over the spec's out-of-scope list>
+
+   ## Next Steps
+   <Approval, audit, or handoff action that follows this plan>
+
+   ## Version History
+   - v1.0: Initial plan draft.
    ```
 
 3. Save to `docs/01-plan/features/<feature>.plan.md`.
@@ -156,13 +189,25 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```markdown
    # Design: <feature>
 
+   ## Executive Summary
+   <One-sentence summary of the technical design>
+
+   ## Overview
+   <2-3 sentences: design intent, constraints, and key decisions>
+
    ## Architecture Overview
    <Prose or ASCII diagram: how components interact at the boundary level>
+
+   ## Detailed Design
+   <Detailed behavior, state transitions, and edge cases by component>
 
    ## Components Changed / Added
    | Component | File path | Change type | Purpose |
    |---|---|---|---|
    | <name> | `relative/path.py` | new / modify | <why> |
+
+   ## Implementation Order
+   - <ordered implementation step that preserves dependencies>
 
    ## Data Model / Schema Changes
    <New or modified models, fields, tables, config keys, or serialization formats.
@@ -180,9 +225,15 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    <Which layers get unit tests (mock at what boundary?), which get integration tests,
    what fixtures or test data are needed>
 
+   ## Test Plan
+   <Specific test files, scenarios, and verification commands>
+
    ## Invariant Compliance
    <Explicit statement for each Axis B rule: "complies because..." or
    "this design requires an invariant update: [proposed change]">
+
+   ## Version History
+   - v1.0: Initial design draft.
    ```
 
 4. Save to `docs/02-design/features/<feature>.design.md`.
@@ -208,6 +259,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    > Source: docs/02-design/features/<feature>.design.md (post-audit)
    > Branch target: feature/NNN-<feature-slug>
+
+   ## Executive Summary
+   <One-sentence summary of the implementation task graph>
 
    ## Task 1: <module-name>
 
@@ -237,6 +291,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    ## Task 2: <module-name>
    ...
+
+   ## Version History
+   - v1.0: Initial implementation plan draft.
    ````
 
 3. Save to `docs/01-plan/features/<feature>.impl-plan.md`.
@@ -272,6 +329,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```markdown
    # Analysis: <feature>
 
+   ## Executive Summary
+   <One-sentence summary of coverage and readiness>
+
    ## Match Rate: <N>%
 
    ## FR Coverage
@@ -298,6 +358,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ## Verdict
    Match rate: <N>% (threshold: 90%). Tests: <N>/N passing.
    → <Advance to Phase 7 | Iterate — N gaps to close>
+
+   ## Version History
+   - v1.0: Initial gap analysis draft.
    ```
 
 6. Save to `docs/03-analysis/<feature>.analysis.md`.
@@ -337,6 +400,9 @@ Draft and save to `docs/04-report/features/<feature>.report.md`:
 ```markdown
 # Report: <feature>
 
+## Executive Summary
+<One-sentence summary of the completed feature and final outcome>
+
 ## Summary
 <2-3 sentences: what was built, key decisions made, overall outcome>
 
@@ -361,6 +427,9 @@ Draft and save to `docs/04-report/features/<feature>.report.md`:
 ## Carry Items
 - <anything deferred, explicitly out-of-scope, or left for follow-up work>
   "None" if nothing deferred.
+
+## Version History
+- v1.0: Initial report draft.
 ```
 
 ### 7c — Archive
