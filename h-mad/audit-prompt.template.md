@@ -2,8 +2,9 @@
 
 > Used by `/h-mad` Phase 3 audit-plan, Phase 4 audit-design, and Phase 5b audit-impl-plan.
 > The orchestrator inlines the target document(s) into the `<INLINE_*>` slots, inlines the
-> project's Axis B rubric from `<PROJECT_ROOT>/.h-mad/invariants.md` into the
-> `<INLINE_PROJECT_INVARIANTS>` slot, stages the result at
+> workflow-universal base rubric from `~/.claude/skills/h-mad/invariants.base.md` into the
+> `<INLINE_BASE_INVARIANTS>` slot and the project's domain rubric from
+> `<PROJECT_ROOT>/.h-mad/invariants.md` into the `<INLINE_PROJECT_INVARIANTS>` slot, stages the result at
 > `/tmp/audit_<feature>_<phase>_cycle<N>.txt`, then dispatches agy via `cmux send` with
 > file-indirection per the project's cmux discipline (see HemaSuite CLAUDE.md §F-12 for
 > the canonical pattern).
@@ -28,8 +29,14 @@ Axis A — Generic adversarial:
   Flag silent drift, dropped FRs, undocumented design decisions that change
   plan-stated behavior.
 
-Axis B — Project-invariant compliance (any breach = must-fix, you cannot
-downgrade):
+Axis B — Invariant compliance (any breach = must-fix, you cannot downgrade).
+Two layers, both binding:
+
+### Base invariants (workflow-universal; non-overridable by any project file — but the operator `## Acknowledged-not-fixed` sidecar still applies to base findings):
+
+<INLINE_BASE_INVARIANTS>
+
+### Project invariants (domain rules for this repository):
 
 <INLINE_PROJECT_INVARIANTS>
 
@@ -40,12 +47,12 @@ Output schema (exact, no other top-level sections):
 
 ## Must-fix
 - <issue> — <why it breaks invariant or creates a hard gap>
-  *(empty section: write "None")*
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
 
 ## Should-fix
 - <issue> — <why it matters but isn't a hard gate>
-  *(empty section: write "None")*
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
 
 ## Nit
 - <style/clarity issue>
-  *(empty section: write "None")*
+  *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*

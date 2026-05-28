@@ -106,11 +106,23 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 
 ## What you NEVER do
 
-- Never skip the awk gate after an audit.
+- Never skip the gate (`h_mad_audit_gate.py`) after an audit.
+- Never parse the gate via `$?`/exit code — parse the `GATE:` token; the gate exits 0 on a verdict by design.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
 - Never invoke Codex or agy directly — always via cmux file-indirection per CLAUDE.md §F-12.
+
+## Known interactions (coexisting plugins)
+
+`/h-mad` has **zero runtime dependency** on any other plugin. It does, however, coexist with plugins that install Claude Code hooks. The notable one is **OMC** (`oh-my-claudecode`), whose `persistent-mode.mjs` produces two streams of noise during `/h-mad` runs:
+
+- **Autopilot Stop-hook nag** — emits "Autopilot not complete" on most turns even with no autopilot state on disk (an unconditional nag, not state-driven).
+- **Tool-error retry guidance** — `post-tool-use-failure.mjs` records any tool failure to `last-tool-error.json`; `persistent-mode.mjs` then injects `[TOOL ERROR - RETRY REQUIRED]` (escalating to "STOP RETRYING" at retry_count ≥ 5) on the next Stop.
+
+The retry-guidance stream was historically triggered by the audit gate itself: the old gate used a non-zero exit (`awk … exit (c>0)`) as its FAIL signal, which the harness reported as a `PostToolUseFailure`. **This is fixed at the root** — the gate now signals via the `GATE:` token and exits 0 (Audit-gate signal discipline, base invariant), so a legitimate gate-FAIL no longer registers as a tool error. The retry-guidance noise during `/h-mad` is therefore resolved skill-side; OMC's behavior was correct given a real non-zero exit.
+
+Workaround for the **separate** autopilot Stop-hook nag (not addressed by the gate fix): `export DISABLE_OMC=1` (or `OMC_SKIP_HOOKS=persistent-mode`) for the session. Never switch to the OMC autopilot skill mid-`/h-mad`.
 
 ## State schema
 
@@ -133,27 +145,32 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 
 1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`.
 2. Replace `<INLINE_TARGET_DOC>` with full text of the target doc (plan.md, design.md, or impl-plan.md).
-3. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `.h-mad/invariants.md`.
-4. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
-5. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
-6. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
-7. Dispatch via cmux file-indirection:
+3. Replace `<INLINE_BASE_INVARIANTS>` with full text of `~/.claude/skills/h-mad/invariants.base.md` (workflow-universal Axis B — always inlined, base before project, regardless of whether a project file exists).
+4. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `<PROJECT_ROOT>/.h-mad/invariants.md` (domain Axis B). If the project file is absent/empty, leave the slot empty — the base layer still applies.
+5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
+6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
+7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
+8. Dispatch via cmux file-indirection:
    ```bash
    cmux send --surface <agy-surface> "$(cat /tmp/audit_<feature>_<phase>_cycle<N>.txt)"
    cmux send-key --surface <agy-surface> Enter
    ```
-8. Capture: `cmux read-screen --surface <agy-surface> --lines 50`.
-9. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
-10. Run awk gate — counts bullets in BOTH `## Must-fix` AND `## Should-fix` sections (Acknowledged-not-fixed override: items listed under `## Acknowledged-not-fixed` in a sidecar `.audit.v<N+1>.md` are excluded from the count by the operator):
+9. Capture: `cmux read-screen --surface <agy-surface> --lines 50`.
+10. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
+11. Run the gate — the verdict unit counts bullets in BOTH `## Must-fix` AND `## Should-fix` (excluding the bare-`None` sentinel, a stray `- None`, and any `## Acknowledged-not-fixed` items in the same file or a sidecar `.audit.v<N+1>.md` passed via `--ack-file`):
     ```bash
-    awk '/^## Must-fix/{f=1;next} /^## Should-fix/{f=1;next} /^## /{f=0} f && /^- /{c++} END{exit (c>0)}' <audit-file>
+    python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py <audit-file>
     ```
-    Exit 0 = gate passes (must-fix=0 AND should-fix=0). Exit 1 = gate fails (at least one must-fix or should-fix item remains). Nits never block.
+    The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
+    - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
+    - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+    The gate emits a `[H-MAD] <feature> gate <verdict>` marker line. Nits never block. If the `GATE:` token is absent from stdout (unexpected), treat it as an operational error and halt `step<N>:gate_token_missing` with a `[H-MAD]` marker — never silently treat a missing token as PASS.
 
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
+- `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
 - `h_mad_resume_decision.py` — smart-resume decision
-- `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier
+- `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`)
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
 - `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2)
