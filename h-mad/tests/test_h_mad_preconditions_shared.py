@@ -40,3 +40,15 @@ def test_count_must_fix_counts_real_must_fix_bullet(tmp_path: Path) -> None:
     audit_file.write_text("## Must-fix\n- real issue\n## Should-fix\nNone\n", encoding="utf-8")
 
     assert _count_must_fix(audit_file) == 1
+
+
+def test_count_must_fix_honors_acknowledged_sidecar(tmp_path: Path) -> None:
+    # Operator-override preservation: a Must-fix item waived under
+    # ## Acknowledged-not-fixed must NOT count, or /h-mad do locks out.
+    audit_file = tmp_path / "audit.md"
+    audit_file.write_text(
+        "## Must-fix\n- waived item\n## Acknowledged-not-fixed\n- waived item\n",
+        encoding="utf-8",
+    )
+
+    assert _count_must_fix(audit_file) == 0

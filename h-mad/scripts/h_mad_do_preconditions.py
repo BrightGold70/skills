@@ -18,13 +18,15 @@ import re
 import sys
 from pathlib import Path
 
-from h_mad_audit_gate import classify
+from h_mad_audit_gate import classify, _acknowledged_from_text
 
 AUDIT_VERSION_RE = re.compile(r"\.audit\.v(\d+)\.md$")
 
 
 def _count_must_fix(path: Path) -> int:
-    return classify(path.read_text())["must_count"]
+    text = path.read_text()
+    acknowledged = _acknowledged_from_text(text)
+    return classify(text, acknowledged=acknowledged)["must_count"]
 
 
 def _latest_audit(features_dir: Path, feature: str, phase: str) -> Path | None:

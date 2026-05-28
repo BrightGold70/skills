@@ -144,6 +144,18 @@ def test_cli_must_only_bases_verdict_on_must_count(tmp_path: Path) -> None:
     assert "gate PASS" in result.stdout
 
 
+def test_cli_marker_feature_is_derived_from_filename(tmp_path: Path) -> None:
+    # Project-agnostic: the [H-MAD] marker feature must come from the audit
+    # filename, not a hardcoded constant.
+    audit_file = tmp_path / "some-other-feature.plan.audit.v1.md"
+    audit_file.write_text("## Must-fix\nNone\n## Should-fix\nNone\n", encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert "[H-MAD] some-other-feature gate PASS" in result.stdout
+    assert "h-mad-audit-surfaces-reconcile" not in result.stdout
+
+
 def test_production_module_uses_only_stdlib_imports() -> None:
     stdlib = getattr(sys, "stdlib_module_names", set())
     if not stdlib:

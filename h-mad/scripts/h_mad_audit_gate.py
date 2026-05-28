@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 
-FEATURE = "h-mad-audit-surfaces-reconcile"
 BLOCKING_SECTIONS = {
     "## Must-fix": "must_count",
     "## Should-fix": "should_count",
@@ -91,8 +90,11 @@ def main(argv: list[str] | None = None) -> int:
 
     result = classify(text, acknowledged)
     verdict = "FAIL" if result["must_count"] or (result["should_count"] and not args.must_only) else "PASS"
+    # Feature name derived from the audit filename (project-agnostic):
+    # "<feature>.<phase>.audit.v<N>.md" -> "<feature>".
+    feature = args.audit_file.name.split(".")[0] or "unknown"
     print(f"GATE: {verdict} must={result['must_count']} should={result['should_count']}")
-    print(f"[H-MAD] {FEATURE} gate {verdict}")
+    print(f"[H-MAD] {feature} gate {verdict}")
     return 0
 
 
