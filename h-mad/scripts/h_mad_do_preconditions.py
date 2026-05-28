@@ -18,22 +18,13 @@ import re
 import sys
 from pathlib import Path
 
+from h_mad_audit_gate import classify
+
 AUDIT_VERSION_RE = re.compile(r"\.audit\.v(\d+)\.md$")
 
 
 def _count_must_fix(path: Path) -> int:
-    in_section = False
-    count = 0
-    for line in path.read_text().splitlines():
-        if line.startswith("## Must-fix"):
-            in_section = True
-            continue
-        if line.startswith("## "):
-            in_section = False
-            continue
-        if in_section and line.startswith("- "):
-            count += 1
-    return count
+    return classify(path.read_text())["must_count"]
 
 
 def _latest_audit(features_dir: Path, feature: str, phase: str) -> Path | None:
