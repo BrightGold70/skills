@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-STATE_FILE="docs/.bkit-memory.json"
+STATE_FILE="${CLAUDE_PROJECT_DIR:-.}/docs/.bkit-memory.json"
 
 # Claude Code PreToolUse hooks receive tool input as JSON via stdin.
 # Positional arg is supported for direct invocation / testing.

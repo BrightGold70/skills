@@ -12,7 +12,7 @@ Usage:
 Exit codes:
   0 = success
   2 = feature not present in state (record only)
-  3 = malformed state file (record only)
+  3 = state file missing or malformed (record only)
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def cmd_record(args: argparse.Namespace) -> int:
 
     if not state_path.is_file():
         print(f"WARN: state file not found at {state_path} — skipping telemetry record", file=sys.stderr)
-        return 2
+        return 3
 
     try:
         state = json.loads(state_path.read_text())
@@ -44,9 +44,12 @@ def cmd_record(args: argparse.Namespace) -> int:
         return 2
 
     audit_cycles = feat_state.get("audit_cycles") or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
     row = {
+        "schema_version": 1,
         "feature": args.feature,
-        "recorded_ts": datetime.now(timezone.utc).isoformat(),
+        "recorded_ts": now_iso,
+        "completed_ts": now_iso,
         "started_ts": feat_state.get("started_ts"),
         "last_completed_phase": feat_state.get("last_completed_phase", 0),
         "audit_cycles": {
@@ -98,10 +101,11 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
     tail = rows[-args.limit:]
     print(f"=== /h-mad telemetry — last {len(tail)} of {len(rows)} records ===\n")
-    print(f"{'feature':<30} {'phase':>5} {'plan_a':>6} {'des_a':>6} {'impl_a':>6} {'iter':>5} {'elapsed':>8}")
-    print("-" * 75)
+    print(f"{'feature':<30} {'phase':>5} {'plan_a':>6} {'des_a':>6} {'impl_a':>6} {'iter':>5} {'elapsed':>8} {'status':>8}")
+    print("-" * 84)
     for r in tail:
         ac = r.get("audit_cycles") or {}
+        status = "halted" if r.get("halt_reason") else "ok"
         print(
             f"{r.get('feature', '?'):<30}"
             f"{r.get('last_completed_phase', 0):>5}"
@@ -110,6 +114,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
             f"{ac.get('impl_plan', 0):>7}"
             f"{r.get('iterate_cycles', 0):>6}"
             f"{str(r.get('elapsed_min', '?')) + 'm':>9}"
+            f"{status:>9}"
         )
 
     n_high_audit = sum(
