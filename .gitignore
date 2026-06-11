@@ -27,3 +27,6 @@ logs/.*.json
 # OS
 .DS_Store
 Thumbs.db
+
+# H-MAD per-run telemetry/state (runtime artifact, not skill source)
+.h-mad/

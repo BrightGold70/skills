@@ -16,6 +16,32 @@ import sys
 from pathlib import Path
 
 
+def _phase_num(value) -> int:
+    """Coerce a phase marker to its integer index (0-7).
+
+    Tolerant of every form the state file actually carries: the schema's
+    integer (0-7), the orchestrator's "stepN" string (the `phase` enum form
+    that also leaks into current/last_completed_phase), and the "complete"
+    sentinel. Anything unrecognized maps to 0 so the caller degrades to
+    resume_manual rather than crashing. `bool` is special-cased because it
+    is an int subclass (`True >= 7` would otherwise silently mislead).
+    """
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token == "complete":
+            return 7
+        for prefix in ("step", "phase"):  # both prefixes occur in real state
+            if token.startswith(prefix) and token[len(prefix):].isdigit():
+                return int(token[len(prefix):])
+        if token.isdigit():
+            return int(token)
+    return 0
+
+
 def decide(state_file: Path, feature: str) -> str:
     if not state_file.is_file():
         return "start_fresh"
@@ -29,7 +55,11 @@ def decide(state_file: Path, feature: str) -> str:
         return "start_fresh"
     if feat_state.get("halt_reason"):
         return "halted"
-    last = feat_state.get("last_completed_phase", 0)
+    if feat_state.get("complete") is True:
+        return "complete"
+    if str(feat_state.get("current_phase", "")).strip().lower() == "complete":
+        return "complete"
+    last = _phase_num(feat_state.get("last_completed_phase", 0))
     if last >= 7:
         return "complete"
     if last >= 4:
