@@ -62,6 +62,13 @@ In parallel:
 - `git status --short` — does the working-tree state match the doc's "Uncommitted changes" claim? (Doc says "none" but tree is dirty → flag. Doc lists specific files but tree is clean → flag, the work was probably committed since.)
 - For each file path cited in Next Steps and Files Touched, check existence. If a path no longer exists (renamed/moved/deleted), flag it — that Next Step needs adjusting before the user picks it up.
 - `git log --oneline -5` — has anything new landed since the handoff was written? If the doc references commits that aren't in `git log`, the branch may have been rebased; mention it.
+- **Remote ↔ local sync** — the working tree may have moved on the remote since the handoff (another machine, a teammate, a CI bot, or a `/handoff` WRITE push from a different session). Before the user starts any new action, reconcile against the remote so they don't branch off a stale base:
+  - `git fetch` (quiet; if no remote or no upstream, skip this bullet silently — `git rev-parse --abbrev-ref @{u}` errors → no upstream).
+  - `git rev-list --left-right --count @{u}...HEAD` → `<behind>	<ahead>`.
+  - **In sync** (0 behind, 0 ahead): state "in sync with `<upstream>`" on one line; no action.
+  - **Behind, clean tree**: surface as a divergence and **fast-forward before acting** — run `git pull --ff-only`. If it fast-forwards cleanly, report the new HEAD. This is the "sync remote and local before starting" guarantee.
+  - **Behind, dirty tree** OR **diverged** (behind > 0 AND ahead > 0): do NOT auto-pull — flag it ("N behind / M ahead, uncommitted changes present" or "branches have diverged — rebase/merge needed") and let the user resolve. A surprise merge/rebase mid-resume is worse than a one-line warning.
+  - **Ahead only** (unpushed local commits): flag as information ("M local commits not yet pushed") — relevant because the prior session may have committed without pushing.
 - **In-flight processes** — for each PID cited in In-Flight Processes / Open Items / Next Steps, run `ps -p <PID> -o pid,etime,stat`. For each cited log path, `ls -la <log>` to read size + mtime. Surface one of: "still running, N min elapsed (matches handoff trajectory)" / "exited" / "log unchanged for N hours — likely dead, treat as historical". This is the single most load-bearing reconciliation when the handoff hands off live work; never skip it. If the doc is days old, treat all in-flight claims as historical without bothering to check `ps` (the PID has been recycled and reporting on a stranger's process is worse than silence).
 - **Worktree split** — if the handoff path is inside `.claude/worktrees/<name>/`, the doc was written from a worktree. Run `git -C <worktree-root> rev-parse --abbrev-ref HEAD` AND `git -C <parent-repo> rev-parse --abbrev-ref HEAD` — both trees have independent state and both matter. The handoff's "Branch:" field usually refers to the *worktree*; the parent repo may be on a deferred-cleanup branch (the handoff often calls this out). State each tree's branch on its own divergence line if they disagree with the doc.
 
@@ -84,6 +91,7 @@ After reconciliation and TodoList restore, give the user a brief resume report:
 
 **Handoff:** docs/handoffs/2026-04-30-lightrag-guideline-rag.md
 **Branch:** main (matches)
+**Remote:** 2 behind origin/main → fast-forwarded to `a1b2c3d`
 **Uncommitted changes:** 2 files (matches handoff)
 
 **Divergences:**
@@ -101,6 +109,7 @@ Then stop. Don't start executing tasks — the user reads the report and decides
 - Don't rewrite or update the handoff doc in read mode — it's a historical record.
 - Don't run tests or builds as part of reconciliation.
 - Don't assume the in-flight process is still running if the doc is >4h old.
+- Don't `git pull` when the tree is dirty or the branch has diverged — fast-forward-only (`git pull --ff-only`) on a clean tree, otherwise flag and let the user resolve. Never `git merge`/`git rebase`/`git push` during a resume.
 
 ---
 
@@ -444,11 +453,29 @@ Session closeout: <one-line summary from Session Summary>."
 
 Do not use `git add -A` — only stage the handoff and learnings files.
 
+### Sync with remote (before push)
+
+The remote may have moved since the session started (another machine, a teammate, CI, or a `/handoff` push from a different window). Reconcile the now-committed handoff against the remote so the push is a clean fast-forward and you don't leave a rejected-push surprise for next session.
+
+```bash
+git fetch                                          # skip if no remote/upstream (git rev-parse @{u} errors)
+git rev-list --left-right --count @{u}...HEAD       # "<behind>	<ahead>"
+```
+
+- **In sync / ahead only** (behind = 0): proceed straight to Push.
+- **Behind** (remote has new commits the local doesn't): integrate before pushing. The tree is clean here — everything except the handoff/learnings files was committed or untouched — so `git pull --rebase` replays your single handoff commit on top:
+  ```bash
+  git pull --rebase
+  ```
+  If the rebase conflicts (rare — handoff files are new/append-only), abort (`git rebase --abort`), tell the user the remote diverged and the handoff commit is local-only, and stop. Don't force-resolve.
+
 ### Push
 
 ```bash
 git push origin HEAD
 ```
+
+If the push is still rejected (remote moved again between fetch and push), re-run the Sync step once, then push. Never `--force`.
 
 ### Verify
 
