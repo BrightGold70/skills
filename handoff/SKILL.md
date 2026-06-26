@@ -34,9 +34,22 @@ Parse flags from the invocation before doing anything else. Flags apply only to 
 
 ## Reading a handoff (resume mode)
 
+### Step 0: Sync local with the remote BEFORE locating/reading
+
+Do this first, before Step 1 — otherwise you may locate + read a **stale** handoff: a newer one (or commits that updated the doc) may have been pushed from another machine / session and not exist locally yet. Step 3's "Remote ↔ local sync" runs *after* the doc is read, which is too late for this. If the current project is a git repo:
+
+- `git rev-parse --abbrev-ref @{u}` — if it errors (no upstream / no remote), skip this step **silently** and proceed to Step 1 on the local tree.
+- `git fetch` (quiet).
+- `git rev-list --left-right --count @{u}...HEAD` → `<behind>\t<ahead>`.
+  - **Behind, clean tree**: `git pull --ff-only`. Now Step 1 locates and Step 2 reads the freshest handoff + the commits it references. Report the new HEAD in the Step 5 resume report.
+  - **Behind, dirty tree** OR **diverged** (behind > 0 AND ahead > 0): do NOT pull — a surprise merge/rebase is worse than a slightly-stale doc. Read the local doc as-is; Step 3 does the full divergence flagging.
+  - **In sync / ahead only**: proceed.
+
+This Step 0 fast-forward (clean-tree only) is the "sync remote and local before reading" guarantee. Step 3 still runs afterward for the dirty/diverged/ahead/in-flight cases this step deliberately skips (its `git fetch` is then a cheap idempotent no-op).
+
 ### Step 1: Locate the doc
 
-Check, in order:
+Locate on the now-synced tree (Step 0). Check, in order:
 
 1. **Explicit path in the user's message** — if they paste or type a path, use it.
 2. **`docs/handoffs/` in the current project** — list files, sort by name (ISO date prefix), take the newest. Confirm with the user if there are multiple candidates with different slugs.
@@ -63,7 +76,7 @@ In parallel:
 - `git status --short` — does the working-tree state match the doc's "Uncommitted changes" claim? (Doc says "none" but tree is dirty → flag. Doc lists specific files but tree is clean → flag, the work was probably committed since.)
 - For each file path cited in Next Steps and Files Touched, check existence. If a path no longer exists (renamed/moved/deleted), flag it — that Next Step needs adjusting before the user picks it up.
 - `git log --oneline -5` — has anything new landed since the handoff was written? If the doc references commits that aren't in `git log`, the branch may have been rebased; mention it.
-- **Remote ↔ local sync** — the working tree may have moved on the remote since the handoff (another machine, a teammate, a CI bot, or a `/handoff` WRITE push from a different session). Before the user starts any new action, reconcile against the remote so they don't branch off a stale base:
+- **Remote ↔ local sync** — Step 0 already fast-forwarded the clean-behind case before reading; this bullet re-checks and covers what Step 0 deliberately skipped (dirty/diverged/ahead). The working tree may have moved on the remote since the handoff (another machine, a teammate, a CI bot, or a `/handoff` WRITE push from a different session). Before the user starts any new action, reconcile against the remote so they don't branch off a stale base:
   - `git fetch` (quiet; if no remote or no upstream, skip this bullet silently — `git rev-parse --abbrev-ref @{u}` errors → no upstream).
   - `git rev-list --left-right --count @{u}...HEAD` → `<behind>	<ahead>`.
   - **In sync** (0 behind, 0 ahead): state "in sync with `<upstream>`" on one line; no action.
