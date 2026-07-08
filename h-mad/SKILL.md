@@ -83,16 +83,36 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
-- **5d** — RED dispatch via cmux (see `references/codex-implementer-prompt.md`). Verify Codex + agy panes alive (`cmux tree --all`); refuse if missing → halt `step5d:no_<agent>_pane`. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
-- **5e** — GREEN dispatch via cmux (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
+- **5d** — RED dispatch via cmux (see `references/codex-implementer-prompt.md`). Verify Codex + agy panes alive (`cmux tree --all`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
+- **5e** — GREEN dispatch via cmux (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
 ## Phase 6 (Verification) sub-steps
 
-- **6a-prime** — architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Inputs: Phase 5 diff (BASE = 5c sha; HEAD = 5g sha) + audited design. Halt `step6a-prime:architectural_review_failed` on `WITH_FIXES` or `NO`.
+- **6a-prime** — architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Inputs: Phase 5 diff (BASE = 5c sha; HEAD = 5g sha) + audited design. **Clear the agy pane's context first** (§"Agent-pane context hygiene") — 6a-prime is a fresh architectural pass, not a continuation of the plan/design audit thread. Halt `step6a-prime:architectural_review_failed` on `WITH_FIXES` or `NO`.
 - **6a** — run inline gap analysis. Parse match rate from `docs/03-analysis/<feature>.analysis.md`.
 - **6b** — if < 90%, run inline iterate (5-cycle cap). Loop until ≥90% AND 100% test pass.
+
+## Agent-pane context hygiene
+
+The Codex (surface:5) and agy (surface:2) panes are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `cmux read-screen` you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
+
+**When to clear (fresh pass) vs keep warm (continuation):**
+- **Clear** at: the first cycle of each audit phase (Phase 3/4/5b cycle 1); 5d and the first 5e dispatch of a feature; 6a-prime; and whenever you confirm a pane is alive at the *start* of a new feature.
+- **Keep warm** at: cycles 2..N of the *same* audit (the running revision thread — "here's the fix for your prior should-fix" — is exactly the context you want); a Codex GREEN retry within the same module.
+
+**How to clear (per pane), then verify it took:**
+```bash
+# agy (Antigravity CLI, surface:2) and Codex (surface:5) both accept /clear:
+cmux send --surface <surface> "/clear"
+cmux send-key --surface <surface> Enter
+# verify a clean prompt (no leftover input, not mid-run):
+cmux read-screen --surface <surface> --lines 6
+```
+If `/clear` is not honored or the pane is wedged (input box still shows queued text, or a 400/desync on agy), **restart the surface** instead: re-seed via the launch command (`agy --dangerously-skip-permissions` / the Codex CLI) per `AGENTS.md`, then re-confirm alive with `cmux tree --all`. A restart is the hard reset; `/clear` is the cheap one. Never dispatch an audit/TDD prompt into a pane whose scrollback still shows the previous cycle's report — you will grep the wrong verdict.
+
+**Cost note:** clearing is cheap and prevents two failure modes seen in practice — (a) an audit verdict influenced by an unrelated prior feature's discussion, and (b) `read-screen` returning a stale prior-cycle report that the gate then parses as this cycle's result.
 
 ## Halt protocol
 
@@ -150,6 +170,7 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
+7.5. **On cycle 1 of each audit phase (and after confirming the agy pane is alive via `cmux tree --all`), clear the agy pane's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
 8. Dispatch via cmux file-indirection:
    ```bash
    cmux send --surface <agy-surface> "$(cat /tmp/audit_<feature>_<phase>_cycle<N>.txt)"
