@@ -6,7 +6,7 @@
 
 1. Write `orchestrator_state[<feature>]`: `halt_reason`, `halt_ts`, `phase = null` (clears hook arm), pin `current_phase` + `last_completed_phase`.
 2. Emit `[H-MAD] <feature> phase<N> halted reason=<reason>`.
-3. `hmad-dispatch notify --title "/h-mad halted" --subtitle <feature> --body <reason>`.
+3. `hmad-dispatch notify "/h-mad halted" "<feature>: <reason>"`.
 4. Print recovery hints.
 5. Exit.
 

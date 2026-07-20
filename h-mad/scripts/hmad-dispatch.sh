@@ -47,7 +47,7 @@ _orca_find() {
     --arg t "$token" '.[] | select(((.command//"") + " " + (.name//"")) | test($t)) | .id')"
   local n; n="$(printf '%s' "$ids" | grep -c . || true)"
   if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
-  echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_${token^^}_TERMINAL" >&2
+  echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
   return 1
 }
 
@@ -115,7 +115,12 @@ _cmd_alive() {
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     cmux) cmux tree --all | grep -q -- "$target" ;;
-    orca) orca terminal list --json | jq -e --arg id "$target" '.[] | select(.id == $id)' >/dev/null ;;
+    orca)
+      if orca terminal list --json | jq -e --arg id "$target" '.[] | select(.id == $id)' >/dev/null 2>&1; then
+        return 0
+      else
+        return 1
+      fi ;;
   esac
 }
 

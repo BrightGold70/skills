@@ -195,3 +195,21 @@ def test_notify_cmux(tmp_path):
             env={"_BINDIR": b}, capture=cap)
     assert r.returncode == 0
     assert "cmux notify --title halted --body reason-x" in cap.read_text()
+
+
+def test_alive_orca_true(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    canned = '[{"id":"t-1","command":"codex"},{"id":"t-2","command":"agy"}]'
+    r = run(["alive", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+                 "HMAD_STUB_ORCA_STDOUT": canned})
+    assert r.returncode == 0
+
+
+def test_alive_orca_false(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    canned = '[{"id":"t-2","command":"agy"}]'
+    r = run(["alive", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-9",
+                 "HMAD_STUB_ORCA_STDOUT": canned})
+    assert r.returncode == 1
