@@ -174,6 +174,30 @@ _cmd_worktree_rm() {  # <selector> [--force]
   [ $rc -eq 0 ] || { echo "[H-MAD] worktree-rm failed selector=$sel rc=$rc" >&2; return $rc; }
 }
 
+_cmd_file_diff() {   # <path> [--staged] [--worktree <sel>]
+  _require_orca file-diff || return $?
+  _need "${1:-}" path || return $?
+  local path="$1"; shift
+  local args=(file diff "$path")
+  while [ $# -gt 0 ]; do case "$1" in
+    --staged) args+=(--staged); shift ;;
+    --worktree) args+=(--worktree "$2"); shift 2 ;;
+    *) shift ;; esac; done
+  args+=(--json)
+  orca "${args[@]}" | _json_extract '.result | tojson'
+}
+
+_cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
+  _require_orca file-open-changed || return $?
+  local args=(file open-changed)
+  while [ $# -gt 0 ]; do case "$1" in
+    --mode) args+=(--mode "$2"); shift 2 ;;
+    --worktree) args+=(--worktree "$2"); shift 2 ;;
+    *) shift ;; esac; done
+  args+=(--json)
+  orca "${args[@]}" | _json_extract '.result | tojson'
+}
+
 _send_text() {
   local agent="$1" text="$2" sub target
   sub="$(_detect_substrate)" || return 1
@@ -261,6 +285,8 @@ main() {
     worktree-create) _cmd_worktree_create "$@" ;;
     worktree-ps) _cmd_worktree_ps "$@" ;;
     worktree-rm) _cmd_worktree_rm "$@" ;;
+    file-diff) _cmd_file_diff "$@" ;;
+    file-open-changed) _cmd_file_open_changed "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

@@ -122,6 +122,18 @@ fanout group. This teardown is idempotent: a gone selector logs and no-ops.
 - **6a** — run inline gap analysis. Parse match rate from `docs/03-analysis/<feature>.analysis.md`.
 - **6b** — if < 90%, run inline iterate (5-cycle cap). Loop until ≥90% AND 100% test pass.
 
+### Surfacing diffs at review gates (Orca only)
+
+At Phase 3 plan approval, Phase 4 design approval, and Phase 6a verification, the
+orchestrator MAY call `hmad-dispatch file-open-changed --mode diff` (or
+`hmad-dispatch file-diff <path>`) to surface the diff in Orca's editor. This is
+best-effort and non-blocking: a non-zero result (substrate≠orca or no editor) is
+logged as `[H-MAD] <feature> diff_surface_skipped`, and the gate proceeds exactly
+as today. Surfacing is never a gate precondition; the cmux review flow is unchanged.
+
+HemaSuite may use `file-diff <manuscript.docx>` to surface a generated manuscript
+DOCX; this is documented usage only, with no HemaSuite code in this feature.
+
 ## Agent-pane context hygiene
 
 The codex and agy agents are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `hmad-dispatch read` output you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
