@@ -7,6 +7,37 @@ export HMAD_ORCA_COORDINATOR_TERMINAL=<coordinator-handle>
 hmad-dispatch env  # reports: orchestration: on
 ```
 
+## Worker identity resolution
+
+`dispatch` resolves an agent to a concrete terminal in two best-effort passes,
+with the env pin always taking precedence:
+
+1. `HMAD_ORCA_<AGENT>_TERMINAL` if set — authoritative.
+2. Anchored, case-insensitive match on the terminal's **title** leading word.
+3. Case-insensitive match on the terminal's **preview**, excluding the
+   coordinator's own pane.
+
+0 or 2+ candidates resolve to a loud `UNRESOLVED` rather than a guess.
+
+**Pin `HMAD_ORCA_CODEX_TERMINAL` in practice.** Both auto-detect passes are
+unreliable for Codex, and this is a property of Orca, not a bug to fix:
+
+- `terminal list` reports a *derived* `.title` — the running program's name if
+  it sets one, else the worktree name. `agy` self-titles, so it resolves. The
+  Codex CLI does not, so its title is the worktree name (e.g. `HemaSuite`) and
+  the title pass cannot match it.
+- `terminal rename` does **not** help. It sets the *tab* title, and panes in a
+  split share one `tabId` (only `leafId` differs), so it renames the whole tab
+  and never changes the per-terminal `.title` that matching reads.
+- `preview` is live scrollback. An agent's launch banner (`OpenAI Codex
+  (v0.144.6)`) identifies the pane only until it scrolls away, usually within
+  the first task. The preview pass is a courtesy for freshly-spawned panes, not
+  a mechanism to rely on.
+
+The coordinator is excluded from the preview pass on purpose: its own pane
+renders the conversation, so a token like `codex` appears there whenever it is
+merely discussed, and matching it would dispatch a task to itself.
+
 Use these additive `hmad-dispatch` verbs:
 
 - `task-create <label> <specfile>` — registers a task and returns its task ID. It requires the coordinator pin and prepends the worker callback handle to the task spec.

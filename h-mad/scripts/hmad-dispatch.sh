@@ -82,12 +82,38 @@ _resolve_target() {
 }
 
 _orca_find() {
-  # Match a terminal whose preview/title contains the agent token.
-  local token="$1" ids
-  ids="$(orca terminal list --json | jq -r \
-    --arg t "$token" '.result.terminals[] | select(((.preview//"") + " " + (.title//"")) | test($t)) | .handle')"
-  local n; n="$(printf '%s' "$ids" | grep -c . || true)"
+  # Match the single Orca terminal whose TITLE begins with the agent token
+  # (case-insensitive), mirroring _cmux_find. Pin HMAD_ORCA_<AGENT>_TERMINAL
+  # to override.
+  #
+  # Identity comes from the title only. The previous matcher tested an
+  # unanchored, case-sensitive regex against (preview + title): preview is live
+  # scrollback, so any pane that merely rendered the word "codex" matched --
+  # including the coordinator's own pane, which could then dispatch to itself.
+  # Anchoring to the leading title word also rejects panes like
+  # `vim codex_result.py`, exactly as the cmux side does.
+  local token="$1" listing ids n
+  listing="$(orca terminal list --json)" || return 1
+  # Pass 1 -- anchored, case-insensitive TITLE match (identity, not content).
+  ids="$(printf '%s' "$listing" | jq -r --arg t "$token" \
+    '.result.terminals[] | select((.title//"") | test("^" + $t + "([^A-Za-z]|$)"; "i")) | .handle')"
+  n="$(printf '%s' "$ids" | grep -c . || true)"
   if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
+  if [ "$n" -eq 0 ]; then
+    # Pass 2 -- preview fallback. Agent panes often carry a generic title (the
+    # Codex pane is titled after its worktree) while the preview holds the
+    # launch banner, e.g. "OpenAI Codex (v0.144.6)". Never consider the
+    # coordinator's own pane: its preview renders this conversation, so the
+    # token appears there whenever it is merely discussed, and matching it
+    # would make the coordinator dispatch to itself.
+    ids="$(printf '%s' "$listing" | jq -r --arg t "$token" \
+      --arg self "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" \
+      '.result.terminals[]
+       | select(.handle != $self)
+       | select((.preview//"") | test($t; "i")) | .handle')"
+    n="$(printf '%s' "$ids" | grep -c . || true)"
+    if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
+  fi
   echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
   return 1
 }

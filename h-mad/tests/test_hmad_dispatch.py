@@ -161,6 +161,91 @@ def test_cmux_identity_autodetect_rejects_false_matches(tmp_path):
     assert "agy -> surface:5" in r.stdout
 
 
+def _orca_terms(*pairs):
+    """Build an `orca terminal list --json` envelope from (handle, title, preview)."""
+    items = ",".join(
+        '{"handle":"%s","title":"%s","preview":"%s"}' % p for p in pairs
+    )
+    return '{"ok":true,"result":{"terminals":[' + items + ']}}'
+
+
+def test_orca_identity_autodetect_by_title(tmp_path):
+    # Mirror of the cmux auto-detect: resolve by the LEADING word of the title.
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms(
+        ("term_claude", "Claude Code", "claude --dangerously-skip-permissions"),
+        ("term_codex", "Codex - HemaSuite", "gpt-5.6-terra high"),
+        ("term_agy", "agy --dangerously-skip-permissions", "Gemini 3.1 Pro"),
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+    assert "codex -> term_codex" in r.stdout
+    assert "agy -> term_agy" in r.stdout
+
+
+def test_orca_identity_autodetect_ambiguous_and_missing(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r0 = run(["env"], substrate="orca",
+             env={"_BINDIR": b,
+                  "HMAD_STUB_ORCA_STDOUT": _orca_terms(("term_c", "Claude Code", "claude"))})
+    assert "codex -> UNRESOLVED" in r0.stdout
+    assert "agy -> UNRESOLVED" in r0.stdout
+    r2 = run(["env"], substrate="orca",
+             env={"_BINDIR": b,
+                  "HMAD_STUB_ORCA_STDOUT": _orca_terms(("term_a", "Codex - A", ""),
+                                                       ("term_b", "Codex - B", ""))})
+    assert "codex -> UNRESOLVED" in r2.stdout
+
+
+def test_orca_identity_autodetect_ignores_preview_and_substring_titles(tmp_path):
+    # Regression: the matcher used to test an unanchored regex against
+    # (preview + title). Preview is live scrollback, so a coordinator pane that
+    # merely *rendered* the word "codex" would match and the coordinator could
+    # dispatch a task to itself. Identity must come from the title alone, and
+    # only as its leading word.
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms(
+        # Coordinator rendering the word in its scrollback -- must NOT match.
+        ("term_coord", "Claude Code", "discussing codex and agy dispatch targets"),
+        # Title contains the token but not as the leading word -- must NOT match.
+        ("term_vim", "vim codex_result.py", ""),
+        ("term_less", "less agy-notes.md", ""),
+        ("term_codex", "Codex - HemaSuite", ""),
+        ("term_agy", "agy --dangerously-skip-permissions", ""),
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+    assert "codex -> term_codex" in r.stdout
+    assert "agy -> term_agy" in r.stdout
+
+
+def test_orca_identity_preview_fallback_skips_coordinator_own_pane(tmp_path):
+    # Title match yields 0, so the preview fallback runs. The coordinator's own
+    # preview renders this conversation and therefore contains "codex" whenever
+    # the token is merely discussed -- it must be excluded, or the coordinator
+    # dispatches to itself. The real agent pane (generic title, banner in the
+    # preview) is the correct target.
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms(
+        ("term_coord", "Claude Code", "weighing codex vs agy as dispatch targets"),
+        ("term_real", "HemaSuite", "OpenAI Codex (v0.144.6)  model: gpt-5.6-terra"),
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> term_real" in r.stdout
+    assert "codex -> term_coord" not in r.stdout
+
+
+def test_orca_identity_preview_fallback_refuses_when_only_coordinator_matches(tmp_path):
+    # Excluding the coordinator leaves 0 candidates -> loud UNRESOLVED rather
+    # than a self-dispatch.
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms(("term_coord", "Claude Code", "talking about codex again"))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> UNRESOLVED" in r.stdout
+
+
 def test_cmux_identity_env_override(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["env"], substrate="cmux",
