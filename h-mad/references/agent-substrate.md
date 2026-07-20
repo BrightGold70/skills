@@ -24,7 +24,7 @@ H-MAD drives two long-lived peer-agent REPLs — **codex** (implementation/tests
 
 ## Agent identity
 - **cmux (static):** `HMAD_CMUX_CODEX_SURFACE` (default `surface:5`), `HMAD_CMUX_AGY_SURFACE` (default `surface:2`).
-- **orca (dynamic):** `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin an id/name; else resolved from `orca terminal list --json` by matching the terminal running `codex`/`agy`. Ambiguous → wrapper halts, pin the env var.
+- **orca (dynamic):** `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin an id/name; else resolved from `orca terminal list --json` by matching the terminal running `codex`/`agy`. Zero or multiple matches → wrapper halts; pin the env var.
 
 ## Launching the panes
 - **cmux:** `cmux split-window --command 'codex'` / `cmux split-window --command 'agy --dangerously-skip-permissions'`.

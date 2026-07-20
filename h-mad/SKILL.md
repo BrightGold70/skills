@@ -167,7 +167,7 @@ print('OK')
 
 ## Audit prompt assembly
 
-**Substrate preflight (Phase 5 + first audit dispatch).** Run `hmad-dispatch env`.
+**Substrate preflight (once per H-MAD run — at Phase 5 start, or the first audit dispatch if earlier; skip if the substrate was already recorded this run).** Run `hmad-dispatch env`.
 If it exits non-zero → halt `<phase>:no_substrate`. Record the printed substrate +
 agent mapping via `scripts/h_mad_telemetry.py` so the run log states which environment
 it dispatched under. This is the explicit environment check (cmux vs orca) — do it
@@ -227,6 +227,7 @@ Ad-hoc summary: `python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py summa
 - `references/phase-table.md` — full phase gate table
 - `references/failure-recovery.md` — halt routes + recovery hints
 - `references/state-schema.md` — state schema details
+- `references/agent-substrate.md` — Agent dispatch substrate (cmux | orca) — hmad-dispatch verbs, detection, identity pins, pane launch
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template
