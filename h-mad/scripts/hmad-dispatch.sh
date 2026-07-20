@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | notify
+# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -20,6 +20,25 @@ _detect_substrate() {
   if [ "$has_cmux" = 1 ]; then printf 'cmux\n'; return 0; fi   # both present => default cmux
   if [ "$has_orca" = 1 ]; then printf 'orca\n'; return 0; fi
   return 1
+}
+
+_need() {  # $1 value, $2 name — non-zero + message if empty
+  [ -n "${1:-}" ] || { echo "hmad-dispatch: missing required argument: $2" >&2; return 2; }
+}
+
+_require_orca() {  # $1 verb-name — non-zero + message unless substrate=orca
+  local sub; sub="$(_detect_substrate)" || return 1
+  [ "$sub" = "orca" ] || { echo "hmad-dispatch: '$1' requires orchestration mode (substrate=orca); current substrate=$sub" >&2; return 2; }
+}
+
+_coordinator() {  # echo the coordinator handle or fail with a message
+  if [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_COORDINATOR_TERMINAL"
+  else echo "hmad-dispatch: set HMAD_ORCA_COORDINATOR_TERMINAL (the H-MAD coordinator's Orca terminal handle)" >&2; return 1; fi
+}
+
+_orchestration_active() {  # 0 iff substrate=orca AND coordinator pinned
+  local sub; sub="$(_detect_substrate)" 2>/dev/null || return 1
+  [ "$sub" = "orca" ] && [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]
 }
 
 _resolve_target() {
@@ -61,7 +80,55 @@ _cmd_env() {
   for a in codex agy; do
     if t="$(_resolve_target "$a" 2>/dev/null)"; then echo "$a -> $t"; else echo "$a -> UNRESOLVED"; fi
   done
+  if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
   return 0
+}
+
+_cmd_task_create() {  # $1 label, $2 specfile
+  _require_orca task-create || return $?
+  _need "${1:-}" label || return $?; _need "${2:-}" specfile || return $?
+  [ -f "$2" ] || { echo "hmad-dispatch: spec file not found: $2" >&2; return 2; }
+  local coord spec
+  coord="$(_coordinator)" || return 1
+  spec="[H-MAD] worker_done coordinator handle (use as --to): ${coord}
+
+$(cat "$2")"
+  orca orchestration task-create --spec "$spec" --task-title "$1" --json \
+    | jq -r '.result.taskId // .taskId // .result.id // .id // empty'
+}
+
+_cmd_dispatch() {  # $1 agent, $2 task_id
+  _require_orca dispatch || return $?
+  _need "${1:-}" agent || return $?; _need "${2:-}" task_id || return $?
+  local target; target="$(_resolve_target "$1")" || return 1
+  orca orchestration dispatch --task "$2" --to "$target" --return-preamble --json
+}
+
+_cmd_await() {  # $1 task_id, [--timeout <s>]
+  _require_orca await || return $?
+  _need "${1:-}" task_id || return $?
+  local task="$1"; shift
+  local timeout=600
+  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
+  local coord; coord="$(_coordinator)" || return 1
+  orca orchestration check --terminal "$coord" --wait --types worker_done --timeout-ms "$(( timeout * 1000 ))" --json \
+    | jq -c --arg t "$task" '(.result.messages // .messages // []) | map(select((.taskId // .payload.taskId // .["task-id"]) == $t)) | .[0] // empty'
+}
+
+_cmd_gate_create() {  # $1 task_id, $2 question, [$3 options-json]
+  _require_orca gate-create || return $?
+  _need "${1:-}" task_id || return $?; _need "${2:-}" question || return $?
+  if [ -n "${3:-}" ]; then
+    orca orchestration gate-create --task "$1" --question "$2" --options "$3" --json | jq -r '.result.gateId // .gateId // .result.id // .id // empty'
+  else
+    orca orchestration gate-create --task "$1" --question "$2" --json | jq -r '.result.gateId // .gateId // .result.id // .id // empty'
+  fi
+}
+
+_cmd_gate_resolve() {  # $1 gate_id, $2 resolution
+  _require_orca gate-resolve || return $?
+  _need "${1:-}" gate_id || return $?; _need "${2:-}" resolution || return $?
+  orca orchestration gate-resolve --id "$1" --resolution "$2" --json
 }
 
 _send_text() {
@@ -143,6 +210,11 @@ main() {
     wait)   _cmd_wait "$@" ;;
     alive)  _cmd_alive "$@" ;;
     notify) _cmd_notify "$@" ;;
+    task-create) _cmd_task_create "$@" ;;
+    dispatch) _cmd_dispatch "$@" ;;
+    await) _cmd_await "$@" ;;
+    gate-create) _cmd_gate_create "$@" ;;
+    gate-resolve) _cmd_gate_resolve "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

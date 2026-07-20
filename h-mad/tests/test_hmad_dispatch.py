@@ -240,3 +240,133 @@ def test_alive_orca_false(tmp_path):
             env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_y",
                  "HMAD_STUB_ORCA_STDOUT": canned})
     assert r.returncode == 1
+
+
+def test_task_create_registers_pinned_coordinator_and_parses_task_id(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    spec = tmp_path / "task.md"; spec.write_text("Implement the module.\n")
+    r = run(["task-create", "implement-module", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": '{"result":{"taskId":"task_1"}}'},
+            capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "task_1\n"
+    text = cap.read_text()
+    assert "orca orchestration task-create --spec [H-MAD] worker_done coordinator handle (use as --to): term_coord" in text
+    assert "Implement the module." in text
+    assert "--task-title implement-module --json" in text
+
+
+def test_task_create_requires_coordinator_and_existing_spec_file(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    spec = tmp_path / "task.md"; spec.write_text("spec")
+    missing_pin = run(["task-create", "label", str(spec)], substrate="orca", env={"_BINDIR": b})
+    assert missing_pin.returncode == 1
+    assert "HMAD_ORCA_COORDINATOR_TERMINAL" in missing_pin.stderr
+    missing_file = run(["task-create", "label", str(tmp_path / "missing.md")], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert missing_file.returncode == 2
+    assert "spec file not found" in missing_file.stderr
+
+
+def test_dispatch_orchestration_uses_resolved_target(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["dispatch", "codex", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca orchestration dispatch --task task_1 --to term_codex --return-preamble --json\n"
+
+
+def test_await_filters_worker_done_and_converts_timeout(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = '{"result":{"messages":[{"taskId":"other"},{"taskId":"task_1","report-path":"/r"}]}}'
+    r = run(["await", "task_1", "--timeout", "60"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert '"taskId":"task_1"' in r.stdout
+    assert cap.read_text() == "orca orchestration check --terminal term_coord --wait --types worker_done --timeout-ms 60000 --json\n"
+
+
+def test_await_defaults_timeout_and_requires_coordinator(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["await", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": '{"messages":[]}'}, capture=cap)
+    assert r.returncode == 0
+    assert "--timeout-ms 600000 --json" in cap.read_text()
+    no_pin = run(["await", "task_1"], substrate="orca", env={"_BINDIR": b})
+    assert no_pin.returncode == 1
+    assert "HMAD_ORCA_COORDINATOR_TERMINAL" in no_pin.stderr
+
+
+def test_gate_create_with_and_without_options_and_gate_resolve(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = '{"result":{"gateId":"gate_1"}}'
+    r = run(["gate-create", "task_1", "Continue?", '["yes","no"]'], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "gate_1\n"
+    assert cap.read_text() == 'orca orchestration gate-create --task task_1 --question Continue? --options ["yes","no"] --json\n'
+    r = run(["gate-create", "task_1", "Continue?"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text().endswith("orca orchestration gate-create --task task_1 --question Continue? --json\n")
+    r = run(["gate-resolve", "gate_1", "approved"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text().endswith("orca orchestration gate-resolve --id gate_1 --resolution approved --json\n")
+
+
+def test_orchestration_verbs_require_orca_on_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    spec = tmp_path / "task.md"; spec.write_text("spec")
+    verbs = [
+        ["task-create", "label", str(spec)], ["dispatch", "codex", "task_1"],
+        ["await", "task_1"], ["gate-create", "task_1", "q?"],
+        ["gate-resolve", "gate_1", "approved"],
+    ]
+    for args in verbs:
+        r = run(args, substrate="cmux", env={"_BINDIR": b})
+        assert r.returncode == 2
+        assert "requires orchestration mode (substrate=orca)" in r.stderr
+
+
+def test_orchestration_verbs_validate_required_arguments(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    for args in (["task-create"], ["dispatch", "codex"], ["await"], ["gate-create", "task_1"],
+                 ["gate-resolve"], ["gate-resolve", "gate_1"]):
+        r = run(args, substrate="orca", env={"_BINDIR": b})
+        assert r.returncode == 2
+        assert "missing required argument" in r.stderr
+
+
+def test_env_reports_orchestration_indicator(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    on = run(["env"], substrate="orca",
+             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert on.returncode == 0
+    assert "orchestration: on" in on.stdout
+    off = run(["env"], substrate="cmux", env={"_BINDIR": b})
+    assert off.returncode == 0
+    assert "orchestration: off" in off.stdout
+
+
+def test_orchestration_worker_done_prompt_blocks_and_docs():
+    required_prompt_strings = ["worker_done", "--task-id", "--report-path",
+                               "[H-MAD] worker_done coordinator handle"]
+    for filename in ["codex-implementer-prompt.md", "agy-spec-reviewer-prompt.md"]:
+        text = (SKILL / "references" / filename).read_text()
+        for required in required_prompt_strings:
+            assert required in text
+    mode_doc = SKILL / "references" / "orchestration-mode.md"
+    assert mode_doc.exists()
+    mode_text = mode_doc.read_text()
+    for required in ["task-create", "dispatch", "await", "gate-create", "gate-resolve",
+                     "HMAD_ORCA_COORDINATOR_TERMINAL", "worker_done"]:
+        assert required in mode_text
+    assert "references/orchestration-mode.md" in (SKILL / "SKILL.md").read_text()

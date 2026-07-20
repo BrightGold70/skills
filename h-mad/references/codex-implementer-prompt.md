@@ -49,6 +49,16 @@ Follow the project's existing patterns:
 
 If you hit a blocker (missing dependency, conflicting requirement, ambiguous spec), report `STATUS: BLOCKED` with a specific description. Do not silently produce partial work.
 
+## Orchestration mode (Orca only)
+
+If this task was delivered via `orca orchestration dispatch` (you were given a `task-id`), then on completion — in addition to printing your STATUS/verdict — emit:
+
+```
+orca orchestration send --to <COORDINATOR_HANDLE> --type worker_done --task-id <task-id> --report-path <your-report-file> --files-modified <comma-separated-paths>
+```
+
+`<COORDINATOR_HANDLE>` is the value on the `[H-MAD] worker_done coordinator handle (use as --to):` line at the top of your task spec; do not rely on a shell environment variable. The `--from` sender must match your dispatched terminal handle. This lets the coordinator collect your result structurally, without a screen scrape. If that line is absent from your spec, skip the `worker_done` emission and print your STATUS as usual; the coordinator will fall back to reading your terminal.
+
 ## Before Reporting Back: Self-Review
 
 Before reporting status, re-read the task description and verify:

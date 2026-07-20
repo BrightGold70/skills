@@ -120,6 +120,10 @@ If `/clear` is not honored or the pane is wedged (input box still shows queued t
 
 **Cost note:** clearing is cheap and prevents two failure modes seen in practice — (a) an audit verdict influenced by an unrelated prior feature's discussion, and (b) `hmad-dispatch read` returning a stale prior-cycle report that the gate then parses as this cycle's result.
 
+### Orchestration mode (Orca)
+
+When `hmad-dispatch env` reports `orchestration: on` (Orca plus an `HMAD_ORCA_COORDINATOR_TERMINAL` pin), dispatch, verdict collection, and decision gates SHOULD use the structured orchestration verbs rather than screen scraping. The `send` / `read` / `wait` scrape flow remains the universal fallback for cmux or an unpinned coordinator. See `references/orchestration-mode.md`.
+
 ## Halt protocol
 
 See `references/failure-recovery.md` for per-phase routes + recovery hints.
