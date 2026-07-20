@@ -9,7 +9,7 @@ Cleared the **entire Orca adaptation backlog** in one session via an autonomous 
 
 ## Key Learnings
 - **Live-Orca e2e caught 3 stub-masked bugs that 5 agy audits + 3 6a-prime reviews all missed.** The create-verbs (`worktree-create`, `automation-create`) extracted the response *envelope* `.id` instead of `.result.<resource>.id`, because the stub JSON *guessed* the shape (`.result.worktree.selector`). Rule: Orca create-verbs return the resource id at `.result.<resource>.id`; **never** fall through to the envelope `.id`. Update stubs to the real envelope+result shape so they guard reality.
-- **Orca runtime facts (live-verified):** automations are agent-driven — valid `--provider` is `claude|codex|gemini` (NOT `agent`; Orca rejects unknown). `worktree create` requires `--repo`/targeting. `--trigger` and `--schedule`/`--cron` are mutually exclusive. Tier-2 orchestration (`dispatch`/`await`/`gate`) is **un-exercisable** — 0 Orca-hosted agents (`agents:[]`); transport (`read`/`send`/`wait`) works.
+- **Orca runtime facts (live-verified):** automations are agent-driven — valid `--provider` is `claude|codex|gemini` (NOT `agent`; Orca rejects unknown). `worktree create` requires `--repo`/targeting. `--trigger` and `--schedule`/`--cron` are mutually exclusive. ~~Tier-2 orchestration (`dispatch`/`await`/`gate`) is **un-exercisable** — 0 Orca-hosted agents (`agents:[]`); transport (`read`/`send`/`wait`) works.~~ **CORRECTED 2026-07-21 (later session): the `agents:[]` premise was wrong.** `orchestration dispatch` targets a **terminal handle**, not a hosted agent — hosted agents were never a prerequisite. Full Tier-2 loop verified live; see the addendum at the end of this doc.
 - **HPW gates Orca on `launcher_helpers.detect_profile()`, which returns `"cmux"` inside a cmux session** (cmux marker wins over `ORCA_*` env). To force the orca path for a live smoke: `HPW_PROFILE_OVERRIDE=orca` (highest precedence) + `orca` on PATH.
 - **Operator decision:** HemaSuite reaches Orca via **direct `orca` CLI calls**, NOT `hmad-dispatch` — no cross-repo dependency on the h-mad skill; mirrors the §37 launch-profile precedent. All `orca` I/O behind one mocked `_run_orca` seam (B10).
 - **cmux `hmad-dispatch` agent defaults were stale** (`codex→surface:5`, `agy→surface:2`) and silently misrouted. Replaced with `_cmux_find` — matches the single surface whose title's **leading word** is the agent token (`[terminal] "${token}[^A-Za-z]`, mirrors `_orca_find`); env pins still override; 0/2+ matches → UNRESOLVED (loud). agy flagged the first (unanchored) attempt as false-matching `vim codex_result` — leading-word anchor fixed it.
@@ -17,13 +17,13 @@ Cleared the **entire Orca adaptation backlog** in one session via an autonomous 
 - **MEMORY.md compaction:** the index is a pointer-only file — all detail belongs in topic files; trimming index hooks loses nothing. `[[wikilinks]]` reference topic files without the `.md` suffix (a `grep <file>.md` check false-flags them).
 
 ## Next Steps
-1. **[BLOCKED] Tier-2 orchestration live e2e** — validate `task-create→dispatch→await→gate` end-to-end. Needs an Orca runtime with **hosted agents** (currently `agents:[]`). Not actionable until such agents exist.
+1. ~~**[BLOCKED] Tier-2 orchestration live e2e**~~ — **DONE 2026-07-21 (later session), PASS.** `task-create → dispatch --inject → check --wait → gate-create → gate-resolve` all verified against the live runtime, dispatching to the `agy` terminal. See the addendum at the end of this doc. Remaining un-exercised: the `orchestration run` coordinator loop.
 2. **Re-run anemia-jmj live e2e** (carry from session start, never acted) — `hpw launch --project anemia_jmj --prompt "Anemia in hematological malignancies" --llm-provider agent --yes --status-json` on a cmux surface (daemon backend=claude + NLM up; `hpw doctor` first). Confirms the earlier launch-path-canonical fix.
 3. **[suggested] review-pipeline-correctness feature** — next HemaSuite e2e-backlog cluster (A-P1-1/2/4) in `HemaSuite/.../docs/HemaSuite_improvement_backlog_2026-06.md`; via HPW `/h-mad`.
 4. **[suggested] dose-token PubMed noise** → #37 topic-hygiene follow-on (E-P1-1, same backlog doc).
 
 ## Open / Blocked Items
-- **Tier-2 orchestration e2e** — status: blocked on Orca-hosted agents (external prereq).
+- **Tier-2 orchestration e2e** — status: ~~blocked on Orca-hosted agents (external prereq)~~ → **CLOSED 2026-07-21, PASS** (never actually blocked; see addendum). Successor open item: `orchestration run` coordinator loop still un-exercised.
 - **HemaSuite Orca wiring carries** — status: deferred, non-blocking. (a) full live desk-check visually opening the manuscript diff in Orca's editor (needs NLM + real manuscript); (b) a cron automation actually *firing* (needs a scheduling cycle). The create/list/remove lifecycle is live-proven.
 - **anemia-jmj e2e / review-pipeline-correctness / dose-token** — status: deferred (pre-existing HemaSuite carries, not touched this session).
 - **Low/speculative Orca candidates** — status: dropped as unnecessary (`linear` N/A, `computer`/`tab`, `status`, `automations show/runs/edit`).
@@ -75,3 +75,35 @@ cd /Users/kimhawk/Coding/skills        # h-mad skill (symlinked ~/.claude/skills
 - `Coding/skills/docs/archive/2026-07/*/` — full H-MAD trails for Tier-3/M1/M2.
 - `Coding/HemaSuite/hematology-paper-writer/docs/archive/2026-07/orca-review-and-e2e-scheduling/` — HPW feature trail; `HemaSuite_Project_Document.md` §37/§38 (Orca substrate origination records).
 - Auto-memory: `project_orca_adaptation_backlog.md` (full arc record).
+
+---
+
+## Addendum — Tier-2 orchestration live e2e: PASS (2026-07-21, later session)
+
+The "blocked on Orca-hosted agents" verdict recorded above was **wrong on its premise** and is retracted. `orchestration dispatch` takes `--to <terminal handle>`, not an agent id; the `agents:[]` reading was never the gate. No external prerequisite ever existed, and no code change was needed to unblock it.
+
+**Environment difference that made this visible:** the verifying session ran *inside* Orca (cwd `/Users/kimhawk/orca/HemaSuite`, four live terminals in the worktree) rather than in a cmux session. The original attempt looked for hosted agents; the terminals were the dispatch targets all along.
+
+**Verified end to end** — coordinator `term_6f1ac45c…` (Claude), worker `term_e4c671ea…` (`agy`, Gemini 3.1 Pro), read-only probe task:
+
+| Step | Result |
+|---|---|
+| `task-create` | `task_5532ebea72f4`, status `ready` |
+| `dispatch-show --preamble` | Full worker contract; `--from` correctly bound to assignee handle |
+| `dispatch --dry-run` | `dispatch: null, injected: false` — confirmed side-effect-free |
+| `dispatch --inject` | `ctx_b85d545a2e79`; agy began executing with no manual Enter |
+| `check --wait --types worker_done` | Returned in ~18s; payload carried both `taskId` and `dispatchId` |
+| task auto-completion | `completed`, `filesModified: []` — read-only constraint honored |
+| `gate-create` | Task flipped `ready → blocked` |
+| `gate-resolve --resolution approve` | Task flipped `blocked → ready` |
+
+Orchestration state was empty before the run and was reset to that baseline afterward (`orchestration reset --all`). No files written, no commits, in either repo.
+
+**New facts worth carrying:**
+- **Orca `--inject` submits; cmux `paste-buffer` does not.** The F-12 rule in HemaSuite `CLAUDE.md` ("Antigravity needs an explicit `send-key enter`") does **not** apply to the Orca dispatch path — agy started work off the injection alone. The two substrates diverge here; don't port the cmux workaround into Orca dispatch code.
+- **The create-verb envelope trap extends to `task-create`.** It returned a request id at `.id` and the real `task_5532ebea72f4` at `.result.task.id` — same shape as `worktree-create` / `automation-create`. Treat `.result.<resource>.id` as the rule for every Orca create-verb, not a per-verb quirk.
+- **`worker_done` auto-completes the task.** The coordinator does not call `task-update`; a coordinator loop should not assume it must.
+- **There is no `await` verb.** The h-mad wrapper's `await` maps to `orchestration check --wait`, which emits `_keepalive` lines on stderr every 15s — filter them when merging streams (`jq 'select(._keepalive|not)'`).
+- **Runtime timestamps ran ~1 day behind the session date** (`2026-07-20 22:19` while the session date was 2026-07-21). Cosmetic, but it will misalign log correlation across runtime and repo history.
+
+**Still un-exercised:** the `orchestration run` coordinator loop (`--spec`, `--max-concurrent`, `--poll-interval-ms`). It spawns a real multi-worker run, so it was deliberately left for an explicit opt-in rather than folded into this probe.
