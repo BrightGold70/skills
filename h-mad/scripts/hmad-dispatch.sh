@@ -110,6 +110,25 @@ _cmd_wait() {
   esac
 }
 
+_cmd_alive() {
+  local agent="$1" sub target; sub="$(_detect_substrate)" || return 1
+  target="$(_resolve_target "$agent")" || return 1
+  case "$sub" in
+    cmux) cmux tree --all | grep -q -- "$target" ;;
+    orca) orca terminal list --json | jq -e --arg id "$target" '.[] | select(.id == $id)' >/dev/null ;;
+  esac
+}
+
+_cmd_notify() {
+  local title="$1" body="$2" sub; sub="$(_detect_substrate)" || sub="cmux"
+  case "$sub" in
+    cmux) cmux notify --title "$title" --body "$body" || true ;;
+    orca) command -v osascript >/dev/null 2>&1 \
+            && osascript -e "display notification \"$body\" with title \"$title\"" >/dev/null 2>&1 || true ;;
+  esac
+  return 0
+}
+
 main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
@@ -118,6 +137,8 @@ main() {
     clear)  _cmd_clear "$@" ;;
     read)   _cmd_read "$@" ;;
     wait)   _cmd_wait "$@" ;;
+    alive)  _cmd_alive "$@" ;;
+    notify) _cmd_notify "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

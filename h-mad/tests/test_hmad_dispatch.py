@@ -172,3 +172,26 @@ def test_wait_orca_uses_native_idle(tmp_path):
             env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t-2"}, capture=cap)
     assert r.returncode == 0
     assert "orca terminal wait --terminal t-2 tui-idle" in cap.read_text()
+
+
+def test_alive_cmux_true(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["alive", "codex"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": "surface:5 codex\nsurface:2 agy\n"})
+    assert r.returncode == 0
+
+
+def test_alive_cmux_false(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["alive", "codex"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": "surface:2 agy\n"})
+    assert r.returncode == 1
+
+
+def test_notify_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    r = run(["notify", "halted", "reason-x"], substrate="cmux",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert "cmux notify --title halted --body reason-x" in cap.read_text()
