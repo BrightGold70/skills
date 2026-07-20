@@ -82,3 +82,35 @@ def test_no_substrate_errors(tmp_path):
     b = _bindir(tmp_path, [])
     r = run(["env"], env={"_BINDIR": b})
     assert r.returncode == 1
+
+
+def test_cmux_identity_defaults(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["env"], substrate="cmux", env={"_BINDIR": b})
+    assert "codex -> surface:5" in r.stdout
+    assert "agy -> surface:2" in r.stdout
+
+
+def test_cmux_identity_env_override(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["env"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:9"})
+    assert "codex -> surface:9" in r.stdout
+
+
+def test_orca_identity_explicit_pin(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-abc",
+                 "HMAD_ORCA_AGY_TERMINAL": "t-def"})
+    assert "codex -> t-abc" in r.stdout
+    assert "agy -> t-def" in r.stdout
+
+
+def test_orca_identity_resolves_from_list_json(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    canned = '[{"id":"t-1","command":"codex"},{"id":"t-2","command":"agy --dangerously-skip-permissions"}]'
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned})
+    assert "codex -> t-1" in r.stdout
+    assert "agy -> t-2" in r.stdout

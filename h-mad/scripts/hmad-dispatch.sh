@@ -22,6 +22,35 @@ _detect_substrate() {
   return 1
 }
 
+_resolve_target() {
+  # $1 = agent (codex|agy). Echo concrete surface/terminal for the active substrate.
+  local agent="$1" sub
+  sub="$(_detect_substrate)" || return 1
+  case "$sub:$agent" in
+    cmux:codex) printf '%s\n' "${HMAD_CMUX_CODEX_SURFACE:-surface:5}"; return 0 ;;
+    cmux:agy)   printf '%s\n' "${HMAD_CMUX_AGY_SURFACE:-surface:2}";   return 0 ;;
+    orca:codex)
+      if [ -n "${HMAD_ORCA_CODEX_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_CODEX_TERMINAL"; return 0; fi
+      _orca_find codex; return $? ;;
+    orca:agy)
+      if [ -n "${HMAD_ORCA_AGY_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_AGY_TERMINAL"; return 0; fi
+      _orca_find agy; return $? ;;
+    *) echo "hmad-dispatch: unknown agent '$agent'" >&2; return 2 ;;
+  esac
+}
+
+_orca_find() {
+  # Match a terminal whose command contains the agent token. Shape of
+  # `orca terminal list --json` to confirm against live CLI; tolerate .command|.name.
+  local token="$1" ids
+  ids="$(orca terminal list --json | jq -r \
+    --arg t "$token" '.[] | select(((.command//"") + " " + (.name//"")) | test($t)) | .id')"
+  local n; n="$(printf '%s' "$ids" | grep -c . || true)"
+  if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
+  echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_${token^^}_TERMINAL" >&2
+  return 1
+}
+
 _cmd_env() {
   local sub
   if ! sub="$(_detect_substrate)"; then
@@ -29,6 +58,10 @@ _cmd_env() {
     return 1
   fi
   echo "substrate: $sub"
+  local a t
+  for a in codex agy; do
+    if t="$(_resolve_target "$a" 2>/dev/null)"; then echo "$a -> $t"; else echo "$a -> UNRESOLVED"; fi
+  done
   return 0
 }
 
