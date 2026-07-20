@@ -80,10 +80,16 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 ## Phase 5 (Implementation) sub-steps
 
+**Substrate preflight (Phase 5 + first audit dispatch).** Run `hmad-dispatch env`.
+If it exits non-zero → halt `<phase>:no_substrate`. Record the printed substrate +
+agent mapping via `scripts/h_mad_telemetry.py` so the run log states which environment
+it dispatched under. This is the explicit environment check (cmux vs orca) — do it
+before any `send`/`read`. See `references/agent-substrate.md`.
+
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
-- **5d** — RED dispatch via cmux (see `references/codex-implementer-prompt.md`). Verify Codex + agy panes alive (`cmux tree --all`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
+- **5d** — RED dispatch via cmux (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
 - **5e** — GREEN dispatch via cmux (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
@@ -96,7 +102,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 ## Agent-pane context hygiene
 
-The Codex (surface:5) and agy (surface:2) panes are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `cmux read-screen` you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
+The codex and agy agents are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `hmad-dispatch read` output you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
 
 **When to clear (fresh pass) vs keep warm (continuation):**
 - **Clear** at: the first cycle of each audit phase (Phase 3/4/5b cycle 1); 5d and the first 5e dispatch of a feature; 6a-prime; and whenever you confirm a pane is alive at the *start* of a new feature.
@@ -104,15 +110,15 @@ The Codex (surface:5) and agy (surface:2) panes are **long-lived REPLs reused ac
 
 **How to clear (per pane), then verify it took:**
 ```bash
-# agy (Antigravity CLI, surface:2) and Codex (surface:5) both accept /clear:
-cmux send --surface <surface> "/clear"
-cmux send-key --surface <surface> Enter
+# agy (Antigravity CLI) and codex both accept /clear:
+hmad-dispatch clear codex
+hmad-dispatch clear agy
 # verify a clean prompt (no leftover input, not mid-run):
-cmux read-screen --surface <surface> --lines 6
+hmad-dispatch read <agent> --lines 6
 ```
-If `/clear` is not honored or the pane is wedged (input box still shows queued text, or a 400/desync on agy), **restart the surface** instead: re-seed via the launch command (`agy --dangerously-skip-permissions` / the Codex CLI) per `AGENTS.md`, then re-confirm alive with `cmux tree --all`. A restart is the hard reset; `/clear` is the cheap one. Never dispatch an audit/TDD prompt into a pane whose scrollback still shows the previous cycle's report — you will grep the wrong verdict.
+If `/clear` is not honored or the pane is wedged (input box still shows queued text, or a 400/desync on agy), **restart the surface** instead: re-seed via the launch command (`agy --dangerously-skip-permissions` / the Codex CLI) per `AGENTS.md`, then re-confirm alive with `hmad-dispatch alive <agent>`. A restart is the hard reset; `/clear` is the cheap one. Never dispatch an audit/TDD prompt into a pane whose scrollback still shows the previous cycle's report — you will grep the wrong verdict.
 
-**Cost note:** clearing is cheap and prevents two failure modes seen in practice — (a) an audit verdict influenced by an unrelated prior feature's discussion, and (b) `read-screen` returning a stale prior-cycle report that the gate then parses as this cycle's result.
+**Cost note:** clearing is cheap and prevents two failure modes seen in practice — (a) an audit verdict influenced by an unrelated prior feature's discussion, and (b) `hmad-dispatch read` returning a stale prior-cycle report that the gate then parses as this cycle's result.
 
 ## Halt protocol
 
@@ -120,7 +126,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 
 1. Write `orchestrator_state[<feature>]`: `halt_reason = "<phase>:<sub-step>:<description>"`, `halt_ts = <now>`, `phase = null`. Pin `current_phase` + `last_completed_phase`.
 2. Emit `[H-MAD] <feature> phase<N> halted reason=<reason>`.
-3. `cmux notify --title "/h-mad halted" --subtitle <feature> --body <reason>`.
+3. `hmad-dispatch notify "/h-mad halted" "<reason>"`.
 4. Print recovery hints.
 5. Exit.
 
@@ -131,7 +137,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
-- Never invoke Codex or agy directly — always via cmux file-indirection per CLAUDE.md §F-12.
+- Never invoke Codex or agy directly — always via `hmad-dispatch` file-indirection (see `references/agent-substrate.md`) per CLAUDE.md §F-12.
 
 ## Known interactions (coexisting plugins)
 
@@ -161,6 +167,12 @@ print('OK')
 
 ## Audit prompt assembly
 
+**Substrate preflight (Phase 5 + first audit dispatch).** Run `hmad-dispatch env`.
+If it exits non-zero → halt `<phase>:no_substrate`. Record the printed substrate +
+agent mapping via `scripts/h_mad_telemetry.py` so the run log states which environment
+it dispatched under. This is the explicit environment check (cmux vs orca) — do it
+before any `send`/`read`. See `references/agent-substrate.md`.
+
 For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 
 1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`.
@@ -170,13 +182,12 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
-7.5. **On cycle 1 of each audit phase (and after confirming the agy pane is alive via `cmux tree --all`), clear the agy pane's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
-8. Dispatch via cmux file-indirection:
+7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
+8. Dispatch via `hmad-dispatch` file-indirection:
    ```bash
-   cmux send --surface <agy-surface> "$(cat /tmp/audit_<feature>_<phase>_cycle<N>.txt)"
-   cmux send-key --surface <agy-surface> Enter
+   hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
    ```
-9. Capture: `cmux read-screen --surface <agy-surface> --lines 50`.
+9. Capture: `hmad-dispatch read agy --lines 50`.
 10. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
 11. Run the gate — the verdict unit counts bullets in BOTH `## Must-fix` AND `## Should-fix` (excluding the bare-`None` sentinel, a stray `- None`, and any `## Acknowledged-not-fixed` items in the same file or a sidecar `.audit.v<N+1>.md` passed via `--ack-file`):
     ```bash
