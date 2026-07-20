@@ -106,4 +106,51 @@ Orchestration state was empty before the run and was reset to that baseline afte
 - **There is no `await` verb.** The h-mad wrapper's `await` maps to `orchestration check --wait`, which emits `_keepalive` lines on stderr every 15s — filter them when merging streams (`jq 'select(._keepalive|not)'`).
 - **Runtime timestamps ran ~1 day behind the session date** (`2026-07-20 22:19` while the session date was 2026-07-21). Cosmetic, but it will misalign log correlation across runtime and repo history.
 
-**Still un-exercised:** the `orchestration run` coordinator loop (`--spec`, `--max-concurrent`, `--poll-interval-ms`). It spawns a real multi-worker run, so it was deliberately left for an explicit opt-in rather than folded into this probe.
+~~**Still un-exercised:** the `orchestration run` coordinator loop~~ — exercised later the same session; see the second addendum below.
+
+---
+
+## Addendum 2 — coordinator loop, Codex worker, and six wrapper bugs (2026-07-21, same session)
+
+Ran the `orchestration run` coordinator loop, then the Codex worker path, then fixed everything the two runs exposed. Shipped to `skills` main: **`1f58047`** (four Tier-2 bugs) and **`d70488e`** (identity resolution + coverage). Suite 114 → 119, all green.
+
+### Coordinator loop: PASS, in a throwaway worktree
+
+Contained in a `--no-parent` worktree off HemaSuite with one fresh `claude` worker and `--max-concurrent 1`, on a read-only spec; removed afterward. Four findings:
+
+- **`--from` is silently required.** Without it, `run` returns `{"runId": …, "status": "running"}` with `ok: true` — and nothing registers. `run-stop` immediately after reports "No active coordinator run", and a `ready` task sits undispatched. The usage string documents `--from` as optional. This is a **false-success response**, and it is what made the loop first look like it "doesn't decompose specs". Upstream bug in Orca (stablyai/orca), not ours — we do not call `run` anywhere.
+- **It is a poller, not an LLM decomposer.** A prose spec produced zero tasks in 30s. `run` polls the existing task DAG, dispatches `ready` tasks up to `--max-concurrent`, collects `worker_done`, and **self-terminates when the queue drains** (`run-stop` afterwards reports no active run). `--spec` is run context; something else must create the tasks.
+- **Recruitment targets agent panes.** The probe worktree held a plain shell and a `claude` pane; the loop dispatched to the agent and never touched the shell. It does not create workers of its own.
+
+### Codex worker path: PASS (first time exercised)
+
+Every prior Tier-2 test used `agy` — the *auditor*. Codex is the *production* Phase-5 TDD worker and had never been run. Full loop through the wrapper: `task-create → dispatch --inject → worker_done → await`, correct hash, nothing modified (the pane runs in YOLO mode). Codex honours the preamble contract including the `Failed: <reason>` rule — an early probe of mine passed it a malformed spec and it reported the failure honestly rather than inventing a plausible commit hash.
+
+### Six wrapper bugs — the whole Tier-2 path was non-functional
+
+All were invisible to the 114-test suite because the stubs guessed response shapes Orca never returns, and Tier-2 had been written off as blocked so nothing ran live.
+
+| # | Site | Defect | Commit |
+|---|---|---|---|
+| 1 | `_cmd_task_create` | alternation ended in `.id` → returned request UUID, not `task_…` | `1f58047` |
+| 2 | `_cmd_gate_create` | same fall-through → returned UUID, not `gate_…` | `1f58047` |
+| 3 | `_cmd_await` | `.payload.taskId` on a JSON *string* → jq hard error | `1f58047` |
+| 4 | `_cmd_dispatch` | `--return-preamble` without `--inject` → delivered nothing; `worker_done` never fired | `1f58047` |
+| 5 | `_orca_find` | unanchored regex over live **preview** → coordinator could match its own pane and self-dispatch | `d70488e` |
+| 6 | `_orca_find` | case-sensitive, so the title arm never matched `Codex …` / `OpenAI Codex` | `d70488e` |
+
+Bug 4 is the one a stub can never catch: with 1–3 fixed the suite was fully green while the worker still received nothing. Fixtures now carry a decoy envelope id (`req_…_NOT_THE_RESOURCE_ID`) so a regression to `.id` fails loudly. The orca side had **zero** auto-detect tests, which is why 5/6 survived while cmux was hardened in `ba79898`; five were added.
+
+### Orca terminal identity — pin Codex, and why nothing else works
+
+Established by probing the live runtime, after a recommendation of mine turned out to be wrong:
+
+- `terminal list` reports a **derived** `.title`: the program's name if it sets one, else the worktree name. `agy` self-titles and resolves; the Codex CLI does not, so its title is `HemaSuite`.
+- **`terminal rename` cannot fix this.** It sets the *tab* title, and split panes share one `tabId` (only `leafId` differs) — the codex and agy panes are leaves of the same tab. It renames both and never changes the per-terminal `.title` that matching reads. Tried it live, reverted it.
+- **`preview` is volatile.** The `OpenAI Codex (v0.144.6)` banner I based the rename recommendation on had scrolled away within the hour; at verification time *no* pane contained the token.
+
+So resolution is pin → anchored case-insensitive title → preview-minus-coordinator, with the preview pass a courtesy for freshly-spawned panes only. **Pin `HMAD_ORCA_CODEX_TERMINAL` in practice.** Documented in `h-mad/references/orchestration-mode.md`.
+
+### Method note
+
+Six defects in one session, none catchable by the stub suite. Stub-only testing did not merely fail to catch them — it **certified them green**, and the "blocked" label protected the code from the one test that would have found them. See [[feedback_tracer_bullet_before_ceremony]].
