@@ -114,3 +114,34 @@ def test_orca_identity_resolves_from_list_json(tmp_path):
             env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned})
     assert "codex -> t-1" in r.stdout
     assert "agy -> t-2" in r.stdout
+
+
+def test_send_cmux_uses_file_contents(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-PROMPT")
+    r = run(["send", "codex", str(pf)], substrate="cmux",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "cmux send --surface surface:5 HELLO-PROMPT" in text
+    assert "send-key --surface surface:5 Enter" in text
+
+
+def test_send_orca_uses_file_contents(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-ORCA")
+    r = run(["send", "codex", str(pf)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "orca terminal send --terminal t-1 --text HELLO-ORCA --enter" in text
+
+
+def test_clear_sends_slash_clear(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    r = run(["clear", "agy"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert "cmux send --surface surface:2 /clear" in cap.read_text()

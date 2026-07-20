@@ -65,10 +65,25 @@ _cmd_env() {
   return 0
 }
 
+_send_text() {
+  local agent="$1" text="$2" sub target
+  sub="$(_detect_substrate)" || return 1
+  target="$(_resolve_target "$agent")" || return 1
+  case "$sub" in
+    cmux) cmux send --surface "$target" "$text"; cmux send-key --surface "$target" Enter ;;
+    orca) orca terminal send --terminal "$target" --text "$text" --enter ;;
+  esac
+}
+
+_cmd_send()  { _send_text "$1" "$(cat "$2")"; }   # $1 agent, $2 promptfile — file CONTENTS, not path
+_cmd_clear() { _send_text "$1" "/clear"; }
+
 main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
     env)    _cmd_env "$@" ;;
+    send)   _cmd_send "$@" ;;
+    clear)  _cmd_clear "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }
