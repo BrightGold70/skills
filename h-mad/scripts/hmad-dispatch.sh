@@ -78,12 +78,46 @@ _send_text() {
 _cmd_send()  { _send_text "$1" "$(cat "$2")"; }   # $1 agent, $2 promptfile — file CONTENTS, not path
 _cmd_clear() { _send_text "$1" "/clear"; }
 
+_cmd_read() {
+  local agent="$1"; shift
+  local lines=50
+  while [ $# -gt 0 ]; do case "$1" in --lines) lines="$2"; shift 2 ;; *) shift ;; esac; done
+  local sub target; sub="$(_detect_substrate)" || return 1
+  target="$(_resolve_target "$agent")" || return 1
+  case "$sub" in
+    cmux) cmux read-screen --surface "$target" --lines "$lines" ;;
+    orca) orca terminal read --terminal "$target" | tail -n "$lines" ;;
+  esac
+}
+
+_cmd_wait() {
+  local agent="$1"; shift
+  local timeout=300
+  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
+  local sub target; sub="$(_detect_substrate)" || return 1
+  target="$(_resolve_target "$agent")" || return 1
+  case "$sub" in
+    orca) orca terminal wait --terminal "$target" tui-idle ;;
+    cmux)
+      # No native idle in cmux: poll read-screen until two consecutive identical snapshots.
+      local prev="" cur elapsed=0
+      while [ "$elapsed" -lt "$timeout" ]; do
+        cur="$(cmux read-screen --surface "$target" --lines 6)"
+        [ "$cur" = "$prev" ] && [ -n "$cur" ] && return 0
+        prev="$cur"; sleep 3; elapsed=$((elapsed + 3))
+      done
+      return 1 ;;
+  esac
+}
+
 main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
     env)    _cmd_env "$@" ;;
     send)   _cmd_send "$@" ;;
     clear)  _cmd_clear "$@" ;;
+    read)   _cmd_read "$@" ;;
+    wait)   _cmd_wait "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

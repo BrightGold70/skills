@@ -145,3 +145,30 @@ def test_clear_sends_slash_clear(tmp_path):
     r = run(["clear", "agy"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
     assert r.returncode == 0
     assert "cmux send --surface surface:2 /clear" in cap.read_text()
+
+
+def test_read_cmux_passes_lines(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex", "--lines", "50"], substrate="cmux",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert "cmux read-screen --surface surface:5 --lines 50" in cap.read_text()
+
+
+def test_read_orca(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    assert "orca terminal read --terminal t-1" in cap.read_text()
+
+
+def test_wait_orca_uses_native_idle(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t-2"}, capture=cap)
+    assert r.returncode == 0
+    assert "orca terminal wait --terminal t-2 tui-idle" in cap.read_text()
