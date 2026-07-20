@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 [ -n "$HMAD_STUB_ORCA_STDOUT" ] && printf '%s' "$HMAD_STUB_ORCA_STDOUT"
-exit 0
+exit "${HMAD_STUB_ORCA_EXIT:-0}"

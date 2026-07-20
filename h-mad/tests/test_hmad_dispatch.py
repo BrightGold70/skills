@@ -370,3 +370,100 @@ def test_orchestration_worker_done_prompt_blocks_and_docs():
                      "HMAD_ORCA_COORDINATOR_TERMINAL", "worker_done"]:
         assert required in mode_text
     assert "references/orchestration-mode.md" in (SKILL / "SKILL.md").read_text()
+
+
+def test_worktree_create_argv_orca(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-create", "m", "--agent", "a1", "--base", "main"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree create --name m --agent a1 --base-branch main --json\n"
+
+
+def test_worktree_create_parses_selector_and_empty_match(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    selected = run(["worktree-create", "m"], substrate="orca",
+                   env={"_BINDIR": b,
+                        "HMAD_STUB_ORCA_STDOUT": '{"result":{"worktree":{"selector":"wt-7"}}}'})
+    assert selected.returncode == 0
+    assert selected.stdout == "wt-7\n"
+    empty = run(["worktree-create", "m"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{}}'})
+    assert empty.returncode == 0
+    assert empty.stdout == ""
+
+
+def test_worktree_create_prompt_file_and_missing_file(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("X")
+    r = run(["worktree-create", "m", "--prompt-file", str(prompt)], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert "--prompt X --json" in cap.read_text()
+
+    missing_cap = tmp_path / "missing-cap.txt"
+    missing = run(["worktree-create", "m", "--prompt-file", str(tmp_path / "missing.txt")],
+                  substrate="orca", env={"_BINDIR": b}, capture=missing_cap)
+    assert missing.returncode == 2
+    assert "prompt file not found" in missing.stderr
+    assert not missing_cap.exists()
+
+
+def test_worktree_create_refuses_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-create", "m"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_worktree_ps_argv_and_passthrough(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = '{"result":{"a":1}}'
+    r = run(["worktree-ps", "--limit", "3"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree ps --limit 3 --json\n"
+    assert r.stdout == '{"a":1}\n'
+
+    default_cap = tmp_path / "default-cap.txt"
+    default = run(["worktree-ps"], substrate="orca", env={"_BINDIR": b}, capture=default_cap)
+    assert default.returncode == 0
+    assert default_cap.read_text() == "orca worktree ps --json\n"
+
+
+def test_worktree_rm_argv_force_and_failure(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-rm", "wt-7", "--force"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree rm --worktree wt-7 --force --json\n"
+
+    failed = run(["worktree-rm", "wt-7"], substrate="orca",
+                 env={"_BINDIR": b, "HMAD_STUB_ORCA_EXIT": "1"})
+    assert failed.returncode == 1
+    assert "[H-MAD] worktree-rm failed selector=wt-7 rc=1" in failed.stderr
+
+
+def test_worktree_ps_and_rm_refuse_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    for args in (["worktree-ps"], ["worktree-rm", "wt-7"]):
+        cap = tmp_path / f"{'-'.join(args)}.txt"
+        r = run(args, substrate="cmux", env={"_BINDIR": b}, capture=cap)
+        assert r.returncode == 2
+        assert "requires orchestration mode (substrate=orca)" in r.stderr
+        assert not cap.exists()
+
+
+def test_skill_documents_fanout_conjunction():
+    text = (SKILL / "SKILL.md").read_text()
+    fanout = text[text.index("## Phase 5 parallel fanout"):]
+    for required in ["substrate=orca", "orchestration: on", "≥2 independent",
+                     "HMAD_ORCA_MAX_WORKTREES", "default 4", "worktree-create",
+                     "worktree-ps", "worktree-rm", "serial fallback"]:
+        assert required in fanout

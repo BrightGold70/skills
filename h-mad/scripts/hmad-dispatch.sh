@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve
+# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-create | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -29,6 +29,10 @@ _need() {  # $1 value, $2 name — non-zero + message if empty
 _require_orca() {  # $1 verb-name — non-zero + message unless substrate=orca
   local sub; sub="$(_detect_substrate)" || return 1
   [ "$sub" = "orca" ] || { echo "hmad-dispatch: '$1' requires orchestration mode (substrate=orca); current substrate=$sub" >&2; return 2; }
+}
+
+_json_extract() {  # $1 = jq alternation expr; stdin JSON -> first non-empty match
+  jq -r "${1} // empty"
 }
 
 _coordinator() {  # echo the coordinator handle or fail with a message
@@ -131,6 +135,45 @@ _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
   orca orchestration gate-resolve --id "$1" --resolution "$2" --json
 }
 
+_cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>]
+  _require_orca worktree-create || return $?
+  _need "${1:-}" name || return $?
+  local name="$1"; shift
+  local agent="" base="" pf=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --agent) agent="$2"; shift 2 ;; --base) base="$2"; shift 2 ;;
+    --prompt-file) pf="$2"; shift 2 ;; *) shift ;; esac; done
+  local args=(worktree create --name "$name")
+  [ -n "$agent" ] && args+=(--agent "$agent")
+  [ -n "$base" ] && args+=(--base-branch "$base")
+  if [ -n "$pf" ]; then
+    [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
+    args+=(--prompt "$(cat "$pf")")
+  fi
+  args+=(--json)
+  orca "${args[@]}" | _json_extract '.result.worktree.selector // .result.worktree.handle // .result.selector // .result.handle // .result.id // .id'
+}
+
+_cmd_worktree_ps() {  # [--limit <n>]
+  _require_orca worktree-ps || return $?
+  local args=(worktree ps)
+  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) shift ;; esac; done
+  args+=(--json)
+  orca "${args[@]}" | _json_extract '.result | tojson'
+}
+
+_cmd_worktree_rm() {  # <selector> [--force]
+  _require_orca worktree-rm || return $?
+  _need "${1:-}" selector || return $?
+  local sel="$1"; shift
+  local args=(worktree rm --worktree "$sel")
+  while [ $# -gt 0 ]; do case "$1" in --force) args+=(--force); shift ;; *) shift ;; esac; done
+  args+=(--json)
+  local rc=0
+  orca "${args[@]}" >/dev/null || rc=$?
+  [ $rc -eq 0 ] || { echo "[H-MAD] worktree-rm failed selector=$sel rc=$rc" >&2; return $rc; }
+}
+
 _send_text() {
   local agent="$1" text="$2" sub target
   sub="$(_detect_substrate)" || return 1
@@ -215,6 +258,9 @@ main() {
     await) _cmd_await "$@" ;;
     gate-create) _cmd_gate_create "$@" ;;
     gate-resolve) _cmd_gate_resolve "$@" ;;
+    worktree-create) _cmd_worktree_create "$@" ;;
+    worktree-ps) _cmd_worktree_ps "$@" ;;
+    worktree-rm) _cmd_worktree_rm "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }
