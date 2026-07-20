@@ -6,7 +6,7 @@
 
 1. Write `orchestrator_state[<feature>]`: `halt_reason`, `halt_ts`, `phase = null` (clears hook arm), pin `current_phase` + `last_completed_phase`.
 2. Emit `[H-MAD] <feature> phase<N> halted reason=<reason>`.
-3. `cmux notify --title "/h-mad halted" --subtitle <feature> --body <reason>`.
+3. `hmad-dispatch notify --title "/h-mad halted" --subtitle <feature> --body <reason>`.
 4. Print recovery hints.
 5. Exit.
 
@@ -16,8 +16,8 @@
 |---|---|---|---|
 | 1–2 | User declines | `<phase>:user_declined` | "Edit artifact; re-run `/h-mad "<feature>"`" |
 | 3 | Inline plan generation failed | `step3:plan_gen_failed` | "Inspect error; re-run Phase 3" |
-| 3, 4, 5 | Cmux pane not alive | `<phase>:no_<agent>_pane` | "Launch agent in cmux (`cmux split-window --command 'codex'` or `cmux split-window --command 'agy --dangerously-skip-permissions'`); re-run" |
-| 3, 4 | agy dispatch fail (cmux 400) | `<phase>:agy_dispatch_failed` | "Restart agy pane per CLAUDE.md §F-12; re-run" |
+| 3, 4, 5 | Cmux pane not alive | `<phase>:no_<agent>_pane` | "Launch agent per `references/agent-substrate.md` (cmux `cmux split-window --command …` OR orca `orca terminal create`); confirm `hmad-dispatch alive <agent>`; re-run" |
+| 3, 4 | agy dispatch fail (cmux 400) | `<phase>:agy_dispatch_failed` | "cmux only: Restart agy pane per CLAUDE.md §F-12; re-run (orca: restart the terminal via `orca terminal create` and re-pin)" |
 | 4 | Inline design generation failed | `step4:design_gen_failed` | "Inspect error; re-run Phase 4" |
 | 4 | Back-propagation loop ≥ 3 times | `step4:back_prop_max` | "Manual review; revise both plan and design; re-run" |
 | 5a | Impl-plan generation failed | `step5a:impl_plan_gen_failed` | "Inspect error; re-run Phase 5a" |

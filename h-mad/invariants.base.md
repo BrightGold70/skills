@@ -34,7 +34,8 @@
 
 ## No new external dependency
 - Scripts MUST use only Python stdlib plus tooling already depended upon by the skill (the
-  cmux/agy/codex dispatch substrate; `jq` where the existing hook already uses it; `pytest`).
+  agent dispatch substrate (cmux or orca, via `hmad-dispatch`); `jq` where the existing hook
+  already uses it; `pytest`).
   Introducing a new third-party package or new CLI is a violation.
 
 ## Doc-template superset compliance

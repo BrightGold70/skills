@@ -3,7 +3,8 @@
 > Used by `~/.claude/skills/h-mad/SKILL.md` Phase 6a-prime (final architectural review
 > before inline gap analysis). Orchestrator stages this template at
 > `/tmp/h_mad_<feature>_6a_prime.txt` with `<INLINE_*>` placeholders substituted, then
-> dispatches via `cmux send` file-indirection per CLAUDE.md §F-12.
+> dispatches via `hmad-dispatch send` file-indirection (substrate-agnostic; see
+> `references/agent-substrate.md`, F-12 discipline preserved).
 
 You are agy performing a final architectural review of the Phase 5 implementation for feature `<INLINE_FEATURE>`.
 

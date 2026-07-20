@@ -5,9 +5,8 @@
 > workflow-universal base rubric from `~/.claude/skills/h-mad/invariants.base.md` into the
 > `<INLINE_BASE_INVARIANTS>` slot and the project's domain rubric from
 > `<PROJECT_ROOT>/.h-mad/invariants.md` into the `<INLINE_PROJECT_INVARIANTS>` slot, stages the result at
-> `/tmp/audit_<feature>_<phase>_cycle<N>.txt`, then dispatches agy via `cmux send` with
-> file-indirection per the project's cmux discipline (see HemaSuite CLAUDE.md §F-12 for
-> the canonical pattern).
+> `/tmp/audit_<feature>_<phase>_cycle<N>.txt`, then dispatches agy via `hmad-dispatch send`
+> file-indirection (see `references/agent-substrate.md`).
 
 You are the agy audit reviewer. Your role this turn:
 - Plan audit: Reviewer.adversarial_consistency
