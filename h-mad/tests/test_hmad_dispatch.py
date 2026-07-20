@@ -467,3 +467,82 @@ def test_skill_documents_fanout_conjunction():
                      "HMAD_ORCA_MAX_WORKTREES", "default 4", "worktree-create",
                      "worktree-ps", "worktree-rm", "serial fallback"]:
         assert required in fanout
+
+
+def test_file_diff_argv(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-diff", "foo.py"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca file diff foo.py --json\n"
+
+
+def test_file_diff_flags(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-diff", "foo.py", "--staged", "--worktree", "wt-3"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca file diff foo.py --staged --worktree wt-3 --json\n"
+
+
+def test_file_diff_passthrough(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["file-diff", "foo.py"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{"d":1}}'})
+    assert r.returncode == 0
+    assert r.stdout == '{"d":1}\n'
+
+
+def test_file_diff_refuses_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-diff", "foo.py"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_file_diff_requires_path(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-diff"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "missing required argument: path" in r.stderr
+    assert not cap.exists()
+
+
+def test_file_open_changed_argv(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-open-changed"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca file open-changed --json\n"
+
+    r = run(["file-open-changed", "--mode", "diff", "--worktree", "wt-3"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text().endswith("orca file open-changed --mode diff --worktree wt-3 --json\n")
+
+
+def test_file_open_changed_passthrough(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["file-open-changed"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{"opened":2}}'})
+    assert r.returncode == 0
+    assert r.stdout == '{"opened":2}\n'
+
+
+def test_file_open_changed_refuses_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["file-open-changed"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_skill_documents_diff_surface_gate():
+    text = (SKILL / "SKILL.md").read_text()
+    for required in ["file-open-changed", "file-diff", "best-effort", "non-blocking"]:
+        assert required in text
