@@ -29,6 +29,27 @@ Cleared the **entire Orca adaptation backlog** in one session via an autonomous 
 - **Low/speculative Orca candidates** — status: dropped as unnecessary (`linear` N/A, `computer`/`tab`, `status`, `automations show/runs/edit`).
 - **`h_mad_derive_test_path.sh`** (skills repo) — pre-existing uncommitted dirty file, NOT ours; leave it.
 
+## HemaSuite Backlog & Todos (not touched this session — carried)
+
+The Orca arc was skills-repo work; the HemaSuite feature backlog sat untouched. Authoritative sources:
+- `HemaSuite/docs/HemaSuite_improvement_backlog_2026-06.md` — the P0–P3 program (18 items).
+- `HemaSuite/hematology-paper-writer/docs/03-analysis/e2e-findings-2026-07-17.md` — F1–F7 (SAPPHIRE-G synopsis) + G1–G5 / A-series (anemia-jmj review) live findings.
+
+**Restored todos #7–#10 (from session-start READ, never acted):**
+1. **#7 — Re-run anemia-jmj live e2e** to confirm the launch-path-canonical fix (`d2f8af0f`) closed **A-P0-1** (output-dir split across `anemia_in_hematological_malignancies/` + `anemia_jmj/`) and **A-P1-3** (KO grounded wrong notebook `9ec98cb7` not `3817ead8`). `hpw launch --project anemia_jmj --prompt "Anemia in hematological malignancies" --llm-provider agent --yes --status-json` (cmux surface; `hpw doctor` first).
+2. **#8 — review-pipeline-correctness feature** (`/h-mad`): the A-series cluster from the anemia e2e —
+   - **A-P1-2** `manuscript-review` doctype never resolves (`resolve doctype_missing`) → wrong quality rubric (root cause).
+   - **A-P1-1** 0/13 sections accepted yet **exit 0** — quality-gate soft-fail masked as success.
+   - **A-P1-4** 16 irrelevant references reach post-assembly audit; `01_introduction` grounding 0.00.
+3. **#9 — dose-token PubMed noise** (F2 / E-P1-1): topic-hygiene follow-on to #37.
+4. **#10 — watch** `_ko_notebooks` interactive fuzzy-match removal (behavior change from launch-path-canonical GREEN — a slug-less KO caller that relied on the `input()` path).
+
+**Other open F/E-series (e2e-findings):** F1/F4 title-slug + registry fragmentation → capstone was `unified-project-store` (verify closed by the anemia re-run); F3 fold into #4 resource-parse; F6 synopsis-PostProcessor KO-wiring follow-on; F7 no-action.
+
+**P0–P3 program (backlog doc, higher-level, un-scheduled):** P0-1 edition-anachronism citation guard · P0-2 manuscript path must not assert classification/risk/nomenclature · P0-3 EndNote PMID auto-resolution can bind the wrong paper · P1-1 `hpw doctor` hard-warn on dead LightRAG daemon · P1-2 NLM grounding for manuscript *editing* · P1-3 auto reference+nomenclature verify in revision flow · P1-4 version-filtered corpus query helper · P2-1..6 (first-class revise command, DocumentRevisor engagement, stats-figure PNG+EPS contract, DOCX figure embed, RecNum↔[N] alignment, CSA `.sav` ingest) · P3-1..6 (quality-checker numbered-heading detection, hardcoded abstract limit, pandoc numbering, `pyreadstat` missing, auto-register project, B4 heading matcher).
+
+**Candidate-unimplemented plan features (no report doc — verify before picking up):** `antigravity-role-7-pilot`, `launcher-imperative-prompt-guard`, `protocol-quality-analyzer`, `r-api-index-real-package-verification`, `slide-guidance-section-slicing`.
+
 ## Context for Next Session
 
 **Files touched this session (all merged + pushed):**
