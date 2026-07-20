@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Test stub: echo argv (one per line) to $HMAD_STUB_CAPTURE, then emit any
+# canned stdout from $HMAD_STUB_CMUX_STDOUT. Never calls the real cmux.
+printf 'cmux %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+[ -n "$HMAD_STUB_CMUX_STDOUT" ] && printf '%s' "$HMAD_STUB_CMUX_STDOUT"
+exit 0
