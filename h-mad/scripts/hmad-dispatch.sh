@@ -45,13 +45,32 @@ _orchestration_active() {  # 0 iff substrate=orca AND coordinator pinned
   [ "$sub" = "orca" ] && [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]
 }
 
+_cmux_find() {
+  # Match the single cmux surface whose terminal title contains the agent token
+  # (case-insensitive). Mirrors _orca_find; the hardcoded surface:N defaults were
+  # stale per-session, so detect by title instead. Pin HMAD_CMUX_<AGENT>_SURFACE to override.
+  # Anchor the token to the LEADING title word (the launched command is the first
+  # title token, e.g. "agy --…", "Codex - …") + a non-letter boundary, so unrelated
+  # panes like `vim codex_result` or `less agy-notes` do not false-match.
+  local token="$1" ids n
+  ids="$(cmux tree --all 2>/dev/null | grep -iE "\[terminal\] \"${token}[^A-Za-z]" | grep -oE 'surface:[0-9]+')"
+  n="$(printf '%s\n' "$ids" | grep -c . || true)"
+  if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
+  echo "hmad-dispatch: cmux surface for '$token' matched $n candidates; pin HMAD_CMUX_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_SURFACE" >&2
+  return 1
+}
+
 _resolve_target() {
   # $1 = agent (codex|agy). Echo concrete surface/terminal for the active substrate.
   local agent="$1" sub
   sub="$(_detect_substrate)" || return 1
   case "$sub:$agent" in
-    cmux:codex) printf '%s\n' "${HMAD_CMUX_CODEX_SURFACE:-surface:5}"; return 0 ;;
-    cmux:agy)   printf '%s\n' "${HMAD_CMUX_AGY_SURFACE:-surface:2}";   return 0 ;;
+    cmux:codex)
+      if [ -n "${HMAD_CMUX_CODEX_SURFACE:-}" ]; then printf '%s\n' "$HMAD_CMUX_CODEX_SURFACE"; return 0; fi
+      _cmux_find codex; return $? ;;
+    cmux:agy)
+      if [ -n "${HMAD_CMUX_AGY_SURFACE:-}" ]; then printf '%s\n' "$HMAD_CMUX_AGY_SURFACE"; return 0; fi
+      _cmux_find agy; return $? ;;
     orca:codex)
       if [ -n "${HMAD_ORCA_CODEX_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_CODEX_TERMINAL"; return 0; fi
       _orca_find codex; return $? ;;

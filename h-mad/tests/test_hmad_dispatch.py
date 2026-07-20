@@ -84,11 +84,43 @@ def test_no_substrate_errors(tmp_path):
     assert r.returncode == 1
 
 
-def test_cmux_identity_defaults(tmp_path):
+def test_cmux_identity_autodetect_by_title(tmp_path):
+    # No env pins: resolve each agent by matching its cmux pane title (mirrors _orca_find).
     b = _bindir(tmp_path, ["cmux"])
-    r = run(["env"], substrate="cmux", env={"_BINDIR": b})
-    assert "codex -> surface:5" in r.stdout
-    assert "agy -> surface:2" in r.stdout
+    tree = ('surface surface:1 [terminal] "Claude Code"\n'
+            'surface surface:4 [terminal] "Codex - HemaSuite"\n'
+            'surface surface:5 [terminal] "agy --dangerously-skip-permissions"\n')
+    r = run(["env"], substrate="cmux", env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": tree})
+    assert "codex -> surface:4" in r.stdout
+    assert "agy -> surface:5" in r.stdout
+
+
+def test_cmux_identity_autodetect_ambiguous_and_missing(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    # 0 matches -> UNRESOLVED (loud, not a stale default)
+    r0 = run(["env"], substrate="cmux",
+             env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": 'surface surface:1 [terminal] "Claude Code"\n'})
+    assert "codex -> UNRESOLVED" in r0.stdout
+    assert "agy -> UNRESOLVED" in r0.stdout
+    # 2 codex matches -> ambiguous -> UNRESOLVED
+    r2 = run(["env"], substrate="cmux",
+             env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT":
+                  'surface surface:4 [terminal] "Codex - A"\nsurface surface:6 [terminal] "Codex - B"\n'})
+    assert "codex -> UNRESOLVED" in r2.stdout
+
+
+def test_cmux_identity_autodetect_rejects_false_matches(tmp_path):
+    # Token must be the LEADING title word; unrelated panes whose title merely
+    # contains the token as a substring must NOT match.
+    b = _bindir(tmp_path, ["cmux"])
+    tree = ('surface surface:3 [terminal] "vim codex_result.py"\n'
+            'surface surface:7 [terminal] "less agy-notes.md"\n'
+            'surface surface:4 [terminal] "Codex - HemaSuite"\n'
+            'surface surface:5 [terminal] "agy --dangerously-skip-permissions"\n')
+    r = run(["env"], substrate="cmux", env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": tree})
+    # Only the real leading-token panes resolve (not the vim/less substring panes).
+    assert "codex -> surface:4" in r.stdout
+    assert "agy -> surface:5" in r.stdout
 
 
 def test_cmux_identity_env_override(tmp_path):
@@ -121,7 +153,7 @@ def test_send_cmux_uses_file_contents(tmp_path):
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-PROMPT")
     r = run(["send", "codex", str(pf)], substrate="cmux",
-            env={"_BINDIR": b}, capture=cap)
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "cmux send --surface surface:5 HELLO-PROMPT" in text
@@ -142,7 +174,8 @@ def test_send_orca_uses_file_contents(tmp_path):
 def test_clear_sends_slash_clear(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
-    r = run(["clear", "agy"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    r = run(["clear", "agy"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_AGY_SURFACE": "surface:2"}, capture=cap)
     assert r.returncode == 0
     assert "cmux send --surface surface:2 /clear" in cap.read_text()
 
@@ -151,7 +184,7 @@ def test_read_cmux_passes_lines(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
     r = run(["read", "codex", "--lines", "50"], substrate="cmux",
-            env={"_BINDIR": b}, capture=cap)
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     assert "cmux read-screen --surface surface:5 --lines 50" in cap.read_text()
 
@@ -204,7 +237,8 @@ def test_orca_explicit_pin_bypasses_list_resolution(tmp_path):
 def test_alive_cmux_true(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["alive", "codex"], substrate="cmux",
-            env={"_BINDIR": b, "HMAD_STUB_CMUX_STDOUT": "surface:5 codex\nsurface:2 agy\n"})
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5",
+                 "HMAD_STUB_CMUX_STDOUT": "surface:5 codex\nsurface:2 agy\n"})
     assert r.returncode == 0
 
 
