@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -7,11 +8,18 @@ WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
 
 
-def run(args, *, substrate=None, path_has=("cmux", "orca"), env=None, capture=None):
+def run(args, *, substrate=None, env=None, capture=None):
     """Invoke the wrapper with only the named stub binaries on PATH."""
     bindir = Path(env["_BINDIR"]) if env and "_BINDIR" in env else None
     e = dict(os.environ)
     e.pop("HMAD_SUBSTRATE", None)
+    # Session-marker env vars checked by _detect_substrate() ABOVE binary
+    # presence; must be stripped so an ambient cmux/orca host session doesn't
+    # false-resolve substrate detection for stub-only tests.
+    e.pop("CMUX", None)
+    e.pop("CMUX_PANE", None)
+    e.pop("ORCA_SESSION", None)
+    e.pop("ORCA_TERMINAL_ID", None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -33,6 +41,12 @@ def _bindir(tmp_path, names):
     b.mkdir()
     for n in names:
         (b / n).symlink_to(STUBS / n)
+    # Later-task wrappers (identity resolve-from-json, alive) pipe stub
+    # output through jq. Provide the real jq under the isolated PATH without
+    # widening it to the ambient PATH (which would leak real cmux/orca).
+    jq = shutil.which("jq")
+    if jq:
+        (b / "jq").symlink_to(jq)
     return b
 
 
