@@ -94,6 +94,28 @@ before any `send`/`read`. See `references/agent-substrate.md`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
+## Phase 5 parallel fanout (Orca only)
+
+The serial Phase 5 path above remains the default and fallback. First partition the
+impl-plan: a task with `Dependencies on other tasks: None` is independent; every
+other task is dependent and remains serial in topological order on the shared tree.
+
+Engage fanout IFF `hmad-dispatch env` shows `substrate=orca` (the command displays
+`substrate: orca`) AND `orchestration: on` AND there are `≥2 independent` tasks.
+If any condition is unmet, use the existing serial fallback.
+
+For each independent task, run at most `HMAD_ORCA_MAX_WORKTREES` live worktrees
+(default 4): `worktree-create <module> --base <feature-branch> --prompt-file
+<staged-prompt>`; use Tier-2 `task-create` then `dispatch --to <selector>`; `await`
+the worker; `git merge --no-ff <module-branch>`; then `worktree-rm <selector>`.
+Tasks beyond the cap queue and log `[H-MAD] worktree_queued module=<module>`.
+
+If `git merge --no-ff` fails or `git ls-files --unmerged` is non-empty, run
+`git merge --abort`, emit `[H-MAD] merge_conflict module=<module>`, and re-dispatch
+that module through the serial path after siblings merge. On any Phase-5 halt during
+fanout, enumerate with `worktree-ps` and run `worktree-rm` for every worktree in the
+fanout group. This teardown is idempotent: a gone selector logs and no-ops.
+
 ## Phase 6 (Verification) sub-steps
 
 - **6a-prime** — architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Inputs: Phase 5 diff (BASE = 5c sha; HEAD = 5g sha) + audited design. **Clear the agy pane's context first** (§"Agent-pane context hygiene") — 6a-prime is a fresh architectural pass, not a continuation of the plan/design audit thread. Halt `step6a-prime:architectural_review_failed` on `WITH_FIXES` or `NO`.
@@ -232,6 +254,7 @@ Ad-hoc summary: `python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py summa
 - `references/failure-recovery.md` — halt routes + recovery hints
 - `references/state-schema.md` — state schema details
 - `references/agent-substrate.md` — Agent dispatch substrate (cmux | orca) — hmad-dispatch verbs, detection, identity pins, pane launch
+- `references/orchestration-mode.md` — Orca structured orchestration and Phase-5 worktree fanout protocol
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template
