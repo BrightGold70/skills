@@ -135,23 +135,28 @@ _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
   orca orchestration gate-resolve --id "$1" --resolution "$2" --json
 }
 
-_cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>]
+_cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--workspace <sel>|--project <id>]
   _require_orca worktree-create || return $?
   _need "${1:-}" name || return $?
   local name="$1"; shift
-  local agent="" base="" pf=""
+  local agent="" base="" pf="" repo="" ws="" proj=""
   while [ $# -gt 0 ]; do case "$1" in
     --agent) agent="$2"; shift 2 ;; --base) base="$2"; shift 2 ;;
-    --prompt-file) pf="$2"; shift 2 ;; *) shift ;; esac; done
+    --prompt-file) pf="$2"; shift 2 ;;
+    --repo) repo="$2"; shift 2 ;; --workspace) ws="$2"; shift 2 ;; --project) proj="$2"; shift 2 ;;
+    *) shift ;; esac; done
   local args=(worktree create --name "$name")
   [ -n "$agent" ] && args+=(--agent "$agent")
   [ -n "$base" ] && args+=(--base-branch "$base")
+  [ -n "$repo" ] && args+=(--repo "$repo")
+  [ -n "$ws" ]   && args+=(--workspace "$ws")
+  [ -n "$proj" ] && args+=(--project "$proj")
   if [ -n "$pf" ]; then
     [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
     args+=(--prompt "$(cat "$pf")")
   fi
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result.worktree.selector // .result.worktree.handle // .result.selector // .result.handle // .result.id // .id'
+  orca "${args[@]}" | _json_extract '.result.worktree.id // .result.worktree.selector // .result.worktree.handle'
 }
 
 _cmd_worktree_ps() {  # [--limit <n>]
@@ -216,7 +221,7 @@ _cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--pro
   [ -n "$ws" ]   && args+=(--workspace "$ws")
   [ -n "$proj" ] && args+=(--project "$proj")
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result.id // .result.automationId // .id'
+  orca "${args[@]}" | _json_extract '.result.automation.id // .result.automation // .result.automationId'
 }
 
 _cmd_automation_run() {   # <id>

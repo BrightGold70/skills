@@ -164,10 +164,12 @@ HemaSuite wiring is documented usage only: no HemaSuite code is changed by these
 
 ```bash
 hmad-dispatch automation-create --name anemia-e2e --trigger cron --prompt-file <prompt-file> \
-  --provider agent --precheck "hpw doctor" --workspace <hemasuite-workspace>
+  --provider claude --precheck "hpw doctor" --repo HemaSuite
 ```
 
-Run one ad hoc with `hmad-dispatch automation-run <id>`, enumerate configured jobs with `hmad-dispatch automation-list`, and clean up with `hmad-dispatch automation-remove <id>`.
+`--provider` must be a provider Orca recognizes — verified live-valid values are `claude`, `codex`, `gemini` (NOT `agent`; Orca rejects unknown providers with `invalid_argument`). Target the run with `--repo <name>` (or `--workspace`/`--project`). Note `--trigger` (`preset|cron|rrule`) and `--schedule` are mutually exclusive; a preset such as `daily` needs no `--schedule`.
+
+Run one ad hoc with `hmad-dispatch automation-run <id>`, enumerate configured jobs with `hmad-dispatch automation-list`, and clean up with `hmad-dispatch automation-remove <id>`. The `<id>` is the automation id returned by `automation-create` (extracted from `.result.automation.id`), NOT the response envelope id.
 
 ## Halt protocol
 

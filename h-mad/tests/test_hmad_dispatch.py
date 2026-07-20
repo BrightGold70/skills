@@ -385,13 +385,24 @@ def test_worktree_create_parses_selector_and_empty_match(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     selected = run(["worktree-create", "m"], substrate="orca",
                    env={"_BINDIR": b,
-                        "HMAD_STUB_ORCA_STDOUT": '{"result":{"worktree":{"selector":"wt-7"}}}'})
+                        "HMAD_STUB_ORCA_STDOUT": '{"id":"envelope-xyz","result":{"worktree":{"id":"wt-7"}}}'})
     assert selected.returncode == 0
     assert selected.stdout == "wt-7\n"
     empty = run(["worktree-create", "m"], substrate="orca",
                 env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{}}'})
     assert empty.returncode == 0
     assert empty.stdout == ""
+
+
+def test_worktree_create_repo_targeting(tmp_path):
+    # Live Orca requires a repo target: `orca worktree create` without --repo
+    # fails "Missing repo selector". Verify targeting flags pass through.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-create", "m", "--repo", "HemaSuite"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree create --name m --repo HemaSuite --json\n"
 
 
 def test_worktree_create_prompt_file_and_missing_file(tmp_path):
@@ -584,7 +595,7 @@ def test_automation_create_parses_id(tmp_path):
     prompt.write_text("RUN E2E")
     r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
              "--prompt-file", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{"id":"auto_9"}}'})
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"id":"envelope-xyz","result":{"automation":{"id":"auto_9"}}}'})
     assert r.returncode == 0
     assert r.stdout == "auto_9\n"
 
