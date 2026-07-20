@@ -546,3 +546,136 @@ def test_skill_documents_diff_surface_gate():
     text = (SKILL / "SKILL.md").read_text()
     for required in ["file-open-changed", "file-diff", "best-effort", "non-blocking"]:
         assert required in text
+
+
+def test_automation_create_argv(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("RUN E2E")
+    r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
+             "--prompt-file", str(prompt), "--provider", "agent"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == (
+        "orca automations create --name nightly --trigger cron --prompt RUN E2E "
+        "--provider agent --json\n"
+    )
+
+
+def test_automation_create_targeting_and_precheck(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("RUN E2E")
+    r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
+             "--prompt-file", str(prompt), "--precheck", "hpw doctor", "--repo", "r1"],
+            substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == (
+        "orca automations create --name nightly --trigger cron --prompt RUN E2E "
+        "--precheck hpw doctor --repo r1 --json\n"
+    )
+
+
+def test_automation_create_parses_id(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("RUN E2E")
+    r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
+             "--prompt-file", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{"id":"auto_9"}}'})
+    assert r.returncode == 0
+    assert r.stdout == "auto_9\n"
+
+
+def test_automation_create_missing_prompt_file(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
+             "--prompt-file", str(tmp_path / "missing.txt")], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "prompt file not found" in r.stderr
+    assert not cap.exists()
+
+
+def test_automation_create_requires_name_and_trigger(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("RUN E2E")
+    for args in (
+        ["automation-create", "--trigger", "cron", "--prompt-file", str(prompt)],
+        ["automation-create", "--name", "nightly", "--prompt-file", str(prompt)],
+    ):
+        cap = tmp_path / f"{'-'.join(args[1:3])}.txt"
+        r = run(args, substrate="orca", env={"_BINDIR": b}, capture=cap)
+        assert r.returncode == 2
+        assert "missing required argument" in r.stderr
+        assert not cap.exists()
+
+
+def test_automation_create_refuses_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("RUN E2E")
+    r = run(["automation-create", "--name", "nightly", "--trigger", "cron",
+             "--prompt-file", str(prompt)], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_automation_run_argv_and_requires_id(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["automation-run", "auto_9"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca automations run auto_9 --json\n"
+
+    missing_cap = tmp_path / "missing-cap.txt"
+    missing = run(["automation-run"], substrate="orca", env={"_BINDIR": b}, capture=missing_cap)
+    assert missing.returncode == 2
+    assert "missing required argument: id" in missing.stderr
+    assert not missing_cap.exists()
+
+
+def test_automation_list_argv_and_passthrough(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["automation-list"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": '{"result":{"x":1}}'}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca automations list --json\n"
+    assert r.stdout == '{"x":1}\n'
+
+
+def test_automation_remove_argv_and_requires_id(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["automation-remove", "auto_9"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca automations remove auto_9 --json\n"
+
+    missing_cap = tmp_path / "missing-cap.txt"
+    missing = run(["automation-remove"], substrate="orca", env={"_BINDIR": b}, capture=missing_cap)
+    assert missing.returncode == 2
+    assert "missing required argument: id" in missing.stderr
+    assert not missing_cap.exists()
+
+
+def test_automation_verbs_refuse_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    for args in (["automation-run", "auto_9"], ["automation-list"], ["automation-remove", "auto_9"]):
+        cap = tmp_path / f"{'-'.join(args)}.txt"
+        r = run(args, substrate="cmux", env={"_BINDIR": b}, capture=cap)
+        assert r.returncode == 2
+        assert "requires orchestration mode (substrate=orca)" in r.stderr
+        assert not cap.exists()
+
+
+def test_skill_documents_automation_usage():
+    text = (SKILL / "SKILL.md").read_text()
+    for required in ["automation-create", "automation-run", "automation-list", "automation-remove", "hpw doctor"]:
+        assert required in text

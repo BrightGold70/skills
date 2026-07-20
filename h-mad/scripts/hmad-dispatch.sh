@@ -198,6 +198,44 @@ _cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
   orca "${args[@]}" | _json_extract '.result | tojson'
 }
 
+_cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--provider <a>] [--precheck <c>] [--repo|--workspace|--project <sel>]
+  _require_orca automation-create || return $?
+  local name="" trig="" pf="" prov="" pre="" repo="" ws="" proj=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --name) name="$2"; shift 2 ;;      --trigger) trig="$2"; shift 2 ;;
+    --prompt-file) pf="$2"; shift 2 ;; --provider) prov="$2"; shift 2 ;;
+    --precheck) pre="$2"; shift 2 ;;   --repo) repo="$2"; shift 2 ;;
+    --workspace) ws="$2"; shift 2 ;;   --project) proj="$2"; shift 2 ;;
+    *) shift ;; esac; done
+  _need "$name" name || return $?; _need "$trig" trigger || return $?; _need "$pf" prompt-file || return $?
+  [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
+  local args=(automations create --name "$name" --trigger "$trig" --prompt "$(cat "$pf")")
+  [ -n "$prov" ] && args+=(--provider "$prov")
+  [ -n "$pre" ]  && args+=(--precheck "$pre")
+  [ -n "$repo" ] && args+=(--repo "$repo")
+  [ -n "$ws" ]   && args+=(--workspace "$ws")
+  [ -n "$proj" ] && args+=(--project "$proj")
+  args+=(--json)
+  orca "${args[@]}" | _json_extract '.result.id // .result.automationId // .id'
+}
+
+_cmd_automation_run() {   # <id>
+  _require_orca automation-run || return $?
+  _need "${1:-}" id || return $?
+  orca automations run "$1" --json
+}
+
+_cmd_automation_list() {
+  _require_orca automation-list || return $?
+  orca automations list --json | _json_extract '.result | tojson'
+}
+
+_cmd_automation_remove() {   # <id>
+  _require_orca automation-remove || return $?
+  _need "${1:-}" id || return $?
+  orca automations remove "$1" --json
+}
+
 _send_text() {
   local agent="$1" text="$2" sub target
   sub="$(_detect_substrate)" || return 1
@@ -287,6 +325,10 @@ main() {
     worktree-rm) _cmd_worktree_rm "$@" ;;
     file-diff) _cmd_file_diff "$@" ;;
     file-open-changed) _cmd_file_open_changed "$@" ;;
+    automation-create) _cmd_automation_create "$@" ;;
+    automation-run) _cmd_automation_run "$@" ;;
+    automation-list) _cmd_automation_list "$@" ;;
+    automation-remove) _cmd_automation_remove "$@" ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }
