@@ -158,6 +158,17 @@ If `/clear` is not honored or the pane is wedged (input box still shows queued t
 
 When `hmad-dispatch env` reports `orchestration: on` (Orca plus an `HMAD_ORCA_COORDINATOR_TERMINAL` pin), dispatch, verdict collection, and decision gates SHOULD use the structured orchestration verbs rather than screen scraping. The `send` / `read` / `wait` scrape flow remains the universal fallback for cmux or an unpinned coordinator. See `references/orchestration-mode.md`.
 
+### Scheduling HemaSuite live-e2e as Orca automations (Orca only)
+
+HemaSuite wiring is documented usage only: no HemaSuite code is changed by these lifecycle wrappers, and HemaSuite must execute in an Orca workspace. To schedule a nightly live-e2e, stage the prompt in a file and create the automation:
+
+```bash
+hmad-dispatch automation-create --name anemia-e2e --trigger cron --prompt-file <prompt-file> \
+  --provider agent --precheck "hpw doctor" --workspace <hemasuite-workspace>
+```
+
+Run one ad hoc with `hmad-dispatch automation-run <id>`, enumerate configured jobs with `hmad-dispatch automation-list`, and clean up with `hmad-dispatch automation-remove <id>`.
+
 ## Halt protocol
 
 See `references/failure-recovery.md` for per-phase routes + recovery hints.
