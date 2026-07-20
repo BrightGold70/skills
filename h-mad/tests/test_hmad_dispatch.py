@@ -109,11 +109,11 @@ def test_orca_identity_explicit_pin(tmp_path):
 
 def test_orca_identity_resolves_from_list_json(tmp_path):
     b = _bindir(tmp_path, ["orca"])
-    canned = '[{"id":"t-1","command":"codex"},{"id":"t-2","command":"agy --dangerously-skip-permissions"}]'
+    canned = '{"result":{"terminals":[{"handle":"term_c","preview":"codex ..."},{"handle":"term_a","preview":"agy ..."}]}}'
     r = run(["env"], substrate="orca",
             env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned})
-    assert "codex -> t-1" in r.stdout
-    assert "agy -> t-2" in r.stdout
+    assert "codex -> term_c" in r.stdout
+    assert "agy -> term_a" in r.stdout
 
 
 def test_send_cmux_uses_file_contents(tmp_path):
@@ -156,22 +156,49 @@ def test_read_cmux_passes_lines(tmp_path):
     assert "cmux read-screen --surface surface:5 --lines 50" in cap.read_text()
 
 
-def test_read_orca(tmp_path):
+def test_read_orca_uses_native_limit(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     r = run(["read", "codex"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_read"}, capture=cap)
     assert r.returncode == 0
-    assert "orca terminal read --terminal t-1" in cap.read_text()
+    assert cap.read_text() == "orca terminal read --terminal term_read --limit 50\n"
+
+
+def test_read_orca_passes_explicit_line_limit(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex", "--lines", "50"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_read"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca terminal read --terminal term_read --limit 50\n"
 
 
 def test_wait_orca_uses_native_idle(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     r = run(["wait", "agy"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t-2"}, capture=cap)
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait"}, capture=cap)
     assert r.returncode == 0
-    assert "orca terminal wait --terminal t-2 tui-idle" in cap.read_text()
+    assert cap.read_text() == "orca terminal wait --terminal term_wait --for tui-idle --timeout-ms 300000\n"
+
+
+def test_wait_orca_converts_timeout_seconds_to_milliseconds(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy", "--timeout", "30"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca terminal wait --terminal term_wait --for tui-idle --timeout-ms 30000\n"
+
+
+def test_orca_explicit_pin_bypasses_list_resolution(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_pin"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca terminal read --terminal term_pin --limit 50\n"
 
 
 def test_alive_cmux_true(tmp_path):
@@ -199,17 +226,17 @@ def test_notify_cmux(tmp_path):
 
 def test_alive_orca_true(tmp_path):
     b = _bindir(tmp_path, ["orca"])
-    canned = '[{"id":"t-1","command":"codex"},{"id":"t-2","command":"agy"}]'
+    canned = '{"result":{"terminals":[{"handle":"term_x"}]}}'
     r = run(["alive", "codex"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_x",
                  "HMAD_STUB_ORCA_STDOUT": canned})
     assert r.returncode == 0
 
 
 def test_alive_orca_false(tmp_path):
     b = _bindir(tmp_path, ["orca"])
-    canned = '[{"id":"t-2","command":"agy"}]'
+    canned = '{"result":{"terminals":[{"handle":"term_x"}]}}'
     r = run(["alive", "codex"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-9",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_y",
                  "HMAD_STUB_ORCA_STDOUT": canned})
     assert r.returncode == 1

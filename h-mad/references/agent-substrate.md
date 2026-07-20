@@ -24,7 +24,7 @@ H-MAD drives two long-lived peer-agent REPLs — **codex** (implementation/tests
 
 ## Agent identity
 - **cmux (static):** `HMAD_CMUX_CODEX_SURFACE` (default `surface:5`), `HMAD_CMUX_AGY_SURFACE` (default `surface:2`).
-- **orca (dynamic):** `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin an id/name; else resolved from `orca terminal list --json` by matching the terminal running `codex`/`agy`. Zero or multiple matches → wrapper halts; pin the env var.
+- **orca (dynamic):** `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin a terminal handle; else resolved from `orca terminal list --json` by matching terminal preview/title for `codex`/`agy`. Zero or multiple matches → wrapper halts; pin the env var. The list schema has no field that identifies the running program, so a handle pin is the reliable identity.
 
 ## Launching the panes
 - **cmux:** `cmux split-window --command 'codex'` / `cmux split-window --command 'agy --dangerously-skip-permissions'`.
@@ -32,6 +32,8 @@ H-MAD drives two long-lived peer-agent REPLs — **codex** (implementation/tests
 
 ## Open items (confirm on your host, update this file)
 - Session-marker env var names for cmux and Orca.
-- Exact `orca terminal list --json` field shape (`.id`, `.command`/`.name`).
-- `orca terminal wait … tui-idle` exact syntax.
-Until confirmed, `HMAD_SUBSTRATE` + the explicit identity pins always yield a correct result.
+
+## Confirmed Orca terminal schema (v1)
+- Wait: `orca terminal wait --terminal <handle> --for exit|tui-idle [--timeout-ms <n>]`.
+- Read: `orca terminal read --terminal <handle> [--limit <n>]`.
+- List: `orca terminal list --json` returns terminal handles at `.result.terminals[].handle`.

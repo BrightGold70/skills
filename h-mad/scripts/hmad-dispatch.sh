@@ -40,11 +40,10 @@ _resolve_target() {
 }
 
 _orca_find() {
-  # Match a terminal whose command contains the agent token. Shape of
-  # `orca terminal list --json` to confirm against live CLI; tolerate .command|.name.
+  # Match a terminal whose preview/title contains the agent token.
   local token="$1" ids
   ids="$(orca terminal list --json | jq -r \
-    --arg t "$token" '.[] | select(((.command//"") + " " + (.name//"")) | test($t)) | .id')"
+    --arg t "$token" '.result.terminals[] | select(((.preview//"") + " " + (.title//"")) | test($t)) | .handle')"
   local n; n="$(printf '%s' "$ids" | grep -c . || true)"
   if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
@@ -86,7 +85,7 @@ _cmd_read() {
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     cmux) cmux read-screen --surface "$target" --lines "$lines" ;;
-    orca) orca terminal read --terminal "$target" | tail -n "$lines" ;;
+    orca) orca terminal read --terminal "$target" --limit "$lines" ;;
   esac
 }
 
@@ -97,7 +96,7 @@ _cmd_wait() {
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
-    orca) orca terminal wait --terminal "$target" tui-idle ;;
+    orca) orca terminal wait --terminal "$target" --for tui-idle --timeout-ms "$(( timeout * 1000 ))" ;;
     cmux)
       # No native idle in cmux: poll read-screen until two consecutive identical snapshots.
       local prev="" cur elapsed=0
@@ -116,7 +115,7 @@ _cmd_alive() {
   case "$sub" in
     cmux) cmux tree --all | grep -q -- "$target" ;;
     orca)
-      if orca terminal list --json | jq -e --arg id "$target" '.[] | select(.id == $id)' >/dev/null 2>&1; then
+      if orca terminal list --json | jq -e --arg id "$target" '.result.terminals[] | select(.handle == $id)' >/dev/null 2>&1; then
         return 0
       else
         return 1
