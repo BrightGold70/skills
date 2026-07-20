@@ -7,6 +7,44 @@ SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
 
+# --- Real Orca response envelopes ------------------------------------------
+#
+# Captured from a live Orca runtime during the 2026-07-21 Tier-2 e2e. Every
+# response is {"id": <per-request uuid>, "ok": true, "result": {...}} and every
+# create-verb returns the resource id at .result.<resource>.id -- NEVER at the
+# envelope .id, which is a per-request correlation uuid that always exists.
+#
+# These fixtures deliberately keep a decoy envelope id: an extraction that
+# falls through to .id yields "req_<uuid>_NOT_THE_RESOURCE_ID" and the assert
+# fails loudly instead of silently returning a plausible-looking uuid. Earlier
+# stubs guessed flat shapes ({"result":{"taskId":...}}) and so guarded a
+# fiction -- the wrapper passed here while failing against a real runtime.
+_ENVELOPE_DECOY_ID = "req_11111111-2222-3333-4444-555555555555_NOT_THE_RESOURCE_ID"
+
+_ENV_TASK_CREATE = (
+    '{"id":"' + _ENVELOPE_DECOY_ID + '","ok":true,'
+    '"result":{"task":{"id":"task_1","parent_id":null,"task_title":"implement-module",'
+    '"status":"ready","deps":"[]","result":null,"completed_at":null}}}'
+)
+
+_ENV_GATE_CREATE = (
+    '{"id":"' + _ENVELOPE_DECOY_ID + '","ok":true,'
+    '"result":{"gate":{"id":"gate_1","task_id":"task_1","question":"Continue?",'
+    '"options":"[\\"yes\\",\\"no\\"]","status":"pending","resolution":null}}}'
+)
+
+# worker_done carries taskId/dispatchId inside a JSON *string* payload, not a
+# nested object -- indexing it directly is a jq hard error, so the filter must
+# fromjson it first.
+_ENV_CHECK_WAIT = (
+    '{"id":"' + _ENVELOPE_DECOY_ID + '","ok":true,"result":{"messages":['
+    '{"id":"msg_other","type":"worker_done","from_handle":"term_w",'
+    '"payload":"{\\"taskId\\":\\"other\\",\\"dispatchId\\":\\"ctx_other\\"}"},'
+    '{"id":"msg_match","type":"worker_done","from_handle":"term_w","report-path":"/r",'
+    '"payload":"{\\"taskId\\":\\"task_1\\",\\"dispatchId\\":\\"ctx_1\\"}"}'
+    '],"count":2}}'
+)
+
 
 def run(args, *, substrate=None, env=None, capture=None):
     """Invoke the wrapper with only the named stub binaries on PATH."""
@@ -282,7 +320,7 @@ def test_task_create_registers_pinned_coordinator_and_parses_task_id(tmp_path):
     spec = tmp_path / "task.md"; spec.write_text("Implement the module.\n")
     r = run(["task-create", "implement-module", str(spec)], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
-                 "HMAD_STUB_ORCA_STDOUT": '{"result":{"taskId":"task_1"}}'},
+                 "HMAD_STUB_ORCA_STDOUT": _ENV_TASK_CREATE},
             capture=cap)
     assert r.returncode == 0
     assert r.stdout == "task_1\n"
@@ -310,18 +348,26 @@ def test_dispatch_orchestration_uses_resolved_target(tmp_path):
     r = run(["dispatch", "codex", "task_1"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex"}, capture=cap)
     assert r.returncode == 0
-    assert cap.read_text() == "orca orchestration dispatch --task task_1 --to term_codex --return-preamble --json\n"
+    # --inject is load-bearing: without it Orca returns the preamble text but
+    # delivers nothing to the worker, so worker_done never fires and await
+    # always times out. The reference doc says dispatch *sends* the task.
+    assert cap.read_text() == (
+        "orca orchestration dispatch --task task_1 --to term_codex "
+        "--inject --return-preamble --json\n"
+    )
 
 
 def test_await_filters_worker_done_and_converts_timeout(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
-    canned = '{"result":{"messages":[{"taskId":"other"},{"taskId":"task_1","report-path":"/r"}]}}'
     r = run(["await", "task_1", "--timeout", "60"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
-                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+                 "HMAD_STUB_ORCA_STDOUT": _ENV_CHECK_WAIT}, capture=cap)
     assert r.returncode == 0
-    assert '"taskId":"task_1"' in r.stdout
+    # Real worker_done carries the ids inside a JSON *string* payload, so the
+    # filter must fromjson it; matching selects msg_match and drops msg_other.
+    assert "msg_match" in r.stdout
+    assert "msg_other" not in r.stdout
     assert cap.read_text() == "orca orchestration check --terminal term_coord --wait --types worker_done --timeout-ms 60000 --json\n"
 
 
@@ -341,7 +387,7 @@ def test_await_defaults_timeout_and_requires_coordinator(tmp_path):
 def test_gate_create_with_and_without_options_and_gate_resolve(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
-    canned = '{"result":{"gateId":"gate_1"}}'
+    canned = _ENV_GATE_CREATE
     r = run(["gate-create", "task_1", "Continue?", '["yes","no"]'], substrate="orca",
             env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
     assert r.returncode == 0

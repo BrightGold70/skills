@@ -116,15 +116,22 @@ _cmd_task_create() {  # $1 label, $2 specfile
   spec="[H-MAD] worker_done coordinator handle (use as --to): ${coord}
 
 $(cat "$2")"
+  # Real shape is .result.task.id; legacy flat keys kept as fallbacks. NEVER
+  # fall through to the envelope .id -- that is a per-request correlation uuid
+  # that always exists, so it silently yields a plausible but useless id.
   orca orchestration task-create --spec "$spec" --task-title "$1" --json \
-    | jq -r '.result.taskId // .taskId // .result.id // .id // empty'
+    | _json_extract '.result.task.id // .result.taskId // .taskId'
 }
 
 _cmd_dispatch() {  # $1 agent, $2 task_id
   _require_orca dispatch || return $?
   _need "${1:-}" agent || return $?; _need "${2:-}" task_id || return $?
   local target; target="$(_resolve_target "$1")" || return 1
-  orca orchestration dispatch --task "$2" --to "$target" --return-preamble --json
+  # --inject actually delivers the preamble+task to the worker terminal;
+  # without it Orca returns the text and delivers nothing, so worker_done
+  # never fires and await times out. --return-preamble additionally echoes
+  # the text back to the coordinator for logging.
+  orca orchestration dispatch --task "$2" --to "$target" --inject --return-preamble --json
 }
 
 _cmd_await() {  # $1 task_id, [--timeout <s>]
@@ -135,16 +142,26 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
   local coord; coord="$(_coordinator)" || return 1
   orca orchestration check --terminal "$coord" --wait --types worker_done --timeout-ms "$(( timeout * 1000 ))" --json \
-    | jq -c --arg t "$task" '(.result.messages // .messages // []) | map(select((.taskId // .payload.taskId // .["task-id"]) == $t)) | .[0] // empty'
+    | jq -c --arg t "$task" '
+        (.result.messages // .messages // [])
+        | map(select(
+            (((.payload // {})
+              | if type == "string" then (fromjson? // {}) else . end
+              | if type == "object" then .taskId else null end)
+             // .taskId // .["task-id"]) == $t))
+        | .[0] // empty'
 }
 
 _cmd_gate_create() {  # $1 task_id, $2 question, [$3 options-json]
   _require_orca gate-create || return $?
   _need "${1:-}" task_id || return $?; _need "${2:-}" question || return $?
+  # .result.gate.id is the real shape; no envelope .id fallback (see task-create).
   if [ -n "${3:-}" ]; then
-    orca orchestration gate-create --task "$1" --question "$2" --options "$3" --json | jq -r '.result.gateId // .gateId // .result.id // .id // empty'
+    orca orchestration gate-create --task "$1" --question "$2" --options "$3" --json \
+      | _json_extract '.result.gate.id // .result.gateId // .gateId'
   else
-    orca orchestration gate-create --task "$1" --question "$2" --json | jq -r '.result.gateId // .gateId // .result.id // .id // empty'
+    orca orchestration gate-create --task "$1" --question "$2" --json \
+      | _json_extract '.result.gate.id // .result.gateId // .gateId'
   fi
 }
 
