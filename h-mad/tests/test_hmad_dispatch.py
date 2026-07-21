@@ -58,6 +58,12 @@ def run(args, *, substrate=None, env=None, capture=None):
     e.pop("CMUX_PANE", None)
     e.pop("ORCA_SESSION", None)
     e.pop("ORCA_TERMINAL_ID", None)
+    # F13: strip every HMAD_ORCA_* pin (coordinator + agent terminal handles).
+    # A live h-mad Orca session exports these, and the identity/coordinator tests
+    # assume an unpinned environment — leaked pins made 8 tests fail spuriously
+    # exactly when the suite is run from inside a running orchestration.
+    for _k in [k for k in e if k.startswith("HMAD_ORCA_")]:
+        e.pop(_k, None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -342,6 +348,70 @@ def test_read_orca_passes_explicit_line_limit(tmp_path):
             env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_read"}, capture=cap)
     assert r.returncode == 0
     assert cap.read_text() == "orca terminal read --terminal term_read --limit 50\n"
+
+
+def test_read_orca_from_start_reads_whole_buffer(tmp_path):
+    # F5: --from-start recovers a report longer than the retained tail viewport.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex", "--from-start"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_read"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca terminal read --terminal term_read --cursor 0 --limit 4000\n"
+
+
+def test_read_orca_explicit_cursor(tmp_path):
+    # F5: --cursor <n> reads from an absolute offset.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["read", "codex", "--cursor", "1200", "--lines", "300"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_read"}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca terminal read --terminal term_read --cursor 1200 --limit 300\n"
+
+
+def test_interrupt_orca_sends_ctrl_c(tmp_path):
+    # F4: interrupt cancels a wedged agent turn with Ctrl-C (0x03), never a bare Enter.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["interrupt", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_int"}, capture=cap)
+    assert r.returncode == 0
+    out = cap.read_text()
+    assert "orca terminal send --terminal term_int --text" in out
+    assert "--enter" not in out  # a blank-Enter submit would be the bug
+
+
+def test_interrupt_cmux_sends_ctrl_c(tmp_path):
+    # F4: cmux path sends the C-c key.
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    r = run(["interrupt", "codex"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:3"}, capture=cap)
+    assert r.returncode == 0
+    assert "cmux send-key --surface surface:3 C-c" in cap.read_text()
+
+
+def test_worktree_ps_rejects_ok_false_envelope(tmp_path):
+    # F11: an exit-0 `"ok":false` error envelope must NOT pass through as data —
+    # the whole point of routing verbs through _orca_json.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["worktree-ps"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert r.stdout == ""
+
+
+def test_task_create_rejects_ok_false_envelope(tmp_path):
+    # F11: same guard on an id-extracting verb.
+    b = _bindir(tmp_path, ["orca"])
+    spec = tmp_path / "spec.txt"; spec.write_text("do the thing")
+    r = run(["task-create", "label", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1",
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert r.returncode != 0
+    assert r.stdout == ""
 
 
 def test_wait_orca_uses_native_idle(tmp_path):

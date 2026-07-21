@@ -24,10 +24,11 @@ which differs per install and per checkout.
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
 | `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
-| `hmad-dispatch read <codex\|agy> [--lines N]` | Scrape the agent screen to stdout |
+| `hmad-dispatch read <codex\|agy> [--lines N] [--cursor N \| --from-start]` | Scrape the agent screen to stdout. `--cursor N` reads from an absolute offset; `--from-start` (= `--cursor 0 --limit 4000`) recovers a report longer than the retained tail viewport |
 | `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle — confirmed by two identical reads, not taken on trust (see below) |
 | `hmad-dispatch alive <codex\|agy>` | Liveness probe (exit 0/1) |
 | `hmad-dispatch clear <codex\|agy>` | Reset the agent's context (`/clear`) |
+| `hmad-dispatch interrupt <codex\|agy>` | Cancel a running/wedged turn with Ctrl-C (0x03). NEVER nudge a TUI REPL with a bare Enter — it submits a blank turn |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
 
 ## How `send` delivers a prompt
@@ -110,6 +111,30 @@ check then confirms. Poll interval is `HMAD_WAIT_POLL_INTERVAL` (default 3s).
 > construction. Confirmation against a live runtime is outstanding; if you see
 > a partial read after a `wait` returns, this fix did not hold and the issue
 > should be reopened.
+
+## Capturing an agy (Antigravity / Gemini-TUI) report
+
+The Antigravity CLI redraws its whole screen every frame, which makes report
+capture unreliable in ways cmux/Codex are not. Observed live and worked around:
+
+- **Completion signal — poll for the sentinel, not `tui-idle`.** Gemini's spinner
+  fools `terminal wait --for tui-idle` (it reports `satisfied:false` with a stale
+  `blockedReason` when the report is actually done, and sometimes idle while still
+  generating). Treat the appearance of the `<sentinel>-END` line in the tail as the
+  completion signal instead.
+- **Never nudge with a bare Enter.** At the REPL `>` prompt an empty submit starts
+  a blank junk turn. To free a done-but-unrendered or wedged pane, use
+  `hmad-dispatch interrupt agy` (Ctrl-C). Sent once it cancels the turn; the pane
+  drops toward the shell and its scrollback **freezes**, which is the reliable
+  capture state.
+- **Recover a report the tail truncated.** The rendered report is often longer than
+  the retained viewport, and per-frame redraw fragments the sentinel across frames.
+  After freezing, `hmad-dispatch read agy --from-start` (full buffer) gets the whole
+  `BEGIN…END` pair. Then dedent + normalize `•`→`-` before the gate (the gate now
+  tolerates both, but the extractor still writes raw TUI text).
+- **Version drift.** agy can self-upgrade via Homebrew mid-session (seen 1.1.1→1.1.5),
+  dropping back to a welcome + trust-workspace prompt that interrupts the dispatch.
+  Preflight the version / re-confirm trust before a dispatch block if reliability matters.
 
 ## Substrate detection (highest precedence wins)
 1. `HMAD_SUBSTRATE=cmux|orca` — explicit override.

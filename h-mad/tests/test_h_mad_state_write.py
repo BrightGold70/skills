@@ -92,6 +92,18 @@ class TestSetFields:
         sw.set_fields(p, "a", iterate_cycles=2)
         assert read(p)["b"]["iterate_cycles"] == 0
 
+    def test_autonomous_entry_ts_accepts_integer_epoch(self, tmp_path):
+        # F12: Phase-5a writes autonomous_entry_ts=<now> (an epoch int). The
+        # strict schema previously typed it string|null, so the writer refused
+        # the very value the SKILL prescribes and the timestamp stayed null.
+        import h_mad_state_validate as sv
+
+        p = store(tmp_path, {"demo": dict(VALID)})
+        sw.set_fields(p, "demo", autonomous_entry_ts=1784673715)
+        rec = read(p)["demo"]
+        assert rec["autonomous_entry_ts"] == 1784673715
+        assert sv.classify(rec) == "strict"
+
     def test_can_write_null(self, tmp_path):
         p = store(tmp_path, {"demo": dict(VALID, phase="step5")})
         sw.set_fields(p, "demo", phase=None)

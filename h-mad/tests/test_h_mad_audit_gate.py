@@ -156,6 +156,73 @@ def test_cli_marker_feature_is_derived_from_filename(tmp_path: Path) -> None:
     assert "h-mad-audit-surfaces-reconcile" not in result.stdout
 
 
+def test_classify_indented_gemini_tui_output_counts_findings() -> None:
+    # F1: agy (Gemini) renders every line indented ~2 spaces. A real Must-fix
+    # must still be counted, not silently scored PASS by a column-0 header match.
+    text = "  ## Must-fix\n  - real issue - why\n  ## Should-fix\n  None\n"
+
+    result = classify(text)
+
+    assert result["verdict"] == "FAIL"
+    assert result["must_count"] == 1
+    assert result["should_count"] == 0
+
+
+def test_classify_unicode_and_asterisk_bullets_count() -> None:
+    # F1: agy emits `•`, other tools `*`; both are blocking bullets.
+    text = "## Must-fix\n• bullet issue\n* asterisk issue\n## Should-fix\nNone\n"
+
+    result = classify(text)
+
+    assert result["must_count"] == 2
+    assert result["verdict"] == "FAIL"
+
+
+def test_classify_indented_bare_none_still_passes() -> None:
+    # F1: indentation must not turn a clean (None) audit into a false FAIL.
+    text = "  ## Must-fix\n  None\n  ## Should-fix\n  None\n"
+
+    assert classify(text) == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+
+
+def test_cli_indented_bullet_scored_end_to_end(tmp_path: Path) -> None:
+    # F1 end-to-end: an indented `•` Must-fix must FAIL (exit 0), not false-PASS.
+    audit_file = tmp_path / "feat.plan.audit.v1.md"
+    audit_file.write_text(
+        "  ## Summary\n  x\n  ## Must-fix\n  • real problem — why\n  ## Should-fix\n  None\n  ## Nit\n  None\n",
+        encoding="utf-8",
+    )
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0
+    assert "GATE: FAIL must=1 should=0" in result.stdout
+
+
+def test_cli_header_less_input_is_invalid_exit_two(tmp_path: Path) -> None:
+    # F2: an empty/garbled extract lacking the mandatory sections must NOT score
+    # as a clean PASS. It is an operational error: GATE: INVALID, exit 2.
+    audit_file = tmp_path / "feat.plan.audit.v1.md"
+    audit_file.write_text("", encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 2
+    assert "GATE: INVALID" in result.stdout
+    assert "PASS" not in result.stdout
+
+
+def test_cli_garbage_without_sections_is_invalid(tmp_path: Path) -> None:
+    # F2: non-empty but section-less content (a stray scrape) is still INVALID.
+    audit_file = tmp_path / "feat.plan.audit.v1.md"
+    audit_file.write_text("some terminal noise\n> prompt\n", encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 2
+    assert "GATE: INVALID" in result.stdout
+
+
 def test_production_module_uses_only_stdlib_imports() -> None:
     stdlib = getattr(sys, "stdlib_module_names", set())
     if not stdlib:

@@ -6,22 +6,23 @@ Live registry of known bugs and improvement points in the `h-mad` / `handoff` sk
 **Lifecycle:** `MONITORING` (tracked, unfixed) · `PLANNED` (scheduled) · `FIXED` (link commit) · `WONTFIX` (with reason)
 
 Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`, 2026-07-22).
+**All F1–F13 resolved on `feature/186-skill-monitoring-fixes` (2026-07-22)** — h-mad suite 355/0 with session pins present. Fixes below; each entry's Status flipped to FIXED.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| F1 | 🔴 | MONITORING | audit gate false-passes on agy/Gemini-TUI output (indent + `•` bullets) |
-| F2 | 🔴 | MONITORING | empty extract output false-passes the gate (`must=0`) |
-| F3 | 🟡 | MONITORING | `orca terminal wait --for tui-idle` unreliable for Gemini spinner |
-| F4 | 🟡 | MONITORING | no safe nudge/interrupt verb; bare-Enter submits a blank agy turn |
-| F5 | 🟡 | MONITORING | Orca scrollback retention < report length; TUI redraw fragments sentinels |
-| F6 | 🟡 | MONITORING | agy self-upgrades via homebrew mid-run → re-auth/trust reset |
+| F1 | 🔴 | FIXED | audit gate false-passes on agy/Gemini-TUI output (indent + `•` bullets) — gate now dedents + accepts `-`/`*`/`•` |
+| F2 | 🔴 | FIXED | empty extract output false-passes the gate — `GATE: INVALID` + exit 2 when Must-fix/Should-fix headers absent |
+| F3 | 🟡 | FIXED | `tui-idle` unreliable for Gemini — documented: poll for `<sentinel>-END` (agent-substrate.md) |
+| F4 | 🟡 | FIXED | no safe nudge — added `hmad-dispatch interrupt` (Ctrl-C) + freeze-capture recipe |
+| F5 | 🟡 | FIXED | scrollback < report — added `read --cursor N` / `--from-start` full-buffer read |
+| F6 | 🟡 | FIXED | agy homebrew self-upgrade — documented version/trust preflight |
 | F7 | 🟢 | FIXED | default substrate was cmux when both present → flipped to orca (`9cdd455`) |
-| F8 | 🟡 | MONITORING | `python3` (brew 3.14) lacks jsonschema; state scripts need documented interp/venv |
-| F9 | 🟡 | MONITORING | Codex Orca terminal title = worktree name → must pin `HMAD_ORCA_CODEX_TERMINAL` |
+| F8 | 🟡 | FIXED | jsonschema missing — actionable remedy message (interpreter/venv/pip) in `h_mad_state_validate.py` |
+| F9 | 🟡 | FIXED | Codex Orca title = worktree name — pin `HMAD_ORCA_CODEX_TERMINAL` (documented in agent-substrate.md identity) |
 | F10 | 🟡 | FIXED | `~/.claude/skills/handoff` was a real dir → symlinked to repo 2026-07-22 |
-| F11 | 🔴 | MONITORING | existing worktree/file verbs swallow `ok:false` (exit-0 error envelope) |
-| F12 | 🔴 | MONITORING | `autonomous_entry_ts` schema rejects the epoch value the SKILL writes |
-| F13 | 🔴 | MONITORING | dispatch-test `run()` leaks `HMAD_ORCA_*` pins → spurious failures in-session |
+| F11 | 🔴 | FIXED | verbs swallow `ok:false` — shared `_orca_json` guard (`.ok != false`) on all extract verbs |
+| F12 | 🔴 | FIXED | `autonomous_entry_ts` schema — now `["string","integer","null"]`, epoch int validates |
+| F13 | 🔴 | FIXED | dispatch-test `run()` leaks pins — now strips every `HMAD_ORCA_*` |
 
 ---
 

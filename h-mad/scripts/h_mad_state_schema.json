@@ -19,7 +19,7 @@
     "last_completed_phase": {"type": "integer", "minimum": 0, "maximum": 7},
     "current_phase": {"type": "integer", "minimum": 0, "maximum": 7},
     "phase": {"enum": ["step5", "step6", "step7", null]},
-    "autonomous_entry_ts": {"type": ["string", "null"], "format": "date-time"},
+    "autonomous_entry_ts": {"type": ["string", "integer", "null"]},
     "audit_cycles": {
       "type": "object",
       "properties": {

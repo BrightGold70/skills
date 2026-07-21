@@ -28,7 +28,15 @@ from pathlib import Path
 try:
     from jsonschema import Draft7Validator
 except ImportError:  # pragma: no cover - dependency guard
-    print("ERROR: jsonschema is required", file=sys.stderr)
+    print(
+        "ERROR: jsonschema is required by the H-MAD state scripts but is not "
+        "importable by this interpreter (" + sys.executable + ").\n"
+        "Remedy: run the state scripts with an interpreter that has it — e.g. a "
+        "conda env (`/opt/anaconda3/bin/python3`), a project venv, or "
+        "`python3 -m pip install --user jsonschema` (add --break-system-packages "
+        "on a PEP-668 / Homebrew Python if --user is refused).",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
