@@ -36,6 +36,7 @@
 | 6 | Iterate no progress (zero gaps closed) | `step6:iterate_no_progress` | "Inspect gaps; may require design revision; re-run" |
 | 6 | Iterate 5-cycle cap, match < 90% | `step6:iterate_max_cycles` | "Inspect analysis gaps; revise design or implementation; re-run" |
 | 6 | Tests not 100% after iterate | `step6:tests_not_green` | "Inspect failing tests; fix; re-run" |
+| 7 | Phase 7 preconditions not met | `step7:verification_not_run` | "Phase 7 merges; Phase 6 verifies. Run `h_mad_phase7_preconditions.py` and clear each blocker: complete Phase 6, produce a gap analysis stating a match rate at or above threshold, resolve any open halt, and address a failing 6a-prime. A feature once reached main and origin with no Phase 6 at all — the suite was green and said nothing about spec conformance; the analysis run afterwards measured 0%." |
 | 7a | Telemetry record failed | `step7:telemetry_failed` | "Non-fatal — emit warning, continue to report step" |
 | 7b | Report generation failed | `step7:report_failed` | "Inspect error; re-run" |
 | 7c | Archive failed | `step7:archive_failed:<stderr>` | "Inspect archive collision; resolve; re-run" |

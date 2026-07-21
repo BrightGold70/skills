@@ -111,7 +111,12 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 4. **Design + Audit-Design** — run inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3. Back-propagation: if design revision invalidates a plan decision, return to Phase 3 to re-clean, then re-enter Phase 4 audit from cycle 1.
 5. **Implementation (autonomous)** — see Phase 5 sub-section below.
 6. **Verification (autonomous)** — run inline gap analysis (`references/inline-protocols.md §Phase 6`). If match rate < 90%, run inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. Loop until ≥90% AND 100% test pass. Phase 6a-prime is an agy architectural review before gap analysis.
-7. **Closure (autonomous)** — `h_mad_telemetry.py record`, then inline report + archive (`references/inline-protocols.md §Phase 7`), then `git add -A && git commit && git push origin main`.
+7. **Closure (autonomous)** — **run the precondition gate first; it is what makes the 6-before-7 ordering real rather than documented:**
+   ```bash
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_phase7_preconditions.py \
+     docs/.bkit-memory.json --feature <feature>
+   ```
+   Parse the **token**, not `$?` (exit 0 on any verdict, 2 on operational error). `PHASE7: BLOCKED` → halt `step7:verification_not_run` and address each blocker. It refuses to close a feature that never ran Phase 6, whose analysis is missing or states no match rate, whose rate is below threshold, whose 6a-prime returned `WITH_FIXES`/`NO`, or that carries an open halt. A `SKIPPED_NO_PANE` archreview is a **warning**, not a blocker — carry it into the report per §6a-prime. Then `h_mad_telemetry.py record`, inline report + archive (`references/inline-protocols.md §Phase 7`), then `git add -A && git commit && git push origin main`.
 
 ## Phase 5 (Implementation) sub-steps
 
@@ -397,6 +402,8 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
 - `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2, strict tier)
 - `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
+- `h_mad_phase7_preconditions.py` — Phase 7 gate: `check()` + CLI printing `PHASE7: READY|BLOCKED`, exit 0 on verdict / 2 on operational error. Enforces 6-before-7 by reading state and the gap analysis.
+- `h_mad_state_staleness.py` — compares state against git and reports disagreement (`STALENESS: CLEAN|SUSPECT`); catches a record that is well-formed and no longer true.
 - `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
