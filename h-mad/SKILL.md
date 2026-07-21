@@ -249,6 +249,17 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
     The gate emits a `[H-MAD] <feature> gate <verdict>` marker line. Nits never block. If the `GATE:` token is absent from stdout (unexpected), treat it as an operational error and halt `step<N>:gate_token_missing` with a `[H-MAD]` marker — never silently treat a missing token as PASS.
 
+## Putting `hmad-dispatch` on PATH
+
+This file spells the wrapper as a bare `hmad-dispatch <verb>`. Put the skill's
+`bin/` on PATH once so those commands work verbatim instead of needing the
+absolute path to `scripts/hmad-dispatch.sh` (which differs per install and per
+checkout):
+
+```bash
+export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+```
+
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.

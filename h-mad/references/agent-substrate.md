@@ -5,6 +5,20 @@ H-MAD drives two long-lived peer-agent REPLs — **codex** (implementation/tests
 `scripts/hmad-dispatch.sh`. The wrapper hides whether the host is **cmux**
 (`manaflow-ai/cmux`) or **Orca** (`stablyai/orca`). Never call `cmux`/`orca` directly.
 
+## Putting it on PATH
+Every verb below is written as a bare `hmad-dispatch <verb>`. Put the skill's
+`bin/` on PATH once and they work verbatim:
+
+```bash
+export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+```
+
+`bin/hmad-dispatch` resolves its own physical location before exec'ing
+`scripts/hmad-dispatch.sh`, so it works through the usual symlink chain
+(`~/.claude/skills/h-mad` → a checkout) and from any working directory.
+Without it, each call needs the absolute path to `scripts/hmad-dispatch.sh`,
+which differs per install and per checkout.
+
 ## Verbs
 | Verb | Purpose |
 |------|---------|
