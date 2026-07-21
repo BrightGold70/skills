@@ -1,0 +1,32 @@
+#!/bin/bash
+# hmad-dispatch — PATH shim for scripts/hmad-dispatch.sh.
+#
+# The docs spell the wrapper as a bare `hmad-dispatch <verb>`, so put this
+# directory on PATH once and the documented commands work verbatim:
+#
+#   export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+#
+# The canonical install is a symlink chain (~/.claude/skills/h-mad -> a
+# checkout), and PATH entries are commonly symlinks too, so resolve this
+# file's physical location rather than trusting $0's directory.
+
+set -euo pipefail
+
+target="${BASH_SOURCE[0]}"
+while [ -L "$target" ]; do
+  link=$(readlink "$target")
+  case "$link" in
+    /*) target="$link" ;;
+    *)  target="$(dirname "$target")/$link" ;;
+  esac
+done
+
+BIN_DIR="$(cd "$(dirname "$target")" && pwd -P)"
+REAL="$BIN_DIR/../scripts/hmad-dispatch.sh"
+
+if [ ! -f "$REAL" ]; then
+  echo "hmad-dispatch: cannot find scripts/hmad-dispatch.sh relative to $BIN_DIR" >&2
+  exit 2
+fi
+
+exec bash "$REAL" "$@"

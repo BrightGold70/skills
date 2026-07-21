@@ -5,16 +5,75 @@ H-MAD drives two long-lived peer-agent REPLs — **codex** (implementation/tests
 `scripts/hmad-dispatch.sh`. The wrapper hides whether the host is **cmux**
 (`manaflow-ai/cmux`) or **Orca** (`stablyai/orca`). Never call `cmux`/`orca` directly.
 
+## Putting it on PATH
+Every verb below is written as a bare `hmad-dispatch <verb>`. Put the skill's
+`bin/` on PATH once and they work verbatim:
+
+```bash
+export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+```
+
+`bin/hmad-dispatch` resolves its own physical location before exec'ing
+`scripts/hmad-dispatch.sh`, so it works through the usual symlink chain
+(`~/.claude/skills/h-mad` → a checkout) and from any working directory.
+Without it, each call needs the absolute path to `scripts/hmad-dispatch.sh`,
+which differs per install and per checkout.
+
 ## Verbs
 | Verb | Purpose |
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
-| `hmad-dispatch send <codex\|agy> <promptfile>` | File-indirection dispatch + submit |
+| `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
 | `hmad-dispatch read <codex\|agy> [--lines N]` | Scrape the agent screen to stdout |
-| `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle |
+| `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle — confirmed by two identical reads, not taken on trust (see below) |
 | `hmad-dispatch alive <codex\|agy>` | Liveness probe (exit 0/1) |
 | `hmad-dispatch clear <codex\|agy>` | Reset the agent's context (`/clear`) |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
+
+## How `send` delivers a prompt
+
+`send` picks its delivery mode from the prompt's size, so callers do not have
+to:
+
+| Prompt size | Delivery |
+|---|---|
+| ≤ `HMAD_SEND_INLINE_MAX` (default 8192 bytes) | Contents inlined into the pane |
+| > threshold | A short instruction naming the staged file, by canonical absolute path — the agent reads it itself |
+
+The threshold sits inside the ~5–10 KB range the file-indirection rule names,
+and well under the 32–61 KB that audit prompts reach in practice. Tune it with
+`HMAD_SEND_INLINE_MAX` if a substrate turns out to tolerate more or less.
+
+Before this split, `send` inlined unconditionally (`$(cat "$2")`), which put
+the documented audit dispatch step in direct conflict with the indirection
+rule at exactly the sizes that occur — so every audit had to be dispatched by
+hand instead.
+
+## How `wait` decides an agent is idle
+
+Idleness is confirmed by **two consecutive identical non-empty reads** of the
+pane, on both substrates. A single read can catch a pane mid-write; two
+matching ones cannot. An empty read never counts — a blank pane is absence of
+evidence, not evidence of idleness, and two empty reads are trivially
+"identical".
+
+| Substrate | Sequence |
+|---|---|
+| orca | `terminal wait --for tui-idle` as a fast first gate, then the stability check |
+| cmux | stability check only (cmux has no native idle) |
+
+Orca's native `--for tui-idle` was observed returning `satisfied: true` twice
+while an agent was still generating, so downstream steps read a partial pane.
+It is therefore treated as **one-directional evidence**: its "not idle" is
+authoritative and aborts the wait, its "idle" is only a hint that the stability
+check then confirms. Poll interval is `HMAD_WAIT_POLL_INTERVAL` (default 3s).
+
+> **Verification status.** The stability logic is unit-tested against stubs,
+> and it is the same approach cmux has always used. The live symptom — a real
+> Orca agent mid-response — cannot be reproduced by a stub, which is idle by
+> construction. Confirmation against a live runtime is outstanding; if you see
+> a partial read after a `wait` returns, this fix did not hold and the issue
+> should be reopened.
 
 ## Substrate detection (highest precedence wins)
 1. `HMAD_SUBSTRATE=cmux|orca` — explicit override.

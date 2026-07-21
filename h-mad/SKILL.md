@@ -89,8 +89,8 @@ before any `send`/`read`. See `references/agent-substrate.md`.
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
-- **5d** — RED dispatch via `hmad-dispatch send` (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
-- **5e** — GREEN dispatch via `hmad-dispatch send` (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
+- **5d** — RED dispatch via `hmad-dispatch send` (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Read each `STATUS:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict"); no extractable verdict after a re-read and re-dispatch → halt `step5d:no_verdict:<module>`. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
+- **5e** — GREEN dispatch via `hmad-dispatch send` (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. Read both verdicts with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict") — never by grepping the scrape for the halt value, which turns an agent's silence into a pass. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. If no verdict can be extracted after a re-read and re-dispatch → halt `step5e:no_verdict:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
@@ -118,7 +118,7 @@ fanout group. This teardown is idempotent: a gone selector logs and no-ops.
 
 ## Phase 6 (Verification) sub-steps
 
-- **6a-prime** — architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Inputs: Phase 5 diff (BASE = 5c sha; HEAD = 5g sha) + audited design. **Clear the agy pane's context first** (§"Agent-pane context hygiene") — 6a-prime is a fresh architectural pass, not a continuation of the plan/design audit thread. Halt `step6a-prime:architectural_review_failed` on `WITH_FIXES` or `NO`.
+- **6a-prime** — architectural review via agy (`references/agy-architectural-reviewer-prompt.md`). Inputs: Phase 5 diff (BASE = 5c sha; HEAD = 5g sha) + audited design. **Clear the agy pane's context first** (§"Agent-pane context hygiene") — 6a-prime is a fresh architectural pass, not a continuation of the plan/design audit thread. Read the `ASSESSMENT:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict") — grepping for `WITH_FIXES`/`NO` makes an empty review indistinguishable from `READY_TO_MERGE`. Halt `step6a-prime:architectural_review_failed` on `WITH_FIXES` or `NO`; halt `step6a-prime:no_verdict` if none can be extracted after a re-read and re-dispatch.
 - **6a** — run inline gap analysis. Parse match rate from `docs/03-analysis/<feature>.analysis.md`.
 - **6b** — if < 90%, run inline iterate (5-cycle cap). Loop until ≥90% AND 100% test pass.
 
@@ -133,6 +133,40 @@ as today. Surfacing is never a gate precondition; the cmux review flow is unchan
 
 HemaSuite may use `file-diff <manuscript.docx>` to surface a generated manuscript
 DOCX; this is documented usage only, with no HemaSuite code in this feature.
+
+## Reading a dispatch verdict
+
+Every dispatch that gates a decision ends in a machine-parsed line, and each is
+read off a live pane:
+
+| Step | Key | Values |
+|---|---|---|
+| 5d / 5e codex | `STATUS:` | `DONE` \| `DONE_WITH_CONCERNS` \| `BLOCKED` \| `NEEDS_CONTEXT` |
+| 5e-review agy | `VERDICT:` | `COMPLIANT` \| `DRIFT` |
+| 6a-prime agy | `ASSESSMENT:` | `READY_TO_MERGE` \| `WITH_FIXES` \| `NO` |
+
+**Never grep the scrape for the halt value.** The halt conditions are phrased
+as "halt on `DRIFT`", "halt on `WITH_FIXES` or `NO`" — so a grep that finds
+nothing looks identical to a clean pass. An agent that dispatched, went idle
+and emitted nothing therefore reads as approval, and the module gets committed
+on silence. A prior module's `STATUS: DONE` still in scrollback is the same
+trap from the other direction.
+
+Extract instead, which fails closed on both:
+
+```bash
+hmad-dispatch read <agent> --lines 200 > /tmp/scrape_<feature>_<module>.txt
+python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
+  /tmp/scrape_<feature>_<module>.txt --key VERDICT \
+  --feature <feature> --phase 5e
+```
+
+It takes the **last** matching line, validates the value against the contract,
+and exits 2 printing nothing when the line is absent, empty, or off-contract.
+Treat exit 2 as "no verdict", never as a pass: re-read with a larger `--lines`,
+and if the agent genuinely produced nothing, `hmad-dispatch clear <agent>` and
+re-dispatch. Repeated silence is a halt (`step5e:no_verdict:<module>`), not a
+reason to proceed.
 
 ## Agent-pane context hygiene
 
@@ -188,7 +222,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
-- Never invoke Codex or agy directly — always via `hmad-dispatch` file-indirection (see `references/agent-substrate.md`) per CLAUDE.md §F-12.
+- Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
 ## Known interactions (coexisting plugins)
 
@@ -206,15 +240,35 @@ Workaround for the **separate** autopilot Stop-hook nag (not addressed by the ga
 See `references/state-schema.md`. Validate with:
 
 ```bash
-python3 -c "
-import json, jsonschema
-schema = json.load(open('$HOME/.claude/skills/h-mad/scripts/h_mad_state_schema.json'))
-state = json.load(open('docs/.bkit-memory.json'))
-for feat, fs in state.get('orchestrator_state', {}).items():
-    jsonschema.validate(fs, schema)
-print('OK')
-"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py docs/.bkit-memory.json
 ```
+
+Validation is **two-tier**, because the v2.2 schema was never enforced at write
+time and forbade extra properties, so established stores hold many one-off
+shapes and a single-tier check always failed:
+
+- `strict` — conforms to v2.2 (`h_mad_state_schema.json`).
+- `historical` — conforms to `h_mad_state_schema_historical.json`: the three
+  fields every observed record carries, extras allowed.
+- `invalid` — neither. Genuinely broken; look at it.
+
+Parse the **token**, not `$?` — same discipline as the audit gate, which
+exits 0 on a verdict so a FAIL never registers as a tool failure:
+
+- `STATE: PASS strict=N historical=M invalid=0` → proceed.
+- `STATE: FAIL … invalid=K` → the named records are broken.
+
+**After writing a record, verify it meets v2.2** — this is what stops the
+drift that produced the historical tier:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py \
+  docs/.bkit-memory.json --feature <feature> --strict-only
+```
+
+Never invent a key. If a run needs a field the schema lacks, add it to
+`h_mad_state_schema.json` rather than writing it ad hoc — that is exactly how
+the store accumulated five spellings of "merge sha".
 
 ## Audit prompt assembly
 
@@ -232,14 +286,27 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 4. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `<PROJECT_ROOT>/.h-mad/invariants.md` (domain Axis B). If the project file is absent/empty, leave the slot empty — the base layer still applies.
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
+6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
-8. Dispatch via `hmad-dispatch` file-indirection:
+8. Dispatch:
    ```bash
    hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
    ```
-9. Capture: `hmad-dispatch read agy --lines 50`.
-10. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
+   `send` chooses its own delivery mode by size: it inlines below
+   `HMAD_SEND_INLINE_MAX` (default 8192 bytes) and otherwise tells the agent to
+   read the staged file by absolute path. Audit prompts run 32–61 KB, so they
+   take the indirection path — no need to hand-roll it.
+9. Capture and extract — **never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
+   ```bash
+   hmad-dispatch read agy --lines 200 > /tmp/scrape_<feature>_<phase>_cycle<N>.txt
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_report.py \
+     /tmp/scrape_<feature>_<phase>_cycle<N>.txt \
+     --feature <feature> --phase <phase> --cycle <N> \
+     > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
+   ```
+   The extractor takes the **last** complete `<AUDIT_SENTINEL>-BEGIN`/`-END` pair, so neither an older cycle nor a retry within this one can win. It exits 2 and writes nothing when the pair is missing or its body is empty — that is the "dispatched, went idle, produced nothing" case, and it must halt the cycle rather than be scored. On exit 2: re-read with a larger `--lines`, and if the report genuinely never arrived, `hmad-dispatch clear agy` and re-dispatch.
+10. Design audits write to `docs/02-design/features/` instead; adjust the redirect above.
 11. Run the gate — the verdict unit counts bullets in BOTH `## Must-fix` AND `## Should-fix` (excluding the bare-`None` sentinel, a stray `- None`, and any `## Acknowledged-not-fixed` items in the same file or a sidecar `.audit.v<N+1>.md` passed via `--ack-file`):
     ```bash
     python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py <audit-file>
@@ -249,14 +316,29 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
     The gate emits a `[H-MAD] <feature> gate <verdict>` marker line. Nits never block. If the `GATE:` token is absent from stdout (unexpected), treat it as an operational error and halt `step<N>:gate_token_missing` with a `[H-MAD]` marker — never silently treat a missing token as PASS.
 
+## Putting `hmad-dispatch` on PATH
+
+This file spells the wrapper as a bare `hmad-dispatch <verb>`. Put the skill's
+`bin/` on PATH once so those commands work verbatim instead of needing the
+absolute path to `scripts/hmad-dispatch.sh` (which differs per install and per
+checkout):
+
+```bash
+export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+```
+
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
+- `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
+- `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
 - `h_mad_resume_decision.py` — smart-resume decision
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`)
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
-- `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2)
+- `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2, strict tier)
+- `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
+- `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
 
 ## Telemetry

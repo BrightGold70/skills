@@ -313,7 +313,35 @@ _send_text() {
   esac
 }
 
-_cmd_send()  { _send_text "$1" "$(cat "$2")"; }   # $1 agent, $2 promptfile — file CONTENTS, not path
+# $1 agent, $2 promptfile.
+#
+# Small prompts are inlined. Above HMAD_SEND_INLINE_MAX bytes (default 8192)
+# the agent is told to read the staged file instead: pasting a 32-61 KB audit
+# prompt into a TUI is what the file-indirection rule exists to prevent, and
+# inlining unconditionally put the documented dispatch step in direct conflict
+# with it at exactly the sizes that occur in practice.
+_cmd_send() {
+  local agent="$1" promptfile="$2"
+  local max="${HMAD_SEND_INLINE_MAX:-8192}"
+
+  if [ ! -f "$promptfile" ]; then
+    echo "hmad-dispatch: no such prompt file: $promptfile" >&2
+    return 2
+  fi
+
+  local size
+  size=$(wc -c < "$promptfile" | tr -d ' ')
+
+  if [ "$size" -le "$max" ]; then
+    _send_text "$agent" "$(cat "$promptfile")"
+    return $?
+  fi
+
+  # Canonical path — the agent resolves it from its own cwd, not ours.
+  local abs
+  abs="$(cd "$(dirname "$promptfile")" && pwd -P)/$(basename "$promptfile")"
+  _send_text "$agent" "Read $abs and follow the instructions in it. It is ${size} bytes; read the whole file before responding."
+}
 _cmd_clear() { _send_text "$1" "/clear"; }
 
 _cmd_read() {
@@ -328,6 +356,37 @@ _cmd_read() {
   esac
 }
 
+_snapshot() {   # $1 substrate, $2 target
+  case "$1" in
+    cmux) cmux read-screen --surface "$2" --lines 6 ;;
+    orca) orca terminal read --terminal "$2" --limit 6 ;;
+  esac
+}
+
+# Two consecutive identical snapshots. A single read can catch a pane
+# mid-write; two matching ones cannot.
+_wait_stable() {   # $1 substrate, $2 target, $3 timeout-seconds
+  local sub="$1" target="$2" timeout="$3"
+  local interval="${HMAD_WAIT_POLL_INTERVAL:-3}"
+  local prev="" cur elapsed=0
+
+  # The clock must advance even when the interval is 0 (tests use that to run
+  # without sleeping); otherwise a pane that never stabilises loops forever.
+  local tick="$interval"
+  [ "$tick" -lt 1 ] && tick=1
+
+  while [ "$elapsed" -le "$timeout" ]; do
+    cur="$(_snapshot "$sub" "$target")"
+    # An empty read is not evidence of idleness — only two identical
+    # non-empty snapshots are.
+    [ -n "$cur" ] && [ "$cur" = "$prev" ] && return 0
+    prev="$cur"
+    [ "$interval" -gt 0 ] && sleep "$interval"
+    elapsed=$((elapsed + tick))
+  done
+  return 1
+}
+
 _cmd_wait() {
   local agent="$1"; shift
   local timeout=300
@@ -335,16 +394,16 @@ _cmd_wait() {
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
-    orca) orca terminal wait --terminal "$target" --for tui-idle --timeout-ms "$(( timeout * 1000 ))" ;;
+    orca)
+      # Orca's native `--for tui-idle` has been observed reporting satisfied
+      # while an agent was still generating, so it is a fast first gate, not
+      # proof: its "not idle" is authoritative, its "idle" is not. Confirm
+      # with the same stability comparison cmux has always relied on.
+      orca terminal wait --terminal "$target" --for tui-idle --timeout-ms "$(( timeout * 1000 ))" || return 1
+      _wait_stable "$sub" "$target" "$timeout" ;;
     cmux)
-      # No native idle in cmux: poll read-screen until two consecutive identical snapshots.
-      local prev="" cur elapsed=0
-      while [ "$elapsed" -lt "$timeout" ]; do
-        cur="$(cmux read-screen --surface "$target" --lines 6)"
-        [ "$cur" = "$prev" ] && [ -n "$cur" ] && return 0
-        prev="$cur"; sleep 3; elapsed=$((elapsed + 3))
-      done
-      return 1 ;;
+      # No native idle in cmux at all — stability is the only signal.
+      _wait_stable "$sub" "$target" "$timeout" ;;
   esac
 }
 

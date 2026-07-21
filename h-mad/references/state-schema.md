@@ -49,15 +49,46 @@ Only one feature may have `phase != null` at a time per machine. The PreToolUse 
 
 ## Validation
 
-Schema lives at `~/.claude/skills/h-mad/scripts/h_mad_state_schema.json`. Validate before writing:
+Two schemas live in `~/.claude/skills/h-mad/scripts/`:
+
+| Schema | Governs |
+|---|---|
+| `h_mad_state_schema.json` | **strict** v2.2 — required of every new record |
+| `h_mad_state_schema_historical.json` | **historical** — what pre-v2.2 runs actually wrote |
+
+Validate a whole store:
 
 ```bash
-python3 -c "
-import json, jsonschema
-schema = json.load(open('$HOME/.claude/skills/h-mad/scripts/h_mad_state_schema.json'))
-state = json.load(open('docs/.bkit-memory.json'))
-for feat, fs in state.get('orchestrator_state', {}).items():
-    jsonschema.validate(fs, schema)
-print('OK')
-"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py docs/.bkit-memory.json
+# STATE: PASS strict=9 historical=55 invalid=0
 ```
+
+Verify a record you just wrote meets v2.2:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py \
+  docs/.bkit-memory.json --feature <feature> --strict-only
+```
+
+Parse the `STATE:` token, not the exit code — the validator exits 0 on any
+verdict and reserves non-zero for operational errors (missing file, bad JSON,
+unknown feature), so a FAIL never registers as a tool failure.
+
+### Why two tiers
+
+v2.2 was aspirational: nothing enforced it at write time, and
+`additionalProperties: false` rejected every key a run invented. An
+established store drifted to 38 distinct record shapes over 53 distinct keys —
+five spellings of the merge sha (`merge_commit`, `merge_sha`, `merged_sha`,
+`merged`, `shipped_sha`), six of "phase 7 finished" (`phase7_closure`,
+`phase7`, `step7`, `step7_closure`, `"7"`, `7`), and timestamps as both ISO
+strings and unix epochs. Single-tier validation therefore always failed, which
+made the documented check useless, so it went unrun and the drift compounded.
+
+The historical tier requires only `current_phase`, `last_completed_phase`, and
+`phase` — the three fields present in every record observed — so historical
+drift passes while a genuinely broken record still fails. The strict tier plus
+`--strict-only` on the write path is what stops new drift.
+
+**Never invent a key.** If a run needs a field v2.2 lacks, add it to
+`h_mad_state_schema.json` first.
