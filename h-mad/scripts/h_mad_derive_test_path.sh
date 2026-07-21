@@ -24,6 +24,9 @@ case "$PROD_PATH" in
   clinical-statistics-analyzer/*)
     PROJECT="clinical-statistics-analyzer"
     ;;
+  shared/*)
+    PROJECT="shared"
+    ;;
   *)
     # Unknown project layout → empty
     exit 0
