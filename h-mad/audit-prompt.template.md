@@ -14,6 +14,7 @@ You are the agy audit reviewer. Your role this turn:
 - Impl-plan audit: Reviewer.adversarial_consistency (focus: writing-plans quality — no TBD placeholders, no vague reqs, exact file paths, type consistency across tasks, code blocks that match referenced functions)
 
 Target document: <INLINE_TARGET_DOC>
+{For plan and design audits:} Source spec: <INLINE_PAIRED_SPEC>
 {For design audit only:} Paired audited plan: <INLINE_PAIRED_PLAN>
 {For impl-plan audit only:} Paired audited design: <INLINE_PAIRED_DESIGN>
 
@@ -38,6 +39,49 @@ Two layers, both binding:
 ### Project invariants (domain rules for this repository):
 
 <INLINE_PROJECT_INVARIANTS>
+
+Axis C — Spec reconciliation (plan and design audits only; skip for impl-plan
+audits, which contract against the design rather than the spec).
+
+The spec is the source of truth for what this feature must do. A plan or design
+is derived from it and may legitimately argue for a narrower reading — but it
+may not do so silently, because every downstream phase then measures the
+implementation against a spec the design already walked away from.
+
+Read the spec above and reconcile it against the target document **by
+identifier**, not by impression:
+
+**Design audits — every acceptance criterion.** For each `AC-N.M` in the spec,
+classify the design as exactly one of:
+
+| Classification | Meaning |
+|---|---|
+| `implemented-as-written` | the design covers the AC in its spec form |
+| `restated` | the design covers it in a different, usually narrower form |
+| `absent` | the design does not address it at all |
+
+**Plan audits — every functional requirement.** Same three classifications at
+`FR-N` granularity. A plan is a strategy document and is not expected to restate
+each AC; it *is* expected to address every FR or explicitly defer it.
+
+Reporting rules:
+
+- For every `restated` item, **quote both forms** — the spec's wording and the
+  design's — so the divergence is auditable rather than asserted. Then say which
+  is narrower and in what respect.
+- `restated` and `absent` are **must-fix**. This is not a judgement that the
+  design is wrong: a narrowing may be well-argued and may be the right call. It
+  is a judgement that the divergence must be explicit and must land in the spec
+  before the gate clears, so the operator decides deliberately rather than
+  discovering it at verification.
+- An AC whose narrowing the spec **already reflects** is
+  `implemented-as-written`, not `restated`. That is the loop closing correctly.
+- Do not infer coverage from a section heading or a passing reference in a risk
+  or rationale table. An AC is covered when the document says what will satisfy
+  it.
+
+Report Axis C as a table in your `## Summary`, then raise each `restated` or
+`absent` item as its own `## Must-fix` bullet.
 
 Output framing (mandatory — the orchestrator extracts on these markers):
 
