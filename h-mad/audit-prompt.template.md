@@ -39,6 +39,20 @@ Two layers, both binding:
 
 <INLINE_PROJECT_INVARIANTS>
 
+Output framing (mandatory — the orchestrator extracts on these markers):
+
+Emit your report bracketed by these two lines, each alone on its line, with
+nothing before the first or after the second:
+
+    <AUDIT_SENTINEL>-BEGIN
+    ...your report...
+    <AUDIT_SENTINEL>-END
+
+Your report is read by scraping this terminal, and the previous cycle's report
+is usually still visible above the prompt. The markers are how the orchestrator
+tells your new report from that old one — omit them and the audit cannot be
+scored. Emit them even if you have nothing to report.
+
 Output schema (exact, no other top-level sections):
 
 ## Summary

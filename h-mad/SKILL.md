@@ -252,14 +252,23 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 4. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `<PROJECT_ROOT>/.h-mad/invariants.md` (domain Axis B). If the project file is absent/empty, leave the slot empty — the base layer still applies.
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
+6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
 8. Dispatch via `hmad-dispatch` file-indirection:
    ```bash
    hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
    ```
-9. Capture: `hmad-dispatch read agy --lines 50`.
-10. Write audit output to `docs/01-plan/features/<feature>.<phase>.audit.v<N>.md` (or `docs/02-design/features/` for design audits).
+9. Capture and extract — **never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
+   ```bash
+   hmad-dispatch read agy --lines 200 > /tmp/scrape_<feature>_<phase>_cycle<N>.txt
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_report.py \
+     /tmp/scrape_<feature>_<phase>_cycle<N>.txt \
+     --feature <feature> --phase <phase> --cycle <N> \
+     > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
+   ```
+   The extractor takes the **last** complete `<AUDIT_SENTINEL>-BEGIN`/`-END` pair, so neither an older cycle nor a retry within this one can win. It exits 2 and writes nothing when the pair is missing or its body is empty — that is the "dispatched, went idle, produced nothing" case, and it must halt the cycle rather than be scored. On exit 2: re-read with a larger `--lines`, and if the report genuinely never arrived, `hmad-dispatch clear agy` and re-dispatch.
+10. Design audits write to `docs/02-design/features/` instead; adjust the redirect above.
 11. Run the gate — the verdict unit counts bullets in BOTH `## Must-fix` AND `## Should-fix` (excluding the bare-`None` sentinel, a stray `- None`, and any `## Acknowledged-not-fixed` items in the same file or a sidecar `.audit.v<N+1>.md` passed via `--ack-file`):
     ```bash
     python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py <audit-file>
@@ -282,6 +291,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
+- `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
 - `h_mad_resume_decision.py` — smart-resume decision
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`)
