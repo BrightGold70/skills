@@ -313,7 +313,35 @@ _send_text() {
   esac
 }
 
-_cmd_send()  { _send_text "$1" "$(cat "$2")"; }   # $1 agent, $2 promptfile — file CONTENTS, not path
+# $1 agent, $2 promptfile.
+#
+# Small prompts are inlined. Above HMAD_SEND_INLINE_MAX bytes (default 8192)
+# the agent is told to read the staged file instead: pasting a 32-61 KB audit
+# prompt into a TUI is what the file-indirection rule exists to prevent, and
+# inlining unconditionally put the documented dispatch step in direct conflict
+# with it at exactly the sizes that occur in practice.
+_cmd_send() {
+  local agent="$1" promptfile="$2"
+  local max="${HMAD_SEND_INLINE_MAX:-8192}"
+
+  if [ ! -f "$promptfile" ]; then
+    echo "hmad-dispatch: no such prompt file: $promptfile" >&2
+    return 2
+  fi
+
+  local size
+  size=$(wc -c < "$promptfile" | tr -d ' ')
+
+  if [ "$size" -le "$max" ]; then
+    _send_text "$agent" "$(cat "$promptfile")"
+    return $?
+  fi
+
+  # Canonical path — the agent resolves it from its own cwd, not ours.
+  local abs
+  abs="$(cd "$(dirname "$promptfile")" && pwd -P)/$(basename "$promptfile")"
+  _send_text "$agent" "Read $abs and follow the instructions in it. It is ${size} bytes; read the whole file before responding."
+}
 _cmd_clear() { _send_text "$1" "/clear"; }
 
 _cmd_read() {

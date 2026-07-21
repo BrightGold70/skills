@@ -23,12 +23,31 @@ which differs per install and per checkout.
 | Verb | Purpose |
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
-| `hmad-dispatch send <codex\|agy> <promptfile>` | File-indirection dispatch + submit |
+| `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
 | `hmad-dispatch read <codex\|agy> [--lines N]` | Scrape the agent screen to stdout |
 | `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle |
 | `hmad-dispatch alive <codex\|agy>` | Liveness probe (exit 0/1) |
 | `hmad-dispatch clear <codex\|agy>` | Reset the agent's context (`/clear`) |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
+
+## How `send` delivers a prompt
+
+`send` picks its delivery mode from the prompt's size, so callers do not have
+to:
+
+| Prompt size | Delivery |
+|---|---|
+| ≤ `HMAD_SEND_INLINE_MAX` (default 8192 bytes) | Contents inlined into the pane |
+| > threshold | A short instruction naming the staged file, by canonical absolute path — the agent reads it itself |
+
+The threshold sits inside the ~5–10 KB range the file-indirection rule names,
+and well under the 32–61 KB that audit prompts reach in practice. Tune it with
+`HMAD_SEND_INLINE_MAX` if a substrate turns out to tolerate more or less.
+
+Before this split, `send` inlined unconditionally (`$(cat "$2")`), which put
+the documented audit dispatch step in direct conflict with the indirection
+rule at exactly the sizes that occur — so every audit had to be dispatched by
+hand instead.
 
 ## Substrate detection (highest precedence wins)
 1. `HMAD_SUBSTRATE=cmux|orca` — explicit override.

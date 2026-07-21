@@ -222,7 +222,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
-- Never invoke Codex or agy directly — always via `hmad-dispatch` file-indirection (see `references/agent-substrate.md`) per CLAUDE.md §F-12.
+- Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
 ## Known interactions (coexisting plugins)
 
@@ -289,10 +289,14 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
-8. Dispatch via `hmad-dispatch` file-indirection:
+8. Dispatch:
    ```bash
    hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
    ```
+   `send` chooses its own delivery mode by size: it inlines below
+   `HMAD_SEND_INLINE_MAX` (default 8192 bytes) and otherwise tells the agent to
+   read the staged file by absolute path. Audit prompts run 32–61 KB, so they
+   take the indirection path — no need to hand-roll it.
 9. Capture and extract — **never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
    ```bash
    hmad-dispatch read agy --lines 200 > /tmp/scrape_<feature>_<phase>_cycle<N>.txt

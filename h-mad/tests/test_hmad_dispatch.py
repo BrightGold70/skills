@@ -855,3 +855,109 @@ def test_skill_documents_automation_usage():
     text = (SKILL / "SKILL.md").read_text()
     for required in ["automation-create", "automation-run", "automation-list", "automation-remove", "hpw doctor"]:
         assert required in text
+
+
+# --- send: inline vs file-indirection --------------------------------------
+#
+# `send` used to inline the prompt unconditionally (`$(cat "$2")`), which
+# contradicted the file-indirection rule for large prompts at exactly the
+# sizes that occur in practice: audit prompts run 32-61 KB. Above
+# HMAD_SEND_INLINE_MAX (default 8192 bytes) the wrapper now sends a short
+# instruction naming the staged file instead of its contents.
+
+_INLINE_MAX_DEFAULT = 8192
+
+
+def _prompt_file(tmp_path, size, name="prompt.txt"):
+    pf = tmp_path / name
+    pf.write_text("X" * size)
+    return pf
+
+
+def test_send_inlines_a_small_prompt(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = tmp_path / "small.txt"; pf.write_text("SMALL-PROMPT")
+    r = run(["send", "codex", str(pf)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "SMALL-PROMPT" in text
+    assert str(pf) not in text, "small prompts must still be inlined"
+
+
+def test_send_switches_to_indirection_for_a_large_prompt(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
+    r = run(["send", "codex", str(pf)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert str(pf) in text, "must name the staged file"
+    assert "XXXXXXXXXXXX" not in text, "must not inline the contents"
+
+
+def test_indirection_canonicalises_the_path(tmp_path):
+    """The agent resolves the path from its own cwd, so send a canonical one."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    sub = tmp_path / "sub"; sub.mkdir()
+    pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
+    noncanonical = sub / ".." / "big.txt"   # valid, absolute, not canonical
+
+    r = run(["send", "codex", str(noncanonical)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert str(pf.resolve()) in text
+    assert "/.." not in text
+
+
+def test_threshold_boundary_is_inclusive(tmp_path):
+    """Exactly at the limit still inlines; one byte over does not."""
+    b = _bindir(tmp_path, ["orca"])
+    at = tmp_path / "cap_at.txt"
+    pf_at = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT, "at.txt")
+    run(["send", "codex", str(pf_at)], substrate="orca",
+        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=at)
+    assert "XXXXXXXXXXXX" in at.read_text()
+
+    over = tmp_path / "cap_over.txt"
+    pf_over = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "over.txt")
+    run(["send", "codex", str(pf_over)], substrate="orca",
+        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=over)
+    assert "XXXXXXXXXXXX" not in over.read_text()
+
+
+def test_threshold_is_tunable(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = _prompt_file(tmp_path, 100, "medium.txt")
+    r = run(["send", "codex", str(pf)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+                 "HMAD_SEND_INLINE_MAX": "50"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert str(pf) in text
+    assert "XXXXXXXXXXXX" not in text
+
+
+def test_send_cmux_indirection_too(tmp_path):
+    """The threshold is substrate-independent."""
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
+    r = run(["send", "codex", str(pf)], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert str(pf) in text
+    assert "XXXXXXXXXXXX" not in text
+
+
+def test_send_missing_file_fails_loudly(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["send", "codex", str(tmp_path / "nope.txt")], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"})
+    assert r.returncode != 0
