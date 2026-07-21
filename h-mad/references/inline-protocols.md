@@ -324,6 +324,28 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    git diff <baseline-sha>..<head-sha>
    ```
 4. For each FR: read the relevant production files and check each AC against actual code.
+4.5. **For every unmet AC, classify it before recommending anything.** An unmet AC
+   has two causes that look identical in the diff, and they need opposite responses:
+
+   | Classification | What happened | Action |
+   |---|---|---|
+   | `code-vs-design` | the design specifies it, the code does not do it | implementation defect — fix the code |
+   | `design-vs-spec` | the design restates it in a narrower form, or omits it | reconciliation decision — **escalate to the operator**, do not "fix" |
+   | `both` | neither design nor code addresses it | genuine omission — amend both documents, then fix the code |
+
+   To classify, read the design's own words on that AC, including its **rationale**.
+   A narrowing is usually argued for, and the argument is often good: one observed
+   narrowing was reached only after halting broke 68 tests across 6 files, and a
+   second attempt broke 7 more. That reasoning does not appear in a diff, so an
+   analysis that reads only spec-versus-code will report a deliberate, well-founded
+   design decision as an implementation defect and recommend undoing it.
+
+   Two consequences for how you write this up. A `design-vs-spec` item is **not**
+   a defect and must not be listed as one — say which document you believe should
+   change and why, and leave the decision to the operator. And a test that asserts
+   the design's narrower behaviour is **correct against the design**; do not
+   recommend deleting or inverting it on the strength of the spec alone.
+
 5. Draft the analysis:
 
    ```markdown
@@ -364,10 +386,21 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```
 
 6. Save to `docs/03-analysis/<feature>.analysis.md`.
-7. Parse match rate. If ≥90% AND tests 100%: advance. Else: Phase 6b iterate.
+7. Parse match rate. If ≥90% AND tests 100%: advance. Else: Phase 6b iterate —
+   **unless the shortfall is `design-vs-spec`**, which 6b cannot close. 6b is a
+   mechanical fix loop; it cannot decide which of two documents is right, and
+   running it over a reconciliation question just encodes whichever reading the
+   implementer happened to hold. Route those to the operator, record the decision
+   in the spec or the design, and re-measure afterwards.
 
 **Match rate formula**: `(FRs where all ACs are met) / (total FRs) × 100`.
 An FR counts only if every one of its ACs passes — partial credit = 0 for that FR.
+
+The measurement is against the **spec** regardless of classification — a
+`design-vs-spec` AC still counts as unmet, because the implementation genuinely
+does not satisfy what the spec asks. Classification changes the remedy and who
+owns it, never the arithmetic. Report both numbers when they diverge sharply:
+the FR-level match rate, and the AC-level count for calibration.
 
 ---
 
