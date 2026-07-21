@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
 printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+[ "${HMAD_STUB_FAIL:-}" = "1" ] && { printf '%s' '{"ok":false,"error":"boom"}'; exit 0; }
+if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "set" ]; then
+  printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
+  exit 0
+fi
+if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "current" ] && [ "${3:-}" = "--json" ]; then
+  printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
+  exit 0
+fi
 [ -n "$HMAD_STUB_ORCA_STDOUT" ] && printf '%s' "$HMAD_STUB_ORCA_STDOUT"
 exit "${HMAD_STUB_ORCA_EXIT:-0}"
