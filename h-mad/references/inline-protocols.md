@@ -448,6 +448,7 @@ Draft and save to `docs/04-report/features/<feature>.report.md`:
 | Impl-plan audit cycles | N |
 | Iterate cycles (Phase 6b) | N |
 | Final match rate | N% |
+| 6a-prime architectural review | `READY_TO_MERGE` / `WITH_FIXES` / `NO` / **`SKIPPED_NO_PANE`** |
 | Tests | N passing / 0 failing |
 | Phases with back-propagation | Phase N: <reason> / None |
 

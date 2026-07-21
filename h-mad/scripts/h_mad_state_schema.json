@@ -31,6 +31,10 @@
       "additionalProperties": false
     },
     "iterate_cycles": {"type": "integer", "minimum": 0},
+    "archreview": {
+      "description": "Phase 6a-prime outcome. SKIPPED_NO_PANE records that no reviewer pane resolved and the operator elected to proceed; it is never equivalent to READY_TO_MERGE and must surface in the Phase 7 report.",
+      "enum": ["READY_TO_MERGE", "WITH_FIXES", "NO", "SKIPPED_NO_PANE"]
+    },
     "production_paths_needing_red_tests": {
       "type": "array",
       "items": {"type": "string"}
