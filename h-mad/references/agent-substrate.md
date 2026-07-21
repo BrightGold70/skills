@@ -49,6 +49,42 @@ the documented audit dispatch step in direct conflict with the indirection
 rule at exactly the sizes that occur — so every audit had to be dispatched by
 hand instead.
 
+## Prompt size: the silent-output cliff
+
+Above a size threshold an agent reads the staged file, reports a token count,
+emits **nothing**, and returns to its prompt. No error, no partial output.
+
+Measured on one agent in one session — treat as an order of magnitude, not a
+constant:
+
+| Prompt | Result |
+|---|---|
+| 38,921 B | emitted normally |
+| 49,273 B | emitted normally |
+| 53,066 B | **silent** — twice, and `/clear` did not recover it |
+
+So the cliff sat between ~49 KB and ~53 KB there. Re-measure on your own host
+before relying on the boundary; what generalises is that the failure is *silent
+and total*, not that it starts at 53 KB.
+
+**Idle detection cannot see this.** The pane really is settled — nothing is
+being written — so `wait` returns satisfied and a two-read stability comparison
+reports STABLE. Those probes answer "has output stopped", which is a different
+question from "was there any output". A run that trusts `wait` alone will scrape
+an empty pane and proceed.
+
+What catches it is extraction, not readiness: `h_mad_extract_report.py` and
+`h_mad_extract_verdict.py` both exit 2 on absent or empty output rather than
+returning something scoreable. That is why the halt conditions are phrased
+around a *missing* verdict and not only a bad one — see the `no_verdict` halts
+in `failure-recovery.md`.
+
+**Never write a sentinel literally into a dispatch prompt.** The prompt is
+echoed in the pane, so the orchestrator's own grep matches its own instruction
+instead of the agent's report — the extraction then succeeds against text the
+agent never produced. Split the token across fragments when composing the
+prompt (`"AUDIT-D2-BEG" + "IN"`), so only real agent output can match.
+
 ## How `wait` decides an agent is idle
 
 Idleness is confirmed by **two consecutive identical non-empty reads** of the
