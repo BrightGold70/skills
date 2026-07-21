@@ -95,25 +95,39 @@ def test_env_reports_override(tmp_path):
     assert "orca" in r.stdout
 
 
-def test_detect_defaults_cmux_when_only_cmux_present(tmp_path):
+def test_detect_cmux_only_is_cmux(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["env"], env={"_BINDIR": b})
     assert r.returncode == 0
     assert "cmux" in r.stdout
 
 
-def test_detect_orca_when_only_orca_present(tmp_path):
+def test_detect_orca_only_is_orca(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     r = run(["env"], env={"_BINDIR": b})
     assert r.returncode == 0
     assert "orca" in r.stdout
 
 
-def test_both_present_defaults_cmux(tmp_path):
+def test_detect_default_both_present_is_orca(tmp_path):
     b = _bindir(tmp_path, ["cmux", "orca"])
     r = run(["env"], env={"_BINDIR": b})
     assert r.returncode == 0
-    assert "cmux" in r.stdout
+    assert "substrate: orca" in r.stdout
+
+
+def test_detect_override_forces_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    r = run(["env"], substrate="cmux", env={"_BINDIR": b})
+    assert r.returncode == 0
+    assert "substrate: cmux" in r.stdout
+
+
+def test_detect_marker_forces_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    r = run(["env"], env={"_BINDIR": b, "CMUX": "1"})
+    assert r.returncode == 0
+    assert "substrate: cmux" in r.stdout
 
 
 def test_no_substrate_errors(tmp_path):
@@ -647,6 +661,81 @@ def test_worktree_ps_and_rm_refuse_cmux(tmp_path):
         assert r.returncode == 2
         assert "requires orchestration mode (substrate=orca)" in r.stderr
         assert not cap.exists()
+
+
+def test_worktree_comment_orca_sets_comment(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-comment", "id:w1", "hi"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree set --worktree id:w1 --comment hi --json\n"
+
+
+def test_worktree_comment_default_selector_active(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-comment", "hi"], substrate="orca",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree set --worktree active --comment hi --json\n"
+
+
+def test_worktree_comment_missing_text_exit2(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-comment"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "missing required argument: text" in r.stderr
+    assert not cap.exists()
+
+
+def test_worktree_comment_requires_orca(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-comment", "id:w1", "hi"], substrate="cmux",
+            env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_worktree_comment_propagates_ok_false(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["worktree-comment", "id:w1", "hi"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert "OK" not in r.stdout
+
+
+def test_worktree_current_orca_reads(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-current"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree current --json\n"
+    assert r.stdout == '{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}\n'
+    assert " set " not in cap.read_text()
+    assert " create " not in cap.read_text()
+    assert " rm " not in cap.read_text()
+
+
+def test_worktree_current_requires_orca(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-current"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_worktree_current_propagates_ok_false(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["worktree-current"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
 
 
 def test_skill_documents_fanout_conjunction():

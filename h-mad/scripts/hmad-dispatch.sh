@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-create | worktree-ps | worktree-rm
+# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -16,9 +16,8 @@ _detect_substrate() {
   local has_cmux=0 has_orca=0
   command -v cmux >/dev/null 2>&1 && has_cmux=1
   command -v orca >/dev/null 2>&1 && has_orca=1
-  if [ "$has_orca" = 1 ] && [ "$has_cmux" = 0 ]; then printf 'orca\n'; return 0; fi
-  if [ "$has_cmux" = 1 ]; then printf 'cmux\n'; return 0; fi   # both present => default cmux
-  if [ "$has_orca" = 1 ]; then printf 'orca\n'; return 0; fi
+  if [ "$has_orca" = 1 ]; then printf 'orca\n'; return 0; fi   # both present => orca
+  if [ "$has_cmux" = 1 ]; then printf 'cmux\n'; return 0; fi
   return 1
 }
 
@@ -197,6 +196,19 @@ _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
   orca orchestration gate-resolve --id "$1" --resolution "$2" --json
 }
 
+_cmd_worktree_comment() {  # [<selector>] <text>
+  _require_orca worktree-comment || return $?
+  local sel text out rc
+  if [ "$#" -ge 2 ]; then sel="$1"; text="$2"; else sel="active"; text="${1:-}"; fi
+  _need "$text" text || return $?
+  out="$(orca worktree set --worktree "$sel" --comment "$text" --json)" || {
+    rc=$?
+    echo "$out" >&2
+    return "$rc"
+  }
+  printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1 || { echo "$out" >&2; return 1; }
+}
+
 _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--workspace <sel>|--project <id>]
   _require_orca worktree-create || return $?
   _need "${1:-}" name || return $?
@@ -219,6 +231,18 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
   fi
   args+=(--json)
   orca "${args[@]}" | _json_extract '.result.worktree.id // .result.worktree.selector // .result.worktree.handle'
+}
+
+_cmd_worktree_current() {  # (no args)
+  _require_orca worktree-current || return $?
+  local out rc
+  out="$(orca worktree current --json)" || {
+    rc=$?
+    echo "$out" >&2
+    return "$rc"
+  }
+  printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1 || { echo "$out" >&2; return 1; }
+  printf '%s' "$out" | _json_extract '.result | tojson'
 }
 
 _cmd_worktree_ps() {  # [--limit <n>]
@@ -446,7 +470,9 @@ main() {
     await) _cmd_await "$@" ;;
     gate-create) _cmd_gate_create "$@" ;;
     gate-resolve) _cmd_gate_resolve "$@" ;;
+    worktree-comment) _cmd_worktree_comment "$@" ;;
     worktree-create) _cmd_worktree_create "$@" ;;
+    worktree-current) _cmd_worktree_current "$@" ;;
     worktree-ps) _cmd_worktree_ps "$@" ;;
     worktree-rm) _cmd_worktree_rm "$@" ;;
     file-diff) _cmd_file_diff "$@" ;;
