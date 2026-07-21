@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "title": "h-mad orchestrator_state per-feature schema (historical tier)",
+  "description": "Accepts what pre-v2.2 runs actually wrote. The v2.2 schema was never enforced at write time and forbade extra properties, so an established store drifts to many one-off shapes: string phase labels ('complete', 'phase7_closure', 'step7'), epoch-int timestamps, per-phase cycle keys (plan_audit_cycles), and assorted sha keys. This tier requires only the three fields present in every record observed, so a genuinely broken record still fails while historical drift does not.",
+  "type": "object",
+  "required": [
+    "current_phase",
+    "last_completed_phase",
+    "phase"
+  ],
+  "properties": {
+    "current_phase": {
+      "type": ["string", "integer"],
+      "description": "v2.2 uses 0-7; historical records also use labels such as 'complete' or 'phase4_design'."
+    },
+    "last_completed_phase": {
+      "type": ["string", "integer"],
+      "description": "v2.2 uses 0-7; historical records also use 'phase7', 'phase7_closure', 'step7', 'step7_closure', '7'."
+    },
+    "phase": {
+      "type": ["string", "null"],
+      "description": "v2.2 restricts to step5/step6/step7/null; historical records also carry 'complete'."
+    },
+    "halt_reason": {"type": ["string", "null"]},
+    "autonomous_entry_ts": {
+      "type": ["string", "integer", "null"],
+      "description": "Integer form is a unix epoch written by some runs."
+    }
+  },
+  "additionalProperties": true
+}

@@ -206,15 +206,35 @@ Workaround for the **separate** autopilot Stop-hook nag (not addressed by the ga
 See `references/state-schema.md`. Validate with:
 
 ```bash
-python3 -c "
-import json, jsonschema
-schema = json.load(open('$HOME/.claude/skills/h-mad/scripts/h_mad_state_schema.json'))
-state = json.load(open('docs/.bkit-memory.json'))
-for feat, fs in state.get('orchestrator_state', {}).items():
-    jsonschema.validate(fs, schema)
-print('OK')
-"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py docs/.bkit-memory.json
 ```
+
+Validation is **two-tier**, because the v2.2 schema was never enforced at write
+time and forbade extra properties, so established stores hold many one-off
+shapes and a single-tier check always failed:
+
+- `strict` — conforms to v2.2 (`h_mad_state_schema.json`).
+- `historical` — conforms to `h_mad_state_schema_historical.json`: the three
+  fields every observed record carries, extras allowed.
+- `invalid` — neither. Genuinely broken; look at it.
+
+Parse the **token**, not `$?` — same discipline as the audit gate, which
+exits 0 on a verdict so a FAIL never registers as a tool failure:
+
+- `STATE: PASS strict=N historical=M invalid=0` → proceed.
+- `STATE: FAIL … invalid=K` → the named records are broken.
+
+**After writing a record, verify it meets v2.2** — this is what stops the
+drift that produced the historical tier:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py \
+  docs/.bkit-memory.json --feature <feature> --strict-only
+```
+
+Never invent a key. If a run needs a field the schema lacks, add it to
+`h_mad_state_schema.json` rather than writing it ad hoc — that is exactly how
+the store accumulated five spellings of "merge sha".
 
 ## Audit prompt assembly
 
@@ -267,7 +287,9 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`)
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
-- `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2)
+- `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2, strict tier)
+- `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
+- `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
 
 ## Telemetry
