@@ -72,13 +72,33 @@ last seen, so a second session makes a deliberate choice rather than an
 accidental one. A claim older than two hours is treated as abandoned, so a
 crashed session cannot own a feature permanently.
 
+**Then check that the state still describes reality**, before acting on it:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_staleness.py \
+  docs/.bkit-memory.json --feature "<feature>"
+```
+
+The schema validates a record's *shape*; this compares its *contents* against
+git. Both directions have been observed on one feature in a day — a
+`halt_reason` that outlived its resolution by four hours and eight shipped
+modules, and a `last_completed_phase` still reading 4 after Phase 5 had merged
+and pushed. The first routes a resume to `halted` and presents a solved problem
+as the blocker; the second routes to `enter_autonomous` and redoes merged work.
+Both records validated cleanly the whole time.
+
+`STALENESS: CLEAN` → the state is consistent with git. `STALENESS: SUSPECT` →
+each finding names what disagrees. It **reports, it does not adjudicate** —
+the failure being fixed is silent confidence, not a wrong guess, so decide
+yourself and correct the record with `h_mad_state_write.py`.
+
 | Token | What you do |
 |---|---|
 | `owned_elsewhere` | Another session holds this feature and was seen within the staleness window. **Stop and surface it** — print the owner id and heartbeat, and ask whether to coordinate, take over (`--claim <id> --force`), or pick a different feature. Never proceed silently: two sessions on one feature produce contradictory conclusions on the same branch. |
 | `start_fresh` | Initialize `orchestrator_state[<feature>]`. Enter Phase 1. |
 | `resume_manual` | Print current phase + last marker. Ask "continue from phase <N>?" |
 | `enter_autonomous` | Print "all manual checkpoints clear; entering autonomous block." Enter Phase 5. |
-| `halted` | Print `halt_reason` + recovery hints (see `references/failure-recovery.md`). Ask "resume, retry, or reset?" |
+| `halted` | **Run the staleness check first** (below) — a halt that commits landed after is usually already resolved. Then print `halt_reason` + recovery hints (see `references/failure-recovery.md`). Ask "resume, retry, or reset?" |
 | `complete` | Print "feature complete; see docs/archive/<YYYY-MM>/<feature>/". Exit. |
 
 ## Per-phase actions
