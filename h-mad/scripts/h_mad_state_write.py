@@ -152,6 +152,62 @@ def set_fields(state_file: Path, feature: str, **fields: Any) -> dict:
     return _mutate(state_file, feature, apply)
 
 
+def claim(
+    state_file: Path,
+    feature: str,
+    session_id: str,
+    now: str | None = None,
+    force: bool = False,
+) -> dict:
+    """Take ownership of a feature, refreshing the heartbeat.
+
+    Advisory. A second session is refused unless `force` — which must exist,
+    because a session that crashes mid-feature would otherwise hold it forever.
+    Staleness is judged at read time by the resume decision, not here: this only
+    records who and when.
+    """
+
+    def apply(records: dict):
+        if feature not in records:
+            raise StateWriteError(f"no such feature: {feature}")
+        record = records[feature]
+        held_by = record.get("owner_session_id")
+        if held_by and held_by != session_id and not force:
+            raise StateWriteError(
+                f"{feature!r} is owned by session {held_by!r} "
+                f"(last seen {record.get('owner_heartbeat_ts')}). "
+                "Coordinate, or pass force to take over."
+            )
+        return {
+            **record,
+            "owner_session_id": session_id,
+            "owner_heartbeat_ts": now or _utc_now(),
+        }
+
+    return _mutate(state_file, feature, apply)
+
+
+def release(state_file: Path, feature: str) -> dict:
+    """Give up ownership. Safe to call when unowned."""
+
+    def apply(records: dict):
+        if feature not in records:
+            raise StateWriteError(f"no such feature: {feature}")
+        return {
+            **records[feature],
+            "owner_session_id": None,
+            "owner_heartbeat_ts": None,
+        }
+
+    return _mutate(state_file, feature, apply)
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _parse_value(raw: str) -> Any:
     """`phase=null` -> None, `current_phase=5` -> 5, everything else a string."""
     try:
@@ -175,11 +231,20 @@ def main(argv: list[str] | None = None) -> int:
         "as strings — so phase=null writes null and current_phase=5 writes 5.",
     )
     parser.add_argument("--started-ts", help="started_ts for --create")
+    parser.add_argument("--claim", metavar="SESSION_ID", help="Take ownership of the feature")
+    parser.add_argument("--release", action="store_true", help="Give up ownership")
+    parser.add_argument(
+        "--force", action="store_true", help="With --claim, take over an existing claim"
+    )
     args = parser.parse_args(argv)
 
     try:
         if args.create:
             create_feature(args.state_file, args.feature, args.started_ts)
+        if args.claim:
+            claim(args.state_file, args.feature, args.claim, force=args.force)
+        if args.release:
+            release(args.state_file, args.feature)
         fields = {}
         for item in args.set:
             if "=" not in item:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -42,7 +43,49 @@ def _phase_num(value) -> int:
     return 0
 
 
-def decide(state_file: Path, feature: str) -> str:
+OWNERSHIP_STALE_AFTER_SECONDS = 2 * 60 * 60
+
+
+def _parse_ts(value) -> "datetime | None":
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _owned_elsewhere(feat_state: dict, session_id: str | None, now: str | None) -> bool:
+    """True when another session holds this feature and was seen recently.
+
+    A claim older than the staleness window is treated as abandoned — otherwise
+    a session that crashed mid-feature would own it permanently. Callers that
+    pass no session id opt out entirely, so existing callers keep their
+    behaviour rather than meeting a token they cannot interpret.
+    """
+    if not session_id:
+        return False
+    owner = feat_state.get("owner_session_id")
+    if not owner or owner == session_id:
+        return False
+
+    heartbeat = _parse_ts(feat_state.get("owner_heartbeat_ts"))
+    if heartbeat is None:
+        return True  # held, with no evidence of when — treat as live
+
+    reference = _parse_ts(now) or datetime.now(timezone.utc)
+    age = (reference - heartbeat).total_seconds()
+    return age <= OWNERSHIP_STALE_AFTER_SECONDS
+
+
+def decide(
+    state_file: Path,
+    feature: str,
+    session_id: str | None = None,
+    now: str | None = None,
+) -> str:
     if not state_file.is_file():
         return "start_fresh"
     try:
@@ -53,6 +96,11 @@ def decide(state_file: Path, feature: str) -> str:
     feat_state = orchestrator_state.get(feature)
     if not feat_state:
         return "start_fresh"
+    # Ownership is checked before halt: a halted feature held by a live session
+    # is still held, and routing a second session to `halted` would send it to
+    # fix something the first is already working on.
+    if _owned_elsewhere(feat_state, session_id, now):
+        return "owned_elsewhere"
     if feat_state.get("halt_reason"):
         return "halted"
     if feat_state.get("complete") is True:
@@ -71,8 +119,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="h-mad resume decision (v2.2)")
     parser.add_argument("--state", required=True, type=Path)
     parser.add_argument("--feature", required=True)
+    parser.add_argument(
+        "--session-id",
+        help="This session's id. Pass it to get the owned_elsewhere token when "
+        "another live session holds the feature; omit to opt out of the check.",
+    )
+    parser.add_argument("--now", help="Reference time for staleness (testing)")
     args = parser.parse_args()
-    print(decide(args.state, args.feature))
+    print(decide(args.state, args.feature, session_id=args.session_id, now=args.now))
     return 0
 
 

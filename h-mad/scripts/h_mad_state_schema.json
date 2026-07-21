@@ -31,6 +31,15 @@
       "additionalProperties": false
     },
     "iterate_cycles": {"type": "integer", "minimum": 0},
+    "owner_session_id": {
+      "description": "Session currently working this feature. Advisory, not a mutex: it lets a second session see the collision instead of discovering it in the git log. Cleared on release.",
+      "type": ["string", "null"]
+    },
+    "owner_heartbeat_ts": {
+      "description": "When the owner was last seen. A claim older than the staleness window is treated as abandoned, so a crashed session cannot own a feature permanently.",
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
     "archreview": {
       "description": "Phase 6a-prime outcome. SKIPPED_NO_PANE records that no reviewer pane resolved and the operator elected to proceed; it is never equivalent to READY_TO_MERGE and must surface in the Phase 7 report.",
       "enum": ["READY_TO_MERGE", "WITH_FIXES", "NO", "SKIPPED_NO_PANE"]

@@ -56,10 +56,25 @@ Bootstrap does NOT touch existing files, modify git config, or author plan/desig
 
 ## Decision routing (for `/h-mad "<feature>"`)
 
-Run: `python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py --state docs/.bkit-memory.json --feature "<feature>"`
+Run: `python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py --state docs/.bkit-memory.json --feature "<feature>" --session-id "<this session's id>"`
+
+Pass `--session-id` so the collision check runs; omitting it opts out and you
+will not see `owned_elsewhere`. On any token other than `owned_elsewhere`, claim
+the feature before working it, and release when you stop:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature "<feature>" --claim "<session-id>"      # ... work ... then --release
+```
+
+The claim is **advisory** — it reports who holds a feature and when they were
+last seen, so a second session makes a deliberate choice rather than an
+accidental one. A claim older than two hours is treated as abandoned, so a
+crashed session cannot own a feature permanently.
 
 | Token | What you do |
 |---|---|
+| `owned_elsewhere` | Another session holds this feature and was seen within the staleness window. **Stop and surface it** — print the owner id and heartbeat, and ask whether to coordinate, take over (`--claim <id> --force`), or pick a different feature. Never proceed silently: two sessions on one feature produce contradictory conclusions on the same branch. |
 | `start_fresh` | Initialize `orchestrator_state[<feature>]`. Enter Phase 1. |
 | `resume_manual` | Print current phase + last marker. Ask "continue from phase <N>?" |
 | `enter_autonomous` | Print "all manual checkpoints clear; entering autonomous block." Enter Phase 5. |
