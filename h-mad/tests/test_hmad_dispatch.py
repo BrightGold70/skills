@@ -331,21 +331,34 @@ def test_read_orca_passes_explicit_line_limit(tmp_path):
 
 
 def test_wait_orca_uses_native_idle(tmp_path):
+    """Native tui-idle is still called — but as a first gate, not as proof.
+
+    This test used to assert the capture equalled the native wait line alone.
+    That equality encoded "native idle is sufficient", which is the defect:
+    the call was observed returning satisfied while an agent was still
+    generating. The assertion is now containment, and the companion test
+    below pins the confirming read that must follow it.
+    """
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     r = run(["wait", "agy"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait"}, capture=cap)
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_STDOUT": "steady", "HMAD_WAIT_POLL_INTERVAL": "0"},
+            capture=cap)
     assert r.returncode == 0
-    assert cap.read_text() == "orca terminal wait --terminal term_wait --for tui-idle --timeout-ms 300000\n"
+    assert ("orca terminal wait --terminal term_wait --for tui-idle "
+            "--timeout-ms 300000") in cap.read_text()
 
 
 def test_wait_orca_converts_timeout_seconds_to_milliseconds(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     r = run(["wait", "agy", "--timeout", "30"], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait"}, capture=cap)
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_STDOUT": "steady", "HMAD_WAIT_POLL_INTERVAL": "0"},
+            capture=cap)
     assert r.returncode == 0
-    assert cap.read_text() == "orca terminal wait --terminal term_wait --for tui-idle --timeout-ms 30000\n"
+    assert "--timeout-ms 30000" in cap.read_text()
 
 
 def test_orca_explicit_pin_bypasses_list_resolution(tmp_path):
@@ -961,3 +974,107 @@ def test_send_missing_file_fails_loudly(tmp_path):
     r = run(["send", "codex", str(tmp_path / "nope.txt")], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"})
     assert r.returncode != 0
+
+
+# --- wait: idle must be confirmed, not taken on trust ------------------------
+#
+# Orca's native `--for tui-idle` was observed returning satisfied:true twice
+# while agy was still generating, so downstream read a partial pane. cmux never
+# had a native idle and has always confirmed with two consecutive identical
+# snapshots; the orca arm now does the same, using the native call as a fast
+# first gate rather than as proof.
+#
+# LIMITATION: these tests pin the wrapper's control flow against stubs. The
+# underlying defect only manifests against a live Orca runtime with a genuinely
+# mid-response agent, which no stub can reproduce — a stub that returns two
+# identical reads is idle by construction. Live confirmation is outstanding.
+
+_FAST = {"HMAD_WAIT_POLL_INTERVAL": "0"}
+
+
+def test_wait_orca_gates_on_native_idle_then_confirms_by_reading(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_STDOUT": "steady screen", **_FAST},
+            capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "orca terminal wait --terminal term_wait --for tui-idle" in text
+    assert "orca terminal read --terminal term_wait" in text, (
+        "native idle alone is not proof; it must be confirmed by reading"
+    )
+
+
+def test_wait_orca_still_converts_timeout_to_milliseconds(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy", "--timeout", "30"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_STDOUT": "steady screen", **_FAST},
+            capture=cap)
+    assert r.returncode == 0
+    assert "--timeout-ms 30000" in cap.read_text()
+
+
+def test_wait_orca_fails_when_native_gate_fails(tmp_path):
+    """A native timeout is authoritative for 'not idle' — do not poll past it."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_EXIT": "1", **_FAST}, capture=cap)
+    assert r.returncode != 0
+
+
+def test_wait_cmux_still_polls_for_stability(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_AGY_SURFACE": "surface:2",
+                 "HMAD_STUB_CMUX_STDOUT": "steady screen", **_FAST}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "cmux read-screen --surface surface:2" in text
+    assert text.count("read-screen") >= 2, "stability needs two reads, not one"
+
+
+def test_wait_requires_two_reads_on_both_substrates(tmp_path):
+    """One read can catch a pane mid-write; two identical ones cannot."""
+    for sub, pin, binname, needle in [
+        ("orca", {"HMAD_ORCA_AGY_TERMINAL": "t"}, "orca", "terminal read"),
+        ("cmux", {"HMAD_CMUX_AGY_SURFACE": "s"}, "cmux", "read-screen"),
+    ]:
+        d = tmp_path / sub; d.mkdir()
+        b = _bindir(d, [binname])
+        cap = d / "cap.txt"
+        stdout_var = f"HMAD_STUB_{binname.upper()}_STDOUT"
+        r = run(["wait", "agy"], substrate=sub,
+                env={"_BINDIR": b, stdout_var: "steady", **pin, **_FAST},
+                capture=cap)
+        assert r.returncode == 0, sub
+        assert cap.read_text().count(needle) >= 2, sub
+
+
+def test_wait_poll_interval_is_tunable(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy", "--timeout", "1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t",
+                 "HMAD_STUB_ORCA_STDOUT": "steady",
+                 "HMAD_WAIT_POLL_INTERVAL": "0"}, capture=cap)
+    assert r.returncode == 0
+
+
+def test_empty_reads_are_not_treated_as_idle(tmp_path):
+    """A blank pane is absence of evidence, not evidence of idleness.
+
+    Two empty reads are trivially 'identical'; accepting them would make a
+    dead or still-starting pane look settled.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["wait", "agy", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t",
+                 "HMAD_WAIT_POLL_INTERVAL": "0"})
+    assert r.returncode != 0, "empty snapshots must time out, not report idle"
