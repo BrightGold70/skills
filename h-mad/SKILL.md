@@ -147,14 +147,20 @@ If any condition is unmet, use the existing serial fallback.
 For each independent task, run at most `HMAD_ORCA_MAX_WORKTREES` live worktrees
 (default 4): `worktree-create <module> --base <feature-branch> --prompt-file
 <staged-prompt>`; use Tier-2 `task-create` then `dispatch --to <selector>`; `await`
-the worker; `git merge --no-ff <module-branch>`; then `worktree-rm <selector>`.
-Tasks beyond the cap queue and log `[H-MAD] worktree_queued module=<module>`.
+the worker; stamp progress checkpoints and run the **winner-merge decision gate**
+in place of a bare `git merge --no-ff` (see `references/orchestration-mode.md`
+§"Winner-merge decision gate" and §"Progress checkpoints"); then `worktree-rm
+<selector>`. Tasks beyond the cap queue and log `[H-MAD] worktree_queued module=<module>`.
 
-If `git merge --no-ff` fails or `git ls-files --unmerged` is non-empty, run
-`git merge --abort`, emit `[H-MAD] merge_conflict module=<module>`, and re-dispatch
-that module through the serial path after siblings merge. On any Phase-5 halt during
-fanout, enumerate with `worktree-ps` and run `worktree-rm` for every worktree in the
-fanout group. This teardown is idempotent: a gone selector logs and no-ops.
+The gate engages only when `orchestration: on`: a clean verdict + clean merge
+auto-records a `yes` decision (`[H-MAD] merge_gate auto-resolved`) without pausing,
+while a `DRIFT`/non-clean verdict or a merge conflict opens a **blocking** gate for
+a human decision (conflict path first runs `git merge --abort` and emits
+`[H-MAD] merge_conflict module=<module>`). When orchestration is off, the merge is
+the unchanged serial `git merge --no-ff`, conflict-aborted and re-dispatched serially
+as before — no gate. On any Phase-5 halt during fanout, enumerate with `worktree-ps`
+and run `worktree-rm` for every worktree in the fanout group. This teardown is
+idempotent: a gone selector logs and no-ops.
 
 ## Phase 6 (Verification) sub-steps
 
