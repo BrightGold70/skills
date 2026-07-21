@@ -261,8 +261,26 @@ exits 0 on a verdict so a FAIL never registers as a tool failure:
 - `STATE: PASS strict=N historical=M invalid=0` → proceed.
 - `STATE: FAIL … invalid=K` → the named records are broken.
 
-**After writing a record, verify it meets v2.2** — this is what stops the
-drift that produced the historical tier:
+**Write state through `h_mad_state_write.py`, never by hand-editing the JSON.**
+The writer validates the record against the strict schema *before* the bytes
+land, replaces the file atomically, and holds an exclusive lock across the
+read-modify-write:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature <feature> --set last_completed_phase=5 --set current_phase=6
+```
+
+Values are parsed as JSON when possible and kept as strings otherwise, so
+`phase=null` writes `null`, `current_phase=5` writes the integer, and
+`halt_reason=step5d:red_not_all_failing` stays a string. A rejected write exits
+2 and leaves the store byte-identical — an invented key cannot reach disk, which
+is what turns "never invent a key" from a rule the orchestrator has to remember
+into one it cannot break. Only the record being written is validated; legacy
+siblings are left alone, so the writer works on stores with history.
+
+**After writing a record, verify it meets v2.2** — belt and braces, and the way
+to check a record written before the writer existed:
 
 ```bash
 python3 ~/.claude/skills/h-mad/scripts/h_mad_state_validate.py \
@@ -344,6 +362,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
 - `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2, strict tier)
 - `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
+- `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
 
