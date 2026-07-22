@@ -1,10 +1,10 @@
 # Orchestration mode (Orca)
 
-Orchestration mode is an opt-in, Orca-only transport for H-MAD. It is active only when the coordinator pins its terminal handle:
+Orchestration mode is an opt-in, Orca-only transport for H-MAD. It is active when a coordinator terminal resolves. The coordinator is **auto-detected**: Orca exports `ORCA_PANE_KEY="<tabId>:<leafId>"` into each pane, and the coordinator is this pane, whose `leafId` matches a terminal's `.leafId` in `orca terminal list`. So under Orca `hmad-dispatch env` reports `orchestration: on` with no manual setup. Pin it explicitly only to override the auto-detect (e.g. a coordinator in a different pane):
 
 ```bash
-export HMAD_ORCA_COORDINATOR_TERMINAL=<coordinator-handle>
-hmad-dispatch env  # reports: orchestration: on
+hmad-dispatch env                                   # auto-detected → orchestration: on
+export HMAD_ORCA_COORDINATOR_TERMINAL=<handle>      # optional override; pin wins
 ```
 
 ## Worker identity resolution
@@ -45,6 +45,7 @@ Use these additive `hmad-dispatch` verbs:
 - `await <task_id> [--timeout <seconds>]` — waits for that task's `worker_done` callback on the coordinator terminal.
 - `gate-create <task_id> <question> [<options-json>]` — creates a structured decision gate and returns its gate ID.
 - `gate-resolve <gate_id> <resolution>` — resolves a gate with the selected decision.
+- `gate-wait <gate_id> [--timeout <s>] [--interval <s>]` — blocks until the gate is resolved (by a human in the Orca UI or by `gate-resolve`) and echoes its resolution. Polls `orchestration gate-list`. This is the half `gate-create` lacked: without it a "blocking" gate could be opened but never waited on.
 - `worktree-create <name> [--agent <id>] [--base <ref>] [--prompt-file <path>]` — creates an Orca worktree and returns its selector.
 - `worktree-comment [<selector>] <text>` — sets a worktree's free-text comment (a durable, mobile-visible checkpoint), defaulting to the `active` worktree. Captures the response and fails non-zero on an `ok:false` envelope, so a swallowed error cannot read as success.
 - `worktree-current` — returns the active worktree's JSON payload (read-only; used by the `handoff` READ reconcile).
@@ -114,8 +115,11 @@ With orchestration on, for each module:
 
 1. **Non-clean verdict** (the module's 5e review returned `DRIFT`, or its tests
    are not green): do **not** attempt the merge. Open a **blocking** gate
-   `gate-create <task> "Merge <module>? verdict=<v>" '["yes","no"]'`, `await` the
-   human `gate-resolve`, and act on it. Emit `[H-MAD] merge_gate blocked module=<module> reason=verdict`.
+   `gid=$(gate-create <task> "Merge <module>? verdict=<v>" '["yes","no"]')`, then
+   block on the human's decision with `gate-wait "$gid"` (echoes the resolution),
+   and act on it. Emit `[H-MAD] merge_gate blocked module=<module> reason=verdict`.
+   Note: `gate-wait` is the half that makes a blocking gate actually block —
+   `gate-create` only opens it; `await` waits for `worker_done`, not a gate.
 2. **Clean verdict**: attempt `git merge --no-ff <module-branch>`.
    - **Clean merge** (zero exit AND `git ls-files --unmerged` empty): record the
      decision without pausing — `gate-create <task> "Auto-record clean merge of <module>" '["yes","no"]'`
@@ -123,8 +127,8 @@ With orchestration on, for each module:
      The gate is an audit trail here, not a human stop.
    - **Conflict** (non-zero exit OR unmerged paths): `git merge --abort`, emit
      `[H-MAD] merge_conflict module=<module>`, open a **blocking**
-     `gate-create <task> "Merge conflict in <module> — resolve?" '["yes","no"]'`,
-     and `await` the human decision. On `yes` → re-dispatch the module serially
+     `gid=$(gate-create <task> "Merge conflict in <module> — resolve?" '["yes","no"]')`,
+     and block on `gate-wait "$gid"`. On `yes` → re-dispatch the module serially
      after its siblings merge; on `no` → skip and log.
 
 On any fanout halt, use `worktree-ps` to enumerate the fanout group and
