@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -184,6 +184,16 @@ _cmd_env() {
   done
   if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
   return 0
+}
+
+_cmd_resolve() {
+  # resolve <agent> — print the resolved handle/surface for ONE agent
+  # (codex|agy) to stdout and exit 0; empty stdout + stderr diagnostic + exit 1
+  # when UNRESOLVED; empty stdout + stderr message + exit 2 for an unknown or
+  # missing agent. Single-agent form of what `env` computes for both; delegates
+  # to _resolve_target so the two cannot diverge.
+  local agent="${1:-}"
+  _resolve_target "$agent"
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile
@@ -587,6 +597,7 @@ main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
     env)    _cmd_env "$@" ;;
+    resolve) _cmd_resolve "$@" ;;
     send)   _cmd_send "$@" ;;
     clear)  _cmd_clear "$@" ;;
     interrupt) _cmd_interrupt "$@" ;;
