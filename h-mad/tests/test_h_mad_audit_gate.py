@@ -223,6 +223,14 @@ def test_cli_garbage_without_sections_is_invalid(tmp_path: Path) -> None:
     assert "GATE: INVALID" in result.stdout
 
 
+def test_markdown_emphasis_is_not_counted_as_a_finding() -> None:
+    # A `**bold**` note or `*(aside)*` under a section starts with `*` but not
+    # `* `; it must not be miscounted as a blocking bullet (spurious FAIL).
+    text = "## Must-fix\n**Note:** all clear\n*(no blocking issues)*\n## Should-fix\nNone\n"
+
+    assert classify(text) == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+
+
 def test_production_module_uses_only_stdlib_imports() -> None:
     stdlib = getattr(sys, "stdlib_module_names", set())
     if not stdlib:

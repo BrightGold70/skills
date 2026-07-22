@@ -13,12 +13,14 @@ BLOCKING_SECTIONS = {
 }
 
 
-# Bullet markers a reviewer may emit. agy (Antigravity/Gemini) renders `•`, other
-# tools `*`; the template asks for `- `. All three count. Leading whitespace is
+# Bullet markers a reviewer may emit. agy (Antigravity/Gemini) renders `• `, other
+# tools `* `; the template asks for `- `. A trailing space is REQUIRED so markdown
+# emphasis lines placed under a section (`**Note:** …`, `*(no issues)*`) are not
+# miscounted as findings — those start with `*` but not `* `. Leading whitespace is
 # stripped before matching because the Gemini TUI indents every captured line ~2
 # spaces, which previously hid `## Must-fix` from a column-0 match and silently
 # scored a real finding as PASS.
-_BULLET_MARKERS = ("- ", "* ", "• ", "•", "*")
+_BULLET_MARKERS = ("- ", "* ", "• ")
 
 
 def _bullet_remainder(stripped: str) -> str | None:

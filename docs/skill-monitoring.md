@@ -56,4 +56,8 @@ Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`
 
 ---
 
+## Surfaced by the F1–F13 fix review (subagent code-review, 2026-07-22)
+
+- 🟡 **F14 — audit gate only counts bullet-prefixed findings; prose/numbered/blockquote findings score PASS.** After the F1 fix the gate counts `- `/`* `/`• ` bullets (indent-tolerant), but a finding written as a bare prose line, a `1.` numbered item, or a `> blockquote` under `## Must-fix` is still not counted → false PASS. Pre-existing (main counted only `- `), NOT a regression from F1 — F1 narrowed the gap (added `*`/`•` + the INVALID guard) but did not close it. `MONITORING`. **Fix options:** enforce bullet-prefixed findings in the audit template, OR treat any non-`None`, non-header, non-blank line inside a blocking section as a finding (riskier — needs the template's empty-section sentinel to stay exactly `None`).
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._

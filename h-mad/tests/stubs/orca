@@ -9,5 +9,12 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "current" ] && [ "${3:-}" = "--json
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
 fi
+# Default success envelope for un-cased `--json` verbs. Real Orca always returns
+# {"ok":true,"result":{…}}; the previous empty-stdout default was unrealistic and
+# is now rejected by the wrapper's `_orca_json` ok-check. Only applies when no
+# explicit STDOUT/EXIT override and no failure flag is set.
+if [ -z "${HMAD_STUB_ORCA_STDOUT:-}" ] && [ "${HMAD_STUB_ORCA_EXIT:-0}" = "0" ]; then
+  case " $* " in *" --json "*) printf '%s' '{"ok":true,"result":{}}'; exit 0 ;; esac
+fi
 [ -n "$HMAD_STUB_ORCA_STDOUT" ] && printf '%s' "$HMAD_STUB_ORCA_STDOUT"
 exit "${HMAD_STUB_ORCA_EXIT:-0}"
