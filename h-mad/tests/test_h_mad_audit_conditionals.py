@@ -15,7 +15,7 @@ into a dispatched prompt. `resolve()` below is the reference implementation of t
 rule stated in the template's orchestrator note and SKILL.md step 1.5.
 """
 
-import re
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,54 +23,23 @@ SKILL_DIR = REPO_ROOT / "h-mad"
 TEMPLATE = SKILL_DIR / "audit-prompt.template.md"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 
-AUDIT_TYPES = ("plan", "design", "impl-plan")
-MARKER = re.compile(r"\{\{ONLY:([a-z,\-]+)\}\} ?")
-END_ONLY = "{{END-ONLY}}"
+sys.path.insert(0, str(SKILL_DIR / "scripts"))
+# The resolver is imported, never re-implemented here. A test copy of the rule
+# would let the shipped assembler and the rule these tests pin drift apart --
+# exactly the "single-source contract" the base invariants forbid, and the
+# drift would be invisible because both sides would still pass.
+from h_mad_assemble_audit import (  # noqa: E402
+    END_ONLY,
+    MARKER,
+    NOTE_END,
+    NOTE_START,
+    PHASES as AUDIT_TYPES,
+    resolve,
+    strip_orchestrator_note,
+)
+
 LEGACY = ("{For plan and design audits:}", "{For design audit only:}",
           "{For impl-plan audit only:}", "{Design only")
-NOTE_START = "<!-- ORCHESTRATOR-NOTE:START"
-NOTE_END = "ORCHESTRATOR-NOTE:END -->"
-
-
-def _indent(line: str) -> int:
-    return len(line) - len(line.lstrip())
-
-
-def resolve(text: str, audit_type: str) -> str:
-    """Reference resolver for SKILL.md step 1.5."""
-    lines = text.splitlines()
-    out, i = [], 0
-    while i < len(lines):
-        line = lines[i]
-        m = MARKER.search(line)
-        if not m:
-            out.append(line)
-            i += 1
-            continue
-
-        applies = audit_type in m.group(1).split(",")
-        stripped = MARKER.sub("", line, count=1)
-        is_block = not stripped.strip()
-
-        if is_block:
-            j = i + 1
-            while j < len(lines) and lines[j].strip() != END_ONLY:
-                j += 1
-            if j == len(lines):
-                raise ValueError(f"unterminated block marker on line {i + 1}")
-            if applies:
-                out.extend(lines[i + 1 : j])
-            i = j + 1
-        else:
-            base = _indent(line)
-            j = i + 1
-            while j < len(lines) and lines[j].strip() and _indent(lines[j]) > base:
-                j += 1
-            if applies:
-                out.append(stripped)
-                out.extend(lines[i + 1 : j])
-            i = j
-    return "\n".join(out) + ("\n" if text.endswith("\n") else "")
 
 
 def raw() -> str:
@@ -84,10 +53,7 @@ def tmpl() -> str:
     spellings it replaced), so scanning the raw file for markers would flag the
     documentation as the defect. Stripping first mirrors real assembly order.
     """
-    text = raw()
-    head, _, rest = text.partition(NOTE_START)
-    _, _, tail = rest.partition(NOTE_END)
-    return head + tail.lstrip("\n")
+    return strip_orchestrator_note(raw())
 
 
 class TestTemplateMarkersAreWellFormed:

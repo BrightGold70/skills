@@ -163,8 +163,40 @@ _orca_find() {
        | select($self=="" or .handle != $self)
        | select($wt=="" or (.worktreePath // "")==$wt)]}}')"
   # Pass 1 -- anchored, case-insensitive TITLE match (identity, not content).
-  ids="$(printf '%s' "$scoped" | jq -r --arg t "$token" \
-    '.result.terminals[] | select((.title//"") | test("^" + $t + "([^A-Za-z]|$)"; "i")) | .handle')"
+  #
+  # Only run for agents that actually EMIT a title. Orca's `.title` is the pane
+  # program's OSC title when it sets one, and otherwise the enclosing TAB's title
+  # -- and a tab title is shared by every leaf in that tab, so it names a tab, not
+  # a pane. Two consequences, both observed live on 2026-07-22:
+  #
+  #   * Codex sets no OSC title. Therefore ANY `.title` matching "^codex" is
+  #     necessarily inherited (tab title, or the worktree basename) and carries no
+  #     information about what runs in that pane. Matching it is not merely
+  #     unreliable, it is meaningless -- an *agy* pane sitting in a tab named
+  #     "Codex - skills repo" matched "^codex" and would have been handed Codex's
+  #     work. Both agents produce a well-formed sentinel report, so the
+  #     mis-dispatch is silent: the wrong model answers and the gate scores it.
+  #     Codex therefore skips Pass 1 entirely and relies on the preview signature
+  #     or, properly, on a pin/launch.
+  #   * agy DOES set an OSC title ("agy --dangerously-skip-permissions"), so its
+  #     title is real identity -- except when inherited. A title shared by two or
+  #     more leaves of the SAME tab is provably the tab's, so reject it.
+  #
+  # There is no field distinguishing an OSC title from an inherited one; that is
+  # https://github.com/stablyai/orca/issues/9870. Until it exists, "shared across
+  # leaves of one tab" is the only available evidence of inheritance.
+  ids=""
+  if [ "$token" != "codex" ]; then
+    ids="$(printf '%s' "$scoped" | jq -r --arg t "$token" '
+      [.result.terminals[]] as $all
+      | $all[]
+      | select((.title//"") | test("^" + $t + "([^A-Za-z]|$)"; "i"))
+      # Drop titles proven to be tab-inherited: same tabId, same title, >1 leaf.
+      | . as $c
+      | select([$all[] | select((.tabId//"") != "" and (.tabId//"") == ($c.tabId//"")
+                                and (.title//"") == ($c.title//""))] | length < 2)
+      | .handle')"
+  fi
   n="$(printf '%s' "$ids" | grep -c . || true)"
   if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   if [ "$n" -eq 0 ]; then
@@ -176,10 +208,16 @@ _orca_find() {
     # agent-specific signature set. The coordinator's own pane is already
     # excluded from $scoped above; a collision yields n>1 -> UNRESOLVED (safe),
     # never a mis-dispatch.
+    # Signatures must be strings the AGENT PROGRAM emits, never words a pane can
+    # merely render while talking about the agent. The bare tokens "codex" and
+    # "agy" fail that test: a coordinator pane discussing dispatch targets prints
+    # both, and with Pass 1 no longer covering Codex this pass is what runs, so a
+    # bare-token match made the coordinator resolve as Codex and dispatch to
+    # itself. Match the launch banners instead -- model ids and product names.
     local pv_re="$token"
     case "$token" in
-      codex) pv_re='codex|gpt-[0-9]' ;;
-      agy)   pv_re='agy|gemini|antigravity' ;;
+      codex) pv_re='gpt-[0-9]' ;;
+      agy)   pv_re='antigravity|gemini [0-9]' ;;
     esac
     ids="$(printf '%s' "$scoped" | jq -r --arg t "$pv_re" \
       '.result.terminals[] | select((.preview//"") | test($t; "i")) | .handle')"
@@ -213,6 +251,37 @@ _cmd_resolve() {
   # to _resolve_target so the two cannot diverge.
   local agent="${1:-}"
   _resolve_target "$agent"
+}
+
+_cmd_verify() {
+  # verify <agent> — resolve, then confirm the handle still names a live pane.
+  #
+  # `resolve` deliberately does NOT do this. A pin's whole value is that it costs
+  # nothing and depends on no listing: it is what survives when auto-detect
+  # cannot see the pane at all, so making resolution contingent on a successful
+  # `orca terminal list` would put the fallback back under the failure it exists
+  # to survive. But that means `resolve` echoes a pinned handle it has never
+  # checked -- a fabricated or dead pin prints happily with exit 0.
+  #
+  # In practice every consumer catches it: send/read/alive each exit 1 with
+  # `terminal_handle_stale`. This verb closes the reporting gap for callers that
+  # want to know BEFORE dispatching (and for stale pin files left by a crashed
+  # run, which otherwise surface only as a mid-run failure).
+  #
+  # Exit: 0 live, 1 unresolved or stale, 2 unknown agent.
+  local agent="${1:-}" target sub listing
+  case "$agent" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$agent' (codex|agy)" >&2; return 2 ;; esac
+  target="$(_resolve_target "$agent")" || return 1
+  sub="$(_detect_substrate)" || return 1
+  if [ "$sub" != "orca" ]; then printf '%s\n' "$target"; return 0; fi
+  listing="$(orca terminal list --json 2>/dev/null)" || {
+    echo "hmad-dispatch: cannot verify '$agent' — 'orca terminal list' failed" >&2; return 1; }
+  if printf '%s' "$listing" | jq -e --arg h "$target" \
+       '.result.terminals[]? | select(.handle==$h)' >/dev/null 2>&1; then
+    printf '%s\n' "$target"; return 0
+  fi
+  echo "hmad-dispatch: stale_pin — '$agent' resolves to $target, which is not a live terminal; re-pin (hmad-dispatch pin $agent <handle>) or relaunch (hmad-dispatch launch $agent)" >&2
+  return 1
 }
 
 _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the pin file
@@ -698,6 +767,7 @@ main() {
   case "$verb" in
     env)    _cmd_env "$@" ;;
     resolve) _cmd_resolve "$@" ;;
+    verify) _cmd_verify "$@" ;;
     launch) _cmd_launch "$@" ;;
     pin) _cmd_pin "$@" ;;
     pin-agents) _cmd_pin_agents "$@" ;;

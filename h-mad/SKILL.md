@@ -129,9 +129,28 @@ before any `send`/`read`. See `references/agent-substrate.md`.
 **Pin the agents once (Orca) — do it while identity is known.** Immediately after
 a clean `env` under orca, run `hmad-dispatch pin-agents` to freeze the resolved
 codex+agy handles into the session pin file, so later dispatches survive preview
-decay. **Codex has no stable auto-identity**: its Orca title is the worktree name
-and its preview banner (`gpt-N`/`OpenAI Codex`) scrolls off once it works — so
-auto-detect only finds Codex on a **fresh** pane. `pin-agents` therefore **fails
+decay. **Codex has no title identity at all, by construction.** Orca's `.title` is
+the pane program's OSC title if it emits one and otherwise the enclosing *tab's*
+title — and a tab title is shared by every leaf in that tab. Codex emits no OSC
+title, so any `.title` matching `codex` was inherited and says nothing about what
+runs in that pane. Observed live 2026-07-22: an **agy** pane sitting in a tab named
+`Codex - skills repo` matched `^codex`; both agents return a well-formed sentinel
+report, so handing Codex's work to agy would have been silent. Auto-detect therefore
+never matches Codex on title — only on a fresh pane's `gpt-N` banner, which scrolls
+off once it works. (Orca-side gap: stablyai/orca#9870.)
+
+**Check a pin before you trust it.** `resolve` echoes a pinned handle without
+verifying it, so a pin left by a crashed run prints happily with exit 0. That
+independence is deliberate — a pin must keep working when the listing cannot be read
+— so the check is a separate opt-in verb:
+
+```bash
+hmad-dispatch verify codex   # 0 = live, 1 = unresolved or stale_pin, 2 = unknown agent
+```
+
+Run it once per run alongside the substrate preflight. `send`/`read`/`alive` all fail
+loud with `terminal_handle_stale` anyway, but `verify` surfaces it before a dispatch
+rather than mid-audit. `pin-agents` therefore **fails
 loud (rc=1)** if it cannot resolve an agent, naming the missing one and the exact
 env var to set; a run must not proceed with Codex unpinned. If Codex does not
 auto-resolve, read its handle from `orca terminal list` and
@@ -363,7 +382,30 @@ agent mapping via `scripts/h_mad_telemetry.py` so the run log states which envir
 it dispatched under. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
-For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
+For each audit (Phase 3, 4, 5b), **assemble with the script** — it performs steps 1
+through 7.2 below deterministically and refuses to emit a prompt that fails the preflight:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
+  --feature <feature> --phase plan|design|impl-plan --cycle <N> \
+  --project-root <PROJECT_ROOT> \
+  --report-file "$RP"          # Orca only; omit for the sentinel scrape
+```
+
+It prints `ASSEMBLE: PASS <path> <size>` or `ASSEMBLE: HALT <phase>:preflight` with the
+reasons, **exiting 0 either way** (a rejected prompt is a verdict, not a tool failure —
+see the base invariant on audit-gate signal discipline). A halted prompt is deliberately
+not written, so it cannot be dispatched by mistake. A non-zero exit means unreadable
+inputs. On `HALT`, fix the template or invariants file and re-run; never hand-patch the
+staged prompt.
+
+Every defect this area has had came from doing the steps by hand: the rubrics were
+inlined twice, `{Design only — cross-doc:}` reached the reviewer in 69 of 69 dispatched
+prompts, and a hand-written duplication grep hardcoded a project-authored heading. None
+of them raised an error. Use the script.
+
+The steps below are what it implements — read them when debugging a `HALT`, or when
+assembling by hand because the script is unavailable:
 
 1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`, **dropping the leading orchestrator note** — every line from `<!-- ORCHESTRATOR-NOTE:START` through `ORCHESTRATOR-NOTE:END -->` inclusive. That block is assembly instructions to you, not reviewer content; left in, the prompt opens by telling the reviewer it is reading a template.
 1.5. **Resolve the `{{ONLY:…}}` applicability markers** for this audit's type (`plan`,

@@ -237,8 +237,17 @@ def test_orca_identity_autodetect_ignores_preview_and_substring_titles(tmp_path)
         ("term_agy", "agy --dangerously-skip-permissions", ""),
     )
     r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
-    assert "codex -> term_codex" in r.stdout
+    # agy sets its own OSC title, so its title IS identity and resolves.
     assert "agy -> term_agy" in r.stdout
+    # Codex sets no OSC title: "Codex - HemaSuite" can only have been inherited
+    # from the tab (or the worktree basename), so it says nothing about what runs
+    # in that pane -- an agy pane in a tab named "Codex - …" carries the same
+    # string. With no preview banner either, the honest answer is UNRESOLVED,
+    # which forces a pin. Resolving it here is what let Codex work reach agy.
+    assert "codex -> UNRESOLVED" in r.stdout
+    # And the coordinator, which merely *rendered* both words, is never a match.
+    assert "term_coord" not in r.stdout
+    assert "term_vim" not in r.stdout and "term_less" not in r.stdout
 
 
 def test_orca_identity_preview_fallback_skips_coordinator_own_pane(tmp_path):
@@ -431,8 +440,13 @@ def test_orca_identity_explicit_pin(tmp_path):
 
 
 def test_orca_identity_resolves_from_list_json(tmp_path):
+    # Previews carry the agents' launch banners, not the bare words "codex"/"agy":
+    # a bare token is something any pane can render while merely discussing
+    # dispatch, which is how the coordinator once resolved as Codex.
     b = _bindir(tmp_path, ["orca"])
-    canned = '{"result":{"terminals":[{"handle":"term_c","preview":"codex ..."},{"handle":"term_a","preview":"agy ..."}]}}'
+    canned = ('{"result":{"terminals":['
+              '{"handle":"term_c","preview":"gpt-5.6-terra high"},'
+              '{"handle":"term_a","preview":"Antigravity CLI 1.1.5"}]}}')
     r = run(["env"], substrate="orca",
             env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned})
     assert "codex -> term_c" in r.stdout
@@ -459,9 +473,12 @@ def test_orca_identity_scopes_to_coordinator_worktree(tmp_path):
          "worktreePath": "/repo/A", "leafId": "leaf-A2"},
         {"handle": "term_agyB", "title": "agy", "preview": "",
          "worktreePath": "/repo/B", "leafId": "leaf-B2"},
-        {"handle": "term_codexA", "title": "Codex - A", "preview": "",
+        # Codex panes carry no OSC title, so they are identified by their launch
+        # banner, not by the tab-inherited "Codex - X" string. The banner is what
+        # makes this test still exercise Codex scoping rather than title parsing.
+        {"handle": "term_codexA", "title": "Codex - A", "preview": "gpt-5.6-terra high",
          "worktreePath": "/repo/A", "leafId": "leaf-A3"},
-        {"handle": "term_codexB", "title": "Codex - B", "preview": "",
+        {"handle": "term_codexB", "title": "Codex - B", "preview": "gpt-5.6-terra high",
          "worktreePath": "/repo/B", "leafId": "leaf-B3"},
     )
     r = run(["env"], substrate="orca",
@@ -1757,3 +1774,123 @@ def test_empty_reads_are_not_treated_as_idle(tmp_path):
             env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "t",
                  "HMAD_WAIT_POLL_INTERVAL": "0"})
     assert r.returncode != 0, "empty snapshots must time out, not report idle"
+
+
+# --- Orca tab-title inheritance (stablyai/orca#9870) --------------------------
+# Orca's `.title` is the pane program's OSC title when it emits one, and the
+# enclosing TAB's title otherwise. A tab title is shared by every leaf in the
+# tab, so it names a tab, not a pane. Codex emits no OSC title; agy does.
+
+
+def test_codex_never_resolves_from_an_inherited_title(tmp_path):
+    """The live 2026-07-22 mis-dispatch: an *agy* pane sat in a tab titled
+    "Codex - skills repo" and matched "^codex". Both agents emit a well-formed
+    sentinel report, so handing Codex's work to agy is silent -- the wrong model
+    answers and the gate scores it. Codex has no title-based identity at all."""
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_agy_in_codex_tab", "title": "Codex - skills repo",
+         "preview": "the generated report has been written to:",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "term_agy_in_codex_tab" not in r.stdout
+
+
+def test_agy_title_shared_across_leaves_of_one_tab_is_rejected(tmp_path):
+    """A title on two leaves of the SAME tab is provably the tab's, not either
+    pane's, so it cannot be identity -- even for an agent that does emit OSC."""
+    b = _bindir(tmp_path, ["orca"])
+    shared = _orca_terms_full(
+        {"handle": "term_x", "title": "agy - worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+        {"handle": "term_y", "title": "agy - worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l2"},
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": shared})
+    assert "agy -> UNRESOLVED" in r.stdout
+
+    # Same title, but one leaf per tab: nothing proves inheritance, and a real
+    # OSC title must still resolve. Guards against over-rejecting.
+    distinct = _orca_terms_full(
+        {"handle": "term_x", "title": "agy - worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r2 = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": distinct})
+    assert "agy -> term_x" in r2.stdout
+
+
+def test_agent_signatures_reject_words_a_pane_merely_rendered(tmp_path):
+    """Preview signatures must be program output. The bare tokens "codex"/"agy"
+    are not: a coordinator discussing dispatch prints both, and with Pass 1 no
+    longer covering Codex, a bare-token signature made the coordinator resolve
+    as Codex and dispatch to itself."""
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_coord", "title": "Claude Code",
+         "preview": "dispatching to codex and agy panes; codex handles TDD",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "agy -> UNRESOLVED" in r.stdout
+    assert "term_coord" not in r.stdout
+
+
+# --- verify: pin liveness without making resolution depend on the listing -----
+
+
+def test_verify_reports_a_stale_pin_that_resolve_accepts(tmp_path):
+    """`resolve` echoes a pinned handle it never checked, so a dead pin from a
+    crashed run prints happily with exit 0. `verify` is the opt-in check."""
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    env = {"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
+           "HMAD_STUB_ORCA_STDOUT": live}
+
+    r = run(["resolve", "agy"], substrate="orca", env=env)
+    assert r.returncode == 0 and r.stdout.strip() == "term_dead"
+
+    v = run(["verify", "agy"], substrate="orca", env=env)
+    assert v.returncode == 1
+    assert "stale_pin" in v.stderr
+    assert "term_dead" in v.stderr
+
+
+def test_verify_passes_for_a_live_pin(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    v = run(["verify", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_live",
+                 "HMAD_STUB_ORCA_STDOUT": live})
+    assert v.returncode == 0
+    assert v.stdout.strip() == "term_live"
+
+
+def test_verify_rejects_unknown_agent(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    v = run(["verify", "bogus"], substrate="orca", env={"_BINDIR": b})
+    assert v.returncode == 2
+    assert "unknown agent" in v.stderr
+
+
+def test_resolve_stays_independent_of_the_terminal_listing(tmp_path):
+    """Regression guard on the fix itself: a pin must keep resolving when the
+    listing is empty or `orca` is failing outright. That independence is the
+    reason pins survive the auto-detect decay they exist to replace -- moving
+    the liveness check into `resolve` would put the fallback back under the
+    failure it is meant to survive."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_pinned",
+                 "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+    assert r.returncode == 0
+    assert r.stdout.strip() == "term_pinned"
