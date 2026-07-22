@@ -338,12 +338,12 @@ def test_pin_agents_fails_loud_on_unresolved(tmp_path):
     # missing agent + the exact env var to pin.
     b = _bindir(tmp_path, ["orca"])
     pins = tmp_path / "pins.env"
-    # agy resolves via env pin; codex has no pin and the terminal list is empty
-    # → auto-detect finds nothing → UNRESOLVED.
+    # agy resolves via env pin (and that pane is live); codex has no pin and no
+    # pane in the listing → auto-detect finds nothing → UNRESOLVED.
     r = run(["pin-agents"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
                  "HMAD_ORCA_AGY_TERMINAL": "t-agy",
-                 "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+                 "HMAD_STUB_ORCA_STDOUT": _orca_terms(("t-agy", "agy", ""))})
     assert r.returncode != 0
     assert "codex" in r.stderr
     assert "HMAD_ORCA_CODEX_TERMINAL" in r.stderr
@@ -1894,3 +1894,99 @@ def test_resolve_stays_independent_of_the_terminal_listing(tmp_path):
                  "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
     assert r.returncode == 0
     assert r.stdout.strip() == "term_pinned"
+
+
+# --- a pin file records intent, not state -------------------------------------
+# Observed 2026-07-22 (clinical-abbreviation-hygiene Phase 5): every Orca handle
+# rotated, `env` still printed the dead pins, and a RED dispatch reported
+# "Sent 7293 bytes" into a stale handle and vanished -- no error, no report file,
+# no tests written. "Sent N bytes" is not delivery, and a resolvable pin is not a
+# live pane.
+
+
+def test_send_refuses_a_handle_the_listing_proves_is_gone(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "p.txt"; prompt.write_text("do the thing")
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["send", "agy", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
+                 "HMAD_STUB_ORCA_STDOUT": live}, capture=cap)
+    assert r.returncode == 1
+    assert "terminal_handle_stale" in r.stderr
+    assert "nothing was sent" in r.stderr
+    assert "terminal send" not in cap.read_text(), "must not reach the send call"
+
+
+def test_send_still_works_when_the_listing_cannot_be_read(tmp_path):
+    """Only positive evidence blocks a send. A pin exists so dispatch survives
+    when the listing is unavailable; treating 'could not check' as 'dead' would
+    put the pin back under the failure it exists to survive."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "p.txt"; prompt.write_text("do the thing")
+    r = run(["send", "agy", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_x",
+                 "HMAD_STUB_ORCA_STDOUT": "not json at all"}, capture=cap)
+    assert r.returncode == 0
+    assert "terminal send" in cap.read_text()
+
+
+def test_env_marks_a_stale_pin_instead_of_printing_it_as_addressable(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_STUB_ORCA_STDOUT": live})
+    assert "STALE" in r.stdout
+    assert "stale pins: codex" in r.stdout
+
+
+def test_pin_refuses_a_handle_absent_from_the_listing(tmp_path):
+    """Pinning is when identity is supposedly known -- the cheapest place to
+    catch a wrong handle, rather than discovering it as a vanished dispatch."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins), "HMAD_STUB_ORCA_STDOUT": live}
+
+    r = run(["pin", "codex", "term_dead"], substrate="orca", env=env)
+    assert r.returncode == 1
+    assert "refusing to pin" in r.stderr
+    assert not pins.exists()
+
+    # --force covers pinning a pane that does not exist yet.
+    f = run(["pin", "--force", "codex", "term_dead"], substrate="orca", env=env)
+    assert f.returncode == 0
+    assert "codex=term_dead" in pins.read_text()
+
+    # A live handle pins normally.
+    ok = run(["pin", "agy", "term_live"], substrate="orca", env=env)
+    assert ok.returncode == 0
+    assert "agy=term_live" in pins.read_text()
+
+
+def test_pin_agents_ignores_a_dead_env_pin_rather_than_freezing_it(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    live = _orca_terms_full(
+        {"handle": "term_live_agy", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_STUB_ORCA_STDOUT": live})
+    assert r.returncode != 0, "a dead pin must not read as a resolved agent"
+    assert "not a live terminal" in r.stderr
+    assert "term_dead" not in pins.read_text()
+    assert "agy=term_live_agy" in pins.read_text(), "the live agent is still frozen"

@@ -48,6 +48,16 @@ def report_wait(path, timeout, interval, *, out=sys.stdout, err=sys.stderr, slee
         elapsed += tick
     print(f"[H-MAD] report-wait timed out after {timeout}s "
           f"(missing {marker} or empty {path})", file=err)
+    # A missing report is not a verdict. It has been caused by the dispatch never
+    # arriving (a rotated handle: the pane shows `terminal_handle_stale`) and by
+    # the agent stopping mid-run with correct work already on disk
+    # (`Selected model is at capacity`). Treating silence as either pass or fail
+    # has been wrong in both directions -- read the pane, then check the tree.
+    print("[H-MAD] a missing report is neither pass nor fail. Before concluding the "
+          "agent failed, read its pane for `terminal_handle_stale` (the dispatch "
+          "never landed) or `Selected model is at capacity` (it stopped after "
+          "working), and check the working tree for work it completed but never "
+          "reported.", file=err)
     return 1
 
 

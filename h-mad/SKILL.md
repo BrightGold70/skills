@@ -139,18 +139,30 @@ report, so handing Codex's work to agy would have been silent. Auto-detect there
 never matches Codex on title — only on a fresh pane's `gpt-N` banner, which scrolls
 off once it works. (Orca-side gap: stablyai/orca#9870.)
 
-**Check a pin before you trust it.** `resolve` echoes a pinned handle without
-verifying it, so a pin left by a crashed run prints happily with exit 0. That
-independence is deliberate — a pin must keep working when the listing cannot be read
-— so the check is a separate opt-in verb:
+**A pin file records intent, not state.** Handles rotate. Measured on 2026-07-22:
+every Orca handle rotated mid-run, `env` still printed the dead pins, and a dispatch
+reported `Sent 7293 bytes` into a stale handle and simply vanished — no error, no
+report file, no work done. **"Sent N bytes" is not delivery, and a resolvable pin is
+not a live pane.** The wrapper now checks liveness at each point where a wrong handle
+is cheap to catch:
 
-```bash
-hmad-dispatch verify codex   # 0 = live, 1 = unresolved or stale_pin, 2 = unknown agent
-```
+| verb | behaviour on a handle the listing proves is gone |
+|---|---|
+| `pin` / `pin-agents` | refuses to write it (`pin --force` to pin a pane that does not exist yet) |
+| `env` | prints `<handle> STALE` plus a `stale pins:` line — never as addressable |
+| `send` | refuses, `terminal_handle_stale`, **nothing is sent** |
+| `verify <agent>` | 0 live · 1 unresolved/`stale_pin` · 2 unknown agent |
+| `resolve` | unchanged — echoes the pin unverified, by design |
 
-Run it once per run alongside the substrate preflight. `send`/`read`/`alive` all fail
-loud with `terminal_handle_stale` anyway, but `verify` surfaces it before a dispatch
-rather than mid-audit. `pin-agents` therefore **fails
+Only *positive* evidence blocks anything: if `orca terminal list` cannot be read at
+all, the send still goes, because a pin has to keep working when the listing does
+not. `resolve` stays listing-independent for the same reason — use `verify` when you
+need the check.
+
+**A missing report is neither pass nor fail.** If `report-wait` times out, read the
+pane before concluding anything: `terminal_handle_stale` means the dispatch never
+landed, and `Selected model is at capacity` means the agent stopped after doing the
+work. Check the working tree for work completed but never reported. `pin-agents` therefore **fails
 loud (rc=1)** if it cannot resolve an agent, naming the missing one and the exact
 env var to set; a run must not proceed with Codex unpinned. If Codex does not
 auto-resolve, read its handle from `orca terminal list` and

@@ -235,10 +235,24 @@ _cmd_env() {
     return 1
   fi
   echo "substrate: $sub"
-  local a t
+  local a t stale=""
   for a in codex agy; do
-    if t="$(_resolve_target "$a" 2>/dev/null)"; then echo "$a -> $t"; else echo "$a -> UNRESOLVED"; fi
+    if t="$(_resolve_target "$a" 2>/dev/null)"; then
+      # A pin file records intent, not state. `env` is the preflight an operator
+      # reads before committing a run, so a handle whose pane is gone must not
+      # print as if it were addressable -- a dispatch into one vanishes with no
+      # error, no report, and no work done.
+      if [ "$sub" = "orca" ] && { _orca_handle_live "$t"; [ $? -eq 1 ]; }; then
+        echo "$a -> $t STALE (no such terminal — re-pin or relaunch)"
+        stale="${stale:+$stale }$a"
+      else
+        echo "$a -> $t"
+      fi
+    else
+      echo "$a -> UNRESOLVED"
+    fi
   done
+  [ -z "$stale" ] || echo "stale pins: $stale"
   if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
   return 0
 }
@@ -269,17 +283,18 @@ _cmd_verify() {
   # run, which otherwise surface only as a mid-run failure).
   #
   # Exit: 0 live, 1 unresolved or stale, 2 unknown agent.
-  local agent="${1:-}" target sub listing
+  local agent="${1:-}" target sub rc
   case "$agent" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$agent' (codex|agy)" >&2; return 2 ;; esac
   target="$(_resolve_target "$agent")" || return 1
   sub="$(_detect_substrate)" || return 1
   if [ "$sub" != "orca" ]; then printf '%s\n' "$target"; return 0; fi
-  listing="$(orca terminal list --json 2>/dev/null)" || {
-    echo "hmad-dispatch: cannot verify '$agent' — 'orca terminal list' failed" >&2; return 1; }
-  if printf '%s' "$listing" | jq -e --arg h "$target" \
-       '.result.terminals[]? | select(.handle==$h)' >/dev/null 2>&1; then
-    printf '%s\n' "$target"; return 0
-  fi
+  # Guarded: under `set -e` a bare `cmd; rc=$?` aborts the script the moment cmd
+  # returns non-zero, which is exactly the case this verb exists to report.
+  rc=0; _orca_handle_live "$target" || rc=$?
+  case "$rc" in
+    0) printf '%s\n' "$target"; return 0 ;;
+    2) echo "hmad-dispatch: cannot verify '$agent' — 'orca terminal list' unreadable" >&2; return 1 ;;
+  esac
   echo "hmad-dispatch: stale_pin — '$agent' resolves to $target, which is not a live terminal; re-pin (hmad-dispatch pin $agent <handle>) or relaunch (hmad-dispatch launch $agent)" >&2
   return 1
 }
@@ -298,7 +313,18 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
   local a U var handle tmp unresolved=""; tmp="$(mktemp)"
   for a in codex agy; do
     U="$(printf '%s' "$a" | tr '[:lower:]' '[:upper:]')"; var="HMAD_ORCA_${U}_TERMINAL"
-    if [ -n "${!var:-}" ]; then handle="${!var}"; else handle="$(_orca_find "$a" 2>/dev/null || true)"; fi
+    if [ -n "${!var:-}" ]; then
+      handle="${!var}"
+      # An auto-detected handle came out of the listing and is live by
+      # construction; an operator-supplied env pin did not, and pinning a handle
+      # that is already dead just defers the failure to the first dispatch.
+      if [ -n "$handle" ] && { _orca_handle_live "$handle"; [ $? -eq 1 ]; }; then
+        echo "[H-MAD] pin-agents: $var=$handle is not a live terminal — ignoring it" >&2
+        handle=""
+      fi
+    else
+      handle="$(_orca_find "$a" 2>/dev/null || true)"
+    fi
     if [ -n "$handle" ]; then
       printf '%s=%s\n' "$a" "$handle" >> "$tmp"; echo "[H-MAD] pinned $a -> $handle" >&2
     else
@@ -321,12 +347,24 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
 _cmd_pin() {  # <agent> <handle> — record ONE agent's handle in the pin file
   # The durable way to make Codex addressable: capture its handle at a known
   # moment (right after launch, or read from `orca terminal list`) and pin it.
-  # Auto-detect can't identify Codex post-decay and `orca terminal rename` does
-  # NOT change the `.title` that resolution reads (it sets a separate tab-title
-  # layer), so an explicit handle pin is the only reliable identity (H4/H5).
+  # Auto-detect can't identify Codex at all by title -- Codex emits no OSC title,
+  # so any `.title` matching it was inherited from the tab -- and `orca terminal
+  # rename` does NOT change the `.title` that resolution reads. An explicit handle
+  # pin is the only reliable identity (H4/H5).
   _require_orca pin || return $?
+  local force=""
+  case "${1:-}" in --force) force=1; shift ;; esac
   _need "${1:-}" agent || return $?; _need "${2:-}" handle || return $?
   case "$1" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$1' (codex|agy)" >&2; return 2 ;; esac
+  # Pinning is the moment identity is supposed to be known, so it is the cheapest
+  # place to catch a wrong handle -- otherwise the mistake is discovered much
+  # later as a dispatch that silently goes nowhere. Only a readable listing that
+  # lacks the handle blocks the pin; `--force` covers pinning a pane that does not
+  # exist yet.
+  if [ -z "$force" ] && { _orca_handle_live "$2"; [ $? -eq 1 ]; }; then
+    echo "hmad-dispatch: refusing to pin $1 -> $2 — no such terminal in 'orca terminal list'. Check the handle, or pass --force to pin it anyway." >&2
+    return 1
+  fi
   local pf; pf="$(_pin_file)"; local dir; dir="$(dirname "$pf")"; [ -d "$dir" ] || mkdir -p "$dir"
   local tmp; tmp="$(mktemp)"
   [ -f "$pf" ] && { grep -vE "^$1=" "$pf" >> "$tmp" 2>/dev/null || true; }
@@ -608,13 +646,45 @@ _cmd_automation_remove() {   # <id>
   orca automations remove "$1" --json
 }
 
+_orca_handle_live() {
+  # $1 = handle. 0 = present in the listing, 1 = provably absent, 2 = unknown
+  # (the listing itself could not be read).
+  #
+  # The three-way answer matters: a pin exists precisely so dispatch survives when
+  # auto-detect cannot see the pane, so "I could not check" must never be treated
+  # as "dead". Only a readable listing that does NOT contain the handle is
+  # evidence of death.
+  local handle="$1" listing
+  listing="$(orca terminal list --json 2>/dev/null)" || return 2
+  [ -n "$listing" ] || return 2
+  if printf '%s' "$listing" | jq -e --arg h "$handle" \
+       '.result.terminals[]? | select(.handle==$h)' >/dev/null 2>&1; then
+    return 0
+  fi
+  # Distinguish "listing parsed and lacks the handle" from "listing was garbage".
+  printf '%s' "$listing" | jq -e '.result.terminals' >/dev/null 2>&1 || return 2
+  return 1
+}
+
 _send_text() {
   local agent="$1" text="$2" sub target
   sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     cmux) cmux send --surface "$target" "$text"; cmux send-key --surface "$target" Enter ;;
-    orca) orca terminal send --terminal "$target" --text "$text" --enter ;;
+    orca)
+      # Refuse to send into a handle the listing proves is gone. Orca does not
+      # always reject a rotated handle -- a dispatch has been observed printing
+      # "Sent 7293 bytes" into a dead pane and simply vanishing: no error, no
+      # report file, no work done. "Sent N bytes" is not delivery, and a
+      # resolvable pin is not a live pane. Only positive evidence blocks the
+      # send; an unreadable listing (rc 2) still sends, because a pin has to keep
+      # working when the listing cannot be read.
+      if _orca_handle_live "$target"; [ $? -eq 1 ]; then
+        echo "hmad-dispatch: terminal_handle_stale — '$agent' resolves to $target, which is not a live terminal; nothing was sent. Re-pin (hmad-dispatch pin $agent <handle>) or relaunch (hmad-dispatch launch $agent)." >&2
+        return 1
+      fi
+      orca terminal send --terminal "$target" --text "$text" --enter ;;
   esac
 }
 
