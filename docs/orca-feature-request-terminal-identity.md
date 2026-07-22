@@ -1,5 +1,7 @@
 # Feature request: expose a stable per-terminal identity in `orca terminal list`
 
+> Filed: https://github.com/stablyai/orca/issues/9870 (2026-07-22)
+
 **Component:** Orca CLI / daemon — `orca terminal list`, `orca terminal rename`
 **Type:** Feature request (with a small correctness observation about `rename`)
 **Environment:** macOS 26.5.2 · Orca daemon `daemon-v23`/`v24` (`orca --version` prints no version string) · CLI verbs `terminal list --json`, `terminal rename`
