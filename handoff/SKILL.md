@@ -106,6 +106,8 @@ A divergence is not a failure — it's just information the user needs before ac
 
 Use the TodoList tool (TaskCreate or equivalent) to repopulate todos from the doc's **Next Steps** and **Open / Blocked Items**. Each Next Step becomes a `pending` task with the cited path/command in the description. Each Open/Blocked Item becomes a `pending` task tagged with its blocker if any. Do this even if Next Steps is short — the point is that the user can start on item 1 without re-typing the list.
 
+**Prefix every restored todo with `[<repo>@<branch>]`** so that when todos from multiple worktrees/repos/handoffs coexist in one list, each one names its origin at a glance. `<repo>` is the project slug (§"Project slug derivation" — CLI name, else git-remote basename, else repo dir name); `<branch>` is the handoff doc's **Branch:** field (the branch the work belongs to, which under Orca multi-worktree may differ from the branch you resumed on). Example: `[skills@main] Verify report-file transport …`, `[HemaSuite@feature/12] Add _orca_json guard …`. If the doc's Branch is "n/a", use `[<repo>]` alone. Keep the prefix outside any inline reconciliation note (below) — prefix first, then the task, then any `[verify path …]` note.
+
 If the doc's Next Steps reference a file that the reconciliation pass flagged as missing or moved, mark that task with an inline note (e.g., "[verify path — file moved since handoff]") rather than dropping it.
 
 **Dedupe overlapping items.** It's normal for an in-flight piece of work to appear in both Next Steps ("monitor PID N") and Open Items ("PID N still running") — same thing, two framings. Make one Todo, not two. Same for "verify the 14 placeholder dates" appearing in both lists. Combine the descriptions and merge.
@@ -127,7 +129,7 @@ After reconciliation and TodoList restore, give the user a brief resume report:
 - `protocol/sections/background.md` cited in Next Steps — file not found (may have been renamed).
 
 **Todos restored:** 4 items. Starting at:
-1. Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)
+1. [guideline-rag@main] Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)
 ```
 
 Then stop. Don't start executing tasks — the user reads the report and decides what to do first.
