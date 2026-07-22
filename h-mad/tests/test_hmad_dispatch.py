@@ -341,6 +341,39 @@ def test_pin_agents_fails_loud_on_unresolved(tmp_path):
     assert "agy=t-agy" in pins.read_text()   # the resolved agent is still frozen
 
 
+def test_pin_writes_single_agent_and_resolve_reads_it(tmp_path):
+    # H5 follow-up: the durable path for Codex is capturing its handle at a known
+    # moment. `pin <agent> <handle>` records one agent without disturbing the
+    # other, and resolution reads it back.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("agy=t-agy\n")
+    r = run(["pin", "codex", "term_xyz"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r.returncode == 0
+    text = pins.read_text()
+    assert "codex=term_xyz" in text
+    assert "agy=t-agy" in text            # sibling preserved
+    r2 = run(["resolve", "codex"], substrate="orca",
+             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r2.stdout.strip() == "term_xyz"
+
+
+def test_pin_replaces_existing_and_rejects_unknown_agent(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("codex=old\n")
+    r = run(["pin", "codex", "new_handle"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r.returncode == 0
+    text = pins.read_text()
+    assert "codex=new_handle" in text and "codex=old" not in text   # replaced, not duplicated
+    bad = run(["pin", "bogus", "h"], substrate="orca",
+              env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert bad.returncode == 2
+    assert "unknown agent" in bad.stderr
+
+
 def test_pin_agents_clear_removes_file(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     pins = tmp_path / "pins.env"

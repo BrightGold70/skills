@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -247,6 +247,23 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
   # pin it before dispatching (H4 follow-up — the silent rc=0 partial was the bug).
   [ -z "$unresolved" ] || { echo "[H-MAD] pin-agents: unresolved: $unresolved (run cannot dispatch to it until pinned)" >&2; return 1; }
   return 0
+}
+
+_cmd_pin() {  # <agent> <handle> — record ONE agent's handle in the pin file
+  # The durable way to make Codex addressable: capture its handle at a known
+  # moment (right after launch, or read from `orca terminal list`) and pin it.
+  # Auto-detect can't identify Codex post-decay and `orca terminal rename` does
+  # NOT change the `.title` that resolution reads (it sets a separate tab-title
+  # layer), so an explicit handle pin is the only reliable identity (H4/H5).
+  _require_orca pin || return $?
+  _need "${1:-}" agent || return $?; _need "${2:-}" handle || return $?
+  case "$1" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$1' (codex|agy)" >&2; return 2 ;; esac
+  local pf; pf="$(_pin_file)"; local dir; dir="$(dirname "$pf")"; [ -d "$dir" ] || mkdir -p "$dir"
+  local tmp; tmp="$(mktemp)"
+  [ -f "$pf" ] && { grep -vE "^$1=" "$pf" >> "$tmp" 2>/dev/null || true; }
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  mv "$tmp" "$pf"
+  echo "[H-MAD] pinned $1 -> $2 ($pf)" >&2
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile
@@ -654,6 +671,7 @@ main() {
   case "$verb" in
     env)    _cmd_env "$@" ;;
     resolve) _cmd_resolve "$@" ;;
+    pin) _cmd_pin "$@" ;;
     pin-agents) _cmd_pin_agents "$@" ;;
     send)   _cmd_send "$@" ;;
     clear)  _cmd_clear "$@" ;;
