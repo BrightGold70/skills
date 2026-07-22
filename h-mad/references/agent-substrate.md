@@ -24,6 +24,7 @@ which differs per install and per checkout.
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
 | `hmad-dispatch resolve <codex\|agy>` | Resolve one agent to its handle; stdout + exit 0/1/2 |
+| `hmad-dispatch launch <codex\|agy> [--worktree <sel>] [--focus]` | Spawn a FRESH agent terminal via `orca terminal create --command …` and **capture its handle from the create response** (`.result.terminal.handle`), pinning it at spawn. The zero-manual durable identity path (H5) — no title/preview dependence. Launch command overridable via `HMAD_ORCA_CODEX_LAUNCH_CMD` / `HMAD_ORCA_AGY_LAUNCH_CMD` |
 | `hmad-dispatch pin <codex\|agy> <handle>` | Record one agent's handle in the session pin file (preserves the sibling). The durable way to make Codex addressable — capture its handle from `orca terminal list` (or at launch) and pin it, since neither auto-detect nor `orca terminal rename` yields a stable `codex` identity (H5) |
 | `hmad-dispatch pin-agents [--clear]` | Resolve codex+agy ONCE and freeze the handles into the session pin file (`${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`). Run after the Phase-5 preflight so later dispatches survive preview decay (H4). **Fails loud (rc=1)** if it can't resolve an agent — Codex has no stable auto-identity, so pin `HMAD_ORCA_CODEX_TERMINAL` at launch; `--clear` removes the file |
 | `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |

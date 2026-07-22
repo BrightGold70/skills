@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -264,6 +264,33 @@ _cmd_pin() {  # <agent> <handle> — record ONE agent's handle in the pin file
   printf '%s=%s\n' "$1" "$2" >> "$tmp"
   mv "$tmp" "$pf"
   echo "[H-MAD] pinned $1 -> $2 ($pf)" >&2
+}
+
+_cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
+  # H5 durable path: h-mad OWNS the agent launch, so its identity is captured at
+  # spawn from the create response (`.result.terminal.handle`) — never from the
+  # decaying title/preview — and pinned immediately. Zero manual step. Use this
+  # to start a fresh Codex/agy for a run; reuse an operator-launched pane via
+  # `pin`/`pin-agents` instead. The launch command is overridable per agent.
+  _require_orca launch || return $?
+  _need "${1:-}" agent || return $?
+  local agent="$1"; shift
+  case "$agent" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$agent' (codex|agy)" >&2; return 2 ;; esac
+  local wt="active" focus="" cmd
+  while [ $# -gt 0 ]; do case "$1" in
+    --worktree) wt="$2"; shift 2 ;; --focus) focus="--focus"; shift ;; *) shift ;; esac; done
+  case "$agent" in
+    codex) cmd="${HMAD_ORCA_CODEX_LAUNCH_CMD:-codex}" ;;
+    agy)   cmd="${HMAD_ORCA_AGY_LAUNCH_CMD:-agy --dangerously-skip-permissions}" ;;
+  esac
+  local args=(terminal create --worktree "$wt" --command "$cmd" --title "$agent" --json)
+  [ -n "$focus" ] && args+=("$focus")
+  local handle
+  handle="$(_orca_json '.result.terminal.handle // empty' "${args[@]}")" || return $?
+  [ -n "$handle" ] || { echo "hmad-dispatch: launch $agent — no handle in create response" >&2; return 1; }
+  _cmd_pin "$agent" "$handle" >/dev/null || { echo "hmad-dispatch: launch $agent — pin failed" >&2; return 1; }
+  printf '%s\n' "$handle"
+  echo "[H-MAD] launched $agent -> $handle (identity captured at spawn, pinned)" >&2
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile
@@ -671,6 +698,7 @@ main() {
   case "$verb" in
     env)    _cmd_env "$@" ;;
     resolve) _cmd_resolve "$@" ;;
+    launch) _cmd_launch "$@" ;;
     pin) _cmd_pin "$@" ;;
     pin-agents) _cmd_pin_agents "$@" ;;
     send)   _cmd_send "$@" ;;

@@ -341,6 +341,43 @@ def test_pin_agents_fails_loud_on_unresolved(tmp_path):
     assert "agy=t-agy" in pins.read_text()   # the resolved agent is still frozen
 
 
+def test_launch_creates_pins_and_echoes_handle(tmp_path):
+    # H5 durable path: h-mad owns the Codex launch, so identity is captured at
+    # spawn from the create response (`.result.terminal.handle`) — no title/preview
+    # dependence, no manual pin. launch resolves the handle, pins it, echoes it.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pins = tmp_path / "pins.env"
+    canned = '{"ok":true,"result":{"terminal":{"handle":"term_new_codex"}}}'
+    r = run(["launch", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout.strip() == "term_new_codex"
+    assert "codex=term_new_codex" in pins.read_text()      # pinned at spawn
+    cmd = cap.read_text()
+    assert "terminal create --worktree active --command codex --title codex --json" in cmd
+    # resolve then reads the freshly-pinned handle
+    r2 = run(["resolve", "codex"], substrate="orca",
+             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r2.stdout.strip() == "term_new_codex"
+
+
+def test_launch_honors_worktree_and_rejects_unknown_agent(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pins = tmp_path / "pins.env"
+    canned = '{"ok":true,"result":{"terminal":{"handle":"h1"}}}'
+    r = run(["launch", "agy", "--worktree", "path:/x"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert "--worktree path:/x" in cap.read_text()
+    bad = run(["launch", "bogus"], substrate="orca", env={"_BINDIR": b})
+    assert bad.returncode == 2
+    assert "unknown agent" in bad.stderr
+
+
 def test_pin_writes_single_agent_and_resolve_reads_it(tmp_path):
     # H5 follow-up: the durable path for Codex is capturing its handle at a known
     # moment. `pin <agent> <handle>` records one agent without disturbing the

@@ -138,6 +138,11 @@ auto-resolve, read its handle from `orca terminal list` and
 `export HMAD_ORCA_CODEX_TERMINAL=<handle>` (ideally captured right after launching
 Codex, before it works), then re-run `pin-agents`. The env-var pin always
 overrides; `pin-agents --clear` resets. Skip on cmux (surface pins there).
+**Zero-manual alternative**: to start a FRESH agent rather than reuse an
+operator-launched pane, `hmad-dispatch launch <codex|agy>` runs `orca terminal
+create` and captures the handle from the create response, pinning it at spawn —
+no title/preview dependence, no manual pin (H5). Use `launch` when h-mad owns the
+agent; `pin`/`pin-agents` when adopting an existing pane.
 
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
