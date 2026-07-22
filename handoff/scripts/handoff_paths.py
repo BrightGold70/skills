@@ -40,6 +40,12 @@ def canonical_root(start: Path | None = None) -> Path:
     the same value from any linked worktree). Its parent is the main worktree
     root. Falls back to `--show-toplevel` then cwd when that can't be resolved
     (e.g. not a git repo, or an unusual git-dir layout).
+
+    The `p.name == ".git"` guard targets the linked-worktree case. Other layouts
+    fall through *safely* to `--show-toplevel`/cwd rather than misresolving: a
+    submodule (`--git-common-dir` = `.git/modules/<name>`) resolves to the
+    submodule tree, and a bare repo to cwd. Those simply opt out of canonical
+    cross-worktree sharing, which is fine — Orca worktrees are neither.
     """
     base = Path(start) if start else Path.cwd()
     common = _git(["rev-parse", "--git-common-dir"], cwd=base)
@@ -67,13 +73,24 @@ def branch_slug(start: Path | None = None) -> str:
     """Filesystem-safe short branch name for the handoff filename.
 
     `feature/189-foo` → `feature-189-foo`. Detached HEAD / no branch → `nobranch`.
+    Underscores are mapped to `-` so a branch slug can never contain `_`; the
+    handoff filename then uses `__` as the branch|slug separator (see SEP), which
+    is therefore unambiguous even when both the branch and the slug contain `-`.
     """
     base = Path(start) if start else Path.cwd()
     branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=base)
     if not branch or branch == "HEAD":
         return "nobranch"
-    safe = "".join(c if (c.isalnum() or c in "-_.") else "-" for c in branch)
+    # allow only alnum, '-', '.'  (NOT '_', so '__' cannot appear in a branch slug)
+    safe = "".join(c if (c.isalnum() or c in "-.") else "-" for c in branch)
     return safe.strip("-") or "nobranch"
+
+
+# Separator between the branch slug and the free slug in a handoff filename:
+#   YYYY-MM-DD-<branch-slug>__<slug>.md
+# Distinct from '-' (legal in both branch and slug) so branch matching is exact.
+SEP = "__"
+_DATE_LEN = len("YYYY-MM-DD-")  # 11: chars before the branch slug begins
 
 
 def find_latest(branch: str | None = None, start: Path | None = None) -> Path | None:
@@ -86,10 +103,22 @@ def find_latest(branch: str | None = None, start: Path | None = None) -> Path | 
     d = handoffs_dir(start)
     if not d.is_dir():
         return None
-    files = sorted(p for p in d.glob("*.md") if p.is_file())
+    files = [p for p in d.glob("*.md") if p.is_file()]
     if branch:
-        files = [p for p in files if f"-{branch}-" in p.name]
-    return files[-1] if files else None
+        # Exact branch match: the segment right after the ISO date must be
+        # "<branch>__". Anchoring past the date + requiring the '__' separator
+        # means branch `feat` never matches a `feat-ab__…` file (the failure a
+        # bare `-{branch}-` substring caused). Old branch-less files (no `__`)
+        # simply don't match a branch filter, which is correct.
+        pfx = f"{branch}{SEP}"
+        files = [p for p in files if p.name[_DATE_LEN:].startswith(pfx)]
+    if not files:
+        return None
+    # Primary sort = ISO date prefix (lexical). Secondary = mtime, so a same-day
+    # concurrency-guard discriminant (`…-2.md`, added on collision) still orders
+    # as newer even though `-` sorts before `.` lexically.
+    files.sort(key=lambda p: (p.name[:10], p.stat().st_mtime))
+    return files[-1]
 
 
 def main(argv: list[str] | None = None) -> int:
