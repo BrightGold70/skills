@@ -46,6 +46,7 @@ Use these additive `hmad-dispatch` verbs:
 - `gate-create <task_id> <question> [<options-json>]` — creates a structured decision gate and returns its gate ID.
 - `gate-resolve <gate_id> <resolution>` — resolves a gate with the selected decision.
 - `gate-wait <gate_id> [--timeout <s>] [--interval <s>]` — blocks until the gate is resolved (by a human in the Orca UI or by `gate-resolve`) and echoes its resolution. Polls `orchestration gate-list`. This is the half `gate-create` lacked: without it a "blocking" gate could be opened but never waited on.
+- `report-wait <report-path> [--timeout <s>] [--interval <s>]` — blocks until a dispatched agent drops `<report-path>` + a `<report-path>.done` marker, then emits the file. The reliable replacement for `wait`+`read`+`extract_report` (see "Report-file transport" above). Substrate-agnostic — no coordinator pin needed.
 - `worktree-create <name> [--agent <id>] [--base <ref>] [--prompt-file <path>]` — creates an Orca worktree and returns its selector.
 - `worktree-comment [<selector>] <text>` — sets a worktree's free-text comment (a durable, mobile-visible checkpoint), defaulting to the `active` worktree. Captures the response and fails non-zero on an `ok:false` envelope, so a swallowed error cannot read as success.
 - `worktree-current` — returns the active worktree's JSON payload (read-only; used by the `handoff` READ reconcile).
@@ -75,6 +76,46 @@ orca orchestration send --to <COORDINATOR_HANDLE> --type worker_done \
 The sender must be the dispatched terminal handle. A worker without the `[H-MAD]` line skips `worker_done` and reports normally.
 
 For cmux, or when `HMAD_ORCA_COORDINATOR_TERMINAL` is not set, use the universal scrape transport: `hmad-dispatch send`, `read`, and `wait`. Existing scrape transport behavior is unchanged.
+
+## Report-file transport (preferred report/verdict channel under Orca)
+
+Screen-scraping a live TUI is the least reliable way to collect an agent's report,
+and it is the root of most of the audit-path fragility (a redrawing TUI fragments
+the `BEGIN/END` sentinels, `tui-idle` is fooled by a spinner, the retained
+scrollback can be shorter than the report, and indentation/bullets from the render
+reach the gate). When the coordinator and agent share a filesystem — always true
+under Orca, and true for cmux on one host — a **file drop** removes every one of
+those failure modes: the agent writes its complete report to a file and the
+coordinator reads the file, so there is no render race, no idle guess, and no
+sentinel.
+
+**Contract.** The dispatched prompt gives the agent an absolute report path `$RP`
+and instructs it to, as its final action:
+
+1. Write its full report (the same content it would otherwise print) to `$RP`.
+2. Create the completion marker `$RP.done` (e.g. `: > "$RP.done"`).
+
+The marker — not mere file existence — is the done signal, so a half-written
+report is never read.
+
+**Flow (coordinator).** Instead of `send` → `wait` → `read` → `extract_report`:
+
+```bash
+RP="/tmp/audit_<feature>_<phase>_cycle<N>.report.md"
+rm -f "$RP" "$RP.done"
+# stage the prompt with the report-file contract + $RP substituted, then:
+hmad-dispatch send agy /tmp/audit_<feature>_<phase>_cycle<N>.txt
+hmad-dispatch report-wait "$RP" --timeout 600 > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
+# the file is clean markdown — gate it directly, no dedent/sentinel needed:
+python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py docs/.../<feature>.<phase>.audit.v<N>.md
+```
+
+`report-wait` is substrate-agnostic (no coordinator pin required) and polls
+`$RP.done`, so it also replaces the unreliable `wait --for tui-idle` step. If the
+agent cannot write the file (older prompt, non-cooperating agent), `report-wait`
+times out — fall back to the scrape path (`read` + `extract_report`), which stays
+fully supported. **Scrape remains the fallback; report-file is the default under
+Orca.**
 
 ## Phase 5 parallel fanout
 

@@ -29,6 +29,7 @@ which differs per install and per checkout.
 | `hmad-dispatch alive <codex\|agy>` | Liveness probe (exit 0/1) |
 | `hmad-dispatch clear <codex\|agy>` | Reset the agent's context (`/clear`) |
 | `hmad-dispatch interrupt <codex\|agy>` | Cancel a running/wedged turn with Ctrl-C (0x03). NEVER nudge a TUI REPL with a bare Enter — it submits a blank turn |
+| `hmad-dispatch report-wait <path> [--timeout S] [--interval S]` | Wait for the agent to drop `<path>` + `<path>.done`, then emit the file. Reliable replacement for `wait`+`read`+sentinel-extract; substrate-agnostic (shared fs). See orchestration-mode.md §"Report-file transport" |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
 
 ## How `send` delivers a prompt

@@ -493,6 +493,59 @@ def test_gate_wait_requires_orca(tmp_path):
     assert r.returncode == 2
 
 
+def test_report_wait_returns_file_when_marker_present(tmp_path):
+    # File-drop transport: agent wrote the report + a .done marker → report-wait
+    # emits the file, exit 0. No substrate/scrape/sentinel involved.
+    b = _bindir(tmp_path, ["orca"])
+    report = tmp_path / "audit.md"
+    report.write_text("## Must-fix\nNone\n")
+    (tmp_path / "audit.md.done").write_text("")
+    r = run(["report-wait", str(report), "--timeout", "2", "--interval", "0"],
+            substrate="orca", env={"_BINDIR": b})
+    assert r.returncode == 0
+    assert "## Must-fix" in r.stdout
+
+
+def test_report_wait_times_out_without_marker(tmp_path):
+    # Report present but no .done marker → still generating → keep polling → timeout.
+    b = _bindir(tmp_path, ["orca"])
+    report = tmp_path / "audit.md"
+    report.write_text("partial...")
+    r = run(["report-wait", str(report), "--timeout", "0", "--interval", "0"],
+            substrate="orca", env={"_BINDIR": b})
+    assert r.returncode != 0
+    assert "timed out" in r.stderr
+
+
+def test_report_wait_ignores_marker_when_report_empty(tmp_path):
+    # Race guard: .done landed before content → empty file must NOT be read.
+    b = _bindir(tmp_path, ["orca"])
+    report = tmp_path / "audit.md"
+    report.write_text("")
+    (tmp_path / "audit.md.done").write_text("")
+    r = run(["report-wait", str(report), "--timeout", "0", "--interval", "0"],
+            substrate="orca", env={"_BINDIR": b})
+    assert r.returncode != 0
+
+
+def test_report_wait_is_substrate_agnostic(tmp_path):
+    # No _require_orca: file-drop works on cmux too (shared filesystem).
+    b = _bindir(tmp_path, ["cmux"])
+    report = tmp_path / "r.md"
+    report.write_text("hello")
+    (tmp_path / "r.md.done").write_text("")
+    r = run(["report-wait", str(report), "--timeout", "2", "--interval", "0"],
+            substrate="cmux", env={"_BINDIR": b})
+    assert r.returncode == 0
+    assert r.stdout.strip() == "hello"
+
+
+def test_report_wait_missing_path_arg(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["report-wait"], substrate="orca", env={"_BINDIR": b})
+    assert r.returncode == 2
+
+
 def test_wait_orca_uses_native_idle(tmp_path):
     """Native tui-idle is still called — but as a first gate, not as proof.
 

@@ -113,3 +113,9 @@ Output schema (exact, no other top-level sections):
 ## Nit
 - <style/clarity issue>
   *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
+
+Report file (preferred delivery under Orca — the orchestrator fills the path below, or leaves it empty):
+
+<REPORT_FILE_PATH>
+
+If a path appears above, your **final two actions** are: (1) write your report — the exact `## Summary` / `## Must-fix` / `## Should-fix` / `## Nit` schema above; the `<AUDIT_SENTINEL>` brackets are optional inside the file — to that exact path; then (2) create the marker `<that-path>.done` (e.g. `: > "<path>.done"`). The coordinator reads the file, not your terminal, so the file must be complete before the marker exists. If the path is empty, ignore this section and deliver via the terminal sentinels above.

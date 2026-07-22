@@ -357,6 +357,7 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
    **Prompt size.** Axis C makes an already-large prompt larger, and on a big feature the total can exceed what the reviewer will answer — one measured agent emits normally at 49 KB and returns *nothing* at 53 KB (see `references/agent-substrate.md`). Measured on a real feature: design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB, and the same prompt without the spec was already 72 KB. Two things follow. First, **do not solve this by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC. Second, an over-long prompt is now a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate. If a design audit returns nothing, suspect size first — split the audit by FR group and run Axis C over each group in turn, rather than dropping the axis.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
+6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. See `references/orchestration-mode.md` §"Report-file transport".
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
 8. Dispatch:
@@ -367,7 +368,14 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
    `HMAD_SEND_INLINE_MAX` (default 8192 bytes) and otherwise tells the agent to
    read the staged file by absolute path. Audit prompts run 32–61 KB, so they
    take the indirection path — no need to hand-roll it.
-9. Capture and extract — **never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
+9. Capture the report. **Under Orca (report-file transport), skip the scrape entirely** — the agent wrote a clean file, so read it directly and jump to the gate:
+   ```bash
+   hmad-dispatch report-wait "$RP" --timeout 600 \
+     > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
+   ```
+   This has no sentinel-extraction step (the file is already the report), no `wait`, and no dedent/`•`-normalize (the file is clean markdown, not a TUI render). On timeout, the agent did not honour the contract — fall back to the scrape path below.
+
+   **Scrape fallback (cmux / unpinned, or when `report-wait` times out) — never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
    ```bash
    hmad-dispatch read agy --lines 200 > /tmp/scrape_<feature>_<phase>_cycle<N>.txt
    python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_report.py \
