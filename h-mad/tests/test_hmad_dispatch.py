@@ -546,6 +546,15 @@ def test_report_wait_missing_path_arg(tmp_path):
     assert r.returncode == 2
 
 
+def test_report_wait_rejects_flag_in_path_slot(tmp_path):
+    # A flag where the path should be must fail fast (exit 2), not poll 300s for a
+    # file named "--timeout".
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["report-wait", "--timeout", "600"], substrate="orca", env={"_BINDIR": b})
+    assert r.returncode == 2
+    assert "looks like a flag" in r.stderr
+
+
 def test_wait_orca_uses_native_idle(tmp_path):
     """Native tui-idle is still called — but as a first gate, not as proof.
 

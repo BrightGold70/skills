@@ -265,6 +265,9 @@ _cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
   # can write a file works (cmux or orca), so it needs no _require_orca.
   # The .done marker (not just file existence) is the signal, so a half-written
   # report is never read; the file must also be non-empty.
+  # Reject a flag in the path slot (e.g. `report-wait --timeout 600` with the path
+  # omitted) rather than polling 300s for a file literally named "--timeout".
+  case "${1:-}" in -*) echo "hmad-dispatch: report-path looks like a flag: $1 (pass the path first)" >&2; return 2 ;; esac
   _need "${1:-}" report-path || return $?
   local path="$1"; shift
   local timeout=300 interval="${HMAD_REPORT_POLL_INTERVAL:-2}"
