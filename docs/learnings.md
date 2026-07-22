@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-22 · solution · [0.7] · `orca,h-mad,report-file,handoff:2026-07-22-orca-skills-hardening` — Orca agent verdicts: report-file transport (agent writes <path>+<path>.done; coordinator report-waits) beats TUI scrape — kills the indent/bullet/idle/sentinel fragility; gate reads the clean file
+- 2026-07-22 · gotcha · [0.7] · `review,tdd,handoff:2026-07-22-orca-skills-hardening` — Separate review lane is load-bearing: 4 Claude-subagent reviews each caught 1 real bug green tests missed (stub-envelope regression, gate-wait fail-open, find_latest prefix false-match)
+- 2026-07-22 · pattern · [0.7] · `orca,handoff,worktree,handoff:2026-07-22-orca-skills-hardening` — Handoff/learnings under Orca multi-worktree: anchor to canonical main worktree via git-common-dir (not show-toplevel); disambiguate by branch with __ separator so feat can't match feat-ab
 - 2026-07-22 · gotcha · [0.9] · `h-mad,gap-analysis,verification,handoff:2026-07-22-h-mad-fourteen-issues-shipped` — Checking code against spec alone cannot separate 'code diverged from design' from 'design diverged from spec' — a deliberate narrowing reads as a defect. Classify before recommending a fix.
 - 2026-07-22 · pattern · [0.7] · `h-mad,state,schema,handoff:2026-07-22-h-mad-fourteen-issues-shipped` — Validate-before-write at the seam beats documenting a rule: h-mad state drifted to 38 shapes over 53 keys because nothing sat between an invented key and the file, not because the rule was unclear.
 - 2026-07-22 · gotcha · [0.7] · `zsh,git,shell,handoff:2026-07-22-h-mad-fourteen-issues-shipped` — zsh executes backticks and glob-fails on # inside git -m messages, producing a silent no-op that looks like success. Use -F <file>; note git merge -F - does not read stdin though git commit does.
