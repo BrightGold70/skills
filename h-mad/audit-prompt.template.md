@@ -13,6 +13,32 @@
 > literal string replace over the whole file, so a bracketed `<INLINE_…>` mention in this
 > note would be substituted too — splicing a second copy of the rubric into the middle of
 > a blockquote. Prose in this repo refers to slots bare; only a real slot is bracketed.
+>
+> ## Applicability markers
+>
+> `{{ONLY:…}}` is an **assembly directive, never reviewer content**. The audience list is
+> one or more of `plan`, `design`, `impl-plan`, comma-separated. For the audit you are
+> assembling:
+>
+> - **applies** → delete the marker, keep the content;
+> - **does not apply** → delete the marker *and* the content it governs.
+>
+> Never leave the marker in, and never blank a slot while keeping its label — a reviewer
+> shown `Paired audited plan:` with nothing after it reads a missing document, not an
+> inapplicable one.
+>
+> Two forms, distinguished by whether the marker shares its line with content:
+>
+> | Form | Written as | Governs |
+> |---|---|---|
+> | Inline | `{{ONLY:design}} <content>` (may follow a `- ` bullet) | the rest of that line, plus any following lines indented deeper than it |
+> | Block | `{{ONLY:design}}` alone on its line | every line down to the matching `{{END-ONLY}}`, both marker lines included |
+>
+> After substitution, **no `{{` may survive** — step 7.2's preflight greps for it and halts
+> `<phase>:unresolved_conditional`. This is a live failure: the old markers were spelled
+> three different ways (`{For design audit only:}`, `{Design only — cross-doc:}`), and
+> `{Design only — cross-doc:}` reached the reviewer in **69 of 69** dispatched prompts,
+> telling every plan and impl-plan audit to perform a design-only check.
 <!-- ORCHESTRATOR-NOTE:END -->
 
 You are the agy audit reviewer. Your role this turn:
@@ -21,9 +47,9 @@ You are the agy audit reviewer. Your role this turn:
 - Impl-plan audit: Reviewer.adversarial_consistency (focus: writing-plans quality — no TBD placeholders, no vague reqs, exact file paths, type consistency across tasks, code blocks that match referenced functions)
 
 Target document: <INLINE_TARGET_DOC>
-{For plan and design audits:} Source spec: <INLINE_PAIRED_SPEC>
-{For design audit only:} Paired audited plan: <INLINE_PAIRED_PLAN>
-{For impl-plan audit only:} Paired audited design: <INLINE_PAIRED_DESIGN>
+{{ONLY:plan,design}} Source spec: <INLINE_PAIRED_SPEC>
+{{ONLY:design}} Paired audited plan: <INLINE_PAIRED_PLAN>
+{{ONLY:impl-plan}} Paired audited design: <INLINE_PAIRED_DESIGN>
 
 Audit rubric (TWO axes, both mandatory):
 
@@ -32,7 +58,7 @@ Axis A — Generic adversarial:
 - Gaps (missing error paths, untestable AC, unstated assumptions)
 - Weak claims (load-bearing decisions without justification)
 - Scope creep (work outside the stated feature boundary)
-- {Design only — cross-doc:} Does design implement what plan promised?
+- {{ONLY:design}} Cross-doc: does the design implement what the plan promised?
   Flag silent drift, dropped FRs, undocumented design decisions that change
   plan-stated behavior.
 
@@ -47,8 +73,8 @@ Two layers, both binding:
 
 <INLINE_PROJECT_INVARIANTS>
 
-Axis C — Spec reconciliation (plan and design audits only; skip for impl-plan
-audits, which contract against the design rather than the spec).
+{{ONLY:plan,design}}
+Axis C — Spec reconciliation.
 
 The spec is the source of truth for what this feature must do. A plan or design
 is derived from it and may legitimately argue for a narrower reading — but it
@@ -89,6 +115,7 @@ Reporting rules:
 
 Report Axis C as a table in your `## Summary`, then raise each `restated` or
 `absent` item as its own `## Must-fix` bullet.
+{{END-ONLY}}
 
 Output framing (mandatory — the orchestrator extracts on these markers):
 

@@ -366,6 +366,18 @@ before any `send`/`read`. See `references/agent-substrate.md`.
 For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 
 1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`, **dropping the leading orchestrator note** — every line from `<!-- ORCHESTRATOR-NOTE:START` through `ORCHESTRATOR-NOTE:END -->` inclusive. That block is assembly instructions to you, not reviewer content; left in, the prompt opens by telling the reviewer it is reading a template.
+1.5. **Resolve the `{{ONLY:…}}` applicability markers** for this audit's type (`plan`,
+   `design`, or `impl-plan`). A marker is an assembly directive and must never reach the
+   reviewer. If the audience list contains this audit's type → delete the marker, keep the
+   content. Otherwise → delete the marker **and the content it governs**. Inline form
+   (`{{ONLY:design}} <content>`, possibly after a `- ` bullet) governs the rest of that line
+   plus any following lines indented deeper than it; block form (marker alone on its line)
+   governs down to the matching `{{END-ONLY}}`, both marker lines included.
+
+   **Delete the whole line — never blank the slot and keep its label.** `Paired audited
+   plan:` followed by nothing tells the reviewer a document is *missing*, not that it was
+   inapplicable, and a design audit reading "the plan wasn't provided" discounts the
+   cross-doc check it was supposed to perform.
 2. Replace `<INLINE_TARGET_DOC>` with full text of the target doc (plan.md, design.md, or impl-plan.md).
 3. Replace `<INLINE_BASE_INVARIANTS>` with full text of `~/.claude/skills/h-mad/invariants.base.md` (workflow-universal Axis B — always inlined, base before project, regardless of whether a project file exists).
 4. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `<PROJECT_ROOT>/.h-mad/invariants.md` (domain Axis B). If the project file is absent/empty, leave the slot empty — the base layer still applies.
@@ -386,13 +398,16 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
    P=/tmp/audit_<feature>_<phase>_cycle<N>.txt
    grep -n '<INLINE_\|<AUDIT_SENTINEL>\|<REPORT_FILE_PATH>' "$P" && \
      echo "HALT <phase>:unfilled_slot" || echo "slots OK"
+   grep -n '{{' "$P" && \
+     echo "HALT <phase>:unresolved_conditional" || echo "conditionals OK"
    # duplication check — each rubric must appear exactly once.
    # Do NOT anchor these to '^': a stray copy spliced into a blockquote is prefixed
    # '> # H-MAD …', so an anchored grep reports a clean 1 while the prompt carries 2.
    grep -c 'H-MAD Base Invariants — Axis B' "$P"      # must be 1
    grep -c 'H-MAD Project Invariants — Axis B' "$P"   # must be 1 (0 if no project file)
    ```
-   Any hit on the first grep, or a count > 1 on either rubric → halt `<phase>:unfilled_slot`,
+   Any hit on either grep, or a count > 1 on either rubric → halt (`<phase>:unfilled_slot` /
+   `<phase>:unresolved_conditional`),
    fix the template/invariants file, re-assemble. Do **not** dispatch a prompt that still shows
    a raw `<INLINE_…>`: the reviewer reads it as an unfilled template and silently discounts the
    axis it belongs to, which scores as a clean gate on a rubric that was never delivered.
