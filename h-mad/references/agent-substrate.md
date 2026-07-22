@@ -23,6 +23,7 @@ which differs per install and per checkout.
 | Verb | Purpose |
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
+| `hmad-dispatch resolve <codex\|agy>` | Resolve one agent to its handle; stdout + exit 0/1/2 |
 | `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
 | `hmad-dispatch read <codex\|agy> [--lines N] [--cursor N \| --from-start]` | Scrape the agent screen to stdout. `--cursor N` reads from an absolute offset; `--from-start` (= `--cursor 0 --limit 4000`) recovers a report longer than the retained tail viewport |
 | `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle — confirmed by two identical reads, not taken on trust (see below) |

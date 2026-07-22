@@ -371,6 +371,88 @@ def test_orca_identity_codex_by_model_banner(tmp_path):
     assert "agy -> term_agy" in r.stdout
 
 
+def test_resolve_agy_autodetects_in_coordinator_worktree(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_coordA", "title": "coordinator", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A"},
+        {"handle": "term_agyA", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A2"},
+        {"handle": "term_agyB", "title": "agy", "preview": "",
+         "worktreePath": "/repo/B", "leafId": "leaf-B2"},
+    )
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "ORCA_PANE_KEY": "tab-1:leaf-A"})
+    assert r.returncode == 0
+    assert r.stdout == "term_agyA\n"
+    assert r.stderr == ""
+
+
+def test_resolve_codex_uses_explicit_orca_pin(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["resolve", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-x"})
+    assert r.returncode == 0
+    assert r.stdout == "t-x\n"
+    assert r.stderr == ""
+
+
+def test_resolve_agy_reports_unresolved_orca_candidates(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b,
+                 "HMAD_STUB_ORCA_STDOUT": _orca_terms(("term_codex", "codex", ""))})
+    assert r.returncode == 1
+    assert r.stdout == ""
+    assert "pin HMAD_ORCA_AGY_TERMINAL" in r.stderr
+
+
+def test_resolve_rejects_unknown_agent_with_agent_diagnostic(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["resolve", "bogus"], substrate="orca", env={"_BINDIR": b})
+    assert r.returncode == 2
+    assert r.stdout == ""
+    assert "unknown agent" in r.stderr
+
+
+def test_resolve_requires_agent_arg_without_unknown_verb(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["resolve"], substrate="orca", env={"_BINDIR": b})
+    assert r.returncode == 2
+    assert r.stdout == ""
+    assert "unknown verb" not in r.stderr
+
+
+def test_resolve_agy_matches_env_handle(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms(
+        ("term_codex", "Codex - HemaSuite", ""),
+        ("term_agy", "agy --dangerously-skip-permissions", ""),
+    )
+    env = {"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing}
+    env_result = run(["env"], substrate="orca", env=env)
+    handle = next(line for line in env_result.stdout.splitlines() if line.startswith("agy -> "))
+    handle = handle.removeprefix("agy -> ")
+
+    r = run(["resolve", "agy"], substrate="orca", env=env)
+    assert r.returncode == 0
+    assert r.stdout == f"{handle}\n"
+    assert r.stderr == ""
+
+
+def test_resolve_is_known_verb_while_other_unknown_verbs_remain_unknown(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    resolve = run(["resolve", "agy"], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    unknown = run(["frobnicate"], substrate="orca", env={"_BINDIR": b})
+
+    assert resolve.returncode == 0
+    assert "unknown verb" not in resolve.stderr
+    assert unknown.returncode == 2
+    assert "unknown verb" in unknown.stderr
+
+
 def test_send_cmux_uses_file_contents(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
