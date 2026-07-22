@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -88,9 +88,26 @@ _cmux_find() {
   return 1
 }
 
+_pin_file() {  # path to the session pin file (agent=handle lines)
+  printf '%s\n' "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}"
+}
+
+_pin_lookup() {  # $1 agent -> echo the pinned handle from the pin file, or nothing
+  # H4: Codex/agy auto-detect by title/preview decays mid-run (the model-id
+  # banner scrolls out of the Orca preview once the agent does work), so a long
+  # autonomous run can lose a pane. `pin-agents` records the resolved handles
+  # here once; resolution reads them before falling back to auto-detect.
+  local pf; pf="$(_pin_file)"
+  [ -f "$pf" ] || return 1
+  local line; line="$(grep -E "^$1=" "$pf" 2>/dev/null | head -1 || true)"
+  [ -n "$line" ] || return 1
+  printf '%s\n' "${line#*=}"
+}
+
 _resolve_target() {
   # $1 = agent (codex|agy). Echo concrete surface/terminal for the active substrate.
-  local agent="$1" sub
+  # Orca precedence: explicit env pin > session pin file (H4) > auto-detect.
+  local agent="$1" sub pinned
   sub="$(_detect_substrate)" || return 1
   case "$sub:$agent" in
     cmux:codex)
@@ -101,9 +118,11 @@ _resolve_target() {
       _cmux_find agy; return $? ;;
     orca:codex)
       if [ -n "${HMAD_ORCA_CODEX_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_CODEX_TERMINAL"; return 0; fi
+      pinned="$(_pin_lookup codex || true)"; [ -n "$pinned" ] && { printf '%s\n' "$pinned"; return 0; }
       _orca_find codex; return $? ;;
     orca:agy)
       if [ -n "${HMAD_ORCA_AGY_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_AGY_TERMINAL"; return 0; fi
+      pinned="$(_pin_lookup agy || true)"; [ -n "$pinned" ] && { printf '%s\n' "$pinned"; return 0; }
       _orca_find agy; return $? ;;
     *) echo "hmad-dispatch: unknown agent '$agent'" >&2; return 2 ;;
   esac
@@ -194,6 +213,27 @@ _cmd_resolve() {
   # to _resolve_target so the two cannot diverge.
   local agent="${1:-}"
   _resolve_target "$agent"
+}
+
+_cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the pin file
+  # H4: auto-detect by preview decays once an agent does work. Call this after the
+  # Phase-5 substrate check to freeze the resolved handles into the session pin
+  # file, so every later dispatch is deterministic. Resolves FRESH (explicit env
+  # pin wins, else auto-detect) — it never reads the pin file it is about to write.
+  # `--clear` removes the pin file. Precedence at read time stays: env > pin file
+  # > auto-detect, so an operator env pin always overrides a stale pinned handle.
+  _require_orca pin-agents || return $?
+  local pf; pf="$(_pin_file)"
+  case "${1:-}" in --clear) rm -f "$pf"; echo "[H-MAD] pins cleared: $pf" >&2; return 0 ;; esac
+  local dir; dir="$(dirname "$pf")"; [ -d "$dir" ] || mkdir -p "$dir"
+  local a U var handle wrote=0 tmp; tmp="$(mktemp)"
+  for a in codex agy; do
+    U="$(printf '%s' "$a" | tr '[:lower:]' '[:upper:]')"; var="HMAD_ORCA_${U}_TERMINAL"
+    if [ -n "${!var:-}" ]; then handle="${!var}"; else handle="$(_orca_find "$a" 2>/dev/null || true)"; fi
+    if [ -n "$handle" ]; then printf '%s=%s\n' "$a" "$handle" >> "$tmp"; echo "[H-MAD] pinned $a -> $handle" >&2; wrote=1; fi
+  done
+  if [ "$wrote" = 1 ]; then mv "$tmp" "$pf"; printf '%s\n' "$pf"; return 0; fi
+  rm -f "$tmp"; echo "[H-MAD] pin-agents: neither agent resolved; nothing written" >&2; return 1
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile
@@ -312,24 +352,15 @@ _cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
   # can write a file works (cmux or orca), so it needs no _require_orca.
   # The .done marker (not just file existence) is the signal, so a half-written
   # report is never read; the file must also be non-empty.
-  # Reject a flag in the path slot (e.g. `report-wait --timeout 600` with the path
-  # omitted) rather than polling 300s for a file literally named "--timeout".
-  case "${1:-}" in -*) echo "hmad-dispatch: report-path looks like a flag: $1 (pass the path first)" >&2; return 2 ;; esac
-  _need "${1:-}" report-path || return $?
-  local path="$1"; shift
-  local timeout=300 interval="${HMAD_REPORT_POLL_INTERVAL:-2}"
-  while [ $# -gt 0 ]; do case "$1" in
-    --timeout) timeout="$2"; shift 2 ;; --interval) interval="$2"; shift 2 ;;
-    *) shift ;; esac; done
-  local marker="${path}.done" elapsed=0 tick="$interval"
-  [ "$tick" -lt 1 ] && tick=1
-  while [ "$elapsed" -le "$timeout" ]; do
-    if [ -f "$marker" ] && [ -s "$path" ]; then cat "$path"; return 0; fi
-    [ "$interval" -gt 0 ] && sleep "$interval"
-    elapsed=$((elapsed + tick))
-  done
-  echo "[H-MAD] report-wait timed out after ${timeout}s (missing ${marker} or empty ${path})" >&2
-  return 1
+  #
+  # H3 decoupling: the polling loop lives in the standalone stdlib script
+  # h_mad_report_wait.py, which this verb delegates to. When the dispatched
+  # implementer is editing THIS wrapper (e.g. adding a verb), poll with the
+  # script DIRECTLY — `python3 <skill>/scripts/h_mad_report_wait.py <path> …` —
+  # so the coordinator's poll never re-parses a half-saved hmad-dispatch.sh and
+  # can't die on a transient syntax error. Both paths share one implementation.
+  local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  python3 "$here/h_mad_report_wait.py" "$@"
 }
 
 _cmd_worktree_comment() {  # [<selector>] <text>
@@ -610,6 +641,7 @@ main() {
   case "$verb" in
     env)    _cmd_env "$@" ;;
     resolve) _cmd_resolve "$@" ;;
+    pin-agents) _cmd_pin_agents "$@" ;;
     send)   _cmd_send "$@" ;;
     clear)  _cmd_clear "$@" ;;
     interrupt) _cmd_interrupt "$@" ;;

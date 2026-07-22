@@ -24,13 +24,14 @@ which differs per install and per checkout.
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
 | `hmad-dispatch resolve <codex\|agy>` | Resolve one agent to its handle; stdout + exit 0/1/2 |
+| `hmad-dispatch pin-agents [--clear]` | Resolve codex+agy ONCE and freeze the handles into the session pin file (`${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`). Run after the Phase-5 preflight so later dispatches survive preview decay (H4); `--clear` removes the file |
 | `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
 | `hmad-dispatch read <codex\|agy> [--lines N] [--cursor N \| --from-start]` | Scrape the agent screen to stdout. `--cursor N` reads from an absolute offset; `--from-start` (= `--cursor 0 --limit 4000`) recovers a report longer than the retained tail viewport |
 | `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle — confirmed by two identical reads, not taken on trust (see below) |
 | `hmad-dispatch alive <codex\|agy>` | Liveness probe (exit 0/1) |
 | `hmad-dispatch clear <codex\|agy>` | Reset the agent's context (`/clear`) |
 | `hmad-dispatch interrupt <codex\|agy>` | Cancel a running/wedged turn with Ctrl-C (0x03). NEVER nudge a TUI REPL with a bare Enter — it submits a blank turn |
-| `hmad-dispatch report-wait <path> [--timeout S] [--interval S]` | Wait for the agent to drop `<path>` + `<path>.done`, then emit the file. Reliable replacement for `wait`+`read`+sentinel-extract; substrate-agnostic (shared fs). See orchestration-mode.md §"Report-file transport" |
+| `hmad-dispatch report-wait <path> [--timeout S] [--interval S]` | Wait for the agent to drop `<path>` + `<path>.done`, then emit the file. Reliable replacement for `wait`+`read`+sentinel-extract; substrate-agnostic (shared fs). The polling loop is the standalone `scripts/h_mad_report_wait.py`; when the dispatched implementer is editing `hmad-dispatch.sh` itself, poll with that script directly so the coordinator never re-parses a half-saved wrapper (H3). See orchestration-mode.md §"Report-file transport" |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
 
 ## How `send` delivers a prompt
@@ -146,7 +147,7 @@ capture unreliable in ways cmux/Codex are not. Observed live and worked around:
 
 ## Agent identity
 - **cmux (dynamic):** `HMAD_CMUX_CODEX_SURFACE` / `HMAD_CMUX_AGY_SURFACE` pin a surface id; else resolved from `cmux tree --all` by matching the terminal title for `codex`/`agy` (`_cmux_find`, mirroring the orca path). Zero or multiple matches → wrapper halts (`UNRESOLVED`); pin the env var. Hardcoded `surface:5`/`surface:2` defaults were removed — they went stale per session and silently misrouted audits/TDD to the wrong pane.
-- **orca (dynamic):** `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin a terminal handle; else resolved from `orca terminal list --json` by matching terminal preview/title for `codex`/`agy`. Zero or multiple matches → wrapper halts; pin the env var. The list schema has no field that identifies the running program, so a handle pin is the reliable identity.
+- **orca (dynamic):** resolution precedence is **explicit env pin → session pin file → auto-detect**. `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` pin a terminal handle; else the session pin file (`${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`, written by `pin-agents`) is consulted; else resolved from `orca terminal list --json`, scoped to the coordinator's own worktree, by matching the leading title word (then a preview-signature fallback: `codex|gpt-[0-9]`, `agy|gemini|antigravity`). Zero or multiple matches → wrapper halts; pin the env var or run `pin-agents`. The list schema has no field naming the running program, and the preview banner **decays** once the agent does work (the `gpt-N` model id scrolls off), so a handle pin — via the env var or the pin file — is the only durable identity for a long run (H4). Auto-detect is a convenience for a fresh pane, not a guarantee.
 
 ## Launching the panes
 - **cmux:** `cmux split-window --command 'codex'` / `cmux split-window --command 'agy --dangerously-skip-permissions'`.

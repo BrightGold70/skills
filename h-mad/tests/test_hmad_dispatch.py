@@ -277,6 +277,60 @@ def test_cmux_identity_env_override(tmp_path):
     assert "codex -> surface:9" in r.stdout
 
 
+def test_resolve_reads_pin_file_when_env_unset(tmp_path):
+    # H4: a session pin file (written by `pin-agents`) survives Codex/agy preview
+    # decay — resolution consults it before falling back to auto-detect, so a
+    # long autonomous run doesn't lose a pane when its banner scrolls off.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("agy=term_pinned_agy\ncodex=term_pinned_codex\n")
+    # No env pin, no ORCA_PANE_KEY, empty terminal list → auto-detect would find
+    # nothing; the pin file must supply the handle.
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+    assert r.returncode == 0
+    assert r.stdout.strip() == "term_pinned_agy"
+
+
+def test_env_var_pin_beats_pin_file(tmp_path):
+    # H4 precedence: an explicit operator env pin always wins over the session
+    # pin file, which in turn wins over auto-detect.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("agy=term_from_file\n")
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_AGY_TERMINAL": "term_from_env"})
+    assert r.returncode == 0
+    assert r.stdout.strip() == "term_from_env"
+
+
+def test_pin_agents_writes_resolved_handles(tmp_path):
+    # H4: `pin-agents` resolves both agents once and persists them to the pin
+    # file, so subsequent dispatches are deterministic regardless of preview decay.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_CODEX_TERMINAL": "t-codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "t-agy"})
+    assert r.returncode == 0
+    written = pins.read_text()
+    assert "codex=t-codex" in written
+    assert "agy=t-agy" in written
+
+
+def test_pin_agents_clear_removes_file(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("agy=stale\n")
+    r = run(["pin-agents", "--clear"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r.returncode == 0
+    assert not pins.exists()
+
+
 def test_orca_identity_explicit_pin(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     r = run(["env"], substrate="orca",
