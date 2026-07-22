@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -252,6 +252,36 @@ _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
     elapsed=$((elapsed + tick))
   done
   echo "[H-MAD] gate-wait timed out after ${timeout}s (gate=$gate still pending)" >&2
+  return 1
+}
+
+_cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
+  # Wait for a dispatched agent to DROP a report file, then emit it. This is the
+  # reliable alternative to wait+read+sentinel-extract under Orca: the agent writes
+  # its full report to <report-path> and signals completion by creating
+  # <report-path>.done; the coordinator polls the marker and reads the file. No
+  # tui-idle guess, no screen scrape, no BEGIN/END sentinel — the file is complete
+  # by construction. Substrate-agnostic: any agent that shares the filesystem and
+  # can write a file works (cmux or orca), so it needs no _require_orca.
+  # The .done marker (not just file existence) is the signal, so a half-written
+  # report is never read; the file must also be non-empty.
+  # Reject a flag in the path slot (e.g. `report-wait --timeout 600` with the path
+  # omitted) rather than polling 300s for a file literally named "--timeout".
+  case "${1:-}" in -*) echo "hmad-dispatch: report-path looks like a flag: $1 (pass the path first)" >&2; return 2 ;; esac
+  _need "${1:-}" report-path || return $?
+  local path="$1"; shift
+  local timeout=300 interval="${HMAD_REPORT_POLL_INTERVAL:-2}"
+  while [ $# -gt 0 ]; do case "$1" in
+    --timeout) timeout="$2"; shift 2 ;; --interval) interval="$2"; shift 2 ;;
+    *) shift ;; esac; done
+  local marker="${path}.done" elapsed=0 tick="$interval"
+  [ "$tick" -lt 1 ] && tick=1
+  while [ "$elapsed" -le "$timeout" ]; do
+    if [ -f "$marker" ] && [ -s "$path" ]; then cat "$path"; return 0; fi
+    [ "$interval" -gt 0 ] && sleep "$interval"
+    elapsed=$((elapsed + tick))
+  done
+  echo "[H-MAD] report-wait timed out after ${timeout}s (missing ${marker} or empty ${path})" >&2
   return 1
 }
 
@@ -545,6 +575,7 @@ main() {
     gate-create) _cmd_gate_create "$@" ;;
     gate-resolve) _cmd_gate_resolve "$@" ;;
     gate-wait) _cmd_gate_wait "$@" ;;
+    report-wait) _cmd_report_wait "$@" ;;
     worktree-comment) _cmd_worktree_comment "$@" ;;
     worktree-create) _cmd_worktree_create "$@" ;;
     worktree-current) _cmd_worktree_current "$@" ;;

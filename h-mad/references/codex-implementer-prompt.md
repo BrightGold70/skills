@@ -38,6 +38,12 @@ For RED phase (5d): write failing tests for this module based on the impl-plan t
 
 For GREEN phase (5e): implement the minimal code to make the failing tests pass. Verify GREEN by running `pytest <test_path> -v`. Then refactor if helpful, keeping tests green.
 
+## Report file (preferred delivery under Orca)
+
+<REPORT_FILE_PATH>
+
+If a path appears above, your **final two actions** are: (1) write your full report there — the same `STATUS: <value>` line and summary you would otherwise print; then (2) create the marker `<that-path>.done` (e.g. `: > "<path>.done"`). The coordinator reads the file, not your terminal, so finish the report before creating the marker. If the path is empty, print your `STATUS:` line to the terminal as usual.
+
 ## Code Organization
 
 Follow the project's existing patterns:

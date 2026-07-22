@@ -80,4 +80,8 @@ Found by auditing the shipped handoff + merge-gate against the **real** Orca pay
 - 🟡 **G5** — `_coordinator()` auto-detects from `ORCA_PANE_KEY="<tabId>:<leafId>"` → matches a terminal's `.leafId` in `terminal list`. Live-verified: `orchestration: on` with no `HMAD_ORCA_COORDINATOR_TERMINAL`. Pin still overrides.
 - 🟢 **G6** — WRITE stamp now reads the current comment first; a foreign (non-`handoff:`/`h-mad`) note is appended to, not clobbered.
 
+## Architecture: report-file transport (root fix for the scrape-fragility class)
+
+- 🟢 **A1 — audit/TDD verdict collection moved from TUI-scrape to file-drop under Orca.** `FIXED` 2026-07-22 (feature/188). New `hmad-dispatch report-wait <path>` verb: the dispatched agent writes its full report to `<path>` and creates `<path>.done`; the coordinator polls the marker and reads the file — no `tui-idle` guess, no screen scrape, no `BEGIN/END` sentinel, no dedent/`•`-normalize. Substrate-agnostic (shared fs; scrape stays the cmux/unpinned fallback). The audit-prompt + codex-implementer templates carry a `<REPORT_FILE_PATH>` contract slot; SKILL §Audit-assembly + orchestration-mode.md document report-file as the default under Orca. **Live e2e verified**: agy wrote clean markdown to the file + `.done`, `report-wait` read it, and `h_mad_audit_gate.py` scored `GATE: PASS` directly with zero normalization. This addresses the *root cause* of F1–F6 (all were TUI-scrape fragility): on the report-file path those failure modes cannot arise. F1's gate tolerance + F3/F4/F5 scrape guards remain as the fallback-path hardening.
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
