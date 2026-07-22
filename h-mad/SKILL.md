@@ -152,7 +152,12 @@ is cheap to catch:
 | `env` | prints `<handle> STALE` plus a `stale pins:` line — never as addressable |
 | `send` | refuses, `terminal_handle_stale`, **nothing is sent** |
 | `verify <agent>` | 0 live · 1 unresolved/`stale_pin` · 2 unknown agent |
-| `resolve` | unchanged — echoes the pin unverified, by design |
+| `resolve` | echoes the pin unverified, by design — pass `--verify` for the check |
+
+`env` also prints `CONFLICT:` when codex and agy resolve to the **same** handle. Two
+agents cannot be one pane, so identical handles prove at least one resolution is
+wrong — and that is precisely the shape a tab-inherited title produces. Pin both
+explicitly when you see it.
 
 Only *positive* evidence blocks anything: if `orca terminal list` cannot be read at
 all, the send still goes, because a pin has to keep working when the listing does

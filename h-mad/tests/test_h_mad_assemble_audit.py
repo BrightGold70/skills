@@ -186,3 +186,32 @@ def test_design_docs_are_read_from_the_design_directory(tmp_path):
     impl_text, problems = _assemble(root, "impl-plan")
     assert problems == []
     assert "# Design: demo" in impl_text          # paired design, from docs/02-design
+
+
+def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
+    """A real design audit assembled to 48.4 KB and passed silently with 0.6 KB
+    of headroom -- the next feature to add a few ACs crosses the 49 KB cliff
+    having never seen a warning. The reviewer's failure there is a silent empty
+    reply, so the warning has to arrive while there is still room to act."""
+    root = _project(tmp_path)
+    spec = root / "docs/01-plan/features/demo.spec.md"
+    out = tmp_path / "prompt.txt"
+
+    def size_of(filler_lines: int) -> tuple[str, int]:
+        spec.write_text("# Spec: demo\n\n## Functional Requirements\n"
+                        + "- FR-1 filler (AC-1.1)\n" * filler_lines)
+        r = _run("--feature", "demo", "--phase", "plan",
+                 "--project-root", str(root), "--out", str(out))
+        assert r.returncode == 0, r.stderr
+        return r.stdout, out.stat().st_size
+
+    quiet, small = size_of(10)
+    assert "~" not in quiet and "!" not in quiet, f"no warning expected at {small}B"
+
+    approaching, mid = size_of(1700)
+    assert 44 * 1024 < mid <= 49 * 1024, f"fixture drifted: {mid}B"
+    assert "approaching" in approaching
+
+    past, big = size_of(2000)
+    assert big > 49 * 1024, f"fixture drifted: {big}B"
+    assert "past the measured 49 KB" in past

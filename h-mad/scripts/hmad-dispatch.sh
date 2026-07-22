@@ -128,6 +128,23 @@ _resolve_target() {
   esac
 }
 
+_agent_pv_re() {
+  # Program-banner signature for an agent: strings the AGENT ITSELF prints, which
+  # a pane merely *discussing* the agent does not.
+  #
+  # The bare tokens "codex"/"agy" failed that test and let a coordinator resolve as
+  # Codex. A bare `gpt-[0-9]` failed it too, just more narrowly: prose like
+  # "comparing gpt-5 output with ours" matched. What Codex actually prints is a
+  # product line ("OpenAI Codex (v0.145.0)  model: gpt-5.6-terra") or a status line
+  # pairing the model id with a reasoning effort ("gpt-5.6-terra high · ~/repo").
+  # Both are structured; neither occurs in ordinary prose about a model.
+  case "$1" in
+    codex) printf '%s\n' 'openai codex|model: *gpt-|gpt-[0-9][^ ]* +(low|medium|high|xhigh)([^a-z]|$)' ;;
+    agy)   printf '%s\n' 'antigravity cli|gemini [0-9]' ;;
+    *)     printf '%s\n' "$1" ;;
+  esac
+}
+
 _orca_find() {
   # Match the single Orca terminal whose TITLE begins with the agent token
   # (case-insensitive), mirroring _cmux_find. Pin HMAD_ORCA_<AGENT>_TERMINAL
@@ -154,6 +171,18 @@ _orca_find() {
   if [ -n "$self" ]; then
     scope_wt="$(printf '%s' "$listing" | jq -r --arg h "$self" \
       '(.result.terminals[]? | select(.handle==$h) | .worktreePath) // empty' | head -1)"
+  fi
+  if [ -z "$scope_wt" ]; then
+    # No coordinator (no ORCA_PANE_KEY, no pin): fall back to the worktree that
+    # ENCLOSES the current directory rather than searching every worktree. Going
+    # global is the dangerous default -- it is how a HemaSuite pane competes with
+    # a skills pane for the same token. cwd is weaker evidence than the
+    # coordinator's own pane but far better than none; when cwd is inside no known
+    # worktree (stub tests, use outside any checkout) matching stays global.
+    scope_wt="$(printf '%s' "$listing" | jq -r --arg cwd "$PWD" '
+      [.result.terminals[]? | (.worktreePath // "")
+       | select(. != "" and ($cwd == . or ($cwd | startswith(. + "/"))))]
+      | sort_by(length) | last // empty' 2>/dev/null || true)"
   fi
   # Candidate set: same worktree as the coordinator (when known), coordinator's
   # own pane always excluded (even in Pass 1 -- its title/preview may carry the
@@ -183,11 +212,25 @@ _orca_find() {
   #     more leaves of the SAME tab is provably the tab's, so reject it.
   #
   # There is no field distinguishing an OSC title from an inherited one; that is
-  # https://github.com/stablyai/orca/issues/9870. Until it exists, "shared across
-  # leaves of one tab" is the only available evidence of inheritance.
+  # https://github.com/stablyai/orca/issues/9870. Until it exists we use the two
+  # available forms of evidence:
+  #
+  #   a) "shared across leaves of one tab" proves inheritance -- but only when the
+  #      tab has more than one leaf. A SINGLE-leaf tab named "agy - worker" proves
+  #      nothing, and a Codex pane sitting in one resolved as agy (verified).
+  #   b) A rival's PROGRAM BANNER in the preview is strong evidence of what
+  #      actually runs there, and strong evidence beats a weak inherited title. A
+  #      candidate whose preview carries the other agent's banner is rejected,
+  #      which closes (a)'s single-leaf hole: the Codex pane in the "agy - worker"
+  #      tab is printing "gpt-5.6-terra high", so it cannot be agy.
+  local rival_re=""
+  case "$token" in
+    codex) rival_re="$(_agent_pv_re agy)" ;;
+    agy)   rival_re="$(_agent_pv_re codex)" ;;
+  esac
   ids=""
   if [ "$token" != "codex" ]; then
-    ids="$(printf '%s' "$scoped" | jq -r --arg t "$token" '
+    ids="$(printf '%s' "$scoped" | jq -r --arg t "$token" --arg rival "$rival_re" '
       [.result.terminals[]] as $all
       | $all[]
       | select((.title//"") | test("^" + $t + "([^A-Za-z]|$)"; "i"))
@@ -195,6 +238,8 @@ _orca_find() {
       | . as $c
       | select([$all[] | select((.tabId//"") != "" and (.tabId//"") == ($c.tabId//"")
                                 and (.title//"") == ($c.title//""))] | length < 2)
+      # Drop a pane the OTHER agent is demonstrably running.
+      | select($rival == "" or ((.preview//"") | test($rival; "i") | not))
       | .handle')"
   fi
   n="$(printf '%s' "$ids" | grep -c . || true)"
@@ -208,19 +253,16 @@ _orca_find() {
     # agent-specific signature set. The coordinator's own pane is already
     # excluded from $scoped above; a collision yields n>1 -> UNRESOLVED (safe),
     # never a mis-dispatch.
-    # Signatures must be strings the AGENT PROGRAM emits, never words a pane can
-    # merely render while talking about the agent. The bare tokens "codex" and
-    # "agy" fail that test: a coordinator pane discussing dispatch targets prints
-    # both, and with Pass 1 no longer covering Codex this pass is what runs, so a
-    # bare-token match made the coordinator resolve as Codex and dispatch to
-    # itself. Match the launch banners instead -- model ids and product names.
-    local pv_re="$token"
-    case "$token" in
-      codex) pv_re='gpt-[0-9]' ;;
-      agy)   pv_re='antigravity|gemini [0-9]' ;;
-    esac
-    ids="$(printf '%s' "$scoped" | jq -r --arg t "$pv_re" \
-      '.result.terminals[] | select((.preview//"") | test($t; "i")) | .handle')"
+    # Signatures live in _agent_pv_re: strings the AGENT PROGRAM emits, never
+    # words a pane can render while merely talking about the agent. A candidate
+    # also carrying the rival's banner is ambiguous, so it is rejected rather than
+    # guessed at.
+    local pv_re; pv_re="$(_agent_pv_re "$token")"
+    ids="$(printf '%s' "$scoped" | jq -r --arg t "$pv_re" --arg rival "$rival_re" \
+      '.result.terminals[]
+       | select((.preview//"") | test($t; "i"))
+       | select($rival == "" or ((.preview//"") | test($rival; "i") | not))
+       | .handle')"
     n="$(printf '%s' "$ids" | grep -c . || true)"
     if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   fi
@@ -235,9 +277,10 @@ _cmd_env() {
     return 1
   fi
   echo "substrate: $sub"
-  local a t stale=""
+  local a t stale="" seen_codex="" seen_agy=""
   for a in codex agy; do
     if t="$(_resolve_target "$a" 2>/dev/null)"; then
+      case "$a" in codex) seen_codex="$t" ;; agy) seen_agy="$t" ;; esac
       # A pin file records intent, not state. `env` is the preflight an operator
       # reads before committing a run, so a handle whose pane is gone must not
       # print as if it were addressable -- a dispatch into one vanishes with no
@@ -253,6 +296,13 @@ _cmd_env() {
     fi
   done
   [ -z "$stale" ] || echo "stale pins: $stale"
+  # Two agents cannot be the same pane, so identical handles prove at least one
+  # resolution is wrong -- and that is exactly the shape a tab-inherited title
+  # produces (one pane whose tab name matches one agent while it runs the other).
+  # Free to detect, and it catches inheritance cases no single-agent check can.
+  if [ -n "$seen_codex" ] && [ "$seen_codex" = "$seen_agy" ]; then
+    echo "CONFLICT: codex and agy both resolve to $seen_codex — at least one is wrong; pin them explicitly"
+  fi
   if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
   return 0
 }
@@ -263,7 +313,17 @@ _cmd_resolve() {
   # when UNRESOLVED; empty stdout + stderr message + exit 2 for an unknown or
   # missing agent. Single-agent form of what `env` computes for both; delegates
   # to _resolve_target so the two cannot diverge.
+  # `--verify` additionally requires the resolved handle to be a live terminal,
+  # i.e. it behaves as `verify`. The default stays unverified on purpose: a pin's
+  # value is that it depends on no listing, which is what lets it survive the
+  # auto-detect decay it exists to replace.
   local agent="${1:-}"
+  case "$agent" in
+    --verify) _cmd_verify "${2:-}"; return $? ;;
+  esac
+  case "${2:-}" in
+    --verify) _cmd_verify "$agent"; return $? ;;
+  esac
   _resolve_target "$agent"
 }
 

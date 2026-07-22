@@ -47,7 +47,7 @@ _ENV_CHECK_WAIT = (
 )
 
 
-def run(args, *, substrate=None, env=None, capture=None):
+def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     """Invoke the wrapper with only the named stub binaries on PATH."""
     bindir = Path(env["_BINDIR"]) if env and "_BINDIR" in env else None
     e = dict(os.environ)
@@ -80,7 +80,8 @@ def run(args, *, substrate=None, env=None, capture=None):
     # leak into `command -v` lookups and defeat the bindir-only isolation this
     # helper exists to provide.
     e["PATH"] = f"{bindir}:/usr/bin:/bin" if bindir else os.environ["PATH"]
-    return subprocess.run(["bash", str(WRAPPER), *args], capture_output=True, text=True, env=e)
+    return subprocess.run(["bash", str(WRAPPER), *args], capture_output=True,
+                          text=True, env=e, cwd=cwd)
 
 
 def _bindir(tmp_path, names):
@@ -1990,3 +1991,101 @@ def test_pin_agents_ignores_a_dead_env_pin_rather_than_freezing_it(tmp_path):
     assert "not a live terminal" in r.stderr
     assert "term_dead" not in pins.read_text()
     assert "agy=term_live_agy" in pins.read_text(), "the live agent is still frozen"
+
+
+# --- title inheritance, round 2: the single-leaf hole and prose model ids ------
+
+
+def test_agy_does_not_take_a_pane_running_codex(tmp_path):
+    """A SINGLE-leaf tab proves nothing about inheritance, so the shared-title
+    check cannot fire -- a Codex pane in a one-leaf tab named "agy - worker"
+    resolved as agy (verified before the fix). The rival's program banner is
+    strong evidence of what actually runs there and outranks a weak title."""
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_actually_codex", "title": "agy - worker",
+         "preview": "gpt-5.6-terra high · ~/repo", "worktreePath": "/repo/A",
+         "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+    assert "agy -> UNRESOLVED" in r.stdout
+    assert "codex -> term_actually_codex" in r.stdout, "it IS the Codex pane"
+    assert "CONFLICT" not in r.stdout
+
+
+def test_codex_signature_ignores_a_model_id_in_prose(tmp_path):
+    """`gpt-[0-9]` alone matched "comparing gpt-5 output with ours". Codex prints
+    a product line or a model id paired with a reasoning effort; prose does not."""
+    b = _bindir(tmp_path, ["orca"])
+    prose = _orca_terms_full(
+        {"handle": "term_some_agent", "title": "worker",
+         "preview": "comparing gpt-5 output with ours", "worktreePath": "/repo/A",
+         "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca", env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": prose})
+    assert "codex -> UNRESOLVED" in r.stdout
+
+    # The forms Codex actually prints must still resolve.
+    for banner in ("OpenAI Codex (v0.145.0)  model: gpt-5.6-terra",
+                   "gpt-5.6-terra high · ~/orca/HemaSuite"):
+        listing = _orca_terms_full(
+            {"handle": "term_codex", "title": "worker", "preview": banner,
+             "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+        )
+        rr = run(["env"], substrate="orca",
+                 env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing})
+        assert "codex -> term_codex" in rr.stdout, banner
+
+
+def test_env_flags_two_agents_resolving_to_one_pane(tmp_path):
+    """Two agents cannot be the same pane, so identical handles prove at least one
+    resolution is wrong -- the exact shape tab-title inheritance produces."""
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_one", "title": "shared", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_one",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_one"})
+    assert "CONFLICT" in r.stdout
+    assert "term_one" in r.stdout
+
+
+def test_autodetect_scopes_to_the_worktree_enclosing_cwd(tmp_path):
+    """Without ORCA_PANE_KEY the matcher used to search EVERY worktree, so a pane
+    in an unrelated checkout competed for the token. cwd is weaker evidence than
+    the coordinator's own pane but far better than none."""
+    b = _bindir(tmp_path, ["orca"])
+    here = str(tmp_path)
+    listing = _orca_terms_full(
+        {"handle": "term_agy_here", "title": "agy", "preview": "",
+         "worktreePath": here, "tabId": "tab-1", "leafId": "l1"},
+        {"handle": "term_agy_elsewhere", "title": "agy", "preview": "",
+         "worktreePath": "/some/other/checkout", "tabId": "tab-2", "leafId": "l2"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing}, cwd=str(tmp_path))
+    assert "agy -> term_agy_here" in r.stdout
+    assert "term_agy_elsewhere" not in r.stdout
+
+
+def test_resolve_verify_flag_matches_the_verify_verb(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    dead = {"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
+            "HMAD_STUB_ORCA_STDOUT": live}
+    bad = run(["resolve", "agy", "--verify"], substrate="orca", env=dead)
+    assert bad.returncode == 1 and "stale_pin" in bad.stderr
+    # Default stays unverified.
+    plain = run(["resolve", "agy"], substrate="orca", env=dead)
+    assert plain.returncode == 0 and plain.stdout.strip() == "term_dead"
+
+    ok = run(["resolve", "agy", "--verify"], substrate="orca",
+             env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_live",
+                  "HMAD_STUB_ORCA_STDOUT": live})
+    assert ok.returncode == 0 and ok.stdout.strip() == "term_live"

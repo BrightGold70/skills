@@ -214,10 +214,18 @@ def main(argv: list[str] | None = None) -> int:
     out.write_text(text, encoding="utf-8")
     size = len(text.encode())
     print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) sentinel={sentinel}")
+    # Measured: one reviewer emits normally at 49 KB and returns nothing at 53.
+    # Warn *approaching* it, not only past it -- a real design audit assembled to
+    # 48.4 KB, which passed silently with 0.6 KB of headroom, and the next feature
+    # to add a few ACs crosses the cliff with no warning ever having fired.
     if size > 49 * 1024:
-        # Measured: one reviewer emits normally at 49 KB and returns nothing at 53.
         print(f"  ! {size / 1024:.1f} KB is past the measured 49 KB reviewer cliff — "
-              "consider splitting the audit by FR group (SKILL.md step 5.5)")
+              "split the audit by FR group (SKILL.md step 5.5); a silent empty "
+              "reply is the expected failure")
+    elif size > 44 * 1024:
+        print(f"  ~ {size / 1024:.1f} KB is approaching the measured 49 KB reviewer "
+              "cliff — inlining only the spec's '## Functional Requirements' "
+              "section saves ~7 KB and loses no AC (SKILL.md step 5.5)")
     return 0
 
 
