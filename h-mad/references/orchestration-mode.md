@@ -195,3 +195,35 @@ separate, explicit action that uses `--force-with-lease` and aborts on a stale
 remote view), then **create the hosted-review PR/MR**. This preserves the base
 invariant **never `git push --force`** — the wrapper adds no push/force-push
 automation; force-push remains a deliberate, `--force-with-lease` UI action.
+
+## Scheduling an h-mad dispatch-surface live-e2e (Orca only)
+
+The `automation-*` verbs (`automation-create` / `-run` / `-list` / `-remove`)
+schedule a recurring Orca job. Beyond HemaSuite's live-e2e (SKILL.md §"Scheduling
+HemaSuite live-e2e"), the same verbs wire a **self-test of the dispatch surface**:
+a scheduled run that verifies `env` resolves both agents, `resolve` works, the
+report-file round-trip completes, and the suite is green — so a regression in the
+Orca wiring surfaces without a human running the smoke. The prompt is a committed
+artifact, `h-mad/references/e2e-smoke.prompt.md`, so the scheduled job and the
+repo cannot drift.
+
+```bash
+# create — daily preset trigger needs no --schedule; provider must be one Orca
+# recognizes (claude|codex|gemini, never `agent`); target this repo with --repo.
+hmad-dispatch automation-create --name hmad-dispatch-e2e --trigger daily \
+  --prompt-file "$HOME/.claude/skills/h-mad/references/e2e-smoke.prompt.md" \
+  --provider claude --precheck "hmad-dispatch env" --repo skills
+# → prints the automation id (from .result.automation.id)
+
+hmad-dispatch automation-list                 # enumerate configured jobs
+hmad-dispatch automation-run <id>             # fire once, ad hoc
+hmad-dispatch automation-remove <id>          # tear down
+```
+
+The `--precheck "hmad-dispatch env"` gates each run on the substrate being live
+(a non-zero precheck skips the run rather than dispatching into a dead surface).
+The prompt reports a single `E2E: PASS` / `E2E: FAIL — <reason>` line; pair it
+with `--prompt-file` report-file delivery if you want the full check log captured.
+This is documented, opt-in wiring: creating the job is a deliberate operator
+action (it is a persistent recurring automation), not something `/h-mad` starts on
+its own.

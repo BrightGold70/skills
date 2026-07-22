@@ -1288,6 +1288,42 @@ def test_automation_create_missing_prompt_file(tmp_path):
     assert not cap.exists()
 
 
+def test_e2e_smoke_prompt_artifact_covers_surface():
+    # The dispatch-surface live-e2e flow (orchestration-mode.md §"Scheduling an
+    # h-mad dispatch-surface live-e2e") points a scheduled automation at a
+    # COMMITTED prompt artifact so the job and the repo cannot drift. Guard the
+    # artifact: it must exist and exercise the core surface, or the scheduled
+    # smoke silently stops testing anything.
+    prompt = SKILL / "references" / "e2e-smoke.prompt.md"
+    assert prompt.is_file(), "e2e-smoke.prompt.md missing — the scheduled flow has no prompt"
+    text = prompt.read_text()
+    for token in ("hmad-dispatch env", "resolve agy", "resolve codex",
+                  "report-wait", "pytest", "E2E: PASS"):
+        assert token in text, f"e2e smoke prompt no longer covers {token!r}"
+
+
+def test_e2e_smoke_flow_wires_automation_create(tmp_path):
+    # End-to-end wiring of the flow against the stub (no live job): staging the
+    # real committed prompt through automation-create must produce the documented
+    # argv — daily preset trigger (no --schedule), provider claude, --repo skills.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = SKILL / "references" / "e2e-smoke.prompt.md"
+    r = run(["automation-create", "--name", "hmad-dispatch-e2e", "--trigger", "daily",
+             "--prompt-file", str(prompt), "--provider", "claude",
+             "--precheck", "hmad-dispatch env", "--repo", "skills"],
+            substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 0
+    cmd = cap.read_text()
+    assert "automations create --name hmad-dispatch-e2e --trigger daily" in cmd
+    assert " --schedule " not in cmd          # preset trigger takes no --schedule
+    assert "--provider claude" in cmd
+    assert "--precheck hmad-dispatch env" in cmd
+    assert "--repo skills" in cmd
+    assert cmd.rstrip().endswith("--json")
+    assert "E2E: PASS" in cmd                 # the real prompt body was inlined
+
+
 def test_automation_create_requires_name_and_trigger(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     prompt = tmp_path / "prompt.txt"
