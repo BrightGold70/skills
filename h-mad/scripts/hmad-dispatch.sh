@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -32,6 +32,24 @@ _require_orca() {  # $1 verb-name — non-zero + message unless substrate=orca
 
 _json_extract() {  # $1 = jq alternation expr; stdin JSON -> first non-empty match
   jq -r "${1} // empty"
+}
+
+_orca_json() {
+  # Run `orca "$@"`, then extract with the jq expression in $1 — but ONLY after
+  # confirming the response envelope is ok:true. A bare `orca … | _json_extract`
+  # pipe hides two failures: `set -o pipefail` catches a non-zero *exit*, but an
+  # exit-0 response carrying `"ok":false` (an error envelope) slips through as an
+  # empty/garbage extract. Capture-then-check surfaces both. $1 = jq extract expr
+  # (may be empty to only assert ok:true), rest = orca args.
+  local expr="$1"; shift
+  local out rc
+  out="$(orca "$@")" || { rc=$?; echo "$out" >&2; return "$rc"; }
+  # Reject an explicit error envelope (`"ok":false`) — the exact exit-0 failure a
+  # bare pipe swallows. `.ok != false` passes when ok is true or absent, so a real
+  # Orca response (always ok:true) proceeds while an error envelope is surfaced.
+  printf '%s' "$out" | jq -e '.ok != false' >/dev/null 2>&1 || { echo "$out" >&2; return 1; }
+  [ -n "$expr" ] && printf '%s' "$out" | _json_extract "$expr"
+  return 0
 }
 
 _coordinator() {  # echo the coordinator handle or fail with a message
@@ -144,8 +162,8 @@ $(cat "$2")"
   # Real shape is .result.task.id; legacy flat keys kept as fallbacks. NEVER
   # fall through to the envelope .id -- that is a per-request correlation uuid
   # that always exists, so it silently yields a plausible but useless id.
-  orca orchestration task-create --spec "$spec" --task-title "$1" --json \
-    | _json_extract '.result.task.id // .result.taskId // .taskId'
+  _orca_json '.result.task.id // .result.taskId // .taskId' \
+    orchestration task-create --spec "$spec" --task-title "$1" --json
 }
 
 _cmd_dispatch() {  # $1 agent, $2 task_id
@@ -181,13 +199,10 @@ _cmd_gate_create() {  # $1 task_id, $2 question, [$3 options-json]
   _require_orca gate-create || return $?
   _need "${1:-}" task_id || return $?; _need "${2:-}" question || return $?
   # .result.gate.id is the real shape; no envelope .id fallback (see task-create).
-  if [ -n "${3:-}" ]; then
-    orca orchestration gate-create --task "$1" --question "$2" --options "$3" --json \
-      | _json_extract '.result.gate.id // .result.gateId // .gateId'
-  else
-    orca orchestration gate-create --task "$1" --question "$2" --json \
-      | _json_extract '.result.gate.id // .result.gateId // .gateId'
-  fi
+  local args=(orchestration gate-create --task "$1" --question "$2")
+  [ -n "${3:-}" ] && args+=(--options "$3")
+  args+=(--json)
+  _orca_json '.result.gate.id // .result.gateId // .gateId' "${args[@]}"
 }
 
 _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
@@ -198,15 +213,10 @@ _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
 
 _cmd_worktree_comment() {  # [<selector>] <text>
   _require_orca worktree-comment || return $?
-  local sel text out rc
+  local sel text
   if [ "$#" -ge 2 ]; then sel="$1"; text="$2"; else sel="active"; text="${1:-}"; fi
   _need "$text" text || return $?
-  out="$(orca worktree set --worktree "$sel" --comment "$text" --json)" || {
-    rc=$?
-    echo "$out" >&2
-    return "$rc"
-  }
-  printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1 || { echo "$out" >&2; return 1; }
+  _orca_json '' worktree set --worktree "$sel" --comment "$text" --json
 }
 
 _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--workspace <sel>|--project <id>]
@@ -230,19 +240,12 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
     args+=(--prompt "$(cat "$pf")")
   fi
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result.worktree.id // .result.worktree.selector // .result.worktree.handle'
+  _orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}"
 }
 
 _cmd_worktree_current() {  # (no args)
   _require_orca worktree-current || return $?
-  local out rc
-  out="$(orca worktree current --json)" || {
-    rc=$?
-    echo "$out" >&2
-    return "$rc"
-  }
-  printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1 || { echo "$out" >&2; return 1; }
-  printf '%s' "$out" | _json_extract '.result | tojson'
+  _orca_json '.result | tojson' worktree current --json
 }
 
 _cmd_worktree_ps() {  # [--limit <n>]
@@ -250,7 +253,7 @@ _cmd_worktree_ps() {  # [--limit <n>]
   local args=(worktree ps)
   while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) shift ;; esac; done
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result | tojson'
+  _orca_json '.result | tojson' "${args[@]}"
 }
 
 _cmd_worktree_rm() {  # <selector> [--force]
@@ -275,7 +278,7 @@ _cmd_file_diff() {   # <path> [--staged] [--worktree <sel>]
     --worktree) args+=(--worktree "$2"); shift 2 ;;
     *) shift ;; esac; done
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result | tojson'
+  _orca_json '.result | tojson' "${args[@]}"
 }
 
 _cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
@@ -286,7 +289,7 @@ _cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
     --worktree) args+=(--worktree "$2"); shift 2 ;;
     *) shift ;; esac; done
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result | tojson'
+  _orca_json '.result | tojson' "${args[@]}"
 }
 
 _cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--provider <a>] [--precheck <c>] [--repo|--workspace|--project <sel>]
@@ -307,7 +310,7 @@ _cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--pro
   [ -n "$ws" ]   && args+=(--workspace "$ws")
   [ -n "$proj" ] && args+=(--project "$proj")
   args+=(--json)
-  orca "${args[@]}" | _json_extract '.result.automation.id // .result.automation // .result.automationId'
+  _orca_json '.result.automation.id // .result.automation // .result.automationId' "${args[@]}"
 }
 
 _cmd_automation_run() {   # <id>
@@ -318,7 +321,7 @@ _cmd_automation_run() {   # <id>
 
 _cmd_automation_list() {
   _require_orca automation-list || return $?
-  orca automations list --json | _json_extract '.result | tojson'
+  _orca_json '.result | tojson' automations list --json
 }
 
 _cmd_automation_remove() {   # <id>
@@ -368,15 +371,41 @@ _cmd_send() {
 }
 _cmd_clear() { _send_text "$1" "/clear"; }
 
+# Cancel a running/wedged agent turn by sending Ctrl-C (0x03). A bare Enter is
+# NOT a safe nudge — for a TUI REPL like Antigravity it submits a blank turn and
+# starts junk generation. Ctrl-C interrupts generation (and, sent twice, exits the
+# REPL to the shell, which freezes the scrollback for a clean full-buffer read).
+_cmd_interrupt() {   # <agent>
+  local agent="$1" sub target; sub="$(_detect_substrate)" || return 1
+  target="$(_resolve_target "$agent")" || return 1
+  case "$sub" in
+    cmux) cmux send-key --surface "$target" C-c ;;
+    orca) orca terminal send --terminal "$target" --text $'\x03' ;;
+  esac
+}
+
 _cmd_read() {
+  # --lines <n> tails the last n lines (default 50). --cursor <n> reads from an
+  # absolute cursor offset (orca only) so a report longer than the retained
+  # viewport can be recovered; --from-start is shorthand for --cursor 0 with a
+  # large limit, for capturing a full sentinel-framed report the tail truncated.
   local agent="$1"; shift
-  local lines=50
-  while [ $# -gt 0 ]; do case "$1" in --lines) lines="$2"; shift 2 ;; *) shift ;; esac; done
+  local lines=50 cursor=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --lines) lines="$2"; shift 2 ;;
+    --cursor) cursor="$2"; shift 2 ;;
+    --from-start) cursor="0"; lines="4000"; shift ;;
+    *) shift ;; esac; done
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
     cmux) cmux read-screen --surface "$target" --lines "$lines" ;;
-    orca) orca terminal read --terminal "$target" --limit "$lines" ;;
+    orca)
+      if [ -n "$cursor" ]; then
+        orca terminal read --terminal "$target" --cursor "$cursor" --limit "$lines"
+      else
+        orca terminal read --terminal "$target" --limit "$lines"
+      fi ;;
   esac
 }
 
@@ -461,6 +490,7 @@ main() {
     env)    _cmd_env "$@" ;;
     send)   _cmd_send "$@" ;;
     clear)  _cmd_clear "$@" ;;
+    interrupt) _cmd_interrupt "$@" ;;
     read)   _cmd_read "$@" ;;
     wait)   _cmd_wait "$@" ;;
     alive)  _cmd_alive "$@" ;;
