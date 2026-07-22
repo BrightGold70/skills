@@ -126,12 +126,18 @@ agent mapping via `scripts/h_mad_telemetry.py` so the run log states which envir
 it dispatched under. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
-**Pin the agents once (Orca).** Immediately after a clean `env` under orca, run
-`hmad-dispatch pin-agents` to freeze the resolved codex+agy handles into the
-session pin file. Auto-detect by preview **decays** mid-run — once an agent works,
-its `gpt-N`/model banner scrolls out of the Orca preview and `resolve` can go
-UNRESOLVED (H4). Pinning makes every later dispatch deterministic; the env-var pin
-still overrides, and `pin-agents --clear` resets. Skip on cmux (surface pins there).
+**Pin the agents once (Orca) — do it while identity is known.** Immediately after
+a clean `env` under orca, run `hmad-dispatch pin-agents` to freeze the resolved
+codex+agy handles into the session pin file, so later dispatches survive preview
+decay. **Codex has no stable auto-identity**: its Orca title is the worktree name
+and its preview banner (`gpt-N`/`OpenAI Codex`) scrolls off once it works — so
+auto-detect only finds Codex on a **fresh** pane. `pin-agents` therefore **fails
+loud (rc=1)** if it cannot resolve an agent, naming the missing one and the exact
+env var to set; a run must not proceed with Codex unpinned. If Codex does not
+auto-resolve, read its handle from `orca terminal list` and
+`export HMAD_ORCA_CODEX_TERMINAL=<handle>` (ideally captured right after launching
+Codex, before it works), then re-run `pin-agents`. The env-var pin always
+overrides; `pin-agents --clear` resets. Skip on cmux (surface pins there).
 
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.

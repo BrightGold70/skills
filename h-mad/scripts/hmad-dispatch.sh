@@ -226,14 +226,27 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
   local pf; pf="$(_pin_file)"
   case "${1:-}" in --clear) rm -f "$pf"; echo "[H-MAD] pins cleared: $pf" >&2; return 0 ;; esac
   local dir; dir="$(dirname "$pf")"; [ -d "$dir" ] || mkdir -p "$dir"
-  local a U var handle wrote=0 tmp; tmp="$(mktemp)"
+  local a U var handle tmp unresolved=""; tmp="$(mktemp)"
   for a in codex agy; do
     U="$(printf '%s' "$a" | tr '[:lower:]' '[:upper:]')"; var="HMAD_ORCA_${U}_TERMINAL"
     if [ -n "${!var:-}" ]; then handle="${!var}"; else handle="$(_orca_find "$a" 2>/dev/null || true)"; fi
-    if [ -n "$handle" ]; then printf '%s=%s\n' "$a" "$handle" >> "$tmp"; echo "[H-MAD] pinned $a -> $handle" >&2; wrote=1; fi
+    if [ -n "$handle" ]; then
+      printf '%s=%s\n' "$a" "$handle" >> "$tmp"; echo "[H-MAD] pinned $a -> $handle" >&2
+    else
+      unresolved="${unresolved:+$unresolved }$a"
+      # Codex especially: title = worktree name and the preview banner decays once
+      # the pane works, so auto-detect has no stable signal. The ONLY durable path
+      # is an explicit handle pin captured while identity is known (a fresh launch).
+      echo "[H-MAD] pin-agents: $a UNRESOLVED — set HMAD_ORCA_${U}_TERMINAL=<handle> (auto-detect fails once the pane's banner decays; \`orca terminal list\` shows the handles)" >&2
+    fi
   done
-  if [ "$wrote" = 1 ]; then mv "$tmp" "$pf"; printf '%s\n' "$pf"; return 0; fi
-  rm -f "$tmp"; echo "[H-MAD] pin-agents: neither agent resolved; nothing written" >&2; return 1
+  # Persist whatever resolved — a partial pin still freezes the resolved agent.
+  if [ -s "$tmp" ]; then mv "$tmp" "$pf"; printf '%s\n' "$pf"; else rm -f "$tmp"; fi
+  # Fail LOUD on ANY unresolved agent: a run must never proceed believing both
+  # agents are addressable when one silently is not. rc=1 forces the operator to
+  # pin it before dispatching (H4 follow-up — the silent rc=0 partial was the bug).
+  [ -z "$unresolved" ] || { echo "[H-MAD] pin-agents: unresolved: $unresolved (run cannot dispatch to it until pinned)" >&2; return 1; }
+  return 0
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile

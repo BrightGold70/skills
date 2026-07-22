@@ -321,6 +321,26 @@ def test_pin_agents_writes_resolved_handles(tmp_path):
     assert "agy=t-agy" in written
 
 
+def test_pin_agents_fails_loud_on_unresolved(tmp_path):
+    # H4 follow-up: Codex has no reliable auto-identity (title = worktree, preview
+    # decays). pin-agents must NOT return 0 when an agent is unresolved — a silent
+    # partial pin let a run proceed believing both agents were addressable. It
+    # still persists the agent that DID resolve, but exits non-zero and names the
+    # missing agent + the exact env var to pin.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    # agy resolves via env pin; codex has no pin and the terminal list is empty
+    # → auto-detect finds nothing → UNRESOLVED.
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_AGY_TERMINAL": "t-agy",
+                 "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+    assert r.returncode != 0
+    assert "codex" in r.stderr
+    assert "HMAD_ORCA_CODEX_TERMINAL" in r.stderr
+    assert "agy=t-agy" in pins.read_text()   # the resolved agent is still frozen
+
+
 def test_pin_agents_clear_removes_file(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     pins = tmp_path / "pins.env"

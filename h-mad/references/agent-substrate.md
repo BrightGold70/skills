@@ -24,7 +24,7 @@ which differs per install and per checkout.
 |------|---------|
 | `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping (run at Phase-5/audit preflight) |
 | `hmad-dispatch resolve <codex\|agy>` | Resolve one agent to its handle; stdout + exit 0/1/2 |
-| `hmad-dispatch pin-agents [--clear]` | Resolve codex+agy ONCE and freeze the handles into the session pin file (`${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`). Run after the Phase-5 preflight so later dispatches survive preview decay (H4); `--clear` removes the file |
+| `hmad-dispatch pin-agents [--clear]` | Resolve codex+agy ONCE and freeze the handles into the session pin file (`${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`). Run after the Phase-5 preflight so later dispatches survive preview decay (H4). **Fails loud (rc=1)** if it can't resolve an agent — Codex has no stable auto-identity, so pin `HMAD_ORCA_CODEX_TERMINAL` at launch; `--clear` removes the file |
 | `hmad-dispatch send <codex\|agy> <promptfile>` | Dispatch + submit; inlines below the size threshold, otherwise file-indirection (see below) |
 | `hmad-dispatch read <codex\|agy> [--lines N] [--cursor N \| --from-start]` | Scrape the agent screen to stdout. `--cursor N` reads from an absolute offset; `--from-start` (= `--cursor 0 --limit 4000`) recovers a report longer than the retained tail viewport |
 | `hmad-dispatch wait <codex\|agy> [--timeout S]` | Block until the agent is idle — confirmed by two identical reads, not taken on trust (see below) |
