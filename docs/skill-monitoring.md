@@ -60,4 +60,24 @@ Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`
 
 - 🟡 **F14 — audit gate only counted bullet-prefixed findings; prose/numbered/blockquote findings scored PASS.** `FIXED` 2026-07-22. `classify()` now decides per section on the line *payload* (bullet remainder, else the line itself): a section is clean ONLY if every payload is the `None` sentinel; otherwise it has findings — counted as the number of `-`/`*`/`•` bullets, or 1 when the content is non-`None` but bullet-less (prose / `1.` numbered / `> blockquote` / stray note). A wrapped multi-line bullet still counts once (continuation lines aren't bullets, so they don't add). This is fail-safe: an off-template finding now FAILs the gate (human reformats) instead of silently passing. Trade-off: an off-template *reassurance* note under a section also FAILs — reviewers must write `None` for a clean section, per the template contract. Supersedes the earlier bullet-space-only handling of markdown emphasis.
 
+## Handoff/merge-gate Orca-wiring audit (2026-07-22, post-ship review)
+
+Found by auditing the shipped handoff + merge-gate against the **real** Orca payload/CLI (the reconcile was verified by mocked unit tests + doc review, never run live — [[feedback_tracer_bullet_before_ceremony]]). All FIXED on `feature/187-orca-reconcile-and-gate-fixes`.
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| G1 | 🔴 | FIXED | handoff READ read wrong JSON path — payload is `{"worktree":{…}}`, prose said `.branch`/`.comment` → now `.worktree.branch` etc. |
+| G2 | 🔴 | FIXED | branch-format mismatch — `worktree-current` returns `refs/heads/main`, doc uses `main` → prose now strips `refs/heads/` before compare |
+| G3 | 🟡 | FIXED | `worktree-ps` shape `{"worktrees":[…],"truncated"}` + truncation now documented (iterate `.worktrees[]`, surface `truncated`, `--limit`) |
+| G4 | 🟡 | FIXED | merge-gate blocking path had no wait mechanism — added `hmad-dispatch gate-wait <id>` (polls `gate-list`); orchestration-mode blocking paths now use it, not `await` |
+| G5 | 🟡 | FIXED | orchestration needed a manual coordinator pin — `_coordinator()` now auto-detects from `ORCA_PANE_KEY` leafId → `terminal list`; `orchestration: on` with no setup |
+| G6 | 🟢 | FIXED | WRITE stamp clobbered a foreign worktree comment — prose now reads `.worktree.comment` first and appends to a non-skill note instead of overwriting |
+
+- 🔴 **G1** — `worktree-current` payload is `{"worktree":{branch,path,comment,…}}`; the handoff READ reconcile read `.branch`/`.path`/`.comment` (one level too shallow). Fixed to `.worktree.*`. Live-confirmed shape.
+- 🔴 **G2** — `.worktree.branch` is a full ref (`refs/heads/main`); the handoff doc's Branch field + `git rev-parse --abbrev-ref` use the short name → naive compare = permanent phantom divergence. Prose now strips `refs/heads/`.
+- 🟡 **G3** — `worktree-ps` returns `{"worktrees":[…],"totalCount","truncated"}`; prose now iterates `.worktrees[]`, strips `refs/heads/`, and surfaces `truncated` (cap raised via `--limit`).
+- 🟡 **G4** — only `gate-create`/`gate-resolve` existed; a "blocking" gate could be opened but not waited on (`await` waits for `worker_done`, not gates). Added `gate-wait <id> [--timeout][--interval]` polling `orchestration gate-list`. **Fails closed** (review hardening): resolves only on `.resolution` present OR `.status == "resolved"` — any other status (`open`/`created`/`waiting`/`pending`) keeps polling, so a blocking merge gate never proceeds on an ambiguous state (worst case = spurious timeout, the correct bias). Live-verified clean timeout; `test_gate_wait_fails_closed_on_non_resolved_status` locks it. Residual caveat: the exact resolved-gate `.resolution`/`.status` field names still want one live *resolved*-gate capture — the live-captured create fixture shows `status:pending, resolution:null`, so the fail-closed check is safe regardless.
+- 🟡 **G5** — `_coordinator()` auto-detects from `ORCA_PANE_KEY="<tabId>:<leafId>"` → matches a terminal's `.leafId` in `terminal list`. Live-verified: `orchestration: on` with no `HMAD_ORCA_COORDINATOR_TERMINAL`. Pin still overrides.
+- 🟢 **G6** — WRITE stamp now reads the current comment first; a foreign (non-`handoff:`/`h-mad`) note is appended to, not clobbered.
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._

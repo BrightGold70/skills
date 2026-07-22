@@ -58,6 +58,9 @@ def run(args, *, substrate=None, env=None, capture=None):
     e.pop("CMUX_PANE", None)
     e.pop("ORCA_SESSION", None)
     e.pop("ORCA_TERMINAL_ID", None)
+    # ORCA_PANE_KEY drives coordinator auto-detect; strip the ambient one so a
+    # host Orca session can't leak into stub-only tests (tests set it explicitly).
+    e.pop("ORCA_PANE_KEY", None)
     # F13: strip every HMAD_ORCA_* pin (coordinator + agent terminal handles).
     # A live h-mad Orca session exports these, and the identity/coordinator tests
     # assume an unpinned environment — leaked pins made 8 tests fail spuriously
@@ -412,6 +415,82 @@ def test_task_create_rejects_ok_false_envelope(tmp_path):
                  "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
     assert r.returncode != 0
     assert r.stdout == ""
+
+
+_TERMS_WITH_LEAF = '{"ok":true,"result":{"terminals":[{"handle":"term_coord","leafId":"leaf-1"}]}}'
+
+
+def test_coordinator_autodetect_makes_orchestration_on(tmp_path):
+    # G5: with codex/agy pinned and ORCA_PANE_KEY matching a terminal's leafId,
+    # the coordinator resolves WITHOUT HMAD_ORCA_COORDINATOR_TERMINAL → orchestration on.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "ORCA_PANE_KEY": "tab-9:leaf-1",
+                 "HMAD_ORCA_CODEX_TERMINAL": "t-c", "HMAD_ORCA_AGY_TERMINAL": "t-a",
+                 "HMAD_STUB_ORCA_STDOUT": _TERMS_WITH_LEAF})
+    assert r.returncode == 0
+    assert "orchestration: on" in r.stdout
+
+
+def test_coordinator_autodetect_absent_pane_key_is_off(tmp_path):
+    # G5: no pin and no ORCA_PANE_KEY → coordinator unresolved → orchestration off.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-c", "HMAD_ORCA_AGY_TERMINAL": "t-a"})
+    assert r.returncode == 0
+    assert "orchestration: off" in r.stdout
+
+
+def test_coordinator_pin_wins_over_autodetect(tmp_path):
+    # G5: an explicit pin is authoritative even when auto-detect could resolve.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    spec = tmp_path / "spec.txt"; spec.write_text("do the thing")
+    r = run(["task-create", "label", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_pinned",
+                 "ORCA_PANE_KEY": "tab-9:leaf-1",
+                 "HMAD_STUB_ORCA_STDOUT": '{"ok":true,"result":{"task":{"id":"task_1"}}}'},
+            capture=cap)
+    assert r.returncode == 0
+    # the pinned handle must appear as the worker_done --to line in the task spec
+    assert "term_pinned" in cap.read_text()
+
+
+def test_gate_wait_returns_resolution(tmp_path):
+    # G4: a resolved gate → gate-wait echoes its resolution, exit 0.
+    b = _bindir(tmp_path, ["orca"])
+    resolved = '{"ok":true,"result":{"gates":[{"id":"g1","status":"resolved","resolution":"yes"}]}}'
+    r = run(["gate-wait", "g1", "--timeout", "2", "--interval", "0"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": resolved})
+    assert r.returncode == 0
+    assert r.stdout.strip() == "yes"
+
+
+def test_gate_wait_times_out_on_pending(tmp_path):
+    # G4: gate still pending (empty list) → clean non-zero timeout, no hang.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["gate-wait", "g1", "--timeout", "0", "--interval", "0"], substrate="orca",
+            env={"_BINDIR": b})
+    assert r.returncode != 0
+    assert "timed out" in r.stderr
+
+
+def test_gate_wait_fails_closed_on_non_resolved_status(tmp_path):
+    # G4 hardening: a gate with a non-"resolved" status (open/created/waiting) and
+    # no resolution must NOT be treated as resolved — a blocking merge gate must
+    # fail closed (keep polling → timeout), never proceed on an ambiguous state.
+    b = _bindir(tmp_path, ["orca"])
+    openish = '{"ok":true,"result":{"gates":[{"id":"g1","status":"open","resolution":null}]}}'
+    r = run(["gate-wait", "g1", "--timeout", "0", "--interval", "0"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": openish})
+    assert r.returncode != 0
+    assert "timed out" in r.stderr
+
+
+def test_gate_wait_requires_orca(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["gate-wait", "g1"], substrate="cmux", env={"_BINDIR": b})
+    assert r.returncode == 2
 
 
 def test_wait_orca_uses_native_idle(tmp_path):

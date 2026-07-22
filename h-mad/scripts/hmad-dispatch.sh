@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -53,13 +53,24 @@ _orca_json() {
 }
 
 _coordinator() {  # echo the coordinator handle or fail with a message
-  if [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_COORDINATOR_TERMINAL"
-  else echo "hmad-dispatch: set HMAD_ORCA_COORDINATOR_TERMINAL (the H-MAD coordinator's Orca terminal handle)" >&2; return 1; fi
+  if [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]; then printf '%s\n' "$HMAD_ORCA_COORDINATOR_TERMINAL"; return 0; fi
+  # Auto-detect (orca): Orca exports ORCA_PANE_KEY="<tabId>:<leafId>" into each
+  # pane. The coordinator is THIS pane, whose leafId matches a terminal's `.leafId`
+  # in `orca terminal list`. This removes the manual pin as a precondition for
+  # orchestration mode; the pin still wins when set.
+  if [ -n "${ORCA_PANE_KEY:-}" ]; then
+    local leaf handle
+    leaf="${ORCA_PANE_KEY##*:}"
+    handle="$(orca terminal list --json 2>/dev/null \
+      | jq -r --arg l "$leaf" '.result.terminals[]? | select(.leafId == $l) | .handle' 2>/dev/null | head -1)"
+    if [ -n "$handle" ]; then printf '%s\n' "$handle"; return 0; fi
+  fi
+  echo "hmad-dispatch: no coordinator — set HMAD_ORCA_COORDINATOR_TERMINAL (auto-detect from ORCA_PANE_KEY failed)" >&2; return 1
 }
 
-_orchestration_active() {  # 0 iff substrate=orca AND coordinator pinned
+_orchestration_active() {  # 0 iff substrate=orca AND a coordinator resolves (pin or auto-detect)
   local sub; sub="$(_detect_substrate)" 2>/dev/null || return 1
-  [ "$sub" = "orca" ] && [ -n "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" ]
+  [ "$sub" = "orca" ] && _coordinator >/dev/null 2>&1
 }
 
 _cmux_find() {
@@ -209,6 +220,39 @@ _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
   _require_orca gate-resolve || return $?
   _need "${1:-}" gate_id || return $?; _need "${2:-}" resolution || return $?
   orca orchestration gate-resolve --id "$1" --resolution "$2" --json
+}
+
+_cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
+  # Block until a decision gate is resolved (by a human in the Orca UI, or by
+  # gate-resolve), then echo its resolution. gate-create only opens a gate; this
+  # is the missing half that lets a blocking gate actually block-and-resume.
+  # Polls `orchestration gate-list` because there is no push/wait for a gate.
+  _require_orca gate-wait || return $?
+  _need "${1:-}" gate_id || return $?
+  local gate="$1"; shift
+  local timeout=600 interval="${HMAD_GATE_POLL_INTERVAL:-5}"
+  while [ $# -gt 0 ]; do case "$1" in
+    --timeout) timeout="$2"; shift 2 ;; --interval) interval="$2"; shift 2 ;;
+    *) shift ;; esac; done
+  local elapsed=0 res tick="$interval"
+  [ "$tick" -lt 1 ] && tick=1
+  while [ "$elapsed" -le "$timeout" ]; do
+    # Resolved iff .resolution is set OR .status is explicitly "resolved". This
+    # fails CLOSED: any other status (pending/open/created/waiting/…) keeps
+    # polling rather than treating "not pending" as resolved — a blocking merge
+    # gate must never proceed on an ambiguous state. Worst case is a spurious
+    # timeout, the correct bias for a gate. Echo the resolution.
+    res="$(orca orchestration gate-list --json 2>/dev/null \
+      | jq -r --arg g "$gate" '
+          .result.gates[]? | select(.id == $g)
+          | select(((.resolution // "") != "") or ((.status // "") == "resolved"))
+          | (.resolution // .status) // empty' 2>/dev/null | head -1)"
+    if [ -n "$res" ]; then printf '%s\n' "$res"; return 0; fi
+    [ "$interval" -gt 0 ] && sleep "$interval"
+    elapsed=$((elapsed + tick))
+  done
+  echo "[H-MAD] gate-wait timed out after ${timeout}s (gate=$gate still pending)" >&2
+  return 1
 }
 
 _cmd_worktree_comment() {  # [<selector>] <text>
@@ -500,6 +544,7 @@ main() {
     await) _cmd_await "$@" ;;
     gate-create) _cmd_gate_create "$@" ;;
     gate-resolve) _cmd_gate_resolve "$@" ;;
+    gate-wait) _cmd_gate_wait "$@" ;;
     worktree-comment) _cmd_worktree_comment "$@" ;;
     worktree-create) _cmd_worktree_create "$@" ;;
     worktree-current) _cmd_worktree_current "$@" ;;
