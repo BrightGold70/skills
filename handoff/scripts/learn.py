@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -68,20 +67,22 @@ Search via `grep <term> docs/learnings.md` or
 """
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from handoff_paths import canonical_root, learnings_path  # noqa: E402
+
+
 def _project_root() -> Path:
-    """Resolve project root: git toplevel → cwd."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, check=True
-        )
-        return Path(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return Path.cwd()
+    """Canonical (main-worktree) root — shared across Orca linked worktrees.
+
+    Delegates to handoff_paths.canonical_root so learnings written from any
+    worktree land in ONE `docs/learnings.md` at the main worktree, rather than
+    fragmenting per-worktree (and vanishing when a worktree is removed).
+    """
+    return canonical_root()
 
 
 def _learnings_path() -> Path:
-    return _project_root() / "docs" / "learnings.md"
+    return learnings_path()
 
 
 class LearningLine:

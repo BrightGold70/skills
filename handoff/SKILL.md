@@ -61,8 +61,9 @@ This Step 0 fast-forward (clean-tree only) is the "sync remote and local before 
 Locate on the now-synced tree (Step 0). Check, in order:
 
 1. **Explicit path in the user's message** — if they paste or type a path, use it.
-2. **`docs/handoffs/` in the current project** — list files, sort by name (ISO date prefix), take the newest. Confirm with the user if there are multiple candidates with different slugs.
-3. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
+2. **This branch's newest handoff in the canonical store** — `python3 <skill>/scripts/handoff_paths.py latest --branch "$(python3 <skill>/scripts/handoff_paths.py branch-slug)"`. This resolves the shared main-worktree `docs/handoffs/` and prefers a handoff written on the branch you are resuming, so a parallel Orca session on another branch can't hand you the wrong one.
+3. **Repo-wide newest in the canonical store** — `handoff_paths.py latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work.
+4. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
 
 If no handoff is found after these checks, tell the user ("No handoff found for this project — nothing to resume from") and stop. Don't fabricate a handoff.
 
@@ -266,7 +267,7 @@ Before you write anything, collect these in parallel:
    - Check whether each plan has a corresponding `docs/04-report/features/<name>.report.md` (or equivalent). A plan without a report is a candidate "unimplemented" entry; cross-check the codebase or session for evidence it actually shipped before flagging.
    - Skip silently if the project has no such structure. Don't fabricate one. The point is to surface backlog signal that already exists, not invent a tracking system.
 5. **Live processes** — if the session launched any long-running background work that's still alive at the moment of writing (multi-hour ingests, soak tests, build pipelines, daemons started for testing): capture PID, the exact command (one line), the log path, started-at, elapsed, and a one-line "what to verify on exit". This populates the **In-Flight Processes** section. Skip silently if nothing is in flight — most sessions don't have any. The check costs nothing (`ps -p $! -o pid,etime` for each backgrounded job, or `pgrep -f <substring>` for processes the operator launched manually) and the value to a future resume is enormous: without it, the next session has to reverse-engineer "is this still going?" from log mtimes and ambiguous output.
-6. **Worktree state** — if `git rev-parse --show-toplevel` returns a path containing `.claude/worktrees/<name>/`, the session ran in a worktree. Also capture the parent repo's branch (`git -C <parent> rev-parse --abbrev-ref HEAD`) so the handoff names both. The worktree's "to resume" `cd` should point at the worktree root, not the parent.
+6. **Worktree state** — the session ran in a linked worktree if EITHER `git rev-parse --show-toplevel` contains `.claude/worktrees/<name>/` (Claude Code convention) OR it differs from `python3 <skill>/scripts/handoff_paths.py root` (any linked worktree, including **Orca's** sibling-dir layout; under Orca, `hmad-dispatch worktree-current` also reports `.worktree.isMainWorktree == false`). In that case capture the worktree root, its branch, AND the main-worktree root + branch (`git -C <main> rev-parse --abbrev-ref HEAD`) so the handoff names both. The "to resume" `cd` points at the worktree root, not the main repo. (The handoff *file* still lives in the canonical/main store — §Save — so siblings can find it.)
 7. **Session observations** — if `~/.claude/homunculus/observations.jsonl` exists, read the last 50 lines. These structured observations often surface gotchas not explicit in the conversation. Use them to enrich Key Learnings extraction. Skip silently if absent.
    ```bash
    OBS_FILE="$HOME/.claude/homunculus/observations.jsonl"
@@ -367,7 +368,14 @@ git checkout <branch>
 
 If `--dry-run` was set: print the drafted doc to stdout and **stop here**. Do not save, commit, or run scout.
 
-1. Save the file to `docs/handoffs/YYYY-MM-DD-<slug>.md` in the project root.
+1. Save the file to the **canonical, worktree-shared** handoffs dir, with the branch in the name so concurrent Orca sessions on different branches don't collide:
+   ```bash
+   DIR="$(python3 <skill>/scripts/handoff_paths.py dir)"      # main-worktree docs/handoffs (shared by all linked worktrees)
+   BR="$(python3 <skill>/scripts/handoff_paths.py branch-slug)"
+   mkdir -p "$DIR"
+   FILE="$DIR/$(date +%F)-$BR-<slug>.md"
+   ```
+   `handoff_paths.py dir` resolves to the **main worktree** (`git rev-parse --git-common-dir` → parent), not the current linked worktree — so every parallel Orca worktree reads/writes ONE store, and the handoff survives when a worktree is archived/removed. **Concurrency guard:** if `$FILE` already exists (a live sibling session wrote the same branch+slug today), do NOT overwrite — append a short discriminator (`-2`, `-<time>`) so both survive.
 2. Update `~/.claude/handoffs/INDEX.md` (one-line entry, newest first — see §"Update the central index").
 3. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
 4. Proceed to §"Update persistent auto-memories" unless `--skip-memories` was set.
