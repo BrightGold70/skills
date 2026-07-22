@@ -220,7 +220,11 @@ _cmd_dispatch() {  # $1 agent, $2 task_id
   # without it Orca returns the text and delivers nothing, so worker_done
   # never fires and await times out. --return-preamble additionally echoes
   # the text back to the coordinator for logging.
-  orca orchestration dispatch --task "$2" --to "$target" --inject --return-preamble --json
+  # Routed through _orca_json ('.' re-emits the whole envelope) so an exit-0
+  # "ok":false error is surfaced on stderr + non-zero rather than echoed as a
+  # phantom-success stdout — otherwise a failed dispatch reads as delivered and
+  # await times out with no diagnostic (F11 scope, extended to the raw verbs).
+  _orca_json '.' orchestration dispatch --task "$2" --to "$target" --inject --return-preamble --json
 }
 
 _cmd_await() {  # $1 task_id, [--timeout <s>]
@@ -230,7 +234,13 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   local timeout=600
   while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
   local coord; coord="$(_coordinator)" || return 1
-  orca orchestration check --terminal "$coord" --wait --types worker_done --timeout-ms "$(( timeout * 1000 ))" --json \
+  # Guard the check response through _orca_json first ('.' re-emits the whole
+  # envelope, ok-checked), THEN run the worker_done filter. A raw pipe swallowed
+  # an exit-0 "ok":false as `[]` → empty match → indistinguishable from "no
+  # worker_done yet" → silent timeout (F11 scope, extended to the raw verbs).
+  local checked
+  checked="$(_orca_json '.' orchestration check --terminal "$coord" --wait --types worker_done --timeout-ms "$(( timeout * 1000 ))" --json)" || return $?
+  printf '%s' "$checked" \
     | jq -c --arg t "$task" '
         (.result.messages // .messages // [])
         | map(select(
@@ -254,7 +264,9 @@ _cmd_gate_create() {  # $1 task_id, $2 question, [$3 options-json]
 _cmd_gate_resolve() {  # $1 gate_id, $2 resolution
   _require_orca gate-resolve || return $?
   _need "${1:-}" gate_id || return $?; _need "${2:-}" resolution || return $?
-  orca orchestration gate-resolve --id "$1" --resolution "$2" --json
+  # _orca_json guard: an exit-0 "ok":false must surface, not read as a phantom
+  # successful resolution (F11 scope, extended to the raw verbs).
+  _orca_json '.' orchestration gate-resolve --id "$1" --resolution "$2" --json
 }
 
 _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]

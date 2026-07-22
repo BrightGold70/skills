@@ -576,6 +576,46 @@ def test_task_create_rejects_ok_false_envelope(tmp_path):
     assert r.stdout == ""
 
 
+def test_dispatch_rejects_ok_false_envelope(tmp_path):
+    # F11 extension: the raw-JSON `dispatch` verb must not swallow an exit-0
+    # `"ok":false` envelope. Without the guard it echoes the error as stdout and
+    # returns 0 → the coordinator believes the task was delivered and `await`
+    # then times out with no diagnostic. The codex pin makes _resolve_target
+    # succeed without an orca call, so the failure is the dispatch call itself.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["dispatch", "codex", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1",
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert r.stdout == ""
+
+
+def test_gate_resolve_rejects_ok_false_envelope(tmp_path):
+    # F11 extension: `gate-resolve` must surface an error envelope, not report a
+    # phantom successful resolution (exit 0 + error JSON on stdout).
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["gate-resolve", "gate_1", "approved"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert r.stdout == ""
+
+
+def test_await_rejects_ok_false_envelope(tmp_path):
+    # F11 extension: `await` piped a raw `check` response into jq; an `"ok":false`
+    # envelope yielded `[]` → empty match → looked like "no worker_done yet" and
+    # timed out silently. The guard must surface it instead. Coordinator pin makes
+    # _coordinator succeed without an orca call.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["await", "task_1", "--timeout", "5"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1",
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert r.stdout == ""
+
+
 _TERMS_WITH_LEAF = '{"ok":true,"result":{"terminals":[{"handle":"term_coord","leafId":"leaf-1"}]}}'
 
 
