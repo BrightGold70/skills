@@ -174,6 +174,19 @@ class TestConventionIsDocumented:
         assert "{{ONLY:" in s
         assert "unresolved_conditional" in s, "preflight must halt on a surviving marker"
 
+    def test_duplication_check_does_not_hardcode_the_project_rubric_heading(self):
+        """The project invariants heading is project-authored -- HemaSuite's reads
+        '# HPW Project Axis B Invariants'. A hardcoded needle reports a false 0
+        everywhere except this repo, which reads as 'no project layer inlined'."""
+        s = SKILL_MD.read_text(encoding="utf-8")
+        preflight = s[s.index("Residual-placeholder preflight") :][:2500]
+        assert "head -1" in preflight, (
+            "derive the duplication needle from the invariants file's own first line"
+        )
+        assert "grep -c 'H-MAD Project Invariants" not in preflight, (
+            "hardcoded project rubric heading is repo-specific"
+        )
+
     def test_orchestrator_note_carries_the_convention_and_is_stripped(self):
         """The convention is orchestrator guidance, so it belongs in the note —
         which means it cannot leak to the reviewer even if it is verbose."""

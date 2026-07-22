@@ -400,11 +400,16 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
      echo "HALT <phase>:unfilled_slot" || echo "slots OK"
    grep -n '{{' "$P" && \
      echo "HALT <phase>:unresolved_conditional" || echo "conditionals OK"
-   # duplication check — each rubric must appear exactly once.
-   # Do NOT anchor these to '^': a stray copy spliced into a blockquote is prefixed
-   # '> # H-MAD …', so an anchored grep reports a clean 1 while the prompt carries 2.
-   grep -c 'H-MAD Base Invariants — Axis B' "$P"      # must be 1
-   grep -c 'H-MAD Project Invariants — Axis B' "$P"   # must be 1 (0 if no project file)
+   # Duplication check — each rubric must appear exactly once. Derive the needle from
+   # each inlined file's own first line: the PROJECT invariants heading is written by
+   # the project (HemaSuite's reads "# HPW Project Axis B Invariants"), so a hardcoded
+   # heading reports a false 0 in every repo but the one it was written against.
+   # Do NOT anchor to '^': a stray copy spliced into a blockquote is prefixed '> # …',
+   # so an anchored grep reports a clean 1 while the prompt carries 2.
+   BASE_MD=~/.claude/skills/h-mad/invariants.base.md
+   PROJ_MD=<PROJECT_ROOT>/.h-mad/invariants.md
+   grep -Fc "$(head -1 "$BASE_MD")" "$P"                          # must be 1
+   [ -s "$PROJ_MD" ] && grep -Fc "$(head -1 "$PROJ_MD")" "$P"     # must be 1 when a project file exists
    ```
    Any hit on either grep, or a count > 1 on either rubric → halt (`<phase>:unfilled_slot` /
    `<phase>:unresolved_conditional`),
