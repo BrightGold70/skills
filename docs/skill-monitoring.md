@@ -147,6 +147,7 @@ is not re-filed.
 | J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
+| J7 | 🔴 | MONITORING | F13 residual: the pin **file** leaks into `test_hmad_dispatch.py` — 17 tests fail whenever agents are pinned, which Phase 5 preflight *requires* |
 
 - 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
   --worktree path:…/skills` read `term_01f69e2d…` from the `orca terminal create` response and
@@ -201,6 +202,25 @@ is not re-filed.
   processed and the frame redrawn). **`clear` behaves as documented.** Recorded so the
   correlation is not re-filed as causation by a future run. Method note: the throwaway-probe
   pattern (`docs/skill-candidates.md`, recurrence 2) is what settled it.
+
+- 🔴 **J7 — F13 is only half closed: the pin FILE leaks where the env vars no longer do.** F13 added
+  every `HMAD_ORCA_*` env var to the strip-list in `test_hmad_dispatch.py::run()`. The session pin
+  file (`.h-mad/orca-pins.env`) is a **second** leak channel that the strip does not touch: it lives
+  in the repo working directory, and the resolver reads it with precedence env → file → auto-detect.
+  Measured on the `cycle-telemetry-fidelity` Phase-5f suite run: **18 failed / 459 passed**. Moving
+  `.h-mad/orca-pins.env` aside and re-running: **477 passed / 0 failed**. Seventeen of the eighteen
+  were pin-file leakage — `test_orca_identity_*`, `test_resolve_agy_*`, `test_agy_does_not_take_a_pane_running_codex`,
+  `test_codex_never_resolves_from_an_inherited_title`, and the agent-signature tests.
+  **Why this is worse than a test nuisance:** SKILL.md Phase 5 preflight *requires*
+  `hmad-dispatch pin-agents` ("a run must not proceed with Codex unpinned"), and Phase 5f *requires*
+  running the full suite. Following the protocol therefore guarantees 17 failures at 5f, on every
+  run, in the repo whose own tests they are. An orchestrator that trusts the suite reads a real
+  regression signal as noise, or worse, deletes its pins to get green and dispatches into nothing.
+  **Fix direction:** point the pin file at a per-session path outside the repo (or honour a
+  `HMAD_ORCA_PIN_FILE` override in the test harness and set it to a tmp path in `run()`), so pinning
+  and testing stop being mutually exclusive. Workaround used this session: keep the pin file absent
+  and pass `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` as env vars, which the resolver
+  prefers anyway. [[F13]] [[J2]]
 
 **Also observed (evidence for existing entries, not new IDs):** `orca terminal create --title
 "agy-probe"` does not stick — `terminal list` reports `title: agy`, the program's own OSC title.
