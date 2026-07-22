@@ -62,7 +62,7 @@ _coordinator() {  # echo the coordinator handle or fail with a message
     local leaf handle
     leaf="${ORCA_PANE_KEY##*:}"
     handle="$(orca terminal list --json 2>/dev/null \
-      | jq -r --arg l "$leaf" '.result.terminals[] | select(.leafId == $l) | .handle' 2>/dev/null | head -1)"
+      | jq -r --arg l "$leaf" '.result.terminals[]? | select(.leafId == $l) | .handle' 2>/dev/null | head -1)"
     if [ -n "$handle" ]; then printf '%s\n' "$handle"; return 0; fi
   fi
   echo "hmad-dispatch: no coordinator — set HMAD_ORCA_COORDINATOR_TERMINAL (auto-detect from ORCA_PANE_KEY failed)" >&2; return 1
@@ -237,11 +237,15 @@ _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
   local elapsed=0 res tick="$interval"
   [ "$tick" -lt 1 ] && tick=1
   while [ "$elapsed" -le "$timeout" ]; do
-    # Resolved iff .resolution is set OR .status left "pending". Echo the resolution.
+    # Resolved iff .resolution is set OR .status is explicitly "resolved". This
+    # fails CLOSED: any other status (pending/open/created/waiting/…) keeps
+    # polling rather than treating "not pending" as resolved — a blocking merge
+    # gate must never proceed on an ambiguous state. Worst case is a spurious
+    # timeout, the correct bias for a gate. Echo the resolution.
     res="$(orca orchestration gate-list --json 2>/dev/null \
       | jq -r --arg g "$gate" '
           .result.gates[]? | select(.id == $g)
-          | select(((.resolution // "") != "") or ((.status // "pending") != "pending"))
+          | select(((.resolution // "") != "") or ((.status // "") == "resolved"))
           | (.resolution // .status) // empty' 2>/dev/null | head -1)"
     if [ -n "$res" ]; then printf '%s\n' "$res"; return 0; fi
     [ "$interval" -gt 0 ] && sleep "$interval"

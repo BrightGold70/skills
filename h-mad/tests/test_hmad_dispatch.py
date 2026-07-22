@@ -475,6 +475,18 @@ def test_gate_wait_times_out_on_pending(tmp_path):
     assert "timed out" in r.stderr
 
 
+def test_gate_wait_fails_closed_on_non_resolved_status(tmp_path):
+    # G4 hardening: a gate with a non-"resolved" status (open/created/waiting) and
+    # no resolution must NOT be treated as resolved — a blocking merge gate must
+    # fail closed (keep polling → timeout), never proceed on an ambiguous state.
+    b = _bindir(tmp_path, ["orca"])
+    openish = '{"ok":true,"result":{"gates":[{"id":"g1","status":"open","resolution":null}]}}'
+    r = run(["gate-wait", "g1", "--timeout", "0", "--interval", "0"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": openish})
+    assert r.returncode != 0
+    assert "timed out" in r.stderr
+
+
 def test_gate_wait_requires_orca(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["gate-wait", "g1"], substrate="cmux", env={"_BINDIR": b})
