@@ -365,7 +365,7 @@ before any `send`/`read`. See `references/agent-substrate.md`.
 
 For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 
-1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`.
+1. Start from `~/.claude/skills/h-mad/audit-prompt.template.md`, **dropping the leading orchestrator note** — every line from `<!-- ORCHESTRATOR-NOTE:START` through `ORCHESTRATOR-NOTE:END -->` inclusive. That block is assembly instructions to you, not reviewer content; left in, the prompt opens by telling the reviewer it is reading a template.
 2. Replace `<INLINE_TARGET_DOC>` with full text of the target doc (plan.md, design.md, or impl-plan.md).
 3. Replace `<INLINE_BASE_INVARIANTS>` with full text of `~/.claude/skills/h-mad/invariants.base.md` (workflow-universal Axis B — always inlined, base before project, regardless of whether a project file exists).
 4. Replace `<INLINE_PROJECT_INVARIANTS>` with full text of `<PROJECT_ROOT>/.h-mad/invariants.md` (domain Axis B). If the project file is absent/empty, leave the slot empty — the base layer still applies.
@@ -377,6 +377,34 @@ For each audit (Phase 3, 4, 5b), assemble the prompt as follows:
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
 6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. See `references/orchestration-mode.md` §"Report-file transport".
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
+7.2. **Residual-placeholder preflight — mandatory, before any `send`.** Substitution is a
+   literal string replace over the whole file, so it is silent in both failure directions: a
+   slot you forgot stays in the prompt as a raw token, and a bracketed slot *mention* in prose
+   gets replaced too, splicing a second copy of a rubric into the middle of a sentence. Neither
+   raises an error; both reach the reviewer. Check:
+   ```bash
+   P=/tmp/audit_<feature>_<phase>_cycle<N>.txt
+   grep -n '<INLINE_\|<AUDIT_SENTINEL>\|<REPORT_FILE_PATH>' "$P" && \
+     echo "HALT <phase>:unfilled_slot" || echo "slots OK"
+   # duplication check — each rubric must appear exactly once.
+   # Do NOT anchor these to '^': a stray copy spliced into a blockquote is prefixed
+   # '> # H-MAD …', so an anchored grep reports a clean 1 while the prompt carries 2.
+   grep -c 'H-MAD Base Invariants — Axis B' "$P"      # must be 1
+   grep -c 'H-MAD Project Invariants — Axis B' "$P"   # must be 1 (0 if no project file)
+   ```
+   Any hit on the first grep, or a count > 1 on either rubric → halt `<phase>:unfilled_slot`,
+   fix the template/invariants file, re-assemble. Do **not** dispatch a prompt that still shows
+   a raw `<INLINE_…>`: the reviewer reads it as an unfilled template and silently discounts the
+   axis it belongs to, which scores as a clean gate on a rubric that was never delivered.
+
+   This is a live failure, not a hypothetical: `<INLINE_BASE_INVARIANTS>` and
+   `<INLINE_PROJECT_INVARIANTS>` were once written **bracketed** inside the template's own
+   header blockquote and inside `invariants.base.md`'s header, so every assembled prompt carried
+   both rubrics twice (measured: 2 copies of each in every `/tmp/audit_*.txt` on this machine —
+   ~4–6 KB of dead bloat against the ~49–53 KB reviewer cliff in step 5.5) and still displayed a
+   raw `<INLINE_BASE_INVARIANTS>` token. **Prose refers to a slot by bare name
+   (`INLINE_BASE_INVARIANTS`); only a real slot is bracketed.** Keep it that way in any new
+   template or invariants file.
 7.5. **On cycle 1 of each audit phase (and after confirming agy is alive via `hmad-dispatch alive agy`), clear agy's context** (see §"Agent-pane context hygiene") so a prior feature's/phase's transcript can't drift the verdict or pollute the scrollback you later grep. Later cycles of the SAME audit reuse the warm context (the running revision thread is wanted).
 8. Dispatch:
    ```bash

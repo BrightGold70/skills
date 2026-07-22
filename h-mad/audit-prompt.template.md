@@ -1,12 +1,19 @@
+<!-- ORCHESTRATOR-NOTE:START — assembly strips everything down to ORCHESTRATOR-NOTE:END; it never reaches the reviewer. -->
 # Audit Prompt Template
 
 > Used by `/h-mad` Phase 3 audit-plan, Phase 4 audit-design, and Phase 5b audit-impl-plan.
-> The orchestrator inlines the target document(s) into the `<INLINE_*>` slots, inlines the
+> The orchestrator inlines the target document(s) into the `INLINE_*` slots, inlines the
 > workflow-universal base rubric from `~/.claude/skills/h-mad/invariants.base.md` into the
-> `<INLINE_BASE_INVARIANTS>` slot and the project's domain rubric from
-> `<PROJECT_ROOT>/.h-mad/invariants.md` into the `<INLINE_PROJECT_INVARIANTS>` slot, stages the result at
+> `INLINE_BASE_INVARIANTS` slot and the project's domain rubric from
+> `<PROJECT_ROOT>/.h-mad/invariants.md` into the `INLINE_PROJECT_INVARIANTS` slot, stages the result at
 > `/tmp/audit_<feature>_<phase>_cycle<N>.txt`, then dispatches agy via `hmad-dispatch send`
 > file-indirection (see `references/agent-substrate.md`).
+>
+> **Slot names are written here WITHOUT their angle brackets on purpose.** Assembly is a
+> literal string replace over the whole file, so a bracketed `<INLINE_…>` mention in this
+> note would be substituted too — splicing a second copy of the rubric into the middle of
+> a blockquote. Prose in this repo refers to slots bare; only a real slot is bracketed.
+<!-- ORCHESTRATOR-NOTE:END -->
 
 You are the agy audit reviewer. Your role this turn:
 - Plan audit: Reviewer.adversarial_consistency

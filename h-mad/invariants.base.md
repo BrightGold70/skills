@@ -1,7 +1,9 @@
 # H-MAD Base Invariants — Axis B (workflow-universal)
 
 > Shipped with the `/h-mad` skill. The orchestrator inlines this file verbatim into the
-> `<INLINE_BASE_INVARIANTS>` slot of every plan / design / impl-plan audit, **before** the
+> `INLINE_BASE_INVARIANTS` slot (name written bare — a bracketed mention inside an inlined
+> file survives substitution and reaches the reviewer as an unfilled-looking placeholder)
+> of every plan / design / impl-plan audit, **before** the
 > per-project `<PROJECT_ROOT>/.h-mad/invariants.md` domain layer. These rules apply to every
 > project that uses `/h-mad` and are **non-overridable by any project file**: a project's
 > invariants file may add domain rules but may not downgrade or delete a base rule. The
