@@ -120,29 +120,54 @@ _orca_find() {
   # including the coordinator's own pane, which could then dispatch to itself.
   # Anchoring to the leading title word also rejects panes like
   # `vim codex_result.py`, exactly as the cmux side does.
-  local token="$1" listing ids n
+  local token="$1" listing ids n self scope_wt scoped
   listing="$(orca terminal list --json)" || return 1
+  # Scope to the coordinator's OWN worktree, and never match its own pane.
+  # Orca runs one agent set per worktree; a parallel run in another worktree
+  # (a HemaSuite pane also titled "agy") would otherwise make the title match
+  # ambiguous (n>1) and resolve nothing. The coordinator is resolved via the
+  # pin or the ORCA_PANE_KEY leafId auto-detect (_coordinator); its worktreePath
+  # is the scope. When no coordinator is resolvable (manual use, stub tests
+  # without ORCA_PANE_KEY), $self and $scope_wt stay empty and matching is
+  # global -- identical to the pre-scoping behaviour.
+  self="$(_coordinator 2>/dev/null || true)"
+  scope_wt=""
+  if [ -n "$self" ]; then
+    scope_wt="$(printf '%s' "$listing" | jq -r --arg h "$self" \
+      '(.result.terminals[]? | select(.handle==$h) | .worktreePath) // empty' | head -1)"
+  fi
+  # Candidate set: same worktree as the coordinator (when known), coordinator's
+  # own pane always excluded (even in Pass 1 -- its title/preview may carry the
+  # token because it renders this conversation).
+  scoped="$(printf '%s' "$listing" | jq -c --arg wt "$scope_wt" --arg self "$self" \
+    '{result:{terminals:[.result.terminals[]?
+       | select($self=="" or .handle != $self)
+       | select($wt=="" or (.worktreePath // "")==$wt)]}}')"
   # Pass 1 -- anchored, case-insensitive TITLE match (identity, not content).
-  ids="$(printf '%s' "$listing" | jq -r --arg t "$token" \
+  ids="$(printf '%s' "$scoped" | jq -r --arg t "$token" \
     '.result.terminals[] | select((.title//"") | test("^" + $t + "([^A-Za-z]|$)"; "i")) | .handle')"
   n="$(printf '%s' "$ids" | grep -c . || true)"
   if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   if [ "$n" -eq 0 ]; then
     # Pass 2 -- preview fallback. Agent panes often carry a generic title (the
     # Codex pane is titled after its worktree) while the preview holds the
-    # launch banner, e.g. "OpenAI Codex (v0.144.6)". Never consider the
-    # coordinator's own pane: its preview renders this conversation, so the
-    # token appears there whenever it is merely discussed, and matching it
-    # would make the coordinator dispatch to itself.
-    ids="$(printf '%s' "$listing" | jq -r --arg t "$token" \
-      --arg self "${HMAD_ORCA_COORDINATOR_TERMINAL:-}" \
-      '.result.terminals[]
-       | select(.handle != $self)
-       | select((.preview//"") | test($t; "i")) | .handle')"
+    # launch banner. The token alone is not always present: a user-launched
+    # Codex shows no "codex" literal, only its model id (e.g. "gpt-5.6-terra")
+    # and persona text; agy may show "Gemini"/"Antigravity". Match an
+    # agent-specific signature set. The coordinator's own pane is already
+    # excluded from $scoped above; a collision yields n>1 -> UNRESOLVED (safe),
+    # never a mis-dispatch.
+    local pv_re="$token"
+    case "$token" in
+      codex) pv_re='codex|gpt-[0-9]' ;;
+      agy)   pv_re='agy|gemini|antigravity' ;;
+    esac
+    ids="$(printf '%s' "$scoped" | jq -r --arg t "$pv_re" \
+      '.result.terminals[] | select((.preview//"") | test($t; "i")) | .handle')"
     n="$(printf '%s' "$ids" | grep -c . || true)"
     if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   fi
-  echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
+  echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates${scope_wt:+ in worktree $scope_wt}; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
   return 1
 }
 

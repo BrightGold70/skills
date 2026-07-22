@@ -93,4 +93,16 @@ Found by auditing the shipped handoff + merge-gate against the **real** Orca pay
   - **Gap 2 (report-file audit cycle) CLOSED:** drove a real audit — assembled `audit-prompt.template.md` with `<REPORT_FILE_PATH>` filled, agy did an Axis-A/B/C review (FR-1/FR-2 `implemented-as-written`), wrote CLEAN markdown to the file, `report-wait` read it, `h_mad_audit_gate.py` scored `GATE: PASS` **directly** — no extract, no dedent, no `•`-normalize. Report-file confirmed as the default audit path in a live cycle.
   - **Gap 3 (`wait` reliability) CLOSED:** `hmad-dispatch wait codex` returned rc=0 in 4s (stability check detected idle, not a timeout) on a stable-TUI agent; the Gemini-only `tui-idle` unreliability is structurally covered by report-file's `.done`-marker completion (Gap 2), so the audit path no longer depends on idle-detection.
 
+## Worktree-scoped identity resolution (2026-07-22, post-handoff)
+
+Surfaced live while preparing follow-on #1 (a `/h-mad` report-file run): `hmad-dispatch env` reported **both** `codex -> UNRESOLVED` and `agy -> UNRESOLVED` despite live agy + Codex panes present. Root-caused via systematic debugging against the real `orca terminal list --json`. Both FIXED (h-mad suite 386/0, +3 RED→GREEN tests; live `env` now resolves both).
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| H1 | 🔴 | FIXED | `_orca_find` matched title/preview across ALL worktrees → 2 panes titled "agy" (skills + HemaSuite) → n=2 → UNRESOLVED; couldn't self-exclude coordinator without a pin |
+| H2 | 🔴 | FIXED | Codex pane title = worktree name, preview banner carries NO "codex" literal (only `gpt-5.6-terra`/"Sol") → token match found nothing → UNRESOLVED |
+
+- 🔴 **H1 — resolution not scoped to the coordinator's worktree.** Orca runs one agent set per worktree; with a HemaSuite pane also titled "agy", the global anchored-title match returned 2 candidates → ambiguous → UNRESOLVED. Self-exclusion also required a manual `HMAD_ORCA_COORDINATOR_TERMINAL` (`$self` was empty otherwise, so the coordinator's own pane could match). Fixed: `_orca_find` now resolves the coordinator via `_coordinator` (pin or `ORCA_PANE_KEY` leafId), scopes candidates to that pane's `worktreePath`, and excludes self in BOTH passes. No pane context (manual/tests) → empty scope → global fallback, backward compatible. Live-verified: `agy -> term_92396979` (skills agy, not the HemaSuite one).
+- 🔴 **H2 — Codex has no "codex" literal in its Orca metadata.** A user-launched Codex pane is titled after its worktree ("skills") and its preview shows only the model id (`gpt-5.6-terra`) + persona ("Sol") — never "codex". Title Pass-1 misses, and the Pass-2 preview fallback grepped for the bare token. Fixed: per-agent preview signature set in Pass-2 — `codex` → `codex|gpt-[0-9]`, `agy` → `agy|gemini|antigravity`. A collision yields n>1 → UNRESOLVED (safe; never a mis-dispatch). Live-verified: `codex -> term_41f3e488`. **Supersedes F9's workaround** — the `HMAD_ORCA_CODEX_TERMINAL` pin is no longer required for a worktree-local Codex (still overrides).
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._

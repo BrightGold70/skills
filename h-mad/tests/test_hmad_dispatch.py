@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -292,6 +293,82 @@ def test_orca_identity_resolves_from_list_json(tmp_path):
             env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned})
     assert "codex -> term_c" in r.stdout
     assert "agy -> term_a" in r.stdout
+
+
+def _orca_terms_full(*terms):
+    """Build an `orca terminal list --json` envelope from full term dicts
+    (handle/title/preview/worktreePath/leafId)."""
+    return json.dumps({"ok": True, "result": {"terminals": list(terms)}})
+
+
+def test_orca_identity_scopes_to_coordinator_worktree(tmp_path):
+    # Multi-worktree Orca: two panes titled "agy", one per worktree. The
+    # coordinator (ORCA_PANE_KEY leafId) lives in worktree A; only A's agy may
+    # resolve. Without worktree scoping the global title match sees 2 "agy"
+    # panes -> ambiguous -> UNRESOLVED (the live 2026-07-22 bug: a HemaSuite agy
+    # made the skills agy unresolvable).
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_coordA", "title": "coordinator", "preview": "driving h-mad",
+         "worktreePath": "/repo/A", "leafId": "leaf-A"},
+        {"handle": "term_agyA", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A2"},
+        {"handle": "term_agyB", "title": "agy", "preview": "",
+         "worktreePath": "/repo/B", "leafId": "leaf-B2"},
+        {"handle": "term_codexA", "title": "Codex - A", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A3"},
+        {"handle": "term_codexB", "title": "Codex - B", "preview": "",
+         "worktreePath": "/repo/B", "leafId": "leaf-B3"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "ORCA_PANE_KEY": "tab-1:leaf-A"})
+    assert "agy -> term_agyA" in r.stdout
+    assert "codex -> term_codexA" in r.stdout
+    assert "term_agyB" not in r.stdout
+    assert "term_codexB" not in r.stdout
+
+
+def test_orca_identity_excludes_coordinator_own_pane_by_autodetect(tmp_path):
+    # The coordinator's own pane can carry the agent token in its title/preview
+    # (it renders this conversation). Auto-detect via ORCA_PANE_KEY must exclude
+    # it WITHOUT needing HMAD_ORCA_COORDINATOR_TERMINAL pinned — the live gap
+    # where $self was empty so the coordinator could match itself.
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_self", "title": "agy notes", "preview": "codex and agy",
+         "worktreePath": "/repo/A", "leafId": "leaf-A"},
+        {"handle": "term_agyA", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A2"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "ORCA_PANE_KEY": "tab-1:leaf-A"})
+    assert "agy -> term_agyA" in r.stdout
+    assert "agy -> term_self" not in r.stdout
+
+
+def test_orca_identity_codex_by_model_banner(tmp_path):
+    # Live 2026-07-22: a user-launched Codex pane is titled after its worktree
+    # ("skills") and its preview banner carries NO "codex" literal -- only the
+    # model id ("gpt-5.6-terra") and persona text. Title Pass-1 misses; the
+    # preview fallback must recognise the Codex model-id signature. agy is
+    # unaffected (its title resolves directly).
+    b = _bindir(tmp_path, ["orca"])
+    listing = _orca_terms_full(
+        {"handle": "term_coord", "title": "coordinator", "preview": "driving h-mad",
+         "worktreePath": "/repo/A", "leafId": "leaf-A"},
+        {"handle": "term_codex", "title": "skills",
+         "preview": "Sol is highly capable. Explain this codebase gpt-5.6-terra high",
+         "worktreePath": "/repo/A", "leafId": "leaf-A2"},
+        {"handle": "term_agy", "title": "agy", "preview": "",
+         "worktreePath": "/repo/A", "leafId": "leaf-A3"},
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": listing,
+                 "ORCA_PANE_KEY": "tab-1:leaf-A"})
+    assert "codex -> term_codex" in r.stdout
+    assert "agy -> term_agy" in r.stdout
 
 
 def test_send_cmux_uses_file_contents(tmp_path):
