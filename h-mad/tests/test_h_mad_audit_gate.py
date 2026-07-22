@@ -223,12 +223,65 @@ def test_cli_garbage_without_sections_is_invalid(tmp_path: Path) -> None:
     assert "GATE: INVALID" in result.stdout
 
 
-def test_markdown_emphasis_is_not_counted_as_a_finding() -> None:
-    # A `**bold**` note or `*(aside)*` under a section starts with `*` but not
-    # `* `; it must not be miscounted as a blocking bullet (spurious FAIL).
-    text = "## Must-fix\n**Note:** all clear\n*(no blocking issues)*\n## Should-fix\nNone\n"
+def test_emphasis_note_under_section_is_fail_safe_not_silent_pass() -> None:
+    # Fail-safe (F14): a section that is neither the `None` sentinel nor a bullet
+    # list is off-template. Rather than silently PASS, it counts as a finding so a
+    # human reformats it (to `None` if truly clean). A false FAIL blocks a merge;
+    # a false PASS ships a defect.
+    text = "## Must-fix\n**Note:** all clear\n## Should-fix\nNone\n"
 
-    assert classify(text) == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+    result = classify(text)
+
+    assert result["verdict"] == "FAIL"
+    assert result["must_count"] == 1
+
+
+def test_prose_finding_without_bullet_fails(  ) -> None:
+    # F14: a real finding written as prose (no bullet) must not score PASS.
+    text = "## Must-fix\nThe plan omits error handling for the retry path.\n## Should-fix\nNone\n"
+
+    result = classify(text)
+
+    assert result["verdict"] == "FAIL"
+    assert result["must_count"] == 1
+
+
+def test_numbered_and_blockquote_findings_fail() -> None:
+    # F14: numbered-list and blockquote findings are counted, not missed.
+    numbered = classify("## Must-fix\n1. real blocking issue\n## Should-fix\nNone\n")
+    assert numbered["verdict"] == "FAIL" and numbered["must_count"] == 1
+
+    quoted = classify("## Must-fix\n> real issue via blockquote\n## Should-fix\nNone\n")
+    assert quoted["verdict"] == "FAIL" and quoted["must_count"] == 1
+
+
+def test_wrapped_multiline_bullet_counts_once() -> None:
+    # A long bullet wrapped across lines (agy does this) is ONE finding, and its
+    # continuation line must not itself be counted as a prose finding.
+    text = (
+        "## Must-fix\n"
+        "- FR-4 restatement — the spec requires the raw call\n"
+        "and the design forbids it, which is narrower.\n"
+        "## Should-fix\nNone\n"
+    )
+
+    result = classify(text)
+
+    assert result["verdict"] == "FAIL"
+    assert result["must_count"] == 1
+
+
+def test_cli_prose_finding_fails_end_to_end(tmp_path: Path) -> None:
+    audit_file = tmp_path / "feat.plan.audit.v1.md"
+    audit_file.write_text(
+        "## Summary\nx\n## Must-fix\nThe design drops AC-2.2 silently.\n## Should-fix\nNone\n## Nit\nNone\n",
+        encoding="utf-8",
+    )
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0  # a FAIL verdict still exits 0 (signal discipline)
+    assert "GATE: FAIL must=1 should=0" in result.stdout
 
 
 def test_production_module_uses_only_stdlib_imports() -> None:

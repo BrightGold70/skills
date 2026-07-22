@@ -31,12 +31,42 @@ def _bullet_remainder(stripped: str) -> str | None:
     return None
 
 
-def _is_blocking_bullet(line: str, acknowledged: set[str]) -> bool:
-    """Return True iff line (any indent, -/*/• marker) is a real blocking bullet."""
-    remainder = _bullet_remainder(line.strip())
-    if remainder is None:
-        return False
-    return bool(remainder) and remainder.lower() not in {"none"} and remainder not in acknowledged
+def _payload(line: str) -> str:
+    """The finding text of a content line: its bullet remainder, or the line itself.
+
+    Lets `- None` and `None` both read as the empty-section sentinel, and lets a
+    non-bulleted finding (prose / `1.` numbered / `> blockquote`) still be seen as
+    content rather than silently ignored.
+    """
+    stripped = line.strip()
+    remainder = _bullet_remainder(stripped)
+    return remainder if remainder is not None else stripped
+
+
+def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
+    """Findings in one blocking section's non-blank content lines.
+
+    A section is CLEAN (0) iff every line's payload is the `None` sentinel — this
+    covers an empty section, `None`, and a stray `- None`. Otherwise it has
+    findings. When the section carries `-`/`*`/`•` bullets we count them (so a
+    wrapped multi-line bullet counts once, not once per line). When it carries
+    non-`None` content but NO bullet — a prose, numbered, or blockquote finding a
+    reviewer wrote off-template — we count 1 rather than 0, so such a finding
+    fails the gate (fail-safe) instead of being silently missed (F14).
+    """
+    payloads = [_payload(line) for line in content]
+    if all(p.lower() == "none" for p in payloads):
+        return 0
+    bullets = [
+        p for line, p in zip(content, payloads)
+        if _bullet_remainder(line.strip()) is not None
+        and p and p.lower() != "none" and p not in acknowledged
+    ]
+    if bullets:
+        return len(bullets)
+    # Non-None content with no countable bullet → at least one off-template finding.
+    joined = " ".join(p for p in payloads if p)
+    return 0 if joined in acknowledged else 1
 
 
 def has_gate_sections(text: str) -> bool:
@@ -51,9 +81,14 @@ def has_gate_sections(text: str) -> bool:
 
 
 def classify(text: str, acknowledged: set[str] | None = None) -> dict:
-    """Count blocking bullets in Must-fix/Should-fix (indent- and marker-tolerant)."""
+    """Count findings in Must-fix/Should-fix (indent-, marker- and prose-tolerant).
+
+    A finding is a `-`/`*`/`•` bullet, OR — fail-safe — any non-`None` content in a
+    blocking section that carries no bullet (prose / numbered / blockquote), so an
+    off-template finding fails the gate rather than being silently missed.
+    """
     acknowledged_items = acknowledged or set()
-    counts = {"must_count": 0, "should_count": 0}
+    section_content: dict[str, list[str]] = {key: [] for key in BLOCKING_SECTIONS.values()}
     current_count_key: str | None = None
 
     for line in text.splitlines():
@@ -64,9 +99,13 @@ def classify(text: str, acknowledged: set[str] | None = None) -> dict:
         if stripped.startswith("## "):
             current_count_key = None
             continue
-        if current_count_key and _is_blocking_bullet(line, acknowledged_items):
-            counts[current_count_key] += 1
+        if current_count_key and stripped:
+            section_content[current_count_key].append(line)
 
+    counts = {
+        key: _count_section_findings(content, acknowledged_items)
+        for key, content in section_content.items()
+    }
     verdict = "FAIL" if counts["must_count"] or counts["should_count"] else "PASS"
     return {"verdict": verdict, **counts}
 
