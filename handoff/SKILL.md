@@ -61,8 +61,9 @@ This Step 0 fast-forward (clean-tree only) is the "sync remote and local before 
 Locate on the now-synced tree (Step 0). Check, in order:
 
 1. **Explicit path in the user's message** — if they paste or type a path, use it.
-2. **`docs/handoffs/` in the current project** — list files, sort by name (ISO date prefix), take the newest. Confirm with the user if there are multiple candidates with different slugs.
-3. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
+2. **This branch's newest handoff in the canonical store** — with `HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"`, run `python3 "$HP" latest --branch "$(python3 "$HP" branch-slug)"`. This resolves the shared main-worktree `docs/handoffs/` and prefers a handoff written on the branch you are resuming (exact `<branch>__` match — a `feat` resume never grabs a `feat-ab` sibling), so a parallel Orca session on another branch can't hand you the wrong one.
+3. **Repo-wide newest in the canonical store** — `python3 "$HP" latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work.
+4. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
 
 If no handoff is found after these checks, tell the user ("No handoff found for this project — nothing to resume from") and stop. Don't fabricate a handoff.
 
@@ -216,12 +217,14 @@ Write as if future-you is the reader: someone who knows the project deeply but h
 ### Filename rules
 
 ```
-docs/handoffs/YYYY-MM-DD-<slug>.md
+<canonical>/docs/handoffs/YYYY-MM-DD-<branch-slug>__<slug>.md
 ```
 
+- `<canonical>` — the **main-worktree** root from `handoff_paths.py dir` (see §Save), not the current linked worktree.
 - `YYYY-MM-DD` — today's date in ISO format (use `date +%Y-%m-%d` if unsure).
+- `<branch-slug>` — `handoff_paths.py branch-slug` (current branch, `/`→`-`, no `_`). The `__` after it is the branch|slug separator (never `-`, so READ matches the branch exactly).
 - `<slug>` — 2–4 lowercase words from the session's main topic, hyphenated. Derive from the feature name, PDCA feature slug, or issue/ticket if one exists.
-- Examples: `2026-04-30-lightrag-guideline-rag.md`, `2026-05-01-protocol-daemon-fix.md`
+- Examples: `2026-04-30-main__lightrag-guideline-rag.md`, `2026-05-01-feature-189-handoff__protocol-daemon-fix.md`
 
 ### Project slug derivation
 
@@ -266,7 +269,7 @@ Before you write anything, collect these in parallel:
    - Check whether each plan has a corresponding `docs/04-report/features/<name>.report.md` (or equivalent). A plan without a report is a candidate "unimplemented" entry; cross-check the codebase or session for evidence it actually shipped before flagging.
    - Skip silently if the project has no such structure. Don't fabricate one. The point is to surface backlog signal that already exists, not invent a tracking system.
 5. **Live processes** — if the session launched any long-running background work that's still alive at the moment of writing (multi-hour ingests, soak tests, build pipelines, daemons started for testing): capture PID, the exact command (one line), the log path, started-at, elapsed, and a one-line "what to verify on exit". This populates the **In-Flight Processes** section. Skip silently if nothing is in flight — most sessions don't have any. The check costs nothing (`ps -p $! -o pid,etime` for each backgrounded job, or `pgrep -f <substring>` for processes the operator launched manually) and the value to a future resume is enormous: without it, the next session has to reverse-engineer "is this still going?" from log mtimes and ambiguous output.
-6. **Worktree state** — if `git rev-parse --show-toplevel` returns a path containing `.claude/worktrees/<name>/`, the session ran in a worktree. Also capture the parent repo's branch (`git -C <parent> rev-parse --abbrev-ref HEAD`) so the handoff names both. The worktree's "to resume" `cd` should point at the worktree root, not the parent.
+6. **Worktree state** — the session ran in a linked worktree if EITHER `git rev-parse --show-toplevel` contains `.claude/worktrees/<name>/` (Claude Code convention) OR it differs from `python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py" root` (any linked worktree, including **Orca's** sibling-dir layout; under Orca, `hmad-dispatch worktree-current` also reports `.worktree.isMainWorktree == false`). In that case capture the worktree root, its branch, AND the main-worktree root + branch (`git -C <main> rev-parse --abbrev-ref HEAD`) so the handoff names both. The "to resume" `cd` points at the worktree root, not the main repo. (The handoff *file* still lives in the canonical/main store — §Save — so siblings can find it.)
 7. **Session observations** — if `~/.claude/homunculus/observations.jsonl` exists, read the last 50 lines. These structured observations often surface gotchas not explicit in the conversation. Use them to enrich Key Learnings extraction. Skip silently if absent.
    ```bash
    OBS_FILE="$HOME/.claude/homunculus/observations.jsonl"
@@ -367,7 +370,15 @@ git checkout <branch>
 
 If `--dry-run` was set: print the drafted doc to stdout and **stop here**. Do not save, commit, or run scout.
 
-1. Save the file to `docs/handoffs/YYYY-MM-DD-<slug>.md` in the project root.
+1. Save the file to the **canonical, worktree-shared** handoffs dir, with the branch in the name so concurrent Orca sessions on different branches don't collide:
+   ```bash
+   HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
+   DIR="$(python3 "$HP" dir)"          # main-worktree docs/handoffs (shared by all linked worktrees)
+   BR="$(python3 "$HP" branch-slug)"
+   mkdir -p "$DIR"
+   FILE="$DIR/$(date +%F)-${BR}__<slug>.md"   # note the '__' separator between branch and slug
+   ```
+   `handoff_paths.py dir` resolves to the **main worktree** (`git rev-parse --git-common-dir` → parent), not the current linked worktree — so every parallel Orca worktree reads/writes ONE store, and the handoff survives when a worktree is archived/removed. The `__` between `<branch>` and `<slug>` is the unambiguous separator READ matches on (branch slugs never contain `__`), so resuming branch `feat` can't load a `feat-ab` sibling's handoff. **Concurrency guard:** if `$FILE` already exists (a live sibling session wrote the same branch+slug today), do NOT overwrite — append a short discriminator (`-2`, `-<HHMMSS>`) before `.md` so both survive.
 2. Update `~/.claude/handoffs/INDEX.md` (one-line entry, newest first — see §"Update the central index").
 3. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
 4. Proceed to §"Update persistent auto-memories" unless `--skip-memories` was set.
@@ -509,13 +520,22 @@ git diff --stat HEAD        # sanity-check scope
 
 ### Commit
 
-```bash
-git add docs/handoffs/YYYY-MM-DD-<slug>.md docs/learnings.md
-git add docs/skill-candidates.md 2>/dev/null || true   # only if scout ran
-git commit -m "chore(handoff): YYYY-MM-DD <slug>
+Stage the **actual absolute paths** written in §Save (`$FILE` and `handoff_paths.py learnings`), not a cwd-relative `docs/handoffs/…` — under a linked worktree the cwd path points at the wrong tree and would stage nothing.
 
-Session closeout: <one-line summary from Session Summary>."
+```bash
+ROOT="$(python3 "$HP" root)"                 # canonical main-worktree root
+LEARN="$(python3 "$HP" learnings)"
 ```
+
+- **On the main worktree** (`ROOT` == `git rev-parse --show-toplevel`): stage + commit normally:
+  ```bash
+  git add "$FILE" "$LEARN"
+  git add docs/skill-candidates.md 2>/dev/null || true   # only if scout ran
+  git commit -m "chore(handoff): YYYY-MM-DD <slug>
+
+  Session closeout: <one-line summary from Session Summary>."
+  ```
+- **On a linked worktree** (`ROOT` != current toplevel): the handoff + learnings were written into the **main** tree, not here. Do **not** auto-commit into the main worktree's branch — it may be mid-work on an unrelated branch, and a surprise handoff commit there is worse than none. The file is already written and shared (that is the durability win); note in your report that committing/pushing it is a deliberate step to run from the main worktree if cross-machine persistence is wanted.
 
 Do not use `git add -A` — only stage the handoff and learnings files.
 
