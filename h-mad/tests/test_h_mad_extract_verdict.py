@@ -115,6 +115,39 @@ class TestSilentFailureModes:
             ev.extract_verdict("STATUS:\n", "STATUS")
 
 
+class TestConcernContent:
+    @pytest.mark.parametrize(
+        "scrape",
+        [
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: flaky integration test\n",
+            "STATUS: DONE_WITH_CONCERNS\nWorking-tree concern: generated file is untracked\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns / blockers: flaky integration test\n",
+            "STATUS: DONE_WITH_CONCERNS\n## Concerns\nThe fixture needs review.\n",
+            "STATUS: DONE_WITH_CONCERNS\n**Concerns:** the report is incomplete\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: none of the tests cover submodules, which is a real gap\n",
+        ],
+    )
+    def test_substantive_concern_is_detected(self, scrape):
+        assert ev.concern_stated(scrape)
+
+    @pytest.mark.parametrize(
+        "scrape",
+        [
+            "STATUS: DONE_WITH_CONCERNS\n",
+            "STATUS: DONE_WITH_CONCERNS\nNo relevant section here.\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: none\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: None\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: NONE\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns: n/a\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns:\n- none\n",
+            "STATUS: DONE_WITH_CONCERNS\nConcerns / blockers / context needed:\n- None.\n",
+            "STATUS: DONE_WITH_CONCERNS\n## Concerns\nNone\n",
+        ],
+    )
+    def test_missing_or_negated_concern_is_rejected(self, scrape):
+        assert not ev.concern_stated(scrape)
+
+
 class TestCli:
     def run(self, text, *args, tmp_path):
         src = tmp_path / "scrape.txt"
@@ -144,6 +177,29 @@ class TestCli:
         assert r.returncode == 2
         assert r.stdout.strip() == ""
         assert "no STATUS" in r.stderr
+
+    def test_contentless_done_with_concerns_exits_2_without_verdict(self, tmp_path):
+        r = self.run("STATUS: DONE_WITH_CONCERNS\nConcerns: none\n", "--key", "STATUS", tmp_path=tmp_path)
+        assert r.returncode == 2
+        assert r.stdout.strip() == ""
+        assert "but the report names no concern" in r.stderr
+        assert "no STATUS" not in r.stderr
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("STATUS", "DONE"),
+            ("STATUS", "BLOCKED"),
+            ("STATUS", "NEEDS_CONTEXT"),
+            ("VERDICT", "COMPLIANT"),
+            ("VERDICT", "DRIFT"),
+            ("ASSESSMENT", "READY_TO_MERGE"),
+        ],
+    )
+    def test_other_contracts_are_unaffected_without_concerns(self, key, value, tmp_path):
+        r = self.run(f"{key}: {value}\n", "--key", key, tmp_path=tmp_path)
+        assert r.returncode == 0
+        assert r.stdout.strip() == f"{key}: {value}"
 
     def test_emits_hmad_marker_when_asked(self, tmp_path):
         r = self.run(

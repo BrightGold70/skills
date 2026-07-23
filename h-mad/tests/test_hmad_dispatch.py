@@ -150,6 +150,33 @@ def _bindir(tmp_path, names):
     return b
 
 
+def _git_repo(tmp_path, *, branch="main"):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+                   check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test User"], check=True)
+    (repo / "tracked.txt").write_text("initial\n")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "initial"],
+                   check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(repo), "branch", "-M", branch], check=True)
+    return repo
+
+
+def _rm(repo, *, base=None, force=False, tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    args = ["worktree-rm", f"repo::{repo}"]
+    if force:
+        args.append("--force")
+    if base is not None:
+        args.extend(["--base", base])
+    result = run(args, substrate="orca", env={"_BINDIR": b}, capture=cap)
+    return result, cap
+
+
 def test_env_reports_override(tmp_path):
     b = _bindir(tmp_path, ["cmux", "orca"])
     r = run(["env"], substrate="orca", env={"_BINDIR": b})
@@ -1238,6 +1265,79 @@ def test_worktree_create_prompt_file_and_missing_file(tmp_path):
     assert not missing_cap.exists()
 
 
+def test_worktree_create_prompt_registers_task_on_stderr(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    canned = ('{"result":{"worktree":{"id":"wt-fanout"},'
+              '"task":{"id":"task-fanout"},"gate":{"id":"gate-fanout"}}}')
+    r = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "wt-fanout\n"
+    assert r.stderr == "[H-MAD] worktree_task task=task-fanout selector=wt-fanout\n"
+    assert "orca worktree create --name fanout --prompt fanout prompt --json\n" in cap.read_text()
+    assert "--task-title worktree:fanout --json" in cap.read_text()
+
+
+def test_worktree_create_without_prompt_registers_no_task(tmp_path):
+    """AC-5.1/AC-5.3: the --prompt-file gate must DISCRIMINATE.
+
+    The pre-existing argv test passes whether or not the gate exists, because
+    run() strips HMAD_ORCA_*, so _coordinator() fails and task-create bails
+    before it ever calls orca — leaving the capture clean for the wrong reason.
+    Pinning a coordinator here removes that accident, so registering
+    unconditionally becomes observable. Verified by mutation: replacing the
+    `[ -n "$pf" ]` gate with `true` fails this test and nothing else.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = ('{"result":{"worktree":{"id":"wt-bare"},'
+              '"task":{"id":"task-should-not-exist"}}}')
+    r = run(["worktree-create", "bare"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "wt-bare\n"
+    calls = cap.read_text()
+    assert "task-create" not in calls, "no task may be registered without --prompt-file"
+    assert "worktree_task" not in r.stderr
+
+
+def test_worktree_create_task_id_can_open_gate(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    canned = ('{"result":{"worktree":{"id":"wt-fanout"},'
+              '"task":{"id":"task-fanout"},"gate":{"id":"gate-fanout"}}}')
+    created = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                       "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert created.returncode == 0
+    gate = run(["gate-create", "task-fanout", "Approve?"], substrate="orca",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert gate.returncode == 0
+    assert gate.stdout == "gate-fanout\n"
+    assert "orca orchestration gate-create --task task-fanout --question Approve? --json\n" in cap.read_text()
+
+
+def test_worktree_create_task_registration_failure_is_nonfatal(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    created = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT":
+                       '{"result":{"worktree":{"id":"wt-fanout"}}}'}, capture=cap)
+    assert created.returncode == 0
+    assert created.stdout == "wt-fanout\n"
+    assert "[H-MAD] worktree_task_skipped selector=wt-fanout" in created.stderr
+    assert cap.read_text() == "orca worktree create --name fanout --prompt fanout prompt --json\n"
+
+
 def test_worktree_create_refuses_cmux(tmp_path):
     b = _bindir(tmp_path, ["cmux", "orca"])
     cap = tmp_path / "cap.txt"
@@ -1274,6 +1374,79 @@ def test_worktree_rm_argv_force_and_failure(tmp_path):
                  env={"_BINDIR": b, "HMAD_STUB_ORCA_EXIT": "1"})
     assert failed.returncode == 1
     assert "[H-MAD] worktree-rm failed selector=wt-7 rc=1" in failed.stderr
+
+
+def test_worktree_rm_refuses_modified_tracked_repo(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "tracked.txt").write_text("modified\n")
+    result, cap = _rm(repo, tmp_path=tmp_path)
+    assert result.returncode != 0
+    assert "worktree_has_uncommitted_work" in result.stderr
+    assert not cap.exists()
+
+
+def test_worktree_rm_refuses_untracked_repo(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "untracked.txt").write_text("untracked\n")
+    result, cap = _rm(repo, tmp_path=tmp_path)
+    assert result.returncode != 0
+    assert "worktree_has_uncommitted_work" in result.stderr
+    assert not cap.exists()
+
+
+def test_worktree_rm_ignores_ignored_only_change(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / ".gitignore").write_text("ignored.txt\n")
+    subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "ignore"],
+                   check=True, capture_output=True, text=True)
+    (repo / "ignored.txt").write_text("ignored\n")
+    result, cap = _rm(repo, tmp_path=tmp_path)
+    assert result.returncode == 0
+    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+
+
+def test_worktree_rm_refuses_unmerged_commit(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "tracked.txt").write_text("committed\n")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "unmerged"],
+                   check=True, capture_output=True, text=True)
+    result, cap = _rm(repo, base="HEAD~1", tmp_path=tmp_path)
+    assert result.returncode != 0
+    assert "worktree_has_unmerged_commits" in result.stderr
+    assert not cap.exists()
+
+
+def test_worktree_rm_allows_commits_reachable_from_base(tmp_path):
+    repo = _git_repo(tmp_path)
+    result, cap = _rm(repo, base="HEAD", tmp_path=tmp_path)
+    assert result.returncode == 0
+    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+
+
+def test_worktree_rm_skips_unmerged_check_without_default_base(tmp_path):
+    repo = _git_repo(tmp_path, branch="feature")
+    result, cap = _rm(repo, tmp_path=tmp_path)
+    assert result.returncode == 0
+    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+
+
+def test_worktree_rm_force_short_circuits_dirty_repo(tmp_path):
+    repo = _git_repo(tmp_path)
+    (repo / "tracked.txt").write_text("modified\n")
+    result, cap = _rm(repo, force=True, tmp_path=tmp_path)
+    assert result.returncode == 0
+    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --force --json\n"
+    assert "[H-MAD] worktree-rm forced selector=repo::" in result.stderr
+
+
+def test_worktree_rm_unresolvable_selector_is_removed(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    result = run(["worktree-rm", "wt-7"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert result.returncode == 0
+    assert "orca worktree rm --worktree wt-7 --json\n" in cap.read_text()
 
 
 def test_worktree_ps_and_rm_refuse_cmux(tmp_path):

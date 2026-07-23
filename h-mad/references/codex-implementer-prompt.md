@@ -91,3 +91,11 @@ Followed by:
 The orchestrator parses the STATUS line. Anything else is human-readable. Use `DONE` only when tests are GREEN AND self-review found no issues; use `DONE_WITH_CONCERNS` when work is complete but you have doubts; use `BLOCKED` when you cannot complete (provide the specific blocker); use `NEEDS_CONTEXT` when you need information that wasn't provided.
 
 Do NOT silently produce work you're unsure about.
+
+### Verdict obligation
+
+`DONE_WITH_CONCERNS` is valid only when the report names at least one concern,
+and that concern must be specific. If the work is complete and there is no
+concern to name, report `DONE`
+instead. The orchestrator will reject a contentless `DONE_WITH_CONCERNS` report,
+so this is a required reporting rule rather than optional advice.

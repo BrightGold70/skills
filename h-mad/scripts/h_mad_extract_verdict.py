@@ -56,6 +56,69 @@ def extract_verdict(
     return value
 
 
+# --- contentless DONE_WITH_CONCERNS (J10) -----------------------------------
+#
+# A verdict that declares doubt without stating it is unactionable and cannot be
+# told apart from DONE, so it must fail the way silence does rather than pass as
+# nuance. Measured on this machine: 7 of 13 historical DONE_WITH_CONCERNS reports
+# name no concern anywhere.
+
+_LABEL_WORD = re.compile(r"\b(?:concerns?|blockers?)\b", re.I)
+_SECTION_START = re.compile(r"^(?:#{1,6}[ \t]|STATUS:|VERDICT:|ASSESSMENT:)")
+_NEGATIONS = {
+    "", "-", "none", "n a", "na", "no", "nil", "nothing",
+    "no concern", "no concerns", "no blockers", "not applicable",
+}
+
+
+def _strip_decor(line: str) -> str:
+    """Remove list bullets, markdown headings and emphasis from a line."""
+    s = line.strip()
+    s = re.sub(r"^[-*+][ \t]+", "", s)
+    s = re.sub(r"^#{1,6}[ \t]*", "", s)
+    return s.strip().strip("*_`").strip()
+
+
+def _normalise(text: str) -> str:
+    """Lowercase, drop punctuation, collapse whitespace — for negation matching."""
+    s = _strip_decor(text)
+    s = re.sub(r"[^0-9a-z ]+", " ", s.lower())
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _is_concern_label(head: str) -> bool:
+    """True when *head* looks like a concerns section label or heading.
+
+    Matches on CONTAINMENT, not prefix: a real report used the label
+    'Working-tree concern:', which a prefix test rejects — wrongly discarding a
+    report that did state its concern. Bounded to 60 characters so a prose
+    sentence merely mentioning "concerns" is not mistaken for a section label.
+    """
+    label, sep, _ = head.partition(":")
+    target = label if sep else head
+    return len(target) <= 60 and bool(_LABEL_WORD.search(target))
+
+
+def concern_stated(scrape: str) -> bool:
+    """True when the report names at least one concern."""
+    lines = scrape.splitlines()
+    for i, line in enumerate(lines):
+        head = _strip_decor(line)
+        if not _is_concern_label(head):
+            continue
+        _, sep, rest = head.partition(":")
+        if sep and _normalise(rest):
+            return _normalise(rest) not in _NEGATIONS
+        for nxt in lines[i + 1:]:
+            if not nxt.strip():
+                continue
+            if _SECTION_START.match(nxt.strip()):
+                break
+            return _normalise(nxt) not in _NEGATIONS
+        return False
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the verdict extraction CLI."""
     parser = argparse.ArgumentParser(
@@ -91,6 +154,22 @@ def main(argv: list[str] | None = None) -> int:
         value = extract_verdict(scrape, args.key, allowed)
     except VerdictError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    # Scoped to ONE key and ONE value, so the VERDICT: and ASSESSMENT: contracts
+    # cannot become collateral damage. extract_verdict() itself is unchanged: it
+    # answers "what is the last value of this key", and widening it to read
+    # surrounding prose would make its name a lie.
+    if (
+        args.key == "STATUS"
+        and value == "DONE_WITH_CONCERNS"
+        and not concern_stated(scrape)
+    ):
+        print(
+            "ERROR: STATUS: DONE_WITH_CONCERNS but the report names no concern "
+            "— re-dispatch, or have the agent report DONE",
+            file=sys.stderr,
+        )
         return 2
 
     print(f"{args.key}: {value}")

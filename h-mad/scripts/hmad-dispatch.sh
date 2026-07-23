@@ -689,7 +689,21 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
     args+=(--prompt "$(cat "$pf")")
   fi
   args+=(--json)
-  _orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}"
+
+  local sel rc=0
+  sel="$(_orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}")" || rc=$?
+  [ $rc -eq 0 ] || return $rc
+  [ -n "$sel" ] && printf '%s\n' "$sel"
+
+  if [ -n "$pf" ]; then
+    local tid
+    if tid="$(_cmd_task_create "worktree:$name" "$pf" 2>/dev/null)" && [ -n "$tid" ]; then
+      echo "[H-MAD] worktree_task task=$tid selector=$sel" >&2
+    else
+      echo "[H-MAD] worktree_task_skipped selector=$sel" >&2
+    fi
+  fi
+  return 0
 }
 
 _cmd_worktree_current() {  # (no args)
@@ -705,12 +719,69 @@ _cmd_worktree_ps() {  # [--limit <n>]
   _orca_json '.result | tojson' "${args[@]}"
 }
 
-_cmd_worktree_rm() {  # <selector> [--force]
+# Selector -> filesystem path, or empty when it cannot be resolved to exactly one
+# existing directory. Empty is "cannot check", never "safe to destroy".
+_worktree_path() {  # $1 selector -> path on stdout, or empty + rc 1
+  local sel="$1" path listing matches
+  case "$sel" in
+    *::*) path="${sel#*::}"
+          [ -d "$path" ] && { printf '%s\n' "$path"; return 0; } ;;
+  esac
+  listing="$(orca worktree ps --limit 200 --json 2>/dev/null)" || return 1
+  printf '%s' "$listing" | jq -e '.result.truncated != true' >/dev/null 2>&1 || return 1
+  matches="$(printf '%s' "$listing" | jq -r --arg s "$sel" '
+    [ .result.worktrees[]?
+      | select(.worktreeId==$s or .path==$s or .displayName==$s
+               or .branch==$s or ((.branch // "")|sub("^refs/heads/";""))==$s)
+      | .path ] | unique' 2>/dev/null)" || return 1
+  [ "$(printf '%s' "$matches" | jq -r 'length' 2>/dev/null)" = "1" ] || return 1
+  path="$(printf '%s' "$matches" | jq -r '.[0]' 2>/dev/null)"
+  [ -n "$path" ] && [ -d "$path" ] || return 1
+  printf '%s\n' "$path"
+}
+
+# First of origin/HEAD, main, master that this repo actually has.
+_worktree_default_base() {  # $1 path -> ref on stdout, or empty
+  local path="$1" r
+  for r in origin/HEAD main master; do
+    git -C "$path" rev-parse --verify -q "$r" >/dev/null 2>&1 && { printf '%s\n' "$r"; return 0; }
+  done
+  return 1
+}
+
+# Reason token on stdout + rc 1 when the worktree holds work; rc 0 otherwise.
+_worktree_holds_work() {  # $1 path, $2 base ref (may be empty)
+  local path="$1" base="${2:-}"
+  [ -z "$(git -C "$path" status --porcelain 2>/dev/null)" ] || {
+    echo "worktree_has_uncommitted_work"; return 1; }
+  [ -n "$base" ] || return 0
+  [ -z "$(git -C "$path" log --oneline "$base..HEAD" 2>/dev/null)" ] || {
+    echo "worktree_has_unmerged_commits"; return 1; }
+  return 0
+}
+
+_cmd_worktree_rm() {  # <selector> [--force] [--base <ref>]
   _require_orca worktree-rm || return $?
   _need "${1:-}" selector || return $?
   local sel="$1"; shift
-  local args=(worktree rm --worktree "$sel")
-  while [ $# -gt 0 ]; do case "$1" in --force) args+=(--force); shift ;; *) shift ;; esac; done
+  local args=(worktree rm --worktree "$sel") force="" base=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --force) force=1; args+=(--force); shift ;;
+    --base) base="$2"; shift 2 ;;
+    *) shift ;;
+  esac; done
+  if [ -n "$force" ]; then
+    echo "[H-MAD] worktree-rm forced selector=$sel — guards skipped" >&2
+  else
+    local path reason
+    if path="$(_worktree_path "$sel")"; then
+      [ -n "$base" ] || base="$(_worktree_default_base "$path" || true)"
+      if ! reason="$(_worktree_holds_work "$path" "$base")"; then
+        echo "hmad-dispatch: $reason — '$sel' still holds work at $path; nothing was removed. Commit or merge it, or pass --force to discard." >&2
+        return 1
+      fi
+    fi
+  fi
   args+=(--json)
   local rc=0
   orca "${args[@]}" >/dev/null || rc=$?

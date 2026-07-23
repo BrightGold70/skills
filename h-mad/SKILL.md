@@ -190,6 +190,7 @@ is cheap to catch:
 | `send` | refuses, `terminal_handle_stale`, **nothing is sent** |
 | `verify <agent>` | 0 live · 1 unresolved/`stale_pin` · 2 unknown agent |
 | `resolve` | echoes the pin unverified, by design — pass `--verify` for the check |
+| `worktree-rm` | refuses with `worktree_has_uncommitted_work` or `worktree_has_unmerged_commits`; pass `--force` to skip both guards |
 
 `env` also prints `CONFLICT:` when codex and agy resolve to the **same** handle. Two
 agents cannot be one pane, so identical handles prove at least one resolution is
@@ -236,12 +237,26 @@ Engage fanout IFF `hmad-dispatch env` shows `substrate=orca` (the command displa
 If any condition is unmet, use the existing serial fallback.
 
 For each independent task, run at most `HMAD_ORCA_MAX_WORKTREES` live worktrees
-(default 4): `worktree-create <module> --base <feature-branch> --prompt-file
-<staged-prompt>`; use Tier-2 `task-create` then `dispatch --to <selector>`; `await`
-the worker; stamp progress checkpoints and run the **winner-merge decision gate**
+(default 4). With a staged prompt, `worktree-create <module> --base
+<feature-branch> --prompt-file <staged-prompt>` creates the worktree and registers
+the task in one operation. It keeps stdout exactly the worktree selector and
+prints `[H-MAD] worktree_task task=<id> selector=<sel>` on stderr; capture that
+`<id>` as the task-id for `dispatch`, `await`, and `gate-create`. If no prompt
+file is supplied, `worktree-create` registers no task: use the separate Tier-2
+`task-create` then `dispatch --to <selector>` path and its returned task-id.
+Then `await` the worker; stamp progress checkpoints and run the **winner-merge decision gate**
 in place of a bare `git merge --no-ff` (see `references/orchestration-mode.md`
 §"Winner-merge decision gate" and §"Progress checkpoints"); then `worktree-rm
-<selector>`. Tasks beyond the cap queue and log `[H-MAD] worktree_queued module=<module>`.
+<selector> --base <feature-branch>`. Tasks beyond the cap queue and log
+`[H-MAD] worktree_queued module=<module>`.
+
+**Pass `--base <feature-branch>` on fanout teardown.** The comparison base defaults to the
+first of `origin/HEAD`, `main`, `master` that resolves, and a module worktree is branched
+from the *feature* branch — so every commit on that feature is "not in `main`" and teardown
+refuses for as long as the feature is unmerged. Measured live: a freshly created module
+worktree reported 7 commits ahead of `main` and 1 ahead of its real base. With `--base` set
+to the feature branch, the guard fires only on commits the feature branch does not have —
+which is exactly the work that would be lost.
 
 The gate engages only when `orchestration: on`: a clean verdict + clean merge
 auto-records a `yes` decision (`[H-MAD] merge_gate auto-resolved`) without pausing,
@@ -250,8 +265,15 @@ a human decision (conflict path first runs `git merge --abort` and emits
 `[H-MAD] merge_conflict module=<module>`). When orchestration is off, the merge is
 the unchanged serial `git merge --no-ff`, conflict-aborted and re-dispatched serially
 as before — no gate. On any Phase-5 halt during fanout, enumerate with `worktree-ps`
-and run `worktree-rm` for every worktree in the fanout group. This teardown is
-idempotent: a gone selector logs and no-ops.
+and run `worktree-rm` for every worktree in the fanout group. `worktree-rm`
+refuses with rc=1 and removes nothing when the resolved worktree has uncommitted
+work (`worktree_has_uncommitted_work`) or commits not reachable from its
+comparison base (`worktree_has_unmerged_commits`); commit or merge the work
+first, or pass `--force` when discarding it is intentional. `--force` skips both
+guards and prints `[H-MAD] worktree-rm forced selector=<sel> — guards skipped`.
+An unresolvable or ambiguous selector, or a truncated `worktree-ps` listing,
+means the worktree cannot be checked and does not by itself refuse removal.
+This teardown remains idempotent: a gone selector logs and no-ops.
 
 ## Phase 6 (Verification) sub-steps
 

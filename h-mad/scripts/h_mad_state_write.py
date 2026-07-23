@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +136,7 @@ def create_feature(state_file: Path, feature: str, started_ts: str | None = None
             return None  # already present; do not clobber
         record = dict(_NEW_RECORD_DEFAULTS)
         record["feature"] = feature
-        record["started_ts"] = started_ts or "1970-01-01T00:00:00Z"
+        record["started_ts"] = started_ts or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return record
 
     return _mutate(state_file, feature, apply)

@@ -51,7 +51,8 @@ Use these additive `hmad-dispatch` verbs:
 - `worktree-comment [<selector>] <text>` — sets a worktree's free-text comment (a durable, mobile-visible checkpoint), defaulting to the `active` worktree. Captures the response and fails non-zero on an `ok:false` envelope, so a swallowed error cannot read as success.
 - `worktree-current` — returns the active worktree's JSON payload (read-only; used by the `handoff` READ reconcile).
 - `worktree-ps [--limit <n>]` — returns the current Orca worktree JSON payload.
-- `worktree-rm <selector> [--force]` — removes an Orca worktree.
+- `worktree-rm <selector> [--force] [--base <ref>]` — removes an Orca worktree, **refusing** when it
+  still holds work (see §"Tearing down a fanout worktree").
 
 The normal flow is:
 
@@ -128,8 +129,20 @@ shows `substrate=orca` (displayed as `substrate: orca`), `orchestration: on`, an
 there are `≥2 independent` tasks. Any unmet condition uses the serial fallback.
 
 For each independent task, keep at most `HMAD_ORCA_MAX_WORKTREES` live worktrees
-(default 4): `worktree-create` with the staged prompt, Tier-2 `task-create` and
-`dispatch --to <selector>`, `await` the worker, then run the **winner-merge gate**
+(default 4). These are two distinct task-registration paths:
+
+1. With a staged prompt, `worktree-create <name> --prompt-file <path>` creates
+   the worktree and registers its task. Its stdout remains exactly the selector;
+   its stderr includes `[H-MAD] worktree_task task=<id> selector=<sel>`. The
+   `<id>` in that marker is the task-id to pass to `dispatch`, `await`, and
+   `gate-create`; do not run a second `task-create` for this path. If task
+   registration fails, it emits `[H-MAD] worktree_task_skipped selector=<sel>`
+   and worktree creation still succeeds.
+2. Without `--prompt-file`, `worktree-create` registers no task. Create one
+   separately with Tier-2 `task-create`, then `dispatch --to <selector>` using
+   the task-id returned by `task-create`.
+
+After either path, `await` the worker, then run the **winner-merge gate**
 (below), and `worktree-rm` the selector. Queue tasks beyond the cap with
 `[H-MAD] worktree_queued module=<module>`.
 
@@ -171,6 +184,39 @@ With orchestration on, for each module:
      `gid=$(gate-create <task> "Merge conflict in <module> — resolve?" '["yes","no"]')`,
      and block on `gate-wait "$gid"`. On `yes` → re-dispatch the module serially
      after its siblings merge; on `no` → skip and log.
+
+### Tearing down a fanout worktree — pass `--base <feature-branch>`
+
+`worktree-rm` refuses to destroy a worktree that still holds work: rc=1 with
+`worktree_has_uncommitted_work` when the tree is dirty, or
+`worktree_has_unmerged_commits` when its branch carries commits not reachable from the
+comparison ref. Nothing is removed on either path. This exists because a fanout worker is
+never told to commit, and a teardown that ran anyway destroyed the only copy of two
+workers' output while the merge gate recorded a clean merge (J15).
+
+**The comparison ref defaults to the first of `origin/HEAD`, `main`, `master` that
+resolves — which is almost never what a fanout wants.** A module worktree is branched from
+the *feature* branch, so all of the feature's commits are "not in `main`" and teardown will
+refuse for as long as the feature is unmerged. Measured live: a freshly created module
+worktree reported **7 commits ahead of `main`** and 1 ahead of its actual base.
+
+So the fanout teardown is:
+
+```bash
+hmad-dispatch worktree-rm <selector> --base <feature-branch>
+```
+
+which refuses only while the module has commits the feature branch does not — exactly the
+condition that means "this work would be lost". After the winner-merge gate has merged the
+module, that set is empty and teardown proceeds normally.
+
+`--force` skips both guards, short-circuits before any resolution, and prints
+`[H-MAD] worktree-rm forced selector=<sel> — guards skipped`. Use it to discard a module
+deliberately, never as a reflex when teardown refuses — the refusal is the feature.
+
+Only positive evidence blocks: an unresolvable selector, an ambiguous match, or a truncated
+`worktree ps` listing all mean "cannot check" and remove as before, matching
+`_orca_handle_live`'s rule that an unreadable listing is never treated as death.
 
 On any fanout halt, use `worktree-ps` to enumerate the fanout group and
 `worktree-rm` every member. Cleanup is idempotent: removal of an already-gone
