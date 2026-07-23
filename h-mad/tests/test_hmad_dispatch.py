@@ -1,12 +1,38 @@
+import atexit
 import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
+
+# J7: the pin file is the second leak channel into this harness. F13 stripped the
+# HMAD_ORCA_* env vars, but _pin_file() falls back to a CWD-RELATIVE
+# ".h-mad/orca-pins.env" and pytest's cwd is the repo, so the repo's own session
+# pin file was read by every test that set no explicit value. Measured: 17 failed
+# with a pin file present, 153 passed with it absent.
+#
+# This path is deliberately NEVER CREATED: _pin_file() only reads it via
+# `[ -f "$pf" ]`, so a non-existent path IS the "no pin file" state and there is
+# nothing to clean up. tempfile. mkdtemp() would be wrong here — it registers no
+# cleanup and would leak an empty directory on every pytest collection (rejected
+# by design audit v1). PID-scoped so two concurrent suite runs cannot collide.
+_NO_PIN_FILE = Path(tempfile.gettempdir()) / f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
+
+
+@atexit.register
+def _remove_stray_pin_file() -> None:
+    """Defensive only: every pin-writing test passes its own HMAD_ORCA_PIN_FILE,
+    so nothing should create this path. If a future test forgets, `pin` would
+    mkdir -p and write here, contaminating later tests and leaving a file behind."""
+    try:
+        _NO_PIN_FILE.unlink()
+    except FileNotFoundError:
+        pass
 
 # --- Real Orca response envelopes ------------------------------------------
 #
@@ -74,6 +100,9 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
         e["HMAD_STUB_CAPTURE"] = str(capture)
     if env:
         e.update({k: v for k, v in env.items() if k != "_BINDIR"})
+    # AFTER the update, so a test that passes its own HMAD_ORCA_PIN_FILE keeps it.
+    # env values must be str, hence the cast.
+    e.setdefault("HMAD_ORCA_PIN_FILE", str(_NO_PIN_FILE))
     # Build an isolated PATH containing only the requested stubs (+ real jq/coreutils).
     # Deliberately excludes the ambient PATH: dev/CI machines may have real
     # cmux/orca binaries installed (e.g. under /opt/homebrew/bin), which would
@@ -2089,3 +2118,58 @@ def test_resolve_verify_flag_matches_the_verify_verb(tmp_path):
              env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_live",
                   "HMAD_STUB_ORCA_STDOUT": live})
     assert ok.returncode == 0 and ok.stdout.strip() == "term_live"
+
+
+# --- J7: default pin-file isolation must not leak session state ------------
+#
+# The production default is intentionally cwd-relative. Tests must not let the
+# real repository session pin file affect isolated harness invocations.
+
+
+def test_default_pin_file_is_ignored_without_explicit_env(tmp_path):
+    """AC-6.1-mechanism: the repo-relative default pin file is not read by tests."""
+    b = _bindir(tmp_path, ["orca"])
+    repo_default = tmp_path / ".h-mad" / "orca-pins.env"
+    repo_default.parent.mkdir()
+    repo_default.write_text("agy=term_from_repo_default\n")
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _orca_terms()},
+            cwd=str(tmp_path))
+    assert r.returncode == 1
+    assert r.stdout == ""
+    # Assert WHY it failed. rc=1 + empty stdout is also what a crashing wrapper
+    # produces (bad substrate detection, missing jq, a shell syntax error), so
+    # without this the test would pass for a reason unrelated to the pin file.
+    assert "pin HMAD_ORCA_AGY_TERMINAL" in r.stderr
+    assert "term_from_repo_default" not in r.stdout + r.stderr
+
+
+def test_explicit_pin_file_path_still_wins(tmp_path):
+    """AC-6.3: an explicit HMAD_ORCA_PIN_FILE remains the pin destination."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "explicit-pins.env"
+    r = run(["pin", "agy", "term_explicit"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r.returncode == 0
+    assert pins.read_text() == "agy=term_explicit\n"
+
+
+def test_no_pin_file_path_is_defined_outside_repo():
+    """AC-6.4: _NO_PIN_FILE is module-scoped and outside the repository root."""
+    no_pin_file = _NO_PIN_FILE
+    repo_root = SKILL.parent
+    assert no_pin_file.is_absolute()
+    assert repo_root not in no_pin_file.parents
+
+
+def test_no_mkdtemp_and_no_pin_file_leak_guard():
+    """AC-mkdtemp-guard: no mkdtemp leak pattern exists and the guard path is absent."""
+    source = Path(__file__).read_text()
+    assert "tempfile." + "mkdtemp(" not in source
+    assert not _NO_PIN_FILE.exists()
+
+
+def test_production_pin_file_resolution_literal_unchanged():
+    """AC-6.5: production still contains the cwd-relative pin-file fallback."""
+    script = WRAPPER.read_text()
+    assert "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}" in script

@@ -132,9 +132,8 @@ import tempfile   # NEW
 # `[ -f "$pf" ]`, so a non-existent path is exactly the "no pin file" state, and
 # nothing has to be cleaned up. `tempfile.mkdtemp()` would be wrong here: it
 # registers no cleanup, so every pytest collection would leak an empty directory.
-_NO_PIN_FILE = os.path.join(
-    tempfile.gettempdir(), f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
-)  # PID-scoped: two suites can run concurrently on one machine (observed in this repo)
+# Path, not str — consumed via .is_absolute()/.parents/.exists(); str() at point of use.
+_NO_PIN_FILE = Path(tempfile.gettempdir()) / f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
 
 
 @atexit.register
@@ -154,7 +153,7 @@ In `run()`, immediately after the `e.update(...)` on line 76:
 
 ```python
     # AFTER the update, so a test that passes its own HMAD_ORCA_PIN_FILE keeps it.
-    e.setdefault("HMAD_ORCA_PIN_FILE", _NO_PIN_FILE)
+    e.setdefault("HMAD_ORCA_PIN_FILE", str(_NO_PIN_FILE))
 ```
 
 `_pin_file()` in the shell is **not** changed: it keeps honouring `HMAD_ORCA_PIN_FILE` and keeps
@@ -293,6 +292,8 @@ unchanged, and its documented entry behaviour is extended in-place rather than a
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.3: 5d coverage review — `_NO_PIN_FILE` is a `Path` (the RED tests consume it as one);
+  `str()` applied where it enters the env dict.
 - v1.2: Audit v2 nit (non-blocking, taken) — PID-scope `_NO_PIN_FILE` so concurrent suite runs on
   one machine cannot collide. Not hypothetical: two sessions ran this repo's suite on 2026-07-22.
 - v1.1: Audit v1 must-fix — replaced module-scope `tempfile.mkdtemp()` (which registers no

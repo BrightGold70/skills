@@ -42,9 +42,10 @@ import tempfile    # NEW module import
 # needs cleaning up. tempfile.mkdtemp() would be wrong — it registers no cleanup,
 # leaking an empty directory per pytest collection. PID-scoped because two suites
 # can run concurrently on one machine.
-_NO_PIN_FILE = os.path.join(
-    tempfile.gettempdir(), f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
-)
+# A Path, not a str: the RED tests pin the contract via .is_absolute() / .parents /
+# .exists(), and the module already uses Path throughout (SKILL, WRAPPER, STUBS).
+# str() is applied at the single point of use, since env values must be strings.
+_NO_PIN_FILE = Path(tempfile.gettempdir()) / f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
 
 
 @atexit.register
@@ -58,15 +59,15 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     ...
     if env:
         e.update({k: v for k, v in env.items() if k != "_BINDIR"})
-    e.setdefault("HMAD_ORCA_PIN_FILE", _NO_PIN_FILE)   # NEW — AFTER the update
+    e.setdefault("HMAD_ORCA_PIN_FILE", str(_NO_PIN_FILE))   # NEW — AFTER the update
     ...
 ```
 
 **Acceptance Criteria**:
 - [ ] AC-6.3: A test passing `HMAD_ORCA_PIN_FILE` in its `env` receives that exact value — assert by
       running `pin` with an explicit path and confirming the file is written there, not at the default.
-- [ ] AC-6.4: `_NO_PIN_FILE` is not under the repository root — assert
-      `not str(_NO_PIN_FILE).startswith(str(REPO_ROOT))`.
+- [ ] AC-6.4: `_NO_PIN_FILE` is not under the repository root — the module has no `REPO_ROOT`;
+      the root is `SKILL.parent`. Assert `SKILL.parent not in _NO_PIN_FILE.parents`.
 - [ ] AC-6.1 (mechanism): With a pin file written at the repo-relative default
       `.h-mad/orca-pins.env`, a `run(["resolve","agy"])` with no explicit pin file resolves
       `UNRESOLVED` rather than reading that file. Test must create the repo-relative file in a
@@ -190,4 +191,9 @@ def _phase5_preflight_section() -> str:
 ---
 
 ## Version History
+- v1.1: 5d coverage review — strengthened the AC-6.1 assertion to name WHY resolution failed
+  (rc=1 + empty stdout is also what a crashing wrapper yields), and pinned `_NO_PIN_FILE` as a
+  `Path` rather than a `str`. The reviewer proposed casting inside the tests; that inverts TDD by
+  treating the plan as authoritative over the test, so the implementation contract was changed
+  instead.
 - v1.0: Initial implementation plan draft.
