@@ -773,6 +773,34 @@ The loop, when a measurement turns into a defect:
 
 Steps 1–4 are the discipline; step 5 is the only part a script can check, which is why the script checks that and nothing else.
 
+## Working a `skill-monitoring` item
+
+`docs/skill-monitoring.md` is the standing bug/improvement registry. Closing one is not "read the
+fix direction and apply it" — the filing is a snapshot and **the entry can be wrong**. This loop
+closed nine items in one session (J1–J5, J11–J13, J17), and the premise-check step alone changed the
+fix in four of them.
+
+1. **Verify the entry's premise against the source.** Open the file and line it names; confirm the
+   code says what the entry says. J9's stated cause (a test "probes the real binary") was false — the
+   test already stubbed it. J1's two hypotheses were resolved by one probe. The registry's own
+   *fix direction* is a hypothesis, not a spec: `ASSEMBLE: PASS_OVERSIZE` (J12) and "split by FR
+   group" (J13) were both wrong, and one command each showed it.
+2. **Reproduce it live** with a throwaway probe matching the real call shape, before designing the
+   fix. A green stub suite can certify a bug as fixed; only the live path disproves it. Read a TUI
+   pane with `--from-start`, never a tail (J3) — a tail-grep reports SILENT for replies that arrived.
+3. **TDD the fix — RED first.** If a pre-existing test breaks, apply §"Regression provenance": check
+   whether the test *pinned the defect* before adjusting it. Three tests this session asserted the
+   bug as an acceptance criterion.
+4. **Mutation-test every guard** (§"Test discrimination"): stub each to its permissive value and
+   confirm a test fails. Verify the mutation applied — a `.replace()` matching nothing exits 0 and
+   reports the guard as enforced. Never mutate a path-resolver without snapshotting live state first
+   (J18).
+5. **Dogfood against the runtime.** Every fix on the Phase-5 path (`launch`, `dispatch`, `wait`, the
+   substrate record) must run once for real; isolation tests do not exercise adoption, redraws, or
+   handle rotation.
+6. **Flip the row with evidence**, linking the commit — `MONITORING` → `FIXED`/`DISPROVEN`. A stale
+   row is a coverage hole in both directions. Run the same sweep on sibling rows the fix moots.
+
 ## Telemetry
 
 ```bash

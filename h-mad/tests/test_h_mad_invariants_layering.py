@@ -27,6 +27,9 @@ _BASE_RULE_HEADINGS = (
     "Incident replay",
     "Test discrimination",
     "Assumption verification",
+    "Regression provenance",
+    "Both halves of a doc change",
+    "Reimplementation parity",
 )
 
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -171,6 +174,46 @@ def test_base_rule_assumption_verification_states_the_literal_instruction():
     )
     assert "cites the observed output" in text, (
         "an unevidenced assumption must be identifiable in review"
+    )
+
+
+def test_base_rule_regression_provenance_states_the_literal_instruction():
+    # Candidate `test-pinned-the-defect check` (recurrence 3). When a fix breaks
+    # an existing test, the reflex is to adjust the test -- but three tests this
+    # session (J17 selector, J1 handle, J2 pin path) had asserted the DEFECT as an
+    # acceptance criterion, so "make the test pass" would have preserved the bug.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Regression provenance" in text
+    assert "asserts current behaviour that the change is fixing" in text, (
+        "the rule must name the failure: a test pinning the defect as correct"
+    )
+    assert "Changing an existing test to pass is a violation unless" in text, (
+        "the rule must gate test edits, or it is advice"
+    )
+
+
+def test_base_rule_both_halves_states_the_literal_instruction():
+    # Candidate `both-halves doc fix` (recurrence 2). Deleting an unexecutable
+    # instruction (J11) is only half done; a test asserting ONLY its absence
+    # passes for a deletion that lost the capability.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Both halves of a doc change" in text
+    assert "the executable replacement landed" in text, (
+        "removing an instruction must assert the replacement, not just the removal"
+    )
+
+
+def test_base_rule_reimplementation_parity_states_the_literal_instruction():
+    # Candidate `differential-validator-test` (recurrence 1). J4 replaced
+    # `jsonschema` with a bundled validator; the only thing that made it
+    # trustworthy was a test asserting verdict-equality with the real library.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Reimplementation parity" in text
+    assert "differential test asserting identical results against the original" in text, (
+        "reimplementing a dependency must be pinned to the original's behaviour"
+    )
+    assert "real artifacts on disk" in text, (
+        "parity on a synthetic corpus alone repeats the Incident-replay gap"
     )
 
 

@@ -368,3 +368,21 @@ def test_skill_mandates_reading_size_status_not_only_the_pass_token():
     assert "suspect size before re-dispatching" in text, (
         "the note must say what unverified CHANGES, or it is not actionable"
     )
+
+
+def test_skill_documents_the_monitoring_item_workflow():
+    # Candidate `close-a-filed-defect cycle` (recurrence 9). The loop that closed
+    # 9 registry items in one session, made explicit so it is repeated rather than
+    # re-derived. Each step is load-bearing and each was violated at least once
+    # when skipped, so the doc must name all six.
+    text = _skill_norm()
+    assert "## Working a `skill-monitoring` item" in text
+    for step in ("Verify the entry's premise against the source",
+                 "Reproduce it live",
+                 "Mutation-test every guard",
+                 "Dogfood",
+                 "Flip the row"):
+        assert step in text, f"the playbook omits: {step!r}"
+    assert "the entry can be wrong" in text, (
+        "the premise-check step must warn the filing itself may be mistaken"
+    )

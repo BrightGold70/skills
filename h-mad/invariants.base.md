@@ -114,6 +114,37 @@
 - The evidence belongs in the document, not only in the author's terminal. A cited output is
   checkable by a reviewer; "I verified this" is not.
 
+## Regression provenance
+- When a change makes an existing test fail, the plan or design MUST establish whether that test
+  **asserts current behaviour that the change is fixing** before proposing to edit it. **Changing an
+  existing test to pass is a violation unless** the doc states that the test pinned a defect (or
+  stale contract) as correct, and cites what it asserted.
+- The reflex "make the failing test pass" preserves the bug when the test *was* the bug. Three tests
+  in one session asserted the defect as an acceptance criterion — a forwarded selector a live
+  runtime rejects, a create-response handle the pane never has, a cwd-relative path — and each would
+  have survived a naive "adjust the test" edit. A red pre-existing test is evidence about the test as
+  often as about the change.
+
+## Both halves of a doc change
+- Removing a documented instruction, flag, or capability MUST be paired with **the executable
+  replacement landed** (or an explicit statement that the capability is intentionally dropped, with
+  the reason). A test asserting only that the old text is *gone* passes for a deletion that silently
+  lost the capability.
+- An unexecutable instruction was deleted in one session; a test checking only its absence would
+  have gone green while the run lost the ability it named. The gate is: assert the new path works in
+  the same change that removes the old one.
+
+## Reimplementation parity
+- Replacing a third-party dependency (validator, parser, formatter) with an in-tree implementation
+  MUST ship a **differential test asserting identical results against the original** across a corpus
+  that covers every construct in use, AND against the **real artifacts on disk**. Shipping the
+  reimplementation with tests that exercise only itself is a violation.
+- A hand-rolled reimplementation is worth exactly what its differential test catches. A bundled
+  JSON-Schema validator agreed with the library on a construct-complete corpus and on the live state
+  records; the traps it had to match (annotation-only `format`, `bool` is not `integer`) were
+  invisible without the library beside it. Parity on a synthetic corpus alone repeats the
+  Incident-replay gap: the corpus shares the author's model of the reimplementation.
+
 ---
 
 ## How agy uses this file
