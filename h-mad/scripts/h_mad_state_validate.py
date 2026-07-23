@@ -25,31 +25,134 @@ import json
 import sys
 from pathlib import Path
 
+class _MiniDraft7:
+    """A stdlib validator for exactly the Draft-07 subset these schemas use.
+
+    J4/F8: `jsonschema` is absent from a stock Homebrew/PEP-668 `python3`, so
+    every state call in a run exited 2 until the operator hand-substituted
+    another interpreter -- hit twice in the first five minutes of one run. F8
+    shipped a better *message*, which is not a fix for a missing dependency.
+
+    Of the filed options, degrading to the historical tier when `jsonschema` is
+    missing was rejected: silently validating against a weaker schema is the same
+    class of defect as an unenforced guard. Bundling a validator removes the
+    dependency instead, which is also what `invariants.base.md` §"No new external
+    dependency" wants.
+
+    Deliberately supports ONLY the constructs present in
+    `h_mad_state_schema*.json` -- `type` (incl. lists), `enum`, `required`,
+    `properties`, `additionalProperties` (bool or schema), `items`, `minimum`,
+    `maximum`, `minLength`. An unknown keyword is IGNORED, matching Draft-07,
+    rather than guessed at.
+
+    `format` is ignored on purpose. Draft-07 treats it as an annotation unless a
+    format checker is supplied and the production path supplies none, so
+    `started_ts: "not-a-date"` is valid today. Enforcing it here would reject
+    records the real validator accepts -- a regression dressed as an improvement.
+
+    `jsonschema` still wins when importable; this only carries the run when it is
+    not. `tests/test_h_mad_state_validate_fallback.py` asserts the two agree on
+    every construct and on the live records, which is the only thing that makes a
+    hand-rolled validator trustworthy.
+    """
+
+    _TYPES = {
+        "object": dict, "array": list, "string": str,
+        "number": (int, float), "boolean": bool,
+    }
+
+    def __init__(self, schema: dict) -> None:
+        self.schema = schema
+
+    def is_valid(self, instance: object) -> bool:
+        return self._ok(self.schema, instance)
+
+    @classmethod
+    def _type_ok(cls, expected: object, value: object) -> bool:
+        names = expected if isinstance(expected, list) else [expected]
+        for name in names:
+            if name == "null":
+                if value is None:
+                    return True
+            elif name == "integer":
+                # bool is a subclass of int in Python; JSON Schema treats them
+                # as distinct types.
+                if isinstance(value, int) and not isinstance(value, bool):
+                    return True
+            elif name == "boolean":
+                if isinstance(value, bool):
+                    return True
+            elif name == "number":
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    return True
+            else:
+                py = cls._TYPES.get(str(name))
+                if py is not None and isinstance(value, py):
+                    return True
+        return False
+
+    def _ok(self, schema: object, value: object) -> bool:
+        if not isinstance(schema, dict):
+            return True
+        if "type" in schema and not self._type_ok(schema["type"], value):
+            return False
+        if "enum" in schema and value not in schema["enum"]:
+            return False
+        if isinstance(value, str) and "minLength" in schema:
+            if len(value) < schema["minLength"]:
+                return False
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in schema and value < schema["minimum"]:
+                return False
+            if "maximum" in schema and value > schema["maximum"]:
+                return False
+        if isinstance(value, list) and "items" in schema:
+            if not all(self._ok(schema["items"], item) for item in value):
+                return False
+        if isinstance(value, dict):
+            props = schema.get("properties", {})
+            for name in schema.get("required", []):
+                if name not in value:
+                    return False
+            for name, sub in props.items():
+                if name in value and not self._ok(sub, value[name]):
+                    return False
+            extra = schema.get("additionalProperties", True)
+            if extra is not True:
+                for name, item in value.items():
+                    if name in props:
+                        continue
+                    if extra is False or not self._ok(extra, item):
+                        return False
+        return True
+
+
 try:
-    from jsonschema import Draft7Validator
-except ImportError:  # pragma: no cover - dependency guard
-    print(
-        "ERROR: jsonschema is required by the H-MAD state scripts but is not "
-        "importable by this interpreter (" + sys.executable + ").\n"
-        "Remedy: run the state scripts with an interpreter that has it — e.g. a "
-        "conda env (`/opt/anaconda3/bin/python3`), a project venv, or "
-        "`python3 -m pip install --user jsonschema` (add --break-system-packages "
-        "on a PEP-668 / Homebrew Python if --user is refused).",
-        file=sys.stderr,
-    )
-    sys.exit(2)
+    from jsonschema import Draft7Validator as _Draft7Validator
+except ImportError:  # pragma: no cover - exercised by the fallback test
+    _Draft7Validator = None
+
+# Test seam: force the bundled path even where jsonschema is installed, so the
+# differential tests can compare both backends in one process.
+_FORCE_FALLBACK = False
+
+
+def _make_validator(schema: dict):
+    if _Draft7Validator is None or _FORCE_FALLBACK:
+        return _MiniDraft7(schema)
+    return _Draft7Validator(schema)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 STRICT_SCHEMA = SCRIPT_DIR / "h_mad_state_schema.json"
 HISTORICAL_SCHEMA = SCRIPT_DIR / "h_mad_state_schema_historical.json"
 
-_validators: dict[str, Draft7Validator] = {}
+_validators: dict = {}
 
 
-def _validator(path: Path) -> Draft7Validator:
+def _validator(path: Path):
     key = str(path)
     if key not in _validators:
-        _validators[key] = Draft7Validator(json.loads(path.read_text(encoding="utf-8")))
+        _validators[key] = _make_validator(json.loads(path.read_text(encoding="utf-8")))
     return _validators[key]
 
 
