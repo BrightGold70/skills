@@ -228,3 +228,68 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # measured as fine. Assert it is gone, so it cannot creep back.
     assert "reviewer cliff" not in past
     assert "reviewer cliff" not in approaching
+
+
+# --- J12: size must travel ON the verdict line, not beside it -----------------
+#
+# `SKILL.md` mandates asserting `ASSEMBLE: PASS` before dispatch. The size
+# warning was a SEPARATE `!` line, so an orchestrator following the documented
+# contract exactly never had to read it -- the same defect class the `PREFLIGHT:`
+# token was created to fix, one signal over.
+#
+# The filed fix direction offered `ASSEMBLE: PASS_OVERSIZE`. Testing that
+# proposal kills it: "ASSEMBLE: PASS_OVERSIZE" matches a `grep "ASSEMBLE: PASS"`
+# and satisfies `startswith("ASSEMBLE: PASS")` -- which is how every current
+# consumer, including this file's own tests, reads the token. It would have
+# reproduced J12 rather than fixed it.
+#
+# The other option, `ASSEMBLE: HALT <phase>:oversize`, is now contradicted by
+# evidence: J13 measured five file-indirection prompts spanning 53-61 KB all
+# answered. Halting on a size that demonstrably works would be a regression.
+#
+# So: a REQUIRED machine-readable field on the PASS line itself. "Proceed" stays
+# correct, and the field lands inside the line the mandated read already parses.
+
+
+def test_assemble_pass_always_carries_a_size_status_field(tmp_path):
+    root = _project(tmp_path)
+    out = tmp_path / "prompt.txt"
+    r = _run("--feature", "demo", "--phase", "plan",
+             "--project-root", str(root), "--out", str(out))
+    assert r.returncode == 0, r.stderr
+    line = r.stdout.splitlines()[0]
+    assert line.startswith("ASSEMBLE: PASS")
+    assert "size_status=" in line, (
+        "size must be on the verdict line; beside it is what J12 filed"
+    )
+    assert "size_status=verified" in line
+
+
+def test_size_status_flips_to_unverified_past_the_confirmed_ceiling(tmp_path):
+    root = _project(tmp_path)
+    spec = root / "docs/01-plan/features/demo.spec.md"
+    out = tmp_path / "prompt.txt"
+    spec.write_text("# Spec: demo\n\n## Functional Requirements\n"
+                    + "- FR-1 filler (AC-1.1)\n" * 2300)
+    r = _run("--feature", "demo", "--phase", "plan",
+             "--project-root", str(root), "--out", str(out))
+    assert r.returncode == 0, r.stderr
+    line = r.stdout.splitlines()[0]
+    assert "size_status=unverified" in line
+    # Still a PASS: the evidence says prompts this size answer.
+    assert line.startswith("ASSEMBLE: PASS ")
+
+
+def test_oversize_verdict_token_is_not_a_pass_substring_variant(tmp_path):
+    # Regression guard for the rejected design. If someone later "folds size into
+    # the verdict" by appending to the token, every PASS-grep consumer silently
+    # keeps passing. Assert the token stays exactly PASS or HALT.
+    root = _project(tmp_path)
+    spec = root / "docs/01-plan/features/demo.spec.md"
+    out = tmp_path / "prompt.txt"
+    spec.write_text("# Spec: demo\n\n## Functional Requirements\n"
+                    + "- FR-1 filler (AC-1.1)\n" * 2300)
+    r = _run("--feature", "demo", "--phase", "plan",
+             "--project-root", str(root), "--out", str(out))
+    token = r.stdout.splitlines()[0].split()[1]
+    assert token in ("PASS", "HALT"), f"verdict token drifted to {token!r}"
