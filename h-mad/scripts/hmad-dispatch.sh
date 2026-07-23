@@ -791,17 +791,60 @@ _cmd_worktree_ps() {  # [--limit <n>]
 # Selector -> filesystem path, or empty when it cannot be resolved to exactly one
 # existing directory. Empty is "cannot check", never "safe to destroy".
 _worktree_path() {  # $1 selector -> path on stdout, or empty + rc 1
-  local sel="$1" path listing matches
+  # Understands the selector grammar `orca worktree rm --help` documents:
+  # `id:<repo-id>::<path>`, `name:<displayName>`, `branch:<branch>`,
+  # `issue:<number>`, `path:<path>`, `active`/`current` -- plus the bare forms
+  # this function has always accepted.
+  #
+  # J17: it previously understood ONLY the bare forms, so every documented
+  # prefixed selector failed to resolve. That mattered because the caller
+  # treated "cannot resolve" as "no guard needed" and removed the worktree
+  # anyway: `worktree-rm "path:<p>"` destroyed a worktree holding an unmerged
+  # commit, silently (verified live 2026-07-23). Orca's own refusal covers a
+  # dirty working tree only, never an unmerged branch, so this resolution IS
+  # the unmerged guard's reach.
+  local sel="$1" path listing matches key val
+  # `active`/`current` name the caller's own worktree; only Orca knows which.
   case "$sel" in
-    *::*) path="${sel#*::}"
+    active|current)
+      path="$(orca worktree current --json 2>/dev/null \
+              | jq -r '.result.worktree.path // empty' 2>/dev/null)"
+      [ -n "$path" ] && [ -d "$path" ] && { printf '%s\n' "$path"; return 0; }
+      return 1 ;;
+  esac
+  key=""; val="$sel"
+  case "$sel" in
+    path:*)   key=path;        val="${sel#path:}" ;;
+    name:*)   key=displayName; val="${sel#name:}" ;;
+    branch:*) key=branch;      val="${sel#branch:}" ;;
+    issue:*)  key=issue;       val="${sel#issue:}" ;;
+    id:*)     val="${sel#id:}" ;;
+  esac
+  # `id:<repo-id>::<path>` (and the bare `<repo-id>::<path>`) carry the path
+  # inline, so they need no listing.
+  case "$val" in
+    *::*) path="${val#*::}"
           [ -d "$path" ] && { printf '%s\n' "$path"; return 0; } ;;
   esac
+  # `path:` is likewise self-describing. An explicit path that does not exist is
+  # unresolvable -- never a reason to fall through to a fuzzier match.
+  if [ "$key" = "path" ]; then
+    [ -d "$val" ] && { printf '%s\n' "$val"; return 0; }
+    return 1
+  fi
   listing="$(orca worktree ps --limit 200 --json 2>/dev/null)" || return 1
   printf '%s' "$listing" | jq -e '.result.truncated != true' >/dev/null 2>&1 || return 1
-  matches="$(printf '%s' "$listing" | jq -r --arg s "$sel" '
+  matches="$(printf '%s' "$listing" | jq -r --arg v "$val" --arg k "$key" '
     [ .result.worktrees[]?
-      | select(.worktreeId==$s or .path==$s or .displayName==$s
-               or .branch==$s or ((.branch // "")|sub("^refs/heads/";""))==$s)
+      | select(
+          if   $k == "displayName" then .displayName == $v
+          elif $k == "branch"      then (.branch == $v
+                                         or ((.branch // "")|sub("^refs/heads/";"")) == $v)
+          elif $k == "issue"       then (.linkedIssue != null
+                                         and ((.linkedIssue|tostring) == $v))
+          else (.worktreeId==$v or .path==$v or .displayName==$v
+                or .branch==$v or ((.branch // "")|sub("^refs/heads/";""))==$v)
+          end)
       | .path ] | unique' 2>/dev/null)" || return 1
   [ "$(printf '%s' "$matches" | jq -r 'length' 2>/dev/null)" = "1" ] || return 1
   path="$(printf '%s' "$matches" | jq -r '.[0]' 2>/dev/null)"
@@ -833,28 +876,52 @@ _cmd_worktree_rm() {  # <selector> [--force] [--base <ref>]
   _require_orca worktree-rm || return $?
   _need "${1:-}" selector || return $?
   local sel="$1"; shift
-  local args=(worktree rm --worktree "$sel") force="" base=""
+  local force="" base=""
   while [ $# -gt 0 ]; do case "$1" in
-    --force) force=1; args+=(--force); shift ;;
+    --force) force=1; shift ;;
     --base) base="$2"; shift 2 ;;
     *) shift ;;
   esac; done
+  # What actually gets forwarded. J17: this used to be the caller's string
+  # verbatim, and `repo::<path>` -- the form 8 tests pinned -- is not a selector
+  # Orca accepts at all (`selector_not_found` from a live runtime). Forward the
+  # RESOLVED path in a documented form instead, so the guard and the removal can
+  # never disagree about which worktree is meant.
+  local target="$sel"
   if [ -n "$force" ]; then
     echo "[H-MAD] worktree-rm forced selector=$sel — guards skipped" >&2
   else
     local path reason
-    if path="$(_worktree_path "$sel")"; then
-      [ -n "$base" ] || base="$(_worktree_default_base "$path" || true)"
-      if ! reason="$(_worktree_holds_work "$path" "$base")"; then
-        echo "hmad-dispatch: $reason — '$sel' still holds work at $path; nothing was removed. Commit or merge it, or pass --force to discard." >&2
-        return 1
-      fi
+    # An unresolvable selector is "cannot check", which for a destructive verb
+    # must mean refuse -- not, as before, skip the guard and delete anyway.
+    if ! path="$(_worktree_path "$sel")" || [ -z "$path" ]; then
+      echo "hmad-dispatch: worktree_selector_unresolvable — '$sel' does not resolve to exactly one existing worktree; nothing was removed. Use a documented selector (path:<path>, name:<displayName>, branch:<branch>, issue:<number>, id:<repo-id>::<path>, active) or pass --force to remove without guards." >&2
+      return 1
     fi
+    [ -n "$base" ] || base="$(_worktree_default_base "$path" || true)"
+    if ! reason="$(_worktree_holds_work "$path" "$base")"; then
+      echo "hmad-dispatch: $reason — '$sel' still holds work at $path; nothing was removed. Commit or merge it, or pass --force to discard." >&2
+      return 1
+    fi
+    target="path:$path"
   fi
+  local args=(worktree rm --worktree "$target")
+  [ -n "$force" ] && args+=(--force)
   args+=(--json)
-  local rc=0
-  orca "${args[@]}" >/dev/null || rc=$?
-  [ $rc -eq 0 ] || { echo "[H-MAD] worktree-rm failed selector=$sel rc=$rc" >&2; return $rc; }
+  # Capture rather than discard: the reason for a failure travels in the
+  # response envelope, and sending it to /dev/null left the operator a bare
+  # `rc=1`. An `ok:false` envelope with exit 0 also has to fail here -- the F11
+  # class every other orca-calling verb was already guarded against.
+  local out rc=0
+  out="$(orca "${args[@]}" 2>&1)" || rc=$?
+  if [ $rc -ne 0 ] || ! printf '%s' "$out" | jq -e '.ok == true' >/dev/null 2>&1; then
+    [ $rc -ne 0 ] || rc=1
+    echo "[H-MAD] worktree-rm failed selector=$target rc=$rc: $(printf '%s' "$out" | jq -r '
+      if (.error|type) == "object" then (.error.message // .error.code // "error")
+      elif (.error|type) == "string" then .error
+      else "error" end' 2>/dev/null || printf '%s' "$out" | head -c 200)" >&2
+    return $rc
+  fi
 }
 
 _cmd_file_diff() {   # <path> [--staged] [--worktree <sel>]

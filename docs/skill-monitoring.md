@@ -477,7 +477,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| J17 | 🔴 | MONITORING | `worktree-rm` forwards the caller's selector raw to `orca worktree rm`, which accepts only a full `worktreeId` — the `<anything>::<path>` form the guard resolves and 8 tests assert is rejected live as `selector_not_found` |
+| J17 | 🔴 | **FIXED** `b0662cc` | `worktree-rm` forwarded the caller's selector raw (`repo::<path>` → `selector_not_found`), AND skipped its guards entirely for every *documented* selector form — `path:<p>` silently destroyed a worktree holding an unmerged commit |
 
 - 🔴 **J17 — `worktree-rm`'s guarded selector form is rejected by the real runtime.** Removing the
   merged `auto-hmad-e2e-auto-run-1-…` worktree failed:
@@ -513,6 +513,43 @@ protocol has two gaps that only running it could expose. Both unfixed.
   at the resolved form. Note the reason `--force` would NOT have helped: it skips the guards, not
   the selector, so a forced run fails identically — an operator reaching for `--force` here (the
   reflex [[J15]] exists to prevent) gets the same opaque `rc=1`. [[J15]] [[B5]]
+
+  **The filing above understates it. Fixed `b0662cc` (feature/195); a second, worse defect was
+  found while fixing the first.**
+
+  `_worktree_path` understood only *bare* selectors, so every **documented** form — `path:`,
+  `name:`, `branch:`, `issue:`, `active`/`current` — failed to resolve. And the caller treated
+  "cannot resolve" as "no guard needed": the guard block was wrapped in `if path="$(_worktree_path
+  "$sel")"; then`, so an unresolvable selector fell straight through to the removal. Its own
+  contract comment says *"Empty is 'cannot check', never 'safe to destroy'"*; the caller inverted it.
+
+  **Proven live 2026-07-23 before fixing**, on a throwaway worktree holding one unmerged commit and
+  a clean tree:
+
+  | selector | guard | outcome |
+  |---|---|---|
+  | `repo::<p>` | ran, refused | worktree survived (the filed bug — noisy but SAFE) |
+  | `path:<p>` | **skipped** | **worktree destroyed, silently** — no message, no error, exit 0 |
+
+  So the forms that worked were the unguarded ones, and the form the tests pinned was the
+  guarded-but-broken one. Orca's own refusal covers a **dirty working tree only** (`runtime_error:
+  Failed to delete worktree … ?? PRECIOUS.txt`) and never an unmerged branch, so h-mad's guard is
+  the sole protection for precisely the case [[J15]] exists to prevent. Data loss was averted here
+  only because Orca retains an unmerged branch — but the *worktree* went, with no signal, where the
+  protocol promises a refusal.
+
+  **A prediction I got wrong, worth recording:** I first assumed the documented selectors would
+  bypass straight into data loss. The probe disproved that — Orca's dirty-tree check caught the
+  uncommitted case. Only after committing the file (clean tree, unmerged branch) did the hole open.
+  The narrow window is the whole finding; asserting the broad version would have been wrong.
+
+  **Shipped:** `_worktree_path` learns the full grammar from `worktree rm --help` (incl.
+  `active`/`current` via `worktree current`); an unresolvable selector **refuses**
+  (`worktree_selector_unresolvable`) with `--force` as the escape hatch; the resolved path is
+  forwarded as `path:<p>` so guard and removal cannot disagree; orca's stdout is captured so the
+  failure reason reaches the operator, and an `ok:false` envelope with exit 0 now fails (F11 class —
+  this verb had been missed). Suite 600 → 604; all five guards mutation-tested. Live after: `path:`,
+  `name:` and `repo::` all refuse an unmerged worktree, and `repo::` now *succeeds* on a clean one.
 
 ---
 
