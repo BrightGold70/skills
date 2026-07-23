@@ -143,7 +143,7 @@ is not re-filed.
 |---|---|---|---|
 | J1 | 🔴 | **FIXED** | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
 | J2 | 🟡 | **FIXED** | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
-| J3 | 🟡 | MONITORING | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
+| J3 | 🟡 | **FIXED** | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
 | J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
@@ -231,6 +231,33 @@ is not re-filed.
   lose the *end* of a report), but here the tail was stale about the pane's *readiness*, which
   drives a relaunch decision. **Fix direction:** SKILL's readiness/liveness checks should specify
   `--from-start` (or a full-buffer read) rather than `read --lines N`. [[F5]]
+
+  **FIXED 2026-07-23 — and the doc half was the smaller half.**
+
+  The dangerous surface was **machinery, not advice**: `_snapshot` read a **6-line tail**, and
+  `_wait_stable` returns idle the moment two snapshots match. Two identical *stale* tails are
+  therefore accepted as proof of idleness — precisely the state J3 observed for three consecutive
+  polls. `hmad-dispatch wait` could report idle for a pane mid-generation, after which the
+  orchestrator reads a report that has not been written yet. The J13 probes showed the same shape
+  from the other side: a pane sat unchanged at `Thought for 5s, 305 tokens` for minutes and then
+  produced output.
+
+  Measured on the live agy pane: the old snapshot saw **676 of 47,711 bytes — 1.4% of the buffer**,
+  and decided readiness from it.
+
+  A bigger tail is not the fix (J3's was already 40 lines; a tail is a slice of one frame however
+  deep). `_snapshot` now reads `--cursor 0` on Orca and a much deeper screen on cmux, which has no
+  cursor addressing. Verified live: `wait` still confirms idle in 6s, and two consecutive
+  full-buffer snapshots of an idle pane are identical, so the stability signal is intact.
+
+  Docs followed: the `/clear` readiness check uses `--from-start`, and the five *"re-read with a
+  larger `--lines`"* remedies across `SKILL.md` and `references/failure-recovery.md` now say
+  `--from-start` — that advice was actively wrong, since a larger tail does not escape an overdrawn
+  region.
+
+  One test initially passed for the wrong reason: a whole-file search for the readiness string
+  matched the unrelated J13 size guidance added to `SKILL.md` earlier the same day. Scoped to the
+  context-hygiene block. [[F5]] [[J13]]
 - 🟡 **J4 — F8 re-opened.** The actionable remedy message shipped and works, but the gap it
   describes is unchanged: `python3` on this machine (homebrew 3.14) has no `jsonschema`, so every
   `h_mad_state_write.py` / `h_mad_state_validate.py` / `h_mad_state_staleness.py` call in a run
