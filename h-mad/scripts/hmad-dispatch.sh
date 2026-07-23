@@ -594,12 +594,42 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   esac
   local args=(terminal create --worktree "$wt" --command "$cmd" --title "$agent" --json)
   [ -n "$focus" ] && args+=("$focus")
-  local handle
-  handle="$(_orca_json '.result.terminal.handle // empty' "${args[@]}")" || return $?
-  [ -n "$handle" ] || { echo "hmad-dispatch: launch $agent — no handle in create response" >&2; return 1; }
+  # J1: `.result.terminal.handle` is NOT the handle the pane ends up with. It is
+  # a pre-adoption placeholder -- confirmed three times, most recently by a direct
+  # probe where create said term_d1f7a348…, the pane was term_f0966e2b…, and the
+  # create handle never appeared in `terminal list` at all. Pinning it made every
+  # later dispatch vanish into a handle that did not exist (the 912b93a liveness
+  # check caught it, so launch always failed loud and could not pin).
+  #
+  # `paneKey` from the SAME response is stable, and is the `<tabId>:<leafId>` J16
+  # already joins on. So: create, then resolve the real handle from `terminal
+  # list` by that key. Identity is still owned at spawn -- it is just read from
+  # the field that survives adoption.
+  local resp pane_key handle
+  resp="$(_orca_json '.result.terminal | tojson' "${args[@]}")" || return $?
+  pane_key="$(printf '%s' "$resp" | jq -r '.paneKey // empty' 2>/dev/null)"
+  if [ -z "$pane_key" ]; then
+    echo "hmad-dispatch: launch $agent — create response carries no paneKey, so the pane cannot be identified; nothing was pinned. The create-response handle is a pre-adoption placeholder (J1) and must not be pinned. Pin manually after confirming the pane: hmad-dispatch pin $agent <handle>" >&2
+    return 1
+  fi
+  # Adoption is not instantaneous; a live probe resolved in under 5s.
+  local deadline=$(( $(date +%s) + ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20} ))
+  while :; do
+    handle="$(orca terminal list --json 2>/dev/null \
+      | jq -r --arg k "$pane_key" \
+          '.result.terminals[]? | select(((.tabId//"")+":"+(.leafId//"")) == $k) | .handle' \
+          2>/dev/null | head -1)"
+    [ -n "$handle" ] && break
+    [ "$(date +%s)" -ge "$deadline" ] && break
+    sleep 1
+  done
+  if [ -z "$handle" ]; then
+    echo "hmad-dispatch: launch $agent — paneKey $pane_key did not appear in 'orca terminal list' within ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}s; the pane may not have started. Nothing was pinned." >&2
+    return 1
+  fi
   _cmd_pin "$agent" "$handle" >/dev/null || { echo "hmad-dispatch: launch $agent — pin failed" >&2; return 1; }
   printf '%s\n' "$handle"
-  echo "[H-MAD] launched $agent -> $handle (identity captured at spawn, pinned)" >&2
+  echo "[H-MAD] launched $agent -> $handle (resolved via paneKey $pane_key, pinned)" >&2
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile

@@ -17,6 +17,13 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_WT
   printf '%s' "$HMAD_STUB_ORCA_WT_PS_STDOUT"
   exit 0
 fi
+# J1: `launch` calls `terminal create` and then `terminal list`, and the whole
+# point is that they report DIFFERENT handles for the same pane. A single shared
+# stdout cannot express that. Consulted only when explicitly set.
+if [ "${1:-}" = "terminal" ] && [ "${2:-}" = "create" ] && [ -n "${HMAD_STUB_ORCA_CREATE_STDOUT:-}" ]; then
+  printf '%s' "$HMAD_STUB_ORCA_CREATE_STDOUT"
+  exit 0
+fi
 # Default success envelope for un-cased `--json` verbs. Real Orca always returns
 # {"ok":true,"result":{…}}; the previous empty-stdout default was unrealistic and
 # is now rejected by the wrapper's `_orca_json` ok-check. Only applies when no
