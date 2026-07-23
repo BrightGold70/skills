@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,38 @@ class TestCreate:
         p = store(tmp_path, {"demo": dict(VALID, iterate_cycles=3)})
         sw.create_feature(p, "demo")
         assert read(p)["demo"]["iterate_cycles"] == 3
+
+    def test_default_started_ts_is_current_utc_time_not_epoch(self, tmp_path):
+        p = store(tmp_path)
+        before = datetime.now(timezone.utc)
+        sw.create_feature(p, "demo")
+        after = datetime.now(timezone.utc)
+        started = datetime.fromisoformat(read(p)["demo"]["started_ts"].replace("Z", "+00:00"))
+        assert started != datetime(1970, 1, 1, tzinfo=timezone.utc)
+        assert before - timedelta(seconds=120) <= started <= after + timedelta(seconds=120)
+
+    def test_explicit_started_ts_is_stored_verbatim(self, tmp_path):
+        p = store(tmp_path)
+        explicit = "2001-02-03T04:05:06+09:00"
+        sw.create_feature(p, "demo", explicit)
+        assert read(p)["demo"]["started_ts"] == explicit
+
+    def test_epoch_record_survives_unrelated_feature_write_byte_identically(self, tmp_path):
+        old = dict(VALID, feature="old", started_ts="1970-01-01T00:00:00Z")
+        p = store(tmp_path, {"old": old})
+        before = json.dumps(old, sort_keys=True)
+        sw.create_feature(p, "new")
+        assert json.dumps(read(p)["old"], sort_keys=True) == before
+
+    def test_new_default_started_ts_produces_short_telemetry_elapsed(self, tmp_path):
+        import h_mad_telemetry as telemetry
+
+        p = store(tmp_path)
+        sw.create_feature(p, "demo")
+        out = tmp_path / "telemetry.jsonl"
+        assert telemetry.main(["record", "--feature", "demo", "--state", str(p), "--out", str(out)]) == 0
+        row = json.loads(out.read_text().splitlines()[0])
+        assert row["elapsed_min"] < 60
 
 
 class TestSetFields:
