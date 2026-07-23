@@ -738,7 +738,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`)
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
 - `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
-- `h_mad_state_schema.json` — jsonschema for `orchestrator_state` (v2.2, strict tier)
+- `h_mad_state_schema.json` — JSON Schema (Draft-07) for `orchestrator_state` (v2.2, strict tier). Validated by `jsonschema` when importable, otherwise by the stdlib validator bundled in `h_mad_state_validate.py`, so the state scripts run on a stock `python3` with no third-party packages (J4). The two are held to identical verdicts by a differential test.
 - `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
 - `h_mad_phase7_preconditions.py` — Phase 7 gate: `check()` + CLI printing `PHASE7: READY|BLOCKED`, exit 0 on verdict / 2 on operational error. Enforces 6-before-7 by reading state and the gap analysis.
 - `h_mad_state_staleness.py` — compares state against git and reports disagreement (`STALENESS: CLEAN|SUSPECT`); catches a record that is well-formed and no longer true.

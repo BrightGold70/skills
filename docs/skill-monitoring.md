@@ -17,7 +17,7 @@ Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`
 | F5 | 🟡 | FIXED | scrollback < report — added `read --cursor N` / `--from-start` full-buffer read |
 | F6 | 🟡 | FIXED | agy homebrew self-upgrade — documented version/trust preflight |
 | F7 | 🟢 | FIXED | default substrate was cmux when both present → flipped to orca (`9cdd455`) |
-| F8 | 🟡 | **RE-OPENED** | jsonschema missing — remedy *message* shipped, dependency gap unchanged; every run still needs a manual interpreter (see J4) |
+| F8 | 🟡 | **FIXED** (via J4) | jsonschema missing — closed by bundling a stdlib validator; the state scripts no longer need a third-party package |
 | F9 | 🟡 | FIXED | Codex Orca title = worktree name — pin `HMAD_ORCA_CODEX_TERMINAL` (documented in agent-substrate.md identity) |
 | F10 | 🟡 | FIXED | `~/.claude/skills/handoff` was a real dir → symlinked to repo 2026-07-22 |
 | F11 | 🔴 | FIXED | verbs swallow `ok:false` — shared `_orca_json` guard (`.ok != false`) on all extract verbs |
@@ -144,7 +144,7 @@ is not re-filed.
 | J1 | 🔴 | **FIXED** | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
 | J2 | 🟡 | **FIXED** | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
 | J3 | 🟡 | **FIXED** | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
-| J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
+| J4 | 🟡 | **FIXED** | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
 | J7 | 🟢 | **RESOLVED** | F13 residual: the pin **file** leaked into `test_hmad_dispatch.py`. Fixed by Wave 2 (`787aecf`) — `run()` injects a per-invocation never-created path; suite 530 passed identical with and without the pin file |
@@ -266,6 +266,40 @@ is not re-filed.
   **Fix direction:** vendor a minimal validator, degrade gracefully to the historical tier when
   `jsonschema` is absent, or document a required interpreter in the SKILL preflight so it is a
   stated prerequisite rather than a per-call surprise.
+
+  **FIXED 2026-07-23 — by the first option, not the cheap one.**
+
+  "Degrade to the historical tier when `jsonschema` is absent" was rejected outright: silently
+  validating against a weaker schema is the same defect class as an unenforced guard, and it would
+  fail open exactly when the operator is least likely to notice. Documenting a required interpreter
+  keeps the friction J4 measures ("hit twice in the first five minutes").
+
+  So `h_mad_state_validate.py` now bundles `_MiniDraft7`, a stdlib validator covering **exactly** the
+  ten constructs the two schema files use — enumerated from the schemas rather than guessed — with
+  unknown keywords ignored, as Draft-07 requires. `jsonschema` still wins when importable; the
+  bundled path only carries a run when it is not.
+
+  **A hand-rolled validator is worth exactly what its differential test catches**, so that is the
+  shape of the tests: under an interpreter that HAS `jsonschema`, both backends must return the same
+  verdict on a corpus covering every construct, on `classify()` as well as the leaf check, and on
+  the **live records on disk** (§"Incident replay" — the corpus was authored beside the validator
+  and shares its assumptions; those records were not).
+
+  Two traps worth recording:
+
+  * **`format` must NOT be enforced.** Draft-07 treats it as an annotation unless a format checker
+    is supplied, and the production path supplies none — so `started_ts: "not-a-date"` is valid
+    today. A validator that "helpfully" enforced date-time would reject records the real one
+    accepts: a regression dressed as an improvement. Verified against `jsonschema` before writing it.
+  * **`bool` is not an `integer` in JSON Schema**, but `bool` subclasses `int` in Python. Mutation
+    testing caught this: deleting the guard left the suite 5/5 green because no corpus case passed a
+    boolean where an integer was expected. Three cases added; the mutation now fails 3 tests.
+
+  **Verified end to end on the interpreter J4 is about.** A stock `python3` (no `jsonschema`) now
+  runs `h_mad_state_validate.py`, `h_mad_state_write.py --create/--set` and `h_mad_state_staleness.py`,
+  and both interpreters return byte-identical verdicts on the live store
+  (`STATE: PASS strict=6 historical=0 invalid=0`, `STALENESS: CLEAN findings=0`). **The full suite
+  now passes under both** — 650 under anaconda and 650 under plain `python3`. [[F8]]
 - 🟢 **J5 — `--claim` cannot create.** SKILL's `start_fresh` route prints
   `h_mad_state_write.py … --feature <f> --claim "<session-id>"`, but on a feature that does not
   exist yet that exits 2 with `ERROR: no such feature`. Every first-time claim — i.e. every
