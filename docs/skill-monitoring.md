@@ -142,7 +142,7 @@ is not re-filed.
 | ID | Sev | Status | One-line |
 |---|---|---|---|
 | J1 | 🔴 | **FIXED** | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
-| J2 | 🟡 | MONITORING | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
+| J2 | 🟡 | **FIXED** | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
 | J3 | 🟡 | MONITORING | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
 | J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
@@ -203,6 +203,25 @@ is not re-filed.
   target repo's. Cross-repo runs are a normal mode (this whole feature was one). **Fix direction:**
   resolve the pin file against the project root the run is operating on, and/or make `env` print
   which pin file it read. Workaround today: export `HMAD_ORCA_*_TERMINAL` explicitly.
+
+  **FIXED 2026-07-23.** `_pin_file` now resolves in three branches: an explicit `HMAD_ORCA_PIN_FILE`
+  wins outright; otherwise the default anchors to the **enclosing git repository**
+  (`git rev-parse --show-toplevel`), which is where `.h-mad/` lives by convention; outside a repo it
+  keeps the old cwd-relative behaviour rather than inventing a location. And `env` now prints
+  `pin file: <path>` — J2's core complaint was that the wrong file was read *silently*, so naming it
+  on the line an operator already reads is half the fix.
+
+  **Blast radius was larger than filed.** `_receipt_file` derives from `dirname(_pin_file)`, so the
+  Wave-3 preflight *receipt* moved with the cwd too: `env` in one directory and `send` in another
+  could disagree about whether a receipt existed. Both now follow the repo root.
+
+  **A pre-existing test asserted the literal `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}` as
+  AC-6.5** — the defect encoded as an acceptance criterion, the third instance of that pattern in
+  one day (see J17, J1). Its intent (pin resolution must not change silently) was right, so it was
+  re-aimed at the three branches rather than deleted.
+
+  Verified live from three cwds: repo root, a subdirectory (no stray second file), and the sibling
+  `HemaSuite` checkout — which now reads *its own* pins and says so. [[J18]]
 - 🟡 **J3 — a tail read of a TUI is not evidence of pane state.** `hmad-dispatch read agy
   --lines 12..40` showed a boot screen (`You are currently not signed in`, spinner) unchanged
   across two minutes and three polls; I was one step from declaring the CLI wedged and relaunching
@@ -684,6 +703,36 @@ protocol has two gaps that only running it could expose. Both unfixed.
 ---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
+
+## Surfaced by the J2 fix (2026-07-23)
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J18 | 🟡 | **FIXED** | Mutation-testing a path-resolution function disabled the suite's own isolation and overwrote live session state, while the run reported 642 passed |
+
+- 🟡 **J18 — mutation testing can clobber real state, silently.** `invariants.base.md`
+  §"Test discrimination" mandates stubbing a guard to its permissive value and re-running. Applied
+  to `_pin_file`'s explicit-override branch — the branch every test relies on to point
+  `HMAD_ORCA_PIN_FILE` at a temp path — it redirected **the whole suite's pin writes onto the
+  developer's live `<repo>/.h-mad/orca-pins.env`**, replacing two real agent handles with the test
+  fixtures `term_live` / `term_explicit`. The run reported **642 passed** throughout: from the
+  tests' point of view nothing was wrong, because they assert what the file contains and never
+  where it is *not*.
+
+  Caught only because the next live `hmad-dispatch env` showed two handles that had never existed.
+  Confirmed by re-running the same mutation with the file watched, and the real handles restored
+  from a backup.
+
+  **Fixed** by `h-mad/tests/conftest.py`: a session-scoped autouse fixture snapshots the live pin
+  file, restores it if the session moved it, and fails loudly naming the likely cause. Verified by
+  deliberately re-introducing the leak — the fixture fired, restored the handles, and the suite went
+  red instead of green. The `## Test discrimination` rule now carries the caveat: before mutating
+  anything that decides *where* state is written, snapshot the target or sandbox the cwd.
+
+  The general shape is worth remembering: **a suite's isolation is itself implemented by branches,
+  and mutation testing deletes branches.** The safety property most likely to be disabled by a
+  mutation is the one keeping the tests off your real machine. [[J2]]
+
 
 > **Status-row audit 2026-07-23.** J8, J10, J14 and J15 shipped in Wave 4a (`ab3657e`) but their rows still read `SCHEDULED`/`MONITORING` — verified against the code before flipping (J15's guards fired live during the J17 work the same day). This registry's own lifecycle line says *"Flip Status + link the commit when actioned"*; a stale row is a coverage hole, because the next reader treats a solved problem as open work and an open one as solved.
 

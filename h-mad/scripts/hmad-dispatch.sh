@@ -89,7 +89,31 @@ _cmux_find() {
 }
 
 _pin_file() {  # path to the session pin file (agent=handle lines)
-  printf '%s\n' "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}"
+  # J2: this used to be the bare relative path `.h-mad/orca-pins.env`, resolved
+  # against the CURRENT DIRECTORY. So a coordinator sitting in repo B while
+  # driving a run in repo A read B's pins and reported UNRESOLVED, and a plain
+  # `cd` into a subdirectory silently started a second, empty pin file.
+  # Cross-repo and subdirectory work are both normal modes.
+  #
+  # The blast radius was larger than the pins: _receipt_file() derives from
+  # dirname(_pin_file), so the Wave-3 preflight receipt moved with the cwd too --
+  # `env` in one directory and `send` in another could disagree about whether a
+  # receipt existed at all.
+  #
+  # Anchor to the enclosing git repository, which is where `.h-mad/` lives by
+  # convention, so every directory inside one repo agrees. Outside a repo there
+  # is nothing better than the cwd, and that stays the old behaviour rather than
+  # inventing a location.
+  if [ -n "${HMAD_ORCA_PIN_FILE:-}" ]; then
+    printf '%s\n' "$HMAD_ORCA_PIN_FILE"; return 0
+  fi
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$root" ]; then
+    printf '%s\n' "$root/.h-mad/orca-pins.env"
+  else
+    printf '%s\n' ".h-mad/orca-pins.env"
+  fi
 }
 
 # Path to the preflight receipt. Anchored to the pin file's directory so that a
@@ -404,6 +428,10 @@ _cmd_env() {
     return 1
   fi
   echo "substrate: $sub"
+  # J2: name the pin file. Reading the wrong project's pins used to be silent --
+  # it surfaced only as a puzzling UNRESOLVED, with no hint that the answer came
+  # from another repo. This is the line an operator already reads before a run.
+  [ "$sub" = "orca" ] && echo "pin file: $(_pin_file)"
   local a t stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
   for a in codex agy; do
     if t="$(_resolve_target "$a" 2>/dev/null)"; then
