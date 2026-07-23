@@ -273,7 +273,7 @@ Orca-side `titleSource: "osc"|"tab"|"assigned"` discriminator would still have s
 That would be a new, narrower issue, not this one.
 
 The pre-existing mitigations remain the durable path and are unchanged: `hmad-dispatch launch
-<agent>` captures the handle at t=0 from the create response, and `pin`/`pin-agents` fail loud for
+<agent>` owns the spawn and resolves the pane's handle by paneKey (J1: the create-response handle is a placeholder), and `pin`/`pin-agents` fail loud for
 an operator-launched pane. Owning the launch still beats resolving after the fact; Pass 0 is what
 makes an *un-owned* pane recoverable instead of UNRESOLVED.
 

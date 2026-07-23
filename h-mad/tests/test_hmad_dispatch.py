@@ -649,38 +649,91 @@ def test_pin_agents_fails_loud_on_unresolved(tmp_path):
     assert "agy=t-agy" in pins.read_text()   # the resolved agent is still frozen
 
 
-def test_launch_creates_pins_and_echoes_handle(tmp_path):
-    # H5 durable path: h-mad owns the Codex launch, so identity is captured at
-    # spawn from the create response (`.result.terminal.handle`) — no title/preview
-    # dependence, no manual pin. launch resolves the handle, pins it, echoes it.
+# J1: `terminal create` returns a handle the pane never has. Confirmed three
+# times, most recently 2026-07-23 with a direct probe: create said
+# `term_d1f7a348…`, the pane that materialized was `term_f0966e2b…`, and the
+# create-response handle never appeared in `terminal list` at all. It is a
+# pre-adoption placeholder.
+#
+# What IS stable across both is the `paneKey` the create response also returns —
+# the same `<tabId>:<leafId>` J16 joins on. So launch creates, then resolves the
+# real handle by joining paneKey against `terminal list`.
+_CREATE_RESP = ('{"ok":true,"result":{"terminal":{"handle":"term_placeholder",'
+                '"tabId":"tab9","paneKey":"tab9:leaf9"}}}')
+_LIST_RESP = ('{"ok":true,"result":{"terminals":[{"handle":"term_real",'
+              '"tabId":"tab9","leafId":"leaf9","title":"codex"}]}}')
+
+
+def test_launch_pins_the_live_handle_not_the_create_response_one(tmp_path):
+    # This test previously asserted the OPPOSITE — that the create-response
+    # handle is pinned — and so encoded J1 as correct behaviour. The pin was then
+    # always refused by the liveness check, so `launch` could not pin at all.
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pins = tmp_path / "pins.env"
-    canned = '{"ok":true,"result":{"terminal":{"handle":"term_new_codex"}}}'
     r = run(["launch", "codex"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
-                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
-    assert r.returncode == 0
-    assert r.stdout.strip() == "term_new_codex"
-    assert "codex=term_new_codex" in pins.read_text()      # pinned at spawn
+                 "HMAD_STUB_ORCA_CREATE_STDOUT": _CREATE_RESP,
+                 "HMAD_STUB_ORCA_STDOUT": _LIST_RESP}, capture=cap)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "term_real"
+    assert "codex=term_real" in pins.read_text()
+    assert "term_placeholder" not in pins.read_text()
     cmd = cap.read_text()
     assert "terminal create --worktree active --command codex --title codex --json" in cmd
-    # resolve then reads the freshly-pinned handle
     r2 = run(["resolve", "codex"], substrate="orca",
              env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
-    assert r2.stdout.strip() == "term_new_codex"
+    assert r2.stdout.strip() == "term_real"
+
+
+def test_launch_fails_loud_when_create_response_has_no_panekey(tmp_path):
+    # Without paneKey there is nothing to join on, and the create handle is known
+    # wrong. Guessing (worktree + recency) could pin a bystander pane, so refuse.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    r = run(["launch", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_STUB_ORCA_CREATE_STDOUT":
+                     '{"ok":true,"result":{"terminal":{"handle":"term_placeholder"}}}',
+                 "HMAD_STUB_ORCA_STDOUT": _LIST_RESP})
+    assert r.returncode != 0
+    # Assert the SPECIFIC branch. Both refusals mention "paneKey", so a loose
+    # match passes when this guard is deleted and the poll loop times out
+    # instead -- caught by mutation testing, 21.9s of wasted polling wearing a
+    # passing test as a disguise.
+    assert "carries no paneKey" in r.stderr, r.stderr
+    assert "did not appear" not in r.stderr, "fell through to the timeout branch"
+    assert not pins.exists(), "nothing may be pinned when identity is unknown"
+
+
+def test_launch_fails_loud_when_panekey_never_appears(tmp_path):
+    # The pane may never materialize. Failing loud is right — the previous
+    # behaviour pinned a handle that did not exist and every later dispatch
+    # vanished into it.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    r = run(["launch", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_LAUNCH_RESOLVE_TIMEOUT": "1",
+                 "HMAD_STUB_ORCA_CREATE_STDOUT": _CREATE_RESP,
+                 "HMAD_STUB_ORCA_STDOUT":
+                     '{"ok":true,"result":{"terminals":[]}}'})
+    assert r.returncode != 0
+    assert "did not appear" in r.stderr.lower() or "unresolved" in r.stderr.lower()
+    assert not pins.exists()
 
 
 def test_launch_honors_worktree_and_rejects_unknown_agent(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pins = tmp_path / "pins.env"
-    canned = '{"ok":true,"result":{"terminal":{"handle":"h1"}}}'
     r = run(["launch", "agy", "--worktree", "path:/x"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
-                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
-    assert r.returncode == 0
+                 "HMAD_STUB_ORCA_CREATE_STDOUT": _CREATE_RESP,
+                 "HMAD_STUB_ORCA_STDOUT": _LIST_RESP}, capture=cap)
+    assert r.returncode == 0, r.stderr
     assert "--worktree path:/x" in cap.read_text()
+    assert "agy=term_real" in pins.read_text()
     bad = run(["launch", "bogus"], substrate="orca", env={"_BINDIR": b})
     assert bad.returncode == 2
     assert "unknown agent" in bad.stderr

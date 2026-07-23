@@ -141,7 +141,7 @@ is not re-filed.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| J1 | 🔴 | MONITORING | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
+| J1 | 🔴 | **FIXED** | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
 | J2 | 🟡 | MONITORING | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
 | J3 | 🟡 | MONITORING | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
 | J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
@@ -166,6 +166,34 @@ is not re-filed.
   `terminal list` (by `worktreePath` + recency, or by matching the created tab/leaf id) rather than
   trusting `.result.terminal.handle`; or determine why the two differ and whether one is a
   pre-adoption placeholder. [[H5]] [[F9]]
+
+  **FIXED 2026-07-23 -- reproduced a third time first, which characterised it.** A direct probe
+  matching `launch`'s exact call shape: create said `term_d1f7a348...`, the pane that materialised
+  was `term_f0966e2b...`, and **the create-response handle never appeared in `terminal list` at
+  all**, at any point. So it is not a race and not a rename -- it is a pre-adoption placeholder,
+  the second of the two hypotheses above.
+
+  The same probe showed the fix: `.result.terminal.paneKey` **is** present in the create response
+  and **is** the `<tabId>:<leafId>` that J16 joins on, and it resolved the live handle in under 5
+  seconds. `launch` now creates, polls `terminal list` for that key (`HMAD_LAUNCH_RESOLVE_TIMEOUT`,
+  default 20s), and pins the handle it finds. Identity is still owned at spawn -- it is just read
+  from the field that survives adoption.
+
+  Both failure paths refuse rather than guess: no `paneKey` in the response, or the key never
+  appearing. Guessing by worktree+recency could pin a bystander pane, and the old behaviour already
+  proved what a wrong pin costs -- every later dispatch vanishes into a handle that does not exist.
+
+  **The existing test asserted the create-response handle was pinned** -- it encoded J1 as correct
+  behaviour, exactly as J17's tests did. Rewritten.
+
+  Mutation testing caught one more: deleting the missing-`paneKey` guard left the test passing,
+  because the poll loop then timed out and *its* message also contains "paneKey". The test now
+  asserts the specific branch -- 21.9s of wasted polling had been wearing a green test as a
+  disguise.
+
+  **Dogfooded live:** `hmad-dispatch launch codex` pinned `term_2ff2ec1f...`, which `terminal list`
+  confirms and `hmad-dispatch alive codex` reports live. H5's "launch owns the spawn" claim holds
+  for the first time. [[J16]]
 - 🟡 **J2 — the session pin file is cwd-relative.** `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`
   resolves against the *current directory*, so driving a `/h-mad` run in repo A from a coordinator
   session sitting in repo B reads B's pin file. Observed: `hmad-dispatch read agy` from the wrong

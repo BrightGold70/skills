@@ -233,7 +233,7 @@ Codex, before it works), then re-run `pin-agents`. The env-var pin always
 overrides; `pin-agents --clear` resets. Skip on cmux (surface pins there).
 **Zero-manual alternative**: to start a FRESH agent rather than reuse an
 operator-launched pane, `hmad-dispatch launch <codex|agy>` runs `orca terminal
-create` and captures the handle from the create response, pinning it at spawn —
+create`, resolves the pane's live handle by joining the create response's `paneKey` against `terminal list`, and pins that —
 no title/preview dependence, no manual pin (H5). Use `launch` when h-mad owns the
 agent; `pin`/`pin-agents` when adopting an existing pane.
 
