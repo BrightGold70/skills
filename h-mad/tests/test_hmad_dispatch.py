@@ -165,15 +165,26 @@ def _git_repo(tmp_path, *, branch="main"):
     return repo
 
 
-def _rm(repo, *, base=None, force=False, tmp_path):
+def _rm(repo, *, base=None, force=False, tmp_path, selector=None, env=None):
+    """Invoke `worktree-rm`. Default selector is `path:<repo>`.
+
+    J17: the previous default was the literal `repo::<repo>`, which a real Orca
+    runtime rejects outright (`selector_not_found`) — 8 tests pinned a command
+    that could never have worked. `path:<p>` is one of the documented forms
+    (`orca worktree rm --help`: `id:<repo-id>::<path>`, `name:`, `branch:`,
+    `issue:`, `path:`, `active`/`current`) and is verified accepted live.
+    """
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
-    args = ["worktree-rm", f"repo::{repo}"]
+    args = ["worktree-rm", selector if selector is not None else f"path:{repo}"]
     if force:
         args.append("--force")
     if base is not None:
         args.extend(["--base", base])
-    result = run(args, substrate="orca", env={"_BINDIR": b}, capture=cap)
+    e = {"_BINDIR": b}
+    if env:
+        e.update(env)
+    result = run(args, substrate="orca", env=e, capture=cap)
     return result, cap
 
 
@@ -1579,7 +1590,10 @@ def test_worktree_rm_argv_force_and_failure(tmp_path):
     assert r.returncode == 0
     assert cap.read_text() == "orca worktree rm --worktree wt-7 --force --json\n"
 
-    failed = run(["worktree-rm", "wt-7"], substrate="orca",
+    # The failure path needs a selector that RESOLVES -- an unresolvable one is
+    # now refused before it can reach orca (J17). --force is what carries an
+    # arbitrary selector through, so use it here.
+    failed = run(["worktree-rm", "wt-7", "--force"], substrate="orca",
                  env={"_BINDIR": b, "HMAD_STUB_ORCA_EXIT": "1"})
     assert failed.returncode == 1
     assert "[H-MAD] worktree-rm failed selector=wt-7 rc=1" in failed.stderr
@@ -1612,7 +1626,7 @@ def test_worktree_rm_ignores_ignored_only_change(tmp_path):
     (repo / "ignored.txt").write_text("ignored\n")
     result, cap = _rm(repo, tmp_path=tmp_path)
     assert result.returncode == 0
-    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+    assert cap.read_text() == f"orca worktree rm --worktree path:{repo} --json\n"
 
 
 def test_worktree_rm_refuses_unmerged_commit(tmp_path):
@@ -1631,14 +1645,14 @@ def test_worktree_rm_allows_commits_reachable_from_base(tmp_path):
     repo = _git_repo(tmp_path)
     result, cap = _rm(repo, base="HEAD", tmp_path=tmp_path)
     assert result.returncode == 0
-    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+    assert cap.read_text() == f"orca worktree rm --worktree path:{repo} --json\n"
 
 
 def test_worktree_rm_skips_unmerged_check_without_default_base(tmp_path):
     repo = _git_repo(tmp_path, branch="feature")
     result, cap = _rm(repo, tmp_path=tmp_path)
     assert result.returncode == 0
-    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --json\n"
+    assert cap.read_text() == f"orca worktree rm --worktree path:{repo} --json\n"
 
 
 def test_worktree_rm_force_short_circuits_dirty_repo(tmp_path):
@@ -1646,16 +1660,92 @@ def test_worktree_rm_force_short_circuits_dirty_repo(tmp_path):
     (repo / "tracked.txt").write_text("modified\n")
     result, cap = _rm(repo, force=True, tmp_path=tmp_path)
     assert result.returncode == 0
-    assert cap.read_text() == f"orca worktree rm --worktree repo::{repo} --force --json\n"
-    assert "[H-MAD] worktree-rm forced selector=repo::" in result.stderr
+    assert cap.read_text() == f"orca worktree rm --worktree path:{repo} --force --json\n"
+    assert "[H-MAD] worktree-rm forced selector=path:" in result.stderr
 
 
-def test_worktree_rm_unresolvable_selector_is_removed(tmp_path):
+def test_worktree_rm_unresolvable_selector_refuses(tmp_path):
+    # J17. This test previously asserted the OPPOSITE — that an unresolvable
+    # selector is removed anyway — and so codified the hole as intended
+    # behaviour. `_worktree_path`'s own contract says "Empty is 'cannot check',
+    # never 'safe to destroy'", but the caller skipped the guard block entirely
+    # when resolution failed, turning "cannot check" into "proceed" for a
+    # destructive verb. Refuse instead; --force remains the escape hatch.
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     result = run(["worktree-rm", "wt-7"], substrate="orca", env={"_BINDIR": b}, capture=cap)
+    assert result.returncode != 0
+    assert "worktree_selector_unresolvable" in result.stderr
+    # Resolution itself calls `worktree ps`, so the capture is not empty -- what
+    # matters is that no removal was attempted.
+    assert "worktree rm" not in cap.read_text()
+
+
+def test_worktree_rm_unresolvable_selector_force_still_removes(tmp_path):
+    # The escape hatch must survive: --force skips the guards, and an
+    # unresolvable selector is forwarded verbatim because there is nothing to
+    # canonicalise it to.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    result = run(["worktree-rm", "wt-7", "--force"], substrate="orca",
+                 env={"_BINDIR": b}, capture=cap)
     assert result.returncode == 0
-    assert "orca worktree rm --worktree wt-7 --json\n" in cap.read_text()
+    assert cap.read_text() == "orca worktree rm --worktree wt-7 --force --json\n"
+
+
+def test_worktree_rm_guards_documented_prefixed_selectors(tmp_path):
+    # J17, the severe half. Every documented Orca selector form (`path:`,
+    # `name:`, `branch:`, `issue:`, `id:`, `active`/`current`) failed
+    # `_worktree_path`, so the guard block was skipped and the removal went
+    # through unguarded. Proven live 2026-07-23: `worktree-rm "path:<p>"`
+    # destroyed a worktree holding an unmerged commit, silently — no guard
+    # message, no error, exit 0. Orca's own check only covers a dirty working
+    # tree, never an unmerged branch, so h-mad's guard is the ONLY protection
+    # for exactly the case J15 exists to prevent.
+    repo = _git_repo(tmp_path)
+    (repo / "tracked.txt").write_text("committed\n")
+    subprocess.run(["git", "-C", str(repo), "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "unmerged"],
+                   check=True, capture_output=True, text=True)
+    # `path:` is self-describing; `name:`/`branch:` need the listing to resolve,
+    # so the stub must serve one -- otherwise they refuse as unresolvable and
+    # the test would pass for the wrong reason.
+    ps = ('{"ok":true,"result":{"worktrees":[{"path":"%s","displayName":"%s",'
+          '"branch":"refs/heads/main","worktreeId":"r::%s"}],"truncated":false}}'
+          % (repo, repo.name, repo))
+    for i, sel in enumerate((f"path:{repo}", f"name:{repo.name}", "branch:main")):
+        sub = tmp_path / f"run{i}"; sub.mkdir()
+        result, cap = _rm(repo, base="HEAD~1", tmp_path=sub, selector=sel,
+                          env={"HMAD_STUB_ORCA_WT_PS_STDOUT": ps})
+        assert result.returncode != 0, f"{sel} was not guarded"
+        assert "worktree_has_unmerged_commits" in result.stderr, sel
+        assert "worktree rm" not in (cap.read_text() if cap.exists() else ""), \
+            f"{sel} reached orca despite holding work"
+
+
+def test_worktree_rm_canonicalises_selector_before_forwarding(tmp_path):
+    # J17, the half originally filed. `repo::<path>` is NOT a valid Orca
+    # selector — a real runtime answers `selector_not_found` — yet the wrapper
+    # forwarded whatever the caller passed. `_worktree_path` resolves it (it
+    # keeps only the right-hand side of any `*::*`), so the guard passes and the
+    # removal then fails for an unrelated reason. Forward the resolved path in a
+    # form Orca accepts, not the caller's string.
+    repo = _git_repo(tmp_path)
+    result, cap = _rm(repo, base="HEAD", tmp_path=tmp_path, selector=f"repo::{repo}")
+    assert result.returncode == 0
+    assert cap.read_text() == f"orca worktree rm --worktree path:{repo} --json\n"
+
+
+def test_worktree_rm_surfaces_orca_error_envelope(tmp_path):
+    # The wrapper sent orca's stdout to /dev/null, so the operator saw a bare
+    # `rc=1` while the envelope carrying the reason was discarded. Worse, an
+    # `ok:false` envelope with exit 0 read as success -- the F11 class, which
+    # every other orca-calling verb had already been given a guard for.
+    repo = _git_repo(tmp_path)
+    result, _ = _rm(repo, base="HEAD", tmp_path=tmp_path,
+                    env={"HMAD_STUB_FAIL": "1"})
+    assert result.returncode != 0
+    assert "boom" in result.stderr
 
 
 def test_worktree_ps_and_rm_refuse_cmux(tmp_path):
