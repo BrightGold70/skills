@@ -689,7 +689,21 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
     args+=(--prompt "$(cat "$pf")")
   fi
   args+=(--json)
-  _orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}"
+
+  local sel rc=0
+  sel="$(_orca_json '.result.worktree.id // .result.worktree.selector // .result.worktree.handle' "${args[@]}")" || rc=$?
+  [ $rc -eq 0 ] || return $rc
+  [ -n "$sel" ] && printf '%s\n' "$sel"
+
+  if [ -n "$pf" ]; then
+    local tid
+    if tid="$(_cmd_task_create "worktree:$name" "$pf" 2>/dev/null)" && [ -n "$tid" ]; then
+      echo "[H-MAD] worktree_task task=$tid selector=$sel" >&2
+    else
+      echo "[H-MAD] worktree_task_skipped selector=$sel" >&2
+    fi
+  fi
+  return 0
 }
 
 _cmd_worktree_current() {  # (no args)

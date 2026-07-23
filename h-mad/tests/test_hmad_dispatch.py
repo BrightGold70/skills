@@ -1265,6 +1265,79 @@ def test_worktree_create_prompt_file_and_missing_file(tmp_path):
     assert not missing_cap.exists()
 
 
+def test_worktree_create_prompt_registers_task_on_stderr(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    canned = ('{"result":{"worktree":{"id":"wt-fanout"},'
+              '"task":{"id":"task-fanout"},"gate":{"id":"gate-fanout"}}}')
+    r = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "wt-fanout\n"
+    assert r.stderr == "[H-MAD] worktree_task task=task-fanout selector=wt-fanout\n"
+    assert "orca worktree create --name fanout --prompt fanout prompt --json\n" in cap.read_text()
+    assert "--task-title worktree:fanout --json" in cap.read_text()
+
+
+def test_worktree_create_without_prompt_registers_no_task(tmp_path):
+    """AC-5.1/AC-5.3: the --prompt-file gate must DISCRIMINATE.
+
+    The pre-existing argv test passes whether or not the gate exists, because
+    run() strips HMAD_ORCA_*, so _coordinator() fails and task-create bails
+    before it ever calls orca — leaving the capture clean for the wrong reason.
+    Pinning a coordinator here removes that accident, so registering
+    unconditionally becomes observable. Verified by mutation: replacing the
+    `[ -n "$pf" ]` gate with `true` fails this test and nothing else.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = ('{"result":{"worktree":{"id":"wt-bare"},'
+              '"task":{"id":"task-should-not-exist"}}}')
+    r = run(["worktree-create", "bare"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "wt-bare\n"
+    calls = cap.read_text()
+    assert "task-create" not in calls, "no task may be registered without --prompt-file"
+    assert "worktree_task" not in r.stderr
+
+
+def test_worktree_create_task_id_can_open_gate(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    canned = ('{"result":{"worktree":{"id":"wt-fanout"},'
+              '"task":{"id":"task-fanout"},"gate":{"id":"gate-fanout"}}}')
+    created = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                       "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert created.returncode == 0
+    gate = run(["gate-create", "task-fanout", "Approve?"], substrate="orca",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert gate.returncode == 0
+    assert gate.stdout == "gate-fanout\n"
+    assert "orca orchestration gate-create --task task-fanout --question Approve? --json\n" in cap.read_text()
+
+
+def test_worktree_create_task_registration_failure_is_nonfatal(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("fanout prompt")
+    created = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT":
+                       '{"result":{"worktree":{"id":"wt-fanout"}}}'}, capture=cap)
+    assert created.returncode == 0
+    assert created.stdout == "wt-fanout\n"
+    assert "[H-MAD] worktree_task_skipped selector=wt-fanout" in created.stderr
+    assert cap.read_text() == "orca worktree create --name fanout --prompt fanout prompt --json\n"
+
+
 def test_worktree_create_refuses_cmux(tmp_path):
     b = _bindir(tmp_path, ["cmux", "orca"])
     cap = tmp_path / "cap.txt"
