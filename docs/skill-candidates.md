@@ -48,3 +48,22 @@
 - **panekey-join-agent-identity**: resolve an Orca agent handle by joining `worktree ps` `agents[].paneKey` to `terminal list` `tabId:leafId`, rather than title or preview or content — recurrence: 2 — candidate: **LANDED** (J16, main `bf9c4c3`) — `_orca_find` Pass 0; closed orca#9870
 - **tracer-bullet-design-assumptions**: run each load-bearing design assumption as a throwaway shell/git command before writing it into the design — confirmed the `--porcelain` boundary and the base-ref chain, and found a truncation hole, all before any code existed — recurrence: 4 — candidate: **LANDED** (Wave 4c) — `invariants.base.md` §Assumption verification
 - **assert-literal-instruction-in-doc-tests**: anchor documentation tests on the literal instruction string; asserting that two component words appear "somewhere" passes with the guidance deleted — recurrence: 2 — candidate: **LANDED implicitly** (Waves 4b+4c) — every doc test added in both waves asserts the literal sentence against a whitespace-normalised copy, and each was mutation-tested. Covered by `invariants.base.md` §Test discrimination; no separate rule needed.
+
+## 2026-07-23 — monitoring-registry-drained
+
+- **close-a-filed-defect cycle**: read entry → verify its stated premise against source → reproduce
+  live → TDD the fix → mutation-test every guard → dogfood live → flip the registry row with
+  evidence. Ran 9× this session (J1–J5, J11–J13, J17) with an identical shape, and the
+  premise-check step changed the fix in 4 of them — recurrence: 9 — candidate: yes
+- **test-pinned-the-defect check**: when a fix breaks an existing test, first ask whether the test
+  asserted the bug as an acceptance criterion rather than adjusting the fix — J17's forwarded
+  selector, J1's create-response handle, J2's AC-6.5 pin path — recurrence: 3 — candidate: yes
+- **snapshot-live-state-before-mutation-testing**: mutating a path-resolution branch redirects the
+  suite onto real files; snapshot the target (or sandbox the cwd) first. Now partly mechanised in
+  `h-mad/tests/conftest.py` — recurrence: 1 — candidate: maybe (already a conftest fixture)
+- **differential-validator-test**: when replacing a library with a bundled implementation, assert
+  verdict-equality against the library across a construct-complete corpus AND the real artifacts on
+  disk, rather than testing the replacement alone — recurrence: 1 — candidate: maybe
+- **both-halves doc fix**: when deleting an unexecutable instruction, assert in the same test that
+  the executable replacement landed — a "is it gone" assertion passes for a deletion that lost the
+  capability (J11) — recurrence: 2 — candidate: maybe

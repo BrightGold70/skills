@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-23 · gotcha · [0.7] · `review,h-mad,handoff:2026-07-23-monitoring-registry-drained` — Test a filed fix direction before adopting it. ASSEMBLE: PASS_OVERSIZE would have matched every grep 'ASSEMBLE: PASS' consumer, reproducing the defect it was meant to fix.
+- 2026-07-23 · gotcha · [0.9] · `git,workflow,handoff:2026-07-23-monitoring-registry-drained` — Commit before any history-rewriting git command. git reset --hard with uncommitted work destroyed an implementation mid-session; only a stray /tmp mutation-test backup saved it.
+- 2026-07-23 · gotcha · [0.9] · `testing,regression,h-mad,handoff:2026-07-23-monitoring-registry-drained` — When a fix breaks an existing test, check if the test PINNED the defect. 3 tests this session asserted the filed bug as an acceptance criterion (J17 selector, J1 handle, J2 pin path).
 - 2026-07-23 · gotcha · [0.9] · `bash,cli,hmad-dispatch,argument-parsing` — A shell arg loop ending in '*) shift ;;' silently eats misspelled flags: --timeut made wait block 300s instead of 2s. Reject unknown flags with exit 2 naming the token.
 - 2026-07-23 · gotcha · [0.9] · `jsonschema,validation,h-mad,j4` — Draft-07 'format' is annotation-only unless a format checker is passed, and bool subclasses int in Python but is NOT an integer in JSON Schema. Both bite hand-rolled validators.
 - 2026-07-23 · gotcha · [0.9] · `testing,mutation-testing,isolation,h-mad,j18` — Mutation-testing a path-resolution branch can disable the test suite's own isolation and overwrite live state while reporting all-green. Snapshot the real target or sandbox the cwd first.
