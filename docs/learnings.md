@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-23 · gotcha · [0.9] · `jsonschema,validation,h-mad,j4` — Draft-07 'format' is annotation-only unless a format checker is passed, and bool subclasses int in Python but is NOT an integer in JSON Schema. Both bite hand-rolled validators.
 - 2026-07-23 · gotcha · [0.9] · `testing,mutation-testing,isolation,h-mad,j18` — Mutation-testing a path-resolution branch can disable the test suite's own isolation and overwrite live state while reporting all-green. Snapshot the real target or sandbox the cwd first.
 - 2026-07-23 · gotcha · [0.9] · `orca,h-mad,launch,identity,j1` — orca terminal create's .result.terminal.handle is a pre-adoption placeholder the pane never gets. Use .result.terminal.paneKey joined to terminal list tabId:leafId.
 - 2026-07-23 · gotcha · [0.9] · `h-mad,orca,agy,tui,measurement,j13` — Tail-grepping a TUI pane for a sentinel reports SILENT for replies that arrived: redraws split tokens across frames. Read --from-start and extract on the sentinel pair.
