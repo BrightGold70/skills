@@ -36,6 +36,8 @@ Ask via your response (status: NEEDS_CONTEXT). The orchestrator will provide con
 
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.
 
+**The dispatch states the expected failing/passing counts for this task, and labels which tests are regression guards** — guards assert behaviour that already works and MUST pass from the first run. Not every RED task is all-new behaviour: a refactor-shaped task legitimately lands with most of its tests green. If a test you were asked to write passes immediately and it is a labelled guard, that is the correct outcome — report it and move on, **do not manufacture a failure** by weakening the assertion, asserting the current buggy value, or adding a `pytest.fail()`. If the stated counts and what you observe disagree, STOP and report the discrepancy; do not reconcile it yourself.
+
 For GREEN phase (5e): implement the minimal code to make the failing tests pass. Verify GREEN by running `pytest <test_path> -v`. Then refactor if helpful, keeping tests green.
 
 ## Report file (preferred delivery under Orca)

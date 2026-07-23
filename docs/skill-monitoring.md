@@ -471,6 +471,15 @@ protocol has two gaps that only running it could expose. Both unfixed.
   indirection. `references/agent-substrate.md` still records 53,066 B as silent, and that number is
   now actively costing work — a design audit was trimmed on the strength of it. See J13.
 
+  **New evidence 2026-07-23 (Wave 4c):** the threshold now costs work in a second, structural way.
+  `invariants.base.md` is inlined **verbatim into every audit prompt**, so each rule added to the
+  base rubric spends headroom in *all* of them — Waves 4b+4c added four rules and moved a calibrated
+  test fixture from 47.4 KB to 52.0 KB, failing `test_size_warning_fires_before_the_cliff`. The
+  fixture was recalibrated rather than the threshold retuned (that is J13's decision, not a test's),
+  but the implication stands: **if the 49 KB cliff is real, the Axis-B rubric has a size budget and
+  is already consuming it; if it is not real, the budget is imaginary and the warning is noise.**
+  Either way the number needs re-measuring before the rubric grows again.
+
 ---
 
 ## Surfaced by the post-Wave-4 branch cleanup (2026-07-23)

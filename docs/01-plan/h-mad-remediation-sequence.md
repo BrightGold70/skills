@@ -176,10 +176,29 @@ forbids the skill acquiring a new CLI, and `gh` is not one of its dependencies. 
 checks the **linkage** (issue ↔ test ↔ closing trailer) and prints `gh` commands without invoking
 them — steps 1–4 stay discipline, step 5 is the only part a script can honestly check.
 
-**Not in this batch** — five newer `candidate: yes` items accumulated after this plan was written
-(`mutation-test-every-guard` rec 7, `verify-review-premise-before-acting` rec 4,
-`tracer-bullet-design-assumptions` rec 4, `discriminating-regression-test` rec 3,
-`label-guards-in-red-dispatch` rec 3). They are a Wave 4c decision, not silent scope creep.
+**Wave 4c SHIPPED 2026-07-23** — the five newer `candidate: yes` items that accumulated after this
+plan was written. Suite 619 → **624**; all 12 assertions mutation-tested.
+
+| candidate | rec | landed as |
+|---|---|---|
+| `mutation-test-every-guard` | 7 | `invariants.base.md` §Test discrimination |
+| `discriminating-regression-test` | 3 | same rule — two framings of one mechanism |
+| `tracer-bullet-design-assumptions` | 4 | `invariants.base.md` §Assumption verification |
+| `verify-review-premise-before-acting` | 4 | SKILL.md §Verifying a review finding before acting on it |
+| `label-guards-in-red-dispatch` | 3 | `codex-implementer-prompt.md` §Your Job **+ SKILL.md 5d** |
+
+`label-guards-in-red-dispatch` was not a prose addition. SKILL.md 5d said *"Verify all tests FAIL.
+Halt `step5d:red_not_all_failing` if any test passes"* — which **is** the harmful instruction the
+candidate names: on a refactor-shaped task it halts a correct RED, and the cheapest way for an
+implementer to satisfy it is to weaken an assertion. Telling the implementer about labelled guards
+while the orchestrator still demanded universal failure would also have been a template/consumer
+disagreement (§"Single-source contract"). Both sides now state and check the same counts.
+
+**Surfaced by this wave, filed not fixed:** the four rules added across 4b+4c moved a calibrated
+size fixture 47.4 KB → 52.0 KB, because `invariants.base.md` is inlined into *every* audit prompt.
+The fixture was recalibrated; the 49 KB threshold was left alone because re-measuring it is J13's
+job. See `docs/skill-monitoring.md` §J13 — the Axis-B rubric now has a size budget, or J13's number
+is wrong. It should be settled before the rubric grows again.
 
 Original payload, for provenance:
 
@@ -284,4 +303,5 @@ Do not sequence work behind #9870.
 | 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
 | 4a ✅ `ab3657e` | J15/J14/J8/J10 — the instrument | defects | done; fanout is now safe |
 | 4b ✅ | candidates batch (run directly) | 6 candidates landed, 1 declined | done; suite 619 |
+| 4c ✅ | later candidates + 5d count contract | 5 candidates landed | done; suite 624 |
 | 5 | ~~watch #9870~~ — **moot**, J16 paneKey join shipped | H5 residual, J16 | done; #9870 closed as completed |
