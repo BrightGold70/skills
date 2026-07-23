@@ -558,7 +558,26 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py record \
 
 Non-fatal: if record fails, emit warning and continue to report.
 
+**The cycle counts are derived from the artifacts on disk, not read from orchestrator state.**
+`audit_cycles` is `max(N)` over each phase's `<feature>.<phase>.audit.v<N>.md` files, and
+`iterate_cycles` is `max(N) - 1` over `<feature>.analysis.v<N>.md` — both via
+`scripts/h_mad_cycle_counts.py`, searching the live `docs/` feature directories and
+`docs/archive/*/<feature>/`. The `audit_cycles` and `iterate_cycles` fields still exist in the
+state schema; they are simply no longer what telemetry reports. Nothing increments them, which is
+why they read `0/0/0` on every feature before this changed, and why both drift warnings below
+were unreachable.
+
+`--docs-root PATH` (optional, on both subcommands) sets the tree that is searched. **Default**:
+the parent of the `--state` file when that parent is named `docs`, else `docs/` relative to the
+current directory — so the invocation above needs no change.
+
 Ad-hoc summary: `python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py summary`
+
+`summary` recomputes both counts from disk as it prints, so features recorded before this change
+report their real numbers without `.h-mad/telemetry.jsonl` — an append-only log — being rewritten.
+A feature whose artifacts are absent falls back to its stored row values, so a deleted or
+never-archived docs tree cannot silently zero a real recorded number. The `audit_cycles > 3` and
+`iterate_cycles > 3` drift warnings are computed from the displayed values.
 
 ## References
 
