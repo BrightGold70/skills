@@ -353,6 +353,50 @@ build, or the cliff may be a property of TUI paste rather than of agent-side fil
 delivery modes were not distinguished when the number was recorded. Worth re-measuring deliberately
 before anyone trims a design to satisfy it.
 
+## Surfaced by the first live Phase-5 worktree fanout (2026-07-23, same Wave 3 run)
+
+The fanout path (`worktree-create → dispatch → await → merge → rm`) had been stub-tested only;
+this is its first real Orca-hosted-agent run. It **worked** — two Codex workers implemented
+independent modules in isolated worktrees, both merged clean, suite went 530 → 539 — but the
+protocol has two gaps that only running it could expose. Both unfixed.
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J14 | 🟡 | MONITORING | The fanout protocol lists `worktree-create --prompt-file` and `task-create`+`dispatch`+`await` as one sequence; they are alternatives, and the documented one cannot produce the task-id the other half needs |
+| J15 | 🔴 | MONITORING | Nothing in the fanout protocol or the Codex prompt tells a worker to commit, so the merge gate would merge an empty branch and report success |
+
+- 🟡 **J14 — the fanout dispatch and wait paths are mutually exclusive but documented as
+  sequential.** `SKILL.md` §"Phase 5 parallel fanout" and `references/orchestration-mode.md` §"Phase
+  5 parallel fanout" both read: "`worktree-create <module> --base <feature-branch> --prompt-file
+  <staged-prompt>`; use Tier-2 `task-create` then `dispatch --to <selector>`; `await` the worker".
+  Measured: `worktree-create --prompt-file` starts the agent **immediately** (both workers were
+  `state: working` on the staged prompt seconds after creation), so a following `dispatch --to`
+  would deliver a second prompt into a busy agent. They are alternatives. The consequence is not
+  cosmetic: only the `task-create` path yields a task-id, and **both `await` and `gate-create`
+  require one** (`_cmd_await` `--task`, `_cmd_gate_create` `--task`). Taking the documented
+  create-with-prompt route therefore forfeits the documented wait mechanism *and* the merge gate's
+  record — this run had to fall back to polling report files and then create a worker-less task
+  purely to hang the gates on. **Fix direction:** present them as two explicit modes (prompt-at-
+  create vs task-dispatch) and state which verbs each supports; if `await`/`gate-create` are meant
+  to work in both, `worktree-create` should return a task-id too. Related: the protocol says
+  "merge `<module-branch>`" without saying how to derive it — Orca names the branch
+  `BrightGold70/<name>`, not `<name>`. [[J1]]
+- 🔴 **J15 — a fanout worker is never told to commit, so the merge gate can merge nothing and call
+  it clean.** The winner-merge gate runs `git merge --no-ff <module-branch>` and treats "zero exit
+  AND `git ls-files --unmerged` empty" as a clean merge worth auto-recording. But nothing instructs
+  the worker to commit: `references/codex-implementer-prompt.md` never mentions `git commit`, and
+  the fanout protocol has no equivalent of the serial path's Phase-5g "`git add -A && git commit`
+  per module". Measured on this run: **both** workers reported `STATUS: DONE` with green suites
+  (536 and 533 passed) and left **every change uncommitted** — `git log 1aaf3c4..HEAD` empty,
+  `git status --short` showing two modified files in each worktree. Had the gate run as written it
+  would have merged an up-to-date branch, exited 0, found no unmerged paths, auto-recorded `yes`,
+  and then `worktree-rm` would have **destroyed the only copy of the work** — a total, silent loss
+  reported as a successful merge. This run committed on the workers' behalf before merging.
+  **Fix direction:** add an explicit commit step to the fanout protocol (either the worker commits
+  as its final action before writing the report, or the orchestrator commits after reading a
+  `DONE`), and make the gate refuse a merge whose diff against the base is empty — "nothing to
+  merge" must be a halt, never a clean verdict. [[J12]]
+
 ---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
