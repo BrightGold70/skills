@@ -2560,6 +2560,54 @@ def test_receipt_for_unresolved_agent_is_invalid_after_pinning(tmp_path):
     assert "preflight_handles_rotated" in refused.stderr
 
 
+def test_unset_ttl_uses_the_documented_3600_default(tmp_path):
+    """AC-5.4: with HMAD_PREFLIGHT_TTL_SEC unset the window is 3600s exactly —
+    not an error, and not unbounded. 3500s old is accepted, 3700s old is not."""
+    b = _bindir(tmp_path, ["orca"])
+    receipt = tmp_path / "receipt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight = run(["env"], substrate="orca", env=env)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    values = _receipt_values(receipt)
+
+    def _send_with_age(seconds, cap_name):
+        values["ts"] = str(int(time.time()) - seconds)
+        receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+        # HMAD_PREFLIGHT_TTL_SEC deliberately NOT set: this asserts the default.
+        return run(["send", "codex", str(prompt)], substrate="orca", env=env,
+                   capture=tmp_path / cap_name)
+
+    fresh_enough = _send_with_age(3500, "within.cap")
+    assert fresh_enough.returncode == 0, fresh_enough.stderr
+    assert "preflight_expired" not in fresh_enough.stderr
+
+    too_old = _send_with_age(3700, "beyond.cap")
+    assert too_old.returncode == 1
+    assert "preflight_expired" in too_old.stderr
+
+
+def test_bypass_does_not_suppress_the_agent_conflict_guard(tmp_path):
+    """AC-6.4: HMAD_SKIP_PREFLIGHT waives the *receipt* requirement only. It must
+    never permit a dispatch into a pane two agents both resolve to — that bypass
+    exists to allow dispatching without a preflight, not into a provably wrong pane."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    both_on_one = {"_BINDIR": b, "HMAD_SKIP_PREFLIGHT": "1",
+                   "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                   "HMAD_ORCA_AGY_TERMINAL": "term_shared",
+                   "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_shared")}
+    r = run(["send", "codex", str(prompt)], substrate="orca", env=both_on_one, capture=cap)
+    assert r.returncode == 1
+    assert "preflight_agent_conflict" in r.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text(), \
+        "the bypass must not let a conflicted dispatch reach the send call"
+
+
 def test_preflight_pass_writes_default_receipt_with_timestamp_and_fingerprint(tmp_path):
     """AC-1.1, AC-1.2, AC-1.5, AC-8.2: PASS writes beside its pin file."""
     b = _bindir(tmp_path, ["orca"])
