@@ -189,10 +189,14 @@ def test_design_docs_are_read_from_the_design_directory(tmp_path):
 
 
 def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
-    """A real design audit assembled to 48.4 KB and passed silently with 0.6 KB
-    of headroom -- the next feature to add a few ACs crosses the 49 KB cliff
-    having never seen a warning. The reviewer's failure there is a silent empty
-    reply, so the warning has to arrive while there is still room to act."""
+    """The warning must arrive while there is still room to act, not only after.
+
+    Re-anchored 2026-07-23. The thresholds used to encode a "49 KB reviewer
+    cliff" that never reproduced for the delivery mode this skill uses: `send`
+    switches to file indirection above 8192 B, so every audit prompt is read from
+    a file, and five file-indirection prompts spanning 52,997-61,493 B were all
+    answered normally. The bands now straddle the largest CONFIRMED-answered size
+    (61,493 B) rather than a predicted failure point."""
     root = _project(tmp_path)
     spec = root / "docs/01-plan/features/demo.spec.md"
     out = tmp_path / "prompt.txt"
@@ -208,21 +212,19 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     quiet, small = size_of(10)
     assert "~" not in quiet and "!" not in quiet, f"no warning expected at {small}B"
 
-    # Filler count is calibrated to land mid-band, NOT arbitrary. It was 1700
-    # until Wave 4c added rules to invariants.base.md, which is inlined verbatim
-    # into every audit prompt -- so the same fixture moved 47.4 KB -> 52.0 KB and
-    # overshot. Recalibrated to 1500 rather than widening the band, because the
-    # band is the assertion.
-    #
-    # The drift is worth noticing beyond this test: every rule added to the base
-    # rubric spends headroom in EVERY audit prompt, against a 49 KB threshold that
-    # J13 records as having failed to reproduce three times (52,997 B / 53,058 B /
-    # 58,536 B all answered normally). Re-measuring that threshold is J13's job,
-    # not this test's -- but if it is real, the rubric has a size budget.
-    approaching, mid = size_of(1500)
-    assert 44 * 1024 < mid <= 49 * 1024, f"fixture drifted: {mid}B"
+    # Filler counts are calibrated to land in the bands, NOT arbitrary. Adding
+    # rules to invariants.base.md moves every prompt, because that file is inlined
+    # verbatim into all of them -- recalibrate the fixture rather than widen the
+    # band, because the band is the assertion.
+    approaching, mid = size_of(2200)
+    assert 60 * 1024 < mid <= 64 * 1024, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2000)
-    assert big > 49 * 1024, f"fixture drifted: {big}B"
-    assert "past the measured 49 KB" in past
+    past, big = size_of(2300)
+    assert big > 64 * 1024, f"fixture drifted: {big}B"
+    assert "exceeds the largest prompt confirmed answered" in past
+    # The old wording predicted a failure ("past the measured 49 KB reviewer
+    # cliff ... a silent empty reply is the expected failure") at sizes since
+    # measured as fine. Assert it is gone, so it cannot creep back.
+    assert "reviewer cliff" not in past
+    assert "reviewer cliff" not in approaching
