@@ -214,18 +214,30 @@ def main(argv: list[str] | None = None) -> int:
     out.write_text(text, encoding="utf-8")
     size = len(text.encode())
     print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) sentinel={sentinel}")
-    # Measured: one reviewer emits normally at 49 KB and returns nothing at 53.
-    # Warn *approaching* it, not only past it -- a real design audit assembled to
-    # 48.4 KB, which passed silently with 0.6 KB of headroom, and the next feature
-    # to add a few ACs crosses the cliff with no warning ever having fired.
-    if size > 49 * 1024:
-        print(f"  ! {size / 1024:.1f} KB is past the measured 49 KB reviewer cliff — "
-              "split the audit by FR group (SKILL.md step 5.5); a silent empty "
-              "reply is the expected failure")
-    elif size > 44 * 1024:
-        print(f"  ~ {size / 1024:.1f} KB is approaching the measured 49 KB reviewer "
-              "cliff — inlining only the spec's '## Functional Requirements' "
-              "section saves ~7 KB and loses no AC (SKILL.md step 5.5)")
+    # Thresholds are anchored to the largest prompt CONFIRMED answered, not to a
+    # cliff. The old 49 KB figure came from a session that recorded sizes but not
+    # the DELIVERY MODE, and it never reproduced for the mode this skill actually
+    # uses: `hmad-dispatch send` switches to file indirection above
+    # HMAD_SEND_INLINE_MAX (8192 B), so every audit prompt (32-61 KB) is read by
+    # the agent from a file and none is ever pasted into the TUI. Five
+    # file-indirection observations spanning 52,997-61,493 B were all answered
+    # normally; there is no file-indirection silence on record. See
+    # references/agent-substrate.md §"Prompt size" for the table.
+    #
+    # So these warn about leaving VERIFIED territory, which is honest, rather than
+    # predicting a failure, which the 49 KB wording did and was wrong about --
+    # costing a real design audit a trim it did not need.
+    CONFIRMED_OK = 61_493  # largest prompt observed answered (2026-07-23)
+    if size > 64 * 1024:
+        print(f"  ! {size / 1024:.1f} KB exceeds the largest prompt confirmed answered "
+              f"({CONFIRMED_OK / 1024:.1f} KB) — unverified, not known-bad. If the reply "
+              "comes back empty, suspect size and see SKILL.md step 5.5; note the failure "
+              "mode is silent, so read the full buffer, never a tail")
+    elif size > 60 * 1024:
+        print(f"  ~ {size / 1024:.1f} KB is approaching the largest prompt confirmed "
+              f"answered ({CONFIRMED_OK / 1024:.1f} KB) — inlining only the spec's "
+              "'## Functional Requirements' section saves ~7 KB and loses no AC "
+              "(SKILL.md step 5.5)")
     return 0
 
 

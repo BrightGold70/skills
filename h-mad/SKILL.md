@@ -584,7 +584,27 @@ assembling by hand because the script is unavailable:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 5.5. For plan and design audits: replace `<INLINE_PAIRED_SPEC>` with full text of `docs/01-plan/features/<feature>.spec.md` — the Axis C source of truth. Without it the reviewer has no AC list to reconcile against and Axis C degrades to prose review, which is the failure it exists to prevent: the paired plan carries only incidental AC references, not the enumeration. For impl-plan audits leave the slot empty; that audit contracts against the design.
 
-   **Prompt size.** Axis C makes an already-large prompt larger, and on a big feature the total can exceed what the reviewer will answer — one measured agent emits normally at 49 KB and returns *nothing* at 53 KB (see `references/agent-substrate.md`). Measured on a real feature: design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB, and the same prompt without the spec was already 72 KB. Two things follow. First, **do not solve this by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC. Second, an over-long prompt is now a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate. If a design audit returns nothing, suspect size first — split the audit by FR group and run Axis C over each group in turn, rather than dropping the axis.
+   **Prompt size.** Axis C makes an already-large prompt larger, and on a big feature the total can exceed what the reviewer will answer — one measured agent emits normally at 49 KB and returns *nothing* at 53 KB (see `references/agent-substrate.md`). Measured on a real feature: design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB, and the same prompt without the spec was already 72 KB. Two things follow. First, **do not solve this by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
+
+   **Before treating a silent reply as a size failure, read the whole buffer.** `hmad-dispatch read <agent> --from-start`, not a tail — the TUI reflows a reply across redraw frames, and a tail-grep for a sentinel reports SILENT for prompts that answered (measured; see `references/agent-substrate.md`). Most "size failures" are this.
+
+   **If it really is size, "split by FR group" usually will not help.** Only the spec divides; everything else is carried by every split. Measured on a real design audit totalling 50.9 KB:
+
+   | term | size | divides on an FR split? |
+   |---|---|---|
+   | design | 22.4 KB | no |
+   | plan | 10.3 KB | no |
+   | audit template | 8.0 KB | no |
+   | base + project invariants | 5.5 KB | no |
+   | spec (FR-only trim) | 4.7 KB | **yes** |
+
+   46.2 KB of 50.9 KB is fixed, so a two-way split yields ~48.5 KB per half — about 2 KB of relief for two dispatches, two audit files and two gate runs. The remedy silently assumes the *spec* is the marginal term; whenever the design dominates, which is the normal case for a detailed design, it does not work.
+
+   The options that do work, in order:
+   1. **Inline only the spec's `## Functional Requirements`** — ~7 KB, loses no AC. Already the default.
+   2. **Shorten the design itself** — tighten prose and remove restated plan content. Note the constraint above: do *not* do this by showing the reviewer only AC-bearing sections.
+   3. **Split the feature**, not the audit. Fewer FRs per feature shrinks the design, plan *and* spec together — it is the only division that touches the fixed terms.
+   4. **Trim the rubric** as a last resort, remembering `invariants.base.md` is inlined into every audit prompt, so a rule added there is paid for by all of them.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
 6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. See `references/orchestration-mode.md` §"Report-file transport".

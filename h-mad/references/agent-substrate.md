@@ -79,23 +79,62 @@ the documented audit dispatch step in direct conflict with the indirection
 rule at exactly the sizes that occur — so every audit had to be dispatched by
 hand instead.
 
-## Prompt size: the silent-output cliff
+## Prompt size: the silent-output failure mode
 
-Above a size threshold an agent reads the staged file, reports a token count,
-emits **nothing**, and returns to its prompt. No error, no partial output.
+Above some size an agent reads the staged file, reports a token count, emits
+**nothing**, and returns to its prompt. No error, no partial output. That failure
+*shape* is real and worth designing against. The **boundary**, however, was
+mis-recorded for years, and the number cost real work.
 
-Measured on one agent in one session — treat as an order of magnitude, not a
-constant:
+**Delivery mode is the variable the original measurement omitted.**
+`hmad-dispatch send` inlines a prompt only up to `HMAD_SEND_INLINE_MAX`
+(default **8192 B**); above that it stages the file and tells the agent to read
+it. Audit prompts run 32–61 KB, so **every audit prompt is delivered by file
+indirection and none is ever pasted into the TUI**. The 2026-07-21 session
+recorded sizes but not which mode it used.
 
-| Prompt | Result |
-|---|---|
-| 38,921 B | emitted normally |
-| 49,273 B | emitted normally |
-| 53,066 B | **silent** — twice, and `/clear` did not recover it |
+| Prompt | Delivery | Result |
+|---|---|---|
+| 38,921 B | unrecorded | emitted normally |
+| 49,273 B | unrecorded | emitted normally |
+| 53,066 B | unrecorded | **silent** — twice, `/clear` did not recover it |
+| 52,997 B | file indirection | emitted normally |
+| 53,058 B | file indirection | emitted normally |
+| 56,349 B | file indirection | emitted — token fragmented across frames (2026-07-23) |
+| 58,536 B | file indirection | emitted normally |
+| 61,493 B | file indirection | emitted normally — contiguous token (2026-07-23) |
 
-So the cliff sat between ~49 KB and ~53 KB there. Re-measure on your own host
-before relying on the boundary; what generalises is that the failure is *silent
-and total*, not that it starts at 53 KB.
+**Five file-indirection observations spanning 52,997–61,493 B, all answered.
+There is no file-indirection silence on record**, including at sizes well past
+the "cliff". Treat **61,493 B as the largest size confirmed answered** — beyond
+it is *unverified*, not known-bad. `h_mad_assemble_audit.py` warns on that basis
+now; it previously predicted failure above 49 KB, which caused at least one
+design audit to be trimmed for no reason.
+
+**Do not measure this by grepping a tail — that is probably how the original
+boundary was mis-recorded.** The reply renders into a TUI that redraws and
+fragments it across frames. Measured 2026-07-23: the 61,493 B probe's token
+appeared first as a partial `J13OK J1` and only later as the complete
+`J13OK J13-SIXTY-9F3A`; the 56,349 B probe's token split into `J13-FIFTYFIVE-4`
+and `D8E` in separate frames and never appeared contiguously in any tail.
+
+**Three** independent pollers tailing 40 lines for the exact token reported
+`RESULT=SILENT after ~5min` — two for the 61,493 B probe, one for the 56,349 B
+probe. **All three were wrong.** A full-buffer read found the 61,493 B token
+contiguous (`J13OK J13-SIXTY-9F3A`) and the 56,349 B token as frame-split
+fragments; the staged files' filler never appeared in the pane at all, so those
+characters could only be the agent's own output. A tail-grep does not
+distinguish "produced nothing" from "produced something the viewport reflowed",
+and those two demand opposite responses.
+
+Note also that the retained buffer was **47,711 B — smaller than either prompt**.
+Scrollback capacity is not a measure of what the agent emitted, and it is another
+reason to extract on the sentinel pair rather than eyeball a pane.
+
+Read the whole buffer (`hmad-dispatch read <agent> --from-start`) and extract
+with `h_mad_extract_report.py` — which is what the sentinel-pair protocol exists
+for, and what F5 already warned about. An ad-hoc grep is the wrong instrument
+even when you are only "probing".
 
 **Idle detection cannot see this.** The pane really is settled — nothing is
 being written — so `wait` returns satisfied and a two-read stability comparison

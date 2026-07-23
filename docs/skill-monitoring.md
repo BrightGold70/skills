@@ -302,7 +302,7 @@ had never been executed. All unfixed.
 |---|---|---|---|
 | J11 | 🟡 | MONITORING | `SKILL.md` twice orders "record the substrate + agent mapping via `h_mad_telemetry.py`"; the script has no such argument and the row schema has no such field |
 | J12 | 🟡 | MONITORING | `h_mad_assemble_audit.py` returns `ASSEMBLE: PASS` for a prompt it simultaneously predicts will fail — the oversize warning is an unread line beside a passing token |
-| J13 | 🟢 | MONITORING | The documented remedy for an oversize audit prompt ("split by FR group") does not reduce size when the design is the dominant term |
+| J13 | 🟢 | **FIXED** | The "split by FR group" remedy does not divide the fixed terms — AND the 49 KB cliff it defended against was never reproduced for the delivery mode h-mad actually uses |
 
 - 🟡 **J11 — the mandated substrate record is unexecutable.** `SKILL.md` says, in *both* §"Phase 5
   (Implementation) sub-steps" and §"Audit prompt assembly": "Record the printed substrate + agent
@@ -344,6 +344,42 @@ had never been executed. All unfixed.
   undetectable and that is what Axis C exists to catch. **Fix direction:** state the real options
   (shorten the design, or split the *feature*), and give the fixed-vs-divisible arithmetic so the
   reader can tell which applies. [[J12]]
+
+  **FIXED 2026-07-23 — and the premise turned out to be wrong too, which changed the fix.**
+
+  Applying §"Verifying a review finding before acting on it" to this entry: the remedy was
+  defending against a **49 KB reviewer cliff that has never reproduced for the delivery mode this
+  skill uses**. `hmad-dispatch send` inlines only up to `HMAD_SEND_INLINE_MAX` (8192 B); above that
+  it stages the file and the agent reads it. Audit prompts are 32–61 KB, so **every one goes by file
+  indirection and none is ever pasted**. The 2026-07-21 session that produced the 49 KB figure
+  recorded sizes but not delivery mode.
+
+  Measured live 2026-07-23 via file indirection: **56,349 B answered, 61,493 B answered.** With the
+  three already on record (52,997 / 53,058 / 58,536 B) that is **five file-indirection observations
+  spanning 53–61 KB, all answered, and zero file-indirection silences**.
+
+  **A methodology error inside this very investigation is the most transferable part.** *Three*
+  independent pollers tailing 40 lines for the sentinel reported `RESULT=SILENT after ~5min` (two
+  for the 61,493 B probe, one for 56,349 B), and I nearly wrote "the cliff reproduces" into the docs
+  on that basis. A full-buffer read found the tokens: the TUI had reflowed the reply across redraw frames
+  (`J13OK J1` first, the full line later; the other probe's token split into `J13-FIFTYFIVE-4` and
+  `D8E`). A tail-grep cannot distinguish "emitted nothing" from "emitted something the viewport
+  reflowed" — and **that is plausibly how the original 49 KB boundary was recorded in the first
+  place.** F5 already documented the fragmentation; I used an ad-hoc grep anyway because it was
+  "just a probe".
+
+  **Shipped:** `h_mad_assemble_audit.py` thresholds re-anchored to the largest size *confirmed
+  answered* (61,493 B) instead of a predicted failure point, with wording that says "unverified,
+  not known-bad" — the old text predicted a silent failure at sizes since measured as fine and had
+  already cost a design audit an unnecessary trim. `agent-substrate.md` §"Prompt size" rewritten
+  with the delivery-mode distinction, the full table, and the do-not-tail-grep rule. `SKILL.md`
+  step 5.5 now carries the fixed-vs-divisible arithmetic and the options that actually work
+  (FR-only spec inline → shorten the design → **split the feature** → trim the rubric last).
+
+  **Knock-on for J12:** its "an orchestrator dispatches a prompt the script itself expects to come
+  back empty" premise is now false — the script no longer predicts failure there. J12's structural
+  point (a warning beside `PASS` that nothing must read) still stands and is still worth fixing,
+  but it is no longer urgent. [[J12]] [[F5]]
 
 **Also measured (evidence, not a new ID):** the ~49 KB reviewer cliff did **not** reproduce on this
 host. `references/agent-substrate.md` records 49,273 B emitted normally and 53,066 B silent, and
@@ -470,6 +506,10 @@ protocol has two gaps that only running it could expose. Both unfixed.
   **58,536 B** were all answered normally by Antigravity 1.1.5 / Gemini 3.1 Pro via file
   indirection. `references/agent-substrate.md` still records 53,066 B as silent, and that number is
   now actively costing work — a design audit was trimmed on the strength of it. See J13.
+
+  **RESOLVED 2026-07-23 — see J13.** The threshold was re-measured: five file-indirection prompts
+  spanning 52,997–61,493 B all answered, and every audit prompt is file-delivered. The rubric's
+  "size budget" was measured against a boundary that does not apply to it. Original note follows.
 
   **New evidence 2026-07-23 (Wave 4c):** the threshold now costs work in a second, structural way.
   `invariants.base.md` is inlined **verbatim into every audit prompt**, so each rule added to the

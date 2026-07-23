@@ -338,3 +338,21 @@ def test_skill_5d_states_counts_and_tolerates_labelled_guards():
     assert "match the stated counts" in norm5, (
         "the halt must compare against the stated counts, not require every test to fail"
     )
+
+
+def test_skill_5_5_gives_the_fixed_vs_divisible_arithmetic():
+    # J13: SKILL.md step 5.5 prescribed "split the audit by FR group" for an
+    # oversize prompt. Only the spec divides -- 46.2 of 50.9 KB is fixed cost
+    # carried by every split, so a two-way split buys ~2 KB for double the work.
+    # The step must give the arithmetic so a reader can tell which case they are
+    # in, and must name the options that actually reduce size.
+    text = _skill_norm()
+    assert "divides on an FR split?" in text, (
+        "5.5 must show which terms divide and which are fixed"
+    )
+    assert "Split the feature" in text, (
+        "the only division that touches the fixed terms must be named"
+    )
+    assert "read the whole buffer" in text, (
+        "a silent reply is usually a tail-grep artefact, not size"
+    )
