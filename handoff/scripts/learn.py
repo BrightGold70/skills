@@ -137,11 +137,38 @@ class LearningLine:
         return None
 
 
+def _trim_to(text: str, limit: int = 200) -> str:
+    """Trim `text` to <= `limit` chars at a word boundary, marking the cut with '…'.
+
+    Returns text unchanged when already within the limit. The body is cut to
+    limit-1 (leaving room for the one-char ellipsis) then back to the last space,
+    so the result is a clean prefix of the input plus a visible truncation mark.
+    Exists so hitting the 200-char cap costs ONE step: --trim applies this and
+    stores; a plain rejection prints its result as a paste-ready suggestion.
+    """
+    if len(text) <= limit:
+        return text
+    body = text[: limit - 1]
+    sp = body.rfind(" ")
+    if sp > 0:
+        body = body[:sp]
+    return body.rstrip() + "\u2026"
+
+
 def cmd_add(args: argparse.Namespace) -> int:
     pattern = args.pattern.strip()
     if len(pattern) > 200:
-        print(f"ERROR: pattern exceeds 200 chars ({len(pattern)})", file=sys.stderr)
-        return 1
+        suggestion = _trim_to(pattern, 200)
+        if getattr(args, "trim", False):
+            print(f"NOTE: kernel was {len(pattern)} chars; trimmed to "
+                  f"{len(suggestion)} at a word boundary.", file=sys.stderr)
+            pattern = suggestion
+        else:
+            print(f"ERROR: pattern exceeds 200 chars ({len(pattern)}). "
+                  f"Re-run with --trim to auto-trim at a word boundary, or use "
+                  f"this {len(suggestion)}-char form:", file=sys.stderr)
+            print(f'  "{suggestion}"', file=sys.stderr)
+            return 1
     if args.category not in CATEGORIES:
         print(f"ERROR: category must be one of {CATEGORIES}", file=sys.stderr)
         return 1
@@ -211,7 +238,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="learn.py",
         description="Durable cross-session learnings store (handoff skill)",
@@ -220,6 +247,11 @@ def main() -> int:
 
     p_add = sub.add_parser("add", help="record a new learning")
     p_add.add_argument("pattern", help="≤200-char reusable finding")
+    p_add.add_argument(
+        "--trim", action="store_true",
+        help="if the kernel exceeds 200 chars, auto-trim at a word boundary "
+             "(marked with …) instead of rejecting — one step, no retry loop"
+    )
     p_add.add_argument(
         "--category", required=True, choices=CATEGORIES,
         help="gotcha | solution | pattern"
@@ -241,7 +273,11 @@ def main() -> int:
     p_search = sub.add_parser("search", help="grep-style search over learnings")
     p_search.add_argument("term", help="search term (case-insensitive)")
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = _build_parser().parse_args()
     if args.cmd == "add":
         return cmd_add(args)
     return cmd_search(args)

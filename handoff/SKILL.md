@@ -178,6 +178,10 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" a
   --category gotcha|solution|pattern \
   --confidence 0.3|0.5|0.7|0.9 \
   --tags "domain1,domain2,handoff:2026-04-30-foo"
+# Over 200 chars? Add --trim to word-boundary-trim in one call (marked …), OR
+# shorten to the ≤200 suggestion the plain rejection prints. Don't retry by
+# eyeball — that overshoots. Prefer rewriting tighter when the kernel's punchline
+# is at the END (trim cuts the tail); use --trim when the tail is expendable.
 
 # Search
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" search "<term>"
@@ -410,6 +414,8 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" a
   --category gotcha|solution|pattern \
   --confidence 0.7 \
   --tags "domain1,domain2,handoff:YYYY-MM-DD-<slug>"
+# Over 200 chars: add --trim (word-boundary trim in one call), or paste the
+# ≤200 suggestion the rejection prints — never eyeball-retry, it overshoots.
 ```
 
 Pick confidence based on the evidence: `0.3` for single-session observations not yet
