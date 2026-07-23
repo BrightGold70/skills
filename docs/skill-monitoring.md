@@ -148,6 +148,8 @@ is not re-filed.
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
 | J7 | 🔴 | MONITORING | F13 residual: the pin **file** leaks into `test_hmad_dispatch.py` — 17 tests fail whenever agents are pinned, which Phase 5 preflight *requires* |
+| J8 | 🟡 | MONITORING | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`), overflowing the summary column |
+| J9 | 🟢 | MONITORING | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
 
 - 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
   --worktree path:…/skills` read `term_01f69e2d…` from the `orca terminal create` response and
@@ -221,6 +223,24 @@ is not re-filed.
   and testing stop being mutually exclusive. Workaround used this session: keep the pin file absent
   and pass `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` as env vars, which the resolver
   prefers anyway. [[F13]] [[J2]]
+
+- 🟡 **J8 — `elapsed_min` is nonsense in every recorded row.** Surfaced while verifying the
+  cycle-telemetry-fidelity feature against the real `.h-mad/telemetry.jsonl`: all three rows carry
+  `elapsed_min` ≈ `29744612.6`, i.e. about **56 years**, so `started_ts` is being parsed as roughly
+  the epoch rather than the feature's real start. Pre-existing and untouched by that feature (it
+  changed only the two cycle counters). Two consequences: the elapsed column is meaningless, and at
+  11 characters it overflows its `:>9` field so the summary table's last two columns visibly
+  misalign. **Fix direction:** find what writes `started_ts` into `orchestrator_state` — the value
+  reaching `datetime.fromisoformat` is evidently not the ISO string the schema documents — and
+  either correct the writer or make `cmd_record` treat an implausible elapsed as absent (`?m`)
+  rather than printing it.
+- 🟢 **J9 — `test_alive_cmux_true` is environment-dependent.** Failed once during a Phase-5f full
+  run, then passed on two consecutive full runs of the identical suite with no change in between.
+  It probes the real `cmux` binary, so its result depends on machine state rather than on the code
+  under test. Not order-dependence — it passes in isolation and in the same 498-test set that
+  failed it once. **Fix direction:** stub the substrate probe as the neighbouring tests do, so the
+  suite does not have a test whose verdict depends on whether a terminal multiplexer happens to be
+  responsive.
 
 **Also observed (evidence for existing entries, not new IDs):** `orca terminal create --title
 "agy-probe"` does not stick — `terminal list` reports `title: agy`, the program's own OSC title.
