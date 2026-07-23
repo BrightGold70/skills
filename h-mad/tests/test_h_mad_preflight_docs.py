@@ -261,3 +261,18 @@ def test_skill_documents_sanitize_before_public_filing():
     assert "absolute paths, usernames, sibling project names" in text, (
         "the note must enumerate what to search for, or the check is untestable"
     )
+
+
+def test_skill_documents_stub_harness_probe():
+    # Candidate `throwaway stub-harness probe` (recurrence 2, now 3 -- it is what
+    # turned J17 from "a rejected selector" into "the guards are bypassed").
+    # Documented as a PRACTICE, not scripted: the artifact is meant to be thrown
+    # away, so a permanent script would contradict the thing being taught.
+    text = _skill_norm()
+    assert "## Confirming a suspected defect before fixing it" in text
+    assert "drives the real function through the existing test helpers" in text, (
+        "the practice must name the mechanism, not merely say 'investigate'"
+    )
+    assert "delete the probe" in text, (
+        "a probe that survives becomes an untested second harness"
+    )

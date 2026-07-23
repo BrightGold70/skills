@@ -412,6 +412,23 @@ Two second-order consequences, both observed:
   uncommitted skill edits in the tree. Commit first — this is `## Mutation verification` applied
   to your own work, and a lost implementation is indistinguishable from one never written.
 
+## Confirming a suspected defect before fixing it
+
+When you suspect a hole in a resolver, guard, or parser, **confirm it empirically before designing
+the fix**. Write a throwaway probe that **drives the real function through the existing test
+helpers** — source the shell function, or import the harness helpers from `tests/` into a scratch
+pytest — feed it the inputs you suspect, and print what actually comes back. Then **delete the
+probe**; a probe that survives becomes a second, untested harness that drifts from the first.
+
+This is cheap and it repeatedly changes the answer. Probing `_worktree_path` against the selector
+grammar took one command and converted a filed defect ("this selector form is rejected", true but
+harmless) into the real one ("every *documented* selector form skips the guards entirely, and one
+of them silently destroyed a worktree holding an unmerged commit"). An earlier probe in the same
+session turned two hypotheses into verified bugs and killed a third that was wrong.
+
+The failure it prevents is designing against an imagined mechanism. A fix aimed at the wrong
+mechanism still passes its own tests, because those tests were written from the same wrong model.
+
 ## Filing to a public tracker
 
 Before filing an issue, comment, or reply to a **public** tracker, **grep the body against a

@@ -120,7 +120,7 @@ from agent-side file reads.
 because this run dogfooded the assembler and changing the instrument mid-measurement would have
 invalidated both. J12 now records a concrete defect in it.
 
-## Wave 4 · Instrument slice ✅ SHIPPED `ab3657e` · candidates batch REMAINING
+## Wave 4 · Instrument slice ✅ SHIPPED `ab3657e` · candidates batch ✅ SHIPPED (Wave 4b)
 
 **Depends on:** Wave 3 — now shipped. **Why combined:** the candidates decompose into
 independent, non-conflicting files — the natural payload for the parallel fanout.
@@ -149,7 +149,39 @@ J15, J14, J8 and J10 are all **fixed**:
 suite passed whether or not it existed) and the `--base` documentation test (passed with the
 guidance deleted). Neither was visible to review or to a green run.
 
-**REMAINING in this wave** — the candidates batch, now safe to fan out:
+**Wave 4b SHIPPED 2026-07-23** (feature/196). Suite 608 → **619**. Run directly rather than
+via fanout: Wave 3 already closed G-a by running the fanout live, so it was no longer needed as
+proof, and Phases 1–4 have user-approval gates that would stall an unattended run. Every item
+below is mutation-tested — four assertions initially reported "enforced" against a harness that
+had silently done nothing, because the phrases are line-wrapped and a literal `.replace()` matched
+zero times while exiting 0. That is `## Mutation verification` catching its own commit.
+
+| candidate | rec | landed as |
+|---|---|---|
+| `verify-the-mutation-not-the-command` | 3 | `invariants.base.md` §Mutation verification |
+| `replay-the-incident-against-the-fix` | 4 | `invariants.base.md` §Incident replay (merged with `replay-detector-against-history`, rec 3) |
+| `file-issue-then-fix-under-TDD` | 14 | `h_mad_issue_fix_gate.py` + SKILL.md protocol |
+| `worktree-for-live-skill-edits` | 2 | SKILL.md §Editing this skill while a run is in flight |
+| `sanitize-before-public-filing` | 2 | SKILL.md §Filing to a public tracker |
+| `throwaway stub-harness probe` | 3 | SKILL.md §Confirming a suspected defect — as a **practice**, not a script |
+| `staged-prompt repair sweep` | 2 | **DECLINED** — see below |
+
+`staged-prompt repair sweep` was declined rather than deferred: every staged prompt on disk belongs
+to one feature that shipped 2026-07-22, `/tmp` is scratch, and `h_mad_assemble_audit.py` regenerates
+any prompt in one call. Building backup + in-flight-freshness logic to repair files nothing will
+read again is cost without a beneficiary. Recorded in `docs/skill-candidates.md`.
+
+`file-issue-then-fix-under-TDD` could not be scripted end-to-end: §"No new external dependency"
+forbids the skill acquiring a new CLI, and `gh` is not one of its dependencies. The gate therefore
+checks the **linkage** (issue ↔ test ↔ closing trailer) and prints `gh` commands without invoking
+them — steps 1–4 stay discipline, step 5 is the only part a script can honestly check.
+
+**Not in this batch** — five newer `candidate: yes` items accumulated after this plan was written
+(`mutation-test-every-guard` rec 7, `verify-review-premise-before-acting` rec 4,
+`tracer-bullet-design-assumptions` rec 4, `discriminating-regression-test` rec 3,
+`label-guards-in-red-dispatch` rec 3). They are a Wave 4c decision, not silent scope creep.
+
+Original payload, for provenance:
 
 Payload, triaged by kind:
 
@@ -251,5 +283,5 @@ Do not sequence work behind #9870.
 | 2 | `PREFLIGHT:` token + mandated reads | G-c | stale pin fails the checklist |
 | 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
 | 4a ✅ `ab3657e` | J15/J14/J8/J10 — the instrument | defects | done; fanout is now safe |
-| 4b | candidates batch via fanout | candidates | pass `--base <feature-branch>` on teardown |
+| 4b ✅ | candidates batch (run directly) | 6 candidates landed, 1 declined | done; suite 619 |
 | 5 | ~~watch #9870~~ — **moot**, J16 paneKey join shipped | H5 residual, J16 | done; #9870 closed as completed |
