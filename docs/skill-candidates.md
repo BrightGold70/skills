@@ -8,24 +8,26 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
-## Open, highest recurrence first (2026-07-23)
+## Open, highest recurrence first (reconciled 2026-07-24)
 
-| rec | candidate | session |
+**No `candidate: yes` with rec ≥3 remains unlanded.** Every actionable candidate shipped in the
+2026-07-24 skill-candidate-upgrades session (verified against source, not the label — see below).
+What remains are `maybe` rows that *describe the /h-mad skill that already exists*, kept as
+provenance, not work.
+
+| rec | candidate | status |
 |---|---|---|
-| 9 | `close-a-filed-defect cycle` | 2026-07-23 monitoring-registry-drained |
-| 9 | `H-MAD phase-doc + agy-audit-gate loop` *(maybe)* | 2026-07-20 orca-adaptation-tiers |
-| 6 | `audit→fix→subagent-review→merge loop` *(maybe)* | 2026-07-22 orca-skills-hardening |
-| 3 | `test-pinned-the-defect check` | 2026-07-23 monitoring-registry-drained |
-| 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep`, `both-halves doc fix` *(maybe)* | various |
-| 1 | `differential-validator-test` *(maybe)* | 2026-07-23 monitoring-registry-drained |
+| 9 | `close-a-filed-defect cycle` | **LANDED** — SKILL.md §Working a `skill-monitoring` item |
+| 9 | `H-MAD phase-doc + agy-audit-gate loop` | *maybe* — already the /h-mad skill |
+| 6 | `audit→fix→subagent-review→merge loop` | *maybe* — already the /h-mad skill |
+| 3 | `test-pinned-the-defect check` | **LANDED** — invariants.base.md §Regression provenance |
+| 3 | `verify-backlog-row-premise-vs-code` | **LANDED** — folded into close-a-filed-defect step 1 |
+| 2 | `both-halves doc fix` | **LANDED** — invariants.base.md §Both halves of a doc change |
+| 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep` | *maybe* — not yet needed |
+| 1 | `differential-validator-test` | **LANDED** — invariants.base.md §Reimplementation parity |
 
-The top two are the **same rhythm at two altitudes** — poll-until-idle is the dispatch primitive,
-close-a-filed-defect is the loop built on it — and together they account for most of the tool calls
-in a working session. Promote those before anything lower on the list.
-
-The three `maybe` rows marked *"already the /h-mad skill"* are not really candidates: they describe
-the skill that exists. They are kept as provenance for why a helper was or was not built, not as
-work.
+**Re-scout trigger:** promote only when a *fresh* recurrence (rec ≥3, `candidate: yes`) appears in a
+later session block. As of 2026-07-24 there is none — the backlog is drained of actionable items.
 
 
 ## 2026-07-20 — orca-adaptation-tiers
@@ -82,10 +84,10 @@ work.
 - **close-a-filed-defect cycle**: read entry → verify its stated premise against source → reproduce
   live → TDD the fix → mutation-test every guard → dogfood live → flip the registry row with
   evidence. Ran 9× this session (J1–J5, J11–J13, J17) with an identical shape, and the
-  premise-check step changed the fix in 4 of them — recurrence: 9 — candidate: yes
+  premise-check step changed the fix in 4 of them — recurrence: 9 — candidate: **LANDED** (2026-07-24) — SKILL.md §Working a `skill-monitoring` item
 - **test-pinned-the-defect check**: when a fix breaks an existing test, first ask whether the test
   asserted the bug as an acceptance criterion rather than adjusting the fix — J17's forwarded
-  selector, J1's create-response handle, J2's AC-6.5 pin path — recurrence: 3 — candidate: yes
+  selector, J1's create-response handle, J2's AC-6.5 pin path — recurrence: 3 — candidate: **LANDED** (2026-07-24) — `invariants.base.md` §Regression provenance
 - **snapshot-live-state-before-mutation-testing**: mutating a path-resolution branch redirects the
   suite onto real files; snapshot the target (or sandbox the cwd) first — recurrence: 1 —
   candidate: **LANDED** (J18) — `h-mad/tests/conftest.py::_protect_live_pin_file` snapshots and
@@ -93,14 +95,14 @@ work.
   the caveat.
 - **differential-validator-test**: when replacing a library with a bundled implementation, assert
   verdict-equality against the library across a construct-complete corpus AND the real artifacts on
-  disk, rather than testing the replacement alone — recurrence: 1 — candidate: maybe
+  disk, rather than testing the replacement alone — recurrence: 1 — candidate: **LANDED** (2026-07-24) — `invariants.base.md` §Reimplementation parity
 - **both-halves doc fix**: when deleting an unexecutable instruction, assert in the same test that
   the executable replacement landed — a "is it gone" assertion passes for a deletion that lost the
-  capability (J11) — recurrence: 2 — candidate: maybe
+  capability (J11) — recurrence: 2 — candidate: **LANDED** (2026-07-24) — `invariants.base.md` §Both halves of a doc change
 
 ## 2026-07-24 — skill-candidate-upgrades
 
 - **promote-candidate-to-rule-or-verb**: reconcile skill-candidates by mapping each open row to a concrete insertion point (Axis-B rule / SKILL playbook / new verb), then TDD+mutation+dogfood like any fix — ran across 4 candidates this session — recurrence: 2 — candidate: maybe (this IS the upgrade workflow; a checklist, not a script)
-- **verify-backlog-row-premise-vs-code**: before flipping a candidate/registry row, confirm its claim against git log -S / grep — 3 rows described already-shipped work this session, and (prior session) 4 monitoring rows were stale — recurrence: 3 — candidate: yes (same shape as close-a-filed-defect step 1; fold into it)
+- **verify-backlog-row-premise-vs-code**: before flipping a candidate/registry row, confirm its claim against git log -S / grep — 3 rows described already-shipped work this session, and (prior session) 4 monitoring rows were stale — recurrence: 3 — candidate: **LANDED** (2026-07-24) — folded into close-a-filed-defect step 1 (SKILL.md §Working a `skill-monitoring` item)
 - **fix-the-fixture-not-just-the-assertion**: when a mutation survives after tightening an assertion, suspect the test DATA — aligned word lengths let a naive cut hit a boundary — recurrence: 1 — candidate: maybe
 - **compose-verb-from-existing-verbs**: build a convenience verb (ask = send+wait+read) by calling the existing command functions so their guards carry, routing sub-command chatter to stderr so stdout stays the payload — recurrence: 1 — candidate: no (one instance; the pattern is just single-source reuse)
