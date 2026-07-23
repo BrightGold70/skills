@@ -401,7 +401,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| J16 | 🟢 | **OPPORTUNITY** | `worktree ps` carries `agents[].agentType` keyed by `paneKey`, which maps to `terminal list`'s `tabId:leafId` — a reliable identity source that `_orca_find`'s heuristics do not use |
+| J16 | 🟢 | **RESOLVED** | `worktree ps` carries `agents[].agentType` keyed by `paneKey`, which maps to `terminal list`'s `tabId:leafId` — a reliable identity source that `_orca_find`'s heuristics do not use |
 
 - 🟢 **J16 — agent identity IS available, just not from `terminal list`.** H5 and
   [orca#9870](https://github.com/stablyai/orca/issues/9870) record that Orca "exposes no field naming
@@ -428,6 +428,28 @@ protocol has two gaps that only running it could expose. Both unfixed.
   different call. Worth attempting **before** Wave 5 continues waiting on #9870, and worth reporting
   upstream since it may make the issue moot. Note `agentType` is `antigravity`, not `agy`, so the
   mapping needs an alias. [[H5]] [[J1]]
+
+  **SHIPPED 2026-07-23.** `_orca_find_by_pane` + `_orca_agent_type` in `hmad-dispatch.sh`, wired as
+  **Pass 0** of `_orca_find` ahead of both heuristics; 8 tests. It holds, and the join is now the
+  primary identity mechanism — the title and preview passes are the fallback, not the other way round.
+
+  - **Live before/after, same runtime, same listing, pins bypassed.** Before: `codex -> UNRESOLVED`
+    and `agy -> UNRESOLVED` — *both* passes resolved 0 candidates, so the whole run depended on the
+    pin file. After: both resolve, and both match the pinned handles exactly, on a listing where the
+    agy pane's `.title` literally reads `"Codex - skills repo"`.
+  - **Scoped truncation is safe; unscoped is not.** `worktree ps --limit` drops whole *worktrees*,
+    never agents within one, so a same-worktree rival can never be hidden from a scoped match. With
+    no coordinator and no enclosing worktree, matching is global and a dropped worktree could hide
+    the rival that makes it ambiguous — so the join refuses a truncated listing only in that case.
+  - **Two independent scope layers, and only mutation showed one was untested.** The caller already
+    scopes *terminals* by `.worktreePath`, so deleting the join's own worktree filter broke nothing.
+    The filter is not redundant — it pins which source decides when the two calls disagree about a
+    pane's worktree — but it needed a test that isolates it (`…_trusts_ps_worktree_grouping`).
+  - **Ambiguity declines rather than falls through to guessing.** Two agents of one type in scope →
+    UNRESOLVED → pin. Weaker evidence resolving what stronger evidence called ambiguous is guessing
+    with extra steps.
+  - **Report upstream:** #9870 asks for a per-terminal identity field. `worktree ps` already carries
+    it. The issue may be closable as-is, or reducible to "surface `agentType` on `terminal list` too".
 
 **Also observed (evidence, not new IDs):**
 - **Handle rotation happened twice in one run**, and the Wave-3 receipt caught both:

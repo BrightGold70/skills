@@ -9,6 +9,14 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "current" ] && [ "${3:-}" = "--json
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
 fi
+# J16: `worktree ps` and `terminal list` are DIFFERENT calls that the paneKey
+# identity join consumes together, so a single HMAD_STUB_ORCA_STDOUT cannot
+# express both. This override is consulted only when explicitly set, so every
+# pre-J16 test keeps the shared-stdout behaviour it was written against.
+if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_WT_PS_STDOUT:-}" ]; then
+  printf '%s' "$HMAD_STUB_ORCA_WT_PS_STDOUT"
+  exit 0
+fi
 # Default success envelope for un-cased `--json` verbs. Real Orca always returns
 # {"ok":true,"result":{…}}; the previous empty-stdout default was unrealistic and
 # is now rejected by the wrapper's `_orca_json` ok-check. Only applies when no

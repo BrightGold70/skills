@@ -203,6 +203,66 @@ _agent_pv_re() {
   esac
 }
 
+_orca_agent_type() {
+  # h-mad agent token -> the `agentType` Orca reports in `worktree ps`.
+  # Orca names the Antigravity CLI "antigravity"; h-mad calls it "agy" after the
+  # binary. Without this alias the J16 join matches nothing for agy and silently
+  # degrades to the heuristics it exists to replace.
+  case "$1" in
+    agy) printf '%s\n' 'antigravity' ;;
+    *)   printf '%s\n' "$1" ;;
+  esac
+}
+
+_orca_find_by_pane() {
+  # J16 -- resolve identity by joining `orca worktree ps` to `orca terminal list`.
+  # $1 = agent token, $2 = the already-scoped terminals envelope, $3 = scope
+  # worktree path (may be empty). Echoes exactly one handle + rc 0, else rc 1.
+  #
+  # `terminal list` carries no field naming the running program (orca#9870):
+  # `.title` is the enclosing TAB's title -- shared by every leaf, so it names a
+  # tab, not a pane -- and `.preview` empties once the agent works. But
+  # `worktree ps` returns `.result.worktrees[].agents[]` with an explicit
+  # `agentType` keyed by a `paneKey` of "<tabId>:<leafId>", and `terminal list`
+  # returns `.tabId` and `.leafId`. The join is therefore both title- and
+  # preview-independent: it is the missing field, in a different call.
+  #
+  # Measured live 2026-07-23 at the exact ambiguity H5 documents -- an
+  # antigravity pane titled "Codex - skills repo" beside the real Codex pane,
+  # both previews reset to empty, both passes below resolving 0 candidates for
+  # both agents. The join separated them correctly.
+  local token="$1" scoped="$2" scope_wt="$3" want ps ids n
+  want="$(_orca_agent_type "$token")"
+  # --limit mirrors _worktree_path. Failure (older runtime, no such verb, bad
+  # JSON) is not an error here: Pass 0 is an ENRICHMENT, and the caller's
+  # heuristics remain the contract when it cannot run.
+  ps="$(orca worktree ps --limit 200 --json 2>/dev/null)" || return 1
+  printf '%s' "$ps" | jq -e '.result.worktrees' >/dev/null 2>&1 || return 1
+  # The cap drops whole WORKTREES, never agents within one, so a same-worktree
+  # rival can never be hidden from a scoped match. Unscoped (no coordinator, cwd
+  # inside no known worktree) matching is global, and there a dropped worktree
+  # could hide the very rival that makes this ambiguous -- so refuse instead.
+  if [ -z "$scope_wt" ]; then
+    printf '%s' "$ps" | jq -e '.result.truncated != true' >/dev/null 2>&1 || return 1
+  fi
+  ids="$(printf '%s' "$ps" | jq -r --arg want "$want" --arg wt "$scope_wt" \
+           --argjson tl "$scoped" '
+    [ .result.worktrees[]?
+      | select($wt == "" or (.path // "") == $wt)
+      | (.agents // [])[]
+      | select((.agentType // "") == $want)
+      | .paneKey ] as $keys
+    | $tl.result.terminals[]?
+    | select(((.tabId // "") + ":" + (.leafId // "")) as $k
+             | ($k != ":") and ($keys | index($k)))
+    | .handle' 2>/dev/null)" || return 1
+  n="$(printf '%s' "$ids" | grep -c . || true)"
+  # Exactly one, or decline. Two agents of one type in scope is real ambiguity;
+  # falling through to weaker evidence would be guessing with extra steps.
+  [ "$n" -eq 1 ] || return 1
+  printf '%s\n' "$ids"
+}
+
 _orca_find() {
   # Match the single Orca terminal whose TITLE begins with the agent token
   # (case-insensitive), mirroring _cmux_find. Pin HMAD_ORCA_<AGENT>_TERMINAL
@@ -249,6 +309,15 @@ _orca_find() {
     '{result:{terminals:[.result.terminals[]?
        | select($self=="" or .handle != $self)
        | select($wt=="" or (.worktreePath // "")==$wt)]}}')"
+  # Pass 0 (J16) -- exact identity via the worktree-ps paneKey join. Runs FIRST
+  # because it is the only evidence here that actually names the running program;
+  # everything below infers it from strings a pane may carry for other reasons.
+  # It declines silently (rc 1) when unavailable or ambiguous, leaving Passes 1
+  # and 2 exactly as they were.
+  local by_pane
+  if by_pane="$(_orca_find_by_pane "$token" "$scoped" "$scope_wt")" && [ -n "$by_pane" ]; then
+    printf '%s\n' "$by_pane"; return 0
+  fi
   # Pass 1 -- anchored, case-insensitive TITLE match (identity, not content).
   #
   # Only run for agents that actually EMIT a title. Orca's `.title` is the pane

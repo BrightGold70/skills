@@ -174,7 +174,16 @@ runs in that pane. Observed live 2026-07-22: an **agy** pane sitting in a tab na
 `Codex - skills repo` matched `^codex`; both agents return a well-formed sentinel
 report, so handing Codex's work to agy would have been silent. Auto-detect therefore
 never matches Codex on title — only on a fresh pane's `gpt-N` banner, which scrolls
-off once it works. (Orca-side gap: stablyai/orca#9870.)
+off once it works.
+
+**Identity does exist — in a different call (J16, shipped 2026-07-23).** `orca worktree ps`
+returns `agents[].agentType` keyed by a `paneKey` of `<tabId>:<leafId>`, and `terminal
+list` returns `.tabId`/`.leafId`. `_orca_find` joins them as **Pass 0**, ahead of the
+title and preview passes, which resolves the case above exactly: measured live with pins
+bypassed, both agents went from `UNRESOLVED` to correct. `agentType` is `antigravity`,
+not `agy`. This does not retire pinning — handles still rotate, and `launch` still owns
+identity best — but an un-owned pane is now recoverable. (stablyai/orca#9870 is thereby
+an ergonomics request, not a blocker.)
 
 **A pin file records intent, not state.** Handles rotate. Measured on 2026-07-22:
 every Orca handle rotated mid-run, `env` still printed the dead pins, and a dispatch

@@ -358,6 +358,215 @@ def test_orca_identity_preview_fallback_refuses_when_only_coordinator_matches(tm
     assert "codex -> UNRESOLVED" in r.stdout
 
 
+# --- J16: paneKey identity join ---------------------------------------------
+#
+# `orca terminal list` carries no field naming the running program (orca#9870):
+# `.title` is the enclosing TAB's title, shared by every leaf, and `.preview`
+# decays to empty once the agent works. `orca worktree ps` DOES: it returns
+# `.result.worktrees[].agents[]` with an explicit `agentType` keyed by a
+# `paneKey` of the form "<tabId>:<leafId>", and `terminal list` returns `.tabId`
+# and `.leafId`. Joining the two is title-independent and preview-independent.
+#
+# The fixtures below are the live 2026-07-23 state, verbatim: an ANTIGRAVITY
+# pane whose title reads "Codex - skills repo" beside the real Codex pane titled
+# "skills". Against that listing the title and preview passes resolved 0
+# candidates for BOTH agents (measured), so the whole run depended on a pin file.
+
+
+def _orca_terms_paned(*rows):
+    """`orca terminal list --json` carrying the tabId/leafId the J16 join needs.
+
+    rows: (handle, tabId, leafId, title, preview, worktreePath)
+    """
+    items = ",".join(
+        '{"handle":"%s","tabId":"%s","leafId":"%s","title":"%s","preview":"%s",'
+        '"worktreePath":"%s"}' % r for r in rows
+    )
+    return '{"ok":true,"result":{"terminals":[' + items + ']}}'
+
+
+def _orca_wt_ps(*worktrees, truncated=False):
+    """`orca worktree ps --json`. worktrees: (path, [(paneKey, agentType), ...])."""
+    items = ",".join(
+        '{"path":"%s","agents":[%s]}' % (
+            path,
+            ",".join('{"paneKey":"%s","agentType":"%s"}' % a for a in agents),
+        )
+        for path, agents in worktrees
+    )
+    return ('{"ok":true,"result":{"worktrees":[' + items + '],'
+            '"truncated":' + ("true" if truncated else "false") + '}}')
+
+
+# The live listing: note term_agy's title says "Codex", and both previews are
+# empty (buffers reset). Nothing but the join can tell these two apart.
+_J16_TERMS = _orca_terms_paned(
+    ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+    ("term_agy", "tab1", "leaf_agy", "Codex - skills repo", "", "/wt/skills"),
+    ("term_codex", "tab1", "leaf_codex", "skills", "", "/wt/skills"),
+)
+_J16_PS = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                      ("tab1:leaf_agy", "antigravity"),
+                                      ("tab1:leaf_codex", "codex")]))
+
+
+def test_orca_identity_panekey_join_beats_inherited_title(tmp_path):
+    # The load-bearing case. term_agy's TITLE says "Codex - skills repo"; the
+    # join says antigravity. If the title ever wins, Codex's work is handed to
+    # agy and both produce a well-formed report, so the mis-dispatch is silent.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J16_TERMS,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": _J16_PS,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> term_codex" in r.stdout
+    assert "agy -> term_agy" in r.stdout
+    # The inherited title must not have produced the swap.
+    assert "codex -> term_agy" not in r.stdout
+    assert "agy -> term_codex" not in r.stdout
+    # And the coordinator (agentType "claude") is never an agent target.
+    assert "term_coord" not in r.stdout
+
+
+def test_orca_identity_panekey_join_maps_agy_to_antigravity(tmp_path):
+    # `agentType` is "antigravity", never "agy". Without the alias the join
+    # matches nothing for agy and silently degrades to the old heuristics --
+    # which, on this listing, resolve nothing at all.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+        ("term_a", "tab1", "leaf_a", "skills", "", "/wt/skills"),
+    )
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_a", "antigravity")]))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "agy -> term_a" in r.stdout
+
+
+def test_orca_identity_panekey_join_scopes_to_own_worktree(tmp_path):
+    # A parallel run in another worktree has its own codex agent. Un-scoped the
+    # join sees two and must not guess; scoped to the coordinator's worktree it
+    # sees exactly one. (Live: a HemaSuite codex pane ran beside the skills one.)
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+        ("term_mine", "tab1", "leaf_mine", "skills", "", "/wt/skills"),
+        ("term_other", "tab2", "leaf_other", "HemaSuite", "", "/wt/hema"),
+    )
+    ps = _orca_wt_ps(
+        ("/wt/skills", [("tab1:leaf_coord", "claude"), ("tab1:leaf_mine", "codex")]),
+        ("/wt/hema", [("tab2:leaf_other", "codex")]),
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> term_mine" in r.stdout
+    assert "term_other" not in r.stdout
+
+
+def test_orca_identity_panekey_join_trusts_ps_worktree_grouping(tmp_path):
+    # The caller already scopes TERMINALS by `.worktreePath`, so the previous
+    # test passes even with the join's own worktree filter deleted (measured by
+    # mutation). This pins the second, independent layer: the two sources are
+    # separate calls, and when they disagree about which worktree a pane belongs
+    # to, `worktree ps` -- which is also what names the agent -- decides. Here
+    # `terminal list` puts term_other in our worktree while `worktree ps` groups
+    # its paneKey under another, so only the join's filter can exclude it.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+        ("term_mine", "tab1", "leaf_mine", "skills", "", "/wt/skills"),
+        ("term_other", "tab2", "leaf_other", "skills", "", "/wt/skills"),
+    )
+    ps = _orca_wt_ps(
+        ("/wt/skills", [("tab1:leaf_coord", "claude"), ("tab1:leaf_mine", "codex")]),
+        ("/wt/hema", [("tab2:leaf_other", "codex")]),
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> term_mine" in r.stdout
+    assert "term_other" not in r.stdout
+
+
+def test_orca_identity_panekey_join_outranks_a_matching_but_wrong_title(tmp_path):
+    # Ordering guard. agy DOES set an OSC title, so Pass 1 matches "^agy" -- but
+    # a title is the enclosing TAB's whenever the program set none, and here the
+    # CODEX pane sits in a tab named "agy --dangerously-skip-permissions". Pass 1
+    # alone hands agy's work to Codex. Pass 0 must run first and win.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+        ("term_codex", "tab1", "leaf_codex",
+         "agy --dangerously-skip-permissions", "", "/wt/skills"),
+        ("term_agy", "tab1", "leaf_agy", "skills", "", "/wt/skills"),
+    )
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_codex", "codex"),
+                                     ("tab1:leaf_agy", "antigravity")]))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "agy -> term_agy" in r.stdout
+    assert "agy -> term_codex" not in r.stdout
+    assert "codex -> term_codex" in r.stdout
+
+
+def test_orca_identity_panekey_join_ambiguity_does_not_guess(tmp_path):
+    # Two codex agents in the SAME worktree: the join is ambiguous and must
+    # decline rather than pick one. Neither pane carries a usable title or
+    # preview either, so the honest outcome is UNRESOLVED -> pin.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills"),
+        ("term_a", "tab1", "leaf_a", "skills", "", "/wt/skills"),
+        ("term_b", "tab1", "leaf_b", "skills", "", "/wt/skills"),
+    )
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_a", "codex"),
+                                     ("tab1:leaf_b", "codex")]))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert "codex -> UNRESOLVED" in r.stdout
+
+
+def test_orca_identity_panekey_join_unscoped_refuses_truncated_listing(tmp_path):
+    # `worktree ps` is capped, and the cap drops whole WORKTREES (never agents
+    # within one). So truncation is harmless while scoped -- a same-worktree
+    # rival cannot be hidden -- but with no coordinator and no enclosing
+    # worktree, matching is global and a dropped worktree could hide the very
+    # rival that makes the match ambiguous. Refuse the join, keep the heuristics.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(("term_a", "tab1", "leaf_a", "skills", "", ""))
+    ps = _orca_wt_ps(("", [("tab1:leaf_a", "codex")]), truncated=True)
+    r = run(["env"], substrate="orca", cwd=str(tmp_path),
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps})
+    assert "codex -> UNRESOLVED" in r.stdout
+
+
+def test_orca_identity_panekey_join_falls_through_when_ps_has_no_agents(tmp_path):
+    # Regression guard: an Orca build whose `worktree ps` carries no agents[]
+    # (or a call that fails) must leave the title/preview passes exactly as they
+    # were. agy's own OSC title still resolves it.
+    b = _bindir(tmp_path, ["orca"])
+    terms = _orca_terms_paned(
+        ("term_agy", "tab1", "leaf_agy", "agy --dangerously-skip-permissions", "", ""),
+    )
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": '{"ok":true,"result":{"worktrees":[]}}'})
+    assert "agy -> term_agy" in r.stdout
+
+
 def test_cmux_identity_env_override(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["env"], substrate="cmux",
