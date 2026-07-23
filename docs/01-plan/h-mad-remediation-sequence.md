@@ -24,7 +24,10 @@ non-zero. Signals get *canonical tokens* and *mandated reads*.
 
 ---
 
-## Wave 1 · Instrumentation — `audit_cycles` counter (B1)
+## Wave 1 · Instrumentation — `audit_cycles` counter (B1) — ✅ SHIPPED `5fa96ba`
+
+**Shipped 2026-07-23.** 100% match rate, suite 498/0. Both cycle counters now derive from
+versioned artifacts instead of state fields nothing incremented.
 
 **Blocks:** every later verification that would cite a cycle count. Must be first.
 
@@ -41,7 +44,24 @@ fire, and `references/state-schema.md:18` documents non-zero values the code can
 
 **Done when:** a two-cycle plan audit records `plan: 2`, not `0`.
 
-## Wave 2 · Signal consumability — preflight tokens (G-c)
+## Wave 2 · Signal consumability — preflight tokens (G-c) — ✅ SHIPPED `787aecf`
+
+**Shipped 2026-07-23** as `preflight-signal-discipline`. 100% match rate (26/26 ACs), suite 530/0.
+`env` emits `PREFLIGHT: PASS|FAIL [stale=…] [conflict=…]` with the exit code untouched; `SKILL.md`
+mandates asserting it and `ASSEMBLE: PASS` before dispatch; the automation precheck gates on the
+token **and** on agents being resolved. **J7 resolved** — `run()` injects a per-invocation
+never-created pin path, so pinning and testing are no longer mutually exclusive (530 passed
+identical with and without `.h-mad/orca-pins.env`; pre-fix baseline 17 failed / 136 passed).
+6a-prime: cycle 1 `WITH_FIXES` → cycle 2 `READY_TO_MERGE`.
+
+Validated live mid-run: agy's handle rotated during this feature's own 6a-prime re-review, the
+new mandated read printed `PREFLIGHT: FAIL stale=agy`, and `send` refused — the same
+handle-rotation class that lost the HemaSuite Task-2 RED dispatch.
+
+**Carry (not closed by this wave):** FR-4/FR-5 are protocol, not machinery — nothing enforces
+that an orchestrator performs the read. 6a-prime confirmed this is a real residue. **Wave 3 is
+the exercise.** Also open: the CONFLICT case is unguarded at `send` (two agents on one *live*
+handle is undetectable there; a *stale* handle is already refused by `912b93a`).
 
 **Depends on:** nothing. **Blocks:** Wave 3 (the run should exercise the mandated reads).
 
@@ -102,6 +122,28 @@ both repos repeatedly; they belong in the rubric that audits read, not in prose:
 - `throwaway stub-harness probe` (2, maybe) — scratch pytest importing dispatch-test helpers to
   confirm a suspected resolver hole before fixing it.
 
+**Defects → scripts (folded in 2026-07-23 from Wave 2's findings).** Both are diagnosed to a
+line and neither depends on Wave 3, so they can be pulled forward if the dogfood run slips:
+
+- **J8 — `started_ts` defaults to the epoch.** `h_mad_state_write.py:138` reads
+  `record["started_ts"] = started_ts or "1970-01-01T00:00:00Z"`, so any feature created without an
+  explicit `--started-ts` is stamped with a hardcoded epoch sentinel and every telemetry row reports
+  `elapsed_min ≈ 29744612` (≈56 years), overflowing its `:>9` column. Confirmed against
+  `.h-mad/telemetry.jsonl`: the four pre-Wave-2 rows carry `started_ts='1970-01-01T00:00:00Z'`, while
+  `preflight-signal-discipline` — created with `--started-ts` passed explicitly — carries a real
+  timestamp and a sane `110.3m`. Fix: default to `now(UTC)`. **The transferable lesson belongs in the
+  commit message:** a sentinel that is itself a *valid* timestamp cannot be distinguished from real
+  data downstream, which is why this read as "the reader must be broken" for as long as it did.
+  Existing rows stay wrong — the log is append-only history.
+- **J10 — `DONE_WITH_CONCERNS` with no concerns stated.** A Codex dispatch returned that verdict
+  while naming no concern anywhere in its report, handing the orchestrator a doubt it could neither
+  act on nor distinguish from `DONE`. The verdict is machine-parsed and gates the module; reached for
+  conservatively without content it degrades to noise and forces the full independent verification it
+  exists to avoid. Two-sided fix: make the concern mandatory in
+  `references/codex-implementer-prompt.md` ("if you cannot name one, report `DONE`"), and have
+  `h_mad_extract_verdict.py` treat a contentless `DONE_WITH_CONCERNS` as an operational error rather
+  than a verdict, so silence cannot masquerade as nuance.
+
 **Prose notes → `SKILL.md`:**
 - `worktree-for-live-skill-edits` (2) — edit a symlinked live skill in a worktree so an
   in-flight run keeps reading the merged tree.
@@ -109,7 +151,8 @@ both repos repeatedly; they belong in the rubric that audits read, not in prose:
   (project names, slugs, local paths) before filing publicly.
 
 **Done when:** the fanout completed against live agents, and `h_mad_telemetry.py` reports a
-non-zero `audit_cycles` for this feature — the end-to-end proof of Wave 1.
+non-zero `audit_cycles` **and a plausible `elapsed_min`** for this feature — the end-to-end proof of
+Wave 1 plus the J8 fix. A row reading ~56 years means J8 did not land.
 
 ## Wave 5 · Blocked upstream — watch only
 
