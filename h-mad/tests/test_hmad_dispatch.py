@@ -1,12 +1,56 @@
+import atexit
 import json
 import os
 import shutil
 import subprocess
+import tempfile
+import uuid
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
+
+# J7: the pin file is the second leak channel into this harness. F13 stripped the
+# HMAD_ORCA_* env vars, but _pin_file() falls back to a CWD-RELATIVE
+# ".h-mad/orca-pins.env" and pytest's cwd is the repo, so the repo's own session
+# pin file was read by every test that set no explicit value. Measured: 17 failed
+# with a pin file present, 153 passed with it absent.
+#
+# This path is deliberately NEVER CREATED: _pin_file() only reads it via
+# `[ -f "$pf" ]`, so a non-existent path IS the "no pin file" state and there is
+# nothing to clean up. tempfile. mkdtemp() would be wrong here — it registers no
+# cleanup and would leak an empty directory on every pytest collection (rejected
+# by design audit v1). PID-scoped so two concurrent suite runs cannot collide.
+_NO_PIN_BASE = Path(tempfile.gettempdir())
+_NO_PIN_STEM = f"hmad-tests-absent-orca-pins-{os.getpid()}"
+# The canonical never-created path, kept as a module symbol for the guards below.
+_NO_PIN_FILE = _NO_PIN_BASE / f"{_NO_PIN_STEM}.env"
+
+
+def _absent_pin_file() -> str:
+    """A DISTINCT never-created pin path for each run() invocation.
+
+    A single module-scoped path would be shared by every test in the worker: if
+    one ever forgets to pass an explicit HMAD_ORCA_PIN_FILE to a pin-WRITING
+    verb, it writes there and silently contaminates every later test. Per
+    invocation, that same mistake can only affect the one call that made it, so
+    it surfaces as a local failure instead of spooky action at a distance.
+    (6a-prime architectural review.)
+    """
+    return str(_NO_PIN_BASE / f"{_NO_PIN_STEM}-{uuid.uuid4().hex}.env")
+
+
+@atexit.register
+def _remove_stray_pin_file() -> None:
+    """Defensive only: every pin-writing test passes its own HMAD_ORCA_PIN_FILE,
+    so nothing should create this path. If a future test forgets, `pin` would
+    mkdir -p and write here, contaminating later tests and leaving a file behind."""
+    for stray in [_NO_PIN_FILE, *_NO_PIN_BASE.glob(f"{_NO_PIN_STEM}-*.env")]:
+        try:
+            stray.unlink()
+        except FileNotFoundError:
+            pass
 
 # --- Real Orca response envelopes ------------------------------------------
 #
@@ -74,6 +118,9 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
         e["HMAD_STUB_CAPTURE"] = str(capture)
     if env:
         e.update({k: v for k, v in env.items() if k != "_BINDIR"})
+    # AFTER the update, so a test that passes its own HMAD_ORCA_PIN_FILE keeps it.
+    # env values must be str, hence the cast.
+    e.setdefault("HMAD_ORCA_PIN_FILE", _absent_pin_file())
     # Build an isolated PATH containing only the requested stubs (+ real jq/coreutils).
     # Deliberately excludes the ambient PATH: dev/CI machines may have real
     # cmux/orca binaries installed (e.g. under /opt/homebrew/bin), which would
@@ -2089,3 +2136,270 @@ def test_resolve_verify_flag_matches_the_verify_verb(tmp_path):
              env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_live",
                   "HMAD_STUB_ORCA_STDOUT": live})
     assert ok.returncode == 0 and ok.stdout.strip() == "term_live"
+
+
+# --- J7: default pin-file isolation must not leak session state ------------
+#
+# The production default is intentionally cwd-relative. Tests must not let the
+# real repository session pin file affect isolated harness invocations.
+
+
+def test_default_pin_file_is_ignored_without_explicit_env(tmp_path):
+    """AC-6.1-mechanism: the repo-relative default pin file is not read by tests."""
+    b = _bindir(tmp_path, ["orca"])
+    repo_default = tmp_path / ".h-mad" / "orca-pins.env"
+    repo_default.parent.mkdir()
+    repo_default.write_text("agy=term_from_repo_default\n")
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _orca_terms()},
+            cwd=str(tmp_path))
+    assert r.returncode == 1
+    assert r.stdout == ""
+    # Assert WHY it failed. rc=1 + empty stdout is also what a crashing wrapper
+    # produces (bad substrate detection, missing jq, a shell syntax error), so
+    # without this the test would pass for a reason unrelated to the pin file.
+    assert "pin HMAD_ORCA_AGY_TERMINAL" in r.stderr
+    assert "term_from_repo_default" not in r.stdout + r.stderr
+
+
+def test_explicit_pin_file_path_still_wins(tmp_path):
+    """AC-6.3: an explicit HMAD_ORCA_PIN_FILE remains the pin destination."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "explicit-pins.env"
+    r = run(["pin", "agy", "term_explicit"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins)})
+    assert r.returncode == 0
+    assert pins.read_text() == "agy=term_explicit\n"
+
+
+def test_no_pin_file_path_is_defined_outside_repo():
+    """AC-6.4: _NO_PIN_FILE is module-scoped and outside the repository root."""
+    no_pin_file = _NO_PIN_FILE
+    repo_root = SKILL.parent
+    assert no_pin_file.is_absolute()
+    assert repo_root not in no_pin_file.parents
+
+
+def test_no_mkdtemp_and_no_pin_file_leak_guard():
+    """AC-mkdtemp-guard: no mkdtemp leak pattern exists and the guard path is absent."""
+    source = Path(__file__).read_text()
+    assert "tempfile." + "mkdtemp(" not in source
+    assert not _NO_PIN_FILE.exists()
+
+
+def test_production_pin_file_resolution_literal_unchanged():
+    """AC-6.5: production still contains the cwd-relative pin-file fallback."""
+    script = WRAPPER.read_text()
+    assert "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}" in script
+
+
+# --- preflight verdict: consumable form of the STALE/CONFLICT lines ---------
+#
+# The human-readable agent diagnostics remain useful, but PREFLIGHT: is the
+# single machine-consumable verdict that follows them and the orchestration
+# status line.
+
+
+def _preflight_listing(*handles):
+    return _orca_terms_full(*[
+        {"handle": handle, "title": "worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": f"leaf-{handle}"}
+        for handle in handles
+    ])
+
+
+def test_preflight_passes_when_pins_are_live_and_distinct(tmp_path):
+    """AC-1.1: a healthy session emits PREFLIGHT: PASS."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout.splitlines()
+
+
+def test_preflight_reports_one_stale_codex_pin(tmp_path):
+    """AC-1.2a: a pinned handle absent from the listing reports stale=codex."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "stale=codex" in line
+
+
+def test_preflight_reports_both_stale_pins(tmp_path):
+    """AC-1.2b: both pinned handles absent from the listing report stale=codex,agy."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_other"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_dead_agy"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert "stale=codex,agy" in line
+
+
+def test_preflight_reports_handle_conflict(tmp_path):
+    """AC-1.3: two agents pinned to one live handle report its conflict."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_shared"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_shared"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert "conflict=term_shared" in line
+
+
+def test_preflight_combines_stale_and_conflict_in_one_verdict(tmp_path):
+    """AC-1.4: stale and conflict findings share one PREFLIGHT: FAIL line."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing(),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_dead"})
+    lines = [line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:")]
+    assert len(lines) == 1
+    assert lines[0].startswith("PREFLIGHT: FAIL")
+    assert "stale=" in lines[0]
+    assert "conflict=" in lines[0]
+
+
+def test_preflight_is_last_after_orchestration_status(tmp_path):
+    """AC-1.5: PREFLIGHT: is the last non-empty stdout line after orchestration:."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    lines = [line for line in r.stdout.splitlines() if line.strip()]
+    assert lines[-1].startswith("PREFLIGHT:")
+    assert any(line.startswith("orchestration:") for line in lines[:-1])
+
+
+def test_preflight_emits_exactly_one_verdict_line(tmp_path):
+    """AC-1.6: each env invocation emits exactly one PREFLIGHT: line."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert sum(line.startswith("PREFLIGHT:") for line in r.stdout.splitlines()) == 1
+
+
+def test_preflight_pass_keeps_zero_exit_status(tmp_path):
+    """AC-2.1: PASS is a verdict and exits successfully."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout
+    assert r.returncode == 0
+
+
+def test_preflight_fail_keeps_zero_exit_status(tmp_path):
+    """AC-2.2: FAIL is a verdict and still exits successfully."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: FAIL" in r.stdout
+    assert r.returncode == 0
+
+
+def test_no_substrate_has_no_preflight_verdict(tmp_path):
+    """AC-2.3 guard: operational substrate failure remains non-zero and unadorned."""
+    b = _bindir(tmp_path, [])
+    r = run(["env"], env={"_BINDIR": b})
+    assert r.returncode != 0
+    assert "PREFLIGHT:" not in r.stdout
+
+
+def test_preflight_source_documents_nonzero_and_posttool_failure_contract():
+    """AC-2.4: the verdict source documents no non-zero exit and PostToolUseFailure."""
+    lines = WRAPPER.read_text().splitlines()
+    indices = [i for i, line in enumerate(lines) if 'echo "PREFLIGHT:' in line]
+    assert len(indices) == 1
+    window = lines[max(0, indices[0] - 15):indices[0]]
+    text = "\n".join(window)
+    assert "non-zero" in text
+    assert "PostToolUseFailure" in text
+
+
+def test_preflight_passes_when_both_agents_are_unresolved(tmp_path):
+    """AC-3.1: unresolved agents are ordinary and do not fail preflight."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "agy -> UNRESOLVED" in r.stdout
+    assert "PREFLIGHT: PASS" in r.stdout
+
+
+def test_preflight_keeps_unresolved_agents_visible_in_env_output(tmp_path):
+    """AC-3.2 guard: unresolved agent diagnostics continue to be printed."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "agy -> UNRESOLVED" in r.stdout
+
+
+def test_preflight_fail_never_reports_unresolved_field(tmp_path):
+    """AC-3.3 guard: a FAIL verdict has no unresolved= failure category."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    fail_lines = [ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT: FAIL")]
+    # Assert the FAIL line EXISTS before asserting what it lacks. The loop-only
+    # form passes vacuously when no verdict is emitted at all, so it would keep
+    # passing if the implementation ever stopped emitting FAIL — the same shape
+    # as the AC-6.1 weak assertion caught by the 5d coverage review.
+    assert len(fail_lines) == 1, r.stdout
+    assert "unresolved=" not in fail_lines[0]
+
+
+def test_preflight_passes_when_terminal_listing_is_unreadable(tmp_path):
+    """AC-edge: unknown liveness from an unreadable listing does not fail."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": "not json at all",
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout
+
+
+def test_absent_pin_paths_are_unique_per_invocation():
+    """6a-prime: a shared module-scoped path lets one forgetful test poison the rest."""
+    a, b = _absent_pin_file(), _absent_pin_file()
+    assert a != b
+    for p in (Path(a), Path(b)):
+        assert p.is_absolute()
+        assert SKILL.parent not in p.parents
+        assert not p.exists()
+
+
+def test_forgotten_pin_file_cannot_contaminate_a_later_invocation(tmp_path):
+    """6a-prime finding 1, the property that matters: a pin-WRITING verb invoked
+    without an explicit HMAD_ORCA_PIN_FILE must not be visible to any later call.
+
+    With one shared default this passed silently and broke the next test; with a
+    per-invocation path the mistake stays local to the call that made it."""
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    wrote = run(["pin", "codex", "term_live"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live})
+    assert wrote.returncode == 0, wrote.stderr
+
+    later = run(["resolve", "codex"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+    assert later.returncode == 1
+    assert "term_live" not in later.stdout

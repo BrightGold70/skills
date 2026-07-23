@@ -212,7 +212,9 @@ repo cannot drift.
 # recognizes (claude|codex|gemini, never `agent`); target this repo with --repo.
 hmad-dispatch automation-create --name hmad-dispatch-e2e --trigger daily \
   --prompt-file "$HOME/.claude/skills/h-mad/references/e2e-smoke.prompt.md" \
-  --provider claude --precheck "hmad-dispatch env" --repo skills
+  --provider claude \
+  --precheck "o=\$(hmad-dispatch env); echo \"\$o\" | grep -q 'PREFLIGHT: PASS' && ! echo \"\$o\" | grep -q -- '-> UNRESOLVED'" \
+  --repo skills
 # → prints the automation id (from .result.automation.id)
 
 hmad-dispatch automation-list                 # enumerate configured jobs
@@ -220,7 +222,14 @@ hmad-dispatch automation-run <id>             # fire once, ad hoc
 hmad-dispatch automation-remove <id>          # tear down
 ```
 
-The `--precheck "hmad-dispatch env"` gates each run on the substrate being live
+The precheck greps for `PREFLIGHT: PASS` rather than running `hmad-dispatch env` bare. A bare
+precheck gates on the **exit code**, and `env` exits 0 on a `PREFLIGHT: FAIL` verdict by design
+(the signal-discipline invariant), so a scheduled run would precheck green against a stale pin —
+the automation-shaped instance of the bug the token exists to close. It also greps for `-> UNRESOLVED`, because `PREFLIGHT: PASS` deliberately does NOT mean
+"ready to dispatch" — an unpinned agent is not a *fault*, so it does not raise FAIL (FR-3), and an
+automation that only checked the verdict would preflight green with no agents pinned and then fail
+downstream. The verdict answers "is anything broken"; the extra grep adds "and is anything missing".
+Together they gate each run on the substrate being live
 (a non-zero precheck skips the run rather than dispatching into a dead surface).
 The prompt reports a single `E2E: PASS` / `E2E: FAIL — <reason>` line; pair it
 with `--prompt-file` report-file delivery if you want the full check log captured.
