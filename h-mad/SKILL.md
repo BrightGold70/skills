@@ -126,8 +126,8 @@ agent mapping via `scripts/h_mad_telemetry.py` so the run log states which envir
 it dispatched under. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
-**Then assert the verdict — this step is mandatory, not advisory.** `env` ends with a
-canonical `PREFLIGHT:` line:
+**Dispatch enforcement.** `env` ends with a canonical `PREFLIGHT:` line and writes a
+receipt when the verdict is `PASS`:
 
 ```text
 PREFLIGHT: PASS
@@ -136,17 +136,25 @@ PREFLIGHT: FAIL conflict=term_x
 PREFLIGHT: FAIL stale=codex,agy conflict=term_x
 ```
 
-- **Assert `PREFLIGHT: PASS` before the first `send` of a run**, and **re-assert after any
-  re-pin** (`pin`, `pin-agents`, `launch`). Handles rotate mid-run, so one assertion at the
-  top of a run is not enough — that is exactly how a dispatch reported `Sent 7293 bytes`
-  into a rotated handle and vanished.
-- On `PREFLIGHT: FAIL` → halt `<phase>:preflight_failed`, naming the `stale=` / `conflict=`
-  field. Re-pin or relaunch, then re-assert.
+- `hmad-dispatch send` **refuses with rc=1 and sends nothing unless a valid receipt
+  exists**. The receipt must say `PASS`, be within its TTL, and still match the
+  current handle resolution. The refusal reason token is one of
+  `preflight_not_run`, `preflight_expired`, `preflight_handles_rotated`, or
+  `preflight_agent_conflict`.
+- Recover `preflight_not_run` by running `hmad-dispatch env` and confirming
+  `PREFLIGHT: PASS`, then retry. Recover `preflight_expired` by running `hmad-dispatch
+  env` again to refresh the receipt, then retry.
+- Recover `preflight_handles_rotated` by re-pin or relaunch the affected agent,
+  run `hmad-dispatch env` again, and retry. Recover `preflight_agent_conflict` by
+  pinning distinct handles for codex and agy, then run `hmad-dispatch env` again
+  and retry. `clear` and `interrupt` remain unguarded recovery verbs.
+- Re-assert `PREFLIGHT: PASS` after any re-pin (`pin`, `pin-agents`, `launch`);
+  otherwise halt `<phase>:preflight_failed` and recover using the matching token.
 - **Read the token, never `$?`.** `env` exits 0 on *both* verdicts by design — the base
   invariant on audit-gate signal discipline reserves a non-zero exit for genuine
   operational errors, because it registers as a `PostToolUseFailure` and leaks into
   coexisting plugins. A FAIL therefore cannot be detected by exit status, and
-  `hmad-dispatch env && …` is **not** a guard.
+  `hmad-dispatch env && …` is **not** a guard. The send refusal is the enforced guard.
 - `FAIL` is raised by a stale pin or a codex/agy handle collision only. An `UNRESOLVED`
   agent is *not* a failure — it is the ordinary state of a session that is not
   dispatching. Dispatch-readiness is `pin-agents`' job (it exits 1 on unresolved).
