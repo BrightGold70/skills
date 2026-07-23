@@ -91,6 +91,15 @@ class TestAutomationPrecheckGatesOnTheToken:
         assert "PREFLIGHT: PASS" in t
         assert "--precheck" in t
 
+    def test_precheck_also_requires_agents_to_be_resolved(self):
+        """6a-prime finding 2: PREFLIGHT: PASS means "nothing is broken", not
+        "ready to dispatch" — UNRESOLVED is deliberately not a failure. An
+        automation gating on the verdict alone would preflight green with no
+        agents pinned, then fail downstream."""
+        t = ORCH_MD.read_text(encoding="utf-8")
+        assert "UNRESOLVED" in t
+        assert "ready to dispatch" in t
+
 
 class TestSubstrateReferenceDocumentsTheToken:
     def test_env_row_mentions_preflight(self):

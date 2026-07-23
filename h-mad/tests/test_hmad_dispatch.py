@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
@@ -21,7 +22,23 @@ STUBS = SKILL / "tests" / "stubs"
 # nothing to clean up. tempfile. mkdtemp() would be wrong here — it registers no
 # cleanup and would leak an empty directory on every pytest collection (rejected
 # by design audit v1). PID-scoped so two concurrent suite runs cannot collide.
-_NO_PIN_FILE = Path(tempfile.gettempdir()) / f"hmad-tests-absent-orca-pins-{os.getpid()}.env"
+_NO_PIN_BASE = Path(tempfile.gettempdir())
+_NO_PIN_STEM = f"hmad-tests-absent-orca-pins-{os.getpid()}"
+# The canonical never-created path, kept as a module symbol for the guards below.
+_NO_PIN_FILE = _NO_PIN_BASE / f"{_NO_PIN_STEM}.env"
+
+
+def _absent_pin_file() -> str:
+    """A DISTINCT never-created pin path for each run() invocation.
+
+    A single module-scoped path would be shared by every test in the worker: if
+    one ever forgets to pass an explicit HMAD_ORCA_PIN_FILE to a pin-WRITING
+    verb, it writes there and silently contaminates every later test. Per
+    invocation, that same mistake can only affect the one call that made it, so
+    it surfaces as a local failure instead of spooky action at a distance.
+    (6a-prime architectural review.)
+    """
+    return str(_NO_PIN_BASE / f"{_NO_PIN_STEM}-{uuid.uuid4().hex}.env")
 
 
 @atexit.register
@@ -29,10 +46,11 @@ def _remove_stray_pin_file() -> None:
     """Defensive only: every pin-writing test passes its own HMAD_ORCA_PIN_FILE,
     so nothing should create this path. If a future test forgets, `pin` would
     mkdir -p and write here, contaminating later tests and leaving a file behind."""
-    try:
-        _NO_PIN_FILE.unlink()
-    except FileNotFoundError:
-        pass
+    for stray in [_NO_PIN_FILE, *_NO_PIN_BASE.glob(f"{_NO_PIN_STEM}-*.env")]:
+        try:
+            stray.unlink()
+        except FileNotFoundError:
+            pass
 
 # --- Real Orca response envelopes ------------------------------------------
 #
@@ -102,7 +120,7 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
         e.update({k: v for k, v in env.items() if k != "_BINDIR"})
     # AFTER the update, so a test that passes its own HMAD_ORCA_PIN_FILE keeps it.
     # env values must be str, hence the cast.
-    e.setdefault("HMAD_ORCA_PIN_FILE", str(_NO_PIN_FILE))
+    e.setdefault("HMAD_ORCA_PIN_FILE", _absent_pin_file())
     # Build an isolated PATH containing only the requested stubs (+ real jq/coreutils).
     # Deliberately excludes the ambient PATH: dev/CI machines may have real
     # cmux/orca binaries installed (e.g. under /opt/homebrew/bin), which would
@@ -2354,3 +2372,34 @@ def test_preflight_passes_when_terminal_listing_is_unreadable(tmp_path):
                  "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
                  "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
     assert "PREFLIGHT: PASS" in r.stdout
+
+
+def test_absent_pin_paths_are_unique_per_invocation():
+    """6a-prime: a shared module-scoped path lets one forgetful test poison the rest."""
+    a, b = _absent_pin_file(), _absent_pin_file()
+    assert a != b
+    for p in (Path(a), Path(b)):
+        assert p.is_absolute()
+        assert SKILL.parent not in p.parents
+        assert not p.exists()
+
+
+def test_forgotten_pin_file_cannot_contaminate_a_later_invocation(tmp_path):
+    """6a-prime finding 1, the property that matters: a pin-WRITING verb invoked
+    without an explicit HMAD_ORCA_PIN_FILE must not be visible to any later call.
+
+    With one shared default this passed silently and broke the next test; with a
+    per-invocation path the mistake stays local to the call that made it."""
+    b = _bindir(tmp_path, ["orca"])
+    live = _orca_terms_full(
+        {"handle": "term_live", "title": "worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
+    )
+    wrote = run(["pin", "codex", "term_live"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live})
+    assert wrote.returncode == 0, wrote.stderr
+
+    later = run(["resolve", "codex"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
+    assert later.returncode == 1
+    assert "term_live" not in later.stdout
