@@ -126,6 +126,35 @@ agent mapping via `scripts/h_mad_telemetry.py` so the run log states which envir
 it dispatched under. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
+**Then assert the verdict — this step is mandatory, not advisory.** `env` ends with a
+canonical `PREFLIGHT:` line:
+
+```text
+PREFLIGHT: PASS
+PREFLIGHT: FAIL stale=codex
+PREFLIGHT: FAIL conflict=term_x
+PREFLIGHT: FAIL stale=codex,agy conflict=term_x
+```
+
+- **Assert `PREFLIGHT: PASS` before the first `send` of a run**, and **re-assert after any
+  re-pin** (`pin`, `pin-agents`, `launch`). Handles rotate mid-run, so one assertion at the
+  top of a run is not enough — that is exactly how a dispatch reported `Sent 7293 bytes`
+  into a rotated handle and vanished.
+- On `PREFLIGHT: FAIL` → halt `<phase>:preflight_failed`, naming the `stale=` / `conflict=`
+  field. Re-pin or relaunch, then re-assert.
+- **Read the token, never `$?`.** `env` exits 0 on *both* verdicts by design — the base
+  invariant on audit-gate signal discipline reserves a non-zero exit for genuine
+  operational errors, because it registers as a `PostToolUseFailure` and leaks into
+  coexisting plugins. A FAIL therefore cannot be detected by exit status, and
+  `hmad-dispatch env && …` is **not** a guard.
+- `FAIL` is raised by a stale pin or a codex/agy handle collision only. An `UNRESOLVED`
+  agent is *not* a failure — it is the ordinary state of a session that is not
+  dispatching. Dispatch-readiness is `pin-agents`' job (it exits 1 on unresolved).
+
+The detection has been in `env` for a while; what was missing was any step obliged to
+consume it, which made a correct signal advisory. Skipping this assertion re-opens the
+exact failure the token was added to close.
+
 **Pin the agents once (Orca) — do it while identity is known.** Immediately after
 a clean `env` under orca, run `hmad-dispatch pin-agents` to freeze the resolved
 codex+agy handles into the session pin file, so later dispatches survive preview
@@ -415,6 +444,11 @@ see the base invariant on audit-gate signal discipline). A halted prompt is deli
 not written, so it cannot be dispatched by mistake. A non-zero exit means unreadable
 inputs. On `HALT`, fix the template or invariants file and re-run; never hand-patch the
 staged prompt.
+
+**Assert `ASSEMBLE: PASS` before dispatching the assembled prompt** — the same mandated
+read as the Phase-5 `PREFLIGHT:` assertion, for the same reason: the script exits 0 on
+both verdicts, so `$?` cannot tell you which one you got, and an unread token is worth no
+more than the unread `STALE` line it is modelled on.
 
 Every defect this area has had came from doing the steps by hand: the rubrics were
 inlined twice, `{Design only — cross-doc:}` reached the reviewer in 69 of 69 dispatched
