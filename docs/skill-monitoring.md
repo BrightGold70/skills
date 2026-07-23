@@ -149,7 +149,7 @@ is not re-filed.
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
 | J7 | 🟢 | **RESOLVED** | F13 residual: the pin **file** leaked into `test_hmad_dispatch.py`. Fixed by Wave 2 (`787aecf`) — `run()` injects a per-invocation never-created path; suite 530 passed identical with and without the pin file |
 | J8 | 🟡 | **FIXED** `ab3657e` | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`). Root cause: `h_mad_state_write.py:138` defaults `started_ts` to a hardcoded `1970-01-01T00:00:00Z` sentinel |
-| J9 | 🟢 | MONITORING | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
+| J9 | ⬜ | **DISPROVEN** | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
 | J10 | 🟡 | **FIXED** `ab3657e` | A Codex dispatch returned `STATUS: DONE_WITH_CONCERNS` while naming no concern anywhere in its report — a verdict declaring doubt without stating it is unactionable |
 
 - 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
@@ -410,6 +410,31 @@ is not re-filed.
   failed it once. **Fix direction:** stub the substrate probe as the neighbouring tests do, so the
   suite does not have a test whose verdict depends on whether a terminal multiplexer happens to be
   responsive.
+
+  **DISPROVEN 2026-07-23 — the failure was real, the attributed cause was not.**
+
+  The filed premise is that the test "probes the real `cmux` binary". It does not, and did not when
+  filed:
+
+  * The test already stubs it — `_bindir(tmp_path, ["cmux"])`, exactly as the neighbouring tests do,
+    so the filed fix direction was **already satisfied** and there was nothing to change.
+  * `run()` builds `PATH = f"{bindir}:/usr/bin:/bin"`, so the real binary (present on this machine at
+    `/opt/homebrew/bin/cmux`) is unreachable from the test. `git log -S` dates that PATH construction
+    to **2026-07-20**, which *predates* the Phase-5f run that observed the failure.
+
+  Reproduction attempts: **0 failures in 200 consecutive runs** of the named test, and three
+  consecutive clean full-suite runs (654 each).
+
+  An alternative mechanism was hypothesised and also killed rather than filed: `_cmd_alive`'s
+  `cmux tree --all | grep -q` runs under `set -euo pipefail`, so an early-exiting `grep -q` could in
+  principle SIGPIPE the emitter and make `alive` report a live pane as dead. Measured: **0/40** with
+  a 200,000-line subprocess emitter. Not a real hazard here.
+
+  **What remains true:** one full run did fail once, and that observation stands. Its cause is
+  unknown and has not recurred across the many suite runs since — including after the F13, J7, J2
+  and conftest isolation work, any of which could have removed a contributing condition. Recorded as
+  disproven-cause rather than fixed, so a future observer re-derives the cause instead of re-applying
+  a remedy that was already in place. Method mirrors [[J6]].
 
 **Also observed (evidence for existing entries, not new IDs):** `orca terminal create --title
 "agy-probe"` does not stick — `terminal list` reports `title: agy`, the program's own OSC title.
