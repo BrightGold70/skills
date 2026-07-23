@@ -73,6 +73,11 @@ def cmd_record(args: argparse.Namespace) -> int:
         },
         "iterate_cycles": derived_iterate_cycles,
         "halt_reason": feat_state.get("halt_reason"),
+        # J11: which environment the run dispatched under. Phase 5 writes it into
+        # state from `hmad-dispatch env`; this only reports it. Emitted as an
+        # explicit null when unrecorded rather than omitted, so a reader can tell
+        # "dispatched under an unrecorded substrate" from "row predates the field".
+        "substrate": feat_state.get("substrate"),
     }
 
     # Compute elapsed if started_ts is available

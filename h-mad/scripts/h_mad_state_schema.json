@@ -14,43 +14,132 @@
     "halt_ts"
   ],
   "properties": {
-    "feature": {"type": "string", "minLength": 1},
-    "started_ts": {"type": "string", "format": "date-time"},
-    "last_completed_phase": {"type": "integer", "minimum": 0, "maximum": 7},
-    "current_phase": {"type": "integer", "minimum": 0, "maximum": 7},
-    "phase": {"enum": ["step5", "step6", "step7", null]},
-    "autonomous_entry_ts": {"type": ["string", "integer", "null"]},
+    "feature": {
+      "type": "string",
+      "minLength": 1
+    },
+    "started_ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_completed_phase": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 7
+    },
+    "current_phase": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 7
+    },
+    "phase": {
+      "enum": [
+        "step5",
+        "step6",
+        "step7",
+        null
+      ]
+    },
+    "autonomous_entry_ts": {
+      "type": [
+        "string",
+        "integer",
+        "null"
+      ]
+    },
     "audit_cycles": {
       "type": "object",
       "properties": {
-        "plan": {"type": "integer", "minimum": 0},
-        "design": {"type": "integer", "minimum": 0},
-        "impl_plan": {"type": "integer", "minimum": 0}
+        "plan": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "design": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "impl_plan": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
-      "required": ["plan", "design", "impl_plan"],
+      "required": [
+        "plan",
+        "design",
+        "impl_plan"
+      ],
       "additionalProperties": false
     },
-    "iterate_cycles": {"type": "integer", "minimum": 0},
+    "iterate_cycles": {
+      "type": "integer",
+      "minimum": 0
+    },
     "owner_session_id": {
       "description": "Session currently working this feature. Advisory, not a mutex: it lets a second session see the collision instead of discovering it in the git log. Cleared on release.",
-      "type": ["string", "null"]
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "owner_heartbeat_ts": {
       "description": "When the owner was last seen. A claim older than the staleness window is treated as abandoned, so a crashed session cannot own a feature permanently.",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "date-time"
     },
     "archreview": {
       "description": "Phase 6a-prime outcome. SKIPPED_NO_PANE records that no reviewer pane resolved and the operator elected to proceed; it is never equivalent to READY_TO_MERGE and must surface in the Phase 7 report.",
-      "enum": ["READY_TO_MERGE", "WITH_FIXES", "NO", "SKIPPED_NO_PANE"]
+      "enum": [
+        "READY_TO_MERGE",
+        "WITH_FIXES",
+        "NO",
+        "SKIPPED_NO_PANE"
+      ]
     },
     "production_paths_needing_red_tests": {
       "type": "array",
-      "items": {"type": "string"}
+      "items": {
+        "type": "string"
+      }
     },
-    "halt_reason": {"type": ["string", "null"]},
-    "halt_ts": {"type": ["string", "null"], "format": "date-time"},
-    "last_marker": {"type": "string"}
+    "halt_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "halt_ts": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "last_marker": {
+      "type": "string"
+    },
+    "substrate": {
+      "description": "Dispatch environment for this run, written at Phase-5 start from `hmad-dispatch env` via `--set substrate=\u2026`. OPTIONAL and additive: records written before the field existed have no such key and stay valid (`required` is unchanged), so this is not a version break. `h_mad_telemetry.py record` copies it onto the run row so a log states which environment a feature dispatched under.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

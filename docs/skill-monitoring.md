@@ -300,7 +300,7 @@ had never been executed. All unfixed.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| J11 | 🟡 | MONITORING | `SKILL.md` twice orders "record the substrate + agent mapping via `h_mad_telemetry.py`"; the script has no such argument and the row schema has no such field |
+| J11 | 🟡 | **FIXED** | `SKILL.md` twice orders "record the substrate + agent mapping via `h_mad_telemetry.py`"; the script has no such argument and the row schema has no such field |
 | J12 | 🟡 | MONITORING | `h_mad_assemble_audit.py` returns `ASSEMBLE: PASS` for a prompt it simultaneously predicts will fail — the oversize warning is an unread line beside a passing token |
 | J13 | 🟢 | **FIXED** | The "split by FR group" remedy does not divide the fixed terms — AND the 49 KB cliff it defended against was never reproduced for the delivery mode h-mad actually uses |
 
@@ -318,6 +318,33 @@ had never been executed. All unfixed.
   either add a `substrate`/`agents` field plus the arguments to write it, or — cheaper and honest —
   delete the instruction from both places and state that substrate is captured in the phase report.
   Do not leave prose ordering an impossible call. [[J8]]
+
+  **FIXED 2026-07-23.** Took the first branch, not the cheap one: the capability was worth having,
+  and deleting the sentence would have removed the instruction while leaving the gap it named.
+
+  Made **state the carrier and telemetry the reporter**, which is what §"Single-source contract"
+  wants anyway. Phase 5 writes the field with the writer's existing generic `--set` — no new flag —
+  and `record` copies it onto the Phase-7 row it *already* builds from that same record:
+
+  ```bash
+  h_mad_state_write.py docs/.bkit-memory.json --feature "<f>" \
+    --set substrate='{"name":"orca","agents":{"codex":"term_…","agy":"term_…"}}'
+  ```
+
+  The blocker was never the writer — it was that the strict schema is `additionalProperties: false`,
+  so the Phase-5 instruction had nowhere to write even if someone had tried. `substrate` is now an
+  **optional, additive** property with `required` unchanged, so every pre-existing record stays valid
+  (§"Backward compatibility"). No version bump: the skill's "v2.2" appears in ~8 places and denotes
+  the skill, not the schema; a partial bump would be worse than none.
+
+  The row carries an explicit `null` when unrecorded rather than omitting the key, so a reader can
+  distinguish "dispatched under an unrecorded substrate" from "row predates the field".
+
+  **Dogfooded end to end against the live runtime** — `hmad-dispatch env` → parse → `--set` →
+  `record` — producing the first telemetry row in this repo's history that names its substrate
+  (`orca`, with both agent handles). Both instruction sites in SKILL.md corrected; a doc test
+  asserts the impossible call is gone **and** that the executable one replaced it, since deleting
+  the sentence alone would pass a naive "is it gone" check while losing the capability.
 - 🟡 **J12 — `ASSEMBLE: PASS` is returned for a prompt predicted to fail.** Assembling this
   feature's design audit printed
   `ASSEMBLE: PASS /tmp/…_design_cycle1.txt 54766B (53.5 KB)` followed by a separate warning line:

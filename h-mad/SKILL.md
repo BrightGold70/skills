@@ -122,8 +122,18 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 **Substrate preflight (Phase 5 + first audit dispatch).** Run `hmad-dispatch env`.
 If it exits non-zero → halt `<phase>:no_substrate`. Record the printed substrate +
-agent mapping via `scripts/h_mad_telemetry.py` so the run log states which environment
-it dispatched under. This is the explicit environment check (cmux vs orca) — do it
+agent mapping into state so the run log states which environment it dispatched under:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature "<feature>" \
+  --set substrate='{"name":"orca","agents":{"codex":"term_…","agy":"term_…"}}'
+```
+
+State is the carrier and `h_mad_telemetry.py record` is the reporter — it copies the
+field onto the Phase-7 row it already builds from this record. Writing it here is what
+makes the step executable at Phase-5 time; `record` is a close-out call and cannot
+serve a Phase-5-start instruction. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
 **Dispatch enforcement.** `env` ends with a canonical `PREFLIGHT:` line and writes a
@@ -531,8 +541,18 @@ the store accumulated five spellings of "merge sha".
 
 **Substrate preflight (once per H-MAD run — at Phase 5 start, or the first audit dispatch if earlier; skip if the substrate was already recorded this run).** Run `hmad-dispatch env`.
 If it exits non-zero → halt `<phase>:no_substrate`. Record the printed substrate +
-agent mapping via `scripts/h_mad_telemetry.py` so the run log states which environment
-it dispatched under. This is the explicit environment check (cmux vs orca) — do it
+agent mapping into state so the run log states which environment it dispatched under:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature "<feature>" \
+  --set substrate='{"name":"orca","agents":{"codex":"term_…","agy":"term_…"}}'
+```
+
+State is the carrier and `h_mad_telemetry.py record` is the reporter — it copies the
+field onto the Phase-7 row it already builds from this record. Writing it here is what
+makes the step executable at Phase-5 time; `record` is a close-out call and cannot
+serve a Phase-5-start instruction. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
 For each audit (Phase 3, 4, 5b), **assemble with the script** — it performs steps 1
@@ -706,7 +726,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_state_staleness.py` — compares state against git and reports disagreement (`STALENESS: CLEAN|SUSPECT`); catches a record that is well-formed and no longer true.
 - `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
-- `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
+- `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary. Also copies `substrate` from the feature's state record onto the run row (written at Phase-5 start — see §"Phase 5 (Implementation) sub-steps"); the row carries an explicit `null` when it was never recorded, so an unrecorded run is distinguishable from a pre-field one.
 - `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
 
 ### file-issue-then-fix-under-TDD
