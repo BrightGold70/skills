@@ -79,31 +79,57 @@ that lost a Task-2 RED dispatch on HemaSuite: no error, no report, no tests writ
 
 **Done when:** a stale pin makes the Phase-5 preflight step fail the checklist, not just print.
 
-## Wave 3 · Dogfood run — closes G-b + G-d
+## Wave 3 · Dogfood run — closes G-b + G-d — ✅ SHIPPED `4111297`
 
-**Depends on:** Waves 1–2 (they are the payload). **Vehicle:** run `/h-mad` on the Wave-1+2
-work itself.
+**Shipped 2026-07-23** as `preflight-read-enforcement` (feature/192). 100% match rate
+(9/9 FRs, 37/37 ACs), suite 530 → **550**, 6a-prime `READY_TO_MERGE`, 76.1 min.
 
-Closes two standing gaps in one pass:
-- **G-b** — one full audit cycle through `h_mad_assemble_audit.py`. Today all three phases are
-  smoke-tested but only the *plan* recheck was ever dispatched to a live reviewer.
-- **G-d** — the merge-gate and handoff WRITE/READ *protocol* paths (skill prose driving the
-  verbs). The verbs are live-verified; the prose that drives them is not.
+**Vehicle:** the payload was the Wave-2 carry itself — FR-4/FR-5 shipped as protocol with no
+enforcement. `env` now writes a fingerprinted receipt on `PREFLIGHT: PASS`, and `send` refuses
+(rc=1, nothing sent) unless that receipt exists, is within its TTL, and still matches resolution
+at dispatch time. The previously unguarded agent-conflict case is refused at `send` too. **The
+Wave-2 carry is closed:** dispatching without a passing preflight is now mechanically impossible,
+verified live against the real wrapper on all four refusal reasons plus the positive path.
 
-Expect `audit_cycles` still 0/0/0 for this run — the counter lands at the end of it. That is
-fine and expected; Wave 4 is the first run that should show a real number.
+- **G-b closed** — four audit dispatches went live through `h_mad_assemble_audit.py`: plan,
+  design, and impl-plan ×2 (cycle 1 raised a real should-fix). Previously only the plan recheck
+  had ever reached a live reviewer.
+- **G-d closed** — the merge gate ran from the skill prose: two gates created and resolved
+  against a live orchestration task, both auto-recording clean merges.
+- **G-a closed early (Wave 4's target)** — the Phase-5 worktree fanout ran for real for the
+  first time: two Codex workers on independent modules in isolated Orca worktrees,
+  `worktree-create → dispatch → commit → merge gate → merge → rm`, both merged clean.
 
-**Done when:** design and impl-plan audits were both dispatched live through the assembler, and
-a real merge gate blocked and resolved.
+**`audit_cycles` was NOT 0/0/0** — the expectation above was wrong. Wave 1 works, and this run
+recorded `plan 1 / design 1 / impl_plan 2, iterate 1` with **`elapsed_min: 76.1`**. That is
+Wave 4's done-when ("non-zero `audit_cycles` **and** a plausible `elapsed_min`") already
+satisfied — achieved by passing `--started-ts` explicitly, since J8 is still unfixed.
+
+**Five defects surfaced by running it** (`docs/skill-monitoring.md`), all filed unfixed:
+J11 an unexecutable telemetry instruction · J12 `ASSEMBLE: PASS` returned for a prompt the script
+predicts will fail — the same defect class Wave 2 fixed · J13 the oversize remedy that does not
+reduce size when the design dominates · J14 the fanout dispatch/await path conflict ·
+**J15 🔴 nothing tells a fanout worker to commit**, so the gate would merge an empty branch,
+auto-record success, and `worktree-rm` would destroy the only copy of the work.
+
+**Also measured:** the ~49 KB reviewer cliff did not reproduce — a 52,168 B prompt delivered by
+file indirection was answered normally. The original measurement did not distinguish TUI paste
+from agent-side file reads.
+
+**Carry:** Wave-2's FR-5 (the `ASSEMBLE: PASS` mandated read) remains protocol, held out of scope
+because this run dogfooded the assembler and changing the instrument mid-measurement would have
+invalidated both. J12 now records a concrete defect in it.
 
 ## Wave 4 · Candidates batch, dispatched via worktree fanout — closes G-a + confirms B1
 
-**Depends on:** Wave 3. **Why combined:** the candidates decompose into independent,
-non-conflicting files — the natural payload for the parallel fanout that has never run live.
+**Depends on:** Wave 3 — now shipped. **Why combined:** the candidates decompose into
+independent, non-conflicting files — the natural payload for the parallel fanout.
 
-Fanout target (G-a): `worktree-create → dispatch → await → merge → rm` is stub-tested only; no
-real Orca-hosted-agent run has exercised it. Needs ≥2 independent modules and 2 live agents —
-this batch supplies both.
+**G-a is already closed.** Wave 3 ran the fanout live (two Codex workers, isolated Orca
+worktrees, merge gate, teardown), so this wave no longer needs to prove it. But **fix J15 first**:
+nothing instructs a fanout worker to commit, and run as documented the gate merges an empty branch,
+auto-records success, and `worktree-rm` destroys the work. J14 (the dispatch/await path conflict)
+should be settled at the same time.
 
 Payload, triaged by kind:
 
@@ -150,9 +176,12 @@ line and neither depends on Wave 3, so they can be pulled forward if the dogfood
 - `sanitize-before-public-filing` (2) — grep issue bodies against a forbidden-term list
   (project names, slugs, local paths) before filing publicly.
 
-**Done when:** the fanout completed against live agents, and `h_mad_telemetry.py` reports a
-non-zero `audit_cycles` **and a plausible `elapsed_min`** for this feature — the end-to-end proof of
-Wave 1 plus the J8 fix. A row reading ~56 years means J8 did not land.
+**Done when:** J8 and J10 are fixed and the candidate items have landed. The original
+done-when — "the fanout completed against live agents, and `h_mad_telemetry.py` reports a non-zero
+`audit_cycles` **and a plausible `elapsed_min`**" — was **already met by Wave 3**
+(`plan 1 / design 1 / impl_plan 2`, `elapsed_min 76.1`). Note that row is sane only because Wave 3
+passed `--started-ts` explicitly; J8 itself is still unfixed, so a feature created without it will
+still stamp the epoch and report ~56 years.
 
 ## Wave 5 · Blocked upstream — watch only
 
@@ -187,6 +216,6 @@ Nothing else waits on this. Do not sequence work behind it.
 |---|---|---|---|
 | 1 | `audit_cycles` counter | B1 | counter advances in a test |
 | 2 | `PREFLIGHT:` token + mandated reads | G-c | stale pin fails the checklist |
-| 3 | dogfood `/h-mad` on Waves 1–2 | G-b, G-d | design + impl-plan audited live; merge gate exercised |
-| 4 | candidates via worktree fanout | G-a, candidates, B1 proof | fanout ran live; telemetry non-zero |
+| 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
+| 4 | candidates + J8/J10 (fanout already proven) | candidates, defects | J15 🔴 must be fixed before the next fanout |
 | 5 | watch #9870 | H4/H5 residual | upstream |
