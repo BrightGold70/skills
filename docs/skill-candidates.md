@@ -1,5 +1,34 @@
 # Skill Candidates
 
+Appended by the `/handoff` automation scout, newest session last. **Status is only useful if it is
+current** — reconcile a row when the thing it describes ships, the same way `docs/skill-monitoring.md`
+rows are flipped.
+
+**Verdicts:** `yes` / `maybe` / `no` (scout's initial call) · `LANDED` (shipped — name where) ·
+`SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
+reason) · `done` (legacy spelling of LANDED).
+
+## Open, highest recurrence first (2026-07-23)
+
+| rec | candidate | session |
+|---|---|---|
+| 12+ | `agy/codex poll-until-idle dispatch` | 2026-07-20 orca-adaptation-tiers |
+| 9 | `close-a-filed-defect cycle` | 2026-07-23 monitoring-registry-drained |
+| 9 | `H-MAD phase-doc + agy-audit-gate loop` *(maybe)* | 2026-07-20 orca-adaptation-tiers |
+| 6 | `audit→fix→subagent-review→merge loop` *(maybe)* | 2026-07-22 orca-skills-hardening |
+| 3 | `test-pinned-the-defect check` | 2026-07-23 monitoring-registry-drained |
+| 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep`, `both-halves doc fix` *(maybe)* | various |
+| 1 | `differential-validator-test` *(maybe)* | 2026-07-23 monitoring-registry-drained |
+
+The top two are the **same rhythm at two altitudes** — poll-until-idle is the dispatch primitive,
+close-a-filed-defect is the loop built on it — and together they account for most of the tool calls
+in a working session. Promote those before anything lower on the list.
+
+The three `maybe` rows marked *"already the /h-mad skill"* are not really candidates: they describe
+the skill that exists. They are kept as provenance for why a helper was or was not built, not as
+work.
+
+
 ## 2026-07-20 — orca-adaptation-tiers
 
 - **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: yes
@@ -25,7 +54,7 @@
 
 ## 2026-07-22 — orca-agent-resolution-hardening
 
-- **h-mad audit-prompt assembler**: hand-wrote assemble_audit/design/implplan.py in scratchpad 3× this session to splice INLINE_* slots into audit-prompt.template.md — a bundled `scripts/h_mad_assemble_audit.py <phase>` would DRY it into the skill — recurrence: 3 — candidate: maybe
+- **h-mad audit-prompt assembler**: hand-wrote assemble_audit/design/implplan.py in scratchpad 3× this session to splice INLINE_* slots into audit-prompt.template.md — a bundled `scripts/h_mad_assemble_audit.py <phase>` would DRY it into the skill — recurrence: 3 — candidate: **LANDED** 2026-07-22 (`3f8ae83`) — `h-mad/scripts/h_mad_assemble_audit.py`. Duplicate of the `done` row in the next session block; kept for provenance.
 - **launch+pin agent bootstrap**: `hmad-dispatch launch/pin` then verify resolve — recurrence: 2 — candidate: no (already a verb)
 
 ## 2026-07-22 — audit-assembler-agent-resolution
@@ -39,7 +68,7 @@
 - **discriminating-regression-test**: before keeping a regression test, revert the fix and confirm it fails — a test that passes against the code it was written to catch is decoration — recurrence: 3 — candidate: **LANDED** (Wave 4c) — `invariants.base.md` §Test discrimination (merged with `mutation-test-every-guard`)
 - **label-guards-in-red-dispatch**: state expected fail/pass counts and mark regression guards explicitly when a TDD task is refactor-shaped; "every test must FAIL" makes the implementer manufacture failures — recurrence: 3 — candidate: **LANDED** (Wave 4c) — `codex-implementer-prompt.md` §Your Job + SKILL.md 5d (the old blanket "Verify all tests FAIL" halt was itself the harmful instruction)
 - **verify-review-premise-before-acting**: check a review finding's stated premise against source before applying its prescription; 2 of 5 findings this session were right in substance and wrong in direction — recurrence: 4 — candidate: **LANDED** (Wave 4c) — SKILL.md §Verifying a review finding before acting on it
-- **content-probe-agent-pane**: identify an Orca agent pane by its launch banner via `terminal read --cursor 0`, never by title — recurrence: 5 — candidate: yes (largely covered by hmad-dispatch pin/launch)
+- **content-probe-agent-pane**: identify an Orca agent pane by its launch banner via `terminal read --cursor 0`, never by title — recurrence: 5 — candidate: **SUPERSEDED** by J16 (main `bf9c4c3`). `_orca_find` Pass 0 joins `worktree ps` `agents[].paneKey` to `terminal list` `tabId:leafId`, which is exact where content-probing is heuristic — and content-probing itself *failed* on 2026-07-23 when both panes had reset buffers. Order is now paneKey → content → never title.
 
 ## 2026-07-23 — wave3-wave4a-shipped
 
@@ -59,8 +88,10 @@
   asserted the bug as an acceptance criterion rather than adjusting the fix — J17's forwarded
   selector, J1's create-response handle, J2's AC-6.5 pin path — recurrence: 3 — candidate: yes
 - **snapshot-live-state-before-mutation-testing**: mutating a path-resolution branch redirects the
-  suite onto real files; snapshot the target (or sandbox the cwd) first. Now partly mechanised in
-  `h-mad/tests/conftest.py` — recurrence: 1 — candidate: maybe (already a conftest fixture)
+  suite onto real files; snapshot the target (or sandbox the cwd) first — recurrence: 1 —
+  candidate: **LANDED** (J18) — `h-mad/tests/conftest.py::_protect_live_pin_file` snapshots and
+  restores the live pin file and fails loudly; `invariants.base.md` §"Test discrimination" carries
+  the caveat.
 - **differential-validator-test**: when replacing a library with a bundled implementation, assert
   verdict-equality against the library across a construct-complete corpus AND the real artifacts on
   disk, rather than testing the replacement alone — recurrence: 1 — candidate: maybe
