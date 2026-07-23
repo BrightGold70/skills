@@ -12,7 +12,6 @@ reason) · `done` (legacy spelling of LANDED).
 
 | rec | candidate | session |
 |---|---|---|
-| 12+ | `agy/codex poll-until-idle dispatch` | 2026-07-20 orca-adaptation-tiers |
 | 9 | `close-a-filed-defect cycle` | 2026-07-23 monitoring-registry-drained |
 | 9 | `H-MAD phase-doc + agy-audit-gate loop` *(maybe)* | 2026-07-20 orca-adaptation-tiers |
 | 6 | `audit→fix→subagent-review→merge loop` *(maybe)* | 2026-07-22 orca-skills-hardening |
@@ -31,7 +30,7 @@ work.
 
 ## 2026-07-20 — orca-adaptation-tiers
 
-- **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: yes
+- **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: **LANDED** 2026-07-24 — `hmad-dispatch ask` (send + wait-idle + full-buffer read; extraction stays a separate `h_mad_extract_verdict.py` call). Live-dogfooded against agy
 - **H-MAD phase-doc + agy-audit-gate loop**: write phase doc -> assemble audit prompt (template+doc+invariants) -> dispatch agy -> gate -> fix -> re-audit — recurrence: 9 (3 features x 3 phases) — candidate: maybe (already the /h-mad skill; a helper to stage+dispatch+gate in one call would cut ~40 tool calls)
 
 ## 2026-07-21 — orca-arc-complete-hemasuite-wiring

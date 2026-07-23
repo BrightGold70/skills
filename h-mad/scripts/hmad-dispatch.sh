@@ -1159,6 +1159,42 @@ _cmd_send() {
   abs="$(cd "$(dirname "$promptfile")" && pwd -P)/$(basename "$promptfile")"
   _send_text "$agent" "Read $abs and follow the instructions in it. It is ${size} bytes; read the whole file before responding."
 }
+_cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
+  # The scrape-path dispatch, composed from the three verbs an audit/review
+  # always uses together (recurrence 12+): send -> wait-idle -> read the full
+  # buffer. The orchestration path is `dispatch`+`await`; the report-file path is
+  # `report-wait`; this is their screen-scrape sibling. Verdict extraction stays
+  # a separate `h_mad_extract_verdict.py` call -- it needs --feature/--phase for
+  # its contract and belongs to python. `ask` hands you the buffer to extract.
+  #
+  # Composed from the existing commands on purpose (single-source): send's
+  # preflight-receipt guard and inline-vs-file delivery, wait's full-buffer idle
+  # check (J3), and read --from-start all carry unchanged.
+  _need "${1:-}" agent || return $?
+  _need "${2:-}" promptfile || return $?
+  local agent="$1" promptfile="$2"; shift 2
+  local timeout="" out=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --timeout) timeout="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    *) _unknown_opt ask "$1"; return $? ;;
+  esac; done
+  # 1. Dispatch. send refuses without a fresh preflight receipt, so fail fast --
+  #    never wait on or read a pane we did not dispatch into. send/wait chatter
+  #    ("Sent N bytes", the native-idle line) goes to stderr so ask's STDOUT is
+  #    exactly the reply buffer -- the thing a caller pipes into the extractor.
+  _cmd_send "$agent" "$promptfile" >&2 || return $?
+  # 2. Block until idle (full-buffer stability, not a tail).
+  local wargs=("$agent"); [ -n "$timeout" ] && wargs+=(--timeout "$timeout")
+  _cmd_wait "${wargs[@]}" >&2 || return $?
+  # 3. Capture the whole buffer.
+  if [ -n "$out" ]; then
+    _cmd_read "$agent" --from-start > "$out"
+  else
+    _cmd_read "$agent" --from-start
+  fi
+}
+
 _cmd_clear() { _send_text "$1" "/clear"; }
 
 # Cancel a running/wedged agent turn by sending Ctrl-C (0x03). A bare Enter is
@@ -1297,6 +1333,7 @@ main() {
     pin) _cmd_pin "$@" ;;
     pin-agents) _cmd_pin_agents "$@" ;;
     send)   _cmd_send "$@" ;;
+    ask)    _cmd_ask "$@" ;;
     clear)  _cmd_clear "$@" ;;
     interrupt) _cmd_interrupt "$@" ;;
     read)   _cmd_read "$@" ;;
