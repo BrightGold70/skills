@@ -4,6 +4,25 @@
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
+# Reject an unrecognised flag instead of dropping it. Every arg loop below
+# consumes its POSITIONALS before the loop starts, so anything still present
+# when the loop runs is meant to be a flag -- which is what makes failing safe
+# for positional-taking verbs too.
+#
+# Silently shifting past a typo hands back a plausible answer to a question
+# nobody asked: `worktree-rm <sel> --bse main` drops the base and checks
+# unmerged-ness against the wrong ref (the J15/J17 family, reached by a spelling
+# mistake), `read <agent> --form-start` returns a 50-line tail while the caller
+# believes it asked for the whole buffer (J3), and `wait <agent> --timeut 2`
+# blocks for the 300s default instead of 2s -- measured.
+#
+# Exit 2, not a verdict token: a malformed request is an operational error, per
+# invariants.base.md §"Audit-gate signal discipline".
+_unknown_opt() {  # $1 verb, $2 token
+  echo "hmad-dispatch: $1: unknown option '$2'" >&2
+  return 2
+}
+
 _detect_substrate() {
   # Precedence: HMAD_SUBSTRATE override > session marker > binary presence > default cmux.
   if [ "${HMAD_SUBSTRATE:-}" = "cmux" ] || [ "${HMAD_SUBSTRATE:-}" = "orca" ]; then
@@ -615,7 +634,7 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   case "$agent" in codex|agy) ;; *) echo "hmad-dispatch: unknown agent '$agent' (codex|agy)" >&2; return 2 ;; esac
   local wt="active" focus="" cmd
   while [ $# -gt 0 ]; do case "$1" in
-    --worktree) wt="$2"; shift 2 ;; --focus) focus="--focus"; shift ;; *) shift ;; esac; done
+    --worktree) wt="$2"; shift 2 ;; --focus) focus="--focus"; shift ;; *) _unknown_opt launch "$1"; return $? ;; esac; done
   case "$agent" in
     codex) cmd="${HMAD_ORCA_CODEX_LAUNCH_CMD:-codex}" ;;
     agy)   cmd="${HMAD_ORCA_AGY_LAUNCH_CMD:-agy --dangerously-skip-permissions}" ;;
@@ -696,7 +715,7 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   _need "${1:-}" task_id || return $?
   local task="$1"; shift
   local timeout=600
-  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) _unknown_opt await "$1"; return $? ;; esac; done
   local coord; coord="$(_coordinator)" || return 1
   # Guard the check response through _orca_json first ('.' re-emits the whole
   # envelope, ok-checked), THEN run the worker_done filter. A raw pipe swallowed
@@ -744,7 +763,7 @@ _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
   local timeout=600 interval="${HMAD_GATE_POLL_INTERVAL:-5}"
   while [ $# -gt 0 ]; do case "$1" in
     --timeout) timeout="$2"; shift 2 ;; --interval) interval="$2"; shift 2 ;;
-    *) shift ;; esac; done
+    *) _unknown_opt gate-wait "$1"; return $? ;; esac; done
   local elapsed=0 res tick="$interval"
   [ "$tick" -lt 1 ] && tick=1
   while [ "$elapsed" -le "$timeout" ]; do
@@ -804,7 +823,7 @@ _cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file 
     --agent) agent="$2"; shift 2 ;; --base) base="$2"; shift 2 ;;
     --prompt-file) pf="$2"; shift 2 ;;
     --repo) repo="$2"; shift 2 ;; --workspace) ws="$2"; shift 2 ;; --project) proj="$2"; shift 2 ;;
-    *) shift ;; esac; done
+    *) _unknown_opt worktree-create "$1"; return $? ;; esac; done
   local args=(worktree create --name "$name")
   [ -n "$agent" ] && args+=(--agent "$agent")
   [ -n "$base" ] && args+=(--base-branch "$base")
@@ -841,7 +860,7 @@ _cmd_worktree_current() {  # (no args)
 _cmd_worktree_ps() {  # [--limit <n>]
   _require_orca worktree-ps || return $?
   local args=(worktree ps)
-  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) shift ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-ps "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
 }
@@ -938,7 +957,7 @@ _cmd_worktree_rm() {  # <selector> [--force] [--base <ref>]
   while [ $# -gt 0 ]; do case "$1" in
     --force) force=1; shift ;;
     --base) base="$2"; shift 2 ;;
-    *) shift ;;
+    *) _unknown_opt worktree-rm "$1"; return $? ;;
   esac; done
   # What actually gets forwarded. J17: this used to be the caller's string
   # verbatim, and `repo::<path>` -- the form 8 tests pinned -- is not a selector
@@ -990,7 +1009,7 @@ _cmd_file_diff() {   # <path> [--staged] [--worktree <sel>]
   while [ $# -gt 0 ]; do case "$1" in
     --staged) args+=(--staged); shift ;;
     --worktree) args+=(--worktree "$2"); shift 2 ;;
-    *) shift ;; esac; done
+    *) _unknown_opt file-diff "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
 }
@@ -1001,7 +1020,7 @@ _cmd_file_open_changed() {   # [--mode edit|diff|both] [--worktree <sel>]
   while [ $# -gt 0 ]; do case "$1" in
     --mode) args+=(--mode "$2"); shift 2 ;;
     --worktree) args+=(--worktree "$2"); shift 2 ;;
-    *) shift ;; esac; done
+    *) _unknown_opt file-open-changed "$1"; return $? ;; esac; done
   args+=(--json)
   _orca_json '.result | tojson' "${args[@]}"
 }
@@ -1014,7 +1033,7 @@ _cmd_automation_create() {   # --name <n> --trigger <t> --prompt-file <p> [--pro
     --prompt-file) pf="$2"; shift 2 ;; --provider) prov="$2"; shift 2 ;;
     --precheck) pre="$2"; shift 2 ;;   --repo) repo="$2"; shift 2 ;;
     --workspace) ws="$2"; shift 2 ;;   --project) proj="$2"; shift 2 ;;
-    *) shift ;; esac; done
+    *) _unknown_opt automation-create "$1"; return $? ;; esac; done
   _need "$name" name || return $?; _need "$trig" trigger || return $?; _need "$pf" prompt-file || return $?
   [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
   local args=(automations create --name "$name" --trigger "$trig" --prompt "$(cat "$pf")")
@@ -1166,7 +1185,7 @@ _cmd_read() {
     --lines) lines="$2"; shift 2 ;;
     --cursor) cursor="$2"; shift 2 ;;
     --from-start) cursor="0"; lines="4000"; shift ;;
-    *) shift ;; esac; done
+    *) _unknown_opt read "$1"; return $? ;; esac; done
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
@@ -1227,7 +1246,7 @@ _wait_stable() {   # $1 substrate, $2 target, $3 timeout-seconds
 _cmd_wait() {
   local agent="$1"; shift
   local timeout=300
-  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) shift ;; esac; done
+  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) _unknown_opt wait "$1"; return $? ;; esac; done
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
