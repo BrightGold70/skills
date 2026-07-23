@@ -814,6 +814,36 @@ protocol has two gaps that only running it could expose. Both unfixed.
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
 
+## Pre-existing: silent flag-drop (closed 2026-07-23)
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| P1 | 🟡 | **FIXED** | Eleven arg loops ended in `*) shift ;;`, so a misspelled flag was silently discarded and the verb answered a question nobody asked |
+
+- 🟡 **P1 — `*) shift ;;` at 11 sites.** Wave 4a declined this as pre-existing and out of scope,
+  noting that if it changed, all eleven should change together. Done as its own feature.
+
+  **The cost, measured rather than argued:** `hmad-dispatch wait agy --timeut 2` (one character
+  wrong) **blocked for the 300s default instead of 2s** — reproduced with a bounded probe, and it
+  is what made the first RED run of these tests time out. The same shape elsewhere is worse than
+  slow: `worktree-rm <sel> --bse main` drops the base, so the unmerged check runs against the wrong
+  ref — the J15/J17 failure family reached by a spelling mistake — and `read <agent> --form-start`
+  returns a 50-line tail while the caller believes it asked for the whole buffer (J3). In every case
+  the operator gets a plausible answer to a question they did not ask.
+
+  **Why failing is safe here:** every one of the eleven loops consumes its **positionals before the
+  loop begins**, so anything still present when the loop runs is meant to be a flag. Checked all
+  eleven before changing any, rather than assuming it. Exit 2, not a verdict token — a malformed
+  request is an operational error per §"Audit-gate signal discipline", not a statement about the
+  world.
+
+  Single shared `_unknown_opt` helper (§"Single-source contract") naming both the verb and the
+  offending token, so the operator re-reads their own command line rather than `--help`. Swept the
+  docs for invocations that would newly be rejected: the only two flagged (`automation-create
+  --name`, `file-open-changed --mode`) are both real flags in their loops. Live-verified against the
+  runtime: typos rejected, `--limit` and `--from-start` still work. Suite 654 → 666.
+
+
 ## Surfaced by the J2 fix (2026-07-23)
 
 | ID | Sev | Status | One-line |
