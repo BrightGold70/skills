@@ -1195,6 +1195,81 @@ _cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
   fi
 }
 
+_run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `timeout`)
+  # Returns the child's exit code, or 124 if it had to be killed at the deadline
+  # (the GNU `timeout` convention). stdin/stdout/stderr are inherited by the child,
+  # so a `< promptfile` / `>&2` on the CALL site applies to the backgrounded cmd.
+  local secs="$1"; shift
+  # `<&0` explicitly hands the child our stdin. Without it, bash redirects a
+  # backgrounded command's stdin from /dev/null — which silently starved
+  # `codex exec -` of its piped prompt ("No prompt provided via stdin").
+  "$@" <&0 &
+  local pid=$! waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge "$secs" ]; then
+      kill -TERM "$pid" 2>/dev/null; sleep 2; kill -KILL "$pid" 2>/dev/null
+      wait "$pid" 2>/dev/null; return 124
+    fi
+    sleep 1; waited=$((waited + 1))
+  done
+  wait "$pid"
+}
+
+_cmd_exec() {  # <promptfile> [--cd <dir>] [--model <m>] [--sandbox <mode>] [--out <file>] [--timeout <s>]
+  # The exit-code dispatch path (Phase 5d/5e alternative to the pane REPL). Codex
+  # runs HEADLESS as a real subprocess (`codex exec`), so — unlike send+wait+read —
+  # there IS a process to reap: this verb returns codex's own exit code, no idle
+  # poll. The agent's FINAL message (the STATUS:/VERDICT: carrier) is captured via
+  # `--output-last-message` and echoed to OUR stdout, mirroring `ask`; the streamed
+  # run transcript goes to stderr. So a caller gets both signals cleanly: `$?` for
+  # "did the CLI run", and a stdout token to pipe into h_mad_extract_verdict.py for
+  # "did the WORK pass" (exit 0 never means the TDD task passed — always extract).
+  #
+  # Tradeoff vs the pane path: no cross-dispatch conversation context (each exec is
+  # a fresh session unless resumed), and no human-visible Orca pane. Chosen for 5d/5e
+  # where the task is self-contained and the exit code is the point.
+  _need "${1:-}" promptfile || return $?
+  local promptfile="$1"; shift
+  [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
+  local cd_dir="" model="" sandbox="workspace-write" out="" timeout=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --cd) cd_dir="$2"; shift 2 ;;
+    --model) model="$2"; shift 2 ;;
+    --sandbox) sandbox="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    *) _unknown_opt exec "$1"; return $? ;;
+  esac; done
+  command -v codex >/dev/null 2>&1 || {
+    echo "hmad-dispatch: exec requires the codex CLI on PATH" >&2; return 2; }
+  [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+  # The last-message file carries the verdict token; keep it out of the run log.
+  local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || return 1
+  local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
+              --output-last-message "$last" --skip-git-repo-check)
+  [ -n "$model" ] && args+=(--model "$model")
+
+  # Prompt via stdin ('-') — no keystroke cap, no injection. Transcript -> stderr
+  # (the run log); the final message -> our stdout below.
+  # `|| rc=$?` keeps a non-zero codex exit from tripping `set -e` before we can
+  # capture it — the exit code is the whole point of this verb. rc stays 0 on success.
+  local rc=0
+  if [ -n "$timeout" ]; then
+    _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+  else
+    codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+  fi
+
+  if [ -s "$last" ]; then
+    [ -n "$out" ] && cp "$last" "$out"
+    cat "$last"
+  fi
+  rm -f "$last"
+  echo "hmad-dispatch: codex exec rc=$rc" >&2
+  return "$rc"
+}
+
 _cmd_clear() { _send_text "$1" "/clear"; }
 
 # Cancel a running/wedged agent turn by sending Ctrl-C (0x03). A bare Enter is
@@ -1334,6 +1409,7 @@ main() {
     pin-agents) _cmd_pin_agents "$@" ;;
     send)   _cmd_send "$@" ;;
     ask)    _cmd_ask "$@" ;;
+    exec)   _cmd_exec "$@" ;;
     clear)  _cmd_clear "$@" ;;
     interrupt) _cmd_interrupt "$@" ;;
     read)   _cmd_read "$@" ;;

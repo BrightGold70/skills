@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# codex CLI stub for hmad-dispatch `exec` tests. Records argv, consumes the stdin
+# prompt, writes the canned last-message to the --output-last-message path, emits a
+# transcript to stdout, and exits with a controllable code.
+printf 'codex %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+
+# Consume stdin (the piped prompt); capture it if asked.
+if [ -n "${HMAD_STUB_STDIN_CAPTURE:-}" ]; then cat > "$HMAD_STUB_STDIN_CAPTURE"; else cat >/dev/null; fi
+
+# Simulate a long-running task so the wrapper's --timeout watchdog can fire.
+[ -n "${HMAD_STUB_CODEX_SLEEP:-}" ] && sleep "$HMAD_STUB_CODEX_SLEEP"
+
+# Locate `--output-last-message <file>` / `-o <file>` and write the canned reply.
+last="" prev=""
+for a in "$@"; do
+  case "$prev" in --output-last-message|-o) last="$a" ;; esac
+  prev="$a"
+done
+[ -n "$last" ] && printf '%s' "${HMAD_STUB_CODEX_LAST:-STATUS: DONE}" > "$last"
+
+# Streamed transcript (the run log) goes to stdout; the wrapper routes it to stderr.
+printf '%s\n' "${HMAD_STUB_CODEX_STDOUT:-[codex] running task...}"
+exit "${HMAD_STUB_CODEX_RC:-0}"

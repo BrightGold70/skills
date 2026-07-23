@@ -261,6 +261,40 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
+### Exit-code dispatch for 5d/5e (prototype — `hmad-dispatch exec`)
+
+The 5d/5e dispatches above use the pane REPL (`send`/`ask`): codex runs as a
+long-lived TUI, so completion is inferred by polling the buffer for idle and
+parsing a `STATUS:` token — there is no process to reap and no exit code. `exec`
+is an **alternative transport** for a self-contained module: it runs `codex exec`
+headless as a real subprocess and returns codex's own exit code with no idle poll.
+
+```bash
+# 5d RED (or 5e GREEN) for one module, exit-code path:
+hmad-dispatch exec <promptfile> --out /tmp/exec_<feature>_<module>.txt --timeout 900
+rc=$?                                   # operational: did the CLI run at all
+python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
+  /tmp/exec_<feature>_<module>.txt --key STATUS --feature <feature> --phase 5d
+```
+
+**`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
+completed, `124` = watchdog timeout, non-zero = crash/abort); it does **not** mean
+the TDD task passed. Read the `STATUS:`/`VERDICT:` token exactly as the pane path
+does (§"Reading a dispatch verdict") — exit 0 with `STATUS: BLOCKED` is still a halt,
+and Codex GREEN still needs the anti-gaming verify. `rc` replaces the *idle poll*,
+not the *verdict extraction*.
+
+**When to prefer it:** the task is self-contained (no reliance on the prior cycle's
+conversation) and you want a hard completion signal instead of a poll — e.g. a
+background/parallel module where you'd rather be notified on process exit than watch
+a pane. **When to keep the pane path:** the running revision thread matters (cycles
+2..N of the same 5e, "here's the fix for your prior should-fix" — `exec` is a fresh
+session each call unless resumed) or a human is watching the Orca pane. Default stays
+the pane path; `exec` is opt-in per module.
+
+Sandbox defaults to `workspace-write` (5d/5e write test + impl files). Prompt is
+delivered on stdin, so the 8192-byte keystroke inline cap does not apply.
+
 ## Phase 5 parallel fanout (Orca only)
 
 The serial Phase 5 path above remains the default and fallback. First partition the
