@@ -129,7 +129,7 @@ Investigating why a **manual tab rename to "Codex - skills repo"** (set at sessi
 
 - 🟡 **H5** — **Root cause of the whole Codex-identity class.** `_orca_find` matches `.title` from `orca terminal list --json`. That field is the terminal's OSC/derived title emitted by the *running program*: agy emits `agy` (resolvable), Codex emits its cwd basename `skills` (not resolvable), and the preview banner decays (H2/H4). A user's `orca terminal rename --terminal <h> --title "Codex …"` returns `{"ok":true}` but **`.title` stays `skills`** and `resolve codex` still finds 0 candidates — verified live this session. So rename operates on a *different* (tab-UI) layer that the JSON never exposes. **Consequence**: there is no title- or preview-based signal that reliably or durably identifies Codex.
   - **Mitigation shipped**: `hmad-dispatch pin <codex|agy> <handle>` records a handle in the session pin file in one command (+ `pin-agents` fail-loud, H4). The operator captures Codex's handle from `orca terminal list` (ideally at launch, before decay) and pins it; resolution then reads it deterministically. This is the durable path today.
-  - **Feature request (Orca-side; not fixable in this repo)**: make Codex reliably auto-identifiable — EITHER surface the tab/custom title (what `terminal rename` sets) in `terminal list --json`, OR add a field naming the running command/process per terminal. Either would let `_orca_find` identify Codex without a manual pin. Until then, `pin`/`pin-agents` + explicit handle is the contract. **Filed at `stablyai/orca`** (2026-07-22): https://github.com/stablyai/orca/issues/9870 — source draft: `docs/orca-feature-request-terminal-identity.md` (repro + both API options).
+  - **Feature request (Orca-side; not fixable in this repo)**: make Codex reliably auto-identifiable — EITHER surface the tab/custom title (what `terminal rename` sets) in `terminal list --json`, OR add a field naming the running command/process per terminal. Either would let `_orca_find` identify Codex without a manual pin. **Filed at `stablyai/orca`** (2026-07-22): https://github.com/stablyai/orca/issues/9870 — source draft: `docs/orca-feature-request-terminal-identity.md` (repro + both API options). **SUPERSEDED — issue CLOSED 2026-07-23 as completed:** the second option (a field naming the running program per pane) already existed in `orca worktree ps` as `agents[].agentType` keyed by `paneKey`. `_orca_find` Pass 0 now joins it, so Codex IS auto-identifiable without a manual pin. See J16. `pin`/`pin-agents` remain the most durable path for a long run, but they are no longer the only one.
   - **Launch-owned path — SHIPPED** (`608a7da`+): `hmad-dispatch launch <codex|agy>` runs `orca terminal create --command … --json` and captures `.result.terminal.handle` from the **create response**, pinning it at spawn — identity at t=0, never title/preview. Live-verified end-to-end (create → capture → pin → `resolve` reads it). This is the zero-manual durable fix when h-mad owns the launch; reuse of an operator-launched pane still uses `pin`/`pin-agents`. The Orca feature request (below) remains the fix for the auto-detect-an-existing-pane case.
 
 ## Surfaced by the cycle-telemetry-fidelity `/h-mad` run (2026-07-23)
@@ -282,7 +282,8 @@ is not re-filed.
 **Also observed (evidence for existing entries, not new IDs):** `orca terminal create --title
 "agy-probe"` does not stick — `terminal list` reports `title: agy`, the program's own OSC title.
 Independent confirmation of H5's core claim that `.title` reflects what the program emits and that
-caller-supplied titles are not surfaced. Filed upstream as stablyai/orca#9870.
+caller-supplied titles are not surfaced. Filed upstream as stablyai/orca#9870 — **closed 2026-07-23**;
+the identity it asked for turned out to live in `worktree ps`, not `terminal list` (see J16).
 
 **In flight, not a monitoring item:** `audit_cycles`/`iterate_cycles` are seeded and never
 incremented (both drift warnings dead). Being fixed by the `cycle-telemetry-fidelity` feature —
@@ -448,8 +449,11 @@ protocol has two gaps that only running it could expose. Both unfixed.
   - **Ambiguity declines rather than falls through to guessing.** Two agents of one type in scope →
     UNRESOLVED → pin. Weaker evidence resolving what stronger evidence called ambiguous is guessing
     with extra steps.
-  - **Report upstream:** #9870 asks for a per-terminal identity field. `worktree ps` already carries
-    it. The issue may be closable as-is, or reducible to "surface `agentType` on `terminal list` too".
+  - **Reported upstream and CLOSED 2026-07-23 as completed**
+    ([#9870](https://github.com/stablyai/orca/issues/9870)). The field existed all along; the
+    original report had inventoried only `terminal list` and `terminal show`. Residual gap stated in
+    the closing comment, not tracked: a plain `terminal create` shell is absent from `agents[]`
+    (verified), but whether a **human-adopted** pane registers there is unestablished.
 
 **Also observed (evidence, not new IDs):**
 - **Handle rotation happened twice in one run**, and the Wave-3 receipt caught both:

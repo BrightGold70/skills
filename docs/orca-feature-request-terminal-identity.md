@@ -1,6 +1,17 @@
 # Feature request: expose a stable per-terminal identity in `orca terminal list`
 
 > Filed: https://github.com/stablyai/orca/issues/9870 (2026-07-22)
+>
+> **CLOSED 2026-07-23 as completed.** The field already existed — `orca worktree ps --json` returns
+> `.result.worktrees[].agents[]` with an explicit `agentType` keyed by a `paneKey` of
+> `<tabId>:<leafId>`, joinable to `terminal list`'s `.tabId`/`.leafId`. This document inventoried
+> only `terminal list` and `terminal show`, which is why it concluded the capability was absent.
+> Shipped our side as `_orca_find` Pass 0 (main `bf9c4c3`); see `docs/skill-monitoring.md` §J16.
+>
+> One gap was **not** closed and is deliberately not being tracked here: whether a pane where a
+> human typed `codex` into an already-open shell registers in `agents[]`, or whether only
+> Orca-spawned agents do. A plain `terminal create` shell is absent from `agents[]` (verified). If
+> adoption is unsupported, option 3 below (`titleSource` discriminator) retains standalone value.
 
 **Component:** Orca CLI / daemon — `orca terminal list`, `orca terminal rename`
 **Type:** Feature request (with a small correctness observation about `rename`)

@@ -182,8 +182,8 @@ list` returns `.tabId`/`.leafId`. `_orca_find` joins them as **Pass 0**, ahead o
 title and preview passes, which resolves the case above exactly: measured live with pins
 bypassed, both agents went from `UNRESOLVED` to correct. `agentType` is `antigravity`,
 not `agy`. This does not retire pinning — handles still rotate, and `launch` still owns
-identity best — but an un-owned pane is now recoverable. (stablyai/orca#9870 is thereby
-an ergonomics request, not a blocker.)
+identity best — but an un-owned pane is now recoverable. (stablyai/orca#9870, which asked
+for this field, is closed as completed — it already existed in `worktree ps`.)
 
 **A pin file records intent, not state.** Handles rotate. Measured on 2026-07-22:
 every Orca handle rotated mid-run, `env` still printed the dead pins, and a dispatch

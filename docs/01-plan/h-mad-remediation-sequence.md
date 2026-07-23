@@ -210,11 +210,16 @@ with pins bypassed, both agents previously resolved to **0 candidates** and now 
 including a pane whose `.title` reads `"Codex - skills repo"` while actually running Antigravity.
 See `docs/skill-monitoring.md` §J16.
 
-**[stablyai/orca#9870](https://github.com/stablyai/orca/issues/9870)** — per-terminal identity.
-The premise ("Orca exposes no field naming the running program") is true only of `terminal list`;
-`worktree ps` has carried the field all along. Still worth reporting upstream, but as a
-**documentation/ergonomics** issue — surface `agentType` on `terminal list` so the join isn't
-needed — not a blocker. Nothing in this repo waits on it.
+**[stablyai/orca#9870](https://github.com/stablyai/orca/issues/9870) — CLOSED 2026-07-23 as
+completed.** The premise ("Orca exposes no field naming the running program") was true only of
+`terminal list`; `worktree ps` had carried the field all along. Reported upstream with the
+before/after measurement and closed. Nothing in this repo waits on it.
+
+One residual gap was stated in the closing comment rather than tracked: a plain `terminal create`
+shell is absent from `agents[]` (verified), but whether a **human-adopted** pane — someone typing
+`codex` into an already-open shell — registers there was not established. If it does not, an
+Orca-side `titleSource: "osc"|"tab"|"assigned"` discriminator would still have standalone value.
+That would be a new, narrower issue, not this one.
 
 The pre-existing mitigations remain the durable path and are unchanged: `hmad-dispatch launch
 <agent>` captures the handle at t=0 from the create response, and `pin`/`pin-agents` fail loud for
@@ -247,4 +252,4 @@ Do not sequence work behind #9870.
 | 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
 | 4a ✅ `ab3657e` | J15/J14/J8/J10 — the instrument | defects | done; fanout is now safe |
 | 4b | candidates batch via fanout | candidates | pass `--base <feature-branch>` on teardown |
-| 5 | ~~watch #9870~~ — **moot**, J16 paneKey join shipped | H5 residual, J16 | done; #9870 downgraded to ergonomics |
+| 5 | ~~watch #9870~~ — **moot**, J16 paneKey join shipped | H5 residual, J16 | done; #9870 closed as completed |
