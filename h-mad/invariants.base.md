@@ -84,6 +84,12 @@
   component words already appeared in nearby prose. Neither was visible to review or to a green run.
 - The mutation must itself be verified (§"Mutation verification"): a `.replace()` that matches
   nothing exits 0 and reports the guard as enforced.
+- **Mutating a path-resolution function can disable the suite's own isolation.** Tests usually
+  isolate by pointing an env override at a temp path, and that override is honoured by a branch —
+  the same kind of branch a mutation deletes. Stubbing the override branch in `_pin_file` redirected
+  every pin write in the suite onto the developer's live session file and replaced two real agent
+  handles, while the run reported 642 passed. Before mutating anything that decides *where* state is
+  written, snapshot the real target and restore it, or run in a sandboxed working directory.
 
 ## Incident replay
 - A fix motivated by a specific observed incident MUST be **replayed against the real artifacts

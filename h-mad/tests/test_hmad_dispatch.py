@@ -2769,10 +2769,25 @@ def test_no_mkdtemp_and_no_pin_file_leak_guard():
     assert not _NO_PIN_FILE.exists()
 
 
-def test_production_pin_file_resolution_literal_unchanged():
-    """AC-6.5: production still contains the cwd-relative pin-file fallback."""
+def test_production_pin_file_resolution_is_repo_anchored():
+    """AC-6.5, restated for J2.
+
+    This asserted the literal `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}` --
+    i.e. it pinned the cwd-relative fallback as a requirement, which is exactly
+    the defect J2 filed. The INTENT (pin resolution must not change silently)
+    is right, so it is kept and re-aimed at the three branches that should exist.
+    """
     script = WRAPPER.read_text()
-    assert "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}" in script
+    assert 'if [ -n "${HMAD_ORCA_PIN_FILE:-}" ]; then' in script, (
+        "explicit override must still win outright"
+    )
+    assert 'git rev-parse --show-toplevel' in script, (
+        "the default must anchor to the enclosing repo, not the cwd"
+    )
+    assert "$root/.h-mad/orca-pins.env" in script
+    assert '.h-mad/orca-pins.env' in script, (
+        "outside a repo the cwd-relative fallback remains"
+    )
 
 
 # --- preflight verdict: consumable form of the STALE/CONFLICT lines ---------
@@ -3261,3 +3276,107 @@ def test_forgotten_pin_file_cannot_contaminate_a_later_invocation(tmp_path):
                 env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _orca_terms()})
     assert later.returncode == 1
     assert "term_live" not in later.stdout
+
+
+# --- J2: the pin file must not follow the cwd ---------------------------------
+#
+# `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}` resolved against the CURRENT
+# DIRECTORY, so a coordinator sitting in repo B while driving a run in repo A
+# read B's pins and reported UNRESOLVED. Cross-repo runs are a normal mode.
+#
+# It reaches further than filed: `_receipt_file` derives from `dirname(_pin_file)`,
+# so the Wave-3 preflight RECEIPT moved with the cwd too -- a `cd` between `env`
+# and `send` could invalidate a receipt, or satisfy one from another project.
+#
+# NOTE these tests pass HMAD_ORCA_PIN_FILE="" deliberately: `${VAR:-default}`
+# substitutes on unset OR empty, and run() force-sets the variable otherwise.
+
+
+def _repo_with_subdir(tmp_path):
+    repo = _git_repo(tmp_path)
+    sub = repo / "deep" / "nested"
+    sub.mkdir(parents=True)
+    return repo, sub
+
+
+def test_pin_file_anchors_to_repo_root_not_cwd(tmp_path):
+    repo, sub = _repo_with_subdir(tmp_path)
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["pin", "codex", "term_x"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": ""}, cwd=str(sub))
+    assert r.returncode == 0, r.stderr
+    assert (repo / ".h-mad" / "orca-pins.env").is_file(), (
+        "pin file did not land at the repo root"
+    )
+    assert not (sub / ".h-mad").exists(), "a second pin file was created in the subdir"
+
+
+def test_pinned_handle_is_readable_from_a_different_subdir(tmp_path):
+    # The actual symptom: pin here, resolve there, get UNRESOLVED.
+    repo, sub = _repo_with_subdir(tmp_path)
+    other = repo / "elsewhere"
+    other.mkdir()
+    b = _bindir(tmp_path, ["orca"])
+    run(["pin", "agy", "term_shared"], substrate="orca",
+        env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": ""}, cwd=str(sub))
+    r = run(["resolve", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": ""}, cwd=str(other))
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "term_shared"
+
+
+def test_explicit_pin_file_override_still_wins(tmp_path):
+    repo, sub = _repo_with_subdir(tmp_path)
+    b = _bindir(tmp_path, ["orca"])
+    explicit = tmp_path / "explicit.env"
+    r = run(["pin", "codex", "term_e"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(explicit)}, cwd=str(sub))
+    assert r.returncode == 0, r.stderr
+    assert "codex=term_e" in explicit.read_text()
+    assert not (repo / ".h-mad" / "orca-pins.env").exists()
+
+
+def test_outside_a_git_repo_falls_back_to_cwd(tmp_path):
+    # No repo to anchor to. Must not crash, and must not write outside the cwd.
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["pin", "codex", "term_p"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": ""}, cwd=str(plain))
+    assert r.returncode == 0, r.stderr
+    assert (plain / ".h-mad" / "orca-pins.env").is_file()
+
+
+def test_env_prints_which_pin_file_it_read(tmp_path):
+    # J2's core complaint is that the wrong file is read SILENTLY. Naming it makes
+    # a cross-repo mistake visible on the line the operator already reads.
+    repo, sub = _repo_with_subdir(tmp_path)
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": ""}, cwd=str(sub))
+    assert r.returncode == 0, r.stderr
+    assert "pin file:" in r.stdout
+    assert str(repo / ".h-mad" / "orca-pins.env") in r.stdout
+    assert "PREFLIGHT:" in r.stdout, "the verdict token must still be emitted"
+
+
+def test_receipt_follows_the_repo_root_too(tmp_path):
+    # The receipt derives from dirname(pin file), so it inherited the same bug:
+    # `env` in one directory and `send` in another would disagree about which
+    # receipt exists.
+    repo, sub = _repo_with_subdir(tmp_path)
+    b = _bindir(tmp_path, ["orca"])
+    # The receipt is only WRITTEN on PREFLIGHT: PASS, so both pinned handles have
+    # to be live and distinct in the listing -- otherwise this passes/fails for
+    # the wrong reason.
+    listing = _preflight_listing("t-c", "t-a")
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": "",
+                 "HMAD_ORCA_CODEX_TERMINAL": "t-c", "HMAD_ORCA_AGY_TERMINAL": "t-a",
+                 "HMAD_STUB_ORCA_STDOUT": listing}, cwd=str(sub))
+    assert r.returncode == 0, r.stderr
+    assert "PREFLIGHT: PASS" in r.stdout, r.stdout
+    assert (repo / ".h-mad" / "preflight.receipt").is_file(), (
+        "receipt did not land beside the repo-root pin file"
+    )
+    assert not (sub / ".h-mad").exists()
