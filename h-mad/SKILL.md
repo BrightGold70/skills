@@ -63,9 +63,23 @@ will not see `owned_elsewhere`. On any token other than `owned_elsewhere`, claim
 the feature before working it, and release when you stop:
 
 ```bash
+# start_fresh — the feature does not exist yet, so create it in the same call.
+# `--claim` ALONE exits 2 here with `ERROR: no such feature`, which is how every
+# first-time claim used to fail exactly as documented (J5). `--started-ts` is
+# optional: `--create` defaults it to now (J8).
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature "<feature>" --create --claim "<session-id>"
+
+# every other route (resume_manual / enter_autonomous / halted) — the feature
+# already exists, so claim it without --create.
 python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
   --feature "<feature>" --claim "<session-id>"      # ... work ... then --release
 ```
+
+**Do not reach for `--create` on a resume route to make an error go away.** There,
+`ERROR: no such feature` is a typo guard: the record is supposed to exist, so the
+name is wrong. Adding `--create` would silently fork a second, empty record under
+the misspelling and the run would proceed against it.
 
 The claim is **advisory** — it reports who holds a feature and when they were
 last seen, so a second session makes a deliberate choice rather than an

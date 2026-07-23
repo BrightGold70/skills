@@ -145,7 +145,7 @@ is not re-filed.
 | J2 | 🟡 | **FIXED** | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
 | J3 | 🟡 | **FIXED** | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
 | J4 | 🟡 | **FIXED** | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
-| J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
+| J5 | 🟢 | **FIXED** | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
 | J7 | 🟢 | **RESOLVED** | F13 residual: the pin **file** leaked into `test_hmad_dispatch.py`. Fixed by Wave 2 (`787aecf`) — `run()` injects a per-invocation never-created path; suite 530 passed identical with and without the pin file |
 | J8 | 🟡 | **FIXED** `ab3657e` | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`). Root cause: `h_mad_state_write.py:138` defaults `started_ts` to a hardcoded `1970-01-01T00:00:00Z` sentinel |
@@ -313,6 +313,22 @@ is not re-filed.
   exist yet that exits 2 with `ERROR: no such feature`. Every first-time claim — i.e. every
   `start_fresh` — fails as documented. `--create --claim <id>` works. **Fix direction:** either
   make `--claim` imply `--create`, or correct the SKILL snippet.
+
+  **FIXED 2026-07-23 — by correcting the snippet, deliberately not by making `--claim` imply
+  `--create`.** That error is a real typo guard on every other route: `resume_manual`,
+  `enter_autonomous` and `halted` all claim a feature that already exists, so a misspelled name
+  should fail rather than silently fork a second empty record and run against it. Verified today:
+  `--feature realfeatt --claim` refuses, and nothing is written. Auto-creating would have traded a
+  documented failure for a silent one.
+
+  `SKILL.md` now shows both routes explicitly — `--create --claim` for `start_fresh`, `--claim`
+  alone elsewhere — with a note not to reach for `--create` on a resume route to make the error go
+  away. `--started-ts` is no longer needed either, since J8 made `--create` default it.
+
+  **Found while mutation-testing the guard: `release`'s copy was unenforced.** `set_fields` and
+  `claim` both had their `no such feature` guard covered, but deleting `release`'s left **653 tests
+  passing**. A release against a misspelled name would silently no-op, leaving an operator believing
+  they let go of a feature they still hold. Covered now; the mutation fails a test.
 - ⬜ **J6 — DISPROVEN: `clear <agent>` does not exit the Antigravity pane.** Initially filed from
   an observation that `hmad-dispatch clear agy` was followed within 15s by `status: exited` on
   that handle. The operator then reported having closed that tab manually. Verified with a
