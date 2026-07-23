@@ -148,9 +148,9 @@ is not re-filed.
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
 | J7 | 🟢 | **RESOLVED** | F13 residual: the pin **file** leaked into `test_hmad_dispatch.py`. Fixed by Wave 2 (`787aecf`) — `run()` injects a per-invocation never-created path; suite 530 passed identical with and without the pin file |
-| J8 | 🟡 | **SCHEDULED — Wave 4** | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`). Root cause: `h_mad_state_write.py:138` defaults `started_ts` to a hardcoded `1970-01-01T00:00:00Z` sentinel |
+| J8 | 🟡 | **FIXED** `ab3657e` | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`). Root cause: `h_mad_state_write.py:138` defaults `started_ts` to a hardcoded `1970-01-01T00:00:00Z` sentinel |
 | J9 | 🟢 | MONITORING | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
-| J10 | 🟡 | **SCHEDULED — Wave 4** | A Codex dispatch returned `STATUS: DONE_WITH_CONCERNS` while naming no concern anywhere in its report — a verdict declaring doubt without stating it is unactionable |
+| J10 | 🟡 | **FIXED** `ab3657e` | A Codex dispatch returned `STATUS: DONE_WITH_CONCERNS` while naming no concern anywhere in its report — a verdict declaring doubt without stating it is unactionable |
 
 - 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
   --worktree path:…/skills` read `term_01f69e2d…` from the `orca terminal create` response and
@@ -452,8 +452,8 @@ protocol has two gaps that only running it could expose. Both unfixed.
 
 | ID | Sev | Status | One-line |
 |---|---|---|---|
-| J14 | 🟡 | MONITORING | The fanout protocol lists `worktree-create --prompt-file` and `task-create`+`dispatch`+`await` as one sequence; they are alternatives, and the documented one cannot produce the task-id the other half needs |
-| J15 | 🔴 | MONITORING | Nothing in the fanout protocol or the Codex prompt tells a worker to commit, so the merge gate would merge an empty branch and report success |
+| J14 | 🟡 | **FIXED** `ab3657e` | The fanout protocol lists `worktree-create --prompt-file` and `task-create`+`dispatch`+`await` as one sequence; they are alternatives, and the documented one cannot produce the task-id the other half needs |
+| J15 | 🔴 | **FIXED** `ab3657e` | Nothing in the fanout protocol or the Codex prompt tells a worker to commit, so the merge gate would merge an empty branch and report success |
 
 - 🟡 **J14 — the fanout dispatch and wait paths are mutually exclusive but documented as
   sequential.** `SKILL.md` §"Phase 5 parallel fanout" and `references/orchestration-mode.md` §"Phase
@@ -656,3 +656,6 @@ protocol has two gaps that only running it could expose. Both unfixed.
 ---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
+
+> **Status-row audit 2026-07-23.** J8, J10, J14 and J15 shipped in Wave 4a (`ab3657e`) but their rows still read `SCHEDULED`/`MONITORING` — verified against the code before flipping (J15's guards fired live during the J17 work the same day). This registry's own lifecycle line says *"Flip Status + link the commit when actioned"*; a stale row is a coverage hole, because the next reader treats a solved problem as open work and an open one as solved.
+
