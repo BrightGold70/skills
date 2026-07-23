@@ -395,6 +395,34 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never run `git push --force`.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
+## Editing this skill while a run is in flight
+
+`~/.claude/skills/h-mad` **is a symlink into this repository**, so editing the working tree edits
+the *live* skill. A run already in progress will read whatever is on disk at the moment it next
+opens a file — including a half-finished edit, or a script whose test has not been written yet.
+
+When a run is in flight, **edit in a git worktree** and merge when it is clean; the in-flight run
+keeps reading the merged tree and never sees an intermediate state. `hmad-dispatch worktree-create`
+already does this for fanout modules; the same applies to the operator editing by hand.
+
+Two second-order consequences, both observed:
+- The suites are coupled. A sibling repo's tests reach these scripts *through the symlink*, so a
+  change here can fail a suite in a repo you did not touch. Run both before merging.
+- Never run a history-rewriting git command (`reset --hard`, `checkout --`, `stash`) with
+  uncommitted skill edits in the tree. Commit first — this is `## Mutation verification` applied
+  to your own work, and a lost implementation is indistinguishable from one never written.
+
+## Filing to a public tracker
+
+Before filing an issue, comment, or reply to a **public** tracker, **grep the body against a
+forbidden-term list** and fix any hit. At minimum search for **absolute paths, usernames, sibling
+project names**, private slugs, internal symbol names, and hostnames.
+
+The bodies are assembled from live diagnostics — terminal listings, error envelopes, file paths —
+so leakage is the default outcome, not an unlucky one. The check is mechanical and takes one
+command; do it *before* the post, because an edited issue keeps its original text in the edit
+history and a deleted comment may already be in a notification email.
+
 ## Known interactions (coexisting plugins)
 
 `/h-mad` has **zero runtime dependency** on any other plugin. It does, however, coexist with plugins that install Claude Code hooks. The notable one is **OMC** (`oh-my-claudecode`), whose `persistent-mode.mjs` produces two streams of noise during `/h-mad` runs:
