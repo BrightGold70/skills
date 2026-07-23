@@ -108,3 +108,53 @@ class TestSubstrateReferenceDocumentsTheToken:
         row = next(ln for ln in t.splitlines()
                    if ln.startswith("| `hmad-dispatch env`"))
         assert "PREFLIGHT" in row
+
+
+def test_skill_states_send_refuses_without_receipt() -> None:
+    """AC-9.1: dispatch enforcement is provided by the wrapper, not a read mandate."""
+    s = _phase5_preflight().lower()
+    assert "send" in s
+    assert "refuse" in s or "refuses" in s
+    for token in ("preflight_not_run", "preflight_expired",
+                  "preflight_handles_rotated", "preflight_agent_conflict"):
+        assert token in s
+
+
+def test_skill_documents_each_refusal_reason_and_recovery() -> None:
+    """AC-9.2: every shipped refusal token has an actionable recovery."""
+    s = _phase5_preflight().lower()
+    recoveries = {
+        "preflight_not_run": ("hmad-dispatch env", "run"),
+        "preflight_expired": ("hmad-dispatch env", "run"),
+        "preflight_handles_rotated": ("re-pin", "hmad-dispatch env"),
+        "preflight_agent_conflict": ("pin", "hmad-dispatch env"),
+    }
+    for token, steps in recoveries.items():
+        assert token in s
+        assert all(step in s for step in steps)
+
+
+def test_agent_substrate_documents_receipt_and_env_vars() -> None:
+    """AC-9.3: the substrate reference describes receipt control knobs."""
+    t = SUBS_MD.read_text(encoding="utf-8")
+    low = t.lower()
+    assert "receipt" in low
+    assert "verdict=pass" in low
+    assert "fingerprint" in low
+    assert "ttl" in low
+    for var in ("HMAD_PREFLIGHT_RECEIPT_FILE", "HMAD_PREFLIGHT_TTL_SEC",
+                "HMAD_SKIP_PREFLIGHT"):
+        assert var in t
+
+
+def test_skill_frontmatter_still_valid() -> None:
+    """AC-9.4: preserve a parseable manifest with non-empty required fields."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    assert text.startswith("---\n")
+    end = text.find("\n---\n", 4)
+    assert end != -1
+    frontmatter = text[4:end]
+    fields = dict(line.split(":", 1) for line in frontmatter.splitlines()
+                  if ":" in line)
+    assert fields.get("name", "").strip()
+    assert fields.get("description", "").strip()

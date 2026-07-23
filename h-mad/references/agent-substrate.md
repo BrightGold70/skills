@@ -36,6 +36,30 @@ which differs per install and per checkout.
 | `hmad-dispatch report-wait <path> [--timeout S] [--interval S]` | Wait for the agent to drop `<path>` + `<path>.done`, then emit the file. Reliable replacement for `wait`+`read`+sentinel-extract; substrate-agnostic (shared fs). The polling loop is the standalone `scripts/h_mad_report_wait.py`; when the dispatched implementer is editing `hmad-dispatch.sh` itself, poll with that script directly so the coordinator never re-parses a half-saved wrapper (H3). See orchestration-mode.md §"Report-file transport" |
 | `hmad-dispatch notify <title> <body>` | Halt ping (best-effort) |
 
+## Preflight receipt enforcement
+
+`hmad-dispatch env` writes a receipt artifact beside the pin file (unless
+`HMAD_PREFLIGHT_RECEIPT_FILE` overrides its path) whenever it prints
+`PREFLIGHT: PASS`; it removes the receipt on `PREFLIGHT: FAIL`. The artifact is
+plain text containing `verdict=PASS`, the current `fingerprint=codex=…;agy=…`,
+and a Unix `ts=…` timestamp. `hmad-dispatch send` refuses with rc=1 and sends
+nothing unless the receipt exists, says PASS, is within the TTL, and its
+fingerprint still matches current resolution. Refusal diagnostics name one of
+`preflight_not_run`, `preflight_expired`, `preflight_handles_rotated`, or
+`preflight_agent_conflict`.
+
+The controls are:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HMAD_PREFLIGHT_RECEIPT_FILE` | beside the pin file | Override the receipt artifact path |
+| `HMAD_PREFLIGHT_TTL_SEC` | `3600` | Maximum receipt age in seconds |
+| `HMAD_SKIP_PREFLIGHT` | unset (enforced) | Skip receipt validation for `send` when set; handle-conflict protection remains active |
+
+To recover, run `hmad-dispatch env` and confirm `PREFLIGHT: PASS`; re-pin or
+relaunch after handle rotation, and pin distinct handles after a conflict.
+`clear` and `interrupt` are recovery verbs and are not guarded.
+
 ## How `send` delivers a prompt
 
 `send` picks its delivery mode from the prompt's size, so callers do not have

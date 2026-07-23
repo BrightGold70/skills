@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -112,6 +113,9 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     # exactly when the suite is run from inside a running orchestration.
     for _k in [k for k in e if k.startswith("HMAD_ORCA_")]:
         e.pop(_k, None)
+    # The receipt override is likewise caller state: lifecycle tests must start
+    # from the pin-file-derived default unless they explicitly set an override.
+    e.pop("HMAD_PREFLIGHT_RECEIPT_FILE", None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -666,8 +670,8 @@ def test_send_cmux_uses_file_contents(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-PROMPT")
-    r = run(["send", "codex", str(pf)], substrate="cmux",
-            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="cmux",
+                       env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "cmux send --surface surface:5 HELLO-PROMPT" in text
@@ -678,8 +682,8 @@ def test_send_orca_uses_file_contents(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-ORCA")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "orca terminal send --terminal t-1 --text HELLO-ORCA --enter" in text
@@ -1635,8 +1639,8 @@ def test_send_inlines_a_small_prompt(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "small.txt"; pf.write_text("SMALL-PROMPT")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "SMALL-PROMPT" in text
@@ -1647,8 +1651,8 @@ def test_send_switches_to_indirection_for_a_large_prompt(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text, "must name the staged file"
@@ -1663,8 +1667,8 @@ def test_indirection_canonicalises_the_path(tmp_path):
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
     noncanonical = sub / ".." / "big.txt"   # valid, absolute, not canonical
 
-    r = run(["send", "codex", str(noncanonical)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(noncanonical)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf.resolve()) in text
@@ -1676,14 +1680,14 @@ def test_threshold_boundary_is_inclusive(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     at = tmp_path / "cap_at.txt"
     pf_at = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT, "at.txt")
-    run(["send", "codex", str(pf_at)], substrate="orca",
-        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=at)
+    _enforced_send(["send", "codex", str(pf_at)], substrate="orca",
+                   env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=at)
     assert "XXXXXXXXXXXX" in at.read_text()
 
     over = tmp_path / "cap_over.txt"
     pf_over = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "over.txt")
-    run(["send", "codex", str(pf_over)], substrate="orca",
-        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=over)
+    _enforced_send(["send", "codex", str(pf_over)], substrate="orca",
+                   env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=over)
     assert "XXXXXXXXXXXX" not in over.read_text()
 
 
@@ -1691,9 +1695,9 @@ def test_threshold_is_tunable(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, 100, "medium.txt")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
-                 "HMAD_SEND_INLINE_MAX": "50"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+                            "HMAD_SEND_INLINE_MAX": "50"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text
@@ -1705,8 +1709,8 @@ def test_send_cmux_indirection_too(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
-    r = run(["send", "codex", str(pf)], substrate="cmux",
-            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="cmux",
+                       env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text
@@ -1718,6 +1722,58 @@ def test_send_missing_file_fails_loudly(tmp_path):
     r = run(["send", "codex", str(tmp_path / "nope.txt")], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"})
     assert r.returncode != 0
+
+
+# --- send: resolved-agent conflict guard ------------------------------------
+
+
+def test_send_refuses_when_both_agents_resolve_to_one_handle(tmp_path):
+    """AC-7.1/7.2: never deliver into a pane claimed by both agents."""
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    shared = _preflight_listing("term_shared")
+
+    for agent in ("codex", "agy"):
+        cap = tmp_path / f"{agent}.txt"
+        r = run(["send", agent, str(prompt)], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": shared,
+                     "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                     "HMAD_ORCA_AGY_TERMINAL": "term_shared"}, capture=cap)
+
+        assert r.returncode != 0
+        assert "preflight_agent_conflict" in r.stderr
+        assert not cap.exists() or "terminal send" not in cap.read_text(), \
+            "conflict must prevent delivery"
+
+
+def test_send_allows_distinct_agent_resolutions(tmp_path):
+    """AC-7.3: the conflict guard distinguishes two separate live panes."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    live = _preflight_listing("term_codex", "term_agy")
+
+    r = _enforced_send(["send", "codex", str(prompt)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live,
+                            "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                            "HMAD_ORCA_AGY_TERMINAL": "term_agy"}, capture=cap)
+
+    assert r.returncode == 0
+    assert "preflight_agent_conflict" not in r.stderr
+    assert "terminal send --terminal term_codex" in cap.read_text()
+
+
+def test_send_unresolved_agents_is_not_refused_as_a_conflict(tmp_path):
+    """AC-7.4: two unresolved agents do not establish a shared pane."""
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+
+    r = run(["send", "codex", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+
+    assert r.returncode != 0
+    assert "preflight_agent_conflict" not in r.stderr
+    assert "orca terminal for 'codex' resolved" in r.stderr
 
 
 # --- wait: idle must be confirmed, not taken on trust ------------------------
@@ -1961,8 +2017,9 @@ def test_send_refuses_a_handle_the_listing_proves_is_gone(tmp_path):
          "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
     )
     r = run(["send", "agy", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
-                 "HMAD_STUB_ORCA_STDOUT": live}, capture=cap)
+        env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
+                 "HMAD_STUB_ORCA_STDOUT": live,
+                 "HMAD_SKIP_PREFLIGHT": "1"}, capture=cap)
     assert r.returncode == 1
     assert "terminal_handle_stale" in r.stderr
     assert "nothing was sent" in r.stderr
@@ -1976,9 +2033,9 @@ def test_send_still_works_when_the_listing_cannot_be_read(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     prompt = tmp_path / "p.txt"; prompt.write_text("do the thing")
-    r = run(["send", "agy", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_x",
-                 "HMAD_STUB_ORCA_STDOUT": "not json at all"}, capture=cap)
+    r = _enforced_send(["send", "agy", str(prompt)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_x",
+                            "HMAD_STUB_ORCA_STDOUT": "not json at all"}, capture=cap)
     assert r.returncode == 0
     assert "terminal send" in cap.read_text()
 
@@ -2372,6 +2429,282 @@ def test_preflight_passes_when_terminal_listing_is_unreadable(tmp_path):
                  "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
                  "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
     assert "PREFLIGHT: PASS" in r.stdout
+
+
+# --- preflight receipt lifecycle --------------------------------------------
+
+
+def _receipt_env(b, pin_file, listing, *, receipt_file=None):
+    """Environment for a deterministic, healthy preflight invocation."""
+    env = {
+        "_BINDIR": b,
+        "HMAD_ORCA_PIN_FILE": str(pin_file),
+        "HMAD_STUB_ORCA_STDOUT": listing,
+        "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+        "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+    }
+    if receipt_file is not None:
+        env["HMAD_PREFLIGHT_RECEIPT_FILE"] = str(receipt_file)
+    return env
+
+
+def _receipt_values(receipt_file):
+    return dict(line.split("=", 1) for line in receipt_file.read_text().splitlines())
+
+
+def _env_then_send(args, *, substrate, env, capture):
+    """Run the enforced preflight and dispatch using one receipt path."""
+    preflight = run(["env"], substrate=substrate, env=env)
+    sent = run(args, substrate=substrate, env=env, capture=capture)
+    return preflight, sent
+
+
+def _enforced_send(args, *, substrate, env, capture):
+    env = dict(env)
+    env.setdefault("HMAD_PREFLIGHT_RECEIPT_FILE", str(Path(capture).with_suffix(".receipt")))
+    preflight, sent = _env_then_send(args, substrate=substrate, env=env, capture=capture)
+    assert "PREFLIGHT: PASS" in preflight.stdout, preflight.stdout
+    return sent
+
+
+def test_send_without_receipt_refuses_before_delivery(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    receipt = tmp_path / "receipt"
+    r = run(["send", "codex", str(prompt)], substrate="orca", capture=cap,
+            env={"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+                 "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")})
+    assert r.returncode != 0
+    assert "preflight_not_run" in r.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text()
+
+
+def test_send_after_passing_env_delivers_on_enforced_path(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(tmp_path / "receipt"),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight, sent = _env_then_send(["send", "codex", str(prompt)],
+                                     substrate="orca", env=env, capture=cap)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    assert sent.returncode == 0
+    assert "terminal send --terminal term_codex" in cap.read_text()
+
+
+def test_send_bypass_is_explicit_and_enforced_when_empty(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    cap = tmp_path / "cap.txt"
+    base = {"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+            "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+            "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+            "HMAD_PREFLIGHT_RECEIPT_FILE": str(tmp_path / "missing.receipt")}
+    bypass = dict(base, HMAD_SKIP_PREFLIGHT="1")
+    allowed = run(["send", "codex", str(prompt)], substrate="orca", env=bypass, capture=cap)
+    assert allowed.returncode == 0
+    assert "HMAD_SKIP_PREFLIGHT" in allowed.stderr
+    cap.unlink()
+    enforced = run(["send", "codex", str(prompt)], substrate="orca",
+                    env=dict(base, HMAD_SKIP_PREFLIGHT=""), capture=cap)
+    assert enforced.returncode != 0
+    assert "preflight_not_run" in enforced.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text()
+
+
+def test_send_rejects_expired_and_rotated_receipts_with_distinct_reasons(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    receipt = tmp_path / "receipt"
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight = run(["env"], substrate="orca", env=env)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    values = _receipt_values(receipt)
+    values["ts"] = str(int(time.time()) - 10)
+    receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+    expired = run(["send", "codex", str(prompt)], substrate="orca",
+                  env=dict(env, HMAD_PREFLIGHT_TTL_SEC="1"), capture=tmp_path / "expired.cap")
+    assert "preflight_expired" in expired.stderr
+
+    values["ts"] = str(int(time.time()))
+    receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+    rotated = run(["send", "codex", str(prompt)], substrate="orca",
+                  env=dict(env, HMAD_ORCA_CODEX_TERMINAL="term_rotated"),
+                  capture=tmp_path / "rotated.cap")
+    assert "preflight_handles_rotated" in rotated.stderr
+
+
+def test_receipt_for_unresolved_agent_is_invalid_after_pinning(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    receipt = tmp_path / "receipt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    unresolved = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+                  "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex"),
+                  "HMAD_ORCA_CODEX_TERMINAL": "term_codex"}
+    preflight = run(["env"], substrate="orca", env=unresolved)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    pinned = dict(unresolved, HMAD_ORCA_AGY_TERMINAL="term_agy")
+    refused = run(["send", "agy", str(prompt)], substrate="orca", env=pinned,
+                  capture=tmp_path / "cap.txt")
+    assert "preflight_handles_rotated" in refused.stderr
+
+
+def test_unset_ttl_uses_the_documented_3600_default(tmp_path):
+    """AC-5.4: with HMAD_PREFLIGHT_TTL_SEC unset the window is 3600s exactly —
+    not an error, and not unbounded. 3500s old is accepted, 3700s old is not."""
+    b = _bindir(tmp_path, ["orca"])
+    receipt = tmp_path / "receipt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight = run(["env"], substrate="orca", env=env)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    values = _receipt_values(receipt)
+
+    def _send_with_age(seconds, cap_name):
+        values["ts"] = str(int(time.time()) - seconds)
+        receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+        # HMAD_PREFLIGHT_TTL_SEC deliberately NOT set: this asserts the default.
+        return run(["send", "codex", str(prompt)], substrate="orca", env=env,
+                   capture=tmp_path / cap_name)
+
+    fresh_enough = _send_with_age(3500, "within.cap")
+    assert fresh_enough.returncode == 0, fresh_enough.stderr
+    assert "preflight_expired" not in fresh_enough.stderr
+
+    too_old = _send_with_age(3700, "beyond.cap")
+    assert too_old.returncode == 1
+    assert "preflight_expired" in too_old.stderr
+
+
+def test_bypass_does_not_suppress_the_agent_conflict_guard(tmp_path):
+    """AC-6.4: HMAD_SKIP_PREFLIGHT waives the *receipt* requirement only. It must
+    never permit a dispatch into a pane two agents both resolve to — that bypass
+    exists to allow dispatching without a preflight, not into a provably wrong pane."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    both_on_one = {"_BINDIR": b, "HMAD_SKIP_PREFLIGHT": "1",
+                   "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                   "HMAD_ORCA_AGY_TERMINAL": "term_shared",
+                   "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_shared")}
+    r = run(["send", "codex", str(prompt)], substrate="orca", env=both_on_one, capture=cap)
+    assert r.returncode == 1
+    assert "preflight_agent_conflict" in r.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text(), \
+        "the bypass must not let a conflicted dispatch reach the send call"
+
+
+def test_preflight_pass_writes_default_receipt_with_timestamp_and_fingerprint(tmp_path):
+    """AC-1.1, AC-1.2, AC-1.5, AC-8.2: PASS writes beside its pin file."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "session" / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    r = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy")))
+
+    assert r.returncode == 0
+    assert "PREFLIGHT: PASS" in r.stdout.splitlines()
+    assert receipt.is_file()
+    values = _receipt_values(receipt)
+    assert values["verdict"] == "PASS"
+    assert values["fingerprint"]
+    assert int(values["ts"]) >= 0
+
+
+def test_preflight_receipt_fingerprint_is_stable_and_tracks_resolved_handles(tmp_path):
+    """AC-1.3, AC-1.4: fingerprint is stable for identity and changes with it."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    first_env = _receipt_env(b, pins, _preflight_listing("term_codex", "term_agy"))
+
+    first = run(["env"], substrate="orca", env=first_env)
+    assert first.returncode == 0
+    first_fingerprint = _receipt_values(receipt)["fingerprint"]
+
+    second = run(["env"], substrate="orca", env=first_env)
+    assert second.returncode == 0
+    assert _receipt_values(receipt)["fingerprint"] == first_fingerprint
+
+    changed_env = _receipt_env(
+        b, pins, _preflight_listing("term_codex_changed", "term_agy"))
+    changed_env["HMAD_ORCA_CODEX_TERMINAL"] = "term_codex_changed"
+    changed = run(["env"], substrate="orca", env=changed_env)
+    assert changed.returncode == 0
+    assert _receipt_values(receipt)["fingerprint"] != first_fingerprint
+
+
+def test_preflight_fail_without_receipt_leaves_no_receipt_and_preserves_verdict(tmp_path):
+    """AC-2.1, AC-2.3: FAIL clears absent default receipt without changing stdout."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    env = _receipt_env(b, pins, _preflight_listing("term_agy"))
+    env["HMAD_ORCA_CODEX_TERMINAL"] = "term_dead"
+    r = run(["env"], substrate="orca", env=env)
+
+    assert r.returncode == 0
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "stale=codex" in line
+    assert not receipt.exists()
+
+
+def test_preflight_fail_removes_existing_receipt(tmp_path):
+    """AC-2.2: FAIL removes a receipt written by a prior PASS."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    passed = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy")))
+    assert passed.returncode == 0
+    assert receipt.is_file()
+
+    failing_env = _receipt_env(b, pins, _preflight_listing("term_agy"))
+    failing_env["HMAD_ORCA_CODEX_TERMINAL"] = "term_dead"
+    failed = run(["env"], substrate="orca", env=failing_env)
+    assert "PREFLIGHT: FAIL" in failed.stdout
+    assert not receipt.exists()
+
+
+def test_preflight_receipt_override_wins_over_pin_file_directory(tmp_path):
+    """AC-8.1: explicit receipt override wins and default receipt remains absent."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins" / "session.env"
+    default_receipt = pins.parent / "preflight.receipt"
+    override_receipt = tmp_path / "override" / "receipt.env"
+    r = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy"),
+        receipt_file=override_receipt))
+
+    assert r.returncode == 0
+    assert "PREFLIGHT: PASS" in r.stdout
+    assert override_receipt.is_file()
+    assert not default_receipt.exists()
+
+
+def test_default_preflight_receipt_is_gitignored():
+    """AC-8.4: the repository ignores the unconfigured default receipt path."""
+    r = subprocess.run(
+        ["git", "check-ignore", "-v", ".h-mad/preflight.receipt"],
+        capture_output=True, text=True, cwd=SKILL.parent,
+    )
+    assert r.returncode == 0
+    assert ".h-mad/" in r.stdout
 
 
 def test_absent_pin_paths_are_unique_per_invocation():
