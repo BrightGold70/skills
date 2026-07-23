@@ -263,18 +263,31 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 
 ### Exit-code dispatch for 5d/5e (prototype — `hmad-dispatch exec`)
 
-The 5d/5e dispatches above use the pane REPL (`send`/`ask`): codex runs as a
+The 5d/5e dispatches above use the pane REPL (`send`/`ask`): the agent runs as a
 long-lived TUI, so completion is inferred by polling the buffer for idle and
-parsing a `STATUS:` token — there is no process to reap and no exit code. `exec`
-is an **alternative transport** for a self-contained module: it runs `codex exec`
-headless as a real subprocess and returns codex's own exit code with no idle poll.
+parsing a token — there is no process to reap and no exit code. `exec` is an
+**alternative transport** for a self-contained dispatch: it runs the agent headless
+as a real subprocess and returns the agent's own exit code with no idle poll. Both
+agents are supported, on their natural side of 5d/5e:
+
+- **`exec codex`** — the RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
+  via stdin; final message via `--output-last-message`; default `--sandbox workspace-write`.
+- **`exec agy`** — the 5e-review (and Phase 3/4/5b audit) dispatch. `agy --print`
+  prints the response to stdout; a headless replacement for the agy `ask` scrape.
+  Because it is a subprocess, it needs **no pane and no identity resolution** — the
+  one thing the pane path can still fail at for an un-owned agent.
 
 ```bash
-# 5d RED (or 5e GREEN) for one module, exit-code path:
-hmad-dispatch exec <promptfile> --out /tmp/exec_<feature>_<module>.txt --timeout 900
+# 5d/5e codex (implement), exit-code path:
+hmad-dispatch exec codex <promptfile> --out /tmp/exec_<feature>_<module>.txt --timeout 900
 rc=$?                                   # operational: did the CLI run at all
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/exec_<feature>_<module>.txt --key STATUS --feature <feature> --phase 5d
+
+# 5e-review agy (audit), exit-code path — no pane to resolve:
+hmad-dispatch exec agy <promptfile> --out /tmp/rev_<feature>_<module>.txt --timeout 600
+python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
+  /tmp/rev_<feature>_<module>.txt --key VERDICT --feature <feature> --phase 5e
 ```
 
 **`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
@@ -292,8 +305,11 @@ a pane. **When to keep the pane path:** the running revision thread matters (cyc
 session each call unless resumed) or a human is watching the Orca pane. Default stays
 the pane path; `exec` is opt-in per module.
 
-Sandbox defaults to `workspace-write` (5d/5e write test + impl files). Prompt is
-delivered on stdin, so the 8192-byte keystroke inline cap does not apply.
+Codex sandbox defaults to `workspace-write` (5d/5e write test + impl files); its
+prompt is delivered on stdin, so the 8192-byte keystroke inline cap does not apply.
+agy runs `--print --dangerously-skip-permissions` (headless must auto-approve or a
+tool request blocks); its prompt is an arg, fine below `ARG_MAX` (~1 MB) — audit
+prompts are ≤61 KB.
 
 ## Phase 5 parallel fanout (Orca only)
 

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# agy (Antigravity CLI) stub for hmad-dispatch `exec` tests. Records argv, prints
+# the canned response to stdout (agy --print puts ONLY the response there), and
+# exits with a controllable code. The prompt is the LAST positional arg.
+printf 'agy %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+
+# Capture the prompt (last arg) if asked.
+if [ -n "${HMAD_STUB_AGY_PROMPT_CAPTURE:-}" ]; then
+  printf '%s' "${!#}" > "$HMAD_STUB_AGY_PROMPT_CAPTURE"
+fi
+
+# Simulate a long-running task so the wrapper's --timeout watchdog can fire.
+[ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
+
+# The response (agy --print writes it straight to stdout).
+printf '%s\n' "${HMAD_STUB_AGY_RESP:-VERDICT: COMPLIANT}"
+exit "${HMAD_STUB_AGY_RC:-0}"

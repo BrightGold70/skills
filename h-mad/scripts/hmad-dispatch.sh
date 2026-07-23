@@ -1215,58 +1215,94 @@ _run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `
   wait "$pid"
 }
 
-_cmd_exec() {  # <promptfile> [--cd <dir>] [--model <m>] [--sandbox <mode>] [--out <file>] [--timeout <s>]
-  # The exit-code dispatch path (Phase 5d/5e alternative to the pane REPL). Codex
-  # runs HEADLESS as a real subprocess (`codex exec`), so — unlike send+wait+read —
-  # there IS a process to reap: this verb returns codex's own exit code, no idle
-  # poll. The agent's FINAL message (the STATUS:/VERDICT: carrier) is captured via
-  # `--output-last-message` and echoed to OUR stdout, mirroring `ask`; the streamed
-  # run transcript goes to stderr. So a caller gets both signals cleanly: `$?` for
-  # "did the CLI run", and a stdout token to pipe into h_mad_extract_verdict.py for
-  # "did the WORK pass" (exit 0 never means the TDD task passed — always extract).
+_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
+  # The exit-code dispatch path (alternative to the pane REPL). The agent runs
+  # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
+  # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
+  # final response (the STATUS:/VERDICT: carrier) goes to OUR stdout; run chatter to
+  # stderr. So a caller gets both signals cleanly: `$?` for "did the CLI run", and a
+  # stdout token to pipe into h_mad_extract_verdict.py for "did the WORK pass" (exit
+  # 0 never means the task passed — always extract).
+  #
+  #   codex — `codex exec`, prompt via stdin, final message via --output-last-message.
+  #           The 5d/5e IMPLEMENTER path (writes tests/impl; default --sandbox
+  #           workspace-write).
+  #   agy   — `agy --print "<prompt>"`, response printed straight to stdout. The
+  #           AUDIT/REVIEW path (Phases 3/4/5b + 5e-review); a headless replacement
+  #           for the agy `ask` pane scrape. Pane-independent, so it sidesteps agent
+  #           identity resolution (orca#9870) entirely.
   #
   # Tradeoff vs the pane path: no cross-dispatch conversation context (each exec is
-  # a fresh session unless resumed), and no human-visible Orca pane. Chosen for 5d/5e
-  # where the task is self-contained and the exit code is the point.
-  _need "${1:-}" promptfile || return $?
-  local promptfile="$1"; shift
+  # a fresh session), and no human-visible Orca pane. Chosen where the task is
+  # self-contained and the exit code is the point.
+  _need "${1:-}" agent || return $?
+  _need "${2:-}" promptfile || return $?
+  local agent="$1" promptfile="$2"; shift 2
+  case "$agent" in codex|agy) ;;
+    *) echo "hmad-dispatch: exec: unknown agent '$agent' (expected codex|agy)" >&2; return 2 ;;
+  esac
   [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
-  local cd_dir="" model="" sandbox="workspace-write" out="" timeout=""
+
+  local cd_dir="" model="" out="" timeout="" sandbox="" effort=""
+  [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in
     --cd) cd_dir="$2"; shift 2 ;;
     --model) model="$2"; shift 2 ;;
-    --sandbox) sandbox="$2"; shift 2 ;;
     --out) out="$2"; shift 2 ;;
     --timeout) timeout="$2"; shift 2 ;;
+    --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox
+    --effort) effort="$2"; shift 2 ;;      # agy only
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
-  command -v codex >/dev/null 2>&1 || {
-    echo "hmad-dispatch: exec requires the codex CLI on PATH" >&2; return 2; }
+  [ "$agent" = codex ] && [ -n "$effort" ] && {
+    echo "hmad-dispatch: exec: --effort is agy-only" >&2; return 2; }
+  command -v "$agent" >/dev/null 2>&1 || {
+    echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-  # The last-message file carries the verdict token; keep it out of the run log.
-  local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || return 1
-  local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
-              --output-last-message "$last" --skip-git-repo-check)
-  [ -n "$model" ] && args+=(--model "$model")
-
-  # Prompt via stdin ('-') — no keystroke cap, no injection. Transcript -> stderr
-  # (the run log); the final message -> our stdout below.
-  # `|| rc=$?` keeps a non-zero codex exit from tripping `set -e` before we can
-  # capture it — the exit code is the whole point of this verb. rc stays 0 on success.
+  # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
+  # it — the exit code is the whole point of this verb. rc stays 0 on success.
   local rc=0
-  if [ -n "$timeout" ]; then
-    _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+  if [ "$agent" = codex ]; then
+    local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || return 1
+    local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
+                --output-last-message "$last" --skip-git-repo-check)
+    [ -n "$model" ] && args+=(--model "$model")
+    # Prompt via stdin ('-') — no keystroke cap. Transcript -> stderr; final msg below.
+    if [ -n "$timeout" ]; then
+      _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+    else
+      codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+    fi
+    if [ -s "$last" ]; then [ -n "$out" ] && cp "$last" "$out"; cat "$last"; fi
+    rm -f "$last"
   else
-    codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+    # agy `--print` prints ONLY the response to stdout (verified), so no last-message
+    # file. Headless needs --dangerously-skip-permissions or a tool request blocks
+    # until the print timeout; agy is already launched that way in panes. cwd is agy's
+    # workspace root, so cd there. Prompt is an arg (fine < ARG_MAX ~1MB; audit prompts
+    # are ≤61KB). --timeout maps to BOTH agy's native --print-timeout and the watchdog.
+    # `--print` consumes the NEXT token as the prompt, so it MUST come last with the
+    # prompt adjacent — every other flag goes before it. (A `--print` not adjacent to
+    # the prompt silently ate the following flag as its prompt and dropped the real
+    # one; agy then just greeted. Verified live.)
+    local prompt; prompt="$(cat "$promptfile")"
+    local args=(--dangerously-skip-permissions)
+    [ -n "$model" ] && args+=(--model "$model")
+    [ -n "$effort" ] && args+=(--effort "$effort")
+    [ -n "$sandbox" ] && args+=(--sandbox)
+    [ -n "$timeout" ] && args+=(--print-timeout "${timeout}s")
+    args+=(--print "$prompt")
+    local resp
+    if [ -n "$timeout" ]; then
+      resp="$( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" )" || rc=$?
+    else
+      resp="$( cd "$cd_dir" && agy "${args[@]}" )" || rc=$?
+    fi
+    if [ -n "$resp" ]; then [ -n "$out" ] && printf '%s\n' "$resp" > "$out"; printf '%s\n' "$resp"; fi
   fi
 
-  if [ -s "$last" ]; then
-    [ -n "$out" ] && cp "$last" "$out"
-    cat "$last"
-  fi
-  rm -f "$last"
-  echo "hmad-dispatch: codex exec rc=$rc" >&2
+  echo "hmad-dispatch: $agent exec rc=$rc" >&2
   return "$rc"
 }
 

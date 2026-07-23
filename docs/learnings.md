@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-24 · gotcha · [0.7] · `agy,antigravity,cli-args,live-verify,handoff:2026-07-24-skill-candidate-upgrades` — agy --print takes the NEXT token as its prompt: must be last, prompt adjacent ('agy <flags> --print "<prompt>"'). A --print followed by a flag ate that flag + dropped the real prompt (agy just greeted). Stub green; live caught it
 - 2026-07-24 · gotcha · [0.7] · `bash,stdin,background,codex-exec,live-verify,handoff:2026-07-24-skill-candidate-upgrades` — bash nul's a backgrounded command's stdin (job control off): '"$@" &' starved 'codex exec -' of its piped prompt. Fix: '"$@" <&0 &'. Stub test passed (no --timeout path); only the live codex run exposed it
 - 2026-07-24 · solution · [0.7] · `h-mad,ask-verb,dogfood,agy-tui,handoff:2026-07-24-skill-candidate-upgrades` — hmad-dispatch ask dogfooded live: send->wait->read->extract_verdict chain sound (exit 0). agy returned false-DRIFT inventing a nonexistent _cmd_wait idle arg; premise-check caught the bad finding
 - 2026-07-24 · solution · [0.7] · `backlog,verification,handoff:2026-07-24-skill-candidate-upgrades` — Reconcile a candidate/registry backlog by checking each row's premise against code, not its label: 3 skill-candidate rows described work already shipped (verified via git log -S / grep) before…
