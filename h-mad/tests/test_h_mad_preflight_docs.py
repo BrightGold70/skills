@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_MD = REPO_ROOT / "h-mad" / "SKILL.md"
 ORCH_MD = REPO_ROOT / "h-mad" / "references" / "orchestration-mode.md"
 SUBS_MD = REPO_ROOT / "h-mad" / "references" / "agent-substrate.md"
+CODEX_MD = REPO_ROOT / "h-mad" / "references" / "codex-implementer-prompt.md"
 
 
 def _section(text: str, start: str, end: str) -> str:
@@ -158,3 +159,67 @@ def test_skill_frontmatter_still_valid() -> None:
                   if ":" in line)
     assert fields.get("name", "").strip()
     assert fields.get("description", "").strip()
+
+
+def test_skill_documents_worktree_rm_guards() -> None:
+    """AC-9.1, AC-9.3: the guard and both reason tokens are documented."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    assert "worktree_has_uncommitted_work" in text
+    assert "worktree_has_unmerged_commits" in text
+    # The verb-behaviour table must say worktree-rm can refuse, not merely that
+    # it removes — a reader who only sees the happy path will not pass --force
+    # when they mean to discard, and will read a refusal as a bug.
+    assert "refuses" in text.lower()
+    assert "--force" in text
+
+
+def test_orchestration_mode_documents_task_id_on_both_paths() -> None:
+    """AC-9.2: the two dispatch paths are no longer one sequence."""
+    text = ORCH_MD.read_text(encoding="utf-8")
+    assert "worktree_task" in text, "the task-id marker must be documented"
+    # J14: the old prose ran worktree-create --prompt-file and task-create into a
+    # single semicolon-joined instruction. Assert the task-id is described as
+    # available from the --prompt-file path, which is what made await/gate-create
+    # unusable there.
+    assert "--prompt-file" in text
+    assert "gate-create" in text
+
+
+def test_codex_prompt_requires_a_named_concern() -> None:
+    """AC-8.1, AC-8.2: the obligation and its consequence are both stated."""
+    text = CODEX_MD.read_text(encoding="utf-8")
+    assert "DONE_WITH_CONCERNS" in text
+    lowered = text.lower()
+    assert "at least one concern" in lowered
+    assert "report `done`" in lowered or "report done" in lowered
+    # The consequence must be visible to the agent, not only to the orchestrator:
+    # an obligation with no stated penalty reads as advice.
+    assert "reject" in lowered
+
+
+def test_fanout_teardown_documents_the_base_override() -> None:
+    """The guard is correct but obstructive without `--base <feature-branch>`.
+
+    A module worktree branches from the FEATURE branch, while the default
+    comparison base resolves to origin/HEAD -> main. Every commit on the feature
+    is therefore "not in main", so teardown refuses for as long as the feature is
+    unmerged. Measured live during this feature: a freshly created module
+    worktree reported 7 commits ahead of main and 1 ahead of its real base.
+
+    A guard that always refuses trains the operator to reach for --force, which
+    is exactly the reflex J15 exists to prevent — so the override has to be
+    documented in both places an orchestrator would look.
+    """
+    for doc in (SKILL_MD, ORCH_MD):
+        text = doc.read_text(encoding="utf-8")
+        # Anchor on the LITERAL instruction form. Asserting only that "--base"
+        # and "feature branch" appear somewhere passes vacuously: both files
+        # already carry `--base <ref>` in a verb table and "feature branch" in
+        # unrelated prose, so that version of this test stayed green with the
+        # guidance deleted. Verified by mutation.
+        assert "--base <feature-branch>" in text, (
+            f"{doc.name} must tell the caller to pass the FEATURE branch to "
+            "worktree-rm on fanout teardown, not merely that --base exists"
+        )
+        # And the instruction must sit with the verb it governs.
+        assert "worktree-rm" in text
