@@ -469,4 +469,47 @@ protocol has two gaps that only running it could expose. Both unfixed.
 
 ---
 
+## Surfaced by the post-Wave-4 branch cleanup (2026-07-23)
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J17 | 🔴 | MONITORING | `worktree-rm` forwards the caller's selector raw to `orca worktree rm`, which accepts only a full `worktreeId` — the `<anything>::<path>` form the guard resolves and 8 tests assert is rejected live as `selector_not_found` |
+
+- 🔴 **J17 — `worktree-rm`'s guarded selector form is rejected by the real runtime.** Removing the
+  merged `auto-hmad-e2e-auto-run-1-…` worktree failed:
+
+  ```
+  hmad-dispatch worktree-rm "repo::/Users/kimhawk/orca/workspaces/skills/auto-hmad-e2e-…" --base main
+  → [H-MAD] worktree-rm failed selector=repo::… rc=1
+  ```
+
+  The **guards passed** — `_worktree_path` resolved the path and `_worktree_holds_work` cleared it
+  (no guard message was printed). The failure is one line later, at the `orca` call itself, and the
+  wrapper sends its stdout to `/dev/null`, so the actual cause never reaches the operator:
+
+  ```json
+  {"ok": false, "error": {"code": "selector_not_found", …}}
+  ```
+
+  `orca worktree rm --worktree "<repoId>::<path>"` succeeds (`removed: true`, and it deletes the
+  branch too). So the `::` *shape* is right, but the left side must be the real **repoId** —
+  `_worktree_path` accepts `*::*` and keeps only the right side, which is why any prefix satisfies
+  the guard while only one satisfies Orca.
+
+  **The suite cannot catch this: 8 `worktree-rm` tests pass `repo::<path>`, and 4 assert the exact
+  forwarded string `orca worktree rm --worktree repo::<path> --json`.** The stub accepts any argv,
+  so a green suite pins a command a real runtime refuses — the same shape as [[B5]] (`safe_child`
+  rejecting every absolute path while its tests passed). The tests are not merely silent here; they
+  actively encode the broken form as correct.
+
+  **Fix direction:** resolve the selector to a canonical `worktreeId` inside `_cmd_worktree_rm`
+  before forwarding (join `worktree ps` on `.path`/`.displayName`/`.branch` — `_worktree_path`
+  already does this lookup for the guard and discards the id), and stop discarding `orca`'s stdout
+  on failure so `selector_not_found` reaches stderr instead of a bare `rc=1`. Re-point the 8 tests
+  at the resolved form. Note the reason `--force` would NOT have helped: it skips the guards, not
+  the selector, so a forced run fails identically — an operator reaching for `--force` here (the
+  reflex [[J15]] exists to prevent) gets the same opaque `rc=1`. [[J15]] [[B5]]
+
+---
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
