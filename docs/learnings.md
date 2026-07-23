@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-24 · solution · [0.7] · `handoff,learn,ergonomics` — learn.py --trim word-boundary-trims a >200-char kernel in one call (marked …); the plain rejection also prints a paste-ready ≤200 suggestion. Never eyeball-retry the length — it overshoots.
 - 2026-07-24 · solution · [0.7] · `h-mad,hmad-dispatch,ask,dispatch` — hmad-dispatch ask = send + wait-idle + read --from-start in one call (the audit scrape dispatch). STDOUT is the reply buffer; send/wait chatter goes to stderr; pipe into h_mad_extract_verdict.py.
 - 2026-07-23 · gotcha · [0.7] · `review,h-mad,handoff:2026-07-23-monitoring-registry-drained` — Test a filed fix direction before adopting it. ASSEMBLE: PASS_OVERSIZE would have matched every grep 'ASSEMBLE: PASS' consumer, reproducing the defect it was meant to fix.
 - 2026-07-23 · gotcha · [0.9] · `git,workflow,handoff:2026-07-23-monitoring-registry-drained` — Commit before any history-rewriting git command. git reset --hard with uncommitted work destroyed an implementation mid-session; only a stray /tmp mutation-test backup saved it.
