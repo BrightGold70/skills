@@ -124,6 +124,32 @@ _receipt_write() {  # no args; writes verdict/fingerprint/ts
 
 _receipt_clear() { rm -f "$(_receipt_file)"; }
 
+# Validate the receipt. Prints a reason token on stdout for the caller to compose
+# into its stderr message; returns 0 only when the receipt exists, says PASS, is
+# within the TTL, and still matches resolution NOW.
+#
+# Note this compares RESOLVED VALUES, not liveness: _resolve_target consults the
+# env pin, then the pin file, then auto-detect, and never calls `orca terminal
+# list` when a pin exists. So an unreadable listing leaves resolution unchanged
+# and cannot spuriously invalidate a receipt -- the rc=2 "unknown" contract of
+# _orca_handle_live is honoured structurally, with no special case.
+_receipt_valid() {  # -> 0 valid; 1 + reason token on stdout
+  local rf ttl now v fp ts
+  rf="$(_receipt_file)"
+  [ -f "$rf" ] || { echo "preflight_not_run"; return 1; }
+  v="$(grep -E '^verdict=' "$rf" 2>/dev/null | head -n 1)"; v="${v#*=}"
+  [ "$v" = "PASS" ] || { echo "preflight_not_run"; return 1; }
+  ts="$(grep -E '^ts=' "$rf" 2>/dev/null | head -n 1)"; ts="${ts#*=}"
+  case "$ts" in ''|*[!0-9]*) echo "preflight_not_run"; return 1 ;; esac
+  ttl="${HMAD_PREFLIGHT_TTL_SEC:-3600}"
+  now="$(date +%s)"
+  [ "$(( now - ts ))" -le "$ttl" ] || { echo "preflight_expired"; return 1; }
+  # strip through the FIRST '=' only: the value itself contains '='
+  fp="$(grep -E '^fingerprint=' "$rf" 2>/dev/null | head -n 1)"; fp="${fp#*=}"
+  [ "$fp" = "$(_fingerprint)" ] || { echo "preflight_handles_rotated"; return 1; }
+  return 0
+}
+
 _pin_lookup() {  # $1 agent -> echo the pinned handle from the pin file, or nothing
   # H4: Codex/agy auto-detect by title/preview decays mid-run (the model-id
   # banner scrolls out of the Orca preview once the agent does work), so a long
@@ -825,6 +851,16 @@ _cmd_send() {
   fi
 
   _preflight_conflict_check || return 1
+
+  if [ -n "${HMAD_SKIP_PREFLIGHT:-}" ]; then
+    echo "hmad-dispatch: HMAD_SKIP_PREFLIGHT set — dispatching without a preflight receipt." >&2
+  else
+    local _reason
+    if ! _reason="$(_receipt_valid)"; then
+      echo "hmad-dispatch: $_reason — no valid preflight receipt for this dispatch; nothing was sent. Run 'hmad-dispatch env' and confirm 'PREFLIGHT: PASS', then retry." >&2
+      return 1
+    fi
+  fi
 
   local size
   size=$(wc -c < "$promptfile" | tr -d ' ')

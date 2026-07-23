@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -669,8 +670,8 @@ def test_send_cmux_uses_file_contents(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-PROMPT")
-    r = run(["send", "codex", str(pf)], substrate="cmux",
-            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="cmux",
+                       env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "cmux send --surface surface:5 HELLO-PROMPT" in text
@@ -681,8 +682,8 @@ def test_send_orca_uses_file_contents(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "prompt.txt"; pf.write_text("HELLO-ORCA")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "orca terminal send --terminal t-1 --text HELLO-ORCA --enter" in text
@@ -1638,8 +1639,8 @@ def test_send_inlines_a_small_prompt(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = tmp_path / "small.txt"; pf.write_text("SMALL-PROMPT")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert "SMALL-PROMPT" in text
@@ -1650,8 +1651,8 @@ def test_send_switches_to_indirection_for_a_large_prompt(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text, "must name the staged file"
@@ -1666,8 +1667,8 @@ def test_indirection_canonicalises_the_path(tmp_path):
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
     noncanonical = sub / ".." / "big.txt"   # valid, absolute, not canonical
 
-    r = run(["send", "codex", str(noncanonical)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(noncanonical)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf.resolve()) in text
@@ -1679,14 +1680,14 @@ def test_threshold_boundary_is_inclusive(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     at = tmp_path / "cap_at.txt"
     pf_at = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT, "at.txt")
-    run(["send", "codex", str(pf_at)], substrate="orca",
-        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=at)
+    _enforced_send(["send", "codex", str(pf_at)], substrate="orca",
+                   env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=at)
     assert "XXXXXXXXXXXX" in at.read_text()
 
     over = tmp_path / "cap_over.txt"
     pf_over = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "over.txt")
-    run(["send", "codex", str(pf_over)], substrate="orca",
-        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=over)
+    _enforced_send(["send", "codex", str(pf_over)], substrate="orca",
+                   env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=over)
     assert "XXXXXXXXXXXX" not in over.read_text()
 
 
@@ -1694,9 +1695,9 @@ def test_threshold_is_tunable(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, 100, "medium.txt")
-    r = run(["send", "codex", str(pf)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
-                 "HMAD_SEND_INLINE_MAX": "50"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+                            "HMAD_SEND_INLINE_MAX": "50"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text
@@ -1708,8 +1709,8 @@ def test_send_cmux_indirection_too(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
     pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
-    r = run(["send", "codex", str(pf)], substrate="cmux",
-            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(pf)], substrate="cmux",
+                       env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
     assert str(pf) in text
@@ -1752,10 +1753,10 @@ def test_send_allows_distinct_agent_resolutions(tmp_path):
     prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
     live = _preflight_listing("term_codex", "term_agy")
 
-    r = run(["send", "codex", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live,
-                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
-                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"}, capture=cap)
+    r = _enforced_send(["send", "codex", str(prompt)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live,
+                            "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                            "HMAD_ORCA_AGY_TERMINAL": "term_agy"}, capture=cap)
 
     assert r.returncode == 0
     assert "preflight_agent_conflict" not in r.stderr
@@ -2016,8 +2017,9 @@ def test_send_refuses_a_handle_the_listing_proves_is_gone(tmp_path):
          "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": "l1"},
     )
     r = run(["send", "agy", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
-                 "HMAD_STUB_ORCA_STDOUT": live}, capture=cap)
+        env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_dead",
+                 "HMAD_STUB_ORCA_STDOUT": live,
+                 "HMAD_SKIP_PREFLIGHT": "1"}, capture=cap)
     assert r.returncode == 1
     assert "terminal_handle_stale" in r.stderr
     assert "nothing was sent" in r.stderr
@@ -2031,9 +2033,9 @@ def test_send_still_works_when_the_listing_cannot_be_read(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
     prompt = tmp_path / "p.txt"; prompt.write_text("do the thing")
-    r = run(["send", "agy", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_x",
-                 "HMAD_STUB_ORCA_STDOUT": "not json at all"}, capture=cap)
+    r = _enforced_send(["send", "agy", str(prompt)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_x",
+                            "HMAD_STUB_ORCA_STDOUT": "not json at all"}, capture=cap)
     assert r.returncode == 0
     assert "terminal send" in cap.read_text()
 
@@ -2448,6 +2450,114 @@ def _receipt_env(b, pin_file, listing, *, receipt_file=None):
 
 def _receipt_values(receipt_file):
     return dict(line.split("=", 1) for line in receipt_file.read_text().splitlines())
+
+
+def _env_then_send(args, *, substrate, env, capture):
+    """Run the enforced preflight and dispatch using one receipt path."""
+    preflight = run(["env"], substrate=substrate, env=env)
+    sent = run(args, substrate=substrate, env=env, capture=capture)
+    return preflight, sent
+
+
+def _enforced_send(args, *, substrate, env, capture):
+    env = dict(env)
+    env.setdefault("HMAD_PREFLIGHT_RECEIPT_FILE", str(Path(capture).with_suffix(".receipt")))
+    preflight, sent = _env_then_send(args, substrate=substrate, env=env, capture=capture)
+    assert "PREFLIGHT: PASS" in preflight.stdout, preflight.stdout
+    return sent
+
+
+def test_send_without_receipt_refuses_before_delivery(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    receipt = tmp_path / "receipt"
+    r = run(["send", "codex", str(prompt)], substrate="orca", capture=cap,
+            env={"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+                 "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")})
+    assert r.returncode != 0
+    assert "preflight_not_run" in r.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text()
+
+
+def test_send_after_passing_env_delivers_on_enforced_path(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(tmp_path / "receipt"),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight, sent = _env_then_send(["send", "codex", str(prompt)],
+                                     substrate="orca", env=env, capture=cap)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    assert sent.returncode == 0
+    assert "terminal send --terminal term_codex" in cap.read_text()
+
+
+def test_send_bypass_is_explicit_and_enforced_when_empty(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("do the thing")
+    cap = tmp_path / "cap.txt"
+    base = {"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+            "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+            "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+            "HMAD_PREFLIGHT_RECEIPT_FILE": str(tmp_path / "missing.receipt")}
+    bypass = dict(base, HMAD_SKIP_PREFLIGHT="1")
+    allowed = run(["send", "codex", str(prompt)], substrate="orca", env=bypass, capture=cap)
+    assert allowed.returncode == 0
+    assert "HMAD_SKIP_PREFLIGHT" in allowed.stderr
+    cap.unlink()
+    enforced = run(["send", "codex", str(prompt)], substrate="orca",
+                    env=dict(base, HMAD_SKIP_PREFLIGHT=""), capture=cap)
+    assert enforced.returncode != 0
+    assert "preflight_not_run" in enforced.stderr
+    assert not cap.exists() or "terminal send" not in cap.read_text()
+
+
+def test_send_rejects_expired_and_rotated_receipts_with_distinct_reasons(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    receipt = tmp_path / "receipt"
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+           "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+           "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy")}
+    preflight = run(["env"], substrate="orca", env=env)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    values = _receipt_values(receipt)
+    values["ts"] = str(int(time.time()) - 10)
+    receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+    expired = run(["send", "codex", str(prompt)], substrate="orca",
+                  env=dict(env, HMAD_PREFLIGHT_TTL_SEC="1"), capture=tmp_path / "expired.cap")
+    assert "preflight_expired" in expired.stderr
+
+    values["ts"] = str(int(time.time()))
+    receipt.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+    rotated = run(["send", "codex", str(prompt)], substrate="orca",
+                  env=dict(env, HMAD_ORCA_CODEX_TERMINAL="term_rotated"),
+                  capture=tmp_path / "rotated.cap")
+    assert "preflight_handles_rotated" in rotated.stderr
+
+
+def test_receipt_for_unresolved_agent_is_invalid_after_pinning(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    receipt = tmp_path / "receipt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    unresolved = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+                  "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex"),
+                  "HMAD_ORCA_CODEX_TERMINAL": "term_codex"}
+    preflight = run(["env"], substrate="orca", env=unresolved)
+    assert "PREFLIGHT: PASS" in preflight.stdout
+    pinned = dict(unresolved, HMAD_ORCA_AGY_TERMINAL="term_agy")
+    refused = run(["send", "agy", str(prompt)], substrate="orca", env=pinned,
+                  capture=tmp_path / "cap.txt")
+    assert "preflight_handles_rotated" in refused.stderr
 
 
 def test_preflight_pass_writes_default_receipt_with_timestamp_and_fingerprint(tmp_path):
