@@ -42,6 +42,7 @@ Per-feature state under top-level key `orchestrator_state`. Pre-existing bkit fi
 | `halt_reason` | string \| null | `"<phase>:<sub>:<desc>"` when halted; null otherwise. |
 | `halt_ts` | ISO datetime \| null | When halt occurred. |
 | `last_marker` | string | Last `[H-MAD]` marker emitted. |
+| `substrate` | object \| null | **Optional.** Dispatch environment, written at Phase-5 start from `hmad-dispatch env`: `{"name":"orca","agents":{"codex":"term_…","agy":"term_…"}}`. Additive — records predating it stay valid, and `required` is unchanged. `h_mad_telemetry.py record` copies it onto the run row (J11). |
 
 ## Concurrency rule
 
