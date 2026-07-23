@@ -14,30 +14,17 @@ Prints: OK (exit 0)
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 
 from h_mad_audit_gate import classify, _acknowledged_from_text
-
-AUDIT_VERSION_RE = re.compile(r"\.audit\.v(\d+)\.md$")
+from h_mad_cycle_counts import latest_audit_path
 
 
 def _count_must_fix(path: Path) -> int:
     text = path.read_text()
     acknowledged = _acknowledged_from_text(text)
     return classify(text, acknowledged=acknowledged)["must_count"]
-
-
-def _latest_audit(features_dir: Path, feature: str, phase: str) -> Path | None:
-    pattern = f"{feature}.{phase}.audit.v*.md"
-    candidates = list(features_dir.glob(pattern))
-    if not candidates:
-        return None
-    def _ver(p: Path) -> int:
-        m = AUDIT_VERSION_RE.search(p.name)
-        return int(m.group(1)) if m else 0
-    return max(candidates, key=_ver)
 
 
 def check(repo_root: Path, feature: str) -> tuple[int, list[str]]:
@@ -53,13 +40,17 @@ def check(repo_root: Path, feature: str) -> tuple[int, list[str]]:
     if not design.is_file():
         issues.append(f"MISSING:{design}")
 
-    plan_audit = _latest_audit(plan_features, feature, "plan") if plan_features.is_dir() else None
+    plan_audit = latest_audit_path(
+        repo_root / "docs", feature, "plan", include_archive=False
+    )
     if plan_audit is None:
         issues.append(f"MISSING:{plan_features}/{feature}.plan.audit.v*.md")
     elif _count_must_fix(plan_audit) > 0:
         issues.append(f"DIRTY:{plan_audit}")
 
-    design_audit = _latest_audit(design_features, feature, "design") if design_features.is_dir() else None
+    design_audit = latest_audit_path(
+        repo_root / "docs", feature, "design", include_archive=False
+    )
     if design_audit is None:
         issues.append(f"MISSING:{design_features}/{feature}.design.audit.v*.md")
     elif _count_must_fix(design_audit) > 0:
