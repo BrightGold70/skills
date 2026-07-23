@@ -1181,9 +1181,22 @@ _cmd_read() {
 }
 
 _snapshot() {   # $1 substrate, $2 target
+  # J3: this took a 6-line TAIL, and _wait_stable returns idle as soon as two
+  # snapshots match -- so two identical *stale* tails read as proof of idleness.
+  # That is exactly what J3 observed: an unchanged boot screen across three polls
+  # while the pane was actually at a ready prompt, because the tail was rendering
+  # an overdrawn region of the frame. During the J13 probes a pane likewise sat
+  # unchanged at "Thought for 5s, 305 tokens" for minutes before producing
+  # output. A `wait` built on tails can therefore report idle mid-generation, and
+  # the orchestrator then reads a report that has not been written.
+  #
+  # A bigger tail is not the fix -- J3's was already 40 lines. Reading from the
+  # start of the buffer is, because it cannot be an overdrawn slice of one frame.
+  # The extra bytes cost nothing that matters at a 3s poll interval.
   case "$1" in
-    cmux) cmux read-screen --surface "$2" --lines 6 ;;
-    orca) orca terminal read --terminal "$2" --limit 6 ;;
+    # cmux has no cursor addressing; a deeper read is the best available there.
+    cmux) cmux read-screen --surface "$2" --lines "${HMAD_SNAPSHOT_LINES:-400}" ;;
+    orca) orca terminal read --terminal "$2" --cursor 0 --limit "${HMAD_SNAPSHOT_LINES:-4000}" ;;
   esac
 }
 

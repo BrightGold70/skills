@@ -346,7 +346,7 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
 
 It takes the **last** matching line, validates the value against the contract,
 and exits 2 printing nothing when the line is absent, empty, or off-contract.
-Treat exit 2 as "no verdict", never as a pass: re-read with a larger `--lines`,
+Treat exit 2 as "no verdict", never as a pass: re-read with `--from-start` (a larger tail does not escape an overdrawn frame region — J3),
 and if the agent genuinely produced nothing, `hmad-dispatch clear <agent>` and
 re-dispatch. Repeated silence is a halt (`step5e:no_verdict:<module>`), not a
 reason to proceed.
@@ -386,7 +386,11 @@ The codex and agy agents are **long-lived REPLs reused across every audit cycle,
 hmad-dispatch clear codex
 hmad-dispatch clear agy
 # verify a clean prompt (no leftover input, not mid-run):
-hmad-dispatch read <agent> --lines 6
+# --from-start, NOT a tail: a tail can render an overdrawn region of the frame
+# and show a stale boot screen for a pane that is actually at a ready prompt
+# (J3). Readiness drives a relaunch decision, so it must not be read from a
+# slice of one frame.
+hmad-dispatch read <agent> --from-start | tail -20
 ```
 If `/clear` is not honored or the pane is wedged (input box still shows queued text, or a 400/desync on agy), **restart the surface** instead: re-seed via the launch command (`agy --dangerously-skip-permissions` / the Codex CLI) per `AGENTS.md`, then re-confirm alive with `hmad-dispatch alive <agent>`. A restart is the hard reset; `/clear` is the cheap one. Never dispatch an audit/TDD prompt into a pane whose scrollback still shows the previous cycle's report — you will grep the wrong verdict.
 
@@ -703,7 +707,7 @@ assembling by hand because the script is unavailable:
      --feature <feature> --phase <phase> --cycle <N> \
      > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
    ```
-   The extractor takes the **last** complete `<AUDIT_SENTINEL>-BEGIN`/`-END` pair, so neither an older cycle nor a retry within this one can win. It exits 2 and writes nothing when the pair is missing or its body is empty — that is the "dispatched, went idle, produced nothing" case, and it must halt the cycle rather than be scored. On exit 2: re-read with a larger `--lines`, and if the report genuinely never arrived, `hmad-dispatch clear agy` and re-dispatch.
+   The extractor takes the **last** complete `<AUDIT_SENTINEL>-BEGIN`/`-END` pair, so neither an older cycle nor a retry within this one can win. It exits 2 and writes nothing when the pair is missing or its body is empty — that is the "dispatched, went idle, produced nothing" case, and it must halt the cycle rather than be scored. On exit 2: re-read with `--from-start` (a larger tail does not escape an overdrawn frame region — J3), and if the report genuinely never arrived, `hmad-dispatch clear agy` and re-dispatch.
 10. Design audits write to `docs/02-design/features/` instead; adjust the redirect above.
 11. Run the gate — the verdict unit counts bullets in BOTH `## Must-fix` AND `## Should-fix` (excluding the bare-`None` sentinel, a stray `- None`, and any `## Acknowledged-not-fixed` items in the same file or a sidecar `.audit.v<N+1>.md` passed via `--ack-file`):
     ```bash

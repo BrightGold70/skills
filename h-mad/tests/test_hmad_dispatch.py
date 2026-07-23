@@ -11,6 +11,9 @@ from pathlib import Path
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
+SKILL_MD = SKILL / "SKILL.md"
+RECOVERY_MD = SKILL / "references" / "failure-recovery.md"
+SKILL_MD_TEXT = SKILL_MD.read_text(encoding="utf-8")
 
 # J7: the pin file is the second leak channel into this harness. F13 stripped the
 # HMAD_ORCA_* env vars, but _pin_file() falls back to a CWD-RELATIVE
@@ -3380,3 +3383,62 @@ def test_receipt_follows_the_repo_root_too(tmp_path):
         "receipt did not land beside the repo-root pin file"
     )
     assert not (sub / ".h-mad").exists()
+
+
+# --- J3: a tail read is not evidence of pane state ----------------------------
+#
+# `read --lines 12..40` showed an unchanged boot screen across three polls while
+# the pane was actually at a ready prompt — the tail was rendering an overdrawn
+# region of the frame. `--from-start` showed the truth.
+#
+# The dangerous part is not the doc advice, it is the MACHINERY: `_snapshot` read
+# a 6-line tail and `_wait_stable` returns idle as soon as two of them match. Two
+# identical stale tails are exactly what J3 observed, so `wait` could report idle
+# for a pane still generating — and during the J13 probes a pane sat unchanged at
+# "Thought for 5s, 305 tokens" for minutes before producing output.
+#
+# A bigger tail is not the fix (J3's tail was already 40 lines). Reading from the
+# start of the buffer is.
+
+
+def test_wait_snapshots_the_full_buffer_not_a_tail(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["wait", "agy"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                 "HMAD_STUB_ORCA_STDOUT": "steady", "HMAD_WAIT_POLL_INTERVAL": "0"},
+            capture=cap)
+    assert r.returncode == 0
+    argv = cap.read_text()
+    assert "orca terminal read --terminal term_wait --cursor 0" in argv, (
+        "idle is decided from a tail; two identical stale tails read as idle"
+    )
+    assert "orca terminal read --terminal term_wait --limit 6" not in argv, (
+        "the 6-line tail snapshot must be gone, not merely supplemented"
+    )
+
+
+def test_skill_readiness_check_uses_a_full_buffer_read():
+    # Scoped to the context-hygiene block. A whole-file search passes on the
+    # unrelated J13 size guidance elsewhere in SKILL.md -- which it did, until
+    # this was tightened.
+    text = SKILL_MD_TEXT
+    start = text.index("**How to clear (per pane), then verify it took:**")
+    block = " ".join(text[start:start + 900].split())
+    assert "--from-start" in block, (
+        "verifying a pane took /clear from a 6-line tail is the J3 failure exactly"
+    )
+    assert "read <agent> --lines 6" not in block, (
+        "the tail readiness check must be replaced, not supplemented"
+    )
+
+
+def test_no_verdict_remedies_say_from_start_not_a_bigger_tail():
+    # "Re-read with a larger --lines" appeared as the remedy in four places. A
+    # larger tail does not escape an overdrawn frame region; cursor 0 does.
+    for path in (SKILL_MD, RECOVERY_MD):
+        text = " ".join(path.read_text(encoding="utf-8").split())
+        assert "re-read with a larger `--lines`" not in text, (
+            f"{path.name} still prescribes a bigger tail"
+        )
+        assert "--from-start" in text, f"{path.name} never names the full-buffer read"
