@@ -230,7 +230,9 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
-- **5d** — RED dispatch via `hmad-dispatch send` (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. Read each `STATUS:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict"); no extractable verdict after a re-read and re-dispatch → halt `step5d:no_verdict:<module>`. Verify all tests FAIL. Halt `step5d:red_not_all_failing` if any test passes without implementation.
+- **5d** — RED dispatch via `hmad-dispatch send` (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. **In the dispatch, state the expected failing/passing counts for the task and label any regression guards** — tests asserting behaviour that already works, which must pass from the first run. Read each `STATUS:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict"); no extractable verdict after a re-read and re-dispatch → halt `step5d:no_verdict:<module>`. Then verify the results **match the stated counts**; halt `step5d:red_not_all_failing` when an unlabelled test passes without implementation.
+
+  Not every RED task is all-new behaviour. A refactor-shaped task legitimately lands with most of its tests green, and a blanket "every test must FAIL" halts a correct RED — worse, the cheapest way for an implementer to satisfy it is to weaken an assertion or assert the current buggy value, manufacturing a failure that then "passes" in 5e without anything being fixed. Stating the counts up front makes the check discriminating in both directions: an unexpected pass still halts, and an expected one does not.
 - **5e** — GREEN dispatch via `hmad-dispatch send` (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. Read both verdicts with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict") — never by grepping the scrape for the halt value, which turns an agent's silence into a pass. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. If no verdict can be extracted after a re-read and re-dispatch → halt `step5e:no_verdict:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
@@ -338,6 +340,27 @@ Treat exit 2 as "no verdict", never as a pass: re-read with a larger `--lines`,
 and if the agent genuinely produced nothing, `hmad-dispatch clear <agent>` and
 re-dispatch. Repeated silence is a halt (`step5e:no_verdict:<module>`), not a
 reason to proceed.
+
+## Verifying a review finding before acting on it
+
+A finding from agy or a code reviewer arrives verdict-shaped — a premise, a consequence, and a
+prescription — and the prescription is the part you are tempted to apply. Before applying it,
+**check its stated premise against the source**. If the premise is wrong, the prescription is
+usually wrong in a specific and expensive way: it is aimed at a mechanism that is not there.
+
+Measured: in one session **2 of 5 findings were right about the symptom and wrong about the cause**.
+Applying either prescription verbatim would have introduced a defect while closing a real finding —
+the reviewer had seen something genuine and misattributed it, so the fix moved the bug rather than
+removing it.
+
+This is not a licence to dismiss findings. A finding whose premise fails to check is still
+evidence that *something* is wrong: the reviewer saw a real symptom. Re-derive the cause from the
+source, then fix that — and say in the response that the premise did not hold, so the next reviewer
+is not re-litigating a settled point.
+
+Cheap and mechanical: for each finding, open the file and line it names and confirm the code says
+what the finding says it says. Most premises check out in seconds, and the ones that do not are
+where the expensive mistakes live.
 
 ## Agent-pane context hygiene
 

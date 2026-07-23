@@ -208,7 +208,18 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     quiet, small = size_of(10)
     assert "~" not in quiet and "!" not in quiet, f"no warning expected at {small}B"
 
-    approaching, mid = size_of(1700)
+    # Filler count is calibrated to land mid-band, NOT arbitrary. It was 1700
+    # until Wave 4c added rules to invariants.base.md, which is inlined verbatim
+    # into every audit prompt -- so the same fixture moved 47.4 KB -> 52.0 KB and
+    # overshot. Recalibrated to 1500 rather than widening the band, because the
+    # band is the assertion.
+    #
+    # The drift is worth noticing beyond this test: every rule added to the base
+    # rubric spends headroom in EVERY audit prompt, against a 49 KB threshold that
+    # J13 records as having failed to reproduce three times (52,997 B / 53,058 B /
+    # 58,536 B all answered normally). Re-measuring that threshold is J13's job,
+    # not this test's -- but if it is real, the rubric has a size budget.
+    approaching, mid = size_of(1500)
     assert 44 * 1024 < mid <= 49 * 1024, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 

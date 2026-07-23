@@ -25,6 +25,8 @@ _BASE_RULE_HEADINGS = (
     "Marker discipline",
     "Mutation verification",
     "Incident replay",
+    "Test discrimination",
+    "Assumption verification",
 )
 
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -142,6 +144,33 @@ def test_base_rule_incident_replay_states_the_literal_instruction():
     )
     assert "Synthetic cases alone are a violation" in text, (
         "the rule must state what counts as a violation, or it is advice"
+    )
+
+
+def test_base_rule_test_discrimination_states_the_literal_instruction():
+    # Wave 4c: merges `mutation-test-every-guard` (recurrence 7 — the highest on
+    # the list) with `discriminating-regression-test` (recurrence 3). Two framings
+    # of one mechanism: a check that has never been observed failing has not been
+    # shown to check anything.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Test discrimination" in text
+    assert "observed failing against the unfixed code" in text, (
+        "the rule must require the test be SEEN to fail, not merely to exist"
+    )
+    assert "Zero failures is a finding, not a reassurance" in text, (
+        "the rule must name what a silent suite means, or it reads as optional"
+    )
+
+
+def test_base_rule_assumption_verification_states_the_literal_instruction():
+    # Wave 4c: `tracer-bullet-design-assumptions` (recurrence 4).
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Assumption verification" in text
+    assert "executed as a throwaway command before it is written into the design" in text, (
+        "the rule must require execution, not plausibility"
+    )
+    assert "cites the observed output" in text, (
+        "an unevidenced assumption must be identifiable in review"
     )
 
 

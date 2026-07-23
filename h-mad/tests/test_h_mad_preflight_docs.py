@@ -276,3 +276,65 @@ def test_skill_documents_stub_harness_probe():
     assert "delete the probe" in text, (
         "a probe that survives becomes an untested second harness"
     )
+
+
+def _codex_norm() -> str:
+    return " ".join(CODEX_MD.read_text(encoding="utf-8").split())
+
+
+def test_skill_documents_verify_review_premise_before_acting():
+    # Wave 4c: `verify-review-premise-before-acting` (recurrence 4). 2 of 5
+    # findings in one session were right in substance and wrong in direction —
+    # applying the prescription verbatim would have introduced the bug the
+    # finding was pointing at.
+    text = _skill_norm()
+    assert "## Verifying a review finding before acting on it" in text
+    assert "check its stated premise against the source" in text, (
+        "the rule must name the check, not merely counsel scepticism"
+    )
+    assert "right about the symptom and wrong about the cause" in text, (
+        "the note must name the failure mode a verdict-shaped finding hides"
+    )
+
+
+def test_codex_prompt_labels_guards_in_red_dispatch():
+    # Wave 4c: `label-guards-in-red-dispatch` (recurrence 3). On a refactor-shaped
+    # task, "every test must FAIL" makes the implementer manufacture failures.
+    text = _codex_norm()
+    assert "expected failing/passing counts" in text, (
+        "a RED dispatch must state the counts, or the implementer infers them"
+    )
+    assert "regression guards" in text, (
+        "tests that must pass from the start have to be labelled as such"
+    )
+    assert "do not manufacture a failure" in text, (
+        "the prompt must name the behaviour it is preventing"
+    )
+
+
+def test_skill_5d_states_counts_and_tolerates_labelled_guards():
+    # Wave 4c, the consumer half of `label-guards-in-red-dispatch`.
+    #
+    # codex-implementer-prompt.md tells the implementer "the dispatch states the
+    # expected failing/passing counts and labels regression guards". If SKILL.md
+    # does not instruct the orchestrator to DO that, the template promises
+    # something nothing provides -- a template/consumer disagreement, which
+    # invariants.base.md §"Single-source contract" makes a violation.
+    #
+    # The old rule "Verify all tests FAIL / halt red_not_all_failing" is also the
+    # precise instruction the candidate identifies as harmful: on a refactor-shaped
+    # task it halts a correct RED, and the cheapest way for an implementer to
+    # satisfy it is to weaken an assertion.
+    text = _skill_norm()
+    phase5 = _phase5_preflight()
+    norm5 = " ".join(phase5.split())
+    assert "state the expected failing/passing counts" in norm5, (
+        "5d must instruct the orchestrator to state the counts it will check against"
+    )
+    assert "label any regression guards" in norm5, (
+        "5d must instruct the orchestrator to label guards, or the implementer cannot tell"
+    )
+    assert "red_not_all_failing" in text, "the halt reason must still exist"
+    assert "match the stated counts" in norm5, (
+        "the halt must compare against the stated counts, not require every test to fail"
+    )

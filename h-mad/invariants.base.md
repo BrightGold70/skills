@@ -71,6 +71,20 @@
   reported `Sent 7293 bytes` into a dead pane. Where a command reports on its own behaviour, the
   check must read the *thing it was supposed to change*, from a separate call.
 
+## Test discrimination
+- A test or guard MUST be **observed failing against the unfixed code** before it is trusted.
+  For a regression test, revert the fix and re-run; for a guard, stub it to its permissive value
+  and re-run the suite. **Zero failures is a finding, not a reassurance** — it means the check is
+  unenforced, not that the code is safe. Keeping a check that has never been seen to fail is a
+  violation.
+- A check that cannot fail is decoration, and it is worse than no check because it reports
+  coverage that does not exist. Two guards shipped green this way and were caught only by
+  stubbing: one passed solely because an unrelated helper stripped the env var its subject read,
+  and a documentation test passed with the documented guidance deleted, because both of its
+  component words already appeared in nearby prose. Neither was visible to review or to a green run.
+- The mutation must itself be verified (§"Mutation verification"): a `.replace()` that matches
+  nothing exits 0 and reports the guard as enforced.
+
 ## Incident replay
 - A fix motivated by a specific observed incident MUST be **replayed against the real artifacts
   already on disk** that motivated it, not only against cases authored alongside the fix.
@@ -79,6 +93,20 @@
   construction. A detector validated on 14 handcrafted samples rejected the real historical label
   it was written to accept; the same replay then measured the true rate (7 of 13), which reclassified
   the defect from a one-off into the majority case. Replay is how a fix is told from a belief.
+
+## Assumption verification
+- Every **load-bearing assumption** in a plan or design — an API's accepted inputs, a command's
+  output shape, a boundary, a default — MUST be **executed as a throwaway command before it is
+  written into the design**, and the design **cites the observed output**. An assumption asserted
+  without evidence, where evidence was one command away, is a violation.
+- Design review cannot catch a wrong assumption: it reads as reasonable, and the implementation
+  and its tests are then both built from the same wrong model, so they agree with each other and
+  pass. Tracer-bulleting the assumptions of one feature confirmed a `--porcelain` boundary,
+  confirmed a base-ref chain, and found a truncation hole — all before any code existed. Separately,
+  a selector grammar assumed from a wrapper's own code was wrong in a way that had already let a
+  destructive verb run unguarded.
+- The evidence belongs in the document, not only in the author's terminal. A cited output is
+  checkable by a reviewer; "I verified this" is not.
 
 ---
 
