@@ -201,24 +201,27 @@ done-when was met by Wave 3. J8 is now fixed at the source, so a feature created
 `--started-ts` reports a real elapsed rather than ~56 years — the caveat in the previous version of
 this line no longer applies.
 
-## Wave 5 · Blocked upstream — watch only
+## Wave 5 · ~~Blocked upstream~~ — **moot; closed by J16 (2026-07-23)**
 
-**J16 may make this wave unnecessary — check before waiting.** `orca worktree ps` returns
-`agents[].agentType` keyed by a `paneKey` of `<tabId>:<leafId>`, and `terminal list` returns
-`.tabId`/`.leafId`. Joining them yields exact, title-independent agent identity. Found live when
-two panes both reported `title: "Codex - skills repo"` with empty previews and reset buffers —
-the precise ambiguity H5 documents, which no existing heuristic could resolve. See
-`docs/skill-monitoring.md` §J16. Attempt the join before continuing to wait, and report upstream.
+**The join shipped and this wave no longer has content.** `_orca_find` now resolves identity in
+Pass 0 by joining `orca worktree ps`'s `agents[].agentType` (keyed by `paneKey` = `<tabId>:<leafId>`)
+to `terminal list`'s `.tabId`/`.leafId`. Verified live on the exact listing that motivated the wave:
+with pins bypassed, both agents previously resolved to **0 candidates** and now resolve correctly —
+including a pane whose `.title` reads `"Codex - skills repo"` while actually running Antigravity.
+See `docs/skill-monitoring.md` §J16.
 
 **[stablyai/orca#9870](https://github.com/stablyai/orca/issues/9870)** — per-terminal identity.
-Orca exposes no field naming the running program: Codex's `.title` is its cwd basename, its
-preview banner decays once it works, and `terminal rename` returns `{"ok":true}` while `.title`
-is unchanged. Mitigations shipped and durable — `hmad-dispatch launch <agent>` captures the
-handle at t=0 from the create response; `pin`/`pin-agents` fail loud for an operator-launched
-pane. When #9870 lands, delete the heuristics in `_orca_find`
-(`h-mad/scripts/hmad-dispatch.sh:131-275`) and resolve on the real field.
+The premise ("Orca exposes no field naming the running program") is true only of `terminal list`;
+`worktree ps` has carried the field all along. Still worth reporting upstream, but as a
+**documentation/ergonomics** issue — surface `agentType` on `terminal list` so the join isn't
+needed — not a blocker. Nothing in this repo waits on it.
 
-Nothing else waits on this. Do not sequence work behind it.
+The pre-existing mitigations remain the durable path and are unchanged: `hmad-dispatch launch
+<agent>` captures the handle at t=0 from the create response, and `pin`/`pin-agents` fail loud for
+an operator-launched pane. Owning the launch still beats resolving after the fact; Pass 0 is what
+makes an *un-owned* pane recoverable instead of UNRESOLVED.
+
+Do not sequence work behind #9870.
 
 ---
 
@@ -244,4 +247,4 @@ Nothing else waits on this. Do not sequence work behind it.
 | 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
 | 4a ✅ `ab3657e` | J15/J14/J8/J10 — the instrument | defects | done; fanout is now safe |
 | 4b | candidates batch via fanout | candidates | pass `--base <feature-branch>` on teardown |
-| 5 | watch #9870 | H4/H5 residual | upstream |
+| 5 | ~~watch #9870~~ — **moot**, J16 paneKey join shipped | H5 residual, J16 | done; #9870 downgraded to ergonomics |
