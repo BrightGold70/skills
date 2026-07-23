@@ -2173,3 +2173,184 @@ def test_production_pin_file_resolution_literal_unchanged():
     """AC-6.5: production still contains the cwd-relative pin-file fallback."""
     script = WRAPPER.read_text()
     assert "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}" in script
+
+
+# --- preflight verdict: consumable form of the STALE/CONFLICT lines ---------
+#
+# The human-readable agent diagnostics remain useful, but PREFLIGHT: is the
+# single machine-consumable verdict that follows them and the orchestration
+# status line.
+
+
+def _preflight_listing(*handles):
+    return _orca_terms_full(*[
+        {"handle": handle, "title": "worker", "preview": "",
+         "worktreePath": "/repo/A", "tabId": "tab-1", "leafId": f"leaf-{handle}"}
+        for handle in handles
+    ])
+
+
+def test_preflight_passes_when_pins_are_live_and_distinct(tmp_path):
+    """AC-1.1: a healthy session emits PREFLIGHT: PASS."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout.splitlines()
+
+
+def test_preflight_reports_one_stale_codex_pin(tmp_path):
+    """AC-1.2a: a pinned handle absent from the listing reports stale=codex."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "stale=codex" in line
+
+
+def test_preflight_reports_both_stale_pins(tmp_path):
+    """AC-1.2b: both pinned handles absent from the listing report stale=codex,agy."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_other"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_dead_agy"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert "stale=codex,agy" in line
+
+
+def test_preflight_reports_handle_conflict(tmp_path):
+    """AC-1.3: two agents pinned to one live handle report its conflict."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_shared"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_shared"})
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert "conflict=term_shared" in line
+
+
+def test_preflight_combines_stale_and_conflict_in_one_verdict(tmp_path):
+    """AC-1.4: stale and conflict findings share one PREFLIGHT: FAIL line."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing(),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_dead"})
+    lines = [line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:")]
+    assert len(lines) == 1
+    assert lines[0].startswith("PREFLIGHT: FAIL")
+    assert "stale=" in lines[0]
+    assert "conflict=" in lines[0]
+
+
+def test_preflight_is_last_after_orchestration_status(tmp_path):
+    """AC-1.5: PREFLIGHT: is the last non-empty stdout line after orchestration:."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    lines = [line for line in r.stdout.splitlines() if line.strip()]
+    assert lines[-1].startswith("PREFLIGHT:")
+    assert any(line.startswith("orchestration:") for line in lines[:-1])
+
+
+def test_preflight_emits_exactly_one_verdict_line(tmp_path):
+    """AC-1.6: each env invocation emits exactly one PREFLIGHT: line."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert sum(line.startswith("PREFLIGHT:") for line in r.stdout.splitlines()) == 1
+
+
+def test_preflight_pass_keeps_zero_exit_status(tmp_path):
+    """AC-2.1: PASS is a verdict and exits successfully."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_codex", "term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout
+    assert r.returncode == 0
+
+
+def test_preflight_fail_keeps_zero_exit_status(tmp_path):
+    """AC-2.2: FAIL is a verdict and still exits successfully."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: FAIL" in r.stdout
+    assert r.returncode == 0
+
+
+def test_no_substrate_has_no_preflight_verdict(tmp_path):
+    """AC-2.3 guard: operational substrate failure remains non-zero and unadorned."""
+    b = _bindir(tmp_path, [])
+    r = run(["env"], env={"_BINDIR": b})
+    assert r.returncode != 0
+    assert "PREFLIGHT:" not in r.stdout
+
+
+def test_preflight_source_documents_nonzero_and_posttool_failure_contract():
+    """AC-2.4: the verdict source documents no non-zero exit and PostToolUseFailure."""
+    lines = WRAPPER.read_text().splitlines()
+    indices = [i for i, line in enumerate(lines) if 'echo "PREFLIGHT:' in line]
+    assert len(indices) == 1
+    window = lines[max(0, indices[0] - 15):indices[0]]
+    text = "\n".join(window)
+    assert "non-zero" in text
+    assert "PostToolUseFailure" in text
+
+
+def test_preflight_passes_when_both_agents_are_unresolved(tmp_path):
+    """AC-3.1: unresolved agents are ordinary and do not fail preflight."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "agy -> UNRESOLVED" in r.stdout
+    assert "PREFLIGHT: PASS" in r.stdout
+
+
+def test_preflight_keeps_unresolved_agents_visible_in_env_output(tmp_path):
+    """AC-3.2 guard: unresolved agent diagnostics continue to be printed."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "agy -> UNRESOLVED" in r.stdout
+
+
+def test_preflight_fail_never_reports_unresolved_field(tmp_path):
+    """AC-3.3 guard: a FAIL verdict has no unresolved= failure category."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy"),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_dead",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    fail_lines = [ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT: FAIL")]
+    # Assert the FAIL line EXISTS before asserting what it lacks. The loop-only
+    # form passes vacuously when no verdict is emitted at all, so it would keep
+    # passing if the implementation ever stopped emitting FAIL — the same shape
+    # as the AC-6.1 weak assertion caught by the 5d coverage review.
+    assert len(fail_lines) == 1, r.stdout
+    assert "unresolved=" not in fail_lines[0]
+
+
+def test_preflight_passes_when_terminal_listing_is_unreadable(tmp_path):
+    """AC-edge: unknown liveness from an unreadable listing does not fail."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": "not json at all",
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    assert "PREFLIGHT: PASS" in r.stdout

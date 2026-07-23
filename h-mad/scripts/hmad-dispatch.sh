@@ -277,7 +277,7 @@ _cmd_env() {
     return 1
   fi
   echo "substrate: $sub"
-  local a t stale="" seen_codex="" seen_agy=""
+  local a t stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
   for a in codex agy; do
     if t="$(_resolve_target "$a" 2>/dev/null)"; then
       case "$a" in codex) seen_codex="$t" ;; agy) seen_agy="$t" ;; esac
@@ -301,9 +301,23 @@ _cmd_env() {
   # produces (one pane whose tab name matches one agent while it runs the other).
   # Free to detect, and it catches inheritance cases no single-agent check can.
   if [ -n "$seen_codex" ] && [ "$seen_codex" = "$seen_agy" ]; then
+    conflict_handle="$seen_codex"
     echo "CONFLICT: codex and agy both resolve to $seen_codex — at least one is wrong; pin them explicitly"
   fi
   if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
+  # PREFLIGHT verdict — the machine-consumable form of the STALE/CONFLICT lines above.
+  # A FAIL is something an orchestrator must ACT on; an agent that is merely
+  # UNRESOLVED is not a failure, it is an ordinary un-set-up session.
+  #
+  # This MUST NOT become a non-zero exit. A non-zero exit registers as a Claude Code
+  # PostToolUseFailure and leaks into coexisting plugins' error handling, which is why
+  # invariants.base.md §"Audit-gate signal discipline" reserves non-zero for genuine
+  # operational errors only (here: the no-substrate early return above). GATE: and
+  # ASSEMBLE: follow the same rule. Strengthen this signal by mandating a READ of the
+  # token, never by changing $?.
+  [ -z "$stale" ] || { verdict="FAIL"; fields=" stale=$(printf '%s' "$stale" | tr ' ' ',')"; }
+  [ -z "$conflict_handle" ] || { verdict="FAIL"; fields="$fields conflict=$conflict_handle"; }
+  echo "PREFLIGHT: ${verdict}${fields}"
   return 0
 }
 
