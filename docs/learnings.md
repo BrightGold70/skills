@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-23 · gotcha · [0.9] · `h-mad,orca,agy,tui,measurement,j13` — Tail-grepping a TUI pane for a sentinel reports SILENT for replies that arrived: redraws split tokens across frames. Read --from-start and extract on the sentinel pair.
 - 2026-07-23 · gotcha · [0.9] · `h-mad,orca,worktree-rm,destructive-verbs,guards,j17` — A guard inside `if resolve; then...fi` is no guard when resolve fails: for a destructive verb 'cannot check' must mean refuse. J17: orca selectors didn't resolve, so worktree-rm deleted unguarded.
 - 2026-07-23 · gotcha · [0.7] · `orca,cli,debugging,handoff:2026-07-23-wave3-wave4a-shipped` — Never 2>/dev/null an Orca CLI probe: orca terminal read takes --limit not --lines, and the suppressed invalid_argument envelope read as an empty pane — i.e. 'the agent is gone'.
 - 2026-07-23 · solution · [0.7] · `orca,h-mad,agent-identity,orca-9870,handoff:2026-07-23-wave3-wave4a-shipped` — Orca agent identity: join worktree ps agents[].paneKey (<tabId>:<leafId>) to terminal list tabId/leafId. Title/preview are unreliable; agentType is 'antigravity' not 'agy'.
