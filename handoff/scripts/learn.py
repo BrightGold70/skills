@@ -52,6 +52,13 @@ CATEGORIES = ("gotcha", "solution", "pattern")
 CONFIDENCES = (0.3, 0.5, 0.7, 0.9)
 DEFAULT_CONFIDENCE = 0.7
 
+# Kernel length cap. Deliberately tight — docs/learnings.md is grepped one-liners
+# — but 200 rejected drafts that were already tightened to their payoff (observed
+# 271->216->198 and 243->216->207, the trailing figure being the fit-and-still-
+# meaningful form). 240 accepts that band in one shot while still rejecting bloated
+# first drafts (260+), so "tighten it" survives without the eyeball-retry loop.
+MAX_KERNEL = 240
+
 HEADER = """# Learnings — Durable Cross-Session Knowledge
 
 Project-local kernel of gotchas, solutions, and patterns worth surviving
@@ -137,13 +144,13 @@ class LearningLine:
         return None
 
 
-def _trim_to(text: str, limit: int = 200) -> str:
+def _trim_to(text: str, limit: int = MAX_KERNEL) -> str:
     """Trim `text` to <= `limit` chars at a word boundary, marking the cut with '…'.
 
     Returns text unchanged when already within the limit. The body is cut to
     limit-1 (leaving room for the one-char ellipsis) then back to the last space,
     so the result is a clean prefix of the input plus a visible truncation mark.
-    Exists so hitting the 200-char cap costs ONE step: --trim applies this and
+    Exists so hitting the MAX_KERNEL cap costs ONE step: --trim applies this and
     stores; a plain rejection prints its result as a paste-ready suggestion.
     """
     if len(text) <= limit:
@@ -157,14 +164,14 @@ def _trim_to(text: str, limit: int = 200) -> str:
 
 def cmd_add(args: argparse.Namespace) -> int:
     pattern = args.pattern.strip()
-    if len(pattern) > 200:
-        suggestion = _trim_to(pattern, 200)
+    if len(pattern) > MAX_KERNEL:
+        suggestion = _trim_to(pattern, MAX_KERNEL)
         if getattr(args, "trim", False):
             print(f"NOTE: kernel was {len(pattern)} chars; trimmed to "
                   f"{len(suggestion)} at a word boundary.", file=sys.stderr)
             pattern = suggestion
         else:
-            print(f"ERROR: pattern exceeds 200 chars ({len(pattern)}). "
+            print(f"ERROR: pattern exceeds {MAX_KERNEL} chars ({len(pattern)}). "
                   f"Re-run with --trim to auto-trim at a word boundary, or use "
                   f"this {len(suggestion)}-char form:", file=sys.stderr)
             print(f'  "{suggestion}"', file=sys.stderr)
@@ -246,10 +253,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_add = sub.add_parser("add", help="record a new learning")
-    p_add.add_argument("pattern", help="≤200-char reusable finding")
+    p_add.add_argument("pattern", help=f"≤{MAX_KERNEL}-char reusable finding")
     p_add.add_argument(
         "--trim", action="store_true",
-        help="if the kernel exceeds 200 chars, auto-trim at a word boundary "
+        help=f"if the kernel exceeds {MAX_KERNEL} chars, auto-trim at a word boundary "
              "(marked with …) instead of rejecting — one step, no retry loop"
     )
     p_add.add_argument(

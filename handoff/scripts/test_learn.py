@@ -1,11 +1,13 @@
-"""learn.py: hitting the 200-char cap must cost ONE step, not a guess-loop.
+"""learn.py: hitting the length cap must cost ONE step, not a guess-loop.
 
 The cap is deliberate (docs/learnings.md is grepped one-liners), but rejecting a
 long kernel with only a char count forces the caller to trim by eyeball and
 re-submit — observed overshooting 243 -> 216 -> 207 before landing, three wasted
 round-trips for one learning. The fix makes an over-length kernel recoverable in
 one step: `--trim` word-boundary-trims and stores, and the plain rejection prints
-a ready-to-paste <=200 suggestion so even a manual retry is deterministic.
+a ready-to-paste <=MAX_KERNEL suggestion so even a manual retry is deterministic.
+Assertions reference learn.MAX_KERNEL (raised 200 -> 240) so a future bump can't
+silently strand them.
 """
 import sys
 import types
@@ -64,11 +66,11 @@ def test_over_limit_without_trim_rejects_with_a_paste_ready_suggestion(capsys):
     rc = learn.cmd_add(_args(long))
     assert rc == 1
     err = capsys.readouterr().err
-    assert "exceeds 200" in err
+    assert f"exceeds {learn.MAX_KERNEL}" in err
     assert "--trim" in err, "the error must name the one-shot escape"
-    # the suggestion it prints must itself be <=200, or pasting it fails too
+    # the suggestion it prints must itself be within the cap, or pasting it fails too
     suggestion = err.split('"')[1] if '"' in err else ""
-    assert 0 < len(suggestion) <= 200, f"suggestion is {len(suggestion)} chars"
+    assert 0 < len(suggestion) <= learn.MAX_KERNEL, f"suggestion is {len(suggestion)} chars"
 
 
 def test_over_limit_with_trim_saves_a_within_limit_line(_isolated):
@@ -77,9 +79,9 @@ def test_over_limit_with_trim_saves_a_within_limit_line(_isolated):
     assert rc == 0
     saved = _isolated.read_text()
     entry = next(l for l in saved.splitlines() if l.startswith("- "))
-    # the kernel text after the em-dash is <=200
+    # the kernel text after the em-dash is within the cap
     kernel = entry.split("—", 1)[1].strip() if "—" in entry else entry
-    assert len(kernel) <= 200
+    assert len(kernel) <= learn.MAX_KERNEL
     assert "…" in entry
 
 

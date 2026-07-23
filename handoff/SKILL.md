@@ -151,7 +151,7 @@ Capture a single non-obvious finding, pattern, or gotcha so it survives future `
 
 From the user's description (or the conversation context if they invoked LEARN without a message), extract:
 
-- The **pattern** — a ≤200-character statement of the reusable finding. It should read like a fact, not a story ("qwen3-embedding NaN's on long inputs — substitute random unit vector, not zero vector; L2-norm poisons downstream embeddings").
+- The **pattern** — a ≤240-character statement of the reusable finding. It should read like a fact, not a story ("qwen3-embedding NaN's on long inputs — substitute random unit vector, not zero vector; L2-norm poisons downstream embeddings"). Shorter is still better — the cap is a ceiling, not a target.
 - The **category**: `gotcha` (failure pattern with diagnostic value) / `solution` (working fix that codifies a pattern) / `pattern` (architectural shape worth remembering).
 - **Tags**: comma-separated lowercase. Include `handoff:<date>-<slug>` if a handoff was written this session; `session:<date>` otherwise. Add domain tags to make future grep searches find it.
 
@@ -174,12 +174,12 @@ If the user gave enough detail to fill all three, skip to Step 3. If not, ask on
 ```bash
 # Capture
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
-  "<≤200-char kernel>" \
+  "<≤240-char kernel>" \
   --category gotcha|solution|pattern \
   --confidence 0.3|0.5|0.7|0.9 \
   --tags "domain1,domain2,handoff:2026-04-30-foo"
-# Over 200 chars? Add --trim to word-boundary-trim in one call (marked …), OR
-# shorten to the ≤200 suggestion the plain rejection prints. Don't retry by
+# Over 240 chars? Add --trim to word-boundary-trim in one call (marked …), OR
+# shorten to the ≤240 suggestion the plain rejection prints. Don't retry by
 # eyeball — that overshoots. Prefer rewriting tighter when the kernel's punchline
 # is at the END (trim cuts the tail); use --trim when the tail is expendable.
 
@@ -208,7 +208,7 @@ Then stop — this is a single-shot operation, not a gateway to more work.
 
 - Don't write learnings inline into the handoff doc (that's WRITE mode's job with the "Persist durable learnings" step — LEARN mode writes *only* to `docs/learnings.md`).
 - Don't add more than one learning per LEARN invocation — if the user has several, tell them and invoke LEARN once per learning.
-- Don't pad the kernel past 200 characters to sound thorough — shorter is better.
+- Don't pad the kernel toward the 240-character cap to sound thorough — shorter is better.
 
 ---
 
@@ -410,12 +410,12 @@ For each qualifying learning:
 
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/learn.py" add \
-  "<≤200-char kernel>" \
+  "<≤240-char kernel>" \
   --category gotcha|solution|pattern \
   --confidence 0.7 \
   --tags "domain1,domain2,handoff:YYYY-MM-DD-<slug>"
-# Over 200 chars: add --trim (word-boundary trim in one call), or paste the
-# ≤200 suggestion the rejection prints — never eyeball-retry, it overshoots.
+# Over 240 chars: add --trim (word-boundary trim in one call), or paste the
+# ≤240 suggestion the rejection prints — never eyeball-retry, it overshoots.
 ```
 
 Pick confidence based on the evidence: `0.3` for single-session observations not yet
