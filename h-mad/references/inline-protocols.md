@@ -385,7 +385,18 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    - v1.0: Initial gap analysis draft.
    ```
 
-6. Save to `docs/03-analysis/<feature>.analysis.md`.
+6. Save the analysis to **both** paths:
+   - `docs/03-analysis/<feature>.analysis.v1.md` — the per-cycle artifact. This is the first
+     measurement; Phase 6b adds `v2`, `v3`, … one per iterate cycle.
+   - `docs/03-analysis/<feature>.analysis.md` — the same content, unversioned. This path must
+     always hold the **latest** cycle's content, because `h_mad_phase7_preconditions.py` reads it
+     to parse the match rate and takes the *first* rate it finds in the file. A stale copy here
+     gates Phase 7 on an old measurement.
+
+   **Why the per-cycle files matter.** `iterate_cycles` in the Phase 7 telemetry row is derived by
+   `h_mad_cycle_counts.py` as `max(N) - 1` over these `analysis.v<N>.md` files — there is no
+   counter. Overwriting one file instead of adding the next `v<N>` silently reports a multi-cycle
+   Phase 6 as zero iterate cycles, and erases the record of what each cycle measured.
 7. Parse match rate. If ≥90% AND tests 100%: advance. Else: Phase 6b iterate —
    **unless the shortfall is `design-vs-spec`**, which 6b cannot close. 6b is a
    mechanical fix loop; it cannot decide which of two documents is right, and
@@ -416,7 +427,10 @@ the FR-level match rate, and the AC-level count for calibration.
    - Implement the missing behavior
    - Run `pytest <test_path> -v` — confirm tests pass
    - Do NOT weaken existing tests or delete assertions to force green
-3. Re-run full gap analysis (Phase 6 steps 1–7).
+3. Re-run the full gap analysis (Phase 6 steps 1–7). Write it to the **next unused v<N>**,
+   `docs/03-analysis/<feature>.analysis.v<N>.md` — **never overwrite** a previous cycle's file —
+   and refresh the unversioned `docs/03-analysis/<feature>.analysis.md` with the same content so
+   it continues to hold the latest cycle. See Phase 6 step 6 for what depends on these files.
 4. If ≥90% AND tests 100%: done — advance to Phase 7.
 5. Else: repeat. Cap at 5 cycles total → halt `step6:iterate_max_cycles`.
 

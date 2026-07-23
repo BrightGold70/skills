@@ -17,7 +17,7 @@ Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`
 | F5 | 🟡 | FIXED | scrollback < report — added `read --cursor N` / `--from-start` full-buffer read |
 | F6 | 🟡 | FIXED | agy homebrew self-upgrade — documented version/trust preflight |
 | F7 | 🟢 | FIXED | default substrate was cmux when both present → flipped to orca (`9cdd455`) |
-| F8 | 🟡 | FIXED | jsonschema missing — actionable remedy message (interpreter/venv/pip) in `h_mad_state_validate.py` |
+| F8 | 🟡 | **RE-OPENED** | jsonschema missing — remedy *message* shipped, dependency gap unchanged; every run still needs a manual interpreter (see J4) |
 | F9 | 🟡 | FIXED | Codex Orca title = worktree name — pin `HMAD_ORCA_CODEX_TERMINAL` (documented in agent-substrate.md identity) |
 | F10 | 🟡 | FIXED | `~/.claude/skills/handoff` was a real dir → symlinked to repo 2026-07-22 |
 | F11 | 🔴 | FIXED | verbs swallow `ok:false` — shared `_orca_json` guard (`.ok != false`) on all extract verbs |
@@ -131,5 +131,126 @@ Investigating why a **manual tab rename to "Codex - skills repo"** (set at sessi
   - **Mitigation shipped**: `hmad-dispatch pin <codex|agy> <handle>` records a handle in the session pin file in one command (+ `pin-agents` fail-loud, H4). The operator captures Codex's handle from `orca terminal list` (ideally at launch, before decay) and pins it; resolution then reads it deterministically. This is the durable path today.
   - **Feature request (Orca-side; not fixable in this repo)**: make Codex reliably auto-identifiable — EITHER surface the tab/custom title (what `terminal rename` sets) in `terminal list --json`, OR add a field naming the running command/process per terminal. Either would let `_orca_find` identify Codex without a manual pin. Until then, `pin`/`pin-agents` + explicit handle is the contract. **Filed at `stablyai/orca`** (2026-07-22): https://github.com/stablyai/orca/issues/9870 — source draft: `docs/orca-feature-request-terminal-identity.md` (repro + both API options).
   - **Launch-owned path — SHIPPED** (`608a7da`+): `hmad-dispatch launch <codex|agy>` runs `orca terminal create --command … --json` and captures `.result.terminal.handle` from the **create response**, pinning it at spawn — identity at t=0, never title/preview. Live-verified end-to-end (create → capture → pin → `resolve` reads it). This is the zero-manual durable fix when h-mad owns the launch; reuse of an operator-launched pane still uses `pin`/`pin-agents`. The Orca feature request (below) remains the fix for the auto-detect-an-existing-pane case.
+
+## Surfaced by the cycle-telemetry-fidelity `/h-mad` run (2026-07-23)
+
+Found by **using** the skill on a real feature (Waves 1 of the h-mad remediation sequence, run in
+`~/orca/skills` from a coordinator session whose cwd was a *different* repo), not by reviewing it.
+All are unfixed. One candidate finding was investigated and **disproven** — recorded below so it
+is not re-filed.
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J1 | 🔴 | MONITORING | `launch <agent>` pins the create-response handle, which is NOT the handle the pane ends up with — reproduced 2× |
+| J2 | 🟡 | MONITORING | pin file is cwd-relative, so a cross-repo run silently reads another project's pins and reports UNRESOLVED |
+| J3 | 🟡 | MONITORING | `read --lines N` on a TUI can render a minutes-stale frame; only `--from-start` was truthful |
+| J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
+| J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
+| J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
+| J7 | 🔴 | MONITORING | F13 residual: the pin **file** leaks into `test_hmad_dispatch.py` — 17 tests fail whenever agents are pinned, which Phase 5 preflight *requires* |
+| J8 | 🟡 | MONITORING | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`), overflowing the summary column |
+| J9 | 🟢 | MONITORING | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
+
+- 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
+  --worktree path:…/skills` read `term_01f69e2d…` from the `orca terminal create` response and
+  tried to pin it; the pane that materialized was `term_56c103c5…`. The pin was **correctly**
+  refused (`no such terminal in 'orca terminal list'`) — the 912b93a liveness check caught a
+  genuinely wrong handle, not a race. Reproduced independently a second time the same session via
+  a direct `orca terminal create`: response said `term_cb30d7a7…`, actual pane was
+  `term_e46dc00d…`. **Consequence:** H5's "launch owns the spawn, so identity is captured at t=0,
+  never title/preview" does not hold — the create-response handle is not the pane's handle, so
+  `launch` currently cannot pin at all and always fails loud. The only working identification was
+  content-verification against `terminal list` (`Welcome to the Antigravity CLI`), which is
+  exactly what H5 set out to eliminate. **Fix direction:** after `create`, resolve the handle from
+  `terminal list` (by `worktreePath` + recency, or by matching the created tab/leaf id) rather than
+  trusting `.result.terminal.handle`; or determine why the two differ and whether one is a
+  pre-adoption placeholder. [[H5]] [[F9]]
+- 🟡 **J2 — the session pin file is cwd-relative.** `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`
+  resolves against the *current directory*, so driving a `/h-mad` run in repo A from a coordinator
+  session sitting in repo B reads B's pin file. Observed: `hmad-dispatch read agy` from the wrong
+  cwd reported `orca terminal for 'agy' resolved to 0 candidates in worktree
+  /Users/kimhawk/orca/HemaSuite; pin HMAD_ORCA_AGY_TERMINAL` — two wrong assumptions compounding,
+  since H1's coordinator-worktree scoping also anchors on the *coordinator's* worktree, not the
+  target repo's. Cross-repo runs are a normal mode (this whole feature was one). **Fix direction:**
+  resolve the pin file against the project root the run is operating on, and/or make `env` print
+  which pin file it read. Workaround today: export `HMAD_ORCA_*_TERMINAL` explicitly.
+- 🟡 **J3 — a tail read of a TUI is not evidence of pane state.** `hmad-dispatch read agy
+  --lines 12..40` showed a boot screen (`You are currently not signed in`, spinner) unchanged
+  across two minutes and three polls; I was one step from declaring the CLI wedged and relaunching
+  it. `read --from-start` showed the truth: a ready `>` prompt, `Gemini 3.1 Pro (High)`, cwd
+  `~/orca/skills`. The tail was rendering an overdrawn region of the frame. This is F5's mechanism
+  with a new and more dangerous symptom — F5 is written up as "scrollback < report length" (you
+  lose the *end* of a report), but here the tail was stale about the pane's *readiness*, which
+  drives a relaunch decision. **Fix direction:** SKILL's readiness/liveness checks should specify
+  `--from-start` (or a full-buffer read) rather than `read --lines N`. [[F5]]
+- 🟡 **J4 — F8 re-opened.** The actionable remedy message shipped and works, but the gap it
+  describes is unchanged: `python3` on this machine (homebrew 3.14) has no `jsonschema`, so every
+  `h_mad_state_write.py` / `h_mad_state_validate.py` / `h_mad_state_staleness.py` call in a run
+  exits 2 until the operator manually substitutes `/opt/anaconda3/bin/python3`. Hit twice in the
+  first five minutes of this run. A better error message is not a fix for a missing dependency.
+  **Fix direction:** vendor a minimal validator, degrade gracefully to the historical tier when
+  `jsonschema` is absent, or document a required interpreter in the SKILL preflight so it is a
+  stated prerequisite rather than a per-call surprise.
+- 🟢 **J5 — `--claim` cannot create.** SKILL's `start_fresh` route prints
+  `h_mad_state_write.py … --feature <f> --claim "<session-id>"`, but on a feature that does not
+  exist yet that exits 2 with `ERROR: no such feature`. Every first-time claim — i.e. every
+  `start_fresh` — fails as documented. `--create --claim <id>` works. **Fix direction:** either
+  make `--claim` imply `--create`, or correct the SKILL snippet.
+- ⬜ **J6 — DISPROVEN: `clear <agent>` does not exit the Antigravity pane.** Initially filed from
+  an observation that `hmad-dispatch clear agy` was followed within 15s by `status: exited` on
+  that handle. The operator then reported having closed that tab manually. Verified with a
+  throwaway pane: created a fresh agy terminal, ran `hmad-dispatch clear agy` against it, and 15s
+  later the pane was still `status: running` with the cursor advanced 37→61 (the `/clear` was
+  processed and the frame redrawn). **`clear` behaves as documented.** Recorded so the
+  correlation is not re-filed as causation by a future run. Method note: the throwaway-probe
+  pattern (`docs/skill-candidates.md`, recurrence 2) is what settled it.
+
+- 🔴 **J7 — F13 is only half closed: the pin FILE leaks where the env vars no longer do.** F13 added
+  every `HMAD_ORCA_*` env var to the strip-list in `test_hmad_dispatch.py::run()`. The session pin
+  file (`.h-mad/orca-pins.env`) is a **second** leak channel that the strip does not touch: it lives
+  in the repo working directory, and the resolver reads it with precedence env → file → auto-detect.
+  Measured on the `cycle-telemetry-fidelity` Phase-5f suite run: **18 failed / 459 passed**. Moving
+  `.h-mad/orca-pins.env` aside and re-running: **477 passed / 0 failed**. Seventeen of the eighteen
+  were pin-file leakage — `test_orca_identity_*`, `test_resolve_agy_*`, `test_agy_does_not_take_a_pane_running_codex`,
+  `test_codex_never_resolves_from_an_inherited_title`, and the agent-signature tests.
+  **Why this is worse than a test nuisance:** SKILL.md Phase 5 preflight *requires*
+  `hmad-dispatch pin-agents` ("a run must not proceed with Codex unpinned"), and Phase 5f *requires*
+  running the full suite. Following the protocol therefore guarantees 17 failures at 5f, on every
+  run, in the repo whose own tests they are. An orchestrator that trusts the suite reads a real
+  regression signal as noise, or worse, deletes its pins to get green and dispatches into nothing.
+  **Fix direction:** point the pin file at a per-session path outside the repo (or honour a
+  `HMAD_ORCA_PIN_FILE` override in the test harness and set it to a tmp path in `run()`), so pinning
+  and testing stop being mutually exclusive. Workaround used this session: keep the pin file absent
+  and pass `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` as env vars, which the resolver
+  prefers anyway. [[F13]] [[J2]]
+
+- 🟡 **J8 — `elapsed_min` is nonsense in every recorded row.** Surfaced while verifying the
+  cycle-telemetry-fidelity feature against the real `.h-mad/telemetry.jsonl`: all three rows carry
+  `elapsed_min` ≈ `29744612.6`, i.e. about **56 years**, so `started_ts` is being parsed as roughly
+  the epoch rather than the feature's real start. Pre-existing and untouched by that feature (it
+  changed only the two cycle counters). Two consequences: the elapsed column is meaningless, and at
+  11 characters it overflows its `:>9` field so the summary table's last two columns visibly
+  misalign. **Fix direction:** find what writes `started_ts` into `orchestrator_state` — the value
+  reaching `datetime.fromisoformat` is evidently not the ISO string the schema documents — and
+  either correct the writer or make `cmd_record` treat an implausible elapsed as absent (`?m`)
+  rather than printing it.
+- 🟢 **J9 — `test_alive_cmux_true` is environment-dependent.** Failed once during a Phase-5f full
+  run, then passed on two consecutive full runs of the identical suite with no change in between.
+  It probes the real `cmux` binary, so its result depends on machine state rather than on the code
+  under test. Not order-dependence — it passes in isolation and in the same 498-test set that
+  failed it once. **Fix direction:** stub the substrate probe as the neighbouring tests do, so the
+  suite does not have a test whose verdict depends on whether a terminal multiplexer happens to be
+  responsive.
+
+**Also observed (evidence for existing entries, not new IDs):** `orca terminal create --title
+"agy-probe"` does not stick — `terminal list` reports `title: agy`, the program's own OSC title.
+Independent confirmation of H5's core claim that `.title` reflects what the program emits and that
+caller-supplied titles are not surfaced. Filed upstream as stablyai/orca#9870.
+
+**In flight, not a monitoring item:** `audit_cycles`/`iterate_cycles` are seeded and never
+incremented (both drift warnings dead). Being fixed by the `cycle-telemetry-fidelity` feature —
+see `docs/01-plan/h-mad-remediation-sequence.md` Wave 1.
+
+---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._

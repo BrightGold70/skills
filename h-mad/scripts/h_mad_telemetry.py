@@ -21,6 +21,18 @@ import json
 import pathlib
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+from h_mad_cycle_counts import analysis_artifacts, audit_artifacts, audit_cycles, iterate_cycles
+
+
+def resolve_docs_root(docs_root: str | None, state_path: Path) -> Path:
+    """Resolve the documentation root used for cycle-count derivation."""
+    if docs_root is not None:
+        return Path(docs_root)
+    if state_path.parent.name == "docs":
+        return state_path.parent
+    return Path("docs")
 
 
 def cmd_record(args: argparse.Namespace) -> int:
@@ -43,7 +55,9 @@ def cmd_record(args: argparse.Namespace) -> int:
         print(f"WARN: feature '{args.feature}' not found in state — skipping telemetry record", file=sys.stderr)
         return 2
 
-    audit_cycles = feat_state.get("audit_cycles") or {}
+    docs_root = resolve_docs_root(args.docs_root, state_path)
+    derived_audit_cycles = audit_cycles(docs_root, args.feature)
+    derived_iterate_cycles = iterate_cycles(docs_root, args.feature)
     now_iso = datetime.now(timezone.utc).isoformat()
     row = {
         "schema_version": 1,
@@ -53,11 +67,11 @@ def cmd_record(args: argparse.Namespace) -> int:
         "started_ts": feat_state.get("started_ts"),
         "last_completed_phase": feat_state.get("last_completed_phase", 0),
         "audit_cycles": {
-            "plan": audit_cycles.get("plan", 0),
-            "design": audit_cycles.get("design", 0),
-            "impl_plan": audit_cycles.get("impl_plan", 0),
+            "plan": derived_audit_cycles.get("plan", 0),
+            "design": derived_audit_cycles.get("design", 0),
+            "impl_plan": derived_audit_cycles.get("impl_plan", 0),
         },
-        "iterate_cycles": feat_state.get("iterate_cycles", 0),
+        "iterate_cycles": derived_iterate_cycles,
         "halt_reason": feat_state.get("halt_reason"),
     }
 
@@ -81,6 +95,7 @@ def cmd_record(args: argparse.Namespace) -> int:
 
 def cmd_summary(args: argparse.Namespace) -> int:
     in_path = pathlib.Path(args.input)
+    docs_root = Path(args.docs_root) if args.docs_root is not None else Path("docs")
     if not in_path.is_file():
         print(f"No telemetry file at {in_path}")
         return 0
@@ -103,25 +118,39 @@ def cmd_summary(args: argparse.Namespace) -> int:
     print(f"=== /h-mad telemetry — last {len(tail)} of {len(rows)} records ===\n")
     print(f"{'feature':<30} {'phase':>5} {'plan_a':>6} {'des_a':>6} {'impl_a':>6} {'iter':>5} {'elapsed':>8} {'status':>8}")
     print("-" * 84)
+    displayed_rows = []
     for r in tail:
-        ac = r.get("audit_cycles") or {}
+        feature = r.get("feature", "?")
+        stored_ac = r.get("audit_cycles") or {}
+        audit_maps = {
+            phase: audit_artifacts(docs_root, feature, phase)
+            for phase in ("plan", "design", "impl_plan")
+        }
+        derived_ac = audit_cycles(docs_root, feature)
+        ac = stored_ac if all(not artifacts for artifacts in audit_maps.values()) else derived_ac
+
+        analysis_map = analysis_artifacts(docs_root, feature)
+        derived_iterate = iterate_cycles(docs_root, feature)
+        iterate = r.get("iterate_cycles", 0) if not analysis_map else derived_iterate
+        displayed_rows.append((r, ac, iterate))
         status = "halted" if r.get("halt_reason") else "ok"
         print(
-            f"{r.get('feature', '?'):<30}"
+            f"{feature:<30}"
             f"{r.get('last_completed_phase', 0):>5}"
             f"{ac.get('plan', 0):>7}"
             f"{ac.get('design', 0):>7}"
             f"{ac.get('impl_plan', 0):>7}"
-            f"{r.get('iterate_cycles', 0):>6}"
+            f"{iterate:>6}"
             f"{str(r.get('elapsed_min', '?')) + 'm':>9}"
             f"{status:>9}"
         )
 
     n_high_audit = sum(
-        1 for r in tail
-        if any(int(v or 0) > 3 for v in (r.get("audit_cycles") or {}).values())
+        1
+        for _, ac, _ in displayed_rows
+        if any(int(v or 0) > 3 for v in ac.values())
     )
-    n_high_iter = sum(1 for r in tail if int(r.get("iterate_cycles", 0) or 0) > 3)
+    n_high_iter = sum(1 for _, _, iterate in displayed_rows if int(iterate or 0) > 3)
     if n_high_audit or n_high_iter:
         print()
         if n_high_audit:
@@ -142,10 +171,12 @@ def main(argv: list[str] | None = None) -> int:
     p_record.add_argument("--feature", required=True)
     p_record.add_argument("--state", default="docs/.bkit-memory.json")
     p_record.add_argument("--out", default=".h-mad/telemetry.jsonl")
+    p_record.add_argument("--docs-root", default=None)
 
     p_summary = sub.add_parser("summary", help="print recent telemetry rows + drift signal")
     p_summary.add_argument("--input", default=".h-mad/telemetry.jsonl")
     p_summary.add_argument("--limit", type=int, default=20)
+    p_summary.add_argument("--docs-root", default=None)
 
     args = ap.parse_args(argv)
     if args.cmd == "record":
