@@ -397,6 +397,54 @@ protocol has two gaps that only running it could expose. Both unfixed.
   `DONE`), and make the gate refuse a merge whose diff against the base is empty — "nothing to
   merge" must be a halt, never a clean verdict. [[J12]]
 
+## Surfaced by the fanout-integrity-and-defects `/h-mad` run (2026-07-23, Wave 4)
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J16 | 🟢 | **OPPORTUNITY** | `worktree ps` carries `agents[].agentType` keyed by `paneKey`, which maps to `terminal list`'s `tabId:leafId` — a reliable identity source that `_orca_find`'s heuristics do not use |
+
+- 🟢 **J16 — agent identity IS available, just not from `terminal list`.** H5 and
+  [orca#9870](https://github.com/stablyai/orca/issues/9870) record that Orca "exposes no field naming
+  the running program", which is true of `orca terminal list`: `.title` is the enclosing tab's title
+  (shared by every leaf) and `.preview` decays once the agent works. But `orca worktree ps --json`
+  returns `.result.worktrees[].agents[]` with an explicit **`agentType`** (`codex`, `antigravity`,
+  `claude`) and a **`paneKey`** of the form `<tabId>:<leafId>` — and `terminal list` returns
+  `.tabId` and `.leafId` per terminal. Joining the two gives an exact, title-independent,
+  preview-independent handle for each agent.
+
+  Measured live during this run, at the point where both pinned handles had gone stale and **two
+  panes both reported `title: "Codex - skills repo"` with empty previews** — the exact ambiguity H5
+  documents, where one of them was agy. Content probing could not separate them either (both
+  buffers had been reset to cursor 0). The paneKey join resolved them unambiguously:
+
+  | agent | paneKey leaf | handle |
+  |---|---|---|
+  | antigravity | `9374f1b5…` | `term_0a2de455…` |
+  | codex | `df01b396…` | `term_294ce89e…` |
+
+  **Fix direction:** add a `worktree ps`-based resolution step to `_orca_find`, ahead of the
+  title/preview heuristics, joining `agents[].paneKey` to `terminals[].tabId + ":" + leafId` and
+  matching on `agentType`. That is not a workaround for the missing field — it is the field, in a
+  different call. Worth attempting **before** Wave 5 continues waiting on #9870, and worth reporting
+  upstream since it may make the issue moot. Note `agentType` is `antigravity`, not `agy`, so the
+  mapping needs an alias. [[H5]] [[J1]]
+
+**Also observed (evidence, not new IDs):**
+- **Handle rotation happened twice in one run**, and the Wave-3 receipt caught both:
+  `PREFLIGHT: FAIL stale=agy`, then later `PREFLIGHT: FAIL stale=codex,agy`. Under the pre-Wave-3
+  protocol each was an advisory line nothing was obliged to read, and each dispatch would have gone
+  into a dead pane and vanished. Both halted the run instead. This is the strongest evidence so far
+  that the mandated-read-to-machinery conversion was worth doing.
+- **`orca terminal read` takes `--limit`, not `--lines`** (unlike `hmad-dispatch read`, which uses
+  `--lines`). Passing `--lines` returns an `invalid_argument` envelope; combined with `2>/dev/null`
+  in a probe, that error was silently rendered as an empty pane and briefly read as "the agent is
+  gone". A reminder that suppressing stderr on an Orca call converts a loud error into a wrong
+  conclusion.
+- **The ~49 KB reviewer cliff did not reproduce, again.** Prompts of 52,997 B, 53,058 B and
+  **58,536 B** were all answered normally by Antigravity 1.1.5 / Gemini 3.1 Pro via file
+  indirection. `references/agent-substrate.md` still records 53,066 B as silent, and that number is
+  now actively costing work — a design audit was trimmed on the strength of it. See J13.
+
 ---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
