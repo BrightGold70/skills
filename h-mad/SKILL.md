@@ -565,7 +565,8 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
   --report-file "$RP"          # Orca only; omit for the sentinel scrape
 ```
 
-It prints `ASSEMBLE: PASS <path> <size>` or `ASSEMBLE: HALT <phase>:preflight` with the
+It prints `ASSEMBLE: PASS <path> <size> sentinel=<s> size_status=verified|unverified` or
+`ASSEMBLE: HALT <phase>:preflight` with the
 reasons, **exiting 0 either way** (a rejected prompt is a verdict, not a tool failure —
 see the base invariant on audit-gate signal discipline). A halted prompt is deliberately
 not written, so it cannot be dispatched by mistake. A non-zero exit means unreadable
@@ -576,6 +577,19 @@ staged prompt.
 read as the Phase-5 `PREFLIGHT:` assertion, for the same reason: the script exits 0 on
 both verdicts, so `$?` cannot tell you which one you got, and an unread token is worth no
 more than the unread `STALE` line it is modelled on.
+
+**Read `size_status=` on the same line, not just the token.** `verified` means the prompt
+is no larger than the biggest one confirmed answered (61,493 B — see
+`references/agent-substrate.md`). `size_status=unverified` still dispatches, because
+prompts that size have answered; what it changes is *diagnosis*. If the reply comes back
+empty, **suspect size before re-dispatching** — first re-read the full buffer, since a
+tail-grep reports SILENT for replies the TUI merely reflowed, and only then apply step 5.5.
+
+The field is on the verdict line deliberately. It used to be a separate `!` warning beside
+`ASSEMBLE: PASS`, which an orchestrator following this contract exactly never had to read —
+the same defect the `PREFLIGHT:` token exists to fix, one signal over. Note the verdict
+token stays exactly `PASS`/`HALT`: a `PASS_OVERSIZE` variant would still match every
+`grep "ASSEMBLE: PASS"` consumer and would have reproduced the defect rather than fixed it.
 
 Every defect this area has had came from doing the steps by hand: the rubrics were
 inlined twice, `{Design only — cross-doc:}` reached the reviewer in 69 of 69 dispatched

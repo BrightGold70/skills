@@ -356,3 +356,15 @@ def test_skill_5_5_gives_the_fixed_vs_divisible_arithmetic():
     assert "read the whole buffer" in text, (
         "a silent reply is usually a tail-grep artefact, not size"
     )
+
+
+def test_skill_mandates_reading_size_status_not_only_the_pass_token():
+    # J12. Asserting `ASSEMBLE: PASS` alone is what let a size signal go unread.
+    # The mandated read must name the field and say what to do on `unverified`,
+    # or the field is decoration on a line nobody parses past the token.
+    text = _skill_norm()
+    assert "size_status=" in text, "the mandated read must name the field"
+    assert "size_status=unverified" in text
+    assert "suspect size before re-dispatching" in text, (
+        "the note must say what unverified CHANGES, or it is not actionable"
+    )

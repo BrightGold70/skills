@@ -213,7 +213,20 @@ def main(argv: list[str] | None = None) -> int:
 
     out.write_text(text, encoding="utf-8")
     size = len(text.encode())
-    print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) sentinel={sentinel}")
+    # J12: size travels ON the verdict line, not beside it. SKILL.md mandates
+    # asserting `ASSEMBLE: PASS`, so a separate warning line is a signal nothing
+    # is obliged to read -- the defect the PREFLIGHT: token was created to fix,
+    # one signal over.
+    #
+    # The verdict token itself stays exactly PASS/HALT. `PASS_OVERSIZE` (the
+    # filed suggestion) matches `grep "ASSEMBLE: PASS"` and
+    # `startswith("ASSEMBLE: PASS")` -- how every consumer reads it -- so it would
+    # have reproduced J12 instead of fixing it. And HALT is contradicted by
+    # evidence: J13 measured five file-indirection prompts across 53-61 KB, all
+    # answered. Proceeding is correct; being unable to MISS the size is the fix.
+    size_status = "verified" if size <= 64 * 1024 else "unverified"
+    print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) "
+          f"sentinel={sentinel} size_status={size_status}")
     # Thresholds are anchored to the largest prompt CONFIRMED answered, not to a
     # cliff. The old 49 KB figure came from a session that recorded sizes but not
     # the DELIVERY MODE, and it never reproduced for the mode this skill actually

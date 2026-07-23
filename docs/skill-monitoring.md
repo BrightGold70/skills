@@ -301,7 +301,7 @@ had never been executed. All unfixed.
 | ID | Sev | Status | One-line |
 |---|---|---|---|
 | J11 | 🟡 | **FIXED** | `SKILL.md` twice orders "record the substrate + agent mapping via `h_mad_telemetry.py`"; the script has no such argument and the row schema has no such field |
-| J12 | 🟡 | MONITORING | `h_mad_assemble_audit.py` returns `ASSEMBLE: PASS` for a prompt it simultaneously predicts will fail — the oversize warning is an unread line beside a passing token |
+| J12 | 🟡 | **FIXED** | `h_mad_assemble_audit.py` returns `ASSEMBLE: PASS` for a prompt it simultaneously predicts will fail — the oversize warning is an unread line beside a passing token |
 | J13 | 🟢 | **FIXED** | The "split by FR group" remedy does not divide the fixed terms — AND the 49 KB cliff it defended against was never reproduced for the delivery mode h-mad actually uses |
 
 - 🟡 **J11 — the mandated substrate record is unexecutable.** `SKILL.md` says, in *both* §"Phase 5
@@ -359,6 +359,32 @@ had never been executed. All unfixed.
   prompt), or a distinct third token such as `ASSEMBLE: PASS_OVERSIZE` that the mandated read must
   branch on. A warning adjacent to PASS is worth exactly what the unread `STALE` line was worth.
   [[J7]]
+
+  **FIXED 2026-07-23 — but neither option in the fix direction above survived contact.**
+
+  *Option `ASSEMBLE: HALT <phase>:oversize`* is contradicted by evidence. J13 measured five
+  file-indirection prompts spanning 53-61 KB, all answered. Halting on a size that demonstrably
+  works trades a missed signal for a false stop.
+
+  *Option `ASSEMBLE: PASS_OVERSIZE`* **reproduces this very defect.** Tested before adopting:
+  `"ASSEMBLE: PASS_OVERSIZE ..."` satisfies `grep "ASSEMBLE: PASS"` *and*
+  `startswith("ASSEMBLE: PASS")` -- which is how every consumer reads the token, including this
+  repo's own tests. A PASS-grepping orchestrator would sail past it exactly as it sails past the
+  adjacent `!` line today. The suggestion looked right and was wrong in the direction that
+  mattered; one command found that out.
+
+  **Shipped instead:** a required machine-readable field *on the verdict line* --
+  `ASSEMBLE: PASS <path> <size> sentinel=<s> size_status=verified|unverified` -- with the verdict
+  token left exactly `PASS`/`HALT` so existing consumers keep working. "Proceed" stays correct;
+  what changes is that the size can no longer be *missed* by anything parsing the line the mandated
+  read already parses. `SKILL.md` now requires reading the field and states what `unverified`
+  changes: it is a **diagnosis** hint, not a stop -- on an empty reply, re-read the full buffer
+  first (a tail-grep reports SILENT for replies the TUI reflowed, per J13), then apply step 5.5.
+
+  Note what this does *not* claim to be: machinery. Nothing forces the read, because unlike the
+  Wave-3 `send` receipt there is no irreversible step to guard -- proceeding is correct in both
+  states. Putting the signal inside the line the contract already mandates is the honest ceiling
+  here, and strictly better than a sibling line nothing must parse. [[J13]]
 - 🟢 **J13 — "split by FR group" does not shrink an oversize design audit.** `SKILL.md` step 5.5
   prescribes, for a prompt past the reviewer cliff: "split the audit by FR group and run Axis C over
   each group in turn." Measured on this feature's design audit: total 50.9 KB, of which design
