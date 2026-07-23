@@ -61,6 +61,25 @@
 - Orchestrator phase transitions and halts MUST emit `[H-MAD]` log markers so a run is
   diagnosable from logs alone. Silent state transitions are a violation.
 
+## Mutation verification
+- A step that mutates state (a git operation, a file write, a remote/CLI call) MUST verify the
+  mutation by **re-reading the resulting state**; an **exit code is not evidence that a mutation
+  occurred**. A plan, design, or implementation that treats a zero exit — or an echoed success
+  string such as `Sent N bytes` or `{"ok":true}` — as proof of the intended effect is a violation.
+- The failure this blocks is silent and looks exactly like success: two `zsh` no-ops (backtick
+  execution inside `-m`, a leading-dash path) both exited 0 while doing nothing, and a dispatch
+  reported `Sent 7293 bytes` into a dead pane. Where a command reports on its own behaviour, the
+  check must read the *thing it was supposed to change*, from a separate call.
+
+## Incident replay
+- A fix motivated by a specific observed incident MUST be **replayed against the real artifacts
+  already on disk** that motivated it, not only against cases authored alongside the fix.
+  **Synthetic cases alone are a violation** whenever such artifacts exist and are reachable.
+- Cases written next to a fix inherit the author's model of the bug, so they agree with it by
+  construction. A detector validated on 14 handcrafted samples rejected the real historical label
+  it was written to accept; the same replay then measured the true rate (7 of 13), which reclassified
+  the defect from a one-off into the majority case. Replay is how a fix is told from a belief.
+
 ---
 
 ## How agy uses this file

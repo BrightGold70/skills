@@ -23,6 +23,8 @@ _BASE_RULE_HEADINGS = (
     "Operator-override preservation",
     "Backward compatibility",
     "Marker discipline",
+    "Mutation verification",
+    "Incident replay",
 )
 
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -108,6 +110,39 @@ def test_operator_sidecar_excludes_base_layer_item():
     result = classify(text, acknowledged={"base: marker discipline not emitted on halt"})
     assert result["must_count"] == 0
     assert result["verdict"] == "PASS"
+
+
+def test_base_rule_mutation_verification_states_the_literal_instruction():
+    # Wave 4b candidate `verify-the-mutation-not-the-command` (recurrence 3).
+    #
+    # Asserted as a LITERAL sentence, not as component words. A Wave-4a doc test
+    # for the `--base` guidance passed with that guidance deleted, because both
+    # of its component words already appeared in unrelated prose nearby. A rule
+    # that can vanish without failing a test is not in the rubric.
+    # Whitespace-normalised so a markdown reflow cannot break the assertion:
+    # the instruction is the literal sentence, not the line breaks in it.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Mutation verification" in text
+    assert "re-reading the resulting state" in text, (
+        "the mutation-verification rule must say to re-read resulting STATE"
+    )
+    assert "exit code is not evidence that a mutation occurred" in text, (
+        "the rule must name the specific fallacy it exists to block"
+    )
+
+
+def test_base_rule_incident_replay_states_the_literal_instruction():
+    # Wave 4b candidate `replay-the-incident-against-the-fix` (recurrence 4),
+    # reinforced by `replay-detector-against-history` (recurrence 3): 14
+    # handcrafted cases passed while the real historical label was rejected.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Incident replay" in text
+    assert "replayed against the real artifacts already on disk" in text, (
+        "the replay rule must require the historical artifacts, not synthetic cases"
+    )
+    assert "Synthetic cases alone are a violation" in text, (
+        "the rule must state what counts as a violation, or it is advice"
+    )
 
 
 def test_example_does_not_duplicate_base_rule_headings():

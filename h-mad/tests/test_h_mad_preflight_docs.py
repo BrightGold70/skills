@@ -223,3 +223,56 @@ def test_fanout_teardown_documents_the_base_override() -> None:
         )
         # And the instruction must sit with the verb it governs.
         assert "worktree-rm" in text
+
+
+# --- Wave 4b operator practices ------------------------------------------------
+#
+# Both assert the LITERAL instruction against a whitespace-normalised copy. A
+# Wave-4a doc test for the `--base` guidance passed with that guidance deleted,
+# because its component words already appeared in nearby prose; a practice that
+# can vanish without failing a test is not documented, it is remembered.
+
+
+def _skill_norm() -> str:
+    return " ".join(SKILL_MD.read_text(encoding="utf-8").split())
+
+
+def test_skill_documents_worktree_for_live_skill_edits():
+    # Candidate `worktree-for-live-skill-edits` (recurrence 2). Editing this
+    # repo edits the LIVE skill: ~/.claude/skills/h-mad is a symlink to it, so
+    # an in-flight run reads half-saved files from the working tree.
+    text = _skill_norm()
+    assert "## Editing this skill while a run is in flight" in text
+    assert "is a symlink into this repository" in text, (
+        "the note must state WHY editing here is live, or it reads as optional"
+    )
+    assert "edit in a git worktree" in text, (
+        "the note must name the remedy, not just the hazard"
+    )
+
+
+def test_skill_documents_sanitize_before_public_filing():
+    # Candidate `sanitize-before-public-filing` (recurrence 2).
+    text = _skill_norm()
+    assert "## Filing to a public tracker" in text
+    assert "grep the body against a forbidden-term list" in text, (
+        "the note must name the mechanical check, not merely advise care"
+    )
+    assert "absolute paths, usernames, sibling project names" in text, (
+        "the note must enumerate what to search for, or the check is untestable"
+    )
+
+
+def test_skill_documents_stub_harness_probe():
+    # Candidate `throwaway stub-harness probe` (recurrence 2, now 3 -- it is what
+    # turned J17 from "a rejected selector" into "the guards are bypassed").
+    # Documented as a PRACTICE, not scripted: the artifact is meant to be thrown
+    # away, so a permanent script would contradict the thing being taught.
+    text = _skill_norm()
+    assert "## Confirming a suspected defect before fixing it" in text
+    assert "drives the real function through the existing test helpers" in text, (
+        "the practice must name the mechanism, not merely say 'investigate'"
+    )
+    assert "delete the probe" in text, (
+        "a probe that survives becomes an untested second harness"
+    )

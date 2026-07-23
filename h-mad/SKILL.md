@@ -395,6 +395,51 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never run `git push --force`.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
+## Editing this skill while a run is in flight
+
+`~/.claude/skills/h-mad` **is a symlink into this repository**, so editing the working tree edits
+the *live* skill. A run already in progress will read whatever is on disk at the moment it next
+opens a file — including a half-finished edit, or a script whose test has not been written yet.
+
+When a run is in flight, **edit in a git worktree** and merge when it is clean; the in-flight run
+keeps reading the merged tree and never sees an intermediate state. `hmad-dispatch worktree-create`
+already does this for fanout modules; the same applies to the operator editing by hand.
+
+Two second-order consequences, both observed:
+- The suites are coupled. A sibling repo's tests reach these scripts *through the symlink*, so a
+  change here can fail a suite in a repo you did not touch. Run both before merging.
+- Never run a history-rewriting git command (`reset --hard`, `checkout --`, `stash`) with
+  uncommitted skill edits in the tree. Commit first — this is `## Mutation verification` applied
+  to your own work, and a lost implementation is indistinguishable from one never written.
+
+## Confirming a suspected defect before fixing it
+
+When you suspect a hole in a resolver, guard, or parser, **confirm it empirically before designing
+the fix**. Write a throwaway probe that **drives the real function through the existing test
+helpers** — source the shell function, or import the harness helpers from `tests/` into a scratch
+pytest — feed it the inputs you suspect, and print what actually comes back. Then **delete the
+probe**; a probe that survives becomes a second, untested harness that drifts from the first.
+
+This is cheap and it repeatedly changes the answer. Probing `_worktree_path` against the selector
+grammar took one command and converted a filed defect ("this selector form is rejected", true but
+harmless) into the real one ("every *documented* selector form skips the guards entirely, and one
+of them silently destroyed a worktree holding an unmerged commit"). An earlier probe in the same
+session turned two hypotheses into verified bugs and killed a third that was wrong.
+
+The failure it prevents is designing against an imagined mechanism. A fix aimed at the wrong
+mechanism still passes its own tests, because those tests were written from the same wrong model.
+
+## Filing to a public tracker
+
+Before filing an issue, comment, or reply to a **public** tracker, **grep the body against a
+forbidden-term list** and fix any hit. At minimum search for **absolute paths, usernames, sibling
+project names**, private slugs, internal symbol names, and hostnames.
+
+The bodies are assembled from live diagnostics — terminal listings, error envelopes, file paths —
+so leakage is the default outcome, not an unlucky one. The check is mechanical and takes one
+command; do it *before* the post, because an edited issue keeps its original text in the edit
+history and a deleted comment may already be in a notification email.
+
 ## Known interactions (coexisting plugins)
 
 `/h-mad` has **zero runtime dependency** on any other plugin. It does, however, coexist with plugins that install Claude Code hooks. The notable one is **OMC** (`oh-my-claudecode`), whose `persistent-mode.mjs` produces two streams of noise during `/h-mad` runs:
@@ -619,6 +664,19 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary
+- `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
+
+### file-issue-then-fix-under-TDD
+
+The loop, when a measurement turns into a defect:
+
+1. **File the issue with the measurement in it** — the number, the command that produced it, the expected value. An issue that says "X is broken" without the observation cannot be verified closed. Sanitize first (§"Filing to a public tracker").
+2. **One test file per issue**, and the file **names the issue** (`# pins #42`). This is the link that survives; six weeks on, a test whose motivation lives only in the author's head reads as arbitrary and gets deleted.
+3. **RED before GREEN.** Confirm the new test fails against the unfixed code — a test that passes against the code it was written to catch is decoration.
+4. **Fix, then close via the trailer** — `Closes #42` in the commit body.
+5. **Gate the linkage**: `h_mad_issue_fix_gate.py --issue 42 --test <path>`. It catches the two failures that actually happen — a fix with no test naming the issue, and a test with no trailer closing it.
+
+Steps 1–4 are the discipline; step 5 is the only part a script can check, which is why the script checks that and nothing else.
 
 ## Telemetry
 
