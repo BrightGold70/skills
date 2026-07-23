@@ -795,6 +795,19 @@ _send_text() {
   esac
 }
 
+# Two agents cannot be one pane, so equal non-empty resolutions prove at least one
+# is wrong -- the exact shape a tab-inherited title produces. Not suppressed by
+# HMAD_SKIP_PREFLIGHT: that bypass exists to permit dispatching without a
+# preflight, not to permit dispatching into a provably wrong pane.
+_preflight_conflict_check() {  # -> 0 ok, 1 conflict (message on stderr)
+  local c a
+  c="$(_resolve_target codex 2>/dev/null)" || c=""
+  a="$(_resolve_target agy 2>/dev/null)" || a=""
+  [ -n "$c" ] && [ -n "$a" ] && [ "$c" = "$a" ] || return 0
+  echo "hmad-dispatch: preflight_agent_conflict — codex and agy both resolve to $c; at least one is wrong and nothing was sent. Pin them explicitly (hmad-dispatch pin <agent> <handle>)." >&2
+  return 1
+}
+
 # $1 agent, $2 promptfile.
 #
 # Small prompts are inlined. Above HMAD_SEND_INLINE_MAX bytes (default 8192)
@@ -810,6 +823,8 @@ _cmd_send() {
     echo "hmad-dispatch: no such prompt file: $promptfile" >&2
     return 2
   fi
+
+  _preflight_conflict_check || return 1
 
   local size
   size=$(wc -c < "$promptfile" | tr -d ' ')
