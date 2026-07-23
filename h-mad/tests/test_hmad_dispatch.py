@@ -112,6 +112,9 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     # exactly when the suite is run from inside a running orchestration.
     for _k in [k for k in e if k.startswith("HMAD_ORCA_")]:
         e.pop(_k, None)
+    # The receipt override is likewise caller state: lifecycle tests must start
+    # from the pin-file-derived default unless they explicitly set an override.
+    e.pop("HMAD_PREFLIGHT_RECEIPT_FILE", None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -2372,6 +2375,126 @@ def test_preflight_passes_when_terminal_listing_is_unreadable(tmp_path):
                  "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
                  "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
     assert "PREFLIGHT: PASS" in r.stdout
+
+
+# --- preflight receipt lifecycle --------------------------------------------
+
+
+def _receipt_env(b, pin_file, listing, *, receipt_file=None):
+    """Environment for a deterministic, healthy preflight invocation."""
+    env = {
+        "_BINDIR": b,
+        "HMAD_ORCA_PIN_FILE": str(pin_file),
+        "HMAD_STUB_ORCA_STDOUT": listing,
+        "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+        "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+    }
+    if receipt_file is not None:
+        env["HMAD_PREFLIGHT_RECEIPT_FILE"] = str(receipt_file)
+    return env
+
+
+def _receipt_values(receipt_file):
+    return dict(line.split("=", 1) for line in receipt_file.read_text().splitlines())
+
+
+def test_preflight_pass_writes_default_receipt_with_timestamp_and_fingerprint(tmp_path):
+    """AC-1.1, AC-1.2, AC-1.5, AC-8.2: PASS writes beside its pin file."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "session" / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    r = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy")))
+
+    assert r.returncode == 0
+    assert "PREFLIGHT: PASS" in r.stdout.splitlines()
+    assert receipt.is_file()
+    values = _receipt_values(receipt)
+    assert values["verdict"] == "PASS"
+    assert values["fingerprint"]
+    assert int(values["ts"]) >= 0
+
+
+def test_preflight_receipt_fingerprint_is_stable_and_tracks_resolved_handles(tmp_path):
+    """AC-1.3, AC-1.4: fingerprint is stable for identity and changes with it."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    first_env = _receipt_env(b, pins, _preflight_listing("term_codex", "term_agy"))
+
+    first = run(["env"], substrate="orca", env=first_env)
+    assert first.returncode == 0
+    first_fingerprint = _receipt_values(receipt)["fingerprint"]
+
+    second = run(["env"], substrate="orca", env=first_env)
+    assert second.returncode == 0
+    assert _receipt_values(receipt)["fingerprint"] == first_fingerprint
+
+    changed_env = _receipt_env(
+        b, pins, _preflight_listing("term_codex_changed", "term_agy"))
+    changed_env["HMAD_ORCA_CODEX_TERMINAL"] = "term_codex_changed"
+    changed = run(["env"], substrate="orca", env=changed_env)
+    assert changed.returncode == 0
+    assert _receipt_values(receipt)["fingerprint"] != first_fingerprint
+
+
+def test_preflight_fail_without_receipt_leaves_no_receipt_and_preserves_verdict(tmp_path):
+    """AC-2.1, AC-2.3: FAIL clears absent default receipt without changing stdout."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    env = _receipt_env(b, pins, _preflight_listing("term_agy"))
+    env["HMAD_ORCA_CODEX_TERMINAL"] = "term_dead"
+    r = run(["env"], substrate="orca", env=env)
+
+    assert r.returncode == 0
+    line = next(line for line in r.stdout.splitlines() if line.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "stale=codex" in line
+    assert not receipt.exists()
+
+
+def test_preflight_fail_removes_existing_receipt(tmp_path):
+    """AC-2.2: FAIL removes a receipt written by a prior PASS."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    receipt = pins.parent / "preflight.receipt"
+    passed = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy")))
+    assert passed.returncode == 0
+    assert receipt.is_file()
+
+    failing_env = _receipt_env(b, pins, _preflight_listing("term_agy"))
+    failing_env["HMAD_ORCA_CODEX_TERMINAL"] = "term_dead"
+    failed = run(["env"], substrate="orca", env=failing_env)
+    assert "PREFLIGHT: FAIL" in failed.stdout
+    assert not receipt.exists()
+
+
+def test_preflight_receipt_override_wins_over_pin_file_directory(tmp_path):
+    """AC-8.1: explicit receipt override wins and default receipt remains absent."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins" / "session.env"
+    default_receipt = pins.parent / "preflight.receipt"
+    override_receipt = tmp_path / "override" / "receipt.env"
+    r = run(["env"], substrate="orca", env=_receipt_env(
+        b, pins, _preflight_listing("term_codex", "term_agy"),
+        receipt_file=override_receipt))
+
+    assert r.returncode == 0
+    assert "PREFLIGHT: PASS" in r.stdout
+    assert override_receipt.is_file()
+    assert not default_receipt.exists()
+
+
+def test_default_preflight_receipt_is_gitignored():
+    """AC-8.4: the repository ignores the unconfigured default receipt path."""
+    r = subprocess.run(
+        ["git", "check-ignore", "-v", ".h-mad/preflight.receipt"],
+        capture_output=True, text=True, cwd=SKILL.parent,
+    )
+    assert r.returncode == 0
+    assert ".h-mad/" in r.stdout
 
 
 def test_absent_pin_paths_are_unique_per_invocation():

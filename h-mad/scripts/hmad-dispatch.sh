@@ -92,6 +92,38 @@ _pin_file() {  # path to the session pin file (agent=handle lines)
   printf '%s\n' "${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}"
 }
 
+# Path to the preflight receipt. Anchored to the pin file's directory so that a
+# caller isolating HMAD_ORCA_PIN_FILE isolates the receipt too (test harness
+# already does this per-invocation); an explicit override wins outright.
+_receipt_file() {  # -> path
+  printf '%s\n' "${HMAD_PREFLIGHT_RECEIPT_FILE:-$(dirname "$(_pin_file)")/preflight.receipt}"
+}
+
+# Deterministic identity of the current agent resolution. Deliberately NOT hashed:
+# it is not a secret, a plain value is diagnosable by reading the file, and it
+# avoids a shasum/sha256sum portability dependency. An unresolvable agent
+# contributes the literal UNRESOLVED, so pinning one invalidates the receipt.
+_fingerprint() {  # -> "codex=<v>;agy=<v>"
+  local a v out=""
+  for a in codex agy; do
+    v="$(_resolve_target "$a" 2>/dev/null)" || v="UNRESOLVED"
+    [ -n "$v" ] || v="UNRESOLVED"
+    out="${out:+$out;}$a=$v"
+  done
+  printf '%s\n' "$out"
+}
+
+_receipt_write() {  # no args; writes verdict/fingerprint/ts
+  local rf; rf="$(_receipt_file)"
+  local dir; dir="$(dirname "$rf")"; [ -d "$dir" ] || mkdir -p "$dir"
+  { printf 'verdict=PASS\n'
+    printf 'fingerprint=%s\n' "$(_fingerprint)"
+    printf 'ts=%s\n' "$(date +%s)"
+  } > "$rf"
+}
+
+_receipt_clear() { rm -f "$(_receipt_file)"; }
+
 _pin_lookup() {  # $1 agent -> echo the pinned handle from the pin file, or nothing
   # H4: Codex/agy auto-detect by title/preview decays mid-run (the model-id
   # banner scrolls out of the Orca preview once the agent does work), so a long
@@ -318,6 +350,7 @@ _cmd_env() {
   [ -z "$stale" ] || { verdict="FAIL"; fields=" stale=$(printf '%s' "$stale" | tr ' ' ',')"; }
   [ -z "$conflict_handle" ] || { verdict="FAIL"; fields="$fields conflict=$conflict_handle"; }
   echo "PREFLIGHT: ${verdict}${fields}"
+  if [ "$verdict" = "PASS" ]; then _receipt_write; else _receipt_clear; fi
   return 0
 }
 
