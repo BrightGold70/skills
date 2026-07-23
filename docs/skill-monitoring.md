@@ -290,4 +290,69 @@ see `docs/01-plan/h-mad-remediation-sequence.md` Wave 1.
 
 ---
 
+## Surfaced by the preflight-read-enforcement `/h-mad` run (2026-07-23, Wave 3 dogfood)
+
+Found by **running** Waves 1–2 through a real 7-phase feature in `~/orca/skills` — the Wave-3
+dogfood whose purpose is exactly this (`docs/01-plan/h-mad-remediation-sequence.md` §Wave 3,
+closing G-b/G-d). All three are prose-vs-tooling mismatches: each instruction was doc-verified and
+had never been executed. All unfixed.
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J11 | 🟡 | MONITORING | `SKILL.md` twice orders "record the substrate + agent mapping via `h_mad_telemetry.py`"; the script has no such argument and the row schema has no such field |
+| J12 | 🟡 | MONITORING | `h_mad_assemble_audit.py` returns `ASSEMBLE: PASS` for a prompt it simultaneously predicts will fail — the oversize warning is an unread line beside a passing token |
+| J13 | 🟢 | MONITORING | The documented remedy for an oversize audit prompt ("split by FR group") does not reduce size when the design is the dominant term |
+
+- 🟡 **J11 — the mandated substrate record is unexecutable.** `SKILL.md` says, in *both* §"Phase 5
+  (Implementation) sub-steps" and §"Audit prompt assembly": "Record the printed substrate + agent
+  mapping via `scripts/h_mad_telemetry.py` so the run log states which environment it dispatched
+  under." `h_mad_telemetry.py record` accepts only `--feature`, `--state`, `--out`, `--docs-root`,
+  and the row it writes (`h_mad_telemetry.py:62-76`) has keys `schema_version`, `feature`,
+  `recorded_ts`, `completed_ts`, `started_ts`, `last_completed_phase`, `audit_cycles`,
+  `iterate_cycles`, `halt_reason`, `elapsed_min` — no substrate, no agent mapping. The command also
+  refuses a feature absent from state and is shaped as a Phase-7 close-out recorder, so it cannot
+  serve a Phase-5-start instruction even in principle. **Consequence:** no run log has ever recorded
+  which substrate it dispatched under, and nothing surfaced that, because an orchestrator either
+  skips the step or calls `record` and reads its cycle-count output as success. **Fix direction:**
+  either add a `substrate`/`agents` field plus the arguments to write it, or — cheaper and honest —
+  delete the instruction from both places and state that substrate is captured in the phase report.
+  Do not leave prose ordering an impossible call. [[J8]]
+- 🟡 **J12 — `ASSEMBLE: PASS` is returned for a prompt predicted to fail.** Assembling this
+  feature's design audit printed
+  `ASSEMBLE: PASS /tmp/…_design_cycle1.txt 54766B (53.5 KB)` followed by a separate warning line:
+  `! 53.5 KB is past the measured 49 KB reviewer cliff … a silent empty reply is the expected
+  failure`. `SKILL.md` §"Audit prompt assembly" mandates asserting **`ASSEMBLE: PASS`** before
+  dispatch — and that assertion succeeds here. An orchestrator following the documented contract
+  exactly dispatches a prompt the script itself expects to come back empty. This is the *same defect
+  class* the `PREFLIGHT:` token was created to fix in Wave 2: a correct signal that nothing is
+  obliged to consume, sitting beside a token that is. **Fix direction:** fold size into the verdict
+  rather than beside it — either `ASSEMBLE: HALT <phase>:oversize` (consistent with the script's
+  existing refuse-to-emit stance for preflight failures, and it already declines to write a halted
+  prompt), or a distinct third token such as `ASSEMBLE: PASS_OVERSIZE` that the mandated read must
+  branch on. A warning adjacent to PASS is worth exactly what the unread `STALE` line was worth.
+  [[J7]]
+- 🟢 **J13 — "split by FR group" does not shrink an oversize design audit.** `SKILL.md` step 5.5
+  prescribes, for a prompt past the reviewer cliff: "split the audit by FR group and run Axis C over
+  each group in turn." Measured on this feature's design audit: total 50.9 KB, of which design
+  22.4 KB + plan 10.3 KB + template 8.0 KB + base/project invariants 5.5 KB = **46.2 KB is fixed
+  cost carried by every split**. Only the spec (4.7 KB after the documented FR-only trim) divides,
+  so a two-way split yields ~48.5 KB per half — roughly 2 KB of relief for two dispatches, two audit
+  files and two gate runs. The remedy silently assumes the *spec* is the marginal term; whenever the
+  design dominates (the normal case for a detailed design) it does not work. Note the same step
+  correctly forbids the reduction that would work — trimming the design — because `absent` becomes
+  undetectable and that is what Axis C exists to catch. **Fix direction:** state the real options
+  (shorten the design, or split the *feature*), and give the fixed-vs-divisible arithmetic so the
+  reader can tell which applies. [[J12]]
+
+**Also measured (evidence, not a new ID):** the ~49 KB reviewer cliff did **not** reproduce on this
+host. `references/agent-substrate.md` records 49,273 B emitted normally and 53,066 B silent, and
+asks that the boundary be re-measured per host. A 52,168 B design audit delivered by **file
+indirection** (`send` stages the path; the agent `Read`s it itself, twice) was answered normally by
+Antigravity CLI 1.1.5 / Gemini 3.1 Pro. The original measurements may have been of a different agent
+build, or the cliff may be a property of TUI paste rather than of agent-side file reads — the two
+delivery modes were not distinguished when the number was recorded. Worth re-measuring deliberately
+before anyone trims a design to satisfy it.
+
+---
+
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
