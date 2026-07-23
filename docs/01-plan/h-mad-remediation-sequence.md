@@ -120,16 +120,36 @@ from agent-side file reads.
 because this run dogfooded the assembler and changing the instrument mid-measurement would have
 invalidated both. J12 now records a concrete defect in it.
 
-## Wave 4 · Candidates batch, dispatched via worktree fanout — closes G-a + confirms B1
+## Wave 4 · Instrument slice ✅ SHIPPED `ab3657e` · candidates batch REMAINING
 
 **Depends on:** Wave 3 — now shipped. **Why combined:** the candidates decompose into
 independent, non-conflicting files — the natural payload for the parallel fanout.
 
-**G-a is already closed.** Wave 3 ran the fanout live (two Codex workers, isolated Orca
-worktrees, merge gate, teardown), so this wave no longer needs to prove it. But **fix J15 first**:
-nothing instructs a fanout worker to commit, and run as documented the gate merges an empty branch,
-auto-records success, and `worktree-rm` destroys the work. J14 (the dispatch/await path conflict)
-should be settled at the same time.
+**Instrument slice shipped 2026-07-23** as `fanout-integrity-and-defects` (feature/193). 100%
+match rate (9/9 FRs, 35/35 ACs), suite 550 → **592**, 6a-prime `READY_TO_MERGE`, 70.9 min.
+J15, J14, J8 and J10 are all **fixed**:
+
+- **J15** — `worktree-rm` refuses to remove a worktree holding uncommitted changes
+  (`worktree_has_uncommitted_work`) or unmerged commits (`worktree_has_unmerged_commits`);
+  `--force` overrides and says so. Guards the *irreversible* step rather than instructing the
+  worker, because both Wave-3 workers had already been told to self-review and neither committed.
+  **Validated against a real Orca worktree** in the exact Wave-3 shape: the worktree and the work
+  both survived. **Fanout teardown must now pass `--base <feature-branch>`** — the default base
+  resolves to `main`, so a module worktree branched from a feature branch reports every feature
+  commit as unmerged (measured: 7 ahead of `main`, 1 ahead of its real base).
+- **J14** — `worktree-create --prompt-file` registers a task and emits
+  `[H-MAD] worktree_task task=<id> selector=<sel>` on stderr; stdout stays byte-identical.
+- **J8** — `started_ts` defaults to `now(UTC)`. Verified live: a feature created without
+  `--started-ts` now reports `elapsed_min 0.0` instead of ~29,744,612.
+- **J10** — a contentless `DONE_WITH_CONCERNS` exits 2 instead of returning a verdict. The
+  detector was replayed against the 13 real reports on this machine: **7 of 13 name no concern**,
+  so J10 is the majority case, not the one-off it was filed as.
+
+**Two guards were found VACUOUS by mutation testing and fixed** — the `--prompt-file` gate (the
+suite passed whether or not it existed) and the `--base` documentation test (passed with the
+guidance deleted). Neither was visible to review or to a green run.
+
+**REMAINING in this wave** — the candidates batch, now safe to fan out:
 
 Payload, triaged by kind:
 
@@ -176,14 +196,19 @@ line and neither depends on Wave 3, so they can be pulled forward if the dogfood
 - `sanitize-before-public-filing` (2) — grep issue bodies against a forbidden-term list
   (project names, slugs, local paths) before filing publicly.
 
-**Done when:** J8 and J10 are fixed and the candidate items have landed. The original
-done-when — "the fanout completed against live agents, and `h_mad_telemetry.py` reports a non-zero
-`audit_cycles` **and a plausible `elapsed_min`**" — was **already met by Wave 3**
-(`plan 1 / design 1 / impl_plan 2`, `elapsed_min 76.1`). Note that row is sane only because Wave 3
-passed `--started-ts` explicitly; J8 itself is still unfixed, so a feature created without it will
-still stamp the epoch and report ~56 years.
+**Done when:** the candidate items have landed. J8 and J10 are done, and the original telemetry
+done-when was met by Wave 3. J8 is now fixed at the source, so a feature created *without*
+`--started-ts` reports a real elapsed rather than ~56 years — the caveat in the previous version of
+this line no longer applies.
 
 ## Wave 5 · Blocked upstream — watch only
+
+**J16 may make this wave unnecessary — check before waiting.** `orca worktree ps` returns
+`agents[].agentType` keyed by a `paneKey` of `<tabId>:<leafId>`, and `terminal list` returns
+`.tabId`/`.leafId`. Joining them yields exact, title-independent agent identity. Found live when
+two panes both reported `title: "Codex - skills repo"` with empty previews and reset buffers —
+the precise ambiguity H5 documents, which no existing heuristic could resolve. See
+`docs/skill-monitoring.md` §J16. Attempt the join before continuing to wait, and report upstream.
 
 **[stablyai/orca#9870](https://github.com/stablyai/orca/issues/9870)** — per-terminal identity.
 Orca exposes no field naming the running program: Codex's `.title` is its cwd basename, its
@@ -217,5 +242,6 @@ Nothing else waits on this. Do not sequence work behind it.
 | 1 | `audit_cycles` counter | B1 | counter advances in a test |
 | 2 | `PREFLIGHT:` token + mandated reads | G-c | stale pin fails the checklist |
 | 3 | dogfood `/h-mad` on Waves 1–2 ✅ `4111297` | G-b, G-d, **G-a**, **B1 proof** | done — 4 live audits, 2 merge gates, fanout ran live, telemetry 1/1/2 + 76.1m |
-| 4 | candidates + J8/J10 (fanout already proven) | candidates, defects | J15 🔴 must be fixed before the next fanout |
+| 4a ✅ `ab3657e` | J15/J14/J8/J10 — the instrument | defects | done; fanout is now safe |
+| 4b | candidates batch via fanout | candidates | pass `--base <feature-branch>` on teardown |
 | 5 | watch #9870 | H4/H5 residual | upstream |
