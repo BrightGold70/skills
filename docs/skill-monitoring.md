@@ -298,8 +298,16 @@ is not re-filed.
   **Verified end to end on the interpreter J4 is about.** A stock `python3` (no `jsonschema`) now
   runs `h_mad_state_validate.py`, `h_mad_state_write.py --create/--set` and `h_mad_state_staleness.py`,
   and both interpreters return byte-identical verdicts on the live store
-  (`STATE: PASS strict=6 historical=0 invalid=0`, `STALENESS: CLEAN findings=0`). **The full suite
-  now passes under both** — 650 under anaconda and 650 under plain `python3`. [[F8]]
+  (`STATE: PASS strict=6 historical=0 invalid=0`, `STALENESS: CLEAN findings=0`).
+
+  **Correction, recorded because the mistake is instructive.** I first wrote that the full suite
+  passes under both interpreters. It does not — the stock `python3` has no `pytest` either, so the
+  suite cannot run there at all, and the "650 passed" I read back had been produced by a rewritten
+  invocation under a different interpreter. The suite runs under anaconda (650); what is verified
+  under stock `python3` is the thing J4 is actually about: `h_mad_state_validate.py`,
+  `h_mad_state_write.py --create/--set` and `h_mad_state_staleness.py` all run and agree with
+  jsonschema's verdicts on the live store. Reading a command's output without confirming which
+  binary produced it is §"Mutation verification" applied to my own evidence. [[F8]]
 - 🟢 **J5 — `--claim` cannot create.** SKILL's `start_fresh` route prints
   `h_mad_state_write.py … --feature <f> --claim "<session-id>"`, but on a feature that does not
   exist yet that exits 2 with `ERROR: no such feature`. Every first-time claim — i.e. every
