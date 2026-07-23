@@ -147,9 +147,10 @@ is not re-filed.
 | J4 | 🟡 | MONITORING | F8 re-opened: the jsonschema *remedy message* shipped, the dependency gap did not close |
 | J5 | 🟢 | MONITORING | `state_write --claim` on a fresh feature fails without `--create`; SKILL's `start_fresh` route omits it |
 | J6 | — | **DISPROVEN** | "`clear <agent>` exits the Antigravity pane" — it does not; the observed exit was an operator closing the tab |
-| J7 | 🔴 | MONITORING | F13 residual: the pin **file** leaks into `test_hmad_dispatch.py` — 17 tests fail whenever agents are pinned, which Phase 5 preflight *requires* |
-| J8 | 🟡 | MONITORING | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`), overflowing the summary column |
+| J7 | 🟢 | **RESOLVED** | F13 residual: the pin **file** leaked into `test_hmad_dispatch.py`. Fixed by Wave 2 (`787aecf`) — `run()` injects a per-invocation never-created path; suite 530 passed identical with and without the pin file |
+| J8 | 🟡 | MONITORING | `elapsed_min` in every telemetry row is ~56 years (`29744612.6`). **Root cause found** (Wave 2): `h_mad_state_write.py:138` defaults `started_ts` to a hardcoded `1970-01-01T00:00:00Z` sentinel |
 | J9 | 🟢 | MONITORING | `test_alive_cmux_true` failed once then passed on two consecutive full runs — probes the real `cmux` binary, so it is environment-dependent |
+| J10 | 🟡 | MONITORING | A Codex dispatch returned `STATUS: DONE_WITH_CONCERNS` while naming no concern anywhere in its report — a verdict declaring doubt without stating it is unactionable |
 
 - 🔴 **J1 — `launch` captures a handle the created pane never has.** `hmad-dispatch launch agy
   --worktree path:…/skills` read `term_01f69e2d…` from the `orca terminal create` response and
@@ -230,10 +231,44 @@ is not re-filed.
   the epoch rather than the feature's real start. Pre-existing and untouched by that feature (it
   changed only the two cycle counters). Two consequences: the elapsed column is meaningless, and at
   11 characters it overflows its `:>9` field so the summary table's last two columns visibly
-  misalign. **Fix direction:** find what writes `started_ts` into `orchestrator_state` — the value
-  reaching `datetime.fromisoformat` is evidently not the ISO string the schema documents — and
-  either correct the writer or make `cmd_record` treat an implausible elapsed as absent (`?m`)
-  rather than printing it.
+  misalign. **ROOT CAUSE FOUND (2026-07-23, Wave 2).** Not a parse failure — the reader is fine and the
+  stored value is literally the epoch. `h_mad_state_write.py:138` reads
+
+  ```python
+  record["started_ts"] = started_ts or "1970-01-01T00:00:00Z"
+  ```
+
+  so every feature created without an explicit `--started-ts` is stamped with a hardcoded epoch
+  sentinel. Confirmed against `.h-mad/telemetry.jsonl`: the four pre-Wave-2 rows all carry
+  `started_ts='1970-01-01T00:00:00Z'` / `elapsed_min≈29744612`, while `preflight-signal-discipline`
+  — the one feature created with `--started-ts` passed explicitly — carries
+  `started_ts='2026-07-23T01:07:14Z'` / `elapsed_min=110.3`.
+
+  **Fix direction:** default to the current UTC time rather than the epoch (`started_ts or
+  datetime.now(timezone.utc).isoformat()`). A sentinel that is a *valid* timestamp cannot be
+  distinguished from real data downstream — which is why this survived as "the reader must be
+  broken" for as long as it did. Optionally also have `cmd_record` render an implausible elapsed as
+  `?m`, but that treats the symptom. Existing rows stay wrong; they are append-only history.
+- 🟡 **J10 — `DONE_WITH_CONCERNS` with no concerns stated.** Observed twice during Wave 2
+  (`preflight-signal-discipline` Tasks 1 and 2). `references/codex-implementer-prompt.md` defines the
+  verdict as "work is complete but you have doubts", and the report format asks for
+  "Concerns / blockers / context needed (if any)". Task 1's report did name its concern (unrelated
+  working-tree files, correctly flagged rather than assumed). Task 2's did not: the body contained
+  only positive verification facts, so the orchestrator was handed a doubt it could not act on and
+  could not distinguish from `DONE`.
+
+  **Why it matters:** the verdict is machine-parsed and gates the module. `DONE_WITH_CONCERNS` is
+  the designed middle rung — a worker that reaches for it conservatively, without content, degrades
+  it to noise, and the safe response (verify everything independently) is exactly the cost the
+  verdict exists to avoid. In this instance independent verification was done anyway and found
+  nothing, so no defect shipped.
+
+  **Fix direction:** make the concern mandatory in the template — "if you report
+  `DONE_WITH_CONCERNS` you MUST list at least one concern; if you cannot name one, report `DONE`" —
+  and consider having `h_mad_extract_verdict.py` treat a `DONE_WITH_CONCERNS` whose report carries no
+  concerns section as an operational error rather than a verdict, so silence cannot masquerade as
+  nuance. [[J9]]
+
 - 🟢 **J9 — `test_alive_cmux_true` is environment-dependent.** Failed once during a Phase-5f full
   run, then passed on two consecutive full runs of the identical suite with no change in between.
   It probes the real `cmux` binary, so its result depends on machine state rather than on the code
