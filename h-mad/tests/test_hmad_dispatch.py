@@ -1720,6 +1720,58 @@ def test_send_missing_file_fails_loudly(tmp_path):
     assert r.returncode != 0
 
 
+# --- send: resolved-agent conflict guard ------------------------------------
+
+
+def test_send_refuses_when_both_agents_resolve_to_one_handle(tmp_path):
+    """AC-7.1/7.2: never deliver into a pane claimed by both agents."""
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    shared = _preflight_listing("term_shared")
+
+    for agent in ("codex", "agy"):
+        cap = tmp_path / f"{agent}.txt"
+        r = run(["send", agent, str(prompt)], substrate="orca",
+                env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": shared,
+                     "HMAD_ORCA_CODEX_TERMINAL": "term_shared",
+                     "HMAD_ORCA_AGY_TERMINAL": "term_shared"}, capture=cap)
+
+        assert r.returncode != 0
+        assert "preflight_agent_conflict" in r.stderr
+        assert not cap.exists() or "terminal send" not in cap.read_text(), \
+            "conflict must prevent delivery"
+
+
+def test_send_allows_distinct_agent_resolutions(tmp_path):
+    """AC-7.3: the conflict guard distinguishes two separate live panes."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    live = _preflight_listing("term_codex", "term_agy")
+
+    r = run(["send", "codex", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": live,
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"}, capture=cap)
+
+    assert r.returncode == 0
+    assert "preflight_agent_conflict" not in r.stderr
+    assert "terminal send --terminal term_codex" in cap.read_text()
+
+
+def test_send_unresolved_agents_is_not_refused_as_a_conflict(tmp_path):
+    """AC-7.4: two unresolved agents do not establish a shared pane."""
+    b = _bindir(tmp_path, ["orca"])
+    prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+
+    r = run(["send", "codex", str(prompt)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+
+    assert r.returncode != 0
+    assert "preflight_agent_conflict" not in r.stderr
+    assert "orca terminal for 'codex' resolved" in r.stderr
+
+
 # --- wait: idle must be confirmed, not taken on trust ------------------------
 #
 # Orca's native `--for tui-idle` was observed returning satisfied:true twice
