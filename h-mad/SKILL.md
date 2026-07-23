@@ -352,11 +352,18 @@ trap from the other direction.
 Extract instead, which fails closed on both:
 
 ```bash
-hmad-dispatch read <agent> --lines 200 > /tmp/scrape_<feature>_<module>.txt
+# `ask` = send + wait-idle + full-buffer read in one call (the send/wait/read
+# dance that repeats every audit). Its stdout is exactly the reply buffer;
+# send/wait chatter goes to stderr. --out captures it for the extractor.
+hmad-dispatch ask <agent> <promptfile> --out /tmp/scrape_<feature>_<module>.txt
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/scrape_<feature>_<module>.txt --key VERDICT \
   --feature <feature> --phase 5e
 ```
+
+If the pane was already dispatched into (you only need to re-read), use
+`hmad-dispatch read <agent> --from-start`, never `--lines N` — a tail can render
+a stale overdrawn frame (J3).
 
 It takes the **last** matching line, validates the value against the contract,
 and exits 2 printing nothing when the line is absent, empty, or off-contract.

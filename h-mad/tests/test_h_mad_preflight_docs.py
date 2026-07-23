@@ -386,3 +386,15 @@ def test_skill_documents_the_monitoring_item_workflow():
     assert "the entry can be wrong" in text, (
         "the premise-check step must warn the filing itself may be mistaken"
     )
+
+
+def test_skill_documents_ask_as_the_scrape_dispatch():
+    # `ask` is the rec-12+ candidate. The verdict-reading section must show it as
+    # the combined send+wait+read, and must not still tell the operator to
+    # capture with a tail (`--lines N`) before extracting -- that was the J3 bug
+    # hiding in the initial capture line.
+    text = _skill_norm()
+    assert "hmad-dispatch ask <agent> <promptfile> --out" in text
+    assert "read <agent> --lines 200" not in text, (
+        "the capture-for-extraction step still uses a tail"
+    )
