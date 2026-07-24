@@ -261,6 +261,31 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
+### Codex authors Phase 5 — enforced, not just instructed
+
+Phase 5 implementation is **Codex's job**; Claude orchestrates, verifies, and gates,
+but does not write the production code itself while a feature is in `step5`. This is
+now enforced mechanically, not left to discipline:
+
+- The `Write|Edit` PreToolUse hook (`hooks/h-mad-tdd-gate.sh`) blocks Claude's own
+  production-`.py` write during `step5`. Codex's writes — whether via `hmad-dispatch
+  exec codex` (subprocess) or its pane (`send`) — go through Codex's process, **not**
+  Claude's Write/Edit tool, so they never reach the hook. A prod write that *does*
+  reach the hook is therefore Claude self-implementing, and is refused.
+- The block fires **only when Codex is available** (the `codex` CLI is on PATH and no
+  unavailable declaration is set). That is the answer to "use Codex when quota is
+  enough": the default assumes Codex can author, so Claude cannot.
+- **Falling back is explicit and auditable**, never silent. To let Claude author
+  (e.g. Codex is genuinely out of quota or unreachable), record it:
+  `h_mad_state_write.py --feature <feat> --set codex_status=exhausted <state_file>`
+  (validated enum: `available|unavailable|exhausted`), or export
+  `HMAD_CODEX_UNAVAILABLE=1` for a one-off. Then Claude's writes pass — still under
+  the test-first gate. A false declaration is a visible lie in the state record, not
+  an invisible shortcut.
+
+Test files, docs, config, and shell are never gated; only production `.py`. The
+gate stands down outside `step5` and disarms at 5g (`phase = null`).
+
 ### Exit-code dispatch for 5d/5e (prototype — `hmad-dispatch exec`)
 
 The 5d/5e dispatches above use the pane REPL (`send`/`ask`): the agent runs as a

@@ -68,6 +68,29 @@ esac
 # Only gate .py production files
 [[ "$TARGET_PATH" != *.py ]] && exit 0
 
+# --- Codex-authorship enforcement -------------------------------------------
+# Codex writes via its OWN process (subprocess `codex exec`, or its pane); those
+# writes never reach this PreToolUse hook. Only Claude's Write/Edit tool does. So
+# a production write arriving HERE during step5 is Claude self-implementing — the
+# exact thing Phase 5 delegates to Codex. Block it when Codex is available, and
+# name the dispatch. The ONLY escape is an auditable declaration that Codex is
+# unavailable: state `codex_status` = unavailable|exhausted, or the
+# HMAD_CODEX_UNAVAILABLE env override. Silent self-authoring is never allowed.
+CODEX_STATUS=$(jq -r --arg k "$ACTIVE" \
+  '.orchestrator_state[$k].codex_status // "available"' "$STATE_FILE" 2>/dev/null || echo available)
+if [ -z "${HMAD_CODEX_UNAVAILABLE:-}" ] \
+   && [ "$CODEX_STATUS" != "unavailable" ] && [ "$CODEX_STATUS" != "exhausted" ] \
+   && command -v codex >/dev/null 2>&1; then
+  echo "[H-MAD-TDD-GATE] BLOCK: Phase 5 implementation must be authored by Codex, not Claude." >&2
+  echo "Dispatch this module to Codex: hmad-dispatch exec codex <promptfile>  (or: send codex)." >&2
+  echo "Codex looks available (codex on PATH; codex_status=$CODEX_STATUS). If it is out of quota, record it —" >&2
+  echo "  python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py --feature $ACTIVE --set codex_status=exhausted \"$STATE_FILE\"" >&2
+  echo "then Claude may author the fallback (still test-first). Or export HMAD_CODEX_UNAVAILABLE=1 for a one-off." >&2
+  exit 1
+fi
+# Codex unavailable / declared exhausted → fall through: Claude may author the
+# fallback, still under the test-first gate below.
+
 # Production-code write → require derivable test that currently fails.
 DERIVE_SCRIPT="$HOME/.claude/skills/h-mad/scripts/h_mad_derive_test_path.sh"
 if [ ! -x "$DERIVE_SCRIPT" ]; then

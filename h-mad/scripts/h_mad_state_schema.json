@@ -139,6 +139,15 @@
         }
       },
       "additionalProperties": false
+    },
+    "codex_status": {
+      "description": "Availability of Codex as the Phase-5 implementer. OPTIONAL and additive (not in `required`; absent means 'available'). The TDD-gate hook reads it: while a feature is in step5, a production write reaching the hook is Claude self-implementing, which is blocked when Codex is available. Set to 'exhausted' or 'unavailable' to record — auditably — that Codex cannot author, permitting Claude to write the fallback (still test-first).",
+      "enum": [
+        "available",
+        "unavailable",
+        "exhausted",
+        null
+      ]
     }
   },
   "additionalProperties": false
