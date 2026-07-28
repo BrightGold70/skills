@@ -33,6 +33,38 @@ REPORT_V2 = "## Summary\nThe fresh one.\n\n## Must-fix\nNone\n\n## Should-fix\nN
 REPORT_V1 = "## Summary\nThe stale one.\n\n## Must-fix\n- an old finding — reason"
 
 
+BOUNDARY = "===HMAD-DISPATCH-BOUNDARY==="
+
+# assemble_audit substitutes the concrete sentinel into the prompt's exemplar
+# block, so a silent reviewer's buffer holds a complete framed pair that is pure
+# prompt echo. The per-cycle sentinel does not defeat this same-run echo; the
+# dispatch boundary does.
+ECHOED_PROMPT = (
+    "agy> follow the instructions\n"
+    "Emit your report bracketed by:\n"
+    f"{framed('...your report...')}\n"
+    f"{BOUNDARY}\n"
+    "agy> \n"
+)
+
+
+class TestBoundarySlice:
+    def test_echoed_frame_only_raises_when_sliced(self):
+        with pytest.raises(er.ExtractionError):
+            er.extract(ECHOED_PROMPT, SENTINEL, after=BOUNDARY)
+
+    def test_without_slice_the_echoed_frame_wins_documenting_the_bug(self):
+        assert er.extract(ECHOED_PROMPT, SENTINEL) == "...your report..."
+
+    def test_real_report_after_boundary_wins(self):
+        scrape = ECHOED_PROMPT + framed(REPORT_V2)
+        assert er.extract(scrape, SENTINEL, after=BOUNDARY) == REPORT_V2
+
+    def test_absent_boundary_fails_closed(self):
+        with pytest.raises(er.ExtractionError, match="boundary marker"):
+            er.extract(framed(REPORT_V2), SENTINEL, after=BOUNDARY)
+
+
 class TestExtract:
     def test_extracts_a_single_framed_report(self):
         assert er.extract(framed(REPORT_V2), SENTINEL) == REPORT_V2

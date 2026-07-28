@@ -989,7 +989,11 @@ def test_send_orca_uses_file_contents(tmp_path):
                        env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
     assert r.returncode == 0
     text = cap.read_text()
-    assert "orca terminal send --terminal t-1 --text HELLO-ORCA --enter" in text
+    # The prompt body and --enter are still there; the dispatch boundary is
+    # appended between them as the final echoed line.
+    assert "orca terminal send --terminal t-1 --text HELLO-ORCA" in text
+    assert "===HMAD-DISPATCH-BOUNDARY===" in text
+    assert "--enter" in text
 
 
 def test_clear_sends_slash_clear(tmp_path):
@@ -1299,6 +1303,52 @@ def test_wait_orca_converts_timeout_seconds_to_milliseconds(tmp_path):
             capture=cap)
     assert r.returncode == 0
     assert "--timeout-ms 30000" in cap.read_text()
+
+
+def _wait_gated(tmp_path, frame, *gate_args, timeout="2"):
+    b = _bindir(tmp_path, ["orca"])
+    return run(["wait", "agy", "--timeout", timeout, *gate_args], substrate="orca",
+               env={"_BINDIR": b, "HMAD_ORCA_AGY_TERMINAL": "term_wait",
+                    "HMAD_STUB_ORCA_STDOUT": frame, "HMAD_WAIT_POLL_INTERVAL": "0"})
+
+
+def test_wait_not_while_regex_blocks_a_stable_busy_frame(tmp_path):
+    """A pane parked on 'Waiting for background terminal' is stable but NOT done.
+
+    The exact false-idle: Codex delegated to a background terminal, the TUI frame
+    is static (native tui-idle satisfied, two snapshots match), yet generation is
+    still in flight. The busy marker must keep the wait unsatisfied.
+    """
+    r = _wait_gated(tmp_path, "Waiting for background terminal\nfoo",
+                    "--not-while-regex", "Waiting for background terminal")
+    assert r.returncode != 0
+
+
+def test_wait_until_regex_times_out_without_evidence(tmp_path):
+    r = _wait_gated(tmp_path, "still working...\nno verdict here",
+                    "--until-regex", "STATUS:")
+    assert r.returncode != 0
+
+
+def test_wait_until_regex_all_patterns_required(tmp_path):
+    """A verdict without a full-suite number is not completion for a 5d/5e GREEN."""
+    r = _wait_gated(tmp_path, "STATUS: DONE\n(suite not run)",
+                    "--until-regex", "STATUS:",
+                    "--until-regex", "[0-9]{3,4} passed")
+    assert r.returncode != 0
+
+
+def test_wait_until_regex_satisfied_by_positive_evidence(tmp_path):
+    r = _wait_gated(tmp_path, "STATUS: DONE\n1234 passed",
+                    "--until-regex", "STATUS:",
+                    "--until-regex", "[0-9]{3,4} passed")
+    assert r.returncode == 0
+
+
+def test_wait_ungated_still_completes_on_stability(tmp_path):
+    """No gates ⇒ the pre-fix behaviour is unchanged (two identical frames = done)."""
+    r = _wait_gated(tmp_path, "steady frame")
+    assert r.returncode == 0
 
 
 def test_orca_explicit_pin_bypasses_list_resolution(tmp_path):
@@ -2173,6 +2223,45 @@ def test_send_inlines_a_small_prompt(tmp_path):
     text = cap.read_text()
     assert "SMALL-PROMPT" in text
     assert str(pf) not in text, "small prompts must still be inlined"
+
+
+def test_send_appends_dispatch_boundary_inline(tmp_path):
+    """Every send ends with the boundary so extraction can slice off the echo."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = tmp_path / "small.txt"; pf.write_text("SMALL-PROMPT")
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "===HMAD-DISPATCH-BOUNDARY===" in text
+    # The boundary must land AFTER the prompt body — it fences the reply below it.
+    assert text.index("SMALL-PROMPT") < text.index("===HMAD-DISPATCH-BOUNDARY===")
+
+
+def test_send_appends_dispatch_boundary_indirection(tmp_path):
+    """The >max path types a 'Read <file>' line; the boundary must ride on THAT,
+    not the untyped file, so it still reaches the echoed buffer."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = _prompt_file(tmp_path, _INLINE_MAX_DEFAULT + 1, "big.txt")
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1"}, capture=cap)
+    assert r.returncode == 0
+    text = cap.read_text()
+    assert "===HMAD-DISPATCH-BOUNDARY===" in text
+    assert str(pf) in text
+
+
+def test_send_boundary_is_tunable(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    pf = tmp_path / "small.txt"; pf.write_text("SMALL-PROMPT")
+    r = _enforced_send(["send", "codex", str(pf)], substrate="orca",
+                       env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "t-1",
+                            "HMAD_DISPATCH_BOUNDARY": "@@EDGE@@"}, capture=cap)
+    assert r.returncode == 0
+    assert "@@EDGE@@" in cap.read_text()
 
 
 def test_send_switches_to_indirection_for_a_large_prompt(tmp_path):

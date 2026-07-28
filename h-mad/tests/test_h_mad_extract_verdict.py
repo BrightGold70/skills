@@ -74,6 +74,61 @@ class TestExtractVerdict:
             ev.extract_verdict("VERDICT: DRIFT\n", "STATUS")
 
 
+BOUNDARY = "===HMAD-DISPATCH-BOUNDARY==="
+
+# The exact shape that produced a false STATUS: DONE: the dispatched prompt
+# quotes its own output contract, the agent emitted nothing, and the buffer holds
+# only the echoed prompt. Without slicing, the contract's `STATUS: DONE` line is
+# read back as the agent's verdict.
+ECHOED_CONTRACT = (
+    "codex> follow the instructions\n"
+    "Report exactly one of:\n"
+    "  STATUS: DONE\n"
+    "  or STATUS: DONE_WITH_CONCERNS\n"
+    "  or STATUS: BLOCKED\n"
+    "  or STATUS: NEEDS_CONTEXT\n"
+    f"{BOUNDARY}\n"
+    "codex> \n"
+)
+
+
+class TestBoundarySlice:
+    def test_echoed_contract_only_raises_when_sliced(self):
+        """Silent agent: buffer is pure prompt echo below the boundary."""
+        with pytest.raises(ev.VerdictError, match="no STATUS"):
+            ev.extract_verdict(ECHOED_CONTRACT, "STATUS", after=BOUNDARY)
+
+    def test_without_slice_the_echo_wins_documenting_the_bug(self):
+        """The pre-fix behaviour, pinned: no slice ⇒ the echo reads as DONE.
+
+        Only `STATUS: DONE` starts its line; the `or STATUS: …` alternatives
+        have `or ` before the key so the anchor skips them. The canonical form
+        the contract lists first is exactly what wins — the observed false DONE.
+        """
+        assert ev.extract_verdict(ECHOED_CONTRACT, "STATUS") == "DONE"
+
+    def test_real_verdict_after_boundary_wins(self):
+        scrape = ECHOED_CONTRACT + "...ran the suite...\nSTATUS: BLOCKED\n"
+        assert ev.extract_verdict(scrape, "STATUS", after=BOUNDARY) == "BLOCKED"
+
+    def test_verdict_above_boundary_is_ignored(self):
+        """A prior cycle's real DONE sits above this dispatch's boundary."""
+        scrape = "STATUS: DONE\n" + ECHOED_CONTRACT + "STATUS: BLOCKED\n"
+        assert ev.extract_verdict(scrape, "STATUS", after=BOUNDARY) == "BLOCKED"
+
+    def test_absent_boundary_fails_closed(self):
+        with pytest.raises(ev.VerdictError, match="boundary marker"):
+            ev.extract_verdict("STATUS: DONE\n", "STATUS", after=BOUNDARY)
+
+    def test_last_boundary_is_the_anchor(self):
+        """Two dispatches in scrollback: only the most recent reply counts."""
+        scrape = (
+            f"STATUS: DONE\n{BOUNDARY}\nSTATUS: COMPLIANT_OLD\n"
+            f"{BOUNDARY}\nSTATUS: BLOCKED\n"
+        )
+        assert ev.extract_verdict(scrape, "STATUS", after=BOUNDARY) == "BLOCKED"
+
+
 class TestAllowedValues:
     def test_accepts_a_listed_value(self):
         got = ev.extract_verdict("STATUS: DONE\n", "STATUS", allowed=CODEX_VALUES)
@@ -208,6 +263,26 @@ class TestCli:
             tmp_path=tmp_path,
         )
         assert "[H-MAD] myfeat phase5e" in r.stdout
+
+    def test_after_marker_bare_flag_slices_echo(self, tmp_path):
+        r = self.run(ECHOED_CONTRACT, "--key", "STATUS", "--after-marker",
+                     tmp_path=tmp_path)
+        assert r.returncode == 2
+        assert r.stdout.strip() == ""
+        assert "no STATUS" in r.stderr
+
+    def test_after_marker_absent_boundary_exits_2(self, tmp_path):
+        r = self.run("STATUS: DONE\n", "--key", "STATUS", "--after-marker",
+                     tmp_path=tmp_path)
+        assert r.returncode == 2
+        assert "boundary marker" in r.stderr
+
+    def test_after_marker_passes_real_verdict(self, tmp_path):
+        scrape = ECHOED_CONTRACT + "STATUS: DONE\n"
+        r = self.run(scrape, "--key", "STATUS", "--after-marker",
+                     tmp_path=tmp_path)
+        assert r.returncode == 0
+        assert r.stdout.strip() == "STATUS: DONE"
 
     def test_missing_file_exits_2(self, tmp_path):
         r = subprocess.run(

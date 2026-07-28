@@ -1188,15 +1188,28 @@ _cmd_send() {
   local size
   size=$(wc -c < "$promptfile" | tr -d ' ')
 
+  # Boundary appended as the FINAL line of everything we send. The agent's reply
+  # renders after the echoed prompt, so verdict/report extraction slices to the
+  # region past this marker's last occurrence and never re-reads the prompt's own
+  # `STATUS: DONE`/sentinel exemplar as the agent's answer (the false-DONE trap).
+  # Kept out of the >8192 file-read branch's file body ON PURPOSE: it must land in
+  # the text that is actually TYPED into the pane (and thus echoed), which for a
+  # large prompt is the "Read <abs>" line, not the untyped file.
+  local boundary="${HMAD_DISPATCH_BOUNDARY:-===HMAD-DISPATCH-BOUNDARY===}"
+
   if [ "$size" -le "$max" ]; then
-    _send_text "$agent" "$(cat "$promptfile")"
+    _send_text "$agent" "$(cat "$promptfile")
+
+$boundary"
     return $?
   fi
 
   # Canonical path — the agent resolves it from its own cwd, not ours.
   local abs
   abs="$(cd "$(dirname "$promptfile")" && pwd -P)/$(basename "$promptfile")"
-  _send_text "$agent" "Read $abs and follow the instructions in it. It is ${size} bytes; read the whole file before responding."
+  _send_text "$agent" "Read $abs and follow the instructions in it. It is ${size} bytes; read the whole file before responding.
+
+$boundary"
 }
 _cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
   # The scrape-path dispatch, composed from the three verbs an audit/review
@@ -1405,10 +1418,38 @@ _snapshot() {   # $1 substrate, $2 target
   esac
 }
 
+# True when *frame* clears every gate: each newline-separated until-pattern must
+# match (AND, since grep -E cannot express conjunction), and the not-while
+# alternation must NOT match. Empty gates are vacuously satisfied.
+_frame_satisfies() {   # $1 frame, $2 until-regex(newline-joined), $3 not-while-regex(|-joined)
+  local frame="$1" until_re="$2" not_while_re="$3" pat
+  if [ -n "$not_while_re" ] && printf '%s' "$frame" | grep -Eq -- "$not_while_re"; then
+    return 1
+  fi
+  if [ -n "$until_re" ]; then
+    while IFS= read -r pat; do
+      [ -z "$pat" ] && continue
+      printf '%s' "$frame" | grep -Eq -- "$pat" || return 1
+    done <<EOF
+$until_re
+EOF
+  fi
+  return 0
+}
+
 # Two consecutive identical snapshots. A single read can catch a pane
 # mid-write; two matching ones cannot.
-_wait_stable() {   # $1 substrate, $2 target, $3 timeout-seconds
-  local sub="$1" target="$2" timeout="$3"
+#
+# Stability alone is not completion. A pane parked on "Waiting for background
+# terminal" (Codex delegated the real work to a background terminal) is a static
+# frame: two snapshots match and native tui-idle is satisfied while generation is
+# still in flight. So two optional gates promote a stable frame to "done":
+#   $4 until-regex     — required positive evidence; a stable frame that lacks it
+#                        keeps polling (silence/echo never satisfy it).
+#   $5 not-while-regex — a known-busy marker; while it matches, a stable frame is
+#                        NOT done, mirroring "tui-idle's not-idle is authoritative".
+_wait_stable() {   # $1 substrate, $2 target, $3 timeout, [$4 until-regex] [$5 not-while-regex]
+  local sub="$1" target="$2" timeout="$3" until_re="${4:-}" not_while_re="${5:-}"
   local interval="${HMAD_WAIT_POLL_INTERVAL:-3}"
   local prev="" cur elapsed=0
 
@@ -1421,7 +1462,11 @@ _wait_stable() {   # $1 substrate, $2 target, $3 timeout-seconds
     cur="$(_snapshot "$sub" "$target")"
     # An empty read is not evidence of idleness — only two identical
     # non-empty snapshots are.
-    [ -n "$cur" ] && [ "$cur" = "$prev" ] && return 0
+    if [ -n "$cur" ] && [ "$cur" = "$prev" ]; then
+      if _frame_satisfies "$cur" "$until_re" "$not_while_re"; then
+        return 0
+      fi
+    fi
     prev="$cur"
     [ "$interval" -gt 0 ] && sleep "$interval"
     elapsed=$((elapsed + tick))
@@ -1431,8 +1476,22 @@ _wait_stable() {   # $1 substrate, $2 target, $3 timeout-seconds
 
 _cmd_wait() {
   local agent="$1"; shift
-  local timeout=300
-  while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) _unknown_opt wait "$1"; return $? ;; esac; done
+  local timeout=300 until_re="" not_while_re=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --timeout) timeout="$2"; shift 2 ;;
+    # Positive-evidence gate: don't call a stable frame done until it matches.
+    # For a 5d/5e GREEN that is the verdict line AND a full-suite result, e.g.
+    #   --until-regex 'STATUS:.*(DONE|BLOCKED|NEEDS_CONTEXT)' --until-regex '[0-9]{3,4} passed'
+    # (repeatable — every occurrence must match).
+    --until-regex) until_re="${until_re:+$until_re
+}$2"; shift 2 ;;
+    # Known-busy marker: while it shows, a stable frame is not done.
+    --not-while-regex) not_while_re="${not_while_re:+$not_while_re|}$2"; shift 2 ;;
+    *) _unknown_opt wait "$1"; return $? ;;
+  esac; done
+  # Multiple --until-regex are ALL required; passed newline-joined, ANDed per
+  # frame by _frame_satisfies. Multiple --not-while-regex are |-joined (any hit
+  # means still busy).
   local sub target; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
@@ -1442,10 +1501,10 @@ _cmd_wait() {
       # proof: its "not idle" is authoritative, its "idle" is not. Confirm
       # with the same stability comparison cmux has always relied on.
       orca terminal wait --terminal "$target" --for tui-idle --timeout-ms "$(( timeout * 1000 ))" || return 1
-      _wait_stable "$sub" "$target" "$timeout" ;;
+      _wait_stable "$sub" "$target" "$timeout" "$until_re" "$not_while_re" ;;
     cmux)
       # No native idle in cmux at all — stability is the only signal.
-      _wait_stable "$sub" "$target" "$timeout" ;;
+      _wait_stable "$sub" "$target" "$timeout" "$until_re" "$not_while_re" ;;
   esac
 }
 
