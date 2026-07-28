@@ -80,6 +80,32 @@ def test_codex_exec_writes_last_message_to_out(tmp_path):
     assert out.read_text() == "VERDICT: COMPLIANT"
 
 
+def test_codex_exec_log_streams_transcript_for_tailing(tmp_path):
+    """--log captures the live transcript to a tailable file; verdict path intact.
+
+    The --output-last-message file only lands at completion, so it is NOT tailable
+    — the transcript is what a watcher follows. --log must not disturb the verdict
+    (still from the last-message file on stdout) or the exit code.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    log = tmp_path / "run.log"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="STATUS: DONE",
+                     HMAD_STUB_CODEX_STDOUT="[codex] running pytest..."))
+    assert r.returncode == 0, r.stderr
+    assert "[codex] running pytest..." in log.read_text()   # transcript is tailable
+    assert r.stdout.strip() == "STATUS: DONE"                # verdict still clean
+    assert "[codex] running" not in r.stdout                 # transcript not on stdout
+
+
+def test_codex_exec_log_preserves_exit_code(tmp_path):
+    b = _bindir(tmp_path, ["codex"])
+    log = tmp_path / "run.log"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_CODEX_RC="7"))
+    assert r.returncode == 7, r.stderr
+
+
 def test_codex_exec_delivers_prompt_via_stdin(tmp_path):
     b = _bindir(tmp_path, ["codex"])
     seen = tmp_path / "stdin.txt"
@@ -169,6 +195,31 @@ def test_agy_exec_writes_response_to_out(tmp_path):
             env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT"))
     assert r.returncode == 0, r.stderr
     assert out.read_text().strip() == "VERDICT: COMPLIANT"
+
+
+def test_agy_exec_log_streams_response_for_tailing(tmp_path):
+    """--log streams agy's response to a tailable file AND the verdict stays clean.
+
+    agy --print buffers under command substitution, so without --log there is
+    nothing to tail. --log redirects the response (stdout only — no stderr noise)
+    to the file, read back for the verdict; exit code preserved (direct redirect,
+    not a pipe).
+    """
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "run.log"
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT"))
+    assert r.returncode == 0, r.stderr
+    assert "VERDICT: COMPLIANT" in log.read_text()       # tailable
+    assert r.stdout.strip() == "VERDICT: COMPLIANT"       # verdict still on stdout
+
+
+def test_agy_exec_log_preserves_exit_code(tmp_path):
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "run.log"
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RC="5", HMAD_STUB_AGY_RESP="VERDICT: DRIFT"))
+    assert r.returncode == 5, r.stderr
 
 
 def test_agy_exec_passes_model_and_effort(tmp_path):
