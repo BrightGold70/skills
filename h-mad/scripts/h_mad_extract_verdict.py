@@ -31,15 +31,52 @@ CONTRACTS = {
     "ASSESSMENT": ["READY_TO_MERGE", "WITH_FIXES", "NO"],
 }
 
+# The boundary line `hmad-dispatch send` appends as the FINAL line of every
+# prompt. The agent's reply always renders after the echoed prompt, so slicing
+# the scrape to the region past the boundary's LAST occurrence discards the
+# echoed prompt wholesale — including any `STATUS: DONE` the output contract
+# quotes. Without it, a silent agent's buffer holds only the echoed prompt, and
+# the contract line the prompt states is read back as the agent's own verdict
+# (a false STATUS: DONE). Constant, not per-dispatch: taking the LAST occurrence
+# means each fresh dispatch's boundary also fences off the previous cycle's
+# scrollback, so uniqueness buys nothing over "last wins".
+DISPATCH_BOUNDARY = "===HMAD-DISPATCH-BOUNDARY==="
+
 
 class VerdictError(Exception):
     """No usable verdict line in the scrape."""
 
 
+def slice_after_boundary(scrape: str, marker: str) -> str:
+    """Return the scrape region after *marker*'s last occurrence.
+
+    Raises if *marker* is absent: a scrape that never captured the boundary is
+    a scrape of the wrong pane, or one taken before the dispatch echoed — either
+    way there is no verdict to trust, so fail closed rather than fall back to
+    scanning the whole buffer (which is exactly the echoed-prompt trap).
+    """
+    idx = scrape.rfind(marker)
+    if idx == -1:
+        raise VerdictError(
+            f"boundary marker {marker!r} not in scrape — the dispatch was not "
+            "captured (wrong pane, or read before the prompt echoed)"
+        )
+    return scrape[idx + len(marker):]
+
+
 def extract_verdict(
-    scrape: str, key: str, allowed: list[str] | None = None
+    scrape: str,
+    key: str,
+    allowed: list[str] | None = None,
+    after: str | None = None,
 ) -> str:
-    """Return the value of the last `<key>:` line in *scrape*."""
+    """Return the value of the last `<key>:` line in *scrape*.
+
+    When *after* is given, only the region past its last occurrence is
+    considered — see :func:`slice_after_boundary`.
+    """
+    if after is not None:
+        scrape = slice_after_boundary(scrape, after)
     pattern = re.compile(rf"^[ \t]*{re.escape(key)}:[ \t]*(.*)$", re.MULTILINE)
     matches = pattern.findall(scrape)
     if not matches:
@@ -137,6 +174,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--feature", help="Emit an [H-MAD] marker for this feature")
     parser.add_argument("--phase", default="5", help="Phase label for the marker")
+    parser.add_argument(
+        "--after-marker",
+        nargs="?",
+        const=DISPATCH_BOUNDARY,
+        default=None,
+        help="Extract only past this marker's last occurrence (fail closed if "
+        f"absent). Bare flag uses the default boundary {DISPATCH_BOUNDARY!r} "
+        "that `hmad-dispatch send` appends; pass a value to override.",
+    )
     args = parser.parse_args(argv)
 
     if args.allowed is not None:
@@ -149,6 +195,15 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+
+    # Slice once here so both the verdict scan and the concern scan see only the
+    # agent's reply, never the echoed prompt above the boundary.
+    if args.after_marker is not None:
+        try:
+            scrape = slice_after_boundary(scrape, args.after_marker)
+        except VerdictError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
 
     try:
         value = extract_verdict(scrape, args.key, allowed)

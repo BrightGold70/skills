@@ -424,7 +424,28 @@ and emitted nothing therefore reads as approval, and the module gets committed
 on silence. A prior module's `STATUS: DONE` still in scrollback is the same
 trap from the other direction.
 
-Extract instead, which fails closed on both:
+**Third trap — the prompt's own contract echo (J17).** The 5d/5e dispatch prompt
+states its output contract (`STATUS: DONE`, on its own line, as the canonical
+form). That line is *typed into the pane* and echoed back. When the agent emits
+nothing — a submit-Enter swallowed mid-boot, say — the buffer holds only the
+echoed prompt, and the extractor reads the contract's own `STATUS: DONE` as the
+agent's verdict: a false DONE, exit 0. The `key-must-start-the-line` guard does
+not catch it because the echoed contract line *does* start the line. This is not
+audit-immune-by-nature: the assembled audit prompt likewise echoes a complete
+`<sentinel>-BEGIN … -END` pair (assemble substitutes the concrete sentinel), so
+`extract_report` shares the trap on a raw scrape — the per-cycle sentinel only
+defeats a *stale prior cycle*, not this *same-run echo*.
+
+**The fix — always pass `--after-marker`.** `hmad-dispatch send` appends a fixed
+boundary line (`===HMAD-DISPATCH-BOUNDARY===`) as the final line of every prompt.
+The agent's reply always renders *after* the echoed prompt, so the extractors
+slice to the region past the boundary's **last** occurrence and never re-read the
+echoed contract. Taking the last occurrence also fences off prior-cycle
+scrollback. **`--after-marker` is mandatory on every scrape extraction** — a
+scrape missing the boundary fails closed (the dispatch was never captured, or you
+read the wrong pane), which is correct.
+
+Extract like this — fails closed on silence, echo, and stale scrollback:
 
 ```bash
 # `ask` = send + wait-idle + full-buffer read in one call (the send/wait/read
@@ -432,20 +453,41 @@ Extract instead, which fails closed on both:
 # send/wait chatter goes to stderr. --out captures it for the extractor.
 hmad-dispatch ask <agent> <promptfile> --out /tmp/scrape_<feature>_<module>.txt
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
-  /tmp/scrape_<feature>_<module>.txt --key VERDICT \
+  /tmp/scrape_<feature>_<module>.txt --key VERDICT --after-marker \
   --feature <feature> --phase 5e
 ```
+
+`--after-marker` with no value uses the default boundary; pass a value only to
+override it. `h_mad_extract_report.py` takes the same flag.
+
+**Idle is not completion — gate `wait` on positive evidence.** `wait`'s idle
+signal (native tui-idle, then two matching snapshots) reports done for a pane
+parked on `Waiting for background terminal`: Codex delegated to a background
+terminal, the TUI frame is static, generation still in flight. Idle is a *first
+gate*, never proof. For a 5d/5e GREEN, require the verdict line **and** a
+full-suite result in the same frame, and refuse a known-busy frame:
+
+```bash
+hmad-dispatch wait codex --timeout 900 \
+  --until-regex 'STATUS:.*(DONE|BLOCKED|NEEDS_CONTEXT)' \
+  --until-regex '[0-9]{3,4} passed' \
+  --not-while-regex 'Waiting for background terminal'
+```
+
+Every `--until-regex` must match (repeatable = AND); any `--not-while-regex`
+match keeps polling. Only then extract the verdict from the boundary-sliced tail.
 
 If the pane was already dispatched into (you only need to re-read), use
 `hmad-dispatch read <agent> --from-start`, never `--lines N` — a tail can render
 a stale overdrawn frame (J3).
 
 It takes the **last** matching line, validates the value against the contract,
-and exits 2 printing nothing when the line is absent, empty, or off-contract.
-Treat exit 2 as "no verdict", never as a pass: re-read with `--from-start` (a larger tail does not escape an overdrawn frame region — J3),
-and if the agent genuinely produced nothing, `hmad-dispatch clear <agent>` and
-re-dispatch. Repeated silence is a halt (`step5e:no_verdict:<module>`), not a
-reason to proceed.
+and exits 2 printing nothing when the line is absent, empty, off-contract, or the
+boundary marker is missing. Treat exit 2 as "no verdict", never as a pass:
+re-read with `--from-start` (a larger tail does not escape an overdrawn frame
+region — J3), and if the agent genuinely produced nothing, `hmad-dispatch clear
+<agent>` and re-dispatch. Repeated silence is a halt
+(`step5e:no_verdict:<module>`), not a reason to proceed.
 
 ## Verifying a review finding before acting on it
 
