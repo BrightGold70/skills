@@ -108,3 +108,5 @@ later session block. As of 2026-07-24 there is none — the backlog is drained o
 - **compose-verb-from-existing-verbs**: build a convenience verb (ask = send+wait+read) by calling the existing command functions so their guards carry, routing sub-command chatter to stderr so stdout stays the payload — recurrence: 1 — candidate: no (one instance; the pattern is just single-source reuse)
 
 ## 2026-07-28 — orca-pin-identity-line — no candidates
+## 2026-07-28 — j17-dispatch-verdict-guard — no candidates
+
