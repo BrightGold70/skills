@@ -254,10 +254,10 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 - **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 - **5c** — baseline branch: `git checkout -b feature/NNN-<slug>`; commit impl-plan + audit files.
-- **5d** — RED dispatch via `hmad-dispatch send` (see `references/codex-implementer-prompt.md`). Verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. **In the dispatch, state the expected failing/passing counts for the task and label any regression guards** — tests asserting behaviour that already works, which must pass from the first run. Read each `STATUS:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict"); no extractable verdict after a re-read and re-dispatch → halt `step5d:no_verdict:<module>`. Then verify the results **match the stated counts**; halt `step5d:red_not_all_failing` when an unlabelled test passes without implementation.
+- **5d** — RED dispatch (see `references/codex-implementer-prompt.md`). **Transport: default `hmad-dispatch exec codex` for a one-shot RED** — hard exit code, no scrape, monitor via `--log` (§"Exit-code dispatch for 5d/5e"); use the pane path (`send`) only for an iterative revision loop. The pane-path steps in the rest of this bullet (alive-check, context clear) apply only when you use `send`; `exec` is a fresh subprocess and needs neither. For the pane path: verify codex + agy alive (`hmad-dispatch alive codex` && `hmad-dispatch alive agy`); refuse if missing → halt `step5d:no_<agent>_pane`. **Immediately after confirming each pane is alive, clear its context** (see §"Agent-pane context hygiene") so no prior-feature/prior-cycle conversation bleeds into this feature's TDD. For each module, dispatch Codex for tests; dispatch agy for coverage review. **In the dispatch, state the expected failing/passing counts for the task and label any regression guards** — tests asserting behaviour that already works, which must pass from the first run. Read each `STATUS:` with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict"); no extractable verdict after a re-read and re-dispatch → halt `step5d:no_verdict:<module>`. Then verify the results **match the stated counts**; halt `step5d:red_not_all_failing` when an unlabelled test passes without implementation.
 
   Not every RED task is all-new behaviour. A refactor-shaped task legitimately lands with most of its tests green, and a blanket "every test must FAIL" halts a correct RED — worse, the cheapest way for an implementer to satisfy it is to weaken an assertion or assert the current buggy value, manufacturing a failure that then "passes" in 5e without anything being fixed. Stating the counts up front makes the check discriminating in both directions: an unexpected pass still halts, and an expected one does not.
-- **5e** — GREEN dispatch via `hmad-dispatch send` (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). Re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. Read both verdicts with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict") — never by grepping the scrape for the halt value, which turns an agent's silence into a pass. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. If no verdict can be extracted after a re-read and re-dispatch → halt `step5e:no_verdict:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
+- **5e** — GREEN dispatch (`references/codex-implementer-prompt.md` + `references/agy-spec-reviewer-prompt.md`). **Transport: default `hmad-dispatch exec` for a one-shot GREEN + its review** (§"Exit-code dispatch for 5d/5e"); use the pane path (`send`) for the iterative revision loop where cycles 2..N reuse the warm thread — there the alive-check + context-clear below apply. For the pane path: re-verify the Codex + agy panes alive and **clear each pane's context** (§"Agent-pane context hygiene") before the first GREEN dispatch of a feature. For each module, dispatch Codex for implementation; dispatch agy for spec-compliance review. Read both verdicts with `h_mad_extract_verdict.py` (§"Reading a dispatch verdict") — never by grepping the scrape for the halt value, which turns an agent's silence into a pass. If agy returns `VERDICT: DRIFT` → halt `step5e-review:spec_drift:<module>`. If no verdict can be extracted after a re-read and re-dispatch → halt `step5e:no_verdict:<module>`. On 3rd consecutive GREEN failure → halt `step5e:green_unreachable:<module>`.
 - **5f** — run full test suite: `pytest <project>/tests/ -v --tb=short`. All must pass (100%). Any failure → halt.
 - **5g** — `git add -A && git commit -m "feat(<feature>): implement <module>"` per module. Write `phase = null` (disarms TDD gate hook). Emit `[H-MAD] <feature> phase5 complete`.
 
@@ -286,14 +286,16 @@ now enforced mechanically, not left to discipline:
 Test files, docs, config, and shell are never gated; only production `.py`. The
 gate stands down outside `step5` and disarms at 5g (`phase = null`).
 
-### Exit-code dispatch for 5d/5e (prototype — `hmad-dispatch exec`)
+### Exit-code dispatch for 5d/5e (`hmad-dispatch exec`) — default for one-shot
 
-The 5d/5e dispatches above use the pane REPL (`send`/`ask`): the agent runs as a
-long-lived TUI, so completion is inferred by polling the buffer for idle and
-parsing a token — there is no process to reap and no exit code. `exec` is an
-**alternative transport** for a self-contained dispatch: it runs the agent headless
-as a real subprocess and returns the agent's own exit code with no idle poll. Both
-agents are supported, on their natural side of 5d/5e:
+The pane REPL (`send`/`ask`) runs the agent as a long-lived TUI, so completion is
+inferred by polling the buffer for idle and parsing a token — there is no process
+to reap and no exit code. `exec` instead runs the agent headless as a real
+subprocess and returns the agent's own exit code with no idle poll. **It is the
+default for a one-shot 5d/5e dispatch** (see the guidance below), because the exit
+code is a hard completion signal and it sidesteps the whole pane failure class —
+tui-idle false-idle, prompt-echo, scrape, identity resolution. Both agents are
+supported, on their natural side of 5d/5e:
 
 - **`exec codex`** — the RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
   via stdin; final message via `--output-last-message`; default `--sandbox workspace-write`.
@@ -303,17 +305,27 @@ agents are supported, on their natural side of 5d/5e:
   one thing the pane path can still fail at for an un-owned agent.
 
 ```bash
-# 5d/5e codex (implement), exit-code path:
-hmad-dispatch exec codex <promptfile> --out /tmp/exec_<feature>_<module>.txt --timeout 900
+# 5d/5e codex (implement), exit-code path. --log streams the live transcript to a
+# tailable file — headless is not blind. Background it and tail to watch:
+hmad-dispatch exec codex <promptfile> --out /tmp/exec_<feature>_<module>.txt \
+  --log /tmp/exec_<feature>_<module>.log --timeout 900 &
+tail -f /tmp/exec_<feature>_<module>.log   # Ctrl-C to stop watching; the run continues
+wait                                        # reap the dispatch
 rc=$?                                   # operational: did the CLI run at all
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/exec_<feature>_<module>.txt --key STATUS --feature <feature> --phase 5d
 
 # 5e-review agy (audit), exit-code path — no pane to resolve:
-hmad-dispatch exec agy <promptfile> --out /tmp/rev_<feature>_<module>.txt --timeout 600
+hmad-dispatch exec agy <promptfile> --out /tmp/rev_<feature>_<module>.txt \
+  --log /tmp/rev_<feature>_<module>.log --timeout 600
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/rev_<feature>_<module>.txt --key VERDICT --feature <feature> --phase 5e
 ```
+
+The verdict comes from `--out` (the `--output-last-message` file / captured response),
+which only lands at completion — so `--out` is NOT tailable. `--log` is: it streams
+the live transcript (codex) or response (agy) to `<file>` as it runs, without
+disturbing the verdict on stdout or the exit code. Tail it to monitor a headless run.
 
 **`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
 completed, `124` = watchdog timeout, non-zero = crash/abort); it does **not** mean
@@ -322,13 +334,16 @@ does (§"Reading a dispatch verdict") — exit 0 with `STATUS: BLOCKED` is still
 and Codex GREEN still needs the anti-gaming verify. `rc` replaces the *idle poll*,
 not the *verdict extraction*.
 
-**When to prefer it:** the task is self-contained (no reliance on the prior cycle's
-conversation) and you want a hard completion signal instead of a poll — e.g. a
-background/parallel module where you'd rather be notified on process exit than watch
-a pane. **When to keep the pane path:** the running revision thread matters (cycles
-2..N of the same 5e, "here's the fix for your prior should-fix" — `exec` is a fresh
-session each call unless resumed) or a human is watching the Orca pane. Default stays
-the pane path; `exec` is opt-in per module.
+**Default for a one-shot 5d/5e dispatch is `exec`.** A single self-contained RED/GREEN
+or a single audit cycle has no prior-cycle conversation to preserve, and the exit code
+is a hard completion signal — so `exec` sidesteps the entire pane failure class at once:
+no tui-idle false-idle, no boundary-echo, no scrape, no identity resolution. Monitor it
+by tailing `--log` (above); headless is not blind.
+
+**Switch to the pane path when** the running revision thread matters — cycles 2..N of
+the *same* 5e ("here's the fix for your prior should-fix"), where `exec`'s fresh session
+each call would re-send the whole context — or when a human wants to watch/intervene in
+the Orca pane live. In short: **one-shot → `exec`; iterative revision loop → pane.**
 
 Codex sandbox defaults to `workspace-write` (5d/5e write test + impl files); its
 prompt is delivered on stdin, so the 8192-byte keystroke inline cap does not apply.

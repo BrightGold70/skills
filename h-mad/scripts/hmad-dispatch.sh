@@ -1267,7 +1267,7 @@ _run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `
   wait "$pid"
 }
 
-_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
+_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -1295,12 +1295,13 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   esac
   [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
 
-  local cd_dir="" model="" out="" timeout="" sandbox="" effort=""
+  local cd_dir="" model="" out="" timeout="" sandbox="" effort="" log=""
   [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in
     --cd) cd_dir="$2"; shift 2 ;;
     --model) model="$2"; shift 2 ;;
     --out) out="$2"; shift 2 ;;
+    --log) log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) timeout="$2"; shift 2 ;;
     --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox
     --effort) effort="$2"; shift 2 ;;      # agy only
@@ -1320,8 +1321,18 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
     [ -n "$model" ] && args+=(--model "$model")
-    # Prompt via stdin ('-') — no keystroke cap. Transcript -> stderr; final msg below.
-    if [ -n "$timeout" ]; then
+    # Prompt via stdin ('-') — no keystroke cap. Transcript is the live progress
+    # signal (the --output-last-message file only lands at completion, so it is
+    # NOT tailable). Default: transcript -> our stderr. With --log: transcript+stderr
+    # -> <file> (a direct redirect, not a pipe, so the codex exit code survives) so
+    # a watcher can `tail -f <file>` a headless run. rc comes from the codex process.
+    if [ -n "$log" ]; then
+      if [ -n "$timeout" ]; then
+        _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
+      else
+        codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
+      fi
+    elif [ -n "$timeout" ]; then
       _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
     else
       codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
@@ -1346,7 +1357,17 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     [ -n "$timeout" ] && args+=(--print-timeout "${timeout}s")
     args+=(--print "$prompt")
     local resp
-    if [ -n "$timeout" ]; then
+    if [ -n "$log" ]; then
+      # Response streamed straight to <file> (stdout ONLY — agy --print puts just
+      # the response there; keeping stderr out preserves a clean verdict), then read
+      # back. Direct redirect, not a pipe, so agy's exit code survives. Live-tailable.
+      if [ -n "$timeout" ]; then
+        ( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" ) > "$log" || rc=$?
+      else
+        ( cd "$cd_dir" && agy "${args[@]}" ) > "$log" || rc=$?
+      fi
+      resp="$(cat "$log" 2>/dev/null)"
+    elif [ -n "$timeout" ]; then
       resp="$( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" )" || rc=$?
     else
       resp="$( cd "$cd_dir" && agy "${args[@]}" )" || rc=$?
