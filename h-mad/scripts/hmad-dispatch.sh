@@ -451,7 +451,7 @@ _cmd_env() {
   # it surfaced only as a puzzling UNRESOLVED, with no hint that the answer came
   # from another repo. This is the line an operator already reads before a run.
   [ "$sub" = "orca" ] && echo "pin file: $(_pin_file)"
-  local a t stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
+  local a t _id stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
   for a in codex agy; do
     if t="$(_resolve_target "$a" 2>/dev/null)"; then
       case "$a" in codex) seen_codex="$t" ;; agy) seen_agy="$t" ;; esac
@@ -464,6 +464,12 @@ _cmd_env() {
         stale="${stale:+$stale }$a"
       else
         echo "$a -> $t"
+        # TUI-independent identity, from the paneKey join (never preview/cursor).
+        # Lets an operator confirm the pin lands on the right program WITHOUT a
+        # `terminal read` -- which reads empty for a live full-screen TUI and has
+        # been misread as a wrong pin. Best-effort; absent when ps is unreadable.
+        _id="$(_orca_identity "$t" 2>/dev/null || true)"
+        [ -n "$_id" ] && echo "        id: $_id"
       fi
     else
       echo "$a -> UNRESOLVED"
@@ -1081,6 +1087,39 @@ _orca_handle_live() {
   # Distinguish "listing parsed and lacks the handle" from "listing was garbage".
   printf '%s' "$listing" | jq -e '.result.terminals' >/dev/null 2>&1 || return 2
   return 1
+}
+
+_orca_identity() {
+  # $1 = handle. Echo a one-line, TUI-INDEPENDENT identity/liveness summary for the
+  # pane, sourced from the SAME `worktree ps` paneKey join the resolver trusts in
+  # Pass 0 (_orca_find_by_pane) -- NOT from `.preview` or `terminal read`.
+  #
+  # That distinction is the whole point. A full-screen TUI (Codex, agy) runs on the
+  # alternate screen buffer, so `terminal read` reports `cursor: 0` and `.preview`
+  # reads empty even while the agent is live and mid-audit. Measured live
+  # 2026-07-28: agy's preview was <empty> and both panes read cursor: 0, which
+  # looked like two idle/wrong shells -- but the paneKey join landed on the exact
+  # two handles pin-agents had picked, and agy's lastAssistantMessage still held
+  # last session's plan-cycle-4 audit, independently confirming the reviewer. The
+  # emptiness was an artifact of the API's view of the alt-screen buffer, not
+  # evidence of a wrong pin. `worktree ps` carries agentType/state/updatedAt/
+  # lastAssistantMessage regardless of screen buffer, so it is the signal to
+  # confirm a pin by -- and the reason `env` prints it, so an operator never has to
+  # (mis)read a preview to check identity.
+  #
+  # Diagnostic only: silent (no output, rc 1) when either listing is unreadable.
+  local handle="$1" tl key ps line
+  tl="$(orca terminal list --json 2>/dev/null)" || return 1
+  key="$(printf '%s' "$tl" | jq -r --arg h "$handle" \
+    '(.result.terminals[]? | select(.handle==$h) | ((.tabId//"")+":"+(.leafId//""))) // empty' 2>/dev/null | head -1)"
+  [ -n "$key" ] && [ "$key" != ":" ] || return 1
+  ps="$(orca worktree ps --limit 200 --json 2>/dev/null)" || return 1
+  line="$(printf '%s' "$ps" | jq -r --arg k "$key" '
+    .result.worktrees[]?.agents[]? | select(.paneKey==$k)
+    | (.agentType//"?") + " state=" + (.state//"?")
+      + " last=\"" + ((.lastAssistantMessage//"") | gsub("\\s+";" ") | .[0:72]) + "\""' 2>/dev/null | head -1)"
+  [ -n "$line" ] || return 1
+  printf '%s\n' "$line"
 }
 
 _send_text() {
