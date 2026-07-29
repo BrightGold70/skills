@@ -41,10 +41,15 @@ Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
    that makes it true. A property you cannot ground in a quoted line is a FAILED property → STOP and
    report; do not paper over it.
 
-4. **Run the full suite and report exact numbers.** Run `<INLINE_TEST_COMMAND> -q` over the whole
-   suite and quote the passed / skipped / failed totals against the reference `<INLINE_SUITE_REFERENCE>`.
-   A number *higher* than the reference is fine (tests were added); any FAILURE is a blocker — report
-   it in full, do not repair and re-run silently.
+4. **Confirm the full-suite result against the reference `<INLINE_SUITE_REFERENCE>`.** The orchestrator runs the full suite itself (`/h-mad` step 5f) and passes you the number — confirm it,
+   do NOT re-run a multi-thousand-test suite inside this dispatch. (Dogfood finding 2026-07-29: a
+   headless codex re-runs the full suite because the PTY shows only progress dots and no summary
+   line, doubling wall-time until the watchdog kills it; and running it from an isolated worktree
+   fails path-coupled tests. Neither is a real regression.) If — and only if — no orchestrator number
+   was provided, run the full suite once with a summary-guaranteed invocation (`-q` redirected to a
+   file you then read, never inferred from live PTY dots) and quote passed / skipped / failed. A
+   number *higher* than the reference is fine (tests added); any FAILURE is a blocker — report it in
+   full, do not repair and re-run silently.
 
 ## Cross-check — do not trust your own headline numbers
 

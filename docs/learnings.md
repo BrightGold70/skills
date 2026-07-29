@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-07-29 · solution · [0.7] · `hmad,verifier,5e,exec,handoff:2026-07-29-skill-upgrades-verifier-parked-paths` — 5e verifier: don't let the codex-exec verify RUN the full suite — the PTY shows only progress dots (no summary), so codex re-runs it, doubling wall-time to a timeout. Orchestrator runs 5f full-suite + passes the number; verifier confirms.…
 - 2026-07-29 · gotcha · [0.7] · `hmad,exec,dogfood,sandbox,handoff:2026-07-29-skill-upgrades-verifier-parked-paths` — 5e verifier dogfood via exec: --sandbox read-only breaks pytest (no writable temp/cache → FileNotFoundError); use workspace-write. Full-suite verify under codex needs timeout >700s, and must NOT run while a concurrent agent mutates the…
 - 2026-07-29 · gotcha · [0.7] · `hmad,pytest,mutation-test,handoff:2026-07-29-skill-upgrades-verifier-parked-paths` — h-mad doc-tests: pin PY=/opt/anaconda3/bin/python3 (pytest 8.3.5); bare python3 can resolve to homebrew 3.14 without pytest. With set -e a mutation loop then applies edits but never runs tests → zero RED evidence + risk of skipped restore.
 - 2026-07-29 · gotcha · [0.7] · `orca,terminal,dispatch,session:2026-07-29` — orca terminal read: scrollback lines live at .result.terminal.tail[] (NOT .rows[]/.lines[]); read-only, --limit <n> pulls more retained rows. jq -r '.result.terminal.tail[]?' to grep a live pane.

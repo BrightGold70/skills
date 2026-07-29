@@ -34,7 +34,7 @@ VERIFIER_LITERALS = [
     "Run the module tests and report the count",
     "Anti-gaming audit",
     "quote the line",
-    "Run the full suite",
+    "The orchestrator runs the full suite itself",
     "reference",
     "Cross-check every count you report against",
     "STATUS: DONE",
