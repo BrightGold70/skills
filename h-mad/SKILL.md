@@ -496,6 +496,12 @@ If the pane was already dispatched into (you only need to re-read), use
 `hmad-dispatch read <agent> --from-start`, never `--lines N` — a tail can render
 a stale overdrawn frame (J3).
 
+If you bypass the wrapper and scrape a pane read-only with the raw CLI
+(`orca terminal read --terminal <handle> --limit <n> --json`), the scrollback
+lines live at `.result.terminal.tail[]` — **not** `.rows[]` or `.lines[]` (a wrong
+jq path returns empty and reads as "no match"). `jq -r '.result.terminal.tail[]?'`
+to grep a live pane; `--limit <n>` pulls more retained rows.
+
 It takes the **last** matching line, validates the value against the contract,
 and exits 2 printing nothing when the line is absent, empty, off-contract, or the
 boundary marker is missing. Treat exit 2 as "no verdict", never as a pass:
