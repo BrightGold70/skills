@@ -110,3 +110,9 @@ later session block. As of 2026-07-24 there is none — the backlog is drained o
 ## 2026-07-28 — orca-pin-identity-line — no candidates
 ## 2026-07-28 — j17-dispatch-verdict-guard — no candidates
 
+## 2026-07-29 — task3-verify-exec-validate
+
+- **hmad-5e-verify-recipe**: the canonical Phase-5e verification against merged/tree code — module pytest (report count) → anti-gaming test audit (name each non-discriminating test + its mitigation, or "all N discriminating") → property grep on the source (quote the line for each stated property) → full suite vs a reference number, any FAILURE is a blocker not a silent fix. Ran fully this session (25 module / 7819 full, Task 3). Recurs once per H-MAD feature — recurrence: 1 this session, high cross-session — candidate: **yes** (a repeatable checklist; the codex_task3_verify.txt prompt is already its template)
+- **find-parked-hmad-task**: locate a parked H-MAD task's repo/branch/worktree when the handoff names none — cross-reference `orca worktree list` (childWorktreeIds), scratchpad `codex_task*_*.txt`, and `.h-mad/telemetry.jsonl`; the scratchpad TDD prompts carry REPO/BRANCH/FEATURE verbatim. Recovered Task 3 (feature/191, HemaSuite) this session — recurrence: 1 — candidate: maybe (the trigger — handoff "its own worktree" with no path — is a recurring gap worth a helper)
+- **exec-transport-smoke**: validate `hmad-dispatch exec` live — read-only prompt ending in a STATUS line, peek `--log` mid-run to prove live streaming (not end-dump), extract with `h_mad_extract_verdict.py --key STATUS`, then grep the real numbers the agent quoted before trusting them (caught codex 21 vs actual 28 under a DONE line) — recurrence: 1 — candidate: maybe (overlaps hmad-5e-verify-recipe's anti-gaming step; the content-crosscheck is the reusable kernel)
+
