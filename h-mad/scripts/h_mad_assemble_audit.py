@@ -224,31 +224,38 @@ def main(argv: list[str] | None = None) -> int:
     # have reproduced J12 instead of fixing it. And HALT is contradicted by
     # evidence: J13 measured five file-indirection prompts across 53-61 KB, all
     # answered. Proceeding is correct; being unable to MISS the size is the fix.
-    size_status = "verified" if size <= 64 * 1024 else "unverified"
+    # The frontier below is PANE-PATH-SPECIFIC. It is anchored to the largest
+    # prompt CONFIRMED answered when delivered by `hmad-dispatch send` into a TUI
+    # pane -- the path where the silent-output failure mode lives (the TUI reflows
+    # a large reply across redraw frames; see references/agent-substrate.md
+    # §"Prompt size"). Six file-indirection observations spanning 52,997-92,055 B
+    # were all answered; there is no file-indirection silence on record. The old
+    # 49 KB "cliff" was a delivery-mode artifact (a paste, not file indirection)
+    # and never reproduced -- it once cost a real design audit a needless trim,
+    # and a 61,493 B "ceiling" that replaced it was itself falsified 2026-07-30 by
+    # a 92,055 B pane prompt answered cleanly (agy/Gemini 3.1 Pro; reply fragmented
+    # across frames, so read the full buffer, never a tail).
+    #
+    # `hmad-dispatch exec` (codex stdin / agy `--print` arg) has NO such frontier:
+    # codex's prompt is delivered on stdin (mechanically uncapped) and agy's is an
+    # arg bounded only by ARG_MAX (~1 MB); a >90 KB exec prompt was confirmed
+    # answered 2026-07-30. So on the exec path these warnings are advisory only.
+    # The assembler cannot know which transport the caller will use, so it warns on
+    # the conservative (pane) basis; ignore it when you will dispatch via `exec`.
+    CONFIRMED_OK = 92_055  # largest PANE prompt observed answered (2026-07-30)
+    size_status = "verified" if size <= CONFIRMED_OK else "unverified"
     print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) "
           f"sentinel={sentinel} size_status={size_status}")
-    # Thresholds are anchored to the largest prompt CONFIRMED answered, not to a
-    # cliff. The old 49 KB figure came from a session that recorded sizes but not
-    # the DELIVERY MODE, and it never reproduced for the mode this skill actually
-    # uses: `hmad-dispatch send` switches to file indirection above
-    # HMAD_SEND_INLINE_MAX (8192 B), so every audit prompt (32-61 KB) is read by
-    # the agent from a file and none is ever pasted into the TUI. Five
-    # file-indirection observations spanning 52,997-61,493 B were all answered
-    # normally; there is no file-indirection silence on record. See
-    # references/agent-substrate.md §"Prompt size" for the table.
-    #
-    # So these warn about leaving VERIFIED territory, which is honest, rather than
-    # predicting a failure, which the 49 KB wording did and was wrong about --
-    # costing a real design audit a trim it did not need.
-    CONFIRMED_OK = 61_493  # largest prompt observed answered (2026-07-23)
-    if size > 64 * 1024:
+    if size > CONFIRMED_OK:
         print(f"  ! {size / 1024:.1f} KB exceeds the largest prompt confirmed answered "
-              f"({CONFIRMED_OK / 1024:.1f} KB) — unverified, not known-bad. If the reply "
-              "comes back empty, suspect size and see SKILL.md step 5.5; note the failure "
-              "mode is silent, so read the full buffer, never a tail")
-    elif size > 60 * 1024:
+              f"on the pane path ({CONFIRMED_OK / 1024:.1f} KB) — unverified there, not "
+              "known-bad, and no limit at all via `hmad-dispatch exec` (codex stdin / agy "
+              "arg <1 MB). If a PANE reply comes back empty, suspect size and see SKILL.md "
+              "step 5.5; the failure mode is silent, so read the full buffer, never a tail")
+    elif size > 84 * 1024:
         print(f"  ~ {size / 1024:.1f} KB is approaching the largest prompt confirmed "
-              f"answered ({CONFIRMED_OK / 1024:.1f} KB) — inlining only the spec's "
+              f"answered on the pane path ({CONFIRMED_OK / 1024:.1f} KB) — a non-issue via "
+              "`hmad-dispatch exec`; on the pane path, inlining only the spec's "
               "'## Functional Requirements' section saves ~7 KB and loses no AC "
               "(SKILL.md step 5.5)")
     return 0

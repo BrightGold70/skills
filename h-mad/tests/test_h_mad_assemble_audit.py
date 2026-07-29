@@ -191,12 +191,14 @@ def test_design_docs_are_read_from_the_design_directory(tmp_path):
 def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     """The warning must arrive while there is still room to act, not only after.
 
-    Re-anchored 2026-07-23. The thresholds used to encode a "49 KB reviewer
+    Re-anchored 2026-07-30. The thresholds used to encode a "49 KB reviewer
     cliff" that never reproduced for the delivery mode this skill uses: `send`
     switches to file indirection above 8192 B, so every audit prompt is read from
-    a file, and five file-indirection prompts spanning 52,997-61,493 B were all
-    answered normally. The bands now straddle the largest CONFIRMED-answered size
-    (61,493 B) rather than a predicted failure point."""
+    a file, and six file-indirection prompts spanning 52,997-92,055 B were all
+    answered normally. The 61,493 B ceiling that anchored these bands until
+    2026-07-30 was itself falsified by a 92,055 B pane prompt answered cleanly
+    (agy/Gemini 3.1 Pro). The bands now straddle the largest CONFIRMED-answered
+    size (92,055 B) rather than a predicted failure point."""
     root = _project(tmp_path)
     spec = root / "docs/01-plan/features/demo.spec.md"
     out = tmp_path / "prompt.txt"
@@ -215,15 +217,15 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # Filler counts are calibrated to land in the bands, NOT arbitrary. Adding
     # rules to invariants.base.md moves every prompt, because that file is inlined
     # verbatim into all of them -- recalibrate the fixture rather than widen the
-    # band, because the band is the assertion. (2000/2200 after the 2026-07-24
-    # Regression-provenance / Both-halves / Reimplementation-parity rules; was
-    # 2200/2300.)
-    approaching, mid = size_of(2000)
-    assert 60 * 1024 < mid <= 64 * 1024, f"fixture drifted: {mid}B"
+    # band, because the band is the assertion. (3200/3500 after the 2026-07-30
+    # re-anchor to the 92,055 B confirmed-answered frontier; was 2000/2200 against
+    # the old 61,493 B ceiling.)
+    approaching, mid = size_of(3200)
+    assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2200)
-    assert big > 64 * 1024, f"fixture drifted: {big}B"
+    past, big = size_of(3500)
+    assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
     # cliff ... a silent empty reply is the expected failure") at sizes since
@@ -272,7 +274,7 @@ def test_size_status_flips_to_unverified_past_the_confirmed_ceiling(tmp_path):
     spec = root / "docs/01-plan/features/demo.spec.md"
     out = tmp_path / "prompt.txt"
     spec.write_text("# Spec: demo\n\n## Functional Requirements\n"
-                    + "- FR-1 filler (AC-1.1)\n" * 2300)
+                    + "- FR-1 filler (AC-1.1)\n" * 3500)
     r = _run("--feature", "demo", "--phase", "plan",
              "--project-root", str(root), "--out", str(out))
     assert r.returncode == 0, r.stderr

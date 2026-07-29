@@ -73,15 +73,21 @@ to:
 | > threshold | A short instruction naming the staged file, by canonical absolute path — the agent reads it itself |
 
 The threshold sits inside the ~5–10 KB range the file-indirection rule names,
-and well under the 32–61 KB that audit prompts reach in practice. Tune it with
-`HMAD_SEND_INLINE_MAX` if a substrate turns out to tolerate more or less.
+and well under the 16–90 KB that audit prompts reach in practice (a large
+design audit assembles to ~88 KB — design + plan + spec inlined). Tune it with
+`HMAD_SEND_INLINE_MAX` if a substrate turns out to tolerate more or less. This
+threshold governs the **pane path only**; `hmad-dispatch exec` delivers the
+prompt on codex stdin or an agy arg and ignores it entirely (see below).
 
 Before this split, `send` inlined unconditionally (`$(cat "$2")`), which put
 the documented audit dispatch step in direct conflict with the indirection
 rule at exactly the sizes that occur — so every audit had to be dispatched by
 hand instead.
 
-## Prompt size: the silent-output failure mode
+## Prompt size: the silent-output failure mode (pane path)
+
+Everything in this section is about the **pane path** — `hmad-dispatch send`/`ask`
+into a TUI. The `exec` path has no size frontier and is covered at the end.
 
 Above some size an agent reads the staged file, reports a token count, emits
 **nothing**, and returns to its prompt. No error, no partial output. That failure
@@ -91,7 +97,7 @@ mis-recorded for years, and the number cost real work.
 **Delivery mode is the variable the original measurement omitted.**
 `hmad-dispatch send` inlines a prompt only up to `HMAD_SEND_INLINE_MAX`
 (default **8192 B**); above that it stages the file and tells the agent to read
-it. Audit prompts run 32–61 KB, so **every audit prompt is delivered by file
+it. Audit prompts run 16–90 KB, so **every audit prompt is delivered by file
 indirection and none is ever pasted into the TUI**. The 2026-07-21 session
 recorded sizes but not which mode it used.
 
@@ -105,13 +111,33 @@ recorded sizes but not which mode it used.
 | 56,349 B | file indirection | emitted — token fragmented across frames (2026-07-23) |
 | 58,536 B | file indirection | emitted normally |
 | 61,493 B | file indirection | emitted normally — contiguous token (2026-07-23) |
+| 92,055 B | file indirection (agy pane, Gemini 3.1 Pro) | emitted — token fragmented across frames (2026-07-30) |
 
-**Five file-indirection observations spanning 52,997–61,493 B, all answered.
+**Six file-indirection observations spanning 52,997–92,055 B, all answered.
 There is no file-indirection silence on record**, including at sizes well past
-the "cliff". Treat **61,493 B as the largest size confirmed answered** — beyond
-it is *unverified*, not known-bad. `h_mad_assemble_audit.py` warns on that basis
-now; it previously predicted failure above 49 KB, which caused at least one
-design audit to be trimmed for no reason.
+the "cliff". Treat **92,055 B as the largest size confirmed answered on the pane
+path** — beyond it is *unverified there*, not known-bad. The 2026-07-30 probe
+directly falsified the earlier ~61 KB ceiling: a 92,055 B prompt was delivered by
+file indirection to a live agy pane and answered `PROBE_OK <token>`. As at 56,349 B
+in 2026-07-23, the reply **fragmented across redraw frames** (`…VERIF` then a lone
+`Y`), so a live tail-grep read `>` the whole time and looked silent — the
+full-buffer `--from-start` read recovered the complete token. That is the reflow
+failure of the *measurement*, not of the agent (see below). `h_mad_assemble_audit.py`
+warns on the 92,055 B basis now; it previously predicted failure above 49 KB, which
+caused at least one design audit to be trimmed for no reason.
+
+## Prompt size on the `exec` path: no frontier
+
+`hmad-dispatch exec` does not touch a TUI, so none of the above applies. codex
+receives its prompt on **stdin** (`codex exec -`), which is mechanically uncapped;
+agy receives it as a `--print` **arg**, bounded only by `ARG_MAX` (~1 MB on macOS,
+`getconf ARG_MAX` = 1,048,576). A **>90 KB** exec prompt was confirmed answered
+(2026-07-30); the pane path is separately confirmed to 92,055 B (above), so at the
+sizes audits actually reach neither transport is the limit. The binding limit on the exec path is
+therefore the receiving model's own context/answer budget, not the transport — so
+do not trim an audit for size when you will dispatch it via `exec` (now the default
+for one-shot 5d/5e). `h_mad_assemble_audit.py`'s size warning is pane-conservative;
+it is advisory only for an exec dispatch.
 
 **Do not measure this by grepping a tail — that is probably how the original
 boundary was mis-recorded.** The reply renders into a TUI that redraws and

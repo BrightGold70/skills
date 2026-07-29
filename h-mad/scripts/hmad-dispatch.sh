@@ -1160,7 +1160,7 @@ _preflight_conflict_check() {  # -> 0 ok, 1 conflict (message on stderr)
 # $1 agent, $2 promptfile.
 #
 # Small prompts are inlined. Above HMAD_SEND_INLINE_MAX bytes (default 8192)
-# the agent is told to read the staged file instead: pasting a 32-61 KB audit
+# the agent is told to read the staged file instead: pasting a 16-90 KB audit
 # prompt into a TUI is what the file-indirection rule exists to prevent, and
 # inlining unconditionally put the documented dispatch step in direct conflict
 # with it at exactly the sizes that occur in practice.
@@ -1343,8 +1343,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # agy `--print` prints ONLY the response to stdout (verified), so no last-message
     # file. Headless needs --dangerously-skip-permissions or a tool request blocks
     # until the print timeout; agy is already launched that way in panes. cwd is agy's
-    # workspace root, so cd there. Prompt is an arg (fine < ARG_MAX ~1MB; audit prompts
-    # are ≤61KB). --timeout maps to BOTH agy's native --print-timeout and the watchdog.
+    # workspace root, so cd there. Prompt is an arg, bounded only by ARG_MAX (~1MB);
+    # audit prompts run 16-90KB and a >90KB exec prompt was confirmed answered, so the
+    # arg is never the limit. --timeout maps to BOTH agy's native --print-timeout and the watchdog.
     # `--print` consumes the NEXT token as the prompt, so it MUST come last with the
     # prompt adjacent — every other flag goes before it. (A `--print` not adjacent to
     # the prompt silently ate the following flag as its prompt and dropped the real

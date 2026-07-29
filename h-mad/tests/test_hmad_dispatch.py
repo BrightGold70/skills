@@ -2200,7 +2200,7 @@ def test_skill_documents_automation_usage():
 #
 # `send` used to inline the prompt unconditionally (`$(cat "$2")`), which
 # contradicted the file-indirection rule for large prompts at exactly the
-# sizes that occur in practice: audit prompts run 32-61 KB. Above
+# sizes that occur in practice: audit prompts run 16-90 KB. Above
 # HMAD_SEND_INLINE_MAX (default 8192 bytes) the wrapper now sends a short
 # instruction naming the staged file instead of its contents.
 

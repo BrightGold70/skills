@@ -346,10 +346,15 @@ each call would re-send the whole context — or when a human wants to watch/int
 the Orca pane live. In short: **one-shot → `exec`; iterative revision loop → pane.**
 
 Codex sandbox defaults to `workspace-write` (5d/5e write test + impl files); its
-prompt is delivered on stdin, so the 8192-byte keystroke inline cap does not apply.
-agy runs `--print --dangerously-skip-permissions` (headless must auto-approve or a
-tool request blocks); its prompt is an arg, fine below `ARG_MAX` (~1 MB) — audit
-prompts are ≤61 KB.
+prompt is delivered on stdin, so it is mechanically uncapped — the 8192-byte
+keystroke inline cap and the pane-path size frontier both do not apply. agy runs
+`--print --dangerously-skip-permissions` (headless must auto-approve or a tool
+request blocks); its prompt is an arg, bounded only by `ARG_MAX` (~1 MB). Audit
+prompts run 16–90 KB (a large design audit assembles to ~88 KB), and a >90 KB exec
+prompt was confirmed answered — so on the `exec` path prompt size is not a transport
+limit, only the receiving model's context budget. Do not trim an audit for size
+when dispatching via `exec`. (The pane path is separately confirmed answered to
+92,055 B — see `references/agent-substrate.md` §"Prompt size".)
 
 ## Phase 5 parallel fanout (Orca only)
 
@@ -742,7 +747,7 @@ both verdicts, so `$?` cannot tell you which one you got, and an unread token is
 more than the unread `STALE` line it is modelled on.
 
 **Read `size_status=` on the same line, not just the token.** `verified` means the prompt
-is no larger than the biggest one confirmed answered (61,493 B — see
+is no larger than the biggest one confirmed answered (92,055 B — see
 `references/agent-substrate.md`). `size_status=unverified` still dispatches, because
 prompts that size have answered; what it changes is *diagnosis*. If the reply comes back
 empty, **suspect size before re-dispatching** — first re-read the full buffer, since a
@@ -781,7 +786,7 @@ assembling by hand because the script is unavailable:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 5.5. For plan and design audits: replace `<INLINE_PAIRED_SPEC>` with full text of `docs/01-plan/features/<feature>.spec.md` — the Axis C source of truth. Without it the reviewer has no AC list to reconcile against and Axis C degrades to prose review, which is the failure it exists to prevent: the paired plan carries only incidental AC references, not the enumeration. For impl-plan audits leave the slot empty; that audit contracts against the design.
 
-   **Prompt size.** Axis C makes an already-large prompt larger, and on a big feature the total can exceed what the reviewer will answer — one measured agent emits normally at 49 KB and returns *nothing* at 53 KB (see `references/agent-substrate.md`). Measured on a real feature: design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB, and the same prompt without the spec was already 72 KB. Two things follow. First, **do not solve this by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
+   **Prompt size.** Axis C makes an already-large prompt larger: measured on a real feature, design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB (72 KB without the spec). Whether that is a problem depends on the transport. On the **`exec` path** it is not — codex stdin is uncapped and agy's arg runs to `ARG_MAX` (~1 MB), and a >90 KB exec prompt was confirmed answered, so dispatch the whole thing. On the **pane path** the confirmed-answered frontier is ~92 KB via file indirection (a 92,055 B prompt was answered by a live agy pane on 2026-07-30, falsifying the earlier ~61 KB ceiling); the old "49 KB normal / 53 KB silent" figure was a delivery-mode artifact (a paste, not file indirection) and never reproduced (see `references/agent-substrate.md`). A real audit assembles to at most ~88 KB, so it sits inside the confirmed pane frontier — but if a pane prompt ever does run past ~92 KB, two things follow. First, **do not solve it by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC; switching that dispatch to `exec` removes the limit outright. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
 
    **Before treating a silent reply as a size failure, read the whole buffer.** `hmad-dispatch read <agent> --from-start`, not a tail — the TUI reflows a reply across redraw frames, and a tail-grep for a sentinel reports SILENT for prompts that answered (measured; see `references/agent-substrate.md`). Most "size failures" are this.
 
@@ -849,7 +854,7 @@ assembling by hand because the script is unavailable:
    ```
    `send` chooses its own delivery mode by size: it inlines below
    `HMAD_SEND_INLINE_MAX` (default 8192 bytes) and otherwise tells the agent to
-   read the staged file by absolute path. Audit prompts run 32–61 KB, so they
+   read the staged file by absolute path. Audit prompts run 16–90 KB, so they
    take the indirection path — no need to hand-roll it.
 9. Capture the report. **Under Orca (report-file transport), skip the scrape entirely** — the agent wrote a clean file, so read it directly and jump to the gate:
    ```bash
