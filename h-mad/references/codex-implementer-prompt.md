@@ -36,9 +36,20 @@ Ask via your response (status: NEEDS_CONTEXT). The orchestrator will provide con
 
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.
 
+**RED acceptance evidence (required — one line per test):**
+1. For each FAILING test: does the failure message name the property under test? (An `ImportError`/`AttributeError` standing in for a behavioural assertion is not a RED — it is an unwritten test.)
+2. For each PASSING test: would it still pass if the behaviour it names were deleted? If yes, it is vacuous — fix or remove it.
+3. For each behavioural test: name the method actually invoked, and confirm it is the one that contains the behaviour under test.
+A RED report that omits these answers is incomplete and will be re-dispatched.
+
 **The dispatch states the expected failing/passing counts for this task, and labels which tests are regression guards** — guards assert behaviour that already works and MUST pass from the first run. Not every RED task is all-new behaviour: a refactor-shaped task legitimately lands with most of its tests green. If a test you were asked to write passes immediately and it is a labelled guard, that is the correct outcome — report it and move on, **do not manufacture a failure** by weakening the assertion, asserting the current buggy value, or adding a `pytest.fail()`. If the stated counts and what you observe disagree, STOP and report the discrepancy; do not reconcile it yourself.
 
 For GREEN phase (5e): implement the minimal code to make the failing tests pass. Verify GREEN by running `pytest <test_path> -v`. Then refactor if helpful, keeping tests green.
+
+Two evasions are **prohibited and must be reported instead of performed**:
+- do not restructure a string literal, identifier, or import to change how a source-level assertion counts it;
+- do not modify code outside the task's stated scope to satisfy a counting assertion.
+If either would be needed to make a test pass, the assertion is wrong → STOP and report `STATUS: BLOCKED` naming it.
 
 ## Report file (preferred delivery under Orca)
 

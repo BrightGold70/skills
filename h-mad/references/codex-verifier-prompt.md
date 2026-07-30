@@ -31,6 +31,8 @@ Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 1. **Run the module tests and report the count.** Run `<INLINE_TEST_COMMAND> <INLINE_TEST_PATH> -q`
    and quote the exact passed/failed number. Any failure here is a blocker — report it, do not fix.
 
+Perform the revert test defined in SKILL.md §5e.
+
 2. **Anti-gaming audit of the module tests.** Report any test that CANNOT FAIL: an assertion true
    by construction, a mock asserted against itself, a test that never reaches the code path it
    names, or a sentinel / hollow assertion. Name the test and say why. If all N are discriminating,
