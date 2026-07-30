@@ -4,7 +4,7 @@
 Rework the emptiness test at the tail of `_cmd_exec` (both agent branches) into an explicit empty-vs-nonempty fork: the non-empty arm is today's behavior unchanged, and the empty arm recovers the verdict from an always-present log, reports the tree delta, and reserves rc 3 — with `--log` defaulted to a wrapper-owned temp so the log always exists.
 
 ## Overview
-The change is confined to `h-mad/scripts/hmad-dispatch.sh` `_cmd_exec`. Design intent: additive on the empty-output branch, byte-identical stdout/rc on the clean-success branch, no new flags, no new dependency (POSIX `git`/`grep`, bash 3.2). Key decision: default `--log` to a temp file so the recovery step always has a source; on a clean run that temp is deleted, so a successful exec leaves no litter and behaves as before except that a bare (no-`--log`) exec now routes its transcript to a printed temp path instead of streaming to stderr.
+The change is confined to `h-mad/scripts/hmad-dispatch.sh` `_cmd_exec`. Design intent: additive on the empty-output branch, byte-identical stdout/rc on the clean-success branch, no new flags, no new dependency (POSIX `git`/`grep`, bash 3.2). Key decision: default `--log` to a temp file so the recovery step always has a source; on a clean bare (no-`--log`) run that temp is **echoed to stderr for live visibility and then deleted**, so a successful exec still streams its transcript exactly as before (FR-1.4) and leaves no litter.
 
 ## Architecture Overview
 ```
@@ -13,7 +13,7 @@ _cmd_exec <agent> <promptfile> [flags]
   ├─ auto-log: if --log omitted → log=$(mktemp); auto_log=1; print "transcript: $log" to stderr
   ├─ run agent (codex: stdin + --output-last-message="$last"; agy: --print arg)
   │     transcript ALWAYS → "$log" (2>&1); rc captured via `|| rc=$?`
-  ├─ final message = codex:"$last" | agy:"$resp"(<- cat "$log")
+  ├─ final message = codex:"$last" | agy:"$resp"(<- resp_file, also appended to "$log")
   ├─ if final message NON-EMPTY:              # unchanged contract
   │     [--out] cp/echo it; cat/printf to stdout; if auto_log → rm "$log"
   └─ else (EMPTY final message):              # NEW recovery arm
@@ -38,12 +38,12 @@ if [ -z "$log" ]; then
   echo "hmad-dispatch: exec: transcript -> $log" >&2
 fi
 ```
-Because `$log` is now always set, the codex `if [ -n "$log" ]` redirect branch is always taken and the two former `>&2`-only sub-branches become unreachable; they are removed. agy likewise always uses its `> "$log"` path and reads `resp="$(cat "$log")"`. A caller-supplied `--log` sets `auto_log=""`, so it is never deleted.
+Because `$log` is now always set, the codex `if [ -n "$log" ]` redirect branch is always taken and the two former `>&2`-only sub-branches become unreachable; they are removed. The codex transcript therefore always lands in `$log`; on the clean auto-log path it is echoed to stderr (`[ -n "$auto_log" ] && cat "$log" >&2`) before deletion, preserving the pre-change live-stderr behavior. agy captures its response into a **separate** `resp_file` (its own `mktemp`), appends it to `$log`, and reads `resp="$(cat "$resp_file")"` — keeping the response capture distinct from `$log` so a caller-supplied `--log` that already holds transcript content is not clobbered and stays available to verdict recovery. A caller-supplied `--log` sets `auto_log=""`, so it is never deleted.
 
 ### Empty-vs-nonempty fork (FR-2)
 - codex: emptiness is `[ -s "$last" ]` (the `--output-last-message` file), as today.
 - agy: emptiness is `[ -n "$resp" ]` where `resp="$(cat "$log" 2>/dev/null)"`.
-Non-empty arm = current code verbatim, plus `[ -n "$auto_log" ] && rm -f "$log"`. Empty arm = the recovery block below.
+Non-empty arm = current code verbatim, plus (auto-log only) `cat "$log" >&2` then `rm -f "$log"`. Empty arm = the recovery block below.
 
 ### Verdict recovery from log (FR-3)
 ```sh
@@ -102,7 +102,7 @@ None.
 
 ## API / Interface Changes
 - No new/changed flags. `_cmd_exec` exit codes gain one reserved value: **3 = "agent exited 0 but final message empty; verdict recovered from log if present."** `0` (success), `124` (watchdog), and the agent's own crash rc are unchanged.
-- Behavior change (documented): when `--log` is omitted, the transcript now goes to an auto-created temp file (path printed to stderr) instead of streaming to stderr; the file is deleted on clean success and retained on empty output.
+- Behavior change (documented): when `--log` is omitted, the transcript is captured to an auto-created temp file (path printed to stderr). On clean success it is still echoed to stderr (unchanged live visibility, FR-1.4) and then deleted; on empty output it is retained as the recovery source (path printed to stderr).
 
 ## Error Handling Strategy
 Diagnostics (auto-log path, empty-message notice, recovery notice, tree delta) all go to **stderr**; the recovered verdict is the only thing written to **stdout**, preserving `stdout = payload` for `h_mad_extract_verdict.py`. `rc` is the machine signal: 0 clean, 3 empty-output, 124 timeout, else agent crash. git/grep failures in the recovery arm are swallowed (`2>/dev/null`, `|| true`) and never alter `rc`.
@@ -146,3 +146,4 @@ Confirms: the git guard cleanly splits repo/non-repo (FR-4.3), the porcelain cou
 ## Version History
 - v1.0: Initial design draft.
 - v1.1: Design-audit cycle 1 fixes — (must-fix) reconciled spec AC-3.1 to the anchored `^(STATUS|VERDICT):` match; (must-fix) added the Assumption-verification evidence block for the git/grep commands; (nit) empty-arm notice now conditioned on `rc` so a crash is not mislabelled "reporting channel failed".
+- v1.2: Back-propagation from 5e spec-review — corrected two over-specified design statements that contradicted FR-1.4 and the RED tests: (1) a clean bare-exec still echoes its transcript to stderr before deleting the auto-log (was wrongly "instead of streaming to stderr"), matching FR-1.4 and `test_codex_exec_stdout_is_last_message_not_transcript`; (2) agy captures its response into a separate `resp_file` appended to `$log` (was wrongly "direct `> $log`"), so a caller `--log` holding transcript is not clobbered and stays recoverable (`test_agy_empty_response_recovers_verdict_from_caller_log`). The implementation was correct against the tests; the design words were the drift.
