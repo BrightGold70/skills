@@ -12,6 +12,16 @@ fi
 # Simulate a long-running task so the wrapper's --timeout watchdog can fire.
 [ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
 
-# The response (agy --print writes it straight to stdout).
-printf '%s\n' "${HMAD_STUB_AGY_RESP:-VERDICT: COMPLIANT}"
+# The response (agy --print writes it straight to stdout). `${VAR-default}`
+# allows an explicitly empty response while retaining the old default.
+if [ -n "${HMAD_STUB_AGY_RESP+x}" ]; then
+  [ -n "$HMAD_STUB_AGY_RESP" ] && printf '%s\n' "$HMAD_STUB_AGY_RESP"
+else
+  printf '%s\n' 'VERDICT: COMPLIANT'
+fi
+# Test-only escape hatch: populate the wrapper's redirected transcript without
+# making the agent response non-empty. Existing knobs and behavior are unchanged.
+if [ -n "${HMAD_STUB_AGY_TRANSCRIPT_PATH:-}" ]; then
+  printf '%s\n' "${HMAD_STUB_AGY_TRANSCRIPT:-}" >> "$HMAD_STUB_AGY_TRANSCRIPT_PATH"
+fi
 exit "${HMAD_STUB_AGY_RC:-0}"

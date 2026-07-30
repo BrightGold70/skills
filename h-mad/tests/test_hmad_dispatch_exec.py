@@ -20,7 +20,7 @@ from pathlib import Path
 
 SKILL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_hmad_dispatch import _bindir, run  # noqa: E402
+from test_hmad_dispatch import _bindir, _git_repo, run  # noqa: E402
 
 
 def _prompt(tmp_path, text="RED task: write a failing test."):
@@ -104,6 +104,113 @@ def test_codex_exec_log_preserves_exit_code(tmp_path):
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
             env=_env(b, HMAD_STUB_CODEX_RC="7"))
     assert r.returncode == 7, r.stderr
+
+
+# --- empty final-message recovery (RED: expected to fail until GREEN) --------
+
+def test_codex_empty_last_message_returns_reserved_rc_and_retains_auto_log(tmp_path):
+    """AC-1.2 / AC-5.1: exit 0 plus empty last-message is not silent success."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT="STATUS: DONE"))
+    assert r.returncode == 3, r.stderr
+    assert "EMPTY final message" in r.stderr
+    transcript = next((line.split("transcript -> ", 1)[1].strip()
+                       for line in r.stderr.splitlines() if "transcript -> " in line), None)
+    assert transcript and Path(transcript).is_file(), r.stderr
+
+
+def test_codex_empty_last_message_exit_zero_is_reserved_rc3(tmp_path):
+    """AC-5.1: the exit-0/empty combination specifically returns rc 3."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST=""))
+    assert r.returncode == 3, r.stderr
+
+
+def test_codex_empty_message_recovers_last_verdict_and_reports_tree_delta(tmp_path):
+    """AC-3.1 / AC-4.1: recover the anchored verdict and report changed paths."""
+    repo = _git_repo(tmp_path)
+    changed = repo / "landed.txt"
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(repo)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT="STATUS: DONE",
+                     HMAD_STUB_CODEX_TOUCH=str(changed)))
+    assert r.returncode == 3, r.stderr
+    assert r.stdout.strip() == "STATUS: DONE"
+    assert "verdict recovered from log" in r.stderr
+
+
+def test_codex_empty_message_uses_last_of_multiple_verdict_lines(tmp_path):
+    """AC-3.4: stale earlier verdicts must not win recovery."""
+    b = _bindir(tmp_path, ["codex"])
+    transcript = "reply with STATUS: INLINE\nSTATUS: FIRST\nVERDICT: LAST\n"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT=transcript))
+    assert r.returncode == 3, r.stderr
+    assert r.stdout.strip() == "VERDICT: LAST"
+    assert "INLINE" not in r.stdout
+
+
+def test_codex_empty_message_reports_git_tree_delta(tmp_path):
+    """AC-4.1 / AC-4.2: delta is counted in the requested --cd repository."""
+    repo = _git_repo(tmp_path)
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(repo)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_TOUCH=str(repo / "landed.txt")))
+    assert r.returncode == 3, r.stderr
+    assert "tree delta: 1 changed" in r.stderr
+
+
+def test_agy_empty_response_recovers_verdict_from_caller_log(tmp_path):
+    """AC-2.2 / AC-3.1: an empty agy response still recovers its transcript."""
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "agy.log"
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RESP="", HMAD_STUB_AGY_TRANSCRIPT_PATH=str(log),
+                     HMAD_STUB_AGY_TRANSCRIPT="VERDICT: COMPLIANT"))
+    assert r.returncode == 3, r.stderr
+    assert r.stdout.strip() == "VERDICT: COMPLIANT"
+    assert "verdict recovered from log" in r.stderr
+
+
+def test_empty_message_crash_preserves_agent_rc(tmp_path):
+    """AC-5.2: rc 3 is reserved for agent-exit-0 reporting failures."""
+    b = _bindir(tmp_path, ["codex"])
+    log = tmp_path / "crash.log"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="2"))
+    assert r.returncode == 2, r.stderr
+    assert r.returncode != 3
+    assert "EMPTY final message" in r.stderr
+
+
+def test_empty_message_in_non_repo_reports_na_tree_delta_and_rc3(tmp_path):
+    """AC-4.3: tree inspection is non-fatal outside a git work tree."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST=""))
+    assert r.returncode == 3, r.stderr
+    assert f"tree delta: n/a ({tmp_path} not a git repo)" in r.stderr
+
+
+def test_clean_nonempty_exec_is_regression_guard(tmp_path):
+    """REGRESSION AC-1.4 / AC-2.3 / AC-5.4: clean path stays rc 0 and payload-only."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="STATUS: CLEAN"))
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "STATUS: CLEAN"
+
+
+def test_caller_log_is_honored_and_not_deleted_regression_guard(tmp_path):
+    """REGRESSION AC-1.3: an explicit transcript path remains caller-owned."""
+    b = _bindir(tmp_path, ["codex"])
+    log = tmp_path / "caller.log"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="STATUS: CLEAN"))
+    assert r.returncode == 0, r.stderr
+    assert log.is_file()
 
 
 def test_codex_exec_delivers_prompt_via_stdin(tmp_path):

@@ -336,6 +336,13 @@ does (§"Reading a dispatch verdict") — exit 0 with `STATUS: BLOCKED` is still
 and Codex GREEN still needs the anti-gaming verify. `rc` replaces the *idle poll*,
 not the *verdict extraction*.
 
+An `exec` with an empty primary channel returns **rc 3** when the agent exited 0;
+the wrapper recovers the last `STATUS:`/`VERDICT:` line from the transcript when
+present and reports the working-tree delta, so check the tree and verify the code
+before treating the dispatch as complete. Exec dispatches use terminal/last-message
+mode: leave the report-file slot empty. Report-file mode belongs to the pane path
+(`send`/`report-wait`), not to `exec`.
+
 **A missing report on the `exec` path — recover from `--log` and the working tree, never
 from the pane.** The pane-path rule above ("A missing report is neither pass nor fail")
 tells you to *read the pane*; on `exec` there is no pane, so that recovery does not

@@ -11,13 +11,16 @@ if [ -n "${HMAD_STUB_STDIN_CAPTURE:-}" ]; then cat > "$HMAD_STUB_STDIN_CAPTURE";
 [ -n "${HMAD_STUB_CODEX_SLEEP:-}" ] && sleep "$HMAD_STUB_CODEX_SLEEP"
 
 # Locate `--output-last-message <file>` / `-o <file>` and write the canned reply.
+# `${VAR-default}` deliberately distinguishes an explicitly empty reply from an
+# unset knob, which is needed to exercise the empty-report recovery path.
 last="" prev=""
 for a in "$@"; do
   case "$prev" in --output-last-message|-o) last="$a" ;; esac
   prev="$a"
 done
-[ -n "$last" ] && printf '%s' "${HMAD_STUB_CODEX_LAST:-STATUS: DONE}" > "$last"
+[ -n "$last" ] && printf '%s' "${HMAD_STUB_CODEX_LAST-STATUS: DONE}" > "$last"
 
 # Streamed transcript (the run log) goes to stdout; the wrapper routes it to stderr.
 printf '%s\n' "${HMAD_STUB_CODEX_STDOUT:-[codex] running task...}"
+[ -n "${HMAD_STUB_CODEX_TOUCH:-}" ] && touch "$HMAD_STUB_CODEX_TOUCH"
 exit "${HMAD_STUB_CODEX_RC:-0}"

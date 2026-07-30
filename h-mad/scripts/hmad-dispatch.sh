@@ -1313,9 +1313,16 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+  local auto_log=""
+  if [ -z "$log" ]; then
+    log="$(mktemp -t hmad_exec_log.XXXXXX)" || return 1
+    auto_log=1
+    echo "hmad-dispatch: exec: transcript -> $log" >&2
+  fi
+
   # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
   # it — the exit code is the whole point of this verb. rc stays 0 on success.
-  local rc=0
+  local rc=0 final_empty=0
   if [ "$agent" = codex ]; then
     local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || return 1
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
@@ -1323,21 +1330,22 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     [ -n "$model" ] && args+=(--model "$model")
     # Prompt via stdin ('-') — no keystroke cap. Transcript is the live progress
     # signal (the --output-last-message file only lands at completion, so it is
-    # NOT tailable). Default: transcript -> our stderr. With --log: transcript+stderr
-    # -> <file> (a direct redirect, not a pipe, so the codex exit code survives) so
-    # a watcher can `tail -f <file>` a headless run. rc comes from the codex process.
-    if [ -n "$log" ]; then
-      if [ -n "$timeout" ]; then
-        _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
-      else
-        codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
-      fi
-    elif [ -n "$timeout" ]; then
-      _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+    # NOT tailable). Transcript always goes to the log (a direct redirect, not a
+    # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
+    # run. rc comes from the codex process.
+    if [ -n "$timeout" ]; then
+      _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
     else
-      codex "${args[@]}" - < "$promptfile" >&2 || rc=$?
+      codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
     fi
-    if [ -s "$last" ]; then [ -n "$out" ] && cp "$last" "$out"; cat "$last"; fi
+    if [ -s "$last" ]; then
+      [ -n "$out" ] && cp "$last" "$out"
+      cat "$last"
+      [ -n "$auto_log" ] && cat "$log" >&2 || true
+      [ -n "$auto_log" ] && rm -f "$log"
+    else
+      final_empty=1
+    fi
     rm -f "$last"
   else
     # agy `--print` prints ONLY the response to stdout (verified), so no last-message
@@ -1357,23 +1365,55 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     [ -n "$sandbox" ] && args+=(--sandbox)
     [ -n "$timeout" ] && args+=(--print-timeout "${timeout}s")
     args+=(--print "$prompt")
-    local resp
-    if [ -n "$log" ]; then
-      # Response streamed straight to <file> (stdout ONLY — agy --print puts just
-      # the response there; keeping stderr out preserves a clean verdict), then read
-      # back. Direct redirect, not a pipe, so agy's exit code survives. Live-tailable.
-      if [ -n "$timeout" ]; then
-        ( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" ) > "$log" || rc=$?
-      else
-        ( cd "$cd_dir" && agy "${args[@]}" ) > "$log" || rc=$?
-      fi
-      resp="$(cat "$log" 2>/dev/null)"
-    elif [ -n "$timeout" ]; then
-      resp="$( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" )" || rc=$?
+    local resp resp_file
+    resp_file="$(mktemp -t hmad_exec_resp.XXXXXX)" || return 1
+    # Response captured to its own file (stdout ONLY — agy --print puts just the
+    # response there; keeping stderr out preserves a clean verdict), then appended
+    # to the transcript log and read back. Keeping the response capture separate
+    # from $log means a caller-supplied --log that already holds transcript content
+    # is not clobbered, so verdict recovery can still find it on an empty response.
+    # Direct redirect, not a pipe, so agy's exit code survives.
+    if [ -n "$timeout" ]; then
+      ( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
     else
-      resp="$( cd "$cd_dir" && agy "${args[@]}" )" || rc=$?
+      ( cd "$cd_dir" && agy "${args[@]}" ) > "$resp_file" || rc=$?
     fi
-    if [ -n "$resp" ]; then [ -n "$out" ] && printf '%s\n' "$resp" > "$out"; printf '%s\n' "$resp"; fi
+    cat "$resp_file" >> "$log"
+    resp="$(cat "$resp_file" 2>/dev/null)"
+    if [ -n "$resp" ]; then
+      [ -n "$out" ] && printf '%s\n' "$resp" > "$out"
+      printf '%s\n' "$resp"
+      [ -n "$auto_log" ] && cat "$log" >&2 || true
+      [ -n "$auto_log" ] && rm -f "$log"
+    else
+      final_empty=1
+    fi
+    rm -f "$resp_file"
+  fi
+
+  if [ "$final_empty" -eq 1 ]; then
+    local msg
+    if [ "$rc" -eq 0 ]; then
+      rc=3
+      msg="reporting channel failed (agent exited 0, no final message)"
+    else
+      msg="agent exited ${rc} with no final message"
+    fi
+    echo "hmad-dispatch: exec: EMPTY final message — ${msg}; transcript: $log" >&2
+    local recovered
+    recovered="$(grep -aE '^(STATUS|VERDICT):' "$log" 2>/dev/null | tail -1 || true)"
+    if [ -n "$recovered" ]; then
+      echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
+      printf '%s\n' "$recovered"
+      [ -n "$out" ] && printf '%s\n' "$recovered" > "$out" || true
+    fi
+    if git -C "$cd_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      local delta
+      delta="$(git -C "$cd_dir" status --porcelain 2>/dev/null | grep -c . || true)"
+      echo "hmad-dispatch: exec: tree delta: ${delta} changed in $cd_dir" >&2
+    else
+      echo "hmad-dispatch: exec: tree delta: n/a ($cd_dir not a git repo)" >&2
+    fi
   fi
 
   echo "hmad-dispatch: $agent exec rc=$rc" >&2
