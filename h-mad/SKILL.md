@@ -235,7 +235,9 @@ all, the send still goes, because a pin has to keep working when the listing doe
 not. `resolve` stays listing-independent for the same reason — use `verify` when you
 need the check.
 
-**A missing report is neither pass nor fail.** If `report-wait` times out, read the
+**A missing report is neither pass nor fail.** This paragraph is the **pane-path** rule;
+for the `exec` path there is no pane to read, so see §"A missing report on the `exec`
+path" instead. If `report-wait` times out, read the
 pane before concluding anything: `terminal_handle_stale` means the dispatch never
 landed, and `Selected model is at capacity` means the agent stopped after doing the
 work. Check the working tree for work completed but never reported. `pin-agents` therefore **fails
@@ -333,6 +335,42 @@ the TDD task passed. Read the `STATUS:`/`VERDICT:` token exactly as the pane pat
 does (§"Reading a dispatch verdict") — exit 0 with `STATUS: BLOCKED` is still a halt,
 and Codex GREEN still needs the anti-gaming verify. `rc` replaces the *idle poll*,
 not the *verdict extraction*.
+
+**A missing report on the `exec` path — recover from `--log` and the working tree, never
+from the pane.** The pane-path rule above ("A missing report is neither pass nor fail")
+tells you to *read the pane*; on `exec` there is no pane, so that recovery does not
+apply and the step used to have none. Measured 2026-07-30 on a real 5e GREEN: the
+`exec codex` dispatch wrote **neither** its report file nor the `.done` marker, the
+process was gone, and the wrapper's own captured stdout was empty — while the working
+tree held **both** artifacts, complete and correct (a one-line production edit plus a
+new test module). Read in the wrong order that is a `step5e:no_verdict` halt over
+finished work; read as "DONE because the tree changed" it is an unverified pass.
+
+Recover in this order:
+
+1. **`--log`** — it survived when `--out` and the report file did not, and it holds the
+   live transcript, including the diffs the agent applied. This is the strongest reason
+   to pass `--log` on every `exec` dispatch: it is the one channel observed to outlive
+   the others.
+2. **`git status` / `git diff`** — enumerate what actually landed. Artifacts present with
+   no report means the work happened and the reporting channel failed, which is a
+   different situation from a crash before any write.
+3. **Verify from the code, not from a self-report.** Re-derive the verdict yourself: run
+   the module's tests, run the acceptance test the task was gated on, and execute the
+   mutations the task required. A missing report is in one respect an advantage — there
+   are no claimed counts to anchor on, so the anti-gaming pass is forced rather than
+   optional. In the measured case the work was correct **and** its required mutations had
+   never been executed; the tests pinned them, but pinning is not the same as having run
+   them.
+
+Do **not** re-dispatch before step 2. A re-dispatch onto a tree that already carries the
+work is how a second, conflicting implementation gets written over a correct one.
+
+**Output loss is not agent-specific.** In the same session a backgrounded `pytest` run
+also completed while its captured output came back empty, so treat "process gone, output
+empty" as a transport symptom rather than evidence about the work. When a long run's
+result matters to a gate, redirect it to a file you name yourself (`> /tmp/<run>.log 2>&1`)
+instead of relying on the harness capture, and re-run rather than inferring the result.
 
 **Default for a one-shot 5d/5e dispatch is `exec`.** A single self-contained RED/GREEN
 or a single audit cycle has no prior-cycle conversation to preserve, and the exit code
