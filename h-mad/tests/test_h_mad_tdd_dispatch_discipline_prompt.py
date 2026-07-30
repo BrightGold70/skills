@@ -59,6 +59,7 @@ def test_verifier_points_to_skill_not_restates() -> None:
     mechanism_literals = (
         "revert production only",
         "RED split returns EXACTLY",
+        "Verify restoration by executing the symbol",
         "never by grepping the source",
     )
     for lit in mechanism_literals:
