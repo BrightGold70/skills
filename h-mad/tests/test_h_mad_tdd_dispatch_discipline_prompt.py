@@ -3,10 +3,10 @@
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-IMPLEMENTER = REPO_ROOT / "h-mad" / "references" / "codex-implementer-prompt.md"
-VERIFIER = REPO_ROOT / "h-mad" / "references" / "codex-verifier-prompt.md"
-SKILL = REPO_ROOT / "h-mad" / "SKILL.md"
+SKILL_ROOT = Path(__file__).resolve().parents[1]  # h-mad/ — never outside the skill dir
+IMPLEMENTER = SKILL_ROOT / "references" / "codex-implementer-prompt.md"
+VERIFIER = SKILL_ROOT / "references" / "codex-verifier-prompt.md"
+SKILL = SKILL_ROOT / "SKILL.md"
 
 
 def _norm(text: str) -> str:
@@ -47,18 +47,23 @@ def test_skill_revert_test_definition_present() -> None:
 
 def test_verifier_points_to_skill_not_restates() -> None:
     verifier = _norm(VERIFIER.read_text(encoding="utf-8"))
+    implementer = _norm(IMPLEMENTER.read_text(encoding="utf-8"))
     assert _norm("Perform the revert test defined in SKILL.md §5e.") in verifier
 
-    mechanism_phrases = ("revert production", "executing the symbol", "grepping")
-    assert all(phrase not in verifier for phrase in mechanism_phrases)
-
-    all_prompt_text = "\n".join(
-        path.read_text(encoding="utf-8") for path in (SKILL, VERIFIER, IMPLEMENTER)
+    # Single-source: the FR-2 revert-test MECHANISM is authored only in SKILL.md;
+    # the verifier and implementer only reference it. Assert the specific
+    # instruction LITERALS are absent from those two files — NOT a global count of
+    # a common token like "grepping" (SKILL.md legitimately uses that word in
+    # unrelated §5e/§6a-prime prose, and an occurrence-count assertion over a whole
+    # file is exactly the over-constraint FR-3 warns against — assert the call form).
+    mechanism_literals = (
+        "revert production only",
+        "RED split returns EXACTLY",
+        "never by grepping the source",
     )
-    for phrase in mechanism_phrases:
-        assert all_prompt_text.count(phrase) == 1, (
-            f"mechanism phrase must have exactly one authoritative occurrence: {phrase!r}"
-        )
+    for lit in mechanism_literals:
+        assert _norm(lit) not in verifier, f"verifier restates FR-2 mechanism: {lit!r}"
+        assert _norm(lit) not in implementer, f"implementer restates FR-2 mechanism: {lit!r}"
 
 
 def test_skill_author_callform_rule_present() -> None:
