@@ -1252,17 +1252,41 @@ _run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `
   # (the GNU `timeout` convention). stdin/stdout/stderr are inherited by the child,
   # so a `< promptfile` / `>&2` on the CALL site applies to the backgrounded cmd.
   local secs="$1"; shift
+  # Run the child in its OWN process group so a timeout kills the whole subprocess
+  # tree, not just the direct child — codex/agy fork grandchildren that would
+  # otherwise orphan and survive past the 124. `set -m` (job control) makes bash
+  # place each backgrounded job in a fresh process group; the pgid is fixed at
+  # fork, so restoring the prior -m state afterwards is safe. macOS ships no
+  # `setsid`, so `set -m` is the portable way to get a new pgroup here.
+  local had_m=0; case "$-" in *m*) had_m=1 ;; esac
+  set -m
   # `<&0` explicitly hands the child our stdin. Without it, bash redirects a
   # backgrounded command's stdin from /dev/null — which silently starved
   # `codex exec -` of its piped prompt ("No prompt provided via stdin").
+  # Absolute deadline off bash's SECONDS, NOT a count of completed sleeps: each
+  # iteration costs slightly more than its sleep, so counting ticks lets a long
+  # timeout drift late by the accumulated loop overhead. `secs` is now the real
+  # wall-clock bound. 0.25s polling caps the post-deadline overshoot instead of
+  # the 1s a whole-second sleep leaves.
+  local deadline=$(( SECONDS + secs )) poll=0.25
   "$@" <&0 &
-  local pid=$! waited=0
+  local pid=$!
+  if [ "$had_m" -eq 0 ]; then set +m; fi
   while kill -0 "$pid" 2>/dev/null; do
-    if [ "$waited" -ge "$secs" ]; then
-      kill -TERM "$pid" 2>/dev/null; sleep 2; kill -KILL "$pid" 2>/dev/null
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      # Signal the whole group (`-$pid`; child is group leader) so grandchildren
+      # die too. Bare pid if the group is already gone.
+      kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+      # Poll out the TERM grace period rather than blocking on a flat `sleep 2`,
+      # so a child that honours SIGTERM is reaped immediately; 2s is the cap.
+      local ticks=0
+      while [ "$ticks" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do
+        sleep 0.1; ticks=$(( ticks + 1 ))
+      done
+      kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null; return 124
     fi
-    sleep 1; waited=$((waited + 1))
+    sleep "$poll"
   done
   wait "$pid"
 }
