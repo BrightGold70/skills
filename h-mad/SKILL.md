@@ -344,6 +344,25 @@ before treating the dispatch as complete. Exec dispatches use terminal/last-mess
 mode: leave the report-file slot empty. Report-file mode belongs to the pane path
 (`send`/`report-wait`), not to `exec`.
 
+**Exception — `exec agy` on an audit phase: fill the report-file slot.** That rule is
+codex-shaped, where `--output-last-message` *is* the deliverable. On an audit the report
+is the deliverable, and `agy --print` surfaces only the agent's **last** message, so the
+report has exactly one fragile channel. Measured 2026-08-01,
+`grounding-shadow-measurement` design cycle 2: 358 bytes of narration ("I have completed
+the audit and output the results as requested") naming the two Must-fix items it had
+actually found, with no `<AUDIT_SENTINEL>` pair — `h_mad_extract_report.py` exit 2. Cycle
+1 of the same feature on the same config delivered a clean 2.9 KB sentinel report, so the
+empty slot is not itself the defect — it is intermittent. **Two mechanisms fit the
+evidence and this data cannot separate them:** either the report was emitted and a later
+summarizing turn became the last message, or it was never emitted and the agent narrated
+having done so — the latter is catalogued as **F-10 claim-execution divergence**
+(`AGENTS.md`; agy's self-narrative diverging from actual execution, rule: never trust the
+narrative, verify the artifact). Discriminating them needs the agy-side trace, and the
+remedy is the same either way, so do not spend a cycle on it. Fill the path and block on
+`report-wait "$RP"` — the verb polls a path
+and a `.done` marker, so it is transport-agnostic and works behind `exec … &` just as it
+does behind `send`. A file cannot be overwritten by a later turn.
+
 **A missing report on the `exec` path — recover from `--log` and the working tree, never
 from the pane.** The pane-path rule above ("A missing report is neither pass nor fail")
 tells you to *read the pane*; on `exec` there is no pane, so that recovery does not
@@ -359,7 +378,11 @@ Recover in this order:
 1. **`--log`** — it survived when `--out` and the report file did not, and it holds the
    live transcript, including the diffs the agent applied. This is the strongest reason
    to pass `--log` on every `exec` dispatch: it is the one channel observed to outlive
-   the others.
+   the others. **Codex only.** For `exec agy` the two are the *same* channel: `agy
+   --print` emits one response and the wrapper writes it to `--out` and `--log`
+   byte-identically (verified on both cycles of a real design audit — `diff` clean at
+   2.9 KB and at 358 B). When an agy exec comes back short, `--log` holds nothing `--out`
+   did not, and reading it is not recovery — it is the same bytes twice.
 2. **`git status` / `git diff`** — enumerate what actually landed. Artifacts present with
    no report means the work happened and the reporting channel failed, which is a
    different situation from a crash before any write.
@@ -373,6 +396,17 @@ Recover in this order:
 
 Do **not** re-dispatch before step 2. A re-dispatch onto a tree that already carries the
 work is how a second, conflicting implementation gets written over a correct one.
+
+**All three steps are scoped to an implementer dispatch — do not apply them to `exec
+agy`.** They exist because a codex RED/GREEN leaves artifacts in the working tree, which
+is both the thing to recover from and the reason a blind re-dispatch is destructive. An
+audit writes nothing to the tree: step 1 is the same bytes twice (above), and steps 2–3
+have no delta to enumerate and no code to re-derive a verdict from. A short or
+sentinel-less agy exec is therefore a plain `<phase>:no_verdict` halt, and its documented
+route is the opposite of this one — re-read, then `hmad-dispatch clear agy` and
+re-dispatch (audits are idempotent, so that is safe). Never score the narration: the 358 B
+case named real findings and would have read as a substantive review to a human skimming
+it, while carrying no schema the gate can count.
 
 **Output loss is not agent-specific.** In the same session a backgrounded `pytest` run
 also completed while its captured output came back empty, so treat "process gone, output
