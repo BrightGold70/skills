@@ -267,6 +267,9 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 
    **Production file**: `<relative/path/to/module.py>`
    **Test file**: `<relative/path/to/test_module.py>`
+   **Task shape**: `new-behaviour` | `refactor` | `wiring`
+   **WIRE** (`wiring` shape only): `<caller/path.py>:<symbol>` → `<callee-symbol>`
+   **WIRE-PIN** (`wiring` shape only): `<test id that fails when ONLY the wire is removed, callee intact>`
 
    **Description**: <what this module does — one focused paragraph>
 
@@ -305,6 +308,7 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
 - Exact file paths (not approximate — the TDD gate hook matches on these)
 - Code structure blocks show real signatures that match the design's interface section
 - Tasks are ordered (dependency graph is a DAG, not a cycle)
+- Every task declares a **Task shape**, and every `wiring`-shaped task carries both `WIRE` and `WIRE-PIN`. A connection with no pin ships untested through every audit cycle *and* through the RED phase — no layer downstream is scoped to see it (`invariants.base.md` §"Connection enforcement"). Name the pin here, not later: the impl-plan is the last document the 5b audit can gate on.
 
 ---
 

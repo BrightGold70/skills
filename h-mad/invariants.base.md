@@ -91,6 +91,23 @@
   handles, while the run reported 642 passed. Before mutating anything that decides *where* state is
   written, snapshot the real target and restore it, or run in a sandboxed working directory.
 
+## Connection enforcement
+- A task whose deliverable is a **connection** — a call site, an import, a registration, a route, a
+  flag or value propagated across a boundary — MUST ship a test that **fails when the connection
+  alone is removed and the callee is left intact**. A test that exercises the callee directly is not
+  evidence that the callee is reached. Shipping a connection with no such test is a violation.
+- **A whole-module revert cannot establish this**, because it removes both sides: the RED split
+  returns identically for a wired and an unwired build. The same blindness runs through every other
+  layer — a RED phase goes red because the callee is *absent*, an anti-gaming audit finds a
+  callee-scoped unit test perfectly discriminating, and a review of the diff sees a call site that is
+  *present* and therefore reads as correct. **Presence is not enforcement.** Measured across two
+  consecutive wiring tasks: each shipped its single load-bearing decision untested through every
+  audit cycle and through the RED phase, and only a mutation scoped to the connection caught it.
+- Mutate the connection in **both directions**: remove it → the wire test must fail; force it to fire
+  unconditionally → the fall-through/negative test must fail. One direction certifies a connection
+  that exists but is unconditional. Verify the mutation landed before trusting the run
+  (§"Mutation verification") — a revert that never happened reports as a pass.
+
 ## Incident replay
 - A fix motivated by a specific observed incident MUST be **replayed against the real artifacts
   already on disk** that motivated it, not only against cases authored alongside the fix.

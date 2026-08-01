@@ -24,6 +24,7 @@ _BASE_RULE_HEADINGS = (
     "Backward compatibility",
     "Marker discipline",
     "Mutation verification",
+    "Connection enforcement",
     "Incident replay",
     "Test discrimination",
     "Assumption verification",
@@ -147,6 +148,28 @@ def test_base_rule_incident_replay_states_the_literal_instruction():
     )
     assert "Synthetic cases alone are a violation" in text, (
         "the rule must state what counts as a violation, or it is advice"
+    )
+
+
+def test_base_rule_connection_enforcement_states_the_literal_instruction():
+    # Measured twice in consecutive wiring tasks: the single load-bearing design
+    # decision shipped untested through every audit cycle AND through the RED
+    # phase, and only a mutation scoped to the connection caught it. No layer was
+    # negligent — none had a rule to fire on, because every Phase-5 gate is scoped
+    # to the callee while the deliverable is the connection.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Connection enforcement" in text
+    assert "fails when the connection alone is removed and the callee is left intact" in text, (
+        "the rule must require a test scoped to the CONNECTION, not to the callee"
+    )
+    assert "A whole-module revert cannot establish this" in text, (
+        "the rule must name the specific gate that looks like it covers this and does not"
+    )
+    assert "Presence is not enforcement" in text, (
+        "the rule must say why a review of the diff cannot catch it"
+    )
+    assert "both directions" in text, (
+        "one-direction mutation certifies a connection that exists but is unconditional"
     )
 
 
