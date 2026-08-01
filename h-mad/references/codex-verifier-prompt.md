@@ -24,6 +24,8 @@ Interpreter / run command: `<INLINE_TEST_COMMAND>` (e.g. `MPLBACKEND=Agg PYTHONP
 Module test file: `<INLINE_TEST_PATH>`.
 Production file(s) under test: `<INLINE_PROD_PATHS>`.
 Stated properties the plan pins (verify each against source): `<INLINE_PROPERTIES>`.
+Connection under test (`wiring` tasks; empty otherwise): `<INLINE_WIRE>`.
+Wire pin — the test that must fail when that connection alone is removed: `<INLINE_WIRE_PIN>`.
 Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
 
 ## Do this, in order
@@ -32,6 +34,18 @@ Full-suite reference number (pre-change baseline): `<INLINE_SUITE_REFERENCE>`.
    and quote the exact passed/failed number. Any failure here is a blocker — report it, do not fix.
 
 Perform the revert test defined in SKILL.md §5e.
+
+1b. **Wire-scoped revert (`wiring` tasks only — when `<INLINE_WIRE_PIN>` is non-empty).** The
+   whole-module revert above removes the caller *and* the callee, so its RED split returns
+   identically for a wired and an unwired build — it cannot establish the one decision a wiring task
+   ships. Revert the **connection alone** (`<INLINE_WIRE>` — the call site / import / registration /
+   propagated argument), leaving the callee and every test file intact, and re-run the module tests.
+   The pin `<INLINE_WIRE_PIN>` MUST fail. **Assert the revert landed before reporting** — re-read the
+   file and confirm the connection is gone; `git stash push -- <paths>` stashes nothing and exits 0
+   when a listed path is untracked, so a revert that never happened reports as a pass. Restore, then
+   mutate the other direction: force the connection to fire unconditionally and confirm the
+   fall-through/negative test fails. A green module suite under either mutation is a FAILED property
+   → `STATUS: BLOCKED`; the connection is unenforced and no other Phase-5 gate is scoped to see it.
 
 2. **Anti-gaming audit of the module tests.** Report any test that CANNOT FAIL: an assertion true
    by construction, a mock asserted against itself, a test that never reaches the code path it
