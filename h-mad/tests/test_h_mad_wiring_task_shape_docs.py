@@ -76,6 +76,16 @@ GUIDANCE = [
         "the counter-measure is a narrower revert, not more of the same review",
     ),
     (
+        SKILL,
+        "Then run the wire-pin gate — 5b is the last gate that can require it.",
+        "the obligation must be mechanical at 5b; after it, nothing can tell wired from unwired",
+    ),
+    (
+        SKILL,
+        "scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md",
+        "the gate must be invoked with a real command, not merely described",
+    ),
+    (
         IMPLEMENTER,
         "this is a `wiring` task and the pin is its single load-bearing test",
         "the implementer must know the pin is the deliverable, not an extra test",
@@ -104,6 +114,8 @@ def test_wiring_guidance_literal_present(path: Path, literal: str, why: str) -> 
 
 # Halt tokens are the executable half: guidance with no halt route is advice.
 HALT_TOKENS = [
+    "step5b:wire_pin_missing:<task>",
+    "step5b:impl_plan_unshaped",
     "step5d:no_wire_pin:<module>",
     "step5d:red_wrong_reason:<module>",
     "step5e:wire_unenforced:<module>",
