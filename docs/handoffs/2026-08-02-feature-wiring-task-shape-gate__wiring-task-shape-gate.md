@@ -1,7 +1,7 @@
 # Handoff — H-MAD `wiring` task shape + Phase-5b wire-pin gate
 
 **Date:** 2026-08-02
-**Branch:** feature/wiring-task-shape-gate (no upstream — never pushed)
+**Branch:** feature/wiring-task-shape-gate → pushed, PR #18 open against `main`
 **Project:** /Users/kimhawk/orca/skills (symlinked as `~/.claude/skills/h-mad`)
 
 ## Session Summary
@@ -20,14 +20,14 @@ Two consecutive H-MAD wiring tasks shipped their single load-bearing design deci
 
 ## Next Steps
 
-1. Decide whether to merge — the branch has no upstream and is 2 commits ahead of `main`: `git log --oneline main..feature/wiring-task-shape-gate`
+1. Review and merge PR #18 — `gh pr view 18` / `gh pr merge 18`
 2. If merging, run BOTH suites first (the skills repo is symlinked into `~/.claude/skills/h-mad`, so a skill script change lands in every consumer immediately) — `/opt/anaconda3/bin/python3 -m pytest h-mad/tests -q` in `/Users/kimhawk/orca/skills` AND `pytest tests/test_h_mad_*.py -q` in `/Users/kimhawk/orca/HemaSuite/hematology-paper-writer`
 3. Exercise the gate on the next real H-MAD feature at Phase 5b — `python3 ~/.claude/skills/h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md`. It has never run inside a live `/h-mad` cycle; every run so far was a test or a dogfood sweep. [[feedback_tracer_bullet_before_ceremony]]
 4. Verify the memory's prediction at the remaining wiring site — memory `project_grounding_shadow_measurement.md` Task 5 was flagged as the next place to expect this defect class. Run the wire-scoped revert there and confirm the new 5e step catches it.
 
 ## Open / Blocked Items
 
-- **Branch unpushed / unmerged** — status: not yet done, deliberate. `feature/wiring-task-shape-gate` has no upstream; nothing was pushed this session. `repo: /Users/kimhawk/orca/skills · branch: feature/wiring-task-shape-gate · worktree: none`
+- **PR #18 open, unmerged** — status: awaiting review. https://github.com/BrightGold70/skills/pull/18 · `repo: /Users/kimhawk/orca/skills · branch: feature/wiring-task-shape-gate · worktree: none`. The skills repo is symlinked into `~/.claude/skills/h-mad`, so the working tree is already live for every consumer — merging changes the remote record, not local behaviour.
 - **Gate never run in a live `/h-mad` cycle** — status: deferred. All evidence is unit tests (35), mutation (16/16 both directions), and a read-only dogfood sweep over ~50 shipped impl-plans. No feature has yet reached 5b with the gate wired in.
 - **Every shipped impl-plan returns `UNSHAPED`** — status: expected, not a defect. ~50 HemaSuite plans predate the `Task shape` field. The first live 5b will halt `step5b:impl_plan_unshaped` unless the plan is regenerated against the current template (`references/inline-protocols.md` §Phase 5a). Worth knowing before it surprises someone mid-cycle.
 
