@@ -129,6 +129,9 @@ HALT_TOKENS = [
     "step5b:wire_pin_missing:<task>",
     "step5b:wire_pin_shape_mislabel:<task>",
     "step5b:impl_plan_unshaped",
+    # `tasks=0` reaches UNSHAPED too, and inherits a remedy — "add the shape field" —
+    # that has nothing to attach to. Same verdict, different plan, different route.
+    "step5b:impl_plan_no_tasks",
     "step5d:no_wire_pin:<module>",
     "step5d:red_wrong_reason:<module>",
     "step5e:wire_unenforced:<module>",
