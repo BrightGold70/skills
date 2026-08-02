@@ -41,9 +41,15 @@ from pathlib import Path
 # The id must be `Task <n>` or a module-style `M<n>`/`T<n>`: a looser pattern
 # swallows prose headings ("## Module layout") and reports phantom unshaped
 # tasks, which would FAIL every plan rather than judging it.
+#
+# The id must also START WITH A DIGIT. "Task" followed by any word swallows
+# `## Task decomposition` and `## Task outline` — both real, both in plans with no
+# task headers at all, so each turns a true `tasks=0` into `tasks=1`. That used to
+# be cosmetic; now that `tasks=0` selects the operator's remedy it is load-bearing.
+# Every id in the shipped corpus is digit-led (`0`, `4.a`, `6.1.5`, `7b`, `13.6`).
 _TASK_RE = re.compile(
     r"^\s*#{2,3}\s+"
-    r"(?:Task\s+(?P<num>[^\s:(–—-]+)|(?P<mod>[MT]\d+))"
+    r"(?:Task\s+(?P<num>\d[^\s:(–—]*)|(?P<mod>[MT]\d+))"
     r"\s*(?:\([^)]*\))?"  # `(B9 gate, pre-code, non-test)` qualifies the id
     r"\s*(?:[:–—-]\s*(?P<name>.*))?$",
     re.IGNORECASE,
@@ -60,6 +66,25 @@ _FIELD_RE = re.compile(
 # Values that look filled in and are not. `<...>` is the template placeholder the
 # generator is supposed to replace; the rest are the ways a generator says nothing.
 _FILLER = {"tbd", "n/a", "na", "none", "-", "--", "todo", "?", "x"}
+
+# Cuts a qualifier — `wiring (connects X to Y)`, `new-behaviour — pure helpers` —
+# off the value. `_SHAPE_RE`'s word boundary already tolerates a trailing qualifier
+# on its own, so this exists for one narrow job: the `|` test below must see the
+# shape WITHOUT its qualifier, or `wiring (engine | tools seam)` reads as an unedited
+# `new-behaviour | refactor | wiring` template and halts correct work. That is also
+# why the cut runs BEFORE the `|` test, not after.
+#
+# An ASCII hyphen is deliberately NOT a terminator: `new-behaviour` contains one.
+_SHAPE_QUALIFIER_RE = re.compile(r"[(,;–—].*$", re.DOTALL)
+
+# The shape's only job is to decide whether the wiring obligation applies, so it is
+# matched against a closed set and anything else reads as UNDECLARED. Trimming
+# qualifiers alone cannot be the whole rule: it leaves every unrecognised word
+# (`wire`, `connection`, `not-wiring`) meaning "declared something, therefore not
+# wiring" — a silent PASS on precisely the task this gate exists to catch. Fail
+# closed: an unrecognised value is a hiding place, exactly like a missing one.
+# The set is the template's own alternation (`references/inline-protocols.md` §Phase 5a).
+_SHAPE_RE = re.compile(r"^(new-behaviours?|new-behaviors?|refactor|wiring)(?![\w-])", re.IGNORECASE)
 
 
 def _clean(value: str) -> str:
@@ -81,17 +106,21 @@ def _is_real_value(value: str | None) -> bool:
 
 
 def _declared_shape(value: str) -> str | None:
-    """The task's shape, or None when nothing was actually chosen.
+    """The task's shape, or None when nothing recognisable was chosen.
 
     The template line offers `new-behaviour | refactor | wiring`; left unedited it
     declares nothing, and must not be read as a shape — least of all as a shape
     that happens to exclude `wiring`.
+
+    The qualifier is cut first, so the alternation check that follows sees the same
+    text a reader would call "the shape": a qualifier containing a `|` must not make
+    a real, pinned shape read as an unedited template and halt correct work.
     """
-    text = _clean(value)
+    text = _SHAPE_QUALIFIER_RE.sub("", _clean(value)).strip()
     if "|" in text:
         return None
-    text = text.lower()
-    return text or None
+    match = _SHAPE_RE.match(text)
+    return match.group(1).lower() if match else None
 
 
 def _parse_tasks(text: str) -> list[dict]:
@@ -105,6 +134,10 @@ def _parse_tasks(text: str) -> list[dict]:
                 "id": mod.upper() if mod else f"Task {num.strip()}",
                 "name": (header.group("name") or "").strip(),
                 "shape": None,
+                # What the plan actually said, kept only so an unrecognised value
+                # can be quoted back: "add the field" is the wrong remedy for a
+                # field that is present and misspelled.
+                "shape_raw": None,
                 "wire": None,
                 "pin": None,
             }
@@ -119,11 +152,23 @@ def _parse_tasks(text: str) -> list[dict]:
         value = field.group(2)
         if label == "task shape":
             current["shape"] = _declared_shape(value)
+            if _is_real_value(value):
+                current["shape_raw"] = _clean(value)
         elif label == "wire-pin":
             current["pin"] = value
         elif label == "wire":
             current["wire"] = value
     return tasks
+
+
+def _unshaped_entry(task: dict) -> str:
+    """How an unshaped task is reported — blank and unrecognised need different fixes."""
+    if task["shape_raw"]:
+        return (
+            f"{task['id']} ({task['name']}): declares `{task['shape_raw']}`, which is "
+            "not `new-behaviour`, `refactor` or `wiring`"
+        )
+    return task["id"]
 
 
 def check(plan_path: Path) -> dict:
@@ -136,13 +181,14 @@ def check(plan_path: Path) -> dict:
             "tasks": len(tasks),
             "wiring": 0,
             "unpinned": [],
-            "unshaped": [task["id"] for task in tasks],
+            "unshaped": [_unshaped_entry(task) for task in tasks],
             "mislabeled": [],
         }
 
     # The plan is shape-aware, so a task with no shape is a hiding place for a
-    # wiring task — precisely what this gate exists to close.
-    unshaped = [task["id"] for task in tasks if not task["shape"]]
+    # wiring task — precisely what this gate exists to close. An unrecognised shape
+    # word lands here too: it hides a wiring task just as effectively as a blank.
+    unshaped = [_unshaped_entry(task) for task in tasks if not task["shape"]]
 
     wiring = [task for task in tasks if task["shape"] == "wiring"]
     unpinned = []
@@ -218,11 +264,23 @@ def main(argv: list[str] | None = None) -> int:
     for item in result["mislabeled"]:
         print(f"  mislabeled: {item}")
     if result["verdict"] == "UNSHAPED":
-        print(
-            "  no task declares a **Task shape** — this plan cannot be judged. "
-            "A wiring task here would ship its connection untested through every "
-            "later gate; add the field (see references/inline-protocols.md §Phase 5a)."
-        )
+        # Same halt, two different plans behind it. `tasks=0` is not a missing
+        # field — it is a plan the parser could not see a task in, and handing that
+        # operator "add the **Task shape** field" sends them to edit a file that has
+        # nothing to add it to.
+        if result["tasks"] == 0:
+            print(
+                "  no task was found — this plan cannot be judged. The parser saw no "
+                "`## Task <n>` or `## M<n>` header, so the shape field is not what is "
+                "missing: check this is the impl-plan (not the design or a legacy "
+                "`.plan.md`) and that its task headers follow that convention."
+            )
+        else:
+            print(
+                "  no task declares a **Task shape** — this plan cannot be judged. "
+                "A wiring task here would ship its connection untested through every "
+                "later gate; add the field (see references/inline-protocols.md §Phase 5a)."
+            )
     print(f"[H-MAD] {feature} wirepin {result['verdict']}")
     return 2 if result["verdict"] == "UNSHAPED" else 0
 
