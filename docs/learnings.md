@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-02 · gotcha · [0.7] · `h-mad,wire-pin,guards,mutation-testing,handoff:2026-08-02-wire-pin-mislabel-merged` — Closing a one-edit evasion often leaves the two-edit one open: h-mad's wire-pin mislabel check catches a shape demotion with WIRE fields kept, but demoting AND clearing them reads as honest work. Residual, not coverage.
+- 2026-08-02 · gotcha · [0.7] · `handoff,git,pr-state,handoff:2026-08-02-wire-pin-mislabel-merged` — A squash-merge commit title ending in '(#N)' is the cheapest proof a handoff's cited PR already landed — check git log for it before trusting a doc's 'PR open, unmerged' claim.
 - 2026-08-02 · gotcha · [0.7] · `mutation-testing,regex,handoff:2026-08-02-wiring-task-shape-gate` — Zero failures from a mutation is a finding about the TEST. Relaxing a header regex to \S+ broke nothing because every prose-heading case was multi-word, which the trailing $ rejects anyway; single-word cases discriminate.
 - 2026-08-02 · gotcha · [0.7] · `mutation-testing,doc-tests,handoff:2026-08-02-wiring-task-shape-gate` — A mutation harness must assert the literal LANDED. One doc literal spanned a line break, .count() returned 0, and the no-op mutation reported the guard as enforced. Wrap-aware regex + post-write assert.
 - 2026-08-02 · gotcha · [0.9] · `h-mad,wiring,phase5,handoff:2026-08-02-wiring-task-shape-gate` — Every H-MAD Phase-5 gate is callee-scoped, but a wiring task's deliverable is the CONNECTION: RED, the whole-module revert, anti-gaming audit and 6a-prime are all blind. Presence is not enforcement; only a wire-scoped mutation sees it.
