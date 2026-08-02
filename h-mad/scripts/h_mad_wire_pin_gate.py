@@ -13,9 +13,13 @@ mechanically, and this gate is the requirement.
 
 Verdicts, printed as a canonical token:
 
-    WIREPIN: PASS tasks=3 wiring=1 unpinned=0        exit 0
-    WIREPIN: FAIL tasks=3 wiring=2 unpinned=1        exit 0
-    WIREPIN: UNSHAPED tasks=2 wiring=0 unpinned=0    exit 2
+    WIREPIN: PASS tasks=3 wiring=1 unpinned=0 mislabeled=0        exit 0
+    WIREPIN: FAIL tasks=3 wiring=2 unpinned=1 mislabeled=0        exit 0
+    WIREPIN: UNSHAPED tasks=2 wiring=0 unpinned=0 mislabeled=0    exit 2
+
+`mislabeled` is on the summary line because a demotion FAILs with `wiring=0
+unpinned=0`: every count a reader would check reads clean, and a FAIL whose
+summary shows nothing wrong invites "the gate is broken" over "the plan is".
 
 `UNSHAPED` means no task declares a shape, so the plan cannot be judged — the same
 discipline as the audit gate refusing to score an extract with no Must-fix section:
@@ -133,6 +137,7 @@ def check(plan_path: Path) -> dict:
             "wiring": 0,
             "unpinned": [],
             "unshaped": [task["id"] for task in tasks],
+            "mislabeled": [],
         }
 
     # The plan is shape-aware, so a task with no shape is a hiding place for a
@@ -150,13 +155,40 @@ def check(plan_path: Path) -> dict:
         if missing:
             unpinned.append(f"{task['id']} ({task['name']}): missing {', '.join(missing)}")
 
-    verdict = "FAIL" if (unpinned or unshaped) else "PASS"
+    # The other hiding place, and the cheaper one to reach: not an absent shape but
+    # a *wrong* one. Closing only the absent case leaves a wiring task one edited
+    # word away from a PASS. WIRE and WIRE-PIN are "`wiring` shape only" per the
+    # impl-plan template, so a task carrying either under another shape contradicts
+    # itself — and the filled-in field is the evidence, while the shape word is only
+    # the label. Trust the evidence.
+    #
+    # `_is_real_value` is what keeps this usable: the template ships both lines on
+    # every task, so an unfilled or placeholder value must read as "declared
+    # nothing" rather than as a wire, or the guard fails every plan generated from
+    # the template — refusing correct work, which is worse than the hole it closes.
+    mislabeled = []
+    for task in tasks:
+        if not task["shape"] or task["shape"] == "wiring":
+            continue
+        present = [
+            label
+            for label, value in (("WIRE", task["wire"]), ("WIRE-PIN", task["pin"]))
+            if _is_real_value(value)
+        ]
+        if present:
+            mislabeled.append(
+                f"{task['id']} ({task['name']}): declares `{task['shape']}` "
+                f"but carries {', '.join(present)}"
+            )
+
+    verdict = "FAIL" if (unpinned or unshaped or mislabeled) else "PASS"
     return {
         "verdict": verdict,
         "tasks": len(tasks),
         "wiring": len(wiring),
         "unpinned": unpinned,
         "unshaped": unshaped,
+        "mislabeled": mislabeled,
     }
 
 
@@ -176,12 +208,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print(
         f"WIREPIN: {result['verdict']} tasks={result['tasks']} "
-        f"wiring={result['wiring']} unpinned={len(result['unpinned'])}"
+        f"wiring={result['wiring']} unpinned={len(result['unpinned'])} "
+        f"mislabeled={len(result['mislabeled'])}"
     )
     for item in result["unpinned"]:
         print(f"  unpinned: {item}")
     for item in result["unshaped"]:
         print(f"  unshaped: {item}")
+    for item in result["mislabeled"]:
+        print(f"  mislabeled: {item}")
     if result["verdict"] == "UNSHAPED":
         print(
             "  no task declares a **Task shape** — this plan cannot be judged. "

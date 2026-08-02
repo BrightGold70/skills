@@ -86,6 +86,18 @@ GUIDANCE = [
         "the gate must be invoked with a real command, not merely described",
     ),
     (
+        SKILL,
+        "`FAIL` has two causes and two different remedies",
+        "one verdict, two remedies: routing both to the missing-pin halt sends the "
+        "operator to add fields that are already present",
+    ),
+    (
+        SKILL,
+        "The gate therefore trusts the filled-in `WIRE`/`WIRE-PIN` over the shape word",
+        "the shape is self-declared, so the evidence has to outrank the label or a "
+        "one-word demotion buys a PASS",
+    ),
+    (
         IMPLEMENTER,
         "this is a `wiring` task and the pin is its single load-bearing test",
         "the implementer must know the pin is the deliverable, not an extra test",
@@ -115,6 +127,7 @@ def test_wiring_guidance_literal_present(path: Path, literal: str, why: str) -> 
 # Halt tokens are the executable half: guidance with no halt route is advice.
 HALT_TOKENS = [
     "step5b:wire_pin_missing:<task>",
+    "step5b:wire_pin_shape_mislabel:<task>",
     "step5b:impl_plan_unshaped",
     "step5d:no_wire_pin:<module>",
     "step5d:red_wrong_reason:<module>",

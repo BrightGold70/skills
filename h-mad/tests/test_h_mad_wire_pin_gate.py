@@ -135,6 +135,88 @@ def test_plan_with_no_shapes_at_all_is_unshaped_not_pass(tmp_path: Path) -> None
     assert result["verdict"] == "UNSHAPED", result
 
 
+# --- the second hiding place: a wrong shape, not a missing one -------------
+#
+# Closing "no shape declared" leaves "wrong shape declared" open, and the second
+# is cheaper to reach: one word changes in a generated plan and the gate believes
+# it. The template says WIRE/WIRE-PIN are "`wiring` shape only", so a task that
+# carries either while declaring another shape contradicts itself. Trust the
+# evidence in the plan over the label on it.
+
+
+@pytest.mark.parametrize("shape", ["new-behaviour", "refactor"])
+def test_wire_field_under_a_non_wiring_shape_is_a_mislabel(tmp_path: Path, shape: str) -> None:
+    result = check(_plan(tmp_path, _task(1, shape=shape, pin=None)))
+    assert result["verdict"] == "FAIL", f"a WIRE under `{shape}` was accepted: {result}"
+    assert "Task 1" in " ".join(result["mislabeled"]), result
+
+
+@pytest.mark.parametrize("shape", ["new-behaviour", "refactor"])
+def test_wire_pin_field_under_a_non_wiring_shape_is_a_mislabel(tmp_path: Path, shape: str) -> None:
+    # Either field alone is enough: a plan that names a pin has admitted the task
+    # wires something, whatever the shape line says.
+    result = check(_plan(tmp_path, _task(1, shape=shape, wire=None)))
+    assert result["verdict"] == "FAIL", f"a WIRE-PIN under `{shape}` was accepted: {result}"
+    assert "Task 1" in " ".join(result["mislabeled"]), result
+
+
+def test_a_demoted_wiring_task_does_not_pass(tmp_path: Path) -> None:
+    # The concrete mutation: take a correctly-pinned wiring task and change only
+    # the shape word. Before this guard the gate returned PASS with wiring=0.
+    body = _task(1, "wire_ok") + _task(2, "wire_demoted", shape="new-behaviour")
+    result = check(_plan(tmp_path, body))
+    assert result["verdict"] == "FAIL", result
+    joined = " ".join(result["mislabeled"])
+    assert "Task 2" in joined and "Task 1" not in joined, joined
+
+
+@pytest.mark.parametrize("value", ["TBD", "N/A", "none", "-", "<caller/path.py>:<symbol>"])
+def test_an_unfilled_wire_template_under_a_non_wiring_shape_is_not_a_mislabel(
+    tmp_path: Path, value: str
+) -> None:
+    # The counter-direction, and the one that decides whether this guard is usable:
+    # the impl-plan template ships WIRE/WIRE-PIN lines on every task. A refactor
+    # task that simply left them unfilled has declared nothing and must still PASS,
+    # or the guard fails every plan written from the template.
+    result = check(_plan(tmp_path, _task(1, shape="refactor", wire=value, pin=value)))
+    assert result["verdict"] == "PASS", f"unfilled `{value}` read as a real wire: {result}"
+    assert result["mislabeled"] == [], result
+
+
+def test_mislabel_is_reported_by_the_cli(tmp_path: Path) -> None:
+    plan = _plan(tmp_path, _task(1, shape="new-behaviour"))
+    proc = subprocess.run(
+        [sys.executable, str(GATE), str(plan)], capture_output=True, text=True
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "WIREPIN: FAIL" in proc.stdout, proc.stdout
+    assert "mislabeled: Task 1" in proc.stdout, proc.stdout
+
+
+def test_summary_line_carries_the_mislabel_count(tmp_path: Path) -> None:
+    # A demotion FAILs with `wiring=0 unpinned=0`: every count on the summary line
+    # reads clean, so a reader who stops at the token sees a FAIL with nothing wrong
+    # and concludes the gate is broken rather than the plan. The count has to be on
+    # the line that carries the verdict.
+    plan = _plan(tmp_path, _task(1, shape="new-behaviour"))
+    proc = subprocess.run(
+        [sys.executable, str(GATE), str(plan)], capture_output=True, text=True
+    )
+    summary = next(l for l in proc.stdout.splitlines() if l.startswith("WIREPIN:"))
+    assert "mislabeled=1" in summary, summary
+
+
+def test_summary_line_reports_zero_mislabels_on_a_pass(tmp_path: Path) -> None:
+    # The counter-direction: the field must be a real count, not a constant that
+    # happens to read right on the failing case.
+    plan = _plan(tmp_path, _task(1, "wire_ok"))
+    proc = subprocess.run(
+        [sys.executable, str(GATE), str(plan)], capture_output=True, text=True
+    )
+    summary = next(l for l in proc.stdout.splitlines() if l.startswith("WIREPIN:"))
+    assert "WIREPIN: PASS" in summary and "mislabeled=0" in summary, summary
+
+
 # --- tolerance: the field must survive how a generator writes it ----------
 
 
