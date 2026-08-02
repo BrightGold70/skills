@@ -132,6 +132,9 @@ HALT_TOKENS = [
     # `tasks=0` reaches UNSHAPED too, and inherits a remedy — "add the shape field" —
     # that has nothing to attach to. Same verdict, different plan, different route.
     "step5b:impl_plan_no_tasks",
+    # The gate can also fail to read the plan at all. Under "read the token, never
+    # `$?`" that is silence, not a route — so it needs a token AND a row like the rest.
+    "step5b:impl_plan_unreadable",
     "step5d:no_wire_pin:<module>",
     "step5d:red_wrong_reason:<module>",
     "step5e:wire_unenforced:<module>",
