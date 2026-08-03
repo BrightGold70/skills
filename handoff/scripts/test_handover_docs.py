@@ -367,3 +367,43 @@ def test_handover_writes_the_marker_that_takeover_reads() -> None:
     assert "Skip this unless the doc carries a `**Handover-From:**` line" in text, (
         "READ no longer reads the marker, so writing it is pointless"
     )
+
+
+# --- the stamp-preserve list must cover every prefix this skill writes -----
+#
+# WRITE stamps `handoff:`, HANDOVER Step 4 stamps `handover:`, TAKEOVER stamps
+# `taken over:`. WRITE's rule knew only `handoff:`/`h-mad`, so it treated its own
+# sibling modes' stamps as human notes and appended — a worktree would accumulate
+# `handover: … — handoff: … — handoff: …` instead of one current checkpoint. Hit
+# live while stamping a real takeover.
+
+_PREFIXES = ["handoff:", "handover:", "taken over:", "h-mad"]
+
+
+def test_both_preserve_rules_list_every_prefix_this_skill_writes() -> None:
+    text = _norm(SKILL)
+    write_rule = "does not already start with `handoff:`, `handover:`, `taken over:` or `h-mad`"
+    handover_rule = "does **not** start with `handoff:`, `handover:`, `taken over:` or `h-mad`"
+    assert write_rule in text, (
+        "WRITE's stamp-preserve list is missing a prefix this skill writes; it will "
+        "append to its own sibling modes' stamps instead of replacing them"
+    )
+    assert handover_rule in text, "HANDOVER Step 4's preserve list drifted from WRITE's"
+
+
+def test_the_two_preserve_lists_are_identical() -> None:
+    # Two rules that must agree are two places to forget. Pin the agreement, not
+    # just each list — this defect was exactly a drift between them.
+    text = _norm(SKILL)
+    for p in _PREFIXES:
+        occurrences = text.count(f"`{p}`")
+        assert occurrences >= 2, (
+            f"prefix `{p}` appears in {occurrences} preserve rule(s); WRITE and "
+            "HANDOVER Step 4 must both list it"
+        )
+
+
+def test_the_reason_is_stated_not_just_the_list() -> None:
+    assert "treats its sibling modes' stamps as human notes" in _norm(SKILL), (
+        "without the why, a future edit trims the list back to the mode it is reading"
+    )
