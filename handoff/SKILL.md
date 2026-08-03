@@ -637,7 +637,7 @@ Always include `handoff:<date>-<slug>` as a tag so the learning is cross-referen
 Two WRITE phases live in reference files rather than here. They are real steps, not optional reading — but they run once, at the end, and carrying ~100 lines of their rules on the critical path dilutes attention on the reconciliation and handover checks that decide whether a handoff is correct at all.
 
 - **Auto-memories** (unless `--skip-memories`) — read `references/auto-memories.md` and follow it. This is what makes a durable fact surface in *future* sessions; `docs/learnings.md` alone does not.
-- **Automation scout** (unless `--skip-scout`) — read `references/automation-scout.md` and follow it.
+- **Automation scout** (unless `--skip-scout`) — read `references/automation-scout.md` and follow it. It **reconciles the open `docs/skill-candidates.md` rows before appending new ones**, not just appends: this scout is the only thing that writes that file, so a status nobody flips decays until the whole backlog has to be re-derived by hand (measured: 4 of 5 open rows described already-shipped work).
 
 Read the file at the moment you run the phase. Doing it from memory is how a phase quietly degrades into a summary of itself.
 

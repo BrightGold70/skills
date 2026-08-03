@@ -233,6 +233,43 @@ def test_review_fix_present(literal: str, why: str) -> None:
     assert " ".join(literal.split()) in _norm(SKILL), f"regressed: {why}"
 
 
+# --- the scout must reconcile, not only append ------------------------------
+
+SCOUT = SKILL.parent / "references" / "automation-scout.md"
+
+
+def test_scout_reconciles_open_rows_before_appending() -> None:
+    # The scout is the ONLY writer of docs/skill-candidates.md, and it was
+    # append-only: the file's header demands "reconcile a row when the thing it
+    # describes ships" while nothing ever did. Measured 2026-08-03 — five rows sat
+    # at `candidate: yes` and four described already-shipped work, so the backlog
+    # had to be re-derived by hand. This is the inverse hazard shape: a rule stated
+    # in an artifact that never reaches the step obliged to act on it.
+    text = " ".join(SCOUT.read_text(encoding="utf-8").split())
+    assert "### Reconcile the open rows FIRST" in text, "the scout is append-only again"
+    assert "before** appending" in text, "ordering matters: appending first dilutes the pass"
+    assert "grep -nE '^- \\*\\*.*candidate: yes' docs/skill-candidates.md" in text, (
+        "the runnable command must be present, and anchored on the row shape — an "
+        "unanchored grep matches the file's own prose and re-checks it every session"
+    )
+    assert "against source, not against the label" in text, (
+        "a row is a claim by a past session; trusting the label is what let 4 stale "
+        "rows survive"
+    )
+    assert "A `no` can still name an upgrade" in text, (
+        "the verdict answers 'is this a new skill?', not 'should an existing skill "
+        "change?' — one row sat inert while naming its own insertion point"
+    )
+
+
+def test_write_phase_says_the_scout_reconciles() -> None:
+    # Both halves: the reference carries the step, and the WRITE phase list has to
+    # say the scout does more than append, or a reader skimming WRITE skips it.
+    assert "reconciles the open `docs/skill-candidates.md` rows before appending" in _norm(SKILL), (
+        "WRITE's scout bullet still describes an append-only phase"
+    )
+
+
 # --- LEARN's documented output must match what learn.py prints -------------
 
 
