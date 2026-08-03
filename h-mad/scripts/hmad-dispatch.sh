@@ -940,7 +940,67 @@ _cmd_dispatch() {  # $1 agent, $2 task_id
   # "ok":false error is surfaced on stderr + non-zero rather than echoed as a
   # phantom-success stdout — otherwise a failed dispatch reads as delivered and
   # await times out with no diagnostic (F11 scope, extended to the raw verbs).
-  _orca_json '.' orchestration dispatch --task "$2" --to "$target" --inject --return-preamble --json
+  local resp
+  resp="$(_orca_json '.' orchestration dispatch --task "$2" --to "$target" --inject --return-preamble --json)" || return $?
+  # J19: `ok:true` is not delivery. Measured 2026-08-03: a dispatch can return
+  # ok:true, status:"dispatched", `injected:false` and exit 0 — the task row is
+  # created and the worker is never told, so `await` sits until timeout with no
+  # diagnostic. We always pass --inject, so this is a latent guard rather than a
+  # live bug; it costs one jq and converts a silent no-op into a loud failure.
+  #
+  # Explicit `false` ONLY. An older runtime that omits the field must keep
+  # working — treating absent as false would break every such dispatch.
+  # `has()`, NOT `//`. jq's alternative operator treats FALSE as null-ish, so
+  # `.result.injected // "absent"` yields "absent" for exactly the value we are
+  # hunting — the guard silently never fired (caught by its own test).
+  if [ "$(printf '%s' "$resp" | jq -r '
+        if (.result? | objects | has("injected")) then (.result.injected | tostring)
+        elif (. | objects | has("injected")) then (.injected | tostring)
+        else "absent" end' 2>/dev/null)" = "false" ]; then
+    echo "hmad-dispatch: dispatch of $2 to $target returned injected=false — the task row exists but the worker was NOT given the prompt; await would time out. Re-dispatch after confirming the pane accepts input." >&2
+    return 1
+  fi
+  printf '%s\n' "$resp"
+}
+
+_await_cache_dir() {  # where reports acked off the queue are parked
+  printf '%s\n' "${HMAD_AWAIT_CACHE_DIR:-$(dirname "$(_pin_file)")/await-cache}"
+}
+
+_await_cache_put() {  # $1 = a `check` envelope — park every worker_done it carries
+  # J19: acking a delivery to advance the queue DISCARDS every message in it,
+  # not just the ones we looked at. Measured live: a 2-message batch acked to
+  # `count: 0`, and `await <the other task>` then timed out for a module that had
+  # genuinely reported. In a fanout modules finish in one order and are awaited
+  # in another, so this is the normal path, not an edge case.
+  #
+  # The ack is still mandatory (an un-acked delivery replays forever), so the
+  # fix is to park the reports BEFORE they are acked away, keyed by task id.
+  local dir; dir="$(_await_cache_dir)"
+  mkdir -p "$dir" 2>/dev/null || return 0   # best-effort: never fail an await
+  printf '%s' "$1" | jq -c '(.result.messages // .messages // [])[]?
+      | select((.type // "") == "worker_done")
+      | {k: (((.payload // {})
+              | if type == "string" then (fromjson? // {}) else . end
+              | if type == "object" then .taskId else null end)
+             // .taskId // .["task-id"] // empty), m: .}
+      | select(.k != null)' 2>/dev/null \
+  | while IFS= read -r row; do
+      local key; key="$(printf '%s' "$row" | jq -r '.k' 2>/dev/null)" || continue
+      # Guard the filename: a task id is `task_<hex>`, but never build a path out
+      # of unvalidated remote input.
+      case "$key" in ''|*/*|*..*) continue ;; esac
+      printf '%s' "$row" | jq -c '.m' > "$dir/$key.json" 2>/dev/null || true
+    done
+  return 0
+}
+
+_await_cache_take() {  # $1 task_id — echo a parked report and consume it, else rc 1
+  local f; f="$(_await_cache_dir)/$1.json"
+  [ -f "$f" ] || return 1
+  cat "$f" || return 1
+  rm -f "$f"
+  return 0
 }
 
 _cmd_await() {  # $1 task_id, [--timeout <s>]
@@ -949,6 +1009,13 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   local task="$1"; shift
   local timeout=600
   while [ $# -gt 0 ]; do case "$1" in --timeout) timeout="$2"; shift 2 ;; *) _unknown_opt await "$1"; return $? ;; esac; done
+  # J19: a report parked by an earlier await (which had to ack it off the queue
+  # to advance) is served from the cache. Checked FIRST — the queue no longer has
+  # it, so going to the runtime for it would time out on work that is finished.
+  local cached
+  if cached="$(_await_cache_take "$task")" && [ -n "$cached" ]; then
+    printf '%s\n' "$cached"; return 0
+  fi
   local coord; coord="$(_coordinator)" || return 1
   # Guard the check response through _orca_json first ('.' re-emits the whole
   # envelope, ok-checked), THEN run the worker_done filter. A raw pipe swallowed
@@ -997,6 +1064,10 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
     # is a spurious timeout, which is the correct bias for a gate (cf. gate-wait).
     [ "${count:-0}" -gt 0 ] || break
     # Non-empty batch with no match for OUR task — it belongs to a sibling module.
+    # Park every report in it BEFORE acking, because the ack destroys them all
+    # (J19, see _await_cache_put). Best-effort by design: a cache failure must
+    # degrade to the previous lossy behaviour, never abort a live await.
+    _await_cache_put "$checked" || true
     # Ack it so the next check advances past it.
     #
     # OBSERVED LIVE 2026-08-03 (this comment previously said the field "could not
