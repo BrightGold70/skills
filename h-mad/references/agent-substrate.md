@@ -22,7 +22,7 @@ which differs per install and per checkout.
 ## Verbs
 | Verb | Purpose |
 |------|---------|
-| `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping, ending in a canonical `PREFLIGHT: PASS\|FAIL [stale=…] [conflict=…]` verdict line (run at Phase-5/audit preflight; assert the token — exit is 0 on both verdicts) |
+| `hmad-dispatch env` | Print resolved substrate + agent→terminal mapping, ending in a canonical `PREFLIGHT: PASS\|FAIL [stale=…] [conflict=…] [unresolved=…]` verdict line (run at Phase-5/audit preflight; assert the token — exit is 0 on both verdicts) |
 | `hmad-dispatch resolve <codex\|agy>` | Resolve one agent to its handle; stdout + exit 0/1/2 |
 | `hmad-dispatch launch <codex\|agy> [--worktree <sel>] [--focus]` | Spawn a FRESH agent terminal via `orca terminal create --command …`, then **resolve its live handle by joining the create response's `paneKey` against `terminal list`** and pin that. The zero-manual durable identity path (H5) — no title/preview dependence. **Not** `.result.terminal.handle`: that is a pre-adoption placeholder the pane never has (J1, confirmed 3×), and pinning it made every later dispatch vanish. Fails loud if the response carries no `paneKey`, or if the key does not appear within `HMAD_LAUNCH_RESOLVE_TIMEOUT` (default 20s). Launch command overridable via `HMAD_ORCA_CODEX_LAUNCH_CMD` / `HMAD_ORCA_AGY_LAUNCH_CMD` |
 | `hmad-dispatch pin <codex\|agy> <handle>` | Record one agent's handle in the session pin file (preserves the sibling). The durable way to make Codex addressable — capture its handle from `orca terminal list` (or at launch) and pin it, since neither auto-detect nor `orca terminal rename` yields a stable `codex` identity (H5) |

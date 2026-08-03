@@ -633,6 +633,7 @@ _cmd_env() {
   # from another repo. This is the line an operator already reads before a run.
   [ "$sub" = "orca" ] && echo "pin file: $(_pin_file)"
   local a t _id stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
+  local unresolved="" orch_on=1
   # J18: resolution stderr was discarded wholesale, which also discarded the OS
   # evidence pass's report -- the one place that can say "the agent IS running,
   # here is its pid, here are the panes it could be in". Capture instead of
@@ -661,6 +662,7 @@ _cmd_env() {
       fi
     else
       echo "$a -> UNRESOLVED"
+      unresolved="${unresolved:+$unresolved,}$a"
     fi
     grep '^\[H-MAD\]' "$_rerr" >&2 || true
     : > "$_rerr"
@@ -676,6 +678,7 @@ _cmd_env() {
     echo "CONFLICT: codex and agy both resolve to $seen_codex — at least one is wrong; pin them explicitly"
   fi
   if _orchestration_active; then
+    orch_on=0
     echo "orchestration: on"
     # Report the Run binding too. `orchestration: on` alone was misleading: it means
     # substrate+coordinator are present, which says nothing about whether a Run is
@@ -694,8 +697,18 @@ _cmd_env() {
     echo "orchestration: off"
   fi
   # PREFLIGHT verdict — the machine-consumable form of the STALE/CONFLICT lines above.
-  # A FAIL is something an orchestrator must ACT on; an agent that is merely
-  # UNRESOLVED is not a failure, it is an ordinary un-set-up session.
+  # A FAIL is something an orchestrator must ACT on.
+  #
+  # An UNRESOLVED agent used to be exempt on the grounds that it "is not a failure,
+  # it is an ordinary un-set-up session". That holds only while nothing is about to
+  # dispatch. Measured live 2026-08-03: `PREFLIGHT: PASS` printed with BOTH agents
+  # UNRESOLVED in a session whose coordinator and Run were bound — i.e. a session
+  # one step from dispatching, with nowhere to dispatch to. A preflight that passes
+  # there is not reporting readiness, it is withholding the one fact that matters.
+  #
+  # So the exemption is kept exactly where its reasoning applies: `_orchestration_active`
+  # (orca AND a coordinator resolves) separates "wired up, about to dispatch" from
+  # "ordinary un-set-up session". Unresolved agents FAIL only in the former.
   #
   # This MUST NOT become a non-zero exit. A non-zero exit registers as a Claude Code
   # PostToolUseFailure and leaks into coexisting plugins' error handling, which is why
@@ -705,6 +718,9 @@ _cmd_env() {
   # token, never by changing $?.
   [ -z "$stale" ] || { verdict="FAIL"; fields=" stale=$(printf '%s' "$stale" | tr ' ' ',')"; }
   [ -z "$conflict_handle" ] || { verdict="FAIL"; fields="$fields conflict=$conflict_handle"; }
+  if [ -n "$unresolved" ] && [ "$orch_on" -eq 0 ]; then
+    verdict="FAIL"; fields="$fields unresolved=$unresolved"
+  fi
   echo "PREFLIGHT: ${verdict}${fields}"
   if [ "$verdict" = "PASS" ]; then _receipt_write; else _receipt_clear; fi
   return 0

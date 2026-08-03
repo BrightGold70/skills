@@ -3331,6 +3331,67 @@ def test_preflight_combines_stale_and_conflict_in_one_verdict(tmp_path):
     assert "conflict=" in lines[0]
 
 
+def test_preflight_fails_when_an_agent_is_unresolved_under_orchestration(tmp_path):
+    """J18: a session wired for orchestration with no addressable agent is a FAIL.
+
+    Previously PASS. The rationale in the code -- "an agent that is merely
+    UNRESOLVED is not a failure, it is an ordinary un-set-up session" -- is right
+    about an un-set-up session and wrong here: a coordinator resolves, so this
+    session is about to dispatch, and it has nowhere to dispatch to. Measured
+    live 2026-08-03: `PREFLIGHT: PASS` printed with BOTH agents UNRESOLVED.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_other"),
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_other"})
+    line = next(ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "unresolved=codex,agy" in line
+
+
+def test_preflight_passes_unresolved_when_session_is_not_set_up(tmp_path):
+    """J18 counterpart: preserve the original rationale where it holds.
+
+    No coordinator resolves, so `_orchestration_active` is false: nothing is
+    about to dispatch and an unpinned agent is an ordinary un-set-up session,
+    not a fault. Making EVERY unresolved agent a FAIL would cry wolf here.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_other")})
+    line = next(ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: PASS")
+    assert "unresolved=" not in line
+
+
+def test_preflight_reports_only_the_unresolved_agent(tmp_path):
+    """One agent addressable, one not: name only the one that is missing."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b,
+                 "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_agy", "term_coord"),
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy"})
+    line = next(ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "unresolved=codex" in line
+    assert "unresolved=codex,agy" not in line
+
+
+def test_preflight_combines_stale_and_unresolved(tmp_path):
+    """A stale pin and an unresolved agent share one verdict line, both named."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b,
+                 "HMAD_STUB_ORCA_STDOUT": _preflight_listing("term_coord"),
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_dead"})
+    line = next(ln for ln in r.stdout.splitlines() if ln.startswith("PREFLIGHT:"))
+    assert line.startswith("PREFLIGHT: FAIL")
+    assert "stale=agy" in line
+    assert "unresolved=codex" in line
+
+
 def test_preflight_is_last_after_orchestration_status(tmp_path):
     """AC-1.5: PREFLIGHT: is the last non-empty stdout line after orchestration:."""
     b = _bindir(tmp_path, ["orca"])

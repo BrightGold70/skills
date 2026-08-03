@@ -317,10 +317,16 @@ hmad-dispatch automation-remove <id>          # tear down
 The precheck greps for `PREFLIGHT: PASS` rather than running `hmad-dispatch env` bare. A bare
 precheck gates on the **exit code**, and `env` exits 0 on a `PREFLIGHT: FAIL` verdict by design
 (the signal-discipline invariant), so a scheduled run would precheck green against a stale pin —
-the automation-shaped instance of the bug the token exists to close. It also greps for `-> UNRESOLVED`, because `PREFLIGHT: PASS` deliberately does NOT mean
-"ready to dispatch" — an unpinned agent is not a *fault*, so it does not raise FAIL (FR-3), and an
-automation that only checked the verdict would preflight green with no agents pinned and then fail
-downstream. The verdict answers "is anything broken"; the extra grep adds "and is anything missing".
+the automation-shaped instance of the bug the token exists to close.
+
+The second grep (`-> UNRESOLVED`) is now **redundant belt-and-braces**, and the reason is worth
+keeping: it existed because `PREFLIGHT: PASS` deliberately did NOT mean "ready to dispatch" — an
+unpinned agent was not treated as a *fault* (FR-3), so an automation that checked only the verdict
+would preflight green with no agents pinned and fail downstream. That gap is closed: when a
+coordinator resolves (`_orchestration_active`), an unresolved agent now raises
+`PREFLIGHT: FAIL unresolved=<agents>`. The verdict answers both "is anything broken" and "is
+anything missing". Keep the grep anyway — it costs nothing and still covers the un-set-up case,
+where an unresolved agent stays a PASS on purpose.
 Together they gate each run on the substrate being live
 (a non-zero precheck skips the run rather than dispatching into a dead surface).
 The prompt reports a single `E2E: PASS` / `E2E: FAIL — <reason>` line; pair it

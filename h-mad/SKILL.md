@@ -165,8 +165,14 @@ receipt when the verdict is `PASS`:
 PREFLIGHT: PASS
 PREFLIGHT: FAIL stale=codex
 PREFLIGHT: FAIL conflict=term_x
+PREFLIGHT: FAIL unresolved=codex,agy
 PREFLIGHT: FAIL stale=codex,agy conflict=term_x
 ```
+
+`unresolved=` fires only when a coordinator resolves — i.e. the session is wired
+for orchestration and is one step from dispatching, with nowhere to dispatch to.
+An un-set-up session (no coordinator) keeps `PASS` with agents unresolved, since
+nothing is about to dispatch there.
 
 - `hmad-dispatch send` **refuses with rc=1 and sends nothing unless a valid receipt
   exists**. The receipt must say `PASS`, be within its TTL, and still match the
