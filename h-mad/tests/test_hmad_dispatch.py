@@ -1787,6 +1787,45 @@ def test_await_acks_a_sibling_batch_before_rechecking(tmp_path):
     assert "--ack dlv_7" in calls[1], f"second check must ack the stale batch: {calls[1]}"
 
 
+def test_await_acks_the_real_orca_delivery_shape(tmp_path):
+    """The ack id Orca ACTUALLY emits, captured live 2026-08-03.
+
+    The sibling-batch test above pins `delivery_id` (snake_case), which was a
+    guess: the comment in `_cmd_await` said the field "could not be observed
+    live", because it appears only on a non-empty coordinator Delivery, which
+    needs a bound Run AND pending mail. A live orchestration e2e finally produced
+    one, and the real envelope is:
+
+        {"result":{"runId":…,"deliveryId":"delivery_5ac615390583","count":1,
+                   "replayed":true,"acknowledged":null,"timedOut":false,
+                   "cancelled":false,"connectionLost":false,"mutation":{…},
+                   "messages":[…]}}
+
+    camelCase `deliveryId`, not snake_case. Both keys are in the fallback chain
+    so the wrapper worked either way -- but every test covered only the key Orca
+    does not send, so nothing pinned the shape that matters.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    sibling = (
+        '{"ok":true,"result":{"runId":"run_1632386a175a",'
+        '"deliveryId":"delivery_5ac615390583","count":1,"replayed":true,'
+        '"acknowledged":null,"timedOut":false,"cancelled":false,'
+        '"connectionLost":false,"messages":['
+        '{"id":"msg_other","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"other\\"}"}]}}'
+    )
+    r = run(["await", "task_mine", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": sibling}, capture=cap)
+    assert r.returncode == 1
+    assert "replayed after --ack" in r.stderr
+    calls = [ln for ln in cap.read_text().splitlines() if "orchestration check" in ln]
+    assert len(calls) == 2, f"expected ack-then-stop, got {len(calls)} checks"
+    assert "--ack" not in calls[0]
+    assert "--ack delivery_5ac615390583" in calls[1], calls[1]
+
+
 def test_await_unackable_batch_fails_loud_instead_of_spinning(tmp_path):
     # A non-empty delivery whose ack id we cannot find would replay forever.
     # Burning the timeout and reporting a plain timeout would hide the cause,
