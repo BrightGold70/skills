@@ -876,3 +876,38 @@ _Append new findings below as later runs surface them. Flip Status + link the co
 
 > **Status-row audit 2026-07-23.** J8, J10, J14 and J15 shipped in Wave 4a (`ab3657e`) but their rows still read `SCHEDULED`/`MONITORING` — verified against the code before flipping (J15's guards fired live during the J17 work the same day). This registry's own lifecycle line says *"Flip Status + link the commit when actioned"*; a stale row is a coverage hole, because the next reader treats a solved problem as open work and an open one as solved.
 
+
+
+> **Adjudication 2026-08-03 — `#68` and `#86` closed, from the HemaSuite handover.**
+>
+> **`#68` — closed as covered elsewhere; the shipped spec is deliberately NOT amended.** The
+> question was whether `docs/01-plan/features/tdd-dispatch-verification-discipline.spec.md` should
+> gain the dispatch-prompt size finding (`92,055B`, the `ARG_MAX`/size-ceiling frontier). Verified:
+> `grep -c '92,055\|size ceiling\|size_status\|ARG_MAX'` against that spec returns **0**, so the
+> premise was correct — it genuinely is not there.
+>
+> It should not be. That spec is about **verification discipline** — whether RED tests can fail,
+> whether GREEN is established by a revert test, whether verification actually verified; its FR-1..
+> FR-4 are all prompt/protocol changes to `codex-implementer-prompt.md` and SKILL.md Phase 5e. The
+> size finding is about **transport capacity** — how large a prompt the dispatch path can carry
+> (`exec` on stdin is mechanically uncapped; a live agy pane answered a 92,055B file-indirection
+> prompt). Orthogonal axis. Adding it would make the spec less coherent, not more complete, and
+> retroactively editing a shipped record to insert a fact that was never in its scope is worse than
+> leaving it out.
+>
+> The finding is already recorded in three places — `docs/learnings.md` (×2), its own handoff
+> `docs/handoffs/2026-07-30-main__dispatch-prompt-size-frontier-92kb.md` (×5), and the
+> `size_status=verified|unverified` contract above. That is better coverage than most findings get.
+> If the size frontier ever needs enforcing rather than remembering, it wants its own spec.
+>
+> **`#86` — closed as a duplicate** of `#67`/`#66`/`#68`. It was a rollup adding only two
+> verification notes, both discharged by the inbound handover brief
+> (`docs/handoffs/2026-08-03-main__five-hmad-items-handover.md`) before any work started.
+>
+> Dispositions of the rest of that handover: `#67` shipped (TDD gate resolved its state file at repo
+> root and stood down silently in sub-project layouts — the gate was off for a whole Phase 5).
+> `#66` item (1) needed no work, closed by PR #22 the same day; item (2) shipped
+> (`phase_counter_behind` fired on healthy mid-Phase-5 records). `#40` remains open as a judgement
+> call — its close criterion was met by a *different* feature's run, and absence of the
+> `Waiting for background terminal` string is evidence the pane path was never exercised, not that
+> the guard works.
