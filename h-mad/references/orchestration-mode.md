@@ -116,9 +116,31 @@ Workers dispatched through Orca must read that handle from their task spec and, 
 
 ```bash
 orca orchestration send --to <COORDINATOR_HANDLE> --type worker_done \
-  --task-id <task-id> --report-path <report-file> \
+  --task-id <task-id> --dispatch-id <ctx-id> --outcome succeeded|failed \
+  --report-path <report-file> \
   --files-modified <comma-separated-paths>
 ```
+
+**`--dispatch-id` is required and this snippet omitted it until 2026-08-03.**
+Orca lifecycle-validates `worker_done` and rejects one without it:
+
+```json
+{"_orcaLifecycleRejection":{"code":"missing_dispatch_id",
+                            "reason":"worker_done requires dispatchId."}}
+```
+
+The rejection is *quiet in the direction that matters*: the message still lands
+in the mailbox and `check` still returns it, so a coordinator sees a plausible
+report while Orca has recorded it as rejected. Measured — a hand-authored
+callback missing the flag was matched by `await` and rejected by Orca at the same
+time.
+
+The `<ctx-id>` comes from the **dispatch preamble Orca injects** when the task is
+dispatched; it is not knowable at `task-create` time. That is also why real
+Orca-dispatched workers were never affected: Orca's own injected preamble states
+the full contract, so workers follow *it*, not this snippet — which is precisely
+how the omission survived here unnoticed. Treat Orca's preamble as authoritative
+and this block as a description of it.
 
 The sender must be the dispatched terminal handle. A worker without the `[H-MAD]` line skips `worker_done` and reports normally.
 

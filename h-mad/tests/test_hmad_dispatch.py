@@ -1857,6 +1857,52 @@ def test_await_acks_the_real_orca_delivery_shape(tmp_path):
     assert "--ack delivery_5ac615390583" in calls[1], calls[1]
 
 
+def test_await_ignores_a_worker_done_orca_rejected(tmp_path):
+    """J20: a lifecycle-REJECTED worker_done is not a completion.
+
+    Orca validates worker_done and can reject it while STILL delivering it to the
+    mailbox -- `check` returns the message with an `_orcaLifecycleRejection` in
+    its payload. Observed 2026-08-03 with two codes: `missing_dispatch_id`
+    (callback sent without --dispatch-id) and `sender_not_assignee` (sent from a
+    terminal that is not the dispatch's assignee).
+
+    Matching one is a FALSE COMPLETION -- the worst failure a gate can have. The
+    worker's report was refused by the runtime, so the module did NOT report, and
+    await must keep waiting rather than hand a rejected message to the caller.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    rejected = (
+        '{"ok":true,"result":{"deliveryId":"delivery_1","count":1,"messages":['
+        '{"id":"msg_r","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_A\\",'
+        '\\"_orcaLifecycleRejection\\":{\\"code\\":\\"missing_dispatch_id\\"}}"}]}}'
+    )
+    r = run(["await", "task_A", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_AWAIT_CACHE_DIR": str(tmp_path / "c"),
+                 "HMAD_STUB_ORCA_STDOUT": rejected})
+    assert r.returncode == 1, "a rejected worker_done must not satisfy await"
+    assert r.stdout == ""
+
+
+def test_await_does_not_cache_a_rejected_worker_done(tmp_path):
+    """The cache must not launder a rejection into a later success."""
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "c"
+    rejected = (
+        '{"ok":true,"result":{"deliveryId":"delivery_1","count":1,"messages":['
+        '{"id":"msg_r","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_A\\",'
+        '\\"_orcaLifecycleRejection\\":{\\"code\\":\\"sender_not_assignee\\"}}"}]}}'
+    )
+    env = {"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+           "HMAD_AWAIT_CACHE_DIR": str(cache),
+           "HMAD_STUB_ORCA_STDOUT": rejected,
+           "HMAD_STUB_ORCA_ACK_STATE": str(tmp_path / "acked.flag")}
+    run(["await", "task_B", "--timeout", "2"], substrate="orca", env=env)
+    assert not (cache / "task_A.json").exists(), "a rejected report must not be parked as valid"
+
+
 def test_await_caches_a_sibling_report_before_acking_it_away(tmp_path):
     """J19: acking to advance the queue must not DISCARD a sibling's report.
 
