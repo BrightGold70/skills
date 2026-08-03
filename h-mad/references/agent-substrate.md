@@ -57,7 +57,7 @@ The controls are:
 | `HMAD_PREFLIGHT_RECEIPT_FILE` | beside the pin file | Override the receipt artifact path |
 | `HMAD_PREFLIGHT_TTL_SEC` | `3600` | Maximum receipt age in seconds |
 | `HMAD_SKIP_PREFLIGHT` | unset (enforced) | Skip receipt validation for `send` when set; handle-conflict protection remains active |
-| `HMAD_AWAIT_CACHE_DIR` | `await-cache/` beside the pin file | Where `await` parks a `worker_done` it must ack off the queue before its own task is awaited; entries are consumed on read |
+| `HMAD_AWAIT_CACHE_DIR` | `await-cache/` beside the pin file | Where `await` parks messages it must ack off the queue before their own task is awaited. `<task>.json` is a valid report (served as success); `<task>.rejected.json` is Orca's lifecycle rejection (never served as success — printed as the reason the task will not report). Both are consumed on read |
 
 To recover, run `hmad-dispatch env` and confirm `PREFLIGHT: PASS`; re-pin or
 relaunch after handle rotation, and pin distinct handles after a conflict.

@@ -1903,6 +1903,138 @@ def test_await_does_not_cache_a_rejected_worker_done(tmp_path):
     assert not (cache / "task_A.json").exists(), "a rejected report must not be parked as valid"
 
 
+_REJECTED_A = (
+    '{"ok":true,"result":{"deliveryId":"delivery_1","count":1,"messages":['
+    '{"id":"msg_r","type":"worker_done",'
+    '"payload":"{\\"taskId\\":\\"task_A\\",'
+    '\\"_orcaLifecycleRejection\\":{\\"code\\":\\"missing_dispatch_id\\",'
+    '\\"reason\\":\\"worker_done requires dispatchId.\\"}}"}]}}'
+)
+
+
+def test_await_timeout_names_the_lifecycle_rejection(tmp_path):
+    """J21: a rejected callback must not read as 'the worker never answered'.
+
+    Refusing to MATCH a rejected worker_done (J20) is correct but silent: the
+    operator gets a bare `await timed out ... no matching worker_done`, which
+    says the module never reported. It did report -- the runtime refused the
+    report -- and those need completely different fixes. Nothing in the h-mad
+    flow reads the mailbox for rejections, so today that diagnosis exists only in
+    a message no one opens.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["await", "task_A", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_AWAIT_CACHE_DIR": str(tmp_path / "c"),
+                 "HMAD_STUB_ORCA_STDOUT": _REJECTED_A})
+    assert r.returncode == 1
+    assert "missing_dispatch_id" in r.stderr
+    assert "requires dispatchId" in r.stderr
+    # The bare timeout line alone would be a misdiagnosis.
+    assert "REJECTED" in r.stderr
+
+
+def test_await_reports_a_rejection_parked_by_an_earlier_await(tmp_path):
+    """The fanout case: whoever awaits FIRST acks the rejection off the queue.
+
+    Without parking it, the module's own await later finds an empty mailbox and
+    reports a plain timeout -- the diagnosis destroyed by an unrelated await.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "c"
+    env = {"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+           "HMAD_AWAIT_CACHE_DIR": str(cache),
+           "HMAD_STUB_ORCA_STDOUT": _REJECTED_A,
+           "HMAD_STUB_ORCA_ACK_STATE": str(tmp_path / "acked.flag")}
+    first = run(["await", "task_B", "--timeout", "2"], substrate="orca", env=env)
+    assert first.returncode == 1
+    # Queue is drained now; task_A's own await must still learn WHY.
+    second = run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env)
+    assert second.returncode == 1
+    assert "missing_dispatch_id" in second.stderr
+    # A rejection is never a success, however it was learned.
+    assert second.stdout == ""
+
+
+def test_await_consumes_a_parked_rejection_so_it_cannot_go_stale(tmp_path):
+    """A parked rejection is delivered ONCE, like the report cache.
+
+    Surfaced by a mutation SURVIVING: deleting the `rm -f` that consumes
+    `<task>.rejected.json` broke no test, so nothing pinned the hand-off
+    semantics. Left un-consumed it is a permanent diagnosis: every later timeout
+    for that task -- including one with a completely different cause, after the
+    worker was fixed and re-dispatched -- would keep blaming the old rejection.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "c"
+    cache.mkdir()
+    (cache / "task_A.rejected.json").write_text(
+        '{"code":"missing_dispatch_id","reason":"worker_done requires dispatchId."}')
+    env = {"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+           "HMAD_AWAIT_CACHE_DIR": str(cache),
+           "HMAD_STUB_ORCA_STDOUT": '{"ok":true,"result":{"count":0,"messages":[]}}'}
+    first = run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env)
+    assert first.returncode == 1
+    assert "missing_dispatch_id" in first.stderr
+
+    second = run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env)
+    assert second.returncode == 1
+    assert "missing_dispatch_id" not in second.stderr, "a consumed rejection must not persist"
+    assert not (cache / "task_A.rejected.json").exists()
+
+
+def test_await_reports_a_cached_rejection_even_when_the_queue_is_stuck(tmp_path):
+    """The entry read of the parked rejection is load-bearing on the EARLY exits.
+
+    Surfaced by a mutation surviving: deleting the pre-loop
+    `_await_rejection_take` broke nothing, because every test that relied on a
+    cached rejection also reached the timeout block, which reads the cache again.
+    The uncovered combination is cache-only + an early `return 1` -- the
+    replay-stuck and unackable-batch exits never reach that block, so without the
+    entry read they report a bare 'queue is not advancing' and the operator never
+    learns the runtime had already refused this task's report.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "c"
+    cache.mkdir()
+    (cache / "task_A.rejected.json").write_text(
+        '{"code":"missing_dispatch_id","reason":"worker_done requires dispatchId."}')
+    # A sibling batch that replays after --ack => the replay-stuck early exit.
+    stuck = (
+        '{"ok":true,"result":{"deliveryId":"dlv_stuck","count":1,"messages":['
+        '{"id":"msg_other","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_OTHER\\"}"}]}}'
+    )
+    r = run(["await", "task_A", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_AWAIT_CACHE_DIR": str(cache),
+                 "HMAD_STUB_ORCA_STDOUT": stuck})
+    assert r.returncode == 1
+    assert "replayed after --ack" in r.stderr, "precondition: this is the early exit"
+    assert "missing_dispatch_id" in r.stderr, "the cached rejection must still be reported"
+
+
+def test_await_prefers_a_valid_report_over_a_rejected_one(tmp_path):
+    """A retried callback supersedes its rejected attempt: both can be in one
+    batch (measured live -- a rejected send and a valid resend for one task)."""
+    b = _bindir(tmp_path, ["orca"])
+    both = (
+        '{"ok":true,"result":{"deliveryId":"delivery_1","count":2,"messages":['
+        '{"id":"msg_r","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_A\\",'
+        '\\"_orcaLifecycleRejection\\":{\\"code\\":\\"sender_not_assignee\\"}}"},'
+        '{"id":"msg_ok","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_A\\",\\"dispatchId\\":\\"ctx_1\\"}"}]}}'
+    )
+    r = run(["await", "task_A", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_AWAIT_CACHE_DIR": str(tmp_path / "c"),
+                 "HMAD_STUB_ORCA_STDOUT": both})
+    assert r.returncode == 0, r.stderr
+    assert "msg_ok" in r.stdout
+    assert "msg_r" not in r.stdout
+
+
 def test_await_caches_a_sibling_report_before_acking_it_away(tmp_path):
     """J19: acking to advance the queue must not DISCARD a sibling's report.
 
