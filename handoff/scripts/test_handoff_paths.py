@@ -124,3 +124,91 @@ def test_cli_dir_and_branch_slug_run(tmp_path, capsys):
         assert out.endswith("docs/handoffs")
     finally:
         os.chdir(cwd)
+
+
+# --- `--repo`: resolving ANOTHER repo's store (HANDOVER mode) --------------
+#
+# A handover writes the brief into the RECEIVER's canonical store, not the
+# sender's. Every function here already took a `start` argument; the CLI just
+# never exposed it, so callers had to `cd` and hope. These pin the flag and,
+# more importantly, pin that a bad target fails LOUDLY — silently resolving a
+# wrong-but-plausible path would write the receiver's brief somewhere they will
+# never look while reporting success.
+
+
+def _cli(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "handoff_paths.py"), *args],
+        cwd=cwd, capture_output=True, text=True,
+    )
+
+
+def test_repo_flag_resolves_the_target_store_not_the_cwd(tmp_path):
+    sender, receiver = tmp_path / "sender", tmp_path / "receiver"
+    _init_repo(sender)
+    _init_repo(receiver)
+    proc = _cli("--repo", str(receiver), "dir", cwd=sender)
+    assert proc.returncode == 0, proc.stderr
+    assert Path(proc.stdout.strip()).resolve() == (receiver / "docs" / "handoffs").resolve()
+
+
+def test_repo_flag_reports_the_target_branch_not_the_senders(tmp_path):
+    # The filename carries the branch slug, and READ matches on it exactly. A
+    # brief written under the sender's branch is invisible to the receiver's
+    # resume even though it sits in the right directory.
+    sender, receiver = tmp_path / "sender", tmp_path / "receiver"
+    _init_repo(sender)
+    _init_repo(receiver)
+    _git(receiver, "checkout", "-q", "-b", "feature/196-grounding")
+    proc = _cli("--repo", str(receiver), "branch-slug", cwd=sender)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "feature-196-grounding"
+
+
+def test_repo_flag_finds_the_targets_latest_handoff(tmp_path):
+    sender, receiver = tmp_path / "sender", tmp_path / "receiver"
+    _init_repo(sender)
+    _init_repo(receiver)
+    d = receiver / "docs" / "handoffs"
+    d.mkdir(parents=True)
+    (d / "2026-08-03-main__theirs.md").write_text("x", encoding="utf-8")
+    proc = _cli("--repo", str(receiver), "latest", cwd=sender)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().endswith("2026-08-03-main__theirs.md")
+
+
+def test_without_the_flag_the_cwd_still_wins(tmp_path):
+    # Counter-direction: the flag must not become the only path that works.
+    sender = tmp_path / "sender"
+    _init_repo(sender)
+    proc = _cli("dir", cwd=sender)
+    assert proc.returncode == 0, proc.stderr
+    assert Path(proc.stdout.strip()).resolve() == (sender / "docs" / "handoffs").resolve()
+
+
+def test_a_nonexistent_target_is_refused(tmp_path):
+    # Assert the SPECIFIC diagnostic, not merely that something was refused.
+    # Both guards reject a nonexistent path — a missing directory also makes the
+    # git probe fail — so a test that only checks "non-zero" passes with the
+    # existence check deleted and hands a typo the message "not inside a git work
+    # tree", sending the operator to debug git instead of their spelling.
+    sender = tmp_path / "sender"
+    _init_repo(sender)
+    proc = _cli("--repo", str(tmp_path / "nope"), "dir", cwd=sender)
+    assert proc.returncode != 0, f"a bogus target resolved to {proc.stdout.strip()!r}"
+    assert "no such directory" in proc.stderr, (
+        f"a missing path must be named as missing, not misreported: {proc.stderr!r}"
+    )
+
+
+def test_a_target_that_is_not_a_git_repo_is_refused(tmp_path):
+    # The dangerous case, because it looks like it worked: a real directory that
+    # is not a repo would resolve to `<dir>/docs/handoffs` and the brief would be
+    # written to a store nothing ever reads.
+    sender = tmp_path / "sender"
+    _init_repo(sender)
+    plain = tmp_path / "just-a-folder"
+    plain.mkdir()
+    proc = _cli("--repo", str(plain), "dir", cwd=sender)
+    assert proc.returncode != 0, f"a non-repo target resolved to {proc.stdout.strip()!r}"
+    assert "git" in proc.stderr.lower(), proc.stderr
