@@ -138,6 +138,12 @@ HALT_TOKENS = [
     "step5d:no_wire_pin:<module>",
     "step5d:red_wrong_reason:<module>",
     "step5e:wire_unenforced:<module>",
+    # A guard nothing notices when disabled, and — separately — a mutation that
+    # never landed. The second is not a pass: an anchor matching zero times
+    # leaves the guard intact and the suite green, which is indistinguishable
+    # from enforcement. They need different remedies, so they need two routes.
+    "step5e:mutation_survived:<module>",
+    "step5e:mutation_unverified:<module>",
 ]
 
 
