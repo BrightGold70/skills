@@ -911,3 +911,33 @@ _Append new findings below as later runs surface them. Flip Status + link the co
 > call — its close criterion was met by a *different* feature's run, and absence of the
 > `Waiting for background terminal` string is evidence the pane path was never exercised, not that
 > the guard works.
+
+> **Adjudication 2026-08-03 — `#40` re-scoped; `#38`'s guard kept, on better evidence than the one proposed.**
+>
+> `#40` planned to instrument a Phase-5 run and count pane-path vs `exec` dispatches, with the stated
+> criterion: *"zero pane-path dispatches across a full Phase 5 → close #38."* The
+> `grounding-shadow-measurement` Phase 5 (Tasks 3–4, 2026-08-01→03) then ran **entirely on `exec`** —
+> zero pane dispatches, zero `wait --not-while-regex` invocations, so `Waiting for background
+> terminal` never had an opportunity to appear.
+>
+> **That criterion is unsound and should not be used.** Absence of the string is evidence the pane
+> path was never *exercised*, not evidence the guard *works* — the same fallacy the mutation
+> discipline exists to prevent (zero failures is itself a finding). Closing a guard because it never
+> fired is precisely backwards, and it would have been closed on a run of a *different* feature than
+> the one `#40` named.
+>
+> **The guard needs none of that evidence, because it is directly verified.**
+> `test_hmad_dispatch.py:1316` pins it — "a pane parked on `Waiting for background terminal` is
+> stable but NOT done" — and that test is discriminating, confirmed by mutation on 2026-08-03:
+> disabling `--not-while-regex` in `_wait_stable` (`h-mad/scripts/hmad-dispatch.sh:1575`) turns the
+> suite red. So `#38`'s correctness was never resting on the evidence run.
+>
+> **Disposition.** `#40`'s instrumentation plan is **closed as overtaken**: it existed to decide
+> whether the pane path still mattered, and `exec` becoming the documented default for one-shot
+> 5d/5e answered that by construction, with the live run confirming it in practice. `#38`'s guard
+> and its test **stay**. The pane path is now a *fallback* rather than the primary path, and a
+> rarely-exercised fallback is exactly the kind whose correctness must come from a unit test rather
+> than from production traffic — production will not exercise it, which is the whole point.
+>
+> The conclusion ("the guard is fine") and the proposed reasoning ("it never fired") are different
+> things, and only one of them is worth keeping.
