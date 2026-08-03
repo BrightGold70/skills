@@ -217,14 +217,16 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # Filler counts are calibrated to land in the bands, NOT arbitrary. Adding
     # rules to invariants.base.md moves every prompt, because that file is inlined
     # verbatim into all of them -- recalibrate the fixture rather than widen the
-    # band, because the band is the assertion. (3200/3500 after the 2026-07-30
-    # re-anchor to the 92,055 B confirmed-answered frontier; was 2000/2200 against
-    # the old 61,493 B ceiling.)
-    approaching, mid = size_of(3200)
+    # band, because the band is the assertion. (3136/3436 after §"Wrapper–runtime
+    # reconciliation" added 1,583 B on 2026-08-03, measured: 3136 -> 90,968 B,
+    # mid-band; 3436 -> 97,868 B, past the frontier. Was 3200/3500 after the
+    # 2026-07-30 re-anchor to the 92,055 B confirmed-answered frontier, and
+    # 2000/2200 before that against the old 61,493 B ceiling.)
+    approaching, mid = size_of(3136)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(3500)
+    past, big = size_of(3436)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
