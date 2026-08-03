@@ -929,6 +929,31 @@ $(cat "$2")"
 }
 
 _cmd_dispatch() {  # $1 agent, $2 task_id
+  # J22: this verb deliberately does NOT pre-flight pane readiness. Measured
+  # 2026-08-03 (Orca 1.4.164): `--inject` into a pane with no agent CLI is
+  # refused ATOMICALLY -- non-zero exit, stdout empty, and `dispatch-show --task`
+  # afterwards returns `dispatch: null`. No task row, no terminal binding,
+  # nothing to clean up, pane still free for a later dispatch. Orca's message
+  # names the terminal, the cause, and both remedies.
+  #
+  # A wrapper-side check could only make things worse on three counts: it opens
+  # a TOCTOU window the atomic path does not have (the agent can exit between
+  # check and dispatch); it would have to re-derive "is an agent here" from
+  # signals separately proven unreliable -- `terminal read` yields 0 lines for an
+  # idle restart-surviving pane (docs/orca-bug-terminal-read-empty-after-restart.md)
+  # and hand-started panes are absent from `worktree ps`'s `agents[]` -- so it
+  # would false-refuse healthy panes, the exact call `_orca_find` Pass 3 already
+  # declines to make; and it protects no state, because there is none to protect.
+  #
+  # The readiness failure that DOES bite is a different one a pre-flight cannot
+  # catch either: an agent that is present but still booting passes detection and
+  # swallows the prompt. That is what the J19 `injected=false` guard below and
+  # report-file completion are for -- never the launch response.
+  #
+  # The reliance is pinned by test_dispatch_surfaces_the_agentless_refusal_intact,
+  # which asserts the message CONTENT, not just the exit code (mutation-verified
+  # ALL_CAUGHT 5/5, including two mutations that keep exit+stream and strip only
+  # the text). If that test is ever weakened, this decision is void.
   _require_orca dispatch || return $?
   _need "${1:-}" agent || return $?; _need "${2:-}" task_id || return $?
   local target; target="$(_resolve_target "$1")" || return 1

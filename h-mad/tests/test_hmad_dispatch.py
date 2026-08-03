@@ -1729,6 +1729,50 @@ def test_dispatch_fails_when_the_runtime_reports_injected_false(tmp_path):
     assert "injected" in r.stderr
 
 
+def test_dispatch_surfaces_the_agentless_refusal_intact(tmp_path):
+    """J22: we deliberately do NOT pre-flight pane readiness -- this test is what
+    that decision rests on, so it must fail if the reliance ever breaks.
+
+    Measured live 2026-08-03 (Orca 1.4.164): dispatching `--inject` into a pane
+    with no agent CLI is refused ATOMICALLY -- exit non-zero, stdout empty, and
+    `dispatch-show --task` afterwards returns `dispatch: null`, so no task row,
+    no terminal binding, nothing to clean up, and the pane stays free for a
+    later dispatch. A wrapper-side pre-flight could only add a TOCTOU window
+    (the agent can exit between the check and the dispatch) and would have to
+    re-derive "is an agent here" from signals we have separately proven
+    unreliable -- `terminal read` returns 0 lines for an idle restart-surviving
+    pane, and hand-started panes are absent from `worktree ps`'s `agents[]`.
+
+    What the operator needs is therefore not an earlier check but Orca's message
+    reaching them unmangled: it names the terminal AND both remedies. Assert the
+    actionable parts, not just the exit code -- a change that summarised stderr
+    would otherwise pass while silently deleting the reason we skip the check.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    # The verbatim envelope measured from Orca 1.4.164.
+    envelope = json.dumps({
+        "ok": False,
+        "error": {
+            "code": "runtime_error",
+            "message": (
+                "Cannot dispatch --inject to terminal term_codex: no recognized "
+                "agent detected. Start an agent CLI (e.g. claude, codex, gemini, "
+                "droid, cursor) in the terminal first, or dispatch without "
+                "--inject and send the prompt manually."
+            ),
+        },
+    })
+    r = run(["dispatch", "codex", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_STUB_ORCA_STDOUT": envelope})
+    assert r.returncode != 0, "an agentless dispatch must not report success"
+    assert r.stdout == "", "a refusal must not reach stdout as a phantom success"
+    # The three things that make the refusal self-servicing without a pre-flight.
+    assert "term_codex" in r.stderr, "must name WHICH terminal was refused"
+    assert "no recognized agent" in r.stderr, "must state the cause"
+    assert "--inject" in r.stderr, "must carry the remedy"
+
+
 def test_dispatch_tolerates_a_runtime_that_omits_injected(tmp_path):
     """Absent != false. An older runtime that reports no `injected` field must
     keep working -- only an explicit false is the failure signal."""
