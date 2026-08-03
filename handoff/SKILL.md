@@ -67,7 +67,7 @@ Locate on the now-synced tree (Step 0). Check, in order:
 
 1. **Explicit path in the user's message** — if they paste or type a path, use it.
 2. **This branch's newest handoff in the canonical store** — with `HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"`, run `python3 "$HP" latest --branch "$(python3 "$HP" branch-slug)"`. This resolves the shared main-worktree `docs/handoffs/` and prefers a handoff written on the branch you are resuming (exact `<branch>__` match — a `feat` resume never grabs a `feat-ab` sibling), so a parallel Orca session on another branch can't hand you the wrong one.
-3. **Repo-wide newest in the canonical store** — `python3 "$HP" latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work.
+3. **Repo-wide newest in the canonical store** — `python3 "$HP" latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work. **Exception: a brief carrying `**Handover-From:**` is addressed to this repo, not to a branch.** A sender names the file for the branch they were told to target, so a handover routinely lands as `…-main__…` while you sit on a feature branch — check 2 then returns nothing and this check finds it under a "different branch" that is not a sibling's work at all. Do not treat that as a suspicious pickup: read it, and go to §"Take over handed-over work". Observed live 2026-08-03 — an inbound five-item handover was invisible to check 2 for exactly this reason.
 4. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
 
 If no handoff is found after these checks, tell the user ("No handoff found for this project — nothing to resume from") and stop. Don't fabricate a handoff.
@@ -108,6 +108,35 @@ In parallel:
 
 A divergence is not a failure — it's just information the user needs before acting. State each one as a single sentence.
 
+### Step 3.5: Take over handed-over work
+
+Skip this unless the doc carries a `**Handover-From:**` line. If it does, the work arrived from another lane and READ's default behaviour is **half a protocol**: it restores the todos and never claims anything. The sender released ownership and stopped watching; if you do not take it, the feature is owned by nobody, and a third session can start the same work without either of you seeing a collision.
+
+**1. Claim it — this is the step with no other home.** If the brief names a feature and a state file exists, ask the oracle first, exactly as HANDOVER does:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
+  --state "$STATE" --feature "<feature>" --session-id "<your-session-id>"
+```
+
+- `owned_elsewhere` → someone **live** holds it. Do not take it; surface the collision. The handover may have raced another session, and that is a real finding, not a formality.
+- anything else → claim it:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py "$STATE" \
+  --feature "<feature>" --claim "<your-session-id>"
+```
+
+A stale claim is takeable by plain `--claim` — reach for `--force` only against a **live** owner, which the oracle just told you there isn't. If the brief says a claim was left deliberately unreleased (a dead session's), that is the one it means; taking it is your decision to make and now is when you make it.
+
+**2. Verify the premises before adopting them.** A brief is a claim about the world made by a session that has stopped. Its reproduce commands are the cheap part — run them. Any premise that no longer holds becomes a divergence line, not a todo. A confident brief is not evidence.
+
+**3. Restore the todos with their ORIGIN, not yours.** Continue to Step 4, but prefix from the brief's `**Handover-From:**` and location block rather than the branch you are sitting on — the work belongs where the sender said it does.
+
+**4. Acknowledge, so the transfer is visible.** Re-stamp the worktree comment from `handover: …` to something that says it was picked up (`taken over: <slug> · <state> · next: <next-step>`). The sender is not watching; this stamp and your claim are the only records that the handover completed rather than fell on the floor.
+
+**Do not** silently work a handed-over item without claiming it. That is the failure this step exists for: the sender let go, you started, and the state file says nobody owns it.
+
 ### Step 4: Restore the TodoList
 
 Use the TodoList tool (TaskCreate or equivalent) to repopulate todos from the doc's **Next Steps** and **Open / Blocked Items**. Each Next Step becomes a `pending` task with the cited path/command in the description. Each Open/Blocked Item becomes a `pending` task tagged with its blocker if any. Do this even if Next Steps is short — the point is that the user can start on item 1 without re-typing the list.
@@ -136,6 +165,13 @@ After reconciliation and TodoList restore, give the user a brief resume report:
 
 **Todos restored:** 4 items. Starting at:
 1. [guideline-rag@main] Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)
+```
+
+When the doc was a handover (§"Take over handed-over work"), say so on its own line and name what you did about ownership — a takeover that is not reported looks identical to an ordinary resume, and the sender is not watching to notice:
+
+```
+**Handover:** from HemaSuite@feature/196 (session 73aae80d) — claimed as <your-session-id>.
+**Premises re-verified:** 3 of 5 hold; 2 changed (see divergences).
 ```
 
 Then stop. Don't start executing tasks — the user reads the report and decides what to do first.
@@ -252,9 +288,12 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
 Read the owner and heartbeat for the brief — the receiver needs to know a claim existed and what happened to it:
 
 ```bash
-python3 -c "import json,sys; r=json.load(open(sys.argv[1]))['orchestrator_state'][sys.argv[2]]; \
-print('owner:', r.get('owner_session_id'), '| heartbeat:', r.get('owner_heartbeat_ts'))" "$STATE" "<feature>"
+python3 -c "import json,sys; s=json.load(open(sys.argv[1])).get('orchestrator_state') or {}; \
+r=s.get(sys.argv[2]); print('NO SUCH FEATURE — nothing claimed' if r is None else \
+('owner: %s | heartbeat: %s' % (r.get('owner_session_id'), r.get('owner_heartbeat_ts'))))" "$STATE" "<feature>"
 ```
+
+Use `.get()` throughout: a state file that exists but has no record for this feature is the **normal** case for loosely-tracked or newly-named work, and indexing it directly raises `KeyError` and halts the handover with a traceback instead of the correct answer, which is "nothing is claimed, carry on".
 
 **Then release**, so the receiver inherits a free claim:
 
@@ -286,7 +325,20 @@ FILE="$DIR/$(date +%F)-${BR}__<slug>.md"
 
 Use the §"Required template" as-is. The **Open / Blocked Items** location block (`repo · branch · worktree` plus artifact paths) is not optional here — for a receiver with none of your context, it is the difference between starting and excavating.
 
+**Add the handover marker, directly under the `**Project:**` line:**
+
+```markdown
+**Handover-From:** <sender-repo> · <sender-branch> · session <sender-session-id>
+```
+
+This one line is what makes the brief *machine*-detectable. Prose like "this is a handover, not a closeout" reads clearly to a human and is invisible to the receiver's READ, which then treats the brief as an ordinary resume: it restores the todos but never claims the feature, so the work sits unowned — the sender released it and stopped watching, and nobody took it. See §"Take over handed-over work" for the half this marker switches on.
+
 ### Step 4: Stamp the target's worktree comment
+
+**First, does the target worktree exist yet?** This step and Step 5 are written in the order that suits an *existing* lane. If the handover creates a **new** worktree, the target does not exist while you are reading this — a `worktree-ps` lookup will miss, and the rule below ("not in `worktree-ps` → skip the stamp") would silently swallow it, leaving the brand-new lane with no checkpoint at all. So:
+
+- **Existing target worktree** → do this step now, then Step 5.
+- **New worktree** (Step 5 will create it) → **skip ahead to Step 5, create the lane, then come back here** and stamp using the `worktree.id` the create response returned (`<repoId>::<worktreePath>` — copy the whole value; do not shorten it to the repo id). There is nothing to preserve on a worktree that did not exist a moment ago, so the read below is unnecessary in this direction.
 
 Best-effort, Orca only. Same preservation rule as the WRITE stamp (§"WRITE — stamp an Orca checkpoint"), but **a different read command**: `worktree-current` reads the worktree you are *in*, which is the sender. To see the target's comment you must go through `worktree-ps` and select by path:
 
@@ -313,7 +365,9 @@ If the target is not in `worktree-ps` at all, skip the stamp — it is an enrich
 
 ### Step 5: Deliver — via `orca-cli`, not by reimplementing it
 
-Invoke the **`orca-cli` skill by name** (the Skill tool — it is a registered skill, so do not go hunting for a file path) and use its Full Handoffs commands: `worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one. Those flag names are a hint, not the contract — that skill defers to the `orca` binary's own version-matched guide, which is the only source that cannot drift from the binary you are about to run.
+Invoke the **`orca-cli` skill by name** (the Skill tool — it is a registered skill, so do not go hunting for a file path) and use its Full Handoffs commands: `worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one.
+
+`--no-parent` is the **default, not a rule**: it makes the handover an independent top-level lane, which is what "this is no longer mine" usually means. Drop it — and pass a parent/base instead — when the user actually asked for stacked work ("hand this to a child worktree", "branch from current", a named base). Hardcoding it there silently strips the lineage they asked for, and Orca's own guide conditions the flag the same way. Those flag names are a hint, not the contract — that skill defers to the `orca` binary's own version-matched guide, which is the only source that cannot drift from the binary you are about to run.
 
 **Send the path, not the payload.** The prompt should name the brief and the location block, then stop — a prompt carrying the whole document decays the moment the doc is updated, and there is then no single source of truth about what was handed over.
 

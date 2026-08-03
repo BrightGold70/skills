@@ -281,3 +281,89 @@ def test_write_phase_list_is_contiguously_numbered() -> None:
     body = SKILL.read_text(encoding="utf-8").split("## After writing", 1)[1].split("\n---", 1)[0]
     nums = [int(m.group(1)) for m in re.finditer(r"^(\d+)\. ", body, re.M)]
     assert nums == list(range(1, len(nums) + 1)), f"phase list numbering is broken: {nums}"
+
+
+# --- the receiving half: TAKEOVER ------------------------------------------
+#
+# HANDOVER was half a protocol. The sender released ownership and stopped
+# watching; nothing told the receiver to CLAIM. A handed-over feature therefore
+# sat owned by nobody, and a third session could start the same work without
+# either side seeing a collision.
+#
+# Takeover lives inside READ rather than as a fifth mode — the same shape as
+# WRITE's foreign-work routing. READ already locates the brief in the receiver's
+# store and restores todos; it just could not tell a handover from a resume.
+
+TAKEOVER = [
+    (
+        "### Step 3.5: Take over handed-over work",
+        "the receiving half needs a step; without it READ restores todos and "
+        "never claims, leaving the work owned by nobody",
+    ),
+    (
+        "**Handover-From:** <sender-repo> · <sender-branch> · session <sender-session-id>",
+        "the marker is what makes a brief machine-detectable; prose reads clearly "
+        "to a human and is invisible to READ",
+    ),
+    (
+        "Skip this unless the doc carries a `**Handover-From:**` line",
+        "the step must be gated on the marker, or every ordinary resume tries to claim",
+    ),
+    (
+        "--feature \"<feature>\" --claim \"<your-session-id>\"",
+        "claiming is the step with no other home — the sender released, so someone "
+        "must take it",
+    ),
+    (
+        "`owned_elsewhere` → someone **live** holds it",
+        "a handover can race a live session; taking it then is a collision, not a formality",
+    ),
+    (
+        "A brief is a claim about the world made by a session that has stopped.",
+        "premises must be re-verified on arrival; a confident brief is not evidence",
+    ),
+    (
+        "Do not** silently work a handed-over item without claiming it",
+        "the exact failure: sender let go, receiver started, state says nobody owns it",
+    ),
+    # The locate defect found while taking a real handover.
+    (
+        "a brief carrying `**Handover-From:**` is addressed to this repo, not to a branch",
+        "a sender names the file for the branch they targeted, so a handover lands as "
+        "`-main__` while the receiver sits on a feature branch and check 2 misses it",
+    ),
+    # S4 from the orca-cli review.
+    (
+        "`--no-parent` is the **default, not a rule**",
+        "hardcoding it strips lineage the user explicitly asked for",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "literal,why", TAKEOVER, ids=[lit[:42] for lit, _ in TAKEOVER]
+)
+def test_takeover_guidance_present(literal: str, why: str) -> None:
+    assert " ".join(literal.split()) in _norm(SKILL), f"regressed: {why}"
+
+
+def test_takeover_runs_before_the_todos_are_restored() -> None:
+    # Ordering is load-bearing: the claim must land before the work becomes
+    # yours. Restoring todos first and claiming later is indistinguishable from
+    # never claiming if the session stops in between.
+    text = _norm(SKILL)
+    assert text.index("### Step 3.5: Take over handed-over work") < text.index(
+        "### Step 4: Restore the TodoList"
+    ), "takeover must precede the TodoList restore"
+
+
+def test_handover_writes_the_marker_that_takeover_reads() -> None:
+    # Both halves must land together, or the marker is written and never read
+    # (or read and never written). Same both-halves rule as the WRITE routing step.
+    text = _norm(SKILL)
+    assert "Add the handover marker, directly under the" in text, (
+        "HANDOVER no longer writes the marker, so takeover can never trigger"
+    )
+    assert "Skip this unless the doc carries a `**Handover-From:**` line" in text, (
+        "READ no longer reads the marker, so writing it is pointless"
+    )
