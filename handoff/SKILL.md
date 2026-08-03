@@ -406,6 +406,7 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 
 **If an item is parked feature-work that lives outside this repo/branch/session** (a separate H-MAD feature, a sibling worktree, another repo), you MUST record where it lives, or the next session cannot find it without a forensic hunt: `repo: <abs path> · branch: <name> · worktree: <path or "none">` plus the key artifact paths (the RED/GREEN/verify prompt files, the plan/spec, the scratchpad dir). "Parked in its own worktree" with no path is the failure mode this line exists to prevent — a resume then has to reconstruct the location from `orca worktree list`, scratchpad prompts, and telemetry.
   - Example: `Task 3 audit — status: parked. repo: /Users/x/orca/HemaSuite/hematology-paper-writer · branch: feature/191 · worktree: none (merged) · prompts: <scratchpad>/codex_task3_{red,green,verify}.txt`
+  - **Recording the location is not the same as handing it over.** If the item belongs to another repo/worktree *and ownership should move with it*, run HANDOVER mode rather than parking it here — a foreign item documented only in this doc is invisible to the session that would actually act on it. See §"Route foreign-worktree work before closing out"; the entry here then becomes a pointer to the brief you wrote there.
 
 ## In-Flight Processes
 
@@ -465,10 +466,28 @@ If `--dry-run` was set: print the drafted doc to stdout and **stop here**. Do no
    ```
    `handoff_paths.py dir` resolves to the **main worktree** (`git rev-parse --git-common-dir` → parent), not the current linked worktree — so every parallel Orca worktree reads/writes ONE store, and the handoff survives when a worktree is archived/removed. The `__` between `<branch>` and `<slug>` is the unambiguous separator READ matches on (branch slugs never contain `__`), so resuming branch `feat` can't load a `feat-ab` sibling's handoff. **Concurrency guard:** if `$FILE` already exists (a live sibling session wrote the same branch+slug today), do NOT overwrite — append a short discriminator (`-2`, `-<HHMMSS>`) before `.md` so both survive.
 2. Update `~/.claude/handoffs/INDEX.md` (one-line entry, newest first — see §"Update the central index").
-3. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
-4. Proceed to §"Update persistent auto-memories" unless `--skip-memories` was set.
-5. Proceed to §"Automation scout" unless `--skip-scout` was set.
-6. Proceed to §"Commit and push".
+3. Proceed to §"Route foreign-worktree work before closing out" — do this before the phases below, because it can change what the doc's Open Items say.
+4. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
+5. Proceed to §"Update persistent auto-memories" unless `--skip-memories` was set.
+6. Proceed to §"Automation scout" unless `--skip-scout` was set.
+7. Proceed to §"Commit and push".
+
+---
+
+## Route foreign-worktree work before closing out
+
+Walk the Open / Blocked Items and ask of each: **does this belong to the repo/worktree I am closing out?**
+
+Recording an item's `repo · branch · worktree` (§"Required template") makes it *findable*. It does not make it *found*. READ mode resolves the canonical store of the repo it is invoked in, so an item parked in this doc about another repo is invisible to that repo's next session — the only reader who would act on it. They would have to already know to go looking in a different project's handoffs, which is the forensic hunt the location rule exists to prevent, just moved up a level.
+
+So for each item that belongs elsewhere, pick one deliberately:
+
+- **Ownership should move** → run **HANDOVER mode** for that item now, before finishing this doc. Then record it here as *handed over*, naming the brief you wrote and where it went — the sender's doc becomes a pointer, not a parking space.
+- **Ownership stays here** (you are still driving it; the other repo is only where the files live) → keep it as a normal Open Item with its location block. This is the common case for a feature you are working *from* this session across two checkouts.
+
+Do not skip the question because the item is well documented. The failure this step exists to catch is a *good* entry in the wrong doc: a session closed out with a foreign task neatly described, its location recorded, and no one on the receiving side ever told. Observed 2026-08-03 — a Task 5 item belonging to a HemaSuite worktree sat in a skills-repo session's list, fully specified, and only moved because a human noticed it did not belong there.
+
+If the item is a claimed feature, HANDOVER's release step matters here specifically: closing out a session while still holding an advisory claim leaves the receiver inheriting a lock from a session that has stopped.
 
 ---
 

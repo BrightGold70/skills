@@ -72,6 +72,32 @@ GUIDANCE = [
         "Don't deliver before releasing the claim",
         "ordering is the whole point: released-after is indistinguishable from never",
     ),
+    # --- WRITE must ROUTE foreign work, not just describe it ------------------
+    (
+        "## Route foreign-worktree work before closing out",
+        "without this step WRITE files a foreign item in the sender's doc and calls "
+        "it handled; the receiving session never learns of it",
+    ),
+    (
+        "Recording an item's `repo · branch · worktree` (§\"Required template\") makes "
+        "it *findable*. It does not make it *found*.",
+        "the location rule reads as sufficient on its own — this is why it is not",
+    ),
+    (
+        "READ mode resolves the canonical store of the repo it is invoked in",
+        "the mechanical reason a foreign item parked here is unreachable: the only "
+        "session that would act on it never reads this store",
+    ),
+    (
+        "Recording the location is not the same as handing it over.",
+        "the reminder has to sit at the point of authoring too, not only in the "
+        "close-out phase, or the item is written wrong before the phase runs",
+    ),
+    (
+        "a *good* entry in the wrong doc",
+        "names the actual failure mode — quality of the entry is not the problem, "
+        "so 'document it well' does not fix it",
+    ),
 ]
 
 
@@ -80,6 +106,28 @@ GUIDANCE = [
 )
 def test_handover_guidance_literal_present(literal: str, why: str) -> None:
     assert " ".join(literal.split()) in _norm(SKILL), f"SKILL.md dropped guidance: {why}"
+
+
+def test_the_routing_phase_is_actually_wired_into_write() -> None:
+    # Both halves must land together. A section can be written perfectly and
+    # still be dead prose if the WRITE phase list never sends anyone to it —
+    # which is exactly what a mutation proved: deleting the list entry left every
+    # content assertion passing. Pin the reference, not just the section.
+    text = _norm(SKILL)
+    heading = "## Route foreign-worktree work before closing out"
+    pointer = 'Proceed to §"Route foreign-worktree work before closing out"'
+    assert heading in text, "the section is gone"
+    assert pointer in text, (
+        "WRITE's phase list no longer routes to the foreign-work step — the section "
+        "exists but nothing reaches it, so a foreign item is filed and forgotten "
+        "exactly as before"
+    )
+    # And it must run before the doc is committed, or the routing decision lands
+    # after the artifact it should have changed.
+    assert text.index(pointer) < text.index('Proceed to §"Commit and push"'), (
+        "the foreign-work step must precede commit; routing after the commit "
+        "cannot change what the doc says"
+    )
 
 
 def test_frontmatter_announces_four_modes() -> None:
