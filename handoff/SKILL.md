@@ -252,9 +252,12 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
 Read the owner and heartbeat for the brief — the receiver needs to know a claim existed and what happened to it:
 
 ```bash
-python3 -c "import json,sys; r=json.load(open(sys.argv[1]))['orchestrator_state'][sys.argv[2]]; \
-print('owner:', r.get('owner_session_id'), '| heartbeat:', r.get('owner_heartbeat_ts'))" "$STATE" "<feature>"
+python3 -c "import json,sys; s=json.load(open(sys.argv[1])).get('orchestrator_state') or {}; \
+r=s.get(sys.argv[2]); print('NO SUCH FEATURE — nothing claimed' if r is None else \
+('owner: %s | heartbeat: %s' % (r.get('owner_session_id'), r.get('owner_heartbeat_ts'))))" "$STATE" "<feature>"
 ```
+
+Use `.get()` throughout: a state file that exists but has no record for this feature is the **normal** case for loosely-tracked or newly-named work, and indexing it directly raises `KeyError` and halts the handover with a traceback instead of the correct answer, which is "nothing is claimed, carry on".
 
 **Then release**, so the receiver inherits a free claim:
 
@@ -287,6 +290,11 @@ FILE="$DIR/$(date +%F)-${BR}__<slug>.md"
 Use the §"Required template" as-is. The **Open / Blocked Items** location block (`repo · branch · worktree` plus artifact paths) is not optional here — for a receiver with none of your context, it is the difference between starting and excavating.
 
 ### Step 4: Stamp the target's worktree comment
+
+**First, does the target worktree exist yet?** This step and Step 5 are written in the order that suits an *existing* lane. If the handover creates a **new** worktree, the target does not exist while you are reading this — a `worktree-ps` lookup will miss, and the rule below ("not in `worktree-ps` → skip the stamp") would silently swallow it, leaving the brand-new lane with no checkpoint at all. So:
+
+- **Existing target worktree** → do this step now, then Step 5.
+- **New worktree** (Step 5 will create it) → **skip ahead to Step 5, create the lane, then come back here** and stamp using the `worktree.id` the create response returned (`<repoId>::<worktreePath>` — copy the whole value; do not shorten it to the repo id). There is nothing to preserve on a worktree that did not exist a moment ago, so the read below is unnecessary in this direction.
 
 Best-effort, Orca only. Same preservation rule as the WRITE stamp (§"WRITE — stamp an Orca checkpoint"), but **a different read command**: `worktree-current` reads the worktree you are *in*, which is the sender. To see the target's comment you must go through `worktree-ps` and select by path:
 
