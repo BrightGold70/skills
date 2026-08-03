@@ -646,6 +646,41 @@ Cheap and mechanical: for each finding, open the file and line it names and conf
 what the finding says it says. Most premises check out in seconds, and the ones that do not are
 where the expensive mistakes live.
 
+## Reviewing a skill with agy
+
+A skill is not a feature: there is no impl-plan task and no Codex report, so neither
+`agy-spec-reviewer-prompt.md` nor `agy-architectural-reviewer-prompt.md` fits. Use
+`references/agy-skill-reviewer-prompt.md` — fill its `INLINE_*` slots and dispatch headless:
+
+```bash
+hmad-dispatch exec agy <prompt-file> --cd <repo> --out <report.md> --log <run.log> --timeout 900
+```
+
+`exec` is pane-independent — it needs only the `agy` CLI on PATH, so a `PREFLIGHT: FAIL` from a
+stale pin does **not** block it. Check `command -v agy` rather than re-pinning.
+
+Three rules carry the value; the template states them, and skipping any one is how a review turns
+into damage:
+
+- **Ground truth is the binary, not its documentation.** When the skill wraps a CLI, run
+  `<cmd> --help` before reporting a flag as missing or unsupported. One review returned four
+  separate "undocumented flag" findings and every one was a real flag the vendor guide omitted;
+  acting on them would have deleted working code. **Say so in the prompt** — a prompt that names a
+  guide as ground truth *causes* this class of false finding.
+- **Classify `[OURS]` / `[UPSTREAM]` / `[USAGE]` first.** A vendor skill pinned in
+  `~/.agents/.skill-lock.json` cannot be patched locally — edits are clobbered on sync — so an
+  `[UPSTREAM]` finding is information, not work. Spend the effort on `[OURS]`.
+- **Verify every finding against the file before acting** (§"Verifying a review finding before
+  acting on it"). Across four skill reviews this has killed 8 findings that did not survive
+  checking, several of them confidently argued.
+
+Then fix under the ordinary discipline: TDD the doc-test, mutation-verify the guard, run both
+coupled suites (§"Editing this skill while a run is in flight" — the symlink couples repos).
+
+Reviewing a skill you *depend on* is worth doing even when you cannot patch it: two `[OURS]`
+defects in our own integration were found by reviewing `orca-cli`, both in a code path no test
+had ever exercised.
+
 ## Agent-pane context hygiene
 
 The codex and agy agents are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `hmad-dispatch read` output you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
@@ -1110,3 +1145,4 @@ never-archived docs tree cannot silently zero a real recorded number. The `audit
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template
+- `references/agy-skill-reviewer-prompt.md` — reviewing a **skill** (doc+script family) rather than a feature; not phase-gated, dispatched via `exec agy`. See §"Reviewing a skill with agy"

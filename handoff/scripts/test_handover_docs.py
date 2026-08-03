@@ -233,6 +233,73 @@ def test_review_fix_present(literal: str, why: str) -> None:
     assert " ".join(literal.split()) in _norm(SKILL), f"regressed: {why}"
 
 
+# --- LEARN's documented output must match what learn.py prints -------------
+
+
+def test_learn_step4_example_matches_the_real_renderer() -> None:
+    # Found by dogfooding the new agy skill-reviewer template against LEARN mode.
+    # The Step 4 example dropped the leading "- " and the "[confidence]" field, so
+    # an agent checking its own run against the doc sees a mismatch and cannot tell
+    # whether the save worked. Derive the shape from the renderer rather than
+    # restating it, so the two cannot drift apart again.
+    learn_py = SKILL.parent / "scripts" / "learn.py"
+    render = " ".join(learn_py.read_text(encoding="utf-8").split())
+    assert 'f"- {self.date_str} · {self.category} · [{self.confidence}]"' in render, (
+        "learn.py's render() changed shape; update this test AND the Step 4 example together"
+    )
+    example = [
+        ln for ln in SKILL.read_text(encoding="utf-8").splitlines()
+        if "lightrag,nan-embed" in ln and "Learning saved" not in ln
+    ]
+    assert example, "the Step 4 success example is gone"
+    for ln in example:
+        stripped = ln.strip()
+        assert stripped.startswith("- "), f"example lost the list bullet render() emits: {stripped[:60]}"
+        assert "· [0.7] ·" in stripped, f"example lost the [confidence] field render() emits: {stripped[:60]}"
+
+
+# --- READ Step 3 must reconcile PR state -----------------------------------
+
+PR_STATE = [
+    (
+        "**PR state** — if the doc's Next Steps or Open Items name a PR",
+        "the bullet itself; without it Step 3 has no PR check at all",
+    ),
+    (
+        "gh pr view <N> --json state,mergedAt,title",
+        "the runnable check — naming the hazard without the command is what this "
+        "skill family keeps regressing into",
+    ),
+    (
+        "git log --oneline -50 | grep -F '(#<N>)'",
+        "a squash-merge lands under a rewritten title, so `gh` alone is not a "
+        "complete answer — and `gh` may be absent or unauthenticated",
+    ),
+    (
+        "do **not** silently assume it is still open",
+        "an unverifiable PR state must be reported as unverified; assuming OPEN is "
+        "what restores a stale merge instruction as the top todo",
+    ),
+]
+
+
+@pytest.mark.parametrize("literal,why", PR_STATE, ids=[lit[:40] for lit, _ in PR_STATE])
+def test_read_reconciles_pr_state(literal: str, why: str) -> None:
+    # A PR claim is the only handoff state living entirely off the local machine,
+    # so every other Step 3 check passes while it is stale. Observed: "merge PR
+    # #18" survived into a resume as the top Next Step, hours after #18 merged.
+    assert " ".join(literal.split()) in _norm(SKILL), f"READ lost its PR reconciliation: {why}"
+
+
+def test_pr_state_is_in_step_3_not_orphaned_prose() -> None:
+    # Both halves: the bullet is only reachable if it sits in the reconciliation
+    # list. Pinning the text alone would pass with the bullet moved somewhere the
+    # resume flow never reads.
+    text = _norm(SKILL)
+    step3 = text.split("### Step 3: Reconcile with reality")[1].split("### Step 4")[0]
+    assert "**PR state**" in step3, "the PR bullet is not inside Step 3's reconciliation list"
+
+
 # --- N1: extraction must not leave dangling pointers ----------------------
 
 REFERENCES = SKILL.parent / "references"

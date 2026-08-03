@@ -2,7 +2,7 @@
 
 > Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5d (RED) and 5e (GREEN).
 > Orchestrator stages this template at `/tmp/h_mad_<feature>_<phase>_<N>.txt` with
-> `<INLINE_*>` placeholders substituted, then dispatches via `hmad-dispatch send`
+> `INLINE_*` placeholders substituted, then dispatches via `hmad-dispatch send`
 > file-indirection (substrate-agnostic; see `references/agent-substrate.md`, F-12
 > discipline preserved).
 
