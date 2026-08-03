@@ -319,6 +319,68 @@ _agent_pv_re() {
   esac
 }
 
+_agent_proc_name() {
+  # h-mad agent token -> the executable name the OS reports for that agent.
+  # Kept separate from _orca_agent_type (Orca's `agentType`, "antigravity") and
+  # from the token itself, because all three namespaces have already diverged
+  # once: token `agy`, agentType `antigravity`, binary `agy`.
+  case "$1" in
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+_agent_procs_in() {  # $1 agent token, $2 worktree path -> pids, one per line
+  # OS-level evidence that an agent is RUNNING in a worktree (J18).
+  #
+  # `lsof -a -d cwd -c <name>` lists processes whose current directory is open,
+  # restricted to that command name; the NAME column (last field) is the cwd.
+  # We match it exactly against the worktree path.
+  #
+  # Deliberately NOT `ps`: `ps -e` was measured returning a PARTIAL process list
+  # on this host (1374 pids on one call, 31 on the next, with `ps -p <pid>`
+  # finding a process `ps -ax | grep` could not). A liveness check that silently
+  # enumerates a subset is worse than none. `lsof` reported both live agents
+  # correctly and repeatably.
+  #
+  # rc 2 = no lsof (no evidence available, distinct from "no process found"),
+  # so the caller can stay silent instead of claiming the agent is absent.
+  local token="$1" wt="$2" name
+  [ -n "$wt" ] || return 2
+  command -v lsof >/dev/null 2>&1 || return 2
+  name="$(_agent_proc_name "$token")"
+  lsof -a -d cwd -c "$name" 2>/dev/null \
+    | awk -v w="$wt" 'NR>1 && $NF==w {print $2}' | sort -u
+}
+
+_orca_unclaimed_panes() {  # $1 scoped terminals envelope -> handles Orca names nowhere
+  # A pane is a J18 candidate only when `worktree ps` agents[] does NOT claim it.
+  # A claimed pane already has an authoritative agentType: if it matched the
+  # wanted agent the paneKey join would have returned it, so a claimed pane
+  # reaching here is provably a DIFFERENT agent. Binding one would re-open the
+  # exact silent swap the join was built to close.
+  #
+  # Claimed-ness is computed across ALL worktrees, not just the scoped one: a
+  # paneKey named anywhere is named, and being lenient here would only ever add
+  # candidates -- the direction that risks a wrong bind.
+  local scoped="$1" ps claimed
+  ps="$(orca worktree ps --limit 200 --json 2>/dev/null)" || ps=""
+  # `|| claimed=""` for the same `set -e`/pipefail reason as above: an older
+  # runtime, a missing verb, or unparseable JSON makes jq non-zero, and that is
+  # the expected "no claim data" case, not a fatal error.
+  claimed="$(printf '%s' "$ps" | jq -c '[.result.worktrees[]?|(.agents//[])[]|.paneKey]' 2>/dev/null)" || claimed=""
+  # No/!unparseable ps => nothing is claimed. That only widens the candidate set,
+  # which cannot cause a wrong bind on its own: the bind still requires the set to
+  # hold EXACTLY ONE pane, and extra candidates make that condition harder, not
+  # easier. Failing the other way (treating everything as claimed) would silently
+  # disable the pass on any runtime whose `worktree ps` is unavailable.
+  [ -n "$claimed" ] || claimed='[]'
+  printf '%s' "$scoped" | jq -r --argjson claimed "$claimed" '
+    .result.terminals[]?
+    | select((((.tabId // "") + ":" + (.leafId // "")) as $k
+              | ($k != ":") and ($claimed | index($k) | not)))
+    | .handle' 2>/dev/null
+}
+
 _orca_agent_type() {
   # h-mad agent token -> the `agentType` Orca reports in `worktree ps`.
   # Orca names the Antigravity CLI "antigravity"; h-mad calls it "agy" after the
@@ -509,6 +571,52 @@ _orca_find() {
     n="$(printf '%s' "$ids" | grep -c . || true)"
     if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   fi
+  # Pass 3 (J18) -- OS evidence for panes Orca did not spawn.
+  #
+  # Reached only when every pass above found nothing, which is the measured state
+  # for a pane that survived an Orca restart: absent from agents[] (Pass 0 blind),
+  # tab-inherited or skipped title (Pass 1), empty renderer buffer (Pass 2). The
+  # agent may nonetheless be very much alive -- two were, for 9 hours.
+  #
+  # The OS can prove the agent is RUNNING here; it cannot say which PANE holds it
+  # (Orca exposes no tty/pid/ptyId -- orca#9870 -- and macOS blocks `ps e`). So
+  # bind only when the mapping is FORCED: one candidate pane, and a live process
+  # that must therefore be in it. Any other shape reports the evidence and
+  # declines, because a wrong bind here is silent -- both agents emit a
+  # well-formed report, so the gate would score the wrong model's work.
+  local os_pids os_rc cands cn
+  # Guarded: under `set -e` a bare `x="$(cmd)"` aborts the moment cmd is non-zero,
+  # and BOTH non-zero returns here are normal control flow (rc 2 = no lsof, rc 1 =
+  # lsof found no such process). Unguarded, `resolve` died with rc 2 and an empty
+  # stderr before it could print any diagnosis at all -- the same trap already
+  # documented twice in this file.
+  os_rc=0; os_pids="$(_agent_procs_in "$token" "$scope_wt")" || os_rc=$?
+  if [ "$os_rc" -eq 0 ] && [ -n "$os_pids" ]; then
+    cands="$(_orca_unclaimed_panes "$scoped")"
+    cn="$(printf '%s' "$cands" | grep -c . || true)"
+    if [ "$cn" -eq 1 ]; then
+      echo "[H-MAD] $token: bound $cands by OS evidence (pid $(printf '%s' "$os_pids" | tr '\n' ' ' | sed 's/ $//'); sole pane in $scope_wt that \`worktree ps\` does not name)" >&2
+      printf '%s\n' "$cands"; return 0
+    fi
+    # Live agent, but the pane is not determined. Say exactly that -- the message
+    # this replaces ("resolved to 0 candidates") reads as "no agent is running",
+    # which was measurably false and sent the operator looking in the wrong place.
+    {
+      printf '[H-MAD] %s: %s process IS live in %s (pid %s), but %s pane(s) there carry no identifying evidence:\n' \
+        "$token" "$token" "$scope_wt" "$(printf '%s' "$os_pids" | tr '\n' ' ' | sed 's/ $//')" "$cn"
+      # Every line carries the [H-MAD] prefix on purpose: `env` replays only
+      # prefixed lines (the generic candidate-count noise stays suppressed), so
+      # an indented continuation line would be filtered out and the operator
+      # would be told candidates exist without being told which.
+      # '%s\n', not '%s': command substitution stripped the trailing newline from
+      # $cands, so the last handle ran into the following line ("term_7d59…[H-MAD]
+      # codex: Orca names none of them") -- observed live before this fix.
+      printf '%s\n' "$cands" | sed "s/^/[H-MAD] $token:     /"
+      printf '[H-MAD] %s: Orca names none of them (absent from `worktree ps` agents[]) and their previews are empty,\n' "$token"
+      printf '[H-MAD] %s: so the pane cannot be inferred. Pin it explicitly:\n' "$token"
+      printf '[H-MAD] %s:   hmad-dispatch pin %s <handle>\n' "$token" "$token"
+    } >&2
+  fi
   echo "hmad-dispatch: orca terminal for '$token' resolved to $n candidates${scope_wt:+ in worktree $scope_wt}; pin HMAD_ORCA_$(printf '%s' "$token" | tr '[:lower:]' '[:upper:]')_TERMINAL" >&2
   return 1
 }
@@ -525,8 +633,16 @@ _cmd_env() {
   # from another repo. This is the line an operator already reads before a run.
   [ "$sub" = "orca" ] && echo "pin file: $(_pin_file)"
   local a t _id stale="" seen_codex="" seen_agy="" conflict_handle="" verdict="PASS" fields=""
+  local unresolved="" orch_on=1
+  # J18: resolution stderr was discarded wholesale, which also discarded the OS
+  # evidence pass's report -- the one place that can say "the agent IS running,
+  # here is its pid, here are the panes it could be in". Capture instead of
+  # suppress, and replay only the `[H-MAD]` lines: the generic
+  # "resolved to N candidates" noise (prefix `hmad-dispatch:`) stays hidden, so
+  # `env` output is unchanged for every case that has nothing new to say.
+  local _rerr; _rerr="$(mktemp)"
   for a in codex agy; do
-    if t="$(_resolve_target "$a" 2>/dev/null)"; then
+    if t="$(_resolve_target "$a" 2>"$_rerr")"; then
       case "$a" in codex) seen_codex="$t" ;; agy) seen_agy="$t" ;; esac
       # A pin file records intent, not state. `env` is the preflight an operator
       # reads before committing a run, so a handle whose pane is gone must not
@@ -546,8 +662,12 @@ _cmd_env() {
       fi
     else
       echo "$a -> UNRESOLVED"
+      unresolved="${unresolved:+$unresolved,}$a"
     fi
+    grep '^\[H-MAD\]' "$_rerr" >&2 || true
+    : > "$_rerr"
   done
+  rm -f "$_rerr"
   [ -z "$stale" ] || echo "stale pins: $stale"
   # Two agents cannot be the same pane, so identical handles prove at least one
   # resolution is wrong -- and that is exactly the shape a tab-inherited title
@@ -558,6 +678,7 @@ _cmd_env() {
     echo "CONFLICT: codex and agy both resolve to $seen_codex — at least one is wrong; pin them explicitly"
   fi
   if _orchestration_active; then
+    orch_on=0
     echo "orchestration: on"
     # Report the Run binding too. `orchestration: on` alone was misleading: it means
     # substrate+coordinator are present, which says nothing about whether a Run is
@@ -576,8 +697,18 @@ _cmd_env() {
     echo "orchestration: off"
   fi
   # PREFLIGHT verdict — the machine-consumable form of the STALE/CONFLICT lines above.
-  # A FAIL is something an orchestrator must ACT on; an agent that is merely
-  # UNRESOLVED is not a failure, it is an ordinary un-set-up session.
+  # A FAIL is something an orchestrator must ACT on.
+  #
+  # An UNRESOLVED agent used to be exempt on the grounds that it "is not a failure,
+  # it is an ordinary un-set-up session". That holds only while nothing is about to
+  # dispatch. Measured live 2026-08-03: `PREFLIGHT: PASS` printed with BOTH agents
+  # UNRESOLVED in a session whose coordinator and Run were bound — i.e. a session
+  # one step from dispatching, with nowhere to dispatch to. A preflight that passes
+  # there is not reporting readiness, it is withholding the one fact that matters.
+  #
+  # So the exemption is kept exactly where its reasoning applies: `_orchestration_active`
+  # (orca AND a coordinator resolves) separates "wired up, about to dispatch" from
+  # "ordinary un-set-up session". Unresolved agents FAIL only in the former.
   #
   # This MUST NOT become a non-zero exit. A non-zero exit registers as a Claude Code
   # PostToolUseFailure and leaks into coexisting plugins' error handling, which is why
@@ -587,6 +718,9 @@ _cmd_env() {
   # token, never by changing $?.
   [ -z "$stale" ] || { verdict="FAIL"; fields=" stale=$(printf '%s' "$stale" | tr ' ' ',')"; }
   [ -z "$conflict_handle" ] || { verdict="FAIL"; fields="$fields conflict=$conflict_handle"; }
+  if [ -n "$unresolved" ] && [ "$orch_on" -eq 0 ]; then
+    verdict="FAIL"; fields="$fields unresolved=$unresolved"
+  fi
   echo "PREFLIGHT: ${verdict}${fields}"
   if [ "$verdict" = "PASS" ]; then _receipt_write; else _receipt_clear; fi
   return 0
