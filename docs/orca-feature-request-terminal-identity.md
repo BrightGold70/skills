@@ -12,6 +12,26 @@
 > human typed `codex` into an already-open shell registers in `agents[]`, or whether only
 > Orca-spawned agents do. A plain `terminal create` shell is absent from `agents[]` (verified). If
 > adoption is unsupported, option 3 below (`titleSource` discriminator) retains standalone value.
+>
+> **ANSWERED 2026-08-03 — adoption is NOT supported, so option 3 keeps its standalone value.**
+> Measured on a live pair of hand-started agents: `codex` (pid 88221) and `agy` (pid 87919), both
+> up 9 hours with cwd in this worktree, were **absent from `agents[]` entirely**. `worktree ps`
+> reported `liveTerminalCount: 3` with exactly ONE `agents[]` entry — the coordinator, the only
+> pane Orca had spawned. Both panes had survived an Orca restart (`incarnationId: null`,
+> `rendererGraphEpoch: 0`).
+>
+> All three identity passes were blind at once for that pane class: the paneKey join (absent from
+> `agents[]`), the title pass (the tab had been renamed, so both panes read `Claude - skills repo`
+> — a *tab* title shared by every leaf), and the preview pass (`terminal read` returned
+> `returnedLineCount: 0`, the renderer buffer having died with the restart). The wrapper reported
+> "resolved to 0 candidates" while both agents were demonstrably alive.
+>
+> There is also **no OS-side join available**: the schema exposes no `tty`, `pid`, or `ptyId`
+> (`orca agent-context --json` — 0 occurrences of each), and macOS blocks `ps e`, so a process
+> found via `lsof -a -d cwd -c codex` cannot be mapped back to a pane. Our side ships this as
+> `_orca_find` Pass 3 (OS evidence), which binds only when exactly one unclaimed pane and one live
+> matching process make the mapping forced, and otherwise reports the evidence and declines —
+> main `398d120`, see `references/orchestration-mode.md` §"Worker identity resolution".
 
 **Component:** Orca CLI / daemon — `orca terminal list`, `orca terminal rename`
 **Type:** Feature request (with a small correctness observation about `rename`)
