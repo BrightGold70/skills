@@ -146,6 +146,39 @@ def test_the_revert_sequence_makes_untracked_files_stashable() -> None:
     assert "git stash pop" in text, "a revert with no documented restore loses the work"
 
 
+def test_every_site_naming_the_stash_hazard_also_gives_the_fix() -> None:
+    # The test above pins ONE site, and that is exactly how this regressed: the
+    # `git add -N` fix was applied to SKILL.md's revert block while three other
+    # places went on naming the hazard with no way to avoid it — including
+    # codex-verifier-prompt.md, handed to an independent agent that cannot see
+    # SKILL.md at all. A site-scoped assertion is a weak test: it stayed green
+    # for all three. Enforce the invariant across every site instead.
+    gaps = []
+    for path in sorted(SKILL_DIR.rglob("*.md")):
+        if "docs/handoffs" in str(path):
+            continue
+        lines = path.read_text(errors="replace").splitlines()
+        for i, line in enumerate(lines):
+            if "stashes nothing" not in line:
+                continue
+            window = "\n".join(lines[max(0, i - 2):i + 6])
+            # Only an actual INSTANCE of the hazard needs the fix beside it, and an
+            # instance always names the command it is about. A doc that merely quotes
+            # the phrase while teaching reviewers to hunt for this shape is not
+            # committing it — `agy-skill-reviewer-prompt.md` lists "stashes nothing"
+            # among the phrasings to grep for, and the first version of this guard
+            # flagged it. Found only when the two branches were merged: the guard
+            # lived on one, the prompt on the other, so neither side failed alone.
+            if "git stash push" not in window:
+                continue
+            if "add -N" not in window:
+                gaps.append(f"{path.relative_to(SKILL_DIR)}:{i + 1}")
+    assert not gaps, (
+        "these name the `git stash push` hazard without the `git add -N` fix that "
+        f"avoids it — an agent given the rule and not the means improvises: {gaps}"
+    )
+
+
 def test_the_destructive_alternative_is_called_out() -> None:
     text = _norm(SKILL)
     assert "deletes** the new implementation" in text, (

@@ -1168,6 +1168,9 @@ def test_coordinator_pin_wins_over_autodetect(tmp_path):
     r = run(["task-create", "label", str(spec)], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_pinned",
                  "ORCA_PANE_KEY": "tab-9:leaf-1",
+                 # task-create probes the Run binding first; that probe is a
+                 # `task-list` call and needs its own shape.
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_BOUND,
                  "HMAD_STUB_ORCA_STDOUT": '{"ok":true,"result":{"task":{"id":"task_1"}}}'},
             capture=cap)
     assert r.returncode == 0
@@ -1408,6 +1411,10 @@ def test_task_create_registers_pinned_coordinator_and_parses_task_id(tmp_path):
     spec = tmp_path / "task.md"; spec.write_text("Implement the module.\n")
     r = run(["task-create", "implement-module", str(spec)], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 # task-create now probes the Run binding first, and that probe is a
+                 # `task-list` call — which needs its own shape. Without this override
+                 # the shared stdout fed a task-create envelope to the probe.
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_BOUND,
                  "HMAD_STUB_ORCA_STDOUT": _ENV_TASK_CREATE},
             capture=cap)
     assert r.returncode == 0
@@ -1416,6 +1423,111 @@ def test_task_create_registers_pinned_coordinator_and_parses_task_id(tmp_path):
     assert "orca orchestration task-create --spec [H-MAD] worker_done coordinator handle (use as --to): term_coord" in text
     assert "Implement the module." in text
     assert "--task-title implement-module --json" in text
+
+
+_ENV_RUN_BOUND = '{"ok":true,"result":{"runId":"run_existing","tasks":[],"count":0}}'
+_ENV_RUN_UNBOUND = (
+    '{"ok":false,"error":{"code":"run_required",'
+    '"message":"No Run is bound. Use orchestration run-create or run-use first."}}'
+)
+_ENV_RUN_CREATE = '{"ok":true,"result":{"run":{"id":"run_new","objective":"o"}}}'
+
+
+def test_task_create_binds_a_run_when_none_is_bound(tmp_path):
+    # THE defect: every orchestration mutation belongs to an explicitly bound Run,
+    # and this wrapper never bound one — so task-create, the FIRST call of the flow,
+    # died on {"code":"run_required"} and the whole structured path was unreachable.
+    # Verified live before the fix; this pins it.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    spec = tmp_path / "task.md"; spec.write_text("Implement the module.\n")
+    r = run(["task-create", "implement-module", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_UNBOUND,
+                 "HMAD_STUB_ORCA_RUNCREATE_STDOUT": _ENV_RUN_CREATE,
+                 "HMAD_STUB_ORCA_STDOUT": _ENV_TASK_CREATE},
+            capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "task_1\n"
+    calls = cap.read_text().splitlines()
+    assert any("orchestration run-create --objective" in c for c in calls), \
+        f"unbound terminal must create a Run before task-create: {calls}"
+    # Ordering is the whole point — a run-create AFTER task-create fixes nothing.
+    ric = next(i for i, c in enumerate(calls) if "run-create" in c)
+    tic = next(i for i, c in enumerate(calls) if "task-create" in c)
+    assert ric < tic, "the Run must be bound BEFORE task-create is attempted"
+    assert "[H-MAD] orchestration run bound: run_new" in r.stderr
+
+
+def test_task_create_reuses_an_already_bound_run(tmp_path):
+    # Binding persists across CLI processes (verified live), so a bound terminal
+    # must NOT create a second Run per task — that would scatter one fanout's tasks
+    # across several Run namespaces and the coordinator's check would miss them.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    spec = tmp_path / "task.md"; spec.write_text("spec")
+    r = run(["task-create", "label", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_BOUND,
+                 "HMAD_STUB_ORCA_STDOUT": _ENV_TASK_CREATE},
+            capture=cap)
+    assert r.returncode == 0
+    assert "run-create" not in cap.read_text(), "must reuse the bound Run, not create another"
+
+
+def test_run_probe_failure_does_not_create_a_second_run(tmp_path):
+    # An unexpected probe failure is NOT evidence of "no Run yet". Creating one on
+    # that guess scatters a fanout's tasks across two Run namespaces, so the
+    # coordinator's check never sees half its workers. Only `run_required` counts.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    spec = tmp_path / "task.md"; spec.write_text("spec")
+    r = run(["task-create", "label", str(spec)], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT":
+                     '{"ok":false,"error":{"code":"transport_error","message":"boom"}}',
+                 "HMAD_STUB_ORCA_RUNCREATE_STDOUT": _ENV_RUN_CREATE,
+                 "HMAD_STUB_ORCA_STDOUT": _ENV_TASK_CREATE},
+            capture=cap)
+    assert r.returncode != 0
+    assert "refusing to create a Run on a guess" in r.stderr
+    text = cap.read_text()
+    assert "run-create" not in text, "must not create a Run after an unrecognised probe failure"
+    assert "task-create" not in text, "must not proceed into the flow unbound"
+
+
+def test_run_ensure_honours_an_explicit_run_pin(tmp_path):
+    # HMAD_ORCA_RUN takes precedence, same shape as HMAD_ORCA_COORDINATOR_TERMINAL.
+    # It must run-use (bind) rather than assume the pin is already bound — the Run
+    # may have been created by another pane.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["run-ensure"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_RUN": "run_pinned"}, capture=cap)
+    assert r.returncode == 0
+    assert r.stdout == "run_pinned\n"
+    text = cap.read_text()
+    assert "orca orchestration run-use --id run_pinned --json" in text
+    assert "run-create" not in text, "a pinned Run must never be re-created"
+
+
+def test_env_reports_the_bound_run(tmp_path):
+    # `orchestration: on` alone was misleading — it reports substrate+coordinator
+    # and says nothing about the Run, yet with no Run every mutation fails.
+    b = _bindir(tmp_path, ["orca"])
+    bound = run(["env"], substrate="orca",
+                env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                     "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_BOUND})
+    assert "orchestration run: run_existing" in bound.stdout
+    unbound = run(["env"], substrate="orca",
+                  env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                       "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_UNBOUND})
+    assert "orchestration run: (none" in unbound.stdout
+    # `env` is a diagnostic: an unbound (or failing) probe must not abort it under
+    # `set -e`, or the command you run to diagnose the problem dies of it.
+    assert "PREFLIGHT" in unbound.stdout, "env must run to completion when unbound"
+    # Reporting is read-only: `env` must never bind as a side effect.
+    assert "run-create" not in unbound.stdout
 
 
 def test_task_create_requires_coordinator_and_existing_spec_file(tmp_path):
@@ -1465,11 +1577,82 @@ def test_await_defaults_timeout_and_requires_coordinator(tmp_path):
     r = run(["await", "task_1"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
                  "HMAD_STUB_ORCA_STDOUT": '{"messages":[]}'}, capture=cap)
-    assert r.returncode == 0
+    # An empty delivery means no worker_done arrived. This MUST NOT be exit 0:
+    # `await` returning success with empty stdout is a false completion, and the
+    # Phase-5 merge gate runs on the strength of that success.
+    assert r.returncode == 1
+    assert r.stdout == ""
+    assert "timed out" in r.stderr
     assert "--timeout-ms 600000 --json" in cap.read_text()
     no_pin = run(["await", "task_1"], substrate="orca", env={"_BINDIR": b})
     assert no_pin.returncode == 1
     assert "HMAD_ORCA_COORDINATOR_TERMINAL" in no_pin.stderr
+
+
+def test_await_empty_delivery_makes_exactly_one_check(tmp_path):
+    # Regression guard on the loop itself: an empty batch must BREAK, not
+    # `continue`. The stub returns immediately instead of blocking for
+    # --timeout-ms, so a `continue` here would hot-spin for the full 600s
+    # default. Counting the captured calls is what pins that; asserting only
+    # on the exit code would pass either way.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["await", "task_1", "--timeout", "600"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": '{"ok":true,"result":{"messages":[],"count":0}}'},
+            capture=cap)
+    assert r.returncode == 1
+    checks = [ln for ln in cap.read_text().splitlines() if "orchestration check" in ln]
+    assert len(checks) == 1, f"expected exactly one check, got {len(checks)}"
+
+
+def test_await_acks_a_sibling_batch_before_rechecking(tmp_path):
+    # The defect this fixes: a coordinator `check` replays the oldest
+    # unacknowledged Delivery until --ack. With a fanout of concurrent modules,
+    # module 2's await got module 1's batch back and the taskId filter missed.
+    # First call must be un-acked; the follow-up must carry --ack <delivery_id>.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    sibling = (
+        '{"ok":true,"result":{"delivery_id":"dlv_7","count":1,"messages":['
+        '{"id":"msg_other","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"other\\"}"}]}}'
+    )
+    # Short timeout on purpose: if the replay guard is ever removed this spins to
+    # the deadline, and a 600s hang is a CI timeout rather than a clean failure.
+    r = run(["await", "task_mine", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": sibling}, capture=cap)
+    # Never matches. The stub replays the same delivery, so the second check
+    # carries --ack and gets dlv_7 back again — which is the "ack is not
+    # advancing" case, and must stop rather than spin to the 600s deadline.
+    assert r.returncode == 1
+    assert r.stdout == ""
+    assert "replayed after --ack" in r.stderr
+    calls = [ln for ln in cap.read_text().splitlines() if "orchestration check" in ln]
+    assert len(calls) == 2, f"expected ack-then-stop, got {len(calls)} checks"
+    assert "--ack" not in calls[0], "first check has nothing to acknowledge yet"
+    assert "--ack dlv_7" in calls[1], f"second check must ack the stale batch: {calls[1]}"
+
+
+def test_await_unackable_batch_fails_loud_instead_of_spinning(tmp_path):
+    # A non-empty delivery whose ack id we cannot find would replay forever.
+    # Burning the timeout and reporting a plain timeout would hide the cause,
+    # so this must fail fast and name the shape it actually got.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    noack = (
+        '{"ok":true,"result":{"count":1,"messages":['
+        '{"id":"m1","type":"worker_done","payload":"{\\"taskId\\":\\"other\\"}"}]}}'
+    )
+    r = run(["await", "task_mine", "--timeout", "600"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": noack}, capture=cap)
+    assert r.returncode == 1
+    assert "no recognisable ack id" in r.stderr
+    assert "timed out" not in r.stderr, "must not masquerade as an ordinary timeout"
+    calls = [ln for ln in cap.read_text().splitlines() if "orchestration check" in ln]
+    assert len(calls) == 1, "must stop on the first unackable batch, not spin"
 
 
 def test_gate_create_with_and_without_options_and_gate_resolve(tmp_path):
@@ -1546,7 +1729,9 @@ def test_worktree_create_argv_orca(tmp_path):
     r = run(["worktree-create", "m", "--agent", "a1", "--base", "main"], substrate="orca",
             env={"_BINDIR": b}, capture=cap)
     assert r.returncode == 0
-    assert cap.read_text() == "orca worktree create --name m --agent a1 --base-branch main --json\n"
+    assert cap.read_text() == (
+        "orca worktree create --name m --agent a1 --base-branch main --setup run --json\n"
+    )
 
 
 def test_worktree_create_parses_selector_and_empty_match(tmp_path):
@@ -1570,7 +1755,38 @@ def test_worktree_create_repo_targeting(tmp_path):
     r = run(["worktree-create", "m", "--repo", "HemaSuite"], substrate="orca",
             env={"_BINDIR": b}, capture=cap)
     assert r.returncode == 0
-    assert cap.read_text() == "orca worktree create --name m --repo HemaSuite --json\n"
+    assert cap.read_text() == "orca worktree create --name m --repo HemaSuite --setup run --json\n"
+
+
+def test_worktree_create_setup_defaults_to_run_and_is_overridable(tmp_path):
+    # The CLI's OWN default is `inherit`, which follows the repo's setup policy —
+    # so omitting the flag makes a fanout worker's prepared-tree guarantee depend
+    # on a per-repo Orca setting this wrapper does not control. Default to `run`
+    # so the guarantee travels with the command, and keep an explicit escape hatch
+    # (the orchestration guide allows skip/inherit "only when there is a concrete
+    # task-specific reason"). Asserting the emitted flag is what pins this; the
+    # other argv tests would still pass if the default silently flipped back.
+    b = _bindir(tmp_path, ["orca"])
+    # Separate capture files per invocation: the stub APPENDS, so a shared file
+    # would still hold the first run's `--setup run` and the override assertion
+    # below would pass on stale text.
+    cap_default = tmp_path / "cap_default.txt"
+    default = run(["worktree-create", "m"], substrate="orca",
+                  env={"_BINDIR": b}, capture=cap_default)
+    assert default.returncode == 0
+    assert cap_default.read_text() == "orca worktree create --name m --setup run --json\n"
+
+    cap_override = tmp_path / "cap_override.txt"
+    override = run(["worktree-create", "m", "--setup", "skip"], substrate="orca",
+                   env={"_BINDIR": b}, capture=cap_override)
+    assert override.returncode == 0
+    assert cap_override.read_text() == "orca worktree create --name m --setup skip --json\n"
+
+    # A worktree create never carries --workspace: `orca automations create` accepts
+    # that flag, `orca worktree create` does not, and forwarding it made the CLI
+    # reject the whole create.
+    bad = run(["worktree-create", "m", "--workspace", "w"], substrate="orca", env={"_BINDIR": b})
+    assert bad.returncode == 2, "--workspace must be rejected, not silently forwarded"
 
 
 def test_worktree_create_prompt_file_and_missing_file(tmp_path):
@@ -1600,11 +1816,17 @@ def test_worktree_create_prompt_registers_task_on_stderr(tmp_path):
               '"task":{"id":"task-fanout"},"gate":{"id":"gate-fanout"}}}')
     r = run(["worktree-create", "fanout", "--prompt-file", str(prompt)], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 # This path registers a task, so it goes through the Run-binding
+                 # probe too — which is a `task-list` call needing its own shape.
+                 "HMAD_STUB_ORCA_TASKLIST_STDOUT": _ENV_RUN_BOUND,
                  "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
     assert r.returncode == 0
     assert r.stdout == "wt-fanout\n"
     assert r.stderr == "[H-MAD] worktree_task task=task-fanout selector=wt-fanout\n"
-    assert "orca worktree create --name fanout --prompt fanout prompt --json\n" in cap.read_text()
+    assert (
+        "orca worktree create --name fanout --setup run --prompt fanout prompt --json\n"
+        in cap.read_text()
+    )
     assert "--task-title worktree:fanout --json" in cap.read_text()
 
 
@@ -1661,7 +1883,9 @@ def test_worktree_create_task_registration_failure_is_nonfatal(tmp_path):
     assert created.returncode == 0
     assert created.stdout == "wt-fanout\n"
     assert "[H-MAD] worktree_task_skipped selector=wt-fanout" in created.stderr
-    assert cap.read_text() == "orca worktree create --name fanout --prompt fanout prompt --json\n"
+    assert cap.read_text() == (
+        "orca worktree create --name fanout --setup run --prompt fanout prompt --json\n"
+    )
 
 
 def test_worktree_create_refuses_cmux(tmp_path):

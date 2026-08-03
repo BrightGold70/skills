@@ -17,6 +17,19 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_WT
   printf '%s' "$HMAD_STUB_ORCA_WT_PS_STDOUT"
   exit 0
 fi
+# Run binding: `_run_ensure` probes `orchestration task-list` and then may call
+# `orchestration run-create` / `run-use`. Those are DIFFERENT calls needing
+# different responses, which a single HMAD_STUB_ORCA_STDOUT cannot express (same
+# reason as J16 below). Consulted only when explicitly set, so every pre-existing
+# test keeps the shared-stdout behaviour it was written against.
+if [ "${1:-}" = "orchestration" ] && [ "${2:-}" = "task-list" ] && [ -n "${HMAD_STUB_ORCA_TASKLIST_STDOUT:-}" ]; then
+  printf '%s' "$HMAD_STUB_ORCA_TASKLIST_STDOUT"
+  exit 0
+fi
+if [ "${1:-}" = "orchestration" ] && [ "${2:-}" = "run-create" ] && [ -n "${HMAD_STUB_ORCA_RUNCREATE_STDOUT:-}" ]; then
+  printf '%s' "$HMAD_STUB_ORCA_RUNCREATE_STDOUT"
+  exit 0
+fi
 # J1: `launch` calls `terminal create` and then `terminal list`, and the whole
 # point is that they report DIFFERENT handles for the same pane. A single shared
 # stdout cannot express that. Consulted only when explicitly set.
