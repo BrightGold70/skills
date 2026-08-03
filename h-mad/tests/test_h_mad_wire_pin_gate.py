@@ -470,6 +470,57 @@ def test_cli_missing_file_is_an_operational_error(tmp_path: Path) -> None:
     assert "WIREPIN: PASS" not in proc.stdout
 
 
+def test_an_unreadable_plan_emits_a_token_on_stdout(tmp_path: Path) -> None:
+    # SKILL.md's contract is "read the `WIREPIN:` token, never `$?`". A caller that
+    # obeys it sees stdout only — so an error that prints to stderr alone is
+    # indistinguishable from the gate never having run. Both look like no token.
+    # That silence is worst in exactly the case the tasks=0 story is about: being
+    # pointed at the wrong file.
+    proc = _run(str(tmp_path / "nope.md"))
+    assert "WIREPIN: UNREADABLE" in proc.stdout, (
+        f"an unreadable plan produced no token for a token-reading caller: {proc.stdout!r}"
+    )
+    assert proc.returncode == 2, "cannot-read is not a verdict"
+
+
+def test_the_unreadable_token_carries_no_counts(tmp_path: Path) -> None:
+    # The load-bearing half. `tasks=` now SELECTS the operator's remedy (SKILL.md
+    # §5b: tasks=0 -> impl_plan_no_tasks). A plan that could not be read has no
+    # counts to report, so printing `tasks=0` would fabricate the one field the
+    # router keys on and hand a wrong-path error the no-tasks remedy — the exact
+    # misrouting the tasks=0 split was written to stop.
+    proc = _run(str(tmp_path / "nope.md"))
+    assert "tasks=" not in proc.stdout, (
+        f"UNREADABLE fabricated a count the remedy router keys on: {proc.stdout!r}"
+    )
+
+
+def test_the_unreadable_path_keeps_its_stderr_diagnostic(tmp_path: Path) -> None:
+    # The token says the class of failure; only the exception says which file and
+    # why. Emitting the token must not cost the operator the detail.
+    proc = _run(str(tmp_path / "nope.md"))
+    assert "ERROR:" in proc.stderr, proc.stderr
+    assert "nope.md" in proc.stderr, proc.stderr
+
+
+def test_unreadable_is_reached_by_more_than_a_missing_file(tmp_path: Path) -> None:
+    # A directory handed to the gate raises IsADirectoryError, not FileNotFoundError.
+    # The token is about "could not read this plan", not about one errno.
+    target = tmp_path / "a-directory.impl-plan.md"
+    target.mkdir()
+    proc = _run(str(target))
+    assert "WIREPIN: UNREADABLE" in proc.stdout, proc.stdout
+    assert proc.returncode == 2
+
+
+def test_unreadable_emits_the_hmad_marker_like_every_other_verdict(tmp_path: Path) -> None:
+    # Log scrapers key on the `[H-MAD] <feature> wirepin <verdict>` line. Omitting it
+    # on the error path makes an errored run invisible to the same scan that sees
+    # every PASS and FAIL.
+    proc = _run(str(tmp_path / "nope.md"))
+    assert "[H-MAD] nope wirepin UNREADABLE" in proc.stdout, proc.stdout
+
+
 def test_cli_unshaped_is_not_a_pass(tmp_path: Path) -> None:
     plan = _plan(tmp_path, _task(1, shape=None, wire=None, pin=None))
     proc = _run(str(plan))

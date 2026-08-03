@@ -16,6 +16,7 @@ Verdicts, printed as a canonical token:
     WIREPIN: PASS tasks=3 wiring=1 unpinned=0 mislabeled=0        exit 0
     WIREPIN: FAIL tasks=3 wiring=2 unpinned=1 mislabeled=0        exit 0
     WIREPIN: UNSHAPED tasks=2 wiring=0 unpinned=0 mislabeled=0    exit 2
+    WIREPIN: UNREADABLE                                           exit 2
 
 `mislabeled` is on the summary line because a demotion FAILs with `wiring=0
 unpinned=0`: every count a reader would check reads clean, and a FAIL whose
@@ -243,14 +244,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("impl_plan", type=Path)
     args = parser.parse_args(argv)
 
+    # "<feature>.impl-plan.md" -> "<feature>" (project-agnostic, same as the audit gate).
+    # Derived from the path, so it is available even when the plan cannot be read —
+    # the UNREADABLE marker below needs it.
+    feature = args.impl_plan.name.split(".")[0] or "unknown"
+
     try:
         result = check(args.impl_plan)
     except OSError as exc:
+        # The caller's contract is "read the `WIREPIN:` token, never `$?`", so a
+        # failure announced on stderr alone is silence to anyone obeying it: no
+        # token is what "the gate never ran" also looks like. Emit one.
+        #
+        # Deliberately WITHOUT the `tasks=`/`wiring=` fields every other verdict
+        # carries. Those are counts of a parse that did not happen, and `tasks=` is
+        # no longer cosmetic — it selects the operator's remedy (`tasks=0` routes to
+        # `impl_plan_no_tasks`). Printing `tasks=0` here would fabricate the field
+        # the router keys on and hand a wrong-path error the no-tasks remedy, which
+        # is the misrouting the tasks=0 split exists to prevent. Absent counts also
+        # make the token self-evidently a different shape from a real verdict.
         print(f"ERROR: {exc}", file=sys.stderr)
+        print("WIREPIN: UNREADABLE")
+        print(
+            "  the plan could not be read, so nothing was judged — this is an "
+            "operational error, not a verdict about the plan's contents. Check the "
+            "path exists and is a readable file (halt `step5b:impl_plan_unreadable`)."
+        )
+        print(f"[H-MAD] {feature} wirepin UNREADABLE")
         return 2
-
-    # "<feature>.impl-plan.md" -> "<feature>" (project-agnostic, same as the audit gate).
-    feature = args.impl_plan.name.split(".")[0] or "unknown"
 
     print(
         f"WIREPIN: {result['verdict']} tasks={result['tasks']} "
