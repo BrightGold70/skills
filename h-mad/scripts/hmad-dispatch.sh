@@ -1655,6 +1655,55 @@ _preflight_conflict_check() {  # -> 0 ok, 1 conflict (message on stderr)
   return 1
 }
 
+_dispatch_boundary() {
+  # ONE definition of the marker, shared by `send` (pane path) and `exec`
+  # (exit-code path). It used to live only inside `_cmd_send`, which is how the two
+  # paths came to disagree about whether prompt echo was guarded at all: `send`
+  # sliced past it, `exec` had never heard of it. Single-source, per
+  # invariants.base.md §Single-source contract.
+  printf '%s\n' "${HMAD_DISPATCH_BOUNDARY:-===HMAD-DISPATCH-BOUNDARY===}"
+}
+
+_verdict_after_boundary() {  # $1 = transcript, $2 = boundary, $3 = echo_expected (1|0)
+  # Recover the agent's LAST verdict line, reading only the region the agent could
+  # have written — everything after the final echo of our own boundary.
+  #
+  # J23: this exists because `exec` recovery used to grep the WHOLE transcript.
+  # `codex exec ... -` echoes the piped prompt into that transcript, and a dispatch
+  # prompt states its output contract by listing the legal STATUS values one per
+  # line (references/codex-implementer-prompt.md requires it). So on a dispatch that
+  # never ran, `tail -1` returned the LAST option of our own contract block --
+  # deterministically `STATUS: NEEDS_CONTEXT` -- and the caller wrote it to --out,
+  # where h_mad_extract_verdict.py accepts it. Measured on a real 401-auth failure:
+  # the only four STATUS lines in a 20,770-byte log were the prompt's own, at
+  # 268/271/274/277. The "must start the line" guard cannot help; echoed contract
+  # lines do start the line.
+  #
+  # What a MISSING boundary means depends on the backend, so the caller says which:
+  #
+  #   $3=1 (codex) -- codex echoes its stdin, so our boundary is expected in the
+  #     transcript. If it is absent, the echo is absent or TRUNCATED, and a truncated
+  #     echo can still carry the contract block while losing the trailing boundary.
+  #     Grepping the whole log there would reopen the exact defect. Refuse instead:
+  #     no verdict is the honest answer, and silence is what the caller can act on.
+  #   $3=0 (agy) -- the prompt is an ARG, never echoed; the transcript is the response
+  #     alone, or content a caller pre-loaded into --log. There is no echo to skip and
+  #     no boundary to expect, so the whole transcript is fair game, exactly as before.
+  #
+  # Bias in both directions is toward silence: if the agent QUOTES the boundary back,
+  # the last occurrence lands inside its reply and we may slice past a real verdict.
+  # That fails to silence, not to a fabricated answer -- the whole point of the change.
+  local start=0 last
+  last="$(grep -aFn -- "$2" "$1" 2>/dev/null | tail -1 | cut -d: -f1)"
+  if [ -n "$last" ]; then
+    start="$last"
+  elif [ "${3:-0}" = "1" ]; then
+    return 0
+  fi
+  tail -n "+$((start + 1))" "$1" 2>/dev/null \
+    | grep -aE '^(STATUS|VERDICT):' | tail -1 || true
+}
+
 # $1 agent, $2 promptfile.
 #
 # Small prompts are inlined. Above HMAD_SEND_INLINE_MAX bytes (default 8192)
@@ -1693,7 +1742,7 @@ _cmd_send() {
   # Kept out of the >8192 file-read branch's file body ON PURPOSE: it must land in
   # the text that is actually TYPED into the pane (and thus echoed), which for a
   # large prompt is the "Read <abs>" line, not the untyped file.
-  local boundary="${HMAD_DISPATCH_BOUNDARY:-===HMAD-DISPATCH-BOUNDARY===}"
+  local boundary; boundary="$(_dispatch_boundary)"
 
   if [ "$size" -le "$max" ]; then
     _send_text "$agent" "$(cat "$promptfile")
@@ -1845,8 +1894,16 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
   # it — the exit code is the whole point of this verb. rc stays 0 on success.
   local rc=0 final_empty=0
+  # J23: append the SAME boundary `send` appends, so verdict recovery can tell our
+  # echoed prompt from the agent's answer. Delivered to both backends: codex echoes
+  # its stdin into the transcript (the defect), and agy does not — but a caller can
+  # point --log at a file that already holds echoed content, and one mechanism on
+  # both paths is cheaper to reason about than two.
+  local boundary; boundary="$(_dispatch_boundary)"
+  local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
+  { cat "$promptfile"; printf '\n%s\n' "$boundary"; } > "$bounded_prompt"
   if [ "$agent" = codex ]; then
-    local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || return 1
+    local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
     [ -n "$model" ] && args+=(--model "$model")
@@ -1856,9 +1913,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
     # run. rc comes from the codex process.
     if [ -n "$timeout" ]; then
-      _run_with_timeout "$timeout" codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
+      _run_with_timeout "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
     else
-      codex "${args[@]}" - < "$promptfile" > "$log" 2>&1 || rc=$?
+      codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
     fi
     if [ -s "$last" ]; then
       [ -n "$out" ] && cp "$last" "$out"
@@ -1880,7 +1937,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # prompt adjacent — every other flag goes before it. (A `--print` not adjacent to
     # the prompt silently ate the following flag as its prompt and dropped the real
     # one; agy then just greeted. Verified live.)
-    local prompt; prompt="$(cat "$promptfile")"
+    local prompt; prompt="$(cat "$bounded_prompt")"
     local args=(--dangerously-skip-permissions)
     [ -n "$model" ] && args+=(--model "$model")
     [ -n "$effort" ] && args+=(--effort "$effort")
@@ -1912,6 +1969,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     fi
     rm -f "$resp_file"
   fi
+  rm -f "$bounded_prompt"
 
   if [ "$final_empty" -eq 1 ]; then
     local msg
@@ -1923,7 +1981,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     fi
     echo "hmad-dispatch: exec: EMPTY final message — ${msg}; transcript: $log" >&2
     local recovered
-    recovered="$(grep -aE '^(STATUS|VERDICT):' "$log" 2>/dev/null | tail -1 || true)"
+    local echo_expected=0
+    [ "$agent" = codex ] && echo_expected=1
+    recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
     if [ -n "$recovered" ]; then
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
       printf '%s\n' "$recovered"
@@ -1931,7 +1991,14 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     fi
     if git -C "$cd_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local delta
-      delta="$(git -C "$cd_dir" status --porcelain 2>/dev/null | grep -c . || true)"
+      # J23: the `-- .` pathspec is load-bearing. `git -C <subdir> status --porcelain`
+      # reports the ENTIRE work tree, so a --cd into a subdirectory counted unrelated
+      # dirt elsewhere in the repo. Measured: `--cd .../hematology-paper-writer` said
+      # "1 changed" for a pre-existing file one directory ABOVE it, while
+      # `git status --short .` there was empty. The recovery protocol reads a non-zero
+      # delta as "the work landed, only the report failed", so a false non-zero argues
+      # against re-dispatching a task that in fact never ran.
+      delta="$(git -C "$cd_dir" status --porcelain -- . 2>/dev/null | grep -c . || true)"
       echo "hmad-dispatch: exec: tree delta: ${delta} changed in $cd_dir" >&2
     else
       echo "hmad-dispatch: exec: tree delta: n/a ($cd_dir not a git repo)" >&2

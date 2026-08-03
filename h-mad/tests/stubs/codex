@@ -5,7 +5,19 @@
 printf 'codex %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 
 # Consume stdin (the piped prompt); capture it if asked.
-if [ -n "${HMAD_STUB_STDIN_CAPTURE:-}" ]; then cat > "$HMAD_STUB_STDIN_CAPTURE"; else cat >/dev/null; fi
+# HMAD_STUB_CODEX_ECHO_STDIN models the REAL codex behaviour that produced the
+# verdict-laundering defect: `codex exec ... -` echoes the piped prompt into its
+# transcript, and the wrapper redirects that transcript to $log. Off by default so
+# the existing transcript-only tests keep asserting what they always did.
+_stdin=""
+if [ -n "${HMAD_STUB_STDIN_CAPTURE:-}" ]; then
+  _stdin="$(cat)"; printf '%s' "$_stdin" > "$HMAD_STUB_STDIN_CAPTURE"
+elif [ -n "${HMAD_STUB_CODEX_ECHO_STDIN:-}" ]; then
+  _stdin="$(cat)"
+else
+  cat >/dev/null
+fi
+[ -n "${HMAD_STUB_CODEX_ECHO_STDIN:-}" ] && printf '%s\n' "$_stdin"
 
 # Simulate a long-running task so the wrapper's --timeout watchdog can fire.
 [ -n "${HMAD_STUB_CODEX_SLEEP:-}" ] && sleep "$HMAD_STUB_CODEX_SLEEP"

@@ -23,6 +23,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_hmad_dispatch import _bindir, _git_repo, run  # noqa: E402
 
 
+# J23: `exec` appends the same boundary `send` does, so verdict recovery can tell our
+# echoed prompt from the agent's reply. Kept as a literal, NOT imported from the
+# script — a test that derives the constant from the code under test cannot catch the
+# code changing it.
+_BOUNDARY = "===HMAD-DISPATCH-BOUNDARY==="
+
+
 def _prompt(tmp_path, text="RED task: write a failing test."):
     p = tmp_path / "prompt.txt"
     p.write_text(text)
@@ -129,12 +136,18 @@ def test_codex_empty_last_message_exit_zero_is_reserved_rc3(tmp_path):
 
 
 def test_codex_empty_message_recovers_last_verdict_and_reports_tree_delta(tmp_path):
-    """AC-3.1 / AC-4.1: recover the anchored verdict and report changed paths."""
+    """AC-3.1 / AC-4.1: recover the anchored verdict and report changed paths.
+
+    J23: now runs with the stdin echo ON, because that is what real codex does — the
+    prompt, then our boundary, then the agent's own output. Modelling the transcript
+    without the echo let this test assert recovery from a log shape codex never emits.
+    """
     repo = _git_repo(tmp_path)
     changed = repo / "landed.txt"
     b = _bindir(tmp_path, ["codex"])
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(repo)],
             env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT="STATUS: DONE",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1",
                      HMAD_STUB_CODEX_TOUCH=str(changed)))
     assert r.returncode == 3, r.stderr
     assert r.stdout.strip() == "STATUS: DONE"
@@ -142,11 +155,16 @@ def test_codex_empty_message_recovers_last_verdict_and_reports_tree_delta(tmp_pa
 
 
 def test_codex_empty_message_uses_last_of_multiple_verdict_lines(tmp_path):
-    """AC-3.4: stale earlier verdicts must not win recovery."""
+    """AC-3.4: stale earlier verdicts must not win recovery.
+
+    J23: echo ON, as real codex does — so this also pins that "last wins" operates on
+    the agent's region only, not on the echoed prompt that precedes the boundary.
+    """
     b = _bindir(tmp_path, ["codex"])
     transcript = "reply with STATUS: INLINE\nSTATUS: FIRST\nVERDICT: LAST\n"
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
-            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT=transcript))
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_ECHO_STDIN="1",
+                     HMAD_STUB_CODEX_STDOUT=transcript))
     assert r.returncode == 3, r.stderr
     assert r.stdout.strip() == "VERDICT: LAST"
     assert "INLINE" not in r.stdout
@@ -220,7 +238,11 @@ def test_codex_exec_delivers_prompt_via_stdin(tmp_path):
     r = run(["exec", "codex", str(pf), "--cd", str(tmp_path)],
             env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(seen)))
     assert r.returncode == 0, r.stderr
-    assert seen.read_text() == "a" * 20000
+    # J23: the dispatch boundary is appended to whatever we deliver, so the prompt is
+    # a PREFIX of stdin now, not the whole of it. The point of this test is unchanged:
+    # the full 20k prompt survives the pipe.
+    assert seen.read_text().startswith("a" * 20000)
+    assert seen.read_text().rstrip().endswith(_BOUNDARY)
 
 
 def test_codex_exec_delivers_stdin_even_through_the_timeout_path(tmp_path):
@@ -232,7 +254,10 @@ def test_codex_exec_delivers_stdin_even_through_the_timeout_path(tmp_path):
     r = run(["exec", "codex", str(pf), "--cd", str(tmp_path), "--timeout", "30"],
             env=_env(b, HMAD_STUB_STDIN_CAPTURE=str(seen)))
     assert r.returncode == 0, r.stderr
-    assert seen.read_text() == "prompt through the watchdog"
+    assert seen.read_text().startswith("prompt through the watchdog")
+    # J23: the boundary must survive the backgrounded path too — if it were dropped
+    # here, verdict recovery would silently fall back to grepping the echoed prompt.
+    assert seen.read_text().rstrip().endswith(_BOUNDARY)
 
 
 def test_codex_exec_passes_model(tmp_path):
@@ -276,7 +301,8 @@ def test_agy_exec_runs_print_headless_prompt_as_last_arg(tmp_path):
     # followed by the prompt. A `--print` with a flag after it ate that flag as the
     # prompt and dropped the real one (verified live — agy just greeted).
     assert "--print audit this" in argv, f"--print must be adjacent to the prompt:\n{argv}"
-    assert argv.rstrip().endswith("audit this"), f"prompt must be the last arg:\n{argv}"
+    # J23: the prompt is still the last ARG; it now ends with the appended boundary.
+    assert argv.rstrip().endswith(_BOUNDARY), f"prompt must be the last arg:\n{argv}"
 
 
 def test_agy_exec_stdout_is_the_response(tmp_path):
@@ -356,7 +382,8 @@ def test_agy_exec_delivers_prompt_as_arg(tmp_path):
     r = run(["exec", "agy", str(_prompt(tmp_path, "the whole audit prompt")), "--cd", str(tmp_path)],
             env=_env(b, HMAD_STUB_AGY_PROMPT_CAPTURE=str(seen)))
     assert r.returncode == 0, r.stderr
-    assert seen.read_text() == "the whole audit prompt"
+    assert seen.read_text().startswith("the whole audit prompt")
+    assert seen.read_text().rstrip().endswith(_BOUNDARY)
 
 
 def test_agy_exec_timeout_kills_and_returns_124(tmp_path):
@@ -417,3 +444,207 @@ def test_exec_rejects_unknown_flag(tmp_path):
     assert r.returncode == 2
     assert "unknown option" in r.stderr.lower()
     assert "--sandbx" in r.stderr
+
+
+# --- J23: the exec recovery path must not launder the prompt's own contract block -----
+
+# The four legal STATUS values, as `references/codex-implementer-prompt.md` requires a
+# dispatch prompt to state them: fenced, one per line. Real codex echoes the piped
+# prompt into its transcript, so these land in $log verbatim.
+_CONTRACT_BLOCK = """\
+Finish by printing exactly one STATUS line:
+
+```
+STATUS: DONE
+```
+```
+STATUS: DONE_WITH_CONCERNS
+```
+```
+STATUS: BLOCKED
+```
+```
+STATUS: NEEDS_CONTEXT
+```
+"""
+
+
+def test_codex_failed_dispatch_does_not_launder_the_prompt_contract_as_a_verdict(tmp_path):
+    """J23 defect 1: recovery grepped the WHOLE transcript, prompt echo included.
+
+    Measured 2026-08-03 from a real Phase-5 dispatch that died on revoked Codex auth
+    (401): the only four `STATUS:` lines in the 20,770-byte log were the prompt's own
+    four fenced options at lines 268/271/274/277, so `tail -1` returned
+    `STATUS: NEEDS_CONTEXT` deterministically and line 1930 wrote it to `--out`, where
+    h_mad_extract_verdict.py accepts it without complaint. No agent-authored STATUS line
+    existed; the agent never ran. The `key-must-start-the-line` guard does not help --
+    the echoed contract lines do start the line.
+
+    Silence is the only correct answer here. `send` has had this guard since it was
+    written (see the boundary block in `_cmd_send`); `exec` did not.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "verdict.out"
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1"))
+    assert r.returncode == 1, "the agent's own exit code must survive"
+    # The whole point: no verdict may be manufactured from the echoed prompt.
+    assert "STATUS:" not in r.stdout, f"laundered a prompt line as a verdict: {r.stdout!r}"
+    assert r.stdout.strip() == ""
+    assert "verdict recovered from log" not in r.stderr
+    # And the primary channel must stay empty rather than hold a contract-valid lie.
+    assert not out.exists() or out.read_text().strip() == "", \
+        f"--out holds a fabricated verdict: {out.read_text()!r}"
+
+
+def test_codex_recovers_a_real_verdict_written_after_the_echoed_prompt(tmp_path):
+    """J23, the other half: the guard must not silence a GENUINE verdict.
+
+    Same echoed contract block, but this time the agent ran and answered. The real
+    reply lands after the echo, so slicing past the boundary keeps it. Without this,
+    the fix for the test above could simply be "never recover", which would break the
+    recovery path the `EMPTY final message` branch exists for.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "verdict.out"
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1",
+                     HMAD_STUB_CODEX_STDOUT="ran the task\nSTATUS: BLOCKED"))
+    assert r.returncode == 1, r.stderr
+    assert r.stdout.strip() == "STATUS: BLOCKED", r.stdout
+    assert "verdict recovered from log" in r.stderr
+    assert out.read_text().strip() == "STATUS: BLOCKED"
+
+
+def test_codex_tree_delta_counts_only_the_cd_subdir(tmp_path):
+    """J23 defect 2: `git -C <subdir> status --porcelain` reports the WHOLE work tree.
+
+    Measured: `--cd .../HemaSuite/hematology-paper-writer` reported `1 changed` while
+    `git status --short .` there was empty -- the counted file was one directory ABOVE
+    the --cd, pre-existing and unrelated. The recovery protocol reads a non-zero delta
+    as "the work happened, only reporting failed", so a false non-zero argues against
+    re-dispatching a task that never ran.
+    """
+    repo = _git_repo(tmp_path)
+    sub = repo / "sub"
+    sub.mkdir()                       # stays CLEAN — an empty dir is invisible to git
+    (repo / "outside.txt").write_text("dirty, and ABOVE the --cd\n")
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(sub)],
+            env=_env(b, HMAD_STUB_CODEX_LAST=""))
+    assert r.returncode == 3, r.stderr
+    assert "tree delta: 0 changed" in r.stderr, r.stderr
+
+
+def test_codex_tree_delta_still_counts_changes_inside_the_cd_subdir(tmp_path):
+    """J23 defect 2, the other half: scoping must not blind the counter.
+
+    Pairs with the test above so the fix cannot be "always report 0" -- a dirty file
+    INSIDE the --cd must still be counted, which is the signal the recovery protocol
+    actually reads.
+    """
+    repo = _git_repo(tmp_path)
+    sub = repo / "sub"
+    sub.mkdir()
+    (sub / "landed.txt").write_text("the agent's work\n")
+    (repo / "outside.txt").write_text("dirty, and ABOVE the --cd\n")
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(sub)],
+            env=_env(b, HMAD_STUB_CODEX_LAST=""))
+    assert r.returncode == 3, r.stderr
+    assert "tree delta: 1 changed" in r.stderr, r.stderr
+
+
+def test_codex_truncated_echo_without_the_boundary_recovers_nothing(tmp_path):
+    """J23 residual hole, found by replaying the real incident log against the fix.
+
+    The 20,770-byte evidence transcript predates the boundary, so slicing alone still
+    fabricated `STATUS: NEEDS_CONTEXT` from it — the "no boundary, grep everything"
+    fallback let the defect straight back in. The same shape occurs post-fix whenever
+    codex dies mid-echo: the contract block is already in the transcript, the trailing
+    boundary is not.
+
+    For codex the boundary is EXPECTED (it echoes stdin), so its absence means the echo
+    is missing or truncated and nothing in the log can be trusted as agent-authored.
+    Refuse. The agy path keeps the whole-log read — see the caller-log test above, which
+    must stay green.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "verdict.out"
+    # The transcript must carry the truncation, NOT a pre-written --log: the codex
+    # branch redirects with `> "$log"`, so it truncates a caller-supplied log before
+    # writing. (Found by a surviving mutant — the first version of this test seeded
+    # the log, watched the wrapper wipe it, and asserted against an empty file, so it
+    # passed with the guard removed.) Driving it through the stub's stdout is what
+    # actually puts a boundary-less contract block in front of the recovery code.
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_STDOUT="[codex] booting\n" + _CONTRACT_BLOCK))
+    assert r.returncode == 1, r.stderr
+    assert "STATUS:" not in r.stdout, f"truncated echo laundered a verdict: {r.stdout!r}"
+    assert "verdict recovered from log" not in r.stderr
+    assert not out.exists() or out.read_text().strip() == ""
+
+
+def test_codex_slices_past_the_LAST_boundary_not_the_first(tmp_path):
+    """J23: which occurrence is load-bearing when the boundary appears twice.
+
+    An agent that quotes its instructions back — or any transcript carrying a second
+    copy — puts the marker in the log more than once. Slicing at the FIRST occurrence
+    leaves everything between the two copies in the "agent-authored" region, and that
+    span still contains the echoed contract block, so the laundering returns. Only the
+    last occurrence bounds the region the agent could actually have written.
+
+    Written because a mutant that swapped `tail -1` for `head -1` on the boundary
+    lookup SURVIVED the rest of this file.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "verdict.out"
+    # The regions must actually DIFFER, or the test cannot tell the two apart: since
+    # both slices end at EOF, `tail -1` returns the same line whenever the real verdict
+    # is last. So put every STATUS line BETWEEN the two boundaries and let the agent
+    # die silently after the second — which is what a quote-then-crash looks like.
+    #   region after LAST  boundary -> empty        -> recover nothing (correct)
+    #   region after FIRST boundary -> the block    -> recover NEEDS_CONTEXT (the bug)
+    transcript = (
+        f"[codex] starting\n{_BOUNDARY}\n"
+        f"let me restate my instructions:\n{_CONTRACT_BLOCK}"
+        f"{_BOUNDARY}\n"
+    )
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_STDOUT=transcript))
+    assert r.returncode == 1, r.stderr
+    assert "NEEDS_CONTEXT" not in r.stdout, \
+        f"sliced at the first boundary and laundered the quoted block: {r.stdout!r}"
+    assert r.stdout.strip() == ""
+    assert not out.exists() or out.read_text().strip() == ""
+
+
+def test_codex_recovers_a_verdict_written_after_a_quoted_boundary(tmp_path):
+    """Pairs with the test above: slicing at the LAST boundary must not over-silence.
+
+    Same quote-the-instructions-back transcript, but the agent then answers. The reply
+    sits after the final boundary and must survive.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "verdict.out"
+    transcript = (
+        f"[codex] starting\n{_BOUNDARY}\n"
+        f"let me restate my instructions:\n{_CONTRACT_BLOCK}"
+        f"{_BOUNDARY}\n"
+        "ran the task\nSTATUS: DONE_WITH_CONCERNS\n"
+    )
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_STDOUT=transcript))
+    assert r.returncode == 1, r.stderr
+    assert r.stdout.strip() == "STATUS: DONE_WITH_CONCERNS", r.stdout
+    assert out.read_text().strip() == "STATUS: DONE_WITH_CONCERNS"

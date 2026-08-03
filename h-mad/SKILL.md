@@ -332,8 +332,8 @@ inferred by polling the buffer for idle and parsing a token — there is no proc
 to reap and no exit code. `exec` instead runs the agent headless as a real
 subprocess and returns the agent's own exit code with no idle poll. **It is the
 default for a one-shot 5d/5e dispatch** (see the guidance below), because the exit
-code is a hard completion signal and it sidesteps the whole pane failure class —
-tui-idle false-idle, prompt-echo, scrape, identity resolution. Both agents are
+code is a hard completion signal and it sidesteps most of the pane failure class —
+tui-idle false-idle, scrape, identity resolution. Both agents are
 supported, on their natural side of 5d/5e:
 
 - **`exec codex`** — the RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
@@ -452,9 +452,25 @@ instead of relying on the harness capture, and re-run rather than inferring the 
 
 **Default for a one-shot 5d/5e dispatch is `exec`.** A single self-contained RED/GREEN
 or a single audit cycle has no prior-cycle conversation to preserve, and the exit code
-is a hard completion signal — so `exec` sidesteps the entire pane failure class at once:
-no tui-idle false-idle, no boundary-echo, no scrape, no identity resolution. Monitor it
+is a hard completion signal — so `exec` sidesteps most of the pane failure class at once:
+no tui-idle false-idle, no scrape, no identity resolution. Monitor it
 by tailing `--log` (above); headless is not blind.
+
+**Prompt echo is NOT one of the things `exec` sidesteps — it is handled, which is a
+different claim.** `codex exec … -` echoes the piped prompt into its transcript, so the
+`exec` *failure* path reads a log that contains your own prompt. This shipped a real
+false verdict on 2026-08-03: a dispatch that died on revoked auth returned
+`STATUS: NEEDS_CONTEXT` — the last option of the prompt's own contract block — and wrote
+it to `--out`, where `h_mad_extract_verdict.py` accepted it. `exec` now appends the same
+`===HMAD-DISPATCH-BOUNDARY===` that `send` does and recovers only from after its last
+occurrence; for codex, a transcript with no boundary at all (a truncated echo) recovers
+**nothing** rather than guessing. Two consequences for you:
+
+- **A recovered verdict is still not a reported verdict.** Recovery reads a transcript,
+  not the agent's final message. Treat it as a hint for triage, never as the gate input.
+- **`tree delta: N changed in <dir>` is scoped to `--cd`** (it was whole-repo until the
+  same date, so a stale file elsewhere read as "the work landed"). A zero delta plus no
+  verdict is the honest signature of a dispatch that never ran — re-dispatch it.
 
 **Switch to the pane path when** the running revision thread matters — cycles 2..N of
 the *same* 5e ("here's the fix for your prior should-fix"), where `exec`'s fresh session
