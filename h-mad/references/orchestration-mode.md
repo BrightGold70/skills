@@ -135,6 +135,25 @@ report while Orca has recorded it as rejected. Measured — a hand-authored
 callback missing the flag was matched by `await` and rejected by Orca at the same
 time.
 
+**`await` refuses a rejected callback and says why.** Matching one is a false
+completion, so the match filter skips any message carrying
+`_orcaLifecycleRejection` — but skipping silently produces
+`await timed out … no matching worker_done`, which claims the module never
+reported. It did; the runtime refused the report. Those need opposite fixes, and
+only one of them is "wait longer". So `await` now parks the rejection (as
+`<task>.rejected.json` in the await cache, separate from a valid report and never
+served as success) and prints it on every failure path:
+
+```text
+[H-MAD] await: the runtime REJECTED task_49f723262b9c's worker_done (sender_not_assignee): dispatch ctx_… expected handle term_5597f6e0…; received handle term_aed16006…
+[H-MAD] await: the worker DID report — Orca refused the report, so waiting longer cannot help.
+[H-MAD] await: the callback came from a terminal that is not the dispatch's assignee. It must be sent FROM the dispatched pane.
+```
+
+Parking matters for the same reason the report cache does: in a fanout whoever
+awaits first acks the batch, and without parking it that ack destroys the one
+explanation of why this module will never report.
+
 The `<ctx-id>` comes from the **dispatch preamble Orca injects** when the task is
 dispatched; it is not knowable at `task-create` time. That is also why real
 Orca-dispatched workers were never affected: Orca's own injected preamble states

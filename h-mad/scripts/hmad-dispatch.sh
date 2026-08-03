@@ -983,20 +983,51 @@ _await_cache_put() {  # $1 = a `check` envelope — park every worker_done it ca
                               | if type == "object" then . else {} end;
       (.result.messages // .messages // [])[]?
       | select((.type // "") == "worker_done")
-      # J20: never park a lifecycle-REJECTED report. Caching one would launder a
-      # rejection into a later await success, which is the same false completion
-      # the match filter above refuses -- just deferred by a few seconds.
-      | select((pl | has("_orcaLifecycleRejection")) | not)
-      | {k: ((pl | .taskId) // .taskId // .["task-id"] // empty), m: .}
+      | {k: ((pl | .taskId) // .taskId // .["task-id"] // empty),
+         # J20: a lifecycle-REJECTED report is never parked as a valid one --
+         # that would launder a rejection into a later await success. J21: it is
+         # parked SEPARATELY instead of dropped, because it carries the only
+         # explanation of why this module will never report, and whoever awaits
+         # first would otherwise ack that explanation off the queue for good.
+         rej: (pl | has("_orcaLifecycleRejection")),
+         why: (pl | ._orcaLifecycleRejection // null),
+         m: .}
       | select(.k != null)' 2>/dev/null \
   | while IFS= read -r row; do
-      local key; key="$(printf '%s' "$row" | jq -r '.k' 2>/dev/null)" || continue
+      local key rej; key="$(printf '%s' "$row" | jq -r '.k' 2>/dev/null)" || continue
       # Guard the filename: a task id is `task_<hex>`, but never build a path out
       # of unvalidated remote input.
       case "$key" in ''|*/*|*..*) continue ;; esac
-      printf '%s' "$row" | jq -c '.m' > "$dir/$key.json" 2>/dev/null || true
+      rej="$(printf '%s' "$row" | jq -r '.rej' 2>/dev/null)"
+      if [ "$rej" = "true" ]; then
+        printf '%s' "$row" | jq -c '.why' > "$dir/$key.rejected.json" 2>/dev/null || true
+      else
+        printf '%s' "$row" | jq -c '.m' > "$dir/$key.json" 2>/dev/null || true
+      fi
     done
   return 0
+}
+
+_await_rejection_take() {  # $1 task_id — echo a parked rejection and consume it
+  local f; f="$(_await_cache_dir)/$1.rejected.json"
+  [ -f "$f" ] || return 1
+  cat "$f" || return 1
+  rm -f "$f"
+  return 0
+}
+
+_await_report_rejection() {  # $1 task_id, $2 rejection JSON — explain and remedy
+  local code reason
+  code="$(printf '%s' "$2" | jq -r '.code // "unknown"' 2>/dev/null)"
+  reason="$(printf '%s' "$2" | jq -r '.reason // ""' 2>/dev/null)"
+  echo "[H-MAD] await: the runtime REJECTED $1's worker_done (${code})${reason:+: $reason}" >&2
+  echo "[H-MAD] await: the worker DID report — Orca refused the report, so waiting longer cannot help." >&2
+  case "$code" in
+    missing_dispatch_id)
+      echo "[H-MAD] await: the callback omitted --dispatch-id. The <ctx-id> is in the dispatch preamble Orca injects; see references/orchestration-mode.md §Worker identity resolution." >&2 ;;
+    sender_not_assignee)
+      echo "[H-MAD] await: the callback came from a terminal that is not the dispatch's assignee. It must be sent FROM the dispatched pane." >&2 ;;
+  esac
 }
 
 _await_cache_take() {  # $1 task_id — echo a parked report and consume it, else rc 1
@@ -1040,6 +1071,21 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   # have. So: loop to an absolute deadline, ack each batch once inspected, and
   # exit NON-ZERO on timeout instead of echoing nothing and returning 0.
   local deadline=$(( SECONDS + timeout ))
+  # J21: a rejection seen for OUR task explains the whole wait. Remember it and
+  # report it at the end rather than failing fast — a worker may resend a valid
+  # callback after a rejected attempt (measured: both in one batch), so the
+  # rejection is a diagnosis for the timeout path, not a reason to stop waiting.
+  local our_rejection="" rejection_reported=0
+  our_rejection="$(_await_rejection_take "$task" 2>/dev/null || true)"
+  if [ -n "$our_rejection" ]; then
+    # Say it NOW, not at the timeout. An earlier await already parked this, so
+    # the runtime refused this task's report before we even started waiting --
+    # and the loop below has three exits that never reach the timeout block
+    # (replay-stuck, unackable batch, empty-batch break). Reporting only there
+    # left a cache-only rejection silent on exactly those paths.
+    _await_report_rejection "$task" "$our_rejection"
+    rejection_reported=1
+  fi
   local ack="" checked match count remaining
   while :; do
     remaining=$(( deadline - SECONDS ))
@@ -1076,6 +1122,30 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
     # (J19, see _await_cache_put). Best-effort by design: a cache failure must
     # degrade to the previous lossy behaviour, never abort a live await.
     _await_cache_put "$checked" || true
+    # A rejection for OUR task in this batch: capture it before the ack, and
+    # before _await_cache_put's copy is consumed by anyone else.
+    if [ -z "$our_rejection" ]; then
+      our_rejection="$(printf '%s' "$checked" | jq -c --arg t "$task" '
+        def pl: (.payload // {})
+                | if type == "string" then (fromjson? // {}) else . end
+                | if type == "object" then . else {} end;
+        [ (.result.messages // .messages // [])[]?
+          | select(((pl | .taskId) // .taskId // .["task-id"]) == $t)
+          | (pl | ._orcaLifecycleRejection)
+          | select(. != null) ] | .[0] // empty' 2>/dev/null || true)"
+      # We just took it out of the batch; drop the parked copy so a later await
+      # for this task does not report a rejection this one already owns.
+      if [ -n "$our_rejection" ]; then
+        _await_rejection_take "$task" >/dev/null 2>&1 || true
+        # Report the MOMENT it is known, not only on the timeout path: this loop
+        # has three other non-zero exits (replay-stuck, unackable batch, and the
+        # empty-batch break), and a diagnosis that only prints on one of them is
+        # the same silence this change exists to remove. Caught by its own test —
+        # the replay-stuck exit swallowed it.
+        _await_report_rejection "$task" "$our_rejection"
+        rejection_reported=1
+      fi
+    fi
     # Ack it so the next check advances past it.
     #
     # OBSERVED LIVE 2026-08-03 (this comment previously said the field "could not
@@ -1116,6 +1186,15 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
       return 1
     fi
   done
+  # J21: name the rejection FIRST when there is one. "no matching worker_done"
+  # alone says the module never reported; a rejection says it did and the runtime
+  # refused it — opposite fixes, and only one of them is waiting longer.
+  if [ -z "$our_rejection" ]; then
+    our_rejection="$(_await_rejection_take "$task" 2>/dev/null || true)"
+  fi
+  if [ -n "$our_rejection" ] && [ "$rejection_reported" -eq 0 ]; then
+    _await_report_rejection "$task" "$our_rejection"
+  fi
   echo "[H-MAD] await timed out after ${timeout}s (task=$task; no matching worker_done)" >&2
   return 1
 }
