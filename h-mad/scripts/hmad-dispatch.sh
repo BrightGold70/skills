@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -85,6 +85,79 @@ _coordinator() {  # echo the coordinator handle or fail with a message
     if [ -n "$handle" ]; then printf '%s\n' "$handle"; return 0; fi
   fi
   echo "hmad-dispatch: no coordinator — set HMAD_ORCA_COORDINATOR_TERMINAL (auto-detect from ORCA_PANE_KEY failed)" >&2; return 1
+}
+
+_run_bound() {  # echo bound Run id (rc 0) | rc 1 = genuinely unbound | rc 2 = unknown
+  # `task-list` is the cheapest read that reports the binding: bound terminals get
+  # `.result.runId`, unbound ones get `{"ok":false,"error":{"code":"run_required"}}`.
+  #
+  # The three outcomes are kept DISTINCT on purpose. Collapsing "unbound" and
+  # "something else went wrong" into one empty string means any transient probe
+  # failure looks like "no Run yet" and silently creates a second Run — which
+  # scatters one fanout's tasks across two namespaces, so the coordinator's `check`
+  # never sees half its workers. Only the documented `run_required` code may be
+  # read as unbound; anything else refuses to guess.
+  local out code rid
+  out="$(orca orchestration task-list --json 2>/dev/null)" || true
+  if printf '%s' "$out" | jq -e '.ok != false' >/dev/null 2>&1; then
+    rid="$(printf '%s' "$out" | jq -r '.result.runId // empty' 2>/dev/null | head -1)"
+    # A bound terminal ALWAYS reports runId; ok:true without one is a shape we do
+    # not recognise, not evidence of "unbound". Fall through to the refusal below
+    # rather than inventing a Run from a response we cannot read.
+    if [ -n "$rid" ]; then printf '%s\n' "$rid"; return 0; fi
+    echo "hmad-dispatch: Run probe returned ok with no runId; refusing to create a Run on a guess" >&2
+    return 2
+  fi
+  code="$(printf '%s' "$out" | jq -r '.error.code // empty' 2>/dev/null)"
+  [ "$code" = "run_required" ] && return 1
+  echo "hmad-dispatch: Run probe failed (${code:-unrecognised response}); refusing to create a Run on a guess" >&2
+  return 2
+}
+
+_run_ensure() {  # guarantee this coordinator terminal has a bound Run; echo its id
+  # WHY THIS EXISTS: every orchestration mutation belongs to an explicitly bound
+  # Run ("New orchestration messages and tasks belong to one explicitly bound Run"
+  # — orchestration guide §Ownership; "Create or bind a Run once before the common
+  # loop" — §Tasks And Dispatch). Without one the FIRST call of the flow fails:
+  #
+  #   $ orca orchestration task-list --json
+  #   {"ok":false,"error":{"code":"run_required",
+  #    "message":"No Run is bound. Use orchestration run-create or run-use first."}}
+  #
+  # This wrapper never bound one, so task-create — the entry point of
+  # task-create → dispatch → worker_done → await → gate — returned ok:false and the
+  # whole structured path died at step one. The Run model became mandatory in a
+  # contract migration after this wrapper was written (`run-list` still shows the
+  # `run_legacy_local` tombstone and a "Recovered orchestration work from a contract
+  # update" Run), which is why stub-only tests never noticed.
+  #
+  # Binding is per-coordinator-terminal runtime state and PERSISTS ACROSS separate
+  # CLI processes (verified live: run-create, then task-list from a fresh process,
+  # returns the same runId). So binding once per session is enough — this is called
+  # from task-create, the first mutation in the flow.
+  local rid
+  if [ -n "${HMAD_ORCA_RUN:-}" ]; then
+    # Explicit pin wins, same precedence as HMAD_ORCA_COORDINATOR_TERMINAL. Bind to
+    # it rather than assuming it is already bound — the pin may name a Run created
+    # by another pane.
+    _orca_json '' orchestration run-use --id "$HMAD_ORCA_RUN" --json || {
+      echo "hmad-dispatch: HMAD_ORCA_RUN=$HMAD_ORCA_RUN could not be bound (run-use failed)" >&2; return 1; }
+    printf '%s\n' "$HMAD_ORCA_RUN"; return 0
+  fi
+  local rc=0
+  rid="$(_run_bound)" || rc=$?
+  # rc 2 = the probe itself failed. Creating a Run here would be acting on a guess,
+  # so propagate instead (the message is already on stderr).
+  [ "$rc" -eq 2 ] && return 1
+  if [ "$rc" -eq 0 ] && [ -n "$rid" ]; then printf '%s\n' "$rid"; return 0; fi
+  # Unbound: create one. run-create binds it to the creating terminal automatically
+  # (the response carries coordinator_handle + coordinator_pane_key), so no separate
+  # run-use is needed here.
+  local objective="${HMAD_ORCA_RUN_OBJECTIVE:-H-MAD orchestration ($(basename "$PWD"))}"
+  rid="$(_orca_json '.result.run.id // .result.runId' orchestration run-create --objective "$objective" --json)" || return $?
+  [ -n "$rid" ] || { echo "hmad-dispatch: run-create returned no run id; cannot bind a Run" >&2; return 1; }
+  echo "[H-MAD] orchestration run bound: $rid ($objective)" >&2
+  printf '%s\n' "$rid"
 }
 
 _orchestration_active() {  # 0 iff substrate=orca AND a coordinator resolves (pin or auto-detect)
@@ -484,7 +557,24 @@ _cmd_env() {
     conflict_handle="$seen_codex"
     echo "CONFLICT: codex and agy both resolve to $seen_codex — at least one is wrong; pin them explicitly"
   fi
-  if _orchestration_active; then echo "orchestration: on"; else echo "orchestration: off"; fi
+  if _orchestration_active; then
+    echo "orchestration: on"
+    # Report the Run binding too. `orchestration: on` alone was misleading: it means
+    # substrate+coordinator are present, which says nothing about whether a Run is
+    # bound — and with no Run every mutation fails `run_required`. Read-only here;
+    # task-create binds on demand. "(none — will bind on task-create)" is the normal
+    # pre-flow state, not a fault.
+    if [ "$sub" = "orca" ]; then
+      # `|| _rid=""` is load-bearing: _run_bound returns 1 for "unbound" and 2 for
+      # "probe failed", and under `set -e` a bare assignment would abort `env`
+      # outright — turning a diagnostic command into a hard failure exactly when
+      # you are running it to diagnose something.
+      local _rid; _rid="$(_run_bound 2>/dev/null)" || _rid=""
+      echo "orchestration run: ${_rid:-(none — will bind on task-create)}"
+    fi
+  else
+    echo "orchestration: off"
+  fi
   # PREFLIGHT verdict — the machine-consumable form of the STALE/CONFLICT lines above.
   # A FAIL is something an orchestrator must ACT on; an agent that is merely
   # UNRESOLVED is not a failure, it is an ordinary un-set-up session.
@@ -691,6 +781,9 @@ _cmd_task_create() {  # $1 label, $2 specfile
   [ -f "$2" ] || { echo "hmad-dispatch: spec file not found: $2" >&2; return 2; }
   local coord spec
   coord="$(_coordinator)" || return 1
+  # Bind a Run before the first mutation of the flow. Without this the CLI rejects
+  # task-create with `run_required` and the whole structured path dies here.
+  _run_ensure >/dev/null || return $?
   spec="[H-MAD] worker_done coordinator handle (use as --to): ${coord}
 
 $(cat "$2")"
@@ -727,17 +820,76 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
   # envelope, ok-checked), THEN run the worker_done filter. A raw pipe swallowed
   # an exit-0 "ok":false as `[]` → empty match → indistinguishable from "no
   # worker_done yet" → silent timeout (F11 scope, extended to the raw verbs).
-  local checked
-  checked="$(_orca_json '.' orchestration check --terminal "$coord" --wait --types worker_done --timeout-ms "$(( timeout * 1000 ))" --json)" || return $?
-  printf '%s' "$checked" \
-    | jq -c --arg t "$task" '
-        (.result.messages // .messages // [])
-        | map(select(
-            (((.payload // {})
-              | if type == "string" then (fromjson? // {}) else . end
-              | if type == "object" then .taskId else null end)
-             // .taskId // .["task-id"]) == $t))
-        | .[0] // empty'
+  #
+  # A coordinator `check` returns the bound Run's OLDEST UNACKNOWLEDGED Delivery
+  # and REPLAYS that exact batch until `--ack <delivery_id>` — stated by both the
+  # orchestration guide (§Messaging: "replays that exact batch until --ack") and
+  # `orca orchestration check --help` ("default: return the bound Run's oldest
+  # unacknowledged FIFO batch"). A single un-acked call is therefore NOT a wait:
+  # once any delivery is outstanding, every later check returns that same stale
+  # batch immediately. In a Phase-5 fanout (up to HMAD_ORCA_MAX_WORKTREES
+  # concurrent modules, each awaited in turn) modules 2..N got module 1's batch
+  # back at once, the taskId filter missed, and the old `jq '.[0] // empty'`
+  # exited 0 on an empty match — so a worker that had NOT reported read as a
+  # successful await. That is a false completion, the worst failure a gate can
+  # have. So: loop to an absolute deadline, ack each batch once inspected, and
+  # exit NON-ZERO on timeout instead of echoing nothing and returning 0.
+  local deadline=$(( SECONDS + timeout ))
+  local ack="" checked match count remaining
+  while :; do
+    remaining=$(( deadline - SECONDS ))
+    [ "$remaining" -gt 0 ] || break
+    local args=(orchestration check --terminal "$coord")
+    # `check --ack <id> --wait` acknowledges, checks, and waits in one call, so
+    # the ack rides along with the next wait rather than costing a round trip.
+    [ -n "$ack" ] && args+=(--ack "$ack")
+    args+=(--wait --types worker_done --timeout-ms "$(( remaining * 1000 ))" --json)
+    checked="$(_orca_json '.' "${args[@]}")" || return $?
+    match="$(printf '%s' "$checked" \
+      | jq -c --arg t "$task" '
+          (.result.messages // .messages // [])
+          | map(select(
+              (((.payload // {})
+                | if type == "string" then (fromjson? // {}) else . end
+                | if type == "object" then .taskId else null end)
+               // .taskId // .["task-id"]) == $t))
+          | .[0] // empty')"
+    if [ -n "$match" ]; then printf '%s\n' "$match"; return 0; fi
+    count="$(printf '%s' "$checked" | jq -r '(.result.messages // .messages // []) | length')"
+    # Empty batch ⇒ `--wait` blocked the whole remaining window and no worker_done
+    # arrived, so the deadline is spent: break to the timeout path. Do NOT `continue`
+    # here — a CLI (or stub) that returns empty immediately instead of blocking would
+    # turn that into a hot spin for the full timeout. Breaking fails CLOSED: worst case
+    # is a spurious timeout, which is the correct bias for a gate (cf. gate-wait).
+    [ "${count:-0}" -gt 0 ] || break
+    # Non-empty batch with no match for OUR task — it belongs to a sibling module.
+    # Ack it so the next check advances past it. Multi-key because the delivery-id
+    # field could not be observed live (it appears only on a non-empty coordinator
+    # Delivery, which needs a bound Run and pending mail); same defensive shape as
+    # task-create's `.result.task.id // .result.taskId // .taskId`.
+    local prev="$ack"
+    ack="$(printf '%s' "$checked" | jq -r '
+      .result.delivery_id // .result.deliveryId // .result.delivery.id
+      // .delivery_id // .deliveryId // empty')"
+    if [ -n "$prev" ] && [ "$ack" = "$prev" ]; then
+      # We already acked this exact delivery and got it back. The ack is not
+      # advancing the queue, so every further iteration is a hot spin that would
+      # end in a misleading plain timeout. Stop and name the stuck id.
+      echo "[H-MAD] await: delivery ${ack} replayed after --ack (task=$task); the queue is not advancing." >&2
+      return 1
+    fi
+    if [ -z "$ack" ]; then
+      # Cannot ack ⇒ the identical batch replays forever. Spinning here would burn
+      # the whole timeout re-reading one stale delivery and then report a plain
+      # timeout, hiding the real cause. Fail LOUD with the shape we actually got.
+      echo "[H-MAD] await: delivery of ${count} message(s) carried no recognisable ack id (task=$task)." >&2
+      echo "[H-MAD] await: without --ack this batch replays forever; check the response shape:" >&2
+      printf '%s' "$checked" | jq -c '.result | keys' >&2 2>/dev/null || true
+      return 1
+    fi
+  done
+  echo "[H-MAD] await timed out after ${timeout}s (task=$task; no matching worker_done)" >&2
+  return 1
 }
 
 _cmd_gate_create() {  # $1 task_id, $2 question, [$3 options-json]
@@ -820,22 +972,36 @@ _cmd_worktree_comment() {  # [<selector>] <text>
   _orca_json '' worktree set --worktree "$sel" --comment "$text" --json
 }
 
-_cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--workspace <sel>|--project <id>]
+_cmd_worktree_create() {  # <name> [--agent <id>] [--base <ref>] [--prompt-file <path>] [--repo <sel>|--project <id>]
+  # NOTE: no --workspace here. `orca automations create` accepts --workspace (and
+  # --workspace-mode), but `orca worktree create` does NOT -- its full option set is
+  # --repo/--project/--project-host-setup/--host for targeting. Forwarding --workspace
+  # made the CLI reject the whole create. Verified by enumerating both --help surfaces.
   _require_orca worktree-create || return $?
   _need "${1:-}" name || return $?
   local name="$1"; shift
-  local agent="" base="" pf="" repo="" ws="" proj=""
+  local agent="" base="" pf="" repo="" proj="" setup="run"
   while [ $# -gt 0 ]; do case "$1" in
     --agent) agent="$2"; shift 2 ;; --base) base="$2"; shift 2 ;;
     --prompt-file) pf="$2"; shift 2 ;;
-    --repo) repo="$2"; shift 2 ;; --workspace) ws="$2"; shift 2 ;; --project) proj="$2"; shift 2 ;;
+    --repo) repo="$2"; shift 2 ;; --project) proj="$2"; shift 2 ;;
+    --setup) setup="$2"; shift 2 ;;
     *) _unknown_opt worktree-create "$1"; return $? ;; esac; done
   local args=(worktree create --name "$name")
   [ -n "$agent" ] && args+=(--agent "$agent")
   [ -n "$base" ] && args+=(--base-branch "$base")
   [ -n "$repo" ] && args+=(--repo "$repo")
-  [ -n "$ws" ]   && args+=(--workspace "$ws")
   [ -n "$proj" ] && args+=(--project "$proj")
+  # --setup defaults to `run`, not to the CLI's own default. The CLI default is
+  # `inherit`, which follows the REPO's setup policy -- so whether a fanout worker
+  # gets a prepared tree depends on a per-repo Orca setting this wrapper does not
+  # control. Every repo on the current host happens to be `run-by-default`, so this
+  # is not a live bug; it is the latent one where a repo configured otherwise starts
+  # a worker in an unprepared checkout and the coordinator only sees the failure
+  # downstream. The orchestration guide says to pass `run` for every new worktree and
+  # to use skip/inherit "only when there is a concrete task-specific reason" -- which
+  # is what the explicit `--setup <policy>` override is for.
+  args+=(--setup "$setup")
   if [ -n "$pf" ]; then
     [ -f "$pf" ] || { echo "hmad-dispatch: prompt file not found: $pf" >&2; return 2; }
     args+=(--prompt "$(cat "$pf")")
@@ -1636,6 +1802,7 @@ main() {
     wait)   _cmd_wait "$@" ;;
     alive)  _cmd_alive "$@" ;;
     notify) _cmd_notify "$@" ;;
+    run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
     dispatch) _cmd_dispatch "$@" ;;
     await) _cmd_await "$@" ;;
