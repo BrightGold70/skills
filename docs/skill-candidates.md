@@ -10,7 +10,12 @@ reason) · `done` (legacy spelling of LANDED).
 
 ## Open, highest recurrence first (reconciled 2026-08-03)
 
-**No `candidate: yes` remains unlanded.** The 2026-07-24 sweep drained everything up to that date;
+**One `candidate: yes` is open: `orca-verb-live-reconcile` (rec 3).** It cleared the promotion bar
+during the 2026-08-03 closeout scout — probing the live `orchestration check` response for a
+delivery-id field is what surfaced `run_required`, a blocker no stub test could see. Promote it next
+session, not in the same breath as the scout that raised it.
+
+Everything else is reconciled. The 2026-07-24 sweep drained everything up to that date;
 the 2026-08-03 sweep reconciled the five `yes` rows the 08-01→08-03 sessions added. Four of those
 five described work that had **already shipped** — the same stale-row pattern the
 `verify-backlog-row-premise-vs-code` rule exists for, and the reason status here is worth nothing
@@ -28,6 +33,7 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 | 3 | `two-direction mutation harness` | **LANDED** — `h-mad/scripts/h_mad_mutation_harness.py` |
 | 3 | `doc-literal pin test` | **LANDED** — practice across 5 doc-test files; rule in invariants.base.md §Test discrimination |
 | 3 | `wire-scoped revert probe` | **SUPERSEDED** — the bundled mutation harness *is* this tool (exact-string replace, refuses unless the anchor matched exactly once, restores and verifies on every path) |
+| 3 | `orca-verb-live-reconcile` | **OPEN** — promoted 2026-08-03. Live create→list→remove against the real runtime after shipping an orca-wrapping verb; the live probe (not the review) found `run_required` |
 | 2 | `both-halves doc fix` | **LANDED** — invariants.base.md §Both halves of a doc change |
 | 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep` | *maybe* — not yet needed |
 | 2 | `test-the-shipped-function-not-a-copy` | **LANDED** — invariants.base.md §Single-source contract ("independent re-implementations that can silently diverge are a violation"); also structurally moot, since every bash test drives the real script via subprocess rather than a copy |
@@ -49,7 +55,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 ## 2026-07-21 — orca-arc-complete-hemasuite-wiring
 
-- **orca-verb-live-reconcile**: after shipping an orca-wrapping verb, run a live create→list→remove cycle against the real runtime and fix output-key extraction — recurrence: 2 (worktree-create + automation-create both had the envelope-.id bug) — candidate: maybe
+- **orca-verb-live-reconcile**: after shipping an orca-wrapping verb, run a live create→list→remove cycle against the real runtime and fix output-key extraction — recurrence: 3 (worktree-create + automation-create envelope-.id bug; 2026-08-03 probing the live `check` response for a delivery-id field is what surfaced `run_required` — orchestration mode had been dead at step one and no stub test could see it) — candidate: yes (promoted 2026-08-03 — the live probe, not the review, found the blocker)
 - **hmad-full-cycle-driver**: the repeated author-docs→agy-audit(2cyc)→Codex-TDD→verify→agy-5e→6a-prime→ship sequence ran 4× this session — recurrence: 4 — candidate: no (already the /h-mad skill)
 
 ## 2026-07-22 — h-mad-fourteen-issues-shipped
@@ -135,7 +141,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 ## 2026-07-29 — verifier-dogfood-and-handover
 
-- **dogfood-a-bundled-prompt-live**: after bundling a new agent-prompt template, exercise it via `hmad-dispatch exec` before trusting it — stage the `<INLINE_*>` slots against real code, run once TRUE (expect DONE) and once with a seeded FALSE property (expect BLOCKED), extract the verdict, and grep the agent's own quoted numbers. Caught that the verifier's full-suite step was impractical (codex re-runs a PTY-dots suite → timeout) → template fix. — recurrence: 2 (exec-transport-smoke + this) — candidate: maybe (the discipline is real; overlaps the verifier template's own crosscheck)
+- **dogfood-a-bundled-prompt-live**: after bundling a new agent-prompt template, exercise it via `hmad-dispatch exec` before trusting it — stage the `<INLINE_*>` slots against real code, run once TRUE (expect DONE) and once with a seeded FALSE property (expect BLOCKED), extract the verdict, and grep the agent's own quoted numbers. Caught that the verifier's full-suite step was impractical (codex re-runs a PTY-dots suite → timeout) → template fix. — recurrence: 3 (exec-transport-smoke; verifier template; 2026-08-03 the agy skill-reviewer — where dogfooding found TWO defects in the freshly-bundled prompt: a slot bracketed in prose across all five reference prompts, and an unbounded probe that wrote a junk entry into the project's permanent learnings file) — candidate: maybe (the discipline is real and keeps paying; overlaps the verifier template's own crosscheck)
 - **scoped-dispatch-to-isolate-a-step**: when one step of a multi-step dispatch is environmentally impractical (a 4.5-min full suite codex re-runs), re-dispatch a SCOPED prompt with that step dropped to prove the rest cleanly, then fix the step's ownership in the template — recurrence: 1 — candidate: no (a one-off debugging move, not a reusable skill)
 
 
@@ -193,3 +199,10 @@ before concluding a row is inert — one row sat inert for a day while naming it
 - **agy-skill-review**: `hmad-dispatch exec agy <prompt-file> --cd --out --log --timeout`, read the report yourself, verify EVERY finding against the file, then fix + TDD + mutation-test. Ran three times now (handoff, h-mad, orca-cli) with the same prompt scaffold — role, read-in-full vs read-on-demand, depth-over-breadth cap, findings classified by who can act, required Must/Should/Nice + Verdict — recurrence: 3 (4 including the 2026-08-03 `orchestration` review) — candidate: **LANDED** (2026-08-03) — `h-mad/references/agy-skill-reviewer-prompt.md` + SKILL.md §Reviewing a skill with agy. Dogfooding the bundled template found two defects in it (a slot bracketed in prose across all five reference prompts; an unbounded probe that wrote to the project's learnings file).
 - **verify-inbound-handover**: On receiving a handover, run its reproduce commands before adopting any premise — 3 of 5 items were re-verified true, and the two the sender had already corrected were confirmed rather than assumed — recurrence: 1 (but now codified as TAKEOVER Step 2 in the skill) — candidate: no (shipped as skill guidance)
 - **mutation-survivor-triage**: Diagnose a survivor as weak test / equivalent mutant / pre-existing weak test before acting — recurrence: 2 sessions — candidate: no (belongs to the mutation memory + harness docs, not a separate skill)
+
+## 2026-08-03 — orchestration-fixes-skill-reviewer
+
+- **verify-vendor-flags-against-`--help`**: before reporting a wrapped CLI's flag/subcommand as missing, unsupported, or renamed, run `<cmd> --help` and quote the real signature — the vendor's own guide lags the binary. Six flags checked this session; four "undocumented flag" findings were all real flags the 388-line guide omits, and two of those four were self-generated because the review prompt named the guide as ground truth — recurrence: 4 (one per false finding) — candidate: **LANDED** (2026-08-03) — `h-mad/references/agy-skill-reviewer-prompt.md` §"Ground truth is the binary" + SKILL.md §"Reviewing a skill with agy"; memory `feedback_vendor_managed_skills_not_patchable`
+- **integration-probe-before-merging-to-main**: cut a throwaway branch from `main`, merge there, run the full suite AND re-run every mutation spec, then merge to `main` only if green. `merge-tree` clean and a marker-free `git merge` both passed while the union was red — a coverage guard on one branch fired on a file that exists only on the other, so neither branch could fail alone — recurrence: 2 (the recorded 2026-08-03 batch-merge row + this) — candidate: **LANDED as a practice** — memory `feedback_union_green_not_merge_clean`. Not scripted: the probe branch is meant to be deleted, and a permanent script would contradict that.
+- **coverage-assertion-over-site-scoped-doc-test**: when a rule spans several files, assert it over *every* file (walk the tree, collect offenders, assert the list is empty) instead of pinning one literal at one site — and match instances, not mentions. A site-scoped test stayed green while the `git add -N` fix was missing from 3 of 4 places naming the hazard — recurrence: 2 (stash sites; bracketed-slot wildcard across five prompts) — candidate: **LANDED** — `invariants.base.md` §Test discrimination covers the rule; the 8th hazard is recorded in memory `feedback_mutation_test_every_guard`
+- **bound-the-probes-you-invite**: a review prompt that tells an agent to run commands must say which ones are read-only. The freshly-bundled skill-reviewer invited `--help` probes without bounding them and the reviewer probed a *mutating* verb, writing a junk entry into the project's permanent learnings file — recurrence: 1 — candidate: **LANDED** (2026-08-03) — the template's "Probes must be read-only" block, mutation-guarded

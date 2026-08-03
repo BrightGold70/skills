@@ -20,9 +20,15 @@ List what is still open — the check is bounded to those rows, so it stays chea
 
 ```bash
 # anchored on the row shape (`- **name**: …`), or prose that merely quotes the phrase
-# "candidate: yes" matches too and you re-check the file's own header every session
-grep -nE '^- \*\*.*candidate: yes' docs/skill-candidates.md | grep -vE 'LANDED|SUPERSEDED|DECLINED'
+# "candidate: yes" matches too and you re-check the file's own header every session.
+# `\**` tolerates a bolded verdict: bold is this file's convention for the TERMINAL
+# states, so a `candidate: **yes**` slip would otherwise be invisible to this very
+# check — which happened the first time the step was run.
+grep -nE '^- \*\*.*candidate: \**yes' docs/skill-candidates.md | grep -vE 'LANDED|SUPERSEDED|DECLINED'
 ```
+
+Keep `yes`/`maybe` **unbolded** when you write a row; reserve bold for `LANDED` / `SUPERSEDED` /
+`DECLINED`, which is what the rest of the file does.
 
 That is the actionable set. `candidate: maybe` rows are mostly parked provenance ("this IS the
 /h-mad skill") — swap `yes` for `maybe` and skim them only when the `yes` set is empty, or you will

@@ -248,9 +248,11 @@ def test_scout_reconciles_open_rows_before_appending() -> None:
     text = " ".join(SCOUT.read_text(encoding="utf-8").split())
     assert "### Reconcile the open rows FIRST" in text, "the scout is append-only again"
     assert "before** appending" in text, "ordering matters: appending first dilutes the pass"
-    assert "grep -nE '^- \\*\\*.*candidate: yes' docs/skill-candidates.md" in text, (
-        "the runnable command must be present, and anchored on the row shape — an "
-        "unanchored grep matches the file's own prose and re-checks it every session"
+    assert "grep -nE '^- \\*\\*.*candidate: \\**yes' docs/skill-candidates.md" in text, (
+        "the runnable command must be present, anchored on the row shape (an unanchored "
+        "grep matches the file's own prose), AND tolerant of a bolded verdict — bold is "
+        "this file's convention for terminal states, so `candidate: **yes**` was "
+        "invisible to this check the first time the step ran"
     )
     assert "against source, not against the label" in text, (
         "a row is a claim by a past session; trusting the label is what let 4 stale "
