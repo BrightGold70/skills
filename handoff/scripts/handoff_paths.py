@@ -121,8 +121,37 @@ def find_latest(branch: str | None = None, start: Path | None = None) -> Path | 
     return files[-1]
 
 
+def _resolve_start(repo: str | None) -> Path | None:
+    """Validate a `--repo` target, or None to resolve from the cwd as before.
+
+    Both checks exist because every failure here is SILENT otherwise:
+    `canonical_root` falls back to the path it was handed when git cannot answer,
+    so a typo'd or non-repo target resolves to `<that path>/docs/handoffs` — a
+    real-looking directory the writer would happily create and the receiver would
+    never read. A handover that reports success while filing the brief somewhere
+    nobody looks is worse than one that refuses.
+    """
+    if repo is None:
+        return None
+    path = Path(repo).expanduser()
+    if not path.is_dir():
+        raise SystemExit(f"handoff_paths: --repo {repo}: no such directory")
+    if _git(["rev-parse", "--is-inside-work-tree"], cwd=path) != "true":
+        raise SystemExit(f"handoff_paths: --repo {repo}: not inside a git work tree")
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Canonical handoff/learnings paths")
+    # Resolve against ANOTHER repo/worktree instead of the cwd. Every function
+    # below already took `start`; this exposes it, which is what a handover needs
+    # to write into the RECEIVER's store rather than the sender's.
+    ap.add_argument(
+        "--repo",
+        default=None,
+        metavar="PATH",
+        help="resolve paths for the repo/worktree at PATH instead of the cwd",
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("dir")           # canonical docs/handoffs dir
     sub.add_parser("learnings")     # canonical docs/learnings.md
@@ -131,17 +160,18 @@ def main(argv: list[str] | None = None) -> int:
     p_latest = sub.add_parser("latest")
     p_latest.add_argument("--branch", default=None)
     args = ap.parse_args(argv)
+    start = _resolve_start(args.repo)
 
     if args.cmd == "dir":
-        print(handoffs_dir())
+        print(handoffs_dir(start))
     elif args.cmd == "learnings":
-        print(learnings_path())
+        print(learnings_path(start))
     elif args.cmd == "branch-slug":
-        print(branch_slug())
+        print(branch_slug(start))
     elif args.cmd == "root":
-        print(canonical_root())
+        print(canonical_root(start))
     elif args.cmd == "latest":
-        latest = find_latest(args.branch)
+        latest = find_latest(args.branch, start)
         if latest is None:
             return 1
         print(latest)

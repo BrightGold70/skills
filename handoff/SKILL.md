@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use this skill in three modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session.
+description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
 ---
 
 # Handoff
@@ -14,6 +14,9 @@ Before doing anything else, identify which mode applies:
 | `/handoff`, "wrap up", "session summary", "close out", "document what we did", "leave notes" | **WRITE** |
 | "read handoff", "resume", "where did we leave off", "pick up where we left off", "continue from last session", invoked right after `/clear` | **READ** |
 | "save this learning", "remember this", "log this gotcha", "capture this pattern", "add to learnings", "search past learnings" | **LEARN** |
+| "hand this over", "hand off <work> to <worktree/repo>", "give this task to another worktree", "transfer this feature", "this belongs to <other repo>'s todo" — **when there is tracked work to transfer** (a parked task, a claimed feature, in-flight state) | **HANDOVER** |
+
+**HANDOVER vs `orca-cli`.** `orca-cli` owns full handoffs and already documents the transport (`worktree create --no-parent --agent … --prompt …`, `terminal send --enter`). Reach for it directly when the ask is "run this prompt over there" — a self-contained instruction with no state behind it. HANDOVER is for when *ownership* moves: there is a claim to release, context that would take a forensic hunt to reconstruct, or a todo that must stop being yours and start being theirs. HANDOVER **composes with** `orca-cli` rather than replacing it — it prepares the brief and releases ownership, then delegates delivery to `orca-cli`'s commands. Never reimplement that transport here.
 
 If ambiguous, default to **WRITE** for session-end invocations and **READ** for session-start ones.
 
@@ -210,6 +213,76 @@ Then stop — this is a single-shot operation, not a gateway to more work.
 - Don't write learnings inline into the handoff doc (that's WRITE mode's job with the "Persist durable learnings" step — LEARN mode writes *only* to `docs/learnings.md`).
 - Don't add more than one learning per LEARN invocation — if the user has several, tell them and invoke LEARN once per learning.
 - Don't pad the kernel toward the 240-character cap to sound thorough — shorter is better.
+
+---
+
+## HANDOVER mode — move ownership to another worktree
+
+WRITE leaves a note for whoever picks this lane up next; that is usually future-you, same branch, same repo. HANDOVER is the cross-lane case: the work stops being yours and starts being someone else's, *now*. The difference matters because two things can go wrong here that WRITE never faces — the brief can land in a store the receiver never reads, and ownership can stay pinned to you after you have walked away.
+
+### Step 1: Name the work and the target
+
+Establish, before writing anything: **what** is moving (the task, feature, or todo), and **where** it goes as `repo · branch · worktree`. If the target is ambiguous — several worktrees could plausibly own it — ask rather than guess. A brief filed against the wrong branch is invisible to the receiver's resume even when it sits in the right directory, because READ matches the branch slug exactly.
+
+### Step 2: Release ownership BEFORE delivering
+
+This is the step with no other home, and the one whose absence is silent.
+
+If the work carries an advisory claim (h-mad's `orchestrator_state`, or any equivalent lock), release it as part of the handover:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py <state-file> \
+  --feature "<feature>" --release
+```
+
+Hand work over without this and the receiver inherits a feature still owned by a session that has stopped. Depending on the version they run, `--claim` either refuses outright or makes them reach for `--force` — and `--force` is the verb for taking a feature from a session that is still *live*. Training a receiver to pass it routinely wears out the one guard protecting a running session.
+
+Two cases that are not yours to fix silently:
+
+- **The claim is held by a different, dead session.** Say so in the brief, with the session id and heartbeat. Do not `--force` on their behalf; the receiver decides, and needs to know it happened.
+- **The claim is held by a live session.** Then the work is not yours to hand over. Stop and surface it.
+
+### Step 3: Write the brief into the RECEIVER's store
+
+Use the target's canonical store, not yours — `--repo` resolves it without leaving your directory:
+
+```bash
+HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
+DIR="$(python3 "$HP" --repo "<target-repo>" dir)"
+BR="$(python3 "$HP" --repo "<target-repo>" branch-slug)"
+mkdir -p "$DIR"
+FILE="$DIR/$(date +%F)-${BR}__<slug>.md"
+```
+
+`--repo` refuses a path that is not a git work tree rather than resolving it anyway. That refusal is deliberate: `canonical_root` falls back to whatever path it was handed, so a typo would otherwise produce a real-looking `docs/handoffs` directory that the writer creates, reports, and nobody ever reads.
+
+Use the §"Required template" as-is. The **Open / Blocked Items** location block (`repo · branch · worktree` plus artifact paths) is not optional here — for a receiver with none of your context, it is the difference between starting and excavating.
+
+### Step 4: Stamp the target's worktree comment
+
+Best-effort, Orca only, same rules as the WRITE stamp (§"WRITE — stamp an Orca checkpoint") — including preserving a human-written comment by appending rather than clobbering. Point at the doc:
+
+```bash
+hmad-dispatch worktree-comment "<target-worktree>" "handover: <slug> · <state> · brief: <FILE>"
+```
+
+### Step 5: Deliver — via `orca-cli`, not by reimplementing it
+
+Read the `orca-cli` skill and use its Full Handoffs commands (`worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one).
+
+**Send the path, not the payload.** The prompt should name the brief and the location block, then stop — a prompt carrying the whole document decays the moment the doc is updated, and there is then no single source of truth about what was handed over.
+
+### Step 6: Let go
+
+Drop the item from your own todo list, report what moved and where, and **stop monitoring** — that is what makes this a handover rather than supervision. If the user wants progress tracked, completion waited on, or results collected, that is the `orchestration` skill and a different request; say so rather than half-doing both.
+
+### HANDOVER don'ts
+
+- Don't deliver before releasing the claim — the receiver inherits a deadlock they can only break with `--force`.
+- Don't write the brief into *your* store and mention the other repo in it; that is a note to yourself, not a handover.
+- Don't paste the whole brief into the delivery prompt.
+- Don't use `orca orchestration task-create` here; a task row means supervised work, which is a different ask.
+- Don't keep watching the receiving lane. Handing over and hovering is the worst of both.
 
 ---
 
