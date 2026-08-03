@@ -997,14 +997,29 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
     # is a spurious timeout, which is the correct bias for a gate (cf. gate-wait).
     [ "${count:-0}" -gt 0 ] || break
     # Non-empty batch with no match for OUR task — it belongs to a sibling module.
-    # Ack it so the next check advances past it. Multi-key because the delivery-id
-    # field could not be observed live (it appears only on a non-empty coordinator
-    # Delivery, which needs a bound Run and pending mail); same defensive shape as
-    # task-create's `.result.task.id // .result.taskId // .taskId`.
+    # Ack it so the next check advances past it.
+    #
+    # OBSERVED LIVE 2026-08-03 (this comment previously said the field "could not
+    # be observed live" — it needs a bound Run AND pending mail, which a full
+    # orchestration e2e finally produced). The real envelope is:
+    #
+    #   {"result":{"runId":…,"deliveryId":"delivery_5ac615390583","count":1,
+    #              "replayed":true,"acknowledged":null,"timedOut":false,
+    #              "cancelled":false,"connectionLost":false,"mutation":{…},
+    #              "messages":[…]}}
+    #
+    # So `.result.deliveryId` is the real key and leads the chain. `replayed:true`
+    # confirms the replay semantics this loop is built around, and `--ack` drains
+    # the queue (count 1 -> 0, `acknowledged` echoing the id).
+    #
+    # The remaining keys stay as version tolerance, NOT as equal candidates: they
+    # are unobserved spellings kept cheap against an older/newer runtime. Note the
+    # snake_case `delivery_id` was the guess every test pinned before this, so the
+    # suite covered only the spelling Orca does not send.
     local prev="$ack"
     ack="$(printf '%s' "$checked" | jq -r '
-      .result.delivery_id // .result.deliveryId // .result.delivery.id
-      // .delivery_id // .deliveryId // empty')"
+      .result.deliveryId // .result.delivery_id // .result.delivery.id
+      // .deliveryId // .delivery_id // empty')"
     if [ -n "$prev" ] && [ "$ack" = "$prev" ]; then
       # We already acked this exact delivery and got it back. The ack is not
       # advancing the queue, so every further iteration is a hot spin that would

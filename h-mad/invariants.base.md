@@ -131,6 +131,25 @@
 - The evidence belongs in the document, not only in the author's terminal. A cited output is
   checkable by a reviewer; "I verified this" is not.
 
+## Wrapper–runtime reconciliation
+- A wrapper verb over an **external runtime's CLI** MUST be exercised **live against that runtime**
+  — a full create → list → remove cycle, or the verb's own equivalent round trip — before it ships,
+  and its **output-key extraction fixed against the observed envelope**. Shipping a verb whose
+  response shape is known only from stub fixtures is a violation, however green the suite is.
+- Stub fixtures encode the author's model of the envelope, so the wrapper and its tests agree with
+  each other and both are wrong together — the Incident-replay gap, applied to response parsing.
+  Four occurrences: a create-response `.id` read from the envelope (a per-request correlation uuid
+  that always exists, so it yielded a plausible but useless handle) in two different verbs; then
+  probing a live response for a delivery-id field surfaced `run_required` — the whole structured
+  path had been **dead at its first mutation**, and no stub test could see it because the stub had
+  no concept of a Run binding. Later the same day the real ack key proved to be `deliveryId` while
+  the extraction chain led with `delivery_id`, and the only test covering that loop pinned the
+  spelling the runtime never sends.
+- The live probe is what finds these, not the review: each was invisible to design review, to the
+  suite, and to a careful reading of the vendor guide. Where a live run is impossible (destructive
+  verb, no credentials), say so in the doc and name what stayed unverified — an unmeasured shape is
+  an open risk, not a pass.
+
 ## Regression provenance
 - When a change makes an existing test fail, the plan or design MUST establish whether that test
   **asserts current behaviour that the change is fixing** before proposing to edit it. **Changing an

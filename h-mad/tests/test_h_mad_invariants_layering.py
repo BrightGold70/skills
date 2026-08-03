@@ -28,6 +28,7 @@ _BASE_RULE_HEADINGS = (
     "Incident replay",
     "Test discrimination",
     "Assumption verification",
+    "Wrapper–runtime reconciliation",
     "Regression provenance",
     "Both halves of a doc change",
     "Reimplementation parity",

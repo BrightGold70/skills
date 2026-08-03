@@ -192,6 +192,44 @@ After either path, `await` the worker, then run the **winner-merge gate**
 (below), and `worktree-rm` the selector. Queue tasks beyond the cap with
 `[H-MAD] worktree_queued module=<module>`.
 
+**Prefer `worker-start` over raw `dispatch` for a module worker.** Decided
+2026-08-03 on live evidence, not preference:
+
+```bash
+orca orchestration worker-start --task <id> --worktree current --agent codex \
+  --timeout-ms 180000 --json      # → state:"ready", stage:"input_accepted"
+```
+
+- `worker-start` composes worktree + terminal + **readiness** + dispatch, and
+  *"exits 0 only for ready"*. Its response carries `state`/`stage`, so
+  `stage: "input_accepted"` is positive confirmation the agent took the prompt.
+- Raw `dispatch` has no readiness contract. Measured: a `codex` pane that
+  `terminal wait --for tui-idle` reported **satisfied** was still
+  `Starting MCP servers (0/3)` and could not accept input. `dispatch` returned
+  `ok:true`, `status:"dispatched"`, **`injected:false`**, and exit 0 — a silent
+  no-op that a fanout awaiting that module would sit on until timeout.
+- Recovery from that state is worse than the failure. The task wedges
+  (`only ready tasks can be dispatched`); `task-update --status ready` clears the
+  task but **orphans the terminal binding** (`Terminal … already has an active
+  dispatch (ctx_…)`); and `worker-abandon --dispatch ctx_…` answers
+  `dispatch_not_found` for the *same id* `dispatch-show` still returns. The pane
+  had to be closed to break the wedge.
+
+Keep raw `dispatch` for the **pinned long-lived pane** path (5d iterative
+revision), where the pane is reused deliberately and its context cleared between
+cycles. `worker-start` is for a *fresh* worker per module, which is the fanout
+shape.
+
+**One delivery carries every pending message for the Run.** Measured with two
+modules reporting before either was awaited: the coordinator's `check` returned
+`count: 2` with both `worker_done`s in ONE delivery, so `await` matched inside
+the first batch. The sibling-batch case therefore arises only when you await a
+module that has **not yet reported** while an earlier module's message is still
+unacknowledged — then the batch genuinely has no match, and the loop must ack to
+advance. That path is live-verified: a 2-message batch with no match extracted
+`deliveryId`, sent `--ack`, re-checked, and drained the queue `count: 2 → 0`,
+exiting **non-zero** on the timeout rather than the old exit-0 false completion.
+
 ### Progress checkpoints (best-effort)
 
 At each of RED-verified, GREEN-verified, and audit-complete for a fanned module,

@@ -10,10 +10,12 @@ reason) · `done` (legacy spelling of LANDED).
 
 ## Open, highest recurrence first (reconciled 2026-08-03)
 
-**One `candidate: yes` is open: `orca-verb-live-reconcile` (rec 3).** It cleared the promotion bar
-during the 2026-08-03 closeout scout — probing the live `orchestration check` response for a
-delivery-id field is what surfaced `run_required`, a blocker no stub test could see. Promote it next
-session, not in the same breath as the scout that raised it.
+**Nothing is open.** `orca-verb-live-reconcile` (the last `candidate: yes`) was promoted 2026-08-03
+to `invariants.base.md` §"Wrapper–runtime reconciliation", generalized off Orca since that file is
+project-agnostic. Its recurrence count reached 5 on the day it landed: the two create-response `.id`
+bugs, the live `check` probe that surfaced `run_required`, and — hours later, in the run that
+promoted it — the ack key proving to be `deliveryId` while the extraction chain led with
+`delivery_id` and the only test pinned the spelling the runtime never sends.
 
 Everything else is reconciled. The 2026-07-24 sweep drained everything up to that date;
 the 2026-08-03 sweep reconciled the five `yes` rows the 08-01→08-03 sessions added. Four of those
@@ -33,9 +35,9 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 | 3 | `two-direction mutation harness` | **LANDED** — `h-mad/scripts/h_mad_mutation_harness.py` |
 | 3 | `doc-literal pin test` | **LANDED** — practice across 5 doc-test files; rule in invariants.base.md §Test discrimination |
 | 3 | `wire-scoped revert probe` | **SUPERSEDED** — the bundled mutation harness *is* this tool (exact-string replace, refuses unless the anchor matched exactly once, restores and verifies on every path) |
-| 3 | `orca-verb-live-reconcile` | **OPEN** — promoted 2026-08-03. Live create→list→remove against the real runtime after shipping an orca-wrapping verb; the live probe (not the review) found `run_required` |
+| 5 | `orca-verb-live-reconcile` | **LANDED** (2026-08-03) — `invariants.base.md` §"Wrapper–runtime reconciliation", generalized off Orca (that file is project-agnostic); pinned by `test_h_mad_invariants_layering.py` |
 | 2 | `both-halves doc fix` | **LANDED** — invariants.base.md §Both halves of a doc change |
-| 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep` | *maybe* — not yet needed |
+| 2 | `orca-verb-live-reconcile`, `live-e2e verb sweep` | **SUPERSEDED** — both folded into `invariants.base.md` §"Wrapper–runtime reconciliation" |
 | 2 | `test-the-shipped-function-not-a-copy` | **LANDED** — invariants.base.md §Single-source contract ("independent re-implementations that can silently diverge are a violation"); also structurally moot, since every bash test drives the real script via subprocess rather than a copy |
 | 1 | `differential-validator-test` | **LANDED** — invariants.base.md §Reimplementation parity |
 | 1 | `reconcile a handoff's PR claims via gh` | **LANDED** (2026-08-03) — handoff SKILL.md Step 3 "PR state". Was filed `candidate: no`, but its own reason named the upgrade ("belongs in the handoff skill's READ reconciliation"); the `no` meant *not a standalone skill* and nobody routed it. |
@@ -55,7 +57,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 ## 2026-07-21 — orca-arc-complete-hemasuite-wiring
 
-- **orca-verb-live-reconcile**: after shipping an orca-wrapping verb, run a live create→list→remove cycle against the real runtime and fix output-key extraction — recurrence: 3 (worktree-create + automation-create envelope-.id bug; 2026-08-03 probing the live `check` response for a delivery-id field is what surfaced `run_required` — orchestration mode had been dead at step one and no stub test could see it) — candidate: yes (promoted 2026-08-03 — the live probe, not the review, found the blocker)
+- **orca-verb-live-reconcile**: after shipping an orca-wrapping verb, run a live create→list→remove cycle against the real runtime and fix output-key extraction — recurrence: 5 (worktree-create + automation-create envelope-.id bug; 2026-08-03 probing the live `check` response for a delivery-id field is what surfaced `run_required` — orchestration mode had been dead at step one and no stub test could see it; 2026-08-03 later, the real ack key was `deliveryId` while the chain led with `delivery_id` and the only test pinned the spelling the runtime never sends) — **LANDED** (2026-08-03) — `invariants.base.md` §"Wrapper–runtime reconciliation"
 - **hmad-full-cycle-driver**: the repeated author-docs→agy-audit(2cyc)→Codex-TDD→verify→agy-5e→6a-prime→ship sequence ran 4× this session — recurrence: 4 — candidate: no (already the /h-mad skill)
 
 ## 2026-07-22 — h-mad-fourteen-issues-shipped
