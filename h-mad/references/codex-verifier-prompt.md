@@ -47,6 +47,13 @@ Perform the revert test defined in SKILL.md §5e.
    fall-through/negative test fails. A green module suite under either mutation is a FAILED property
    → `STATUS: BLOCKED`; the connection is unenforced and no other Phase-5 gate is scoped to see it.
 
+   Prefer `python3 ~/.claude/skills/h-mad/scripts/h_mad_mutation_harness.py <spec.json>` over doing
+   this by hand: it refuses an anchor that does not match exactly once, restores the tree on every
+   path, and re-runs the suite to prove the restore landed — the bookkeeping that decides whether
+   this pass measured anything. Read the `MUTATION:` token. `SURVIVED` names the guards that do not
+   bite; `REFUSED` / `BASELINE_NOT_GREEN` mean nothing was measured, which is NOT a pass and must not
+   be reported as one.
+
 2. **Anti-gaming audit of the module tests.** Report any test that CANNOT FAIL: an assertion true
    by construction, a mock asserted against itself, a test that never reaches the code path it
    names, or a sentinel / hollow assertion. Name the test and say why. If all N are discriminating,
