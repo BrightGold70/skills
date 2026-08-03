@@ -581,6 +581,158 @@ def test_orca_identity_panekey_join_falls_through_when_ps_has_no_agents(tmp_path
     assert "agy -> term_agy" in r.stdout
 
 
+# --- J18: OS-evidence pass for panes Orca did not spawn ---------------------
+#
+# Measured live 2026-08-03. A codex and an agy pane, both up 9h in the skills
+# worktree, resolved to NOTHING through all three passes at once:
+#
+#   Pass 0 (paneKey join)  `worktree ps` reported liveTerminalCount: 3 but
+#                          agents[] held exactly ONE entry -- the coordinator.
+#                          Orca lists only panes IT spawned; these survived an
+#                          app restart (incarnationId null), so the join is blind.
+#   Pass 1 (title)         skipped for codex by design; for agy the title was the
+#                          tab's ("Claude - skills repo", 2 leaves) -> rejected.
+#   Pass 2 (preview)       `terminal read` returned returnedLineCount 0 for both
+#                          -- the renderer buffer did not survive the restart.
+#
+# So the wrapper reported "0 candidates" while BOTH agents were demonstrably
+# alive, and the operator had no way to tell that from "no agent is running".
+# The OS knows: `lsof -a -d cwd -c <name>` lists the agent processes rooted in
+# the worktree. What the OS canNOT give is which PANE a process belongs to --
+# Orca exposes no tty/pid/ptyId (orca#9870) and macOS blocks `ps e` -- so this
+# pass binds ONLY when the mapping is forced (exactly one unidentified pane and
+# a live matching process), and otherwise reports the evidence and declines.
+
+
+def _lsof_stub_env(**by_agent):
+    """HMAD_STUB_LSOF_* env for the lsof stub. by_agent: codex="88221", ...
+
+    The stub keys on the `-c <name>` argument, so an agent with no entry here
+    reports no live process -- the "agent is not running" case.
+    """
+    return {("HMAD_STUB_LSOF_%s" % k.upper()): v for k, v in by_agent.items()}
+
+
+# One pane in scope that `worktree ps` does not claim at all, previews empty.
+_J18_TERMS_ONE = _orca_terms_paned(
+    ("term_coord", "tab1", "leaf_coord", "Claude - skills repo", "", "/wt/skills"),
+    ("term_x", "tab1", "leaf_x", "Claude - skills repo", "", "/wt/skills"),
+)
+# Two, which is the live 2026-08-03 shape: codex and agy side by side.
+_J18_TERMS_TWO = _orca_terms_paned(
+    ("term_coord", "tab1", "leaf_coord", "Claude - skills repo", "", "/wt/skills"),
+    ("term_x", "tab1", "leaf_x", "Claude - skills repo", "", "/wt/skills"),
+    ("term_y", "tab1", "leaf_y", "Claude - skills repo", "", "/wt/skills"),
+)
+# agents[] holds ONLY the coordinator -- exactly what Orca reported live.
+_J18_PS = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude")]))
+
+
+def test_orca_identity_os_evidence_binds_sole_unidentified_pane(tmp_path):
+    # One unidentified pane + a live codex process rooted in the worktree. The
+    # mapping is forced: there is nowhere else that process can be running.
+    b = _bindir(tmp_path, ["orca", "lsof"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J18_TERMS_ONE,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": _J18_PS,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 **_lsof_stub_env(codex="88221")})
+    assert "codex -> term_x" in r.stdout
+
+
+def test_orca_identity_os_evidence_declines_two_unidentified_panes(tmp_path):
+    # THE live case. Two candidate panes, one codex process: the process is
+    # certainly in one of them, and nothing available says which. Binding either
+    # is a coin flip, and a mis-dispatch is silent -- both agents emit a
+    # well-formed report, so the gate would score the wrong model's work.
+    b = _bindir(tmp_path, ["orca", "lsof"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J18_TERMS_TWO,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": _J18_PS,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 **_lsof_stub_env(codex="88221")})
+    assert "codex -> UNRESOLVED" in r.stdout
+    # The whole point of the pass: say that the agent IS running, name the pid,
+    # name both candidates, and give the exact remedy. "0 candidates" is what
+    # this replaces -- it reads as "no agent is running", which was false.
+    assert "88221" in r.stderr
+    assert "term_x" in r.stderr and "term_y" in r.stderr
+    assert "pin codex" in r.stderr
+    # Each candidate occupies its OWN line. Command substitution strips the
+    # trailing newline, so printing $cands with '%s' ran the last handle into the
+    # next sentence ("term_y[H-MAD] codex: Orca names none of them") -- observed
+    # live, and invisible to the substring assertions above, which all still pass
+    # when the two lines are glued together.
+    lines = [ln.strip() for ln in r.stderr.splitlines()]
+    assert "[H-MAD] codex:     term_x" in lines
+    assert "[H-MAD] codex:     term_y" in lines
+
+
+def test_orca_identity_os_evidence_declines_when_agent_not_running(tmp_path):
+    # A sole unidentified pane is NOT enough on its own. With no matching
+    # process the pane is something else entirely (a plain shell, an editor),
+    # and binding it would dispatch h-mad's work into a non-agent.
+    b = _bindir(tmp_path, ["orca", "lsof"])
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J18_TERMS_ONE,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": _J18_PS,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 **_lsof_stub_env(agy="87919")})  # agy runs; codex does not
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "codex -> term_x" not in r.stdout
+
+
+def test_orca_identity_os_evidence_skips_panes_claimed_by_another_agent(tmp_path):
+    # A pane `worktree ps` already names as something else is NOT unidentified.
+    # Only panes agents[] does not claim are candidates -- otherwise a claimed
+    # antigravity pane could be handed Codex's work by the OS pass, re-opening
+    # exactly the swap the paneKey join was built to close.
+    b = _bindir(tmp_path, ["orca", "lsof"])
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_x", "antigravity")]))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J18_TERMS_ONE,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 **_lsof_stub_env(codex="88221")})
+    assert "codex -> UNRESOLVED" in r.stdout
+    assert "codex -> term_x" not in r.stdout
+
+
+def test_orca_identity_os_evidence_absent_lsof_is_not_fatal(tmp_path):
+    # lsof is at /usr/sbin on macOS and absent from minimal containers. The pass
+    # is an ENRICHMENT: without it the wrapper must behave exactly as before,
+    # not crash and not bind.
+    b = _bindir(tmp_path, ["orca"])  # no lsof stub
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _J18_TERMS_ONE,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": _J18_PS,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord"})
+    assert r.returncode == 0
+    assert "codex -> UNRESOLVED" in r.stdout
+
+
+def test_orca_identity_panekey_join_still_outranks_os_evidence(tmp_path):
+    # Ordering guard. When agents[] DOES name the pane, that is direct evidence
+    # and must win; the OS pass never runs. Here the join says term_codex while
+    # a lone unidentified pane (term_x) would otherwise attract the bind.
+    b = _bindir(tmp_path, ["orca", "lsof"])
+    terms = _orca_terms_paned(
+        ("term_coord", "tab1", "leaf_coord", "Claude - skills repo", "", "/wt/skills"),
+        ("term_codex", "tab1", "leaf_codex", "Claude - skills repo", "", "/wt/skills"),
+        ("term_x", "tab1", "leaf_x", "Claude - skills repo", "", "/wt/skills"),
+    )
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_codex", "codex")]))
+    r = run(["env"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": terms,
+                 "HMAD_STUB_ORCA_WT_PS_STDOUT": ps,
+                 "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 **_lsof_stub_env(codex="88221")})
+    assert "codex -> term_codex" in r.stdout
+    assert "codex -> term_x" not in r.stdout
+
+
 def test_cmux_identity_env_override(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     r = run(["env"], substrate="cmux",

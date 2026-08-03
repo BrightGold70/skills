@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# lsof stub for the J18 OS-evidence pass.
+#
+# The wrapper calls: lsof -a -d cwd -c <name>
+# and parses the LAST field of each row as the cwd, the 1st as the command and
+# the 2nd as the pid -- the real column layout:
+#
+#   COMMAND     PID    USER   FD   TYPE DEVICE   SIZE/OFF     NODE NAME
+#   codex     88221 kimhawk  cwd    DIR   1,17      10784 10763131 /Users/x/repo
+#
+# Tests set HMAD_STUB_LSOF_<UPPER_NAME>=<pid>; an agent with no variable set
+# prints nothing and exits 1, which is what real lsof does when `-c <name>`
+# matches no process. That is the "agent not running" case, and it must be
+# distinguishable from "lsof is missing" (a non-existent binary), which the
+# wrapper treats as no evidence at all.
+printf 'lsof %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+
+name=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c) name="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$name" ] || exit 1
+
+upper="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"
+var="HMAD_STUB_LSOF_${upper}"
+pid="${!var:-}"
+[ -n "$pid" ] || exit 1
+
+cwd="${HMAD_STUB_LSOF_CWD:-/wt/skills}"
+printf 'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n'
+printf '%s %s tester cwd DIR 1,17 10784 10763131 %s\n' "$name" "$pid" "$cwd"
+exit 0

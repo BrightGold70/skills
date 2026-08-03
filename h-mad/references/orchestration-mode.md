@@ -9,15 +9,61 @@ export HMAD_ORCA_COORDINATOR_TERMINAL=<handle>      # optional override; pin win
 
 ## Worker identity resolution
 
-`dispatch` resolves an agent to a concrete terminal in two best-effort passes,
-with the env pin always taking precedence:
+`dispatch` resolves an agent to a concrete terminal in best-effort passes, with
+the env pin always taking precedence. Evidence is ordered strongest-first, and a
+pass only runs when every pass above it found nothing:
 
-1. `HMAD_ORCA_<AGENT>_TERMINAL` if set — authoritative.
-2. Anchored, case-insensitive match on the terminal's **title** leading word.
-3. Case-insensitive match on the terminal's **preview**, excluding the
-   coordinator's own pane.
+1. `HMAD_ORCA_<AGENT>_TERMINAL` if set — authoritative. Then the pin file.
+2. **paneKey join** — `orca worktree ps` returns `agents[].agentType` keyed by
+   `<tabId>:<leafId>`, and `terminal list` returns both fields. This is the only
+   evidence that actually *names* the running program, so it outranks everything
+   below it. Blind to panes Orca did not spawn (see below).
+3. Anchored, case-insensitive match on the terminal's **title** leading word.
+   Skipped entirely for Codex, which emits no OSC title — any `^codex` title is
+   necessarily inherited from the tab and names a tab, not a pane.
+4. Case-insensitive match on the terminal's **preview** against a program-banner
+   signature, excluding the coordinator's own pane.
+5. **OS evidence** — `lsof -a -d cwd -c <agent>` proves the agent is *running* in
+   the worktree. Binds only when the mapping is forced: exactly one candidate
+   pane that `worktree ps` does not name, plus a live matching process.
 
 0 or 2+ candidates resolve to a loud `UNRESOLVED` rather than a guess.
+
+**The pane class every pass above is blind to.** Measured live 2026-08-03: a
+codex and an agy pane, both up 9 hours in the same worktree, resolved to nothing
+through passes 2–4 simultaneously. `worktree ps` reported `liveTerminalCount: 3`
+with a single `agents[]` entry — the coordinator — because **Orca lists only
+panes it spawned**, and these had survived an app restart (`incarnationId: null`).
+Their tab had been renamed, so both titles read `Claude - skills repo`; and
+`terminal read` returned `returnedLineCount: 0`, the renderer buffer having died
+with the restart. Pass 5 exists for exactly this state — and note what it cannot
+do, because the limit is structural: Orca exposes no `tty`, `pid`, or `ptyId`
+(orca#9870) and macOS blocks `ps e`, so **no pane↔process join exists**. With
+two unidentified panes and one live process, the process is certainly in one of
+them and nothing available says which. It reports and declines:
+
+```text
+codex -> UNRESOLVED
+[H-MAD] codex: codex process IS live in /path/to/wt (pid 88221), but 2 pane(s) there carry no identifying evidence:
+[H-MAD] codex:     term_4d3f4261-…
+[H-MAD] codex:     term_7d59e6d2-…
+[H-MAD] codex: so the pane cannot be inferred. Pin it explicitly:
+[H-MAD] codex:   hmad-dispatch pin codex <handle>
+```
+
+That message replaced `resolved to 0 candidates`, which read as *no agent is
+running* — measurably false, and it sent the operator looking in the wrong place.
+
+**Use `lsof`, never `ps -e`, for agent liveness.** `ps -eo pid | wc -l` was
+measured returning 1374 on one call and 31 on the next on the same host, with
+`ps -p <pid>` finding a process that `ps -ax | grep` could not. A liveness check
+that silently enumerates a subset of processes is worse than none.
+
+**The durable fix is to not need any of this.** Identity is knowable for free at
+creation: `orca orchestration worker-start --task <id> --worktree current --agent
+codex` (exits 0 only when ready) or `terminal create --command codex`, then pin
+the returned handle immediately. Detection is what you are left with when a pane
+was started by hand.
 
 **Pin `HMAD_ORCA_CODEX_TERMINAL` in practice.** Both auto-detect passes are
 unreliable for Codex, and this is a property of Orca, not a bug to fix:
