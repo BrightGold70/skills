@@ -162,6 +162,15 @@ def test_every_site_naming_the_stash_hazard_also_gives_the_fix() -> None:
             if "stashes nothing" not in line:
                 continue
             window = "\n".join(lines[max(0, i - 2):i + 6])
+            # Only an actual INSTANCE of the hazard needs the fix beside it, and an
+            # instance always names the command it is about. A doc that merely quotes
+            # the phrase while teaching reviewers to hunt for this shape is not
+            # committing it — `agy-skill-reviewer-prompt.md` lists "stashes nothing"
+            # among the phrasings to grep for, and the first version of this guard
+            # flagged it. Found only when the two branches were merged: the guard
+            # lived on one, the prompt on the other, so neither side failed alone.
+            if "git stash push" not in window:
+                continue
             if "add -N" not in window:
                 gaps.append(f"{path.relative_to(SKILL_DIR)}:{i + 1}")
     assert not gaps, (
