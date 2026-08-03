@@ -18,7 +18,9 @@ Before doing anything else, identify which mode applies:
 
 **HANDOVER vs `orca-cli`.** `orca-cli` owns full handoffs and already documents the transport (`worktree create --no-parent --agent … --prompt …`, `terminal send --enter`). Reach for it directly when the ask is "run this prompt over there" — a self-contained instruction with no state behind it. HANDOVER is for when *ownership* moves: there is a claim to release, context that would take a forensic hunt to reconstruct, or a todo that must stop being yours and start being theirs. HANDOVER **composes with** `orca-cli` rather than replacing it — it prepares the brief and releases ownership, then delegates delivery to `orca-cli`'s commands. Never reimplement that transport here.
 
-If ambiguous, default to **WRITE** for session-end invocations and **READ** for session-start ones.
+**Compound requests are WRITE, not a coin flip.** "Wrap up and hand this off to <X>", "close out the session and give the rest to another worktree" name both modes at once. Run **WRITE**, and let its §"Route foreign-worktree work before closing out" step invoke HANDOVER for the items that move. Picking one mode arbitrarily is the failure here: choose HANDOVER alone and the session is never closed out; choose WRITE alone and the transfer silently does not happen.
+
+If still ambiguous, default to **WRITE** for session-end invocations and **READ** for session-start ones.
 
 ---
 
@@ -93,7 +95,7 @@ In parallel:
   - `git fetch` (quiet; if no remote or no upstream, skip this bullet silently — `git rev-parse --abbrev-ref @{u}` errors → no upstream).
   - `git rev-list --left-right --count @{u}...HEAD` → `<behind>	<ahead>`.
   - **In sync** (0 behind, 0 ahead): state "in sync with `<upstream>`" on one line; no action.
-  - **Behind, clean tree**: surface as a divergence and **fast-forward before acting** — run `git pull --ff-only`. If it fast-forwards cleanly, report the new HEAD. This is the "sync remote and local before starting" guarantee.
+  - **Behind, clean tree**: normally impossible here — Step 0 already fast-forwarded this exact case, so reaching it means the remote moved *while you were reading the doc*. Treat it as such: `git pull --ff-only` again and report the new HEAD. (If Step 0 was skipped because there was no upstream, this bullet does not apply either.) Seeing it a second time is information, not a contradiction.
   - **Behind, dirty tree** OR **diverged** (behind > 0 AND ahead > 0): do NOT auto-pull — flag it ("N behind / M ahead, uncommitted changes present" or "branches have diverged — rebase/merge needed") and let the user resolve. A surprise merge/rebase mid-resume is worse than a one-line warning.
   - **Ahead only** (unpushed local commits): flag as information ("M local commits not yet pushed") — relevant because the prior session may have committed without pushing.
 - **In-flight processes** — for each PID cited in In-Flight Processes / Open Items / Next Steps, run `ps -p <PID> -o pid,etime,stat`. For each cited log path, `ls -la <log>` to read size + mtime. Surface one of: "still running, N min elapsed (matches handoff trajectory)" / "exited" / "log unchanged for N hours — likely dead, treat as historical". This is the single most load-bearing reconciliation when the handoff hands off live work; never skip it. If the doc is days old, treat all in-flight claims as historical without bothering to check `ps` (the PID has been recycled and reporting on a stranger's process is worse than silence).
@@ -228,10 +230,36 @@ Establish, before writing anything: **what** is moving (the task, feature, or to
 
 This is the step with no other home, and the one whose absence is silent.
 
-If the work carries an advisory claim (h-mad's `orchestrator_state`, or any equivalent lock), release it as part of the handover:
+**First find the state file.** h-mad keeps the claim in its orchestrator state — the JSON path h-mad's own SKILL.md passes to `h_mad_state_write.py` in its Phase-0 snippet, `docs/.bkit-memory.json` relative to the project root in every current project. Locate it rather than assuming:
 
 ```bash
-python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py <state-file> \
+STATE="$(ls <target-repo>/**/docs/.bkit-memory.json 2>/dev/null | head -1)"
+[ -n "$STATE" ] || echo "no h-mad state file under <target-repo> — nothing is claimed, skip to Step 3"
+```
+
+No state file means no claim to release. Say so and move on; do not invent one.
+
+**Then ask who holds it — do not eyeball the timestamp.** `h_mad_resume_decision.py` is the liveness oracle, and it applies the *same* staleness window the writer does, so its answer and `--claim`'s behaviour cannot disagree:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
+  --state "$STATE" --feature "<feature>" --session-id "<your-session-id>"
+```
+
+- **`owned_elsewhere`** → the owner is **LIVE**. The work is not yours to hand over. Stop and surface it — releasing here would yank a feature out from under a running session.
+- **any other token** (`enter_autonomous`, `resume_manual`, `halted`, `start_fresh`) → no live owner. Safe to proceed.
+
+Read the owner and heartbeat for the brief — the receiver needs to know a claim existed and what happened to it:
+
+```bash
+python3 -c "import json,sys; r=json.load(open(sys.argv[1]))['orchestrator_state'][sys.argv[2]]; \
+print('owner:', r.get('owner_session_id'), '| heartbeat:', r.get('owner_heartbeat_ts'))" "$STATE" "<feature>"
+```
+
+**Then release**, so the receiver inherits a free claim:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py "$STATE" \
   --feature "<feature>" --release
 ```
 
@@ -239,8 +267,8 @@ Hand work over without this and the receiver inherits a feature still owned by a
 
 Two cases that are not yours to fix silently:
 
-- **The claim is held by a different, dead session.** Say so in the brief, with the session id and heartbeat. Do not `--force` on their behalf; the receiver decides, and needs to know it happened.
-- **The claim is held by a live session.** Then the work is not yours to hand over. Stop and surface it.
+- **The claim is held by a different, dead session** (the oracle returned something other than `owned_elsewhere`, but `owner_session_id` is not you). Releasing it is the right move *and* you must say so in the brief, with the session id and heartbeat you just read. Never `--claim --force` on the receiver's behalf — taking ownership is their decision, and a `--force` they did not choose hides that a claim was ever contested.
+- **The claim is held by a live session** (`owned_elsewhere`). The work is not yours to hand over. Stop and surface it.
 
 ### Step 3: Write the brief into the RECEIVER's store
 
@@ -260,21 +288,40 @@ Use the §"Required template" as-is. The **Open / Blocked Items** location block
 
 ### Step 4: Stamp the target's worktree comment
 
-Best-effort, Orca only, same rules as the WRITE stamp (§"WRITE — stamp an Orca checkpoint") — including preserving a human-written comment by appending rather than clobbering. Point at the doc:
+Best-effort, Orca only. Same preservation rule as the WRITE stamp (§"WRITE — stamp an Orca checkpoint"), but **a different read command**: `worktree-current` reads the worktree you are *in*, which is the sender. To see the target's comment you must go through `worktree-ps` and select by path:
 
 ```bash
-hmad-dispatch worktree-comment "<target-worktree>" "handover: <slug> · <state> · brief: <FILE>"
+hmad-dispatch worktree-ps | python3 -c "
+import json,sys
+t = sys.argv[1].rstrip('/')
+for w in json.load(sys.stdin)['worktrees']:
+    if w.get('path','').rstrip('/') == t:
+        print(w.get('comment') or '')
+        break
+else:
+    print('WORKTREE-NOT-FOUND', file=sys.stderr)
+" "<target-worktree-path>"
 ```
+
+Then apply the rule: a non-empty comment that does **not** start with `handoff:`, `handover:`, or `h-mad` was written by a human — append after it (`<existing> — handover: …`). An empty comment or a prior skill stamp is replaced outright. `worktree-comment` only ever overwrites, so preserving is something you do by *composing the new value*, not something the command does for you:
+
+```bash
+hmad-dispatch worktree-comment "<target-worktree>" "<composed-value>"
+```
+
+If the target is not in `worktree-ps` at all, skip the stamp — it is an enrichment, never a gate — and say so rather than stamping the wrong worktree.
 
 ### Step 5: Deliver — via `orca-cli`, not by reimplementing it
 
-Read the `orca-cli` skill and use its Full Handoffs commands (`worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one).
+Invoke the **`orca-cli` skill by name** (the Skill tool — it is a registered skill, so do not go hunting for a file path) and use its Full Handoffs commands: `worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one. Those flag names are a hint, not the contract — that skill defers to the `orca` binary's own version-matched guide, which is the only source that cannot drift from the binary you are about to run.
 
 **Send the path, not the payload.** The prompt should name the brief and the location block, then stop — a prompt carrying the whole document decays the moment the doc is updated, and there is then no single source of truth about what was handed over.
 
 ### Step 6: Let go
 
 Drop the item from your own todo list, report what moved and where, and **stop monitoring** — that is what makes this a handover rather than supervision. If the user wants progress tracked, completion waited on, or results collected, that is the `orchestration` skill and a different request; say so rather than half-doing both.
+
+**"Stop monitoring" means stop watching the receiver — it does not mean end your turn.** When HANDOVER was invoked *as a step inside another mode* (WRITE's §"Route foreign-worktree work before closing out" does exactly this), it is a **returning subroutine**: finish the handover, then go back and complete every remaining step of the calling mode. Treating "let go" as terminal is how a session closeout gets orphaned — the foreign item moves correctly and the handoff doc is then never saved, committed, or pushed.
 
 ### HANDOVER don'ts
 
@@ -327,6 +374,8 @@ Each entry has four pipe-free segments separated by `·`: ISO date, `<project-sl
 
 Create the file with a `# Handoffs Index\n\nNewest first. Format: ISO date · project/slug · summary · path\n\n` header block if missing. Don't commit `~/.claude/handoffs/INDEX.md` to any project repo — it's user-global state, not project state.
 
+**If the index has no `- ` bullet yet** (a fresh install, or a file you just created from the header block), there is nothing to insert *before* — append the entry after the header block instead. The anchor rule below assumes at least one existing entry; applying it to an empty index finds no anchor and is how an agent ends up guessing a position or reporting a failure over a file that is simply new.
+
 **How to prepend — anchor on the first list item, never on the header text.** Insert the new entry *immediately before the first existing `- ` bullet line*, so it becomes the newest. Do **not** anchor the insert on the `Newest first. Format:` header string: this file has been observed carrying a duplicate of that line mid-file, and a header-anchored insert lands the newest entry in the middle instead of the top (observed 2026-07-23 — an entry went to line 36). "Before the first `- ` line" is unambiguous no matter how many stray header lines exist. After inserting, verify placement (`grep -n '^- ' INDEX.md | head -1` should return your entry) rather than trusting the write — and if you find a stray `Newest first.`/`Format:` line anywhere below the top block, delete it while you are here; it is corruption that will mis-anchor the next writer.
 
 The reason this matters: project-local handoffs are great for versioning and PRs but bad for "what did I work on across all my projects last month" — the index is what makes that question answerable in one command (`head ~/.claude/handoffs/INDEX.md` for recent, `grep <topic> ~/.claude/handoffs/INDEX.md` for search).
@@ -350,7 +399,7 @@ Before you write anything, collect these in parallel:
    - List the plan files and `grep` their frontmatter for `status:` (Draft / Deferred / In-progress / Complete) and `gate:` / `blocked_by:`.
    - Check whether each plan has a corresponding `docs/04-report/features/<name>.report.md` (or equivalent). A plan without a report is a candidate "unimplemented" entry; cross-check the codebase or session for evidence it actually shipped before flagging.
    - Skip silently if the project has no such structure. Don't fabricate one. The point is to surface backlog signal that already exists, not invent a tracking system.
-5. **Live processes** — if the session launched any long-running background work that's still alive at the moment of writing (multi-hour ingests, soak tests, build pipelines, daemons started for testing): capture PID, the exact command (one line), the log path, started-at, elapsed, and a one-line "what to verify on exit". This populates the **In-Flight Processes** section. Skip silently if nothing is in flight — most sessions don't have any. The check costs nothing (`ps -p $! -o pid,etime` for each backgrounded job, or `pgrep -f <substring>` for processes the operator launched manually) and the value to a future resume is enormous: without it, the next session has to reverse-engineer "is this still going?" from log mtimes and ambiguous output.
+5. **Live processes** — if the session launched any long-running background work that's still alive at the moment of writing (multi-hour ingests, soak tests, build pipelines, daemons started for testing): capture PID, the exact command (one line), the log path, started-at, elapsed, and a one-line "what to verify on exit". **Write `none` or `stdout` when there is no log file** — plenty of processes were never redirected anywhere. A required-looking column is an invitation to invent a plausible path like `/tmp/job.log`, and a fabricated log is worse than an absent one: the next session tails a file that never existed and concludes the job died. This populates the **In-Flight Processes** section. Skip silently if nothing is in flight — most sessions don't have any. The check costs nothing (`ps -p $! -o pid,etime` for each backgrounded job, or `pgrep -f <substring>` for processes the operator launched manually) and the value to a future resume is enormous: without it, the next session has to reverse-engineer "is this still going?" from log mtimes and ambiguous output.
 6. **Worktree state** — the session ran in a linked worktree if EITHER `git rev-parse --show-toplevel` contains `.claude/worktrees/<name>/` (Claude Code convention) OR it differs from `python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py" root` (any linked worktree, including **Orca's** sibling-dir layout; under Orca, `hmad-dispatch worktree-current` also reports `.worktree.isMainWorktree == false`). In that case capture the worktree root, its branch, AND the main-worktree root + branch (`git -C <main> rev-parse --abbrev-ref HEAD`) so the handoff names both. The "to resume" `cd` points at the worktree root, not the main repo. (The handoff *file* still lives in the canonical/main store — §Save — so siblings can find it.)
 7. **Session observations** — if `~/.claude/homunculus/observations.jsonl` exists, read the last 50 lines. These structured observations often surface gotchas not explicit in the conversation. Use them to enrich Key Learnings extraction. Skip silently if absent.
    ```bash
@@ -468,9 +517,8 @@ If `--dry-run` was set: print the drafted doc to stdout and **stop here**. Do no
 2. Update `~/.claude/handoffs/INDEX.md` (one-line entry, newest first — see §"Update the central index").
 3. Proceed to §"Route foreign-worktree work before closing out" — do this before the phases below, because it can change what the doc's Open Items say.
 4. Proceed to §"Persist durable learnings" if Key Learnings is non-empty and `--skip-learnings` was not set.
-5. Proceed to §"Update persistent auto-memories" unless `--skip-memories` was set.
-6. Proceed to §"Automation scout" unless `--skip-scout` was set.
-7. Proceed to §"Commit and push".
+5. Proceed to §"Update persistent auto-memories, then automation scout" — it routes to `references/auto-memories.md` (unless `--skip-memories`) and `references/automation-scout.md` (unless `--skip-scout`).
+6. Proceed to §"Commit and push".
 
 ---
 
@@ -482,7 +530,7 @@ Recording an item's `repo · branch · worktree` (§"Required template") makes i
 
 So for each item that belongs elsewhere, pick one deliberately:
 
-- **Ownership should move** → run **HANDOVER mode** for that item now, before finishing this doc. Then record it here as *handed over*, naming the brief you wrote and where it went — the sender's doc becomes a pointer, not a parking space.
+- **Ownership should move** → run **HANDOVER mode** for that item now, before finishing this doc — **as a subroutine you return from.** HANDOVER ends with "let go / stop monitoring", which means stop watching the *receiver*; it does not end this WRITE. Come back and finish the remaining steps (learnings, memories, scout, commit and push). Then record the item here as *handed over*, naming the brief you wrote and where it went — the sender's doc becomes a pointer, not a parking space.
 - **Ownership stays here** (you are still driving it; the other repo is only where the files live) → keep it as a normal Open Item with its location block. This is the common case for a feature you are working *from* this session across two checkouts.
 
 Do not skip the question because the item is well documented. The failure this step exists to catch is a *good* entry in the wrong doc: a session closed out with a foreign task neatly described, its location recorded, and no one on the receiving side ever told. Observed 2026-08-03 — a Task 5 item belonging to a HemaSuite worktree sat in a skills-repo session's list, fully specified, and only moved because a human noticed it did not belong there.
@@ -522,94 +570,14 @@ Always include `handoff:<date>-<slug>` as a tag so the learning is cross-referen
 
 ---
 
-## Update persistent auto-memories
+## Update persistent auto-memories, then automation scout
 
-`docs/learnings.md` is **project-scoped** (lives in the repo, grepped on demand). It is NOT the same
-as the **persistent auto-memory** store at `~/.claude/projects/<project-dir-slug>/memory/`, which is
-**user-global** and whose `MEMORY.md` index is loaded into context at the start of *every* session.
-A learning written only to `docs/learnings.md` will not surface automatically next session; a
-memory written to the auto-memory store will. Wrapping up is the moment to reconcile the store with
-what this session proved — skip it and the next session starts with stale guidance. (Skip this phase
-only if `--skip-memories` was set, or the memory dir does not exist.)
+Two WRITE phases live in reference files rather than here. They are real steps, not optional reading — but they run once, at the end, and carrying ~100 lines of their rules on the critical path dilutes attention on the reconciliation and handover checks that decide whether a handoff is correct at all.
 
-**When to write/update a memory** (distinct from a `docs/learnings.md` entry):
-- The session produced **feedback on how to work** — a correction the user gave, or a confirmed
-  approach (e.g. "tool X is reliable when invoked via Y", "always run a real end-to-end check").
-- A **fact contradicts an existing memory** — flip/correct it; a stale memory is worse than none.
-- A durable **user / project / reference** fact not derivable from the repo (who the user is, an
-  ongoing constraint, an external dashboard/ticket).
-Skip anything already captured in the code, git history, CLAUDE.md, or that only mattered this
-session — those belong in the handoff doc or `docs/learnings.md`, not the auto-memory store.
+- **Auto-memories** (unless `--skip-memories`) — read `references/auto-memories.md` and follow it. This is what makes a durable fact surface in *future* sessions; `docs/learnings.md` alone does not.
+- **Automation scout** (unless `--skip-scout`) — read `references/automation-scout.md` and follow it.
 
-**How to apply:**
-1. Read the store's `MEMORY.md` index first. For each candidate, find an existing memory file it
-   updates and **edit that file** (correct/flip stale claims, append a dated reinforcement) rather
-   than creating a duplicate. Only create a new file when nothing covers it.
-2. Each memory is one file with frontmatter (`name`, `description`, `metadata.type:
-   user|feedback|project|reference`) and a body; for `feedback`/`project`, include **Why:** and
-   **How to apply:** lines. Link related memories with `[[their-name]]`. Convert relative dates to
-   absolute.
-3. **Update the one-line pointer in `MEMORY.md`** when a memory's hook changes (e.g. a flipped
-   conclusion) — the index is what the next session actually reads first.
-4. The auto-memory dir is **not a git repo** — there is nothing to commit or push there. It is
-   user-global local state. (The §"Commit and push" finale pushes only the project handoff +
-   learnings to the project remote; it does not touch the memory store.)
-
-If the project uses a different memory mechanism (no `~/.claude/projects/.../memory/` dir), skip
-silently — do not invent one.
-
----
-
-## Automation scout
-
-Scan this session's work for repeated patterns worth capturing as skills. Runs after learnings are persisted, before committing. Skip entirely if `--skip-scout` was set.
-
-### How to run
-
-Run this analysis inline (no external agent or plugin required). If a read-only subagent is available, spawn one for isolation — but the inline path is the default.
-
-Review `git diff HEAD~10..HEAD` and the conversation. Find: command pipelines the user retyped multiple times, multi-step workflows done manually without a shortcut, patterns that recurred ≥2 times, or any sequence that felt like "there should be a skill for this." For each candidate: pattern name, recurrence count, one-line description. Cap at 5 candidates.
-
-### Where to write
-
-Append to `docs/skill-candidates.md` (create with `# Skill Candidates` header if absent):
-
-```markdown
-## YYYY-MM-DD — <session-slug>
-
-- **<pattern>**: <description> — recurrence: N — candidate: yes/maybe/no
-```
-
-If zero candidates found, write: `## YYYY-MM-DD — <slug> — no candidates`.
-
-### Evolution bridge (opt-in)
-
-After writing to `docs/skill-candidates.md`, check whether
-`~/.claude/homunculus/evolved/skills/` exists. If it does **and** any candidate
-has `recurrence: N` where N ≥ 3 **and** `candidate: yes`, write a minimal stub
-there so the pattern is visible to continuous-learning-v2 if installed:
-
-For each qualifying candidate, create
-`~/.claude/homunculus/evolved/skills/<pattern-slug>.md`:
-
-```markdown
----
-name: <pattern-slug>
-description: <one-line description from candidate>
-source: handoff-scout
-recurrence: N
-session: YYYY-MM-DD
----
-
-# <Pattern Name>
-
-Candidate graduated from `docs/skill-candidates.md` via handoff automation scout.
-Recurrence: N sessions. Promote to a full skill when the pattern stabilises further.
-```
-
-Skip silently if `~/.claude/homunculus/evolved/` does not exist — this bridge
-is opt-in for users who have continuous-learning-v2 installed. Do not create
-the directory; just skip.
+Read the file at the moment you run the phase. Doing it from memory is how a phase quietly degrades into a summary of itself.
 
 ---
 
