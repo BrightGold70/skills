@@ -978,12 +978,16 @@ _await_cache_put() {  # $1 = a `check` envelope — park every worker_done it ca
   # fix is to park the reports BEFORE they are acked away, keyed by task id.
   local dir; dir="$(_await_cache_dir)"
   mkdir -p "$dir" 2>/dev/null || return 0   # best-effort: never fail an await
-  printf '%s' "$1" | jq -c '(.result.messages // .messages // [])[]?
+  printf '%s' "$1" | jq -c 'def pl: (.payload // {})
+                              | if type == "string" then (fromjson? // {}) else . end
+                              | if type == "object" then . else {} end;
+      (.result.messages // .messages // [])[]?
       | select((.type // "") == "worker_done")
-      | {k: (((.payload // {})
-              | if type == "string" then (fromjson? // {}) else . end
-              | if type == "object" then .taskId else null end)
-             // .taskId // .["task-id"] // empty), m: .}
+      # J20: never park a lifecycle-REJECTED report. Caching one would launder a
+      # rejection into a later await success, which is the same false completion
+      # the match filter above refuses -- just deferred by a few seconds.
+      | select((pl | has("_orcaLifecycleRejection")) | not)
+      | {k: ((pl | .taskId) // .taskId // .["task-id"] // empty), m: .}
       | select(.k != null)' 2>/dev/null \
   | while IFS= read -r row; do
       local key; key="$(printf '%s' "$row" | jq -r '.k' 2>/dev/null)" || continue
@@ -1048,12 +1052,16 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
     checked="$(_orca_json '.' "${args[@]}")" || return $?
     match="$(printf '%s' "$checked" \
       | jq -c --arg t "$task" '
+          def pl: (.payload // {})
+                  | if type == "string" then (fromjson? // {}) else . end
+                  | if type == "object" then . else {} end;
           (.result.messages // .messages // [])
-          | map(select(
-              (((.payload // {})
-                | if type == "string" then (fromjson? // {}) else . end
-                | if type == "object" then .taskId else null end)
-               // .taskId // .["task-id"]) == $t))
+          # J20: Orca lifecycle-validates worker_done and can REJECT one while
+          # still delivering it here (observed: missing_dispatch_id,
+          # sender_not_assignee). The runtime refused the report, so the module
+          # did not report -- matching it would be a false completion.
+          | map(select((pl | has("_orcaLifecycleRejection")) | not))
+          | map(select(((pl | .taskId) // .taskId // .["task-id"]) == $t))
           | .[0] // empty')"
     if [ -n "$match" ]; then printf '%s\n' "$match"; return 0; fi
     count="$(printf '%s' "$checked" | jq -r '(.result.messages // .messages // []) | length')"
