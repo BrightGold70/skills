@@ -13,8 +13,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from h_mad_state_ownership import (  # noqa: E402
+    OWNERSHIP_STALE_AFTER_SECONDS,  # noqa: F401  (re-exported: callers import it from here)
+    owner_is_live,
+)
 
 
 def _phase_num(value) -> int:
@@ -43,20 +50,6 @@ def _phase_num(value) -> int:
     return 0
 
 
-OWNERSHIP_STALE_AFTER_SECONDS = 2 * 60 * 60
-
-
-def _parse_ts(value) -> "datetime | None":
-    if not isinstance(value, str) or not value.strip():
-        return None
-    text = value.strip().replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
 def _owned_elsewhere(feat_state: dict, session_id: str | None, now: str | None) -> bool:
     """True when another session holds this feature and was seen recently.
 
@@ -64,20 +57,18 @@ def _owned_elsewhere(feat_state: dict, session_id: str | None, now: str | None) 
     a session that crashed mid-feature would own it permanently. Callers that
     pass no session id opt out entirely, so existing callers keep their
     behaviour rather than meeting a token they cannot interpret.
+
+    The window and the "is it live" rule live in `h_mad_state_ownership` because
+    `--claim` must answer this question identically: a router that releases a
+    feature the writer then refuses to hand over is a deadlock only `--force`
+    can break.
     """
     if not session_id:
         return False
     owner = feat_state.get("owner_session_id")
     if not owner or owner == session_id:
         return False
-
-    heartbeat = _parse_ts(feat_state.get("owner_heartbeat_ts"))
-    if heartbeat is None:
-        return True  # held, with no evidence of when — treat as live
-
-    reference = _parse_ts(now) or datetime.now(timezone.utc)
-    age = (reference - heartbeat).total_seconds()
-    return age <= OWNERSHIP_STALE_AFTER_SECONDS
+    return owner_is_live(feat_state.get("owner_heartbeat_ts"), now)
 
 
 def decide(

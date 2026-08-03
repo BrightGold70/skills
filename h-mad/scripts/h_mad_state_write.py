@@ -39,6 +39,7 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+from h_mad_state_ownership import owner_is_live  # noqa: E402
 from h_mad_state_validate import classify  # noqa: E402
 
 
@@ -162,10 +163,20 @@ def claim(
 ) -> dict:
     """Take ownership of a feature, refreshing the heartbeat.
 
-    Advisory. A second session is refused unless `force` — which must exist,
-    because a session that crashes mid-feature would otherwise hold it forever.
-    Staleness is judged at read time by the resume decision, not here: this only
-    records who and when.
+    Advisory. A second session is refused while the current owner still looks
+    live; once its heartbeat goes stale the claim is treated as abandoned and
+    can be taken without `force`.
+
+    That staleness allowance is not a convenience. It previously lived only in
+    the resume router, so the router could return `enter_autonomous` on a
+    19.6h-dead claim while this function refused the very same claim — leaving
+    `force` as the only way through. `force` is the verb for taking a feature
+    from a session that is still RUNNING; routing the routine crashed-session
+    case through it teaches an operator to pass it by reflex, which is how the
+    guard stops protecting the case it exists for. Both halves now read one
+    window (`h_mad_state_ownership`) so they cannot disagree again.
+
+    An absent or unreadable heartbeat counts as live, so this fails closed.
     """
 
     def apply(records: dict):
@@ -173,10 +184,15 @@ def claim(
             raise StateWriteError(f"no such feature: {feature}")
         record = records[feature]
         held_by = record.get("owner_session_id")
-        if held_by and held_by != session_id and not force:
+        if (
+            held_by
+            and held_by != session_id
+            and not force
+            and owner_is_live(record.get("owner_heartbeat_ts"), now)
+        ):
             raise StateWriteError(
                 f"{feature!r} is owned by session {held_by!r} "
-                f"(last seen {record.get('owner_heartbeat_ts')}). "
+                f"(last seen {record.get('owner_heartbeat_ts')}, still live). "
                 "Coordinate, or pass force to take over."
             )
         return {

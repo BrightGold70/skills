@@ -76,6 +76,14 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.js
   --feature "<feature>" --claim "<session-id>"      # ... work ... then --release
 ```
 
+**A non-`owned_elsewhere` token guarantees the claim will be accepted.** The router
+and `--claim` read the SAME staleness window (`h_mad_state_ownership`), so a claim
+the router judged abandoned is takeable without `--force`. They used to disagree: the
+router released a 19.6h-dead claim while `--claim` refused it outright, leaving
+`--force` as the only way through. Keep `--force` for the one case it names — taking a
+feature from a session that is still **live** (`owned_elsewhere`) — and treat needing
+it on any other route as a bug, not as the usual step.
+
 **Do not reach for `--create` on a resume route to make an error go away.** There,
 `ERROR: no such feature` is a typo guard: the record is supposed to exist, so the
 name is wrong. Adding `--create` would silently fork a second, empty record under
