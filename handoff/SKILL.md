@@ -40,7 +40,9 @@ Parse flags from the invocation before doing anything else. Flags apply only to 
 After the handoff markdown is written (and not on `--dry-run`), leave a durable, mobile-visible checkpoint on the active Orca worktree so the next session — and the Orca mobile app — sees where this one stopped without opening the doc:
 
 - Gate on substrate: run `hmad-dispatch env`; proceed only if it reports `substrate: orca`. (`hmad-dispatch` is the h-mad wrapper; if it is not on PATH, skip this step.)
-- Preserve a foreign note: the worktree comment is a single shared field. First read `.worktree.comment` via `hmad-dispatch worktree-current`. If it is non-empty AND does not already start with `handoff:` or `h-mad` (i.e. a human wrote it, not a prior stamp), keep it — append the checkpoint after it (`<existing> — handoff: …`) rather than clobbering. An empty comment or a prior skill stamp is replaced outright.
+- Preserve a foreign note: the worktree comment is a single shared field. First read `.worktree.comment` via `hmad-dispatch worktree-current`. If it is non-empty AND does not already start with `handoff:`, `handover:`, `taken over:` or `h-mad` (i.e. a human wrote it, not a prior stamp), keep it — append the checkpoint after it (`<existing> — handoff: …`) rather than clobbering. An empty comment or a prior skill stamp is replaced outright.
+
+  **All four prefixes, not just `handoff:`.** This skill writes three of them — WRITE stamps `handoff:`, HANDOVER Step 4 stamps `handover:`, TAKEOVER stamps `taken over:` — and HANDOVER's own preserve rule already lists them. A WRITE that knows only `handoff:` treats its sibling modes' stamps as human notes and appends to them, so a worktree accumulates `handover: … — handoff: … — handoff: …` instead of carrying one current checkpoint. Keep this list and HANDOVER Step 4's identical.
 - Stamp: `hmad-dispatch worktree-comment active "handoff: <slug> · <status> · next: <next-step>"`, where `<slug>` is the handoff doc's slug, `<status>` a 2–4 word state, `<next-step>` the top Next Step.
 - Non-fatal: a non-zero result (no runtime, non-orca, wrapper absent) emits `[handoff] worktree_comment_skipped` and is ignored. The handoff is complete regardless — the checkpoint is an enrichment, never a gate. All Orca access goes through `hmad-dispatch`; never call `orca` directly from this skill.
 
@@ -355,7 +357,7 @@ else:
 " "<target-worktree-path>"
 ```
 
-Then apply the rule: a non-empty comment that does **not** start with `handoff:`, `handover:`, or `h-mad` was written by a human — append after it (`<existing> — handover: …`). An empty comment or a prior skill stamp is replaced outright. `worktree-comment` only ever overwrites, so preserving is something you do by *composing the new value*, not something the command does for you:
+Then apply the rule: a non-empty comment that does **not** start with `handoff:`, `handover:`, `taken over:` or `h-mad` was written by a human — append after it (`<existing> — handover: …`). (Same four prefixes as the WRITE stamp; `taken over:` is what TAKEOVER writes, so a handover into a lane that already took one over must replace, not append.) An empty comment or a prior skill stamp is replaced outright. `worktree-comment` only ever overwrites, so preserving is something you do by *composing the new value*, not something the command does for you:
 
 ```bash
 hmad-dispatch worktree-comment "<target-worktree>" "<composed-value>"
