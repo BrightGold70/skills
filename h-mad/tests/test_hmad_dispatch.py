@@ -1709,6 +1709,37 @@ def test_dispatch_orchestration_uses_resolved_target(tmp_path):
     )
 
 
+def test_dispatch_fails_when_the_runtime_reports_injected_false(tmp_path):
+    """J19: `ok:true` + `injected:false` is a SILENT no-op, not a success.
+
+    Measured 2026-08-03: `orca orchestration dispatch` without `--inject` returns
+    ok:true, status:"dispatched", injected:false, exit 0 -- the task row is
+    created and the worker is never told. The wrapper always passes `--inject`,
+    so it is not exposed today; but nothing ASSERTS the outcome, so a runtime
+    that declines to inject (dead pane, changed default) would read as delivered
+    and the await would sit until timeout with no diagnostic. Cheap to close.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    envelope = ('{"ok":true,"result":{"injected":false,'
+                '"dispatch":{"id":"ctx_1","status":"dispatched"}}}')
+    r = run(["dispatch", "codex", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_STUB_ORCA_STDOUT": envelope})
+    assert r.returncode != 0, "a non-injected dispatch must not report success"
+    assert "injected" in r.stderr
+
+
+def test_dispatch_tolerates_a_runtime_that_omits_injected(tmp_path):
+    """Absent != false. An older runtime that reports no `injected` field must
+    keep working -- only an explicit false is the failure signal."""
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["dispatch", "codex", "task_1"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_CODEX_TERMINAL": "term_codex",
+                 "HMAD_STUB_ORCA_STDOUT":
+                 '{"ok":true,"result":{"dispatch":{"id":"ctx_1"}}}'})
+    assert r.returncode == 0, r.stderr
+
+
 def test_await_filters_worker_done_and_converts_timeout(tmp_path):
     b = _bindir(tmp_path, ["orca"])
     cap = tmp_path / "cap.txt"
@@ -1824,6 +1855,84 @@ def test_await_acks_the_real_orca_delivery_shape(tmp_path):
     assert len(calls) == 2, f"expected ack-then-stop, got {len(calls)} checks"
     assert "--ack" not in calls[0]
     assert "--ack delivery_5ac615390583" in calls[1], calls[1]
+
+
+def test_await_caches_a_sibling_report_before_acking_it_away(tmp_path):
+    """J19: acking to advance the queue must not DISCARD a sibling's report.
+
+    Reproduced live 2026-08-03 in a two-module fanout. Module A reported
+    (`worker_done` queued, verified present). A later `await` for a different
+    task found no match in that batch, so it `--ack`ed to advance -- and the ack
+    drained the WHOLE delivery, `count: 2 -> 0`. `await <task_A>` then timed out
+    for a module that had genuinely finished.
+
+    That is the fanout shape, not an edge case: modules finish in one order and
+    are awaited in another, so the first await routinely acks reports nobody has
+    collected yet. The ack is still required (an un-acked delivery replays
+    forever), so the message must be CACHED before it is acked away.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "awaitcache"
+    sibling = (
+        '{"ok":true,"result":{"deliveryId":"delivery_1","count":1,"messages":['
+        '{"id":"msg_a","type":"worker_done",'
+        '"payload":"{\\"taskId\\":\\"task_A\\"}"}]}}'
+    )
+    env = {"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+           "HMAD_AWAIT_CACHE_DIR": str(cache), "HMAD_STUB_ORCA_STDOUT": sibling,
+           # Model the real drain: after --ack, every later check is EMPTY.
+           # Without it the stub replays the batch and the second await below
+           # re-matches from the queue -- so this test would pass with no cache
+           # at all, which is exactly what it must not do.
+           "HMAD_STUB_ORCA_ACK_STATE": str(tmp_path / "acked.flag")}
+    # Await a task that never matches: this acks the batch to advance, and the
+    # ack takes task_A's report with it.
+    first = run(["await", "task_B", "--timeout", "2"], substrate="orca", env=env)
+    assert first.returncode == 1
+
+    # task_A's report was in that acked batch. It must still be recoverable --
+    # from the cache, since the real queue has advanced past it.
+    second = run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env)
+    assert second.returncode == 0, second.stderr
+    assert "task_A" in second.stdout
+
+
+def test_await_serves_a_cached_report_without_touching_the_queue(tmp_path):
+    """A cached report is returned even when the mailbox is empty."""
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    cache = tmp_path / "awaitcache"
+    cache.mkdir()
+    (cache / "task_A.json").write_text(
+        '{"id":"msg_a","type":"worker_done","payload":"{\\"taskId\\":\\"task_A\\"}"}')
+    empty = '{"ok":true,"result":{"count":0,"messages":[]}}'
+    r = run(["await", "task_A", "--timeout", "2"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_AWAIT_CACHE_DIR": str(cache),
+                 "HMAD_STUB_ORCA_STDOUT": empty}, capture=cap)
+    assert r.returncode == 0
+    assert "task_A" in r.stdout
+    # Served from cache: no `orchestration check` round trip at all. A MISSING
+    # capture file is the strongest form of that -- the stub was never executed,
+    # so nothing created it.
+    text = cap.read_text() if cap.exists() else ""
+    calls = [ln for ln in text.splitlines() if "orchestration check" in ln]
+    assert calls == [], f"cache hit must not call check, got {calls}"
+
+
+def test_await_consumes_a_cached_report_so_it_is_not_served_twice(tmp_path):
+    """The cache is a hand-off buffer, not a log: one report, one delivery."""
+    b = _bindir(tmp_path, ["orca"])
+    cache = tmp_path / "awaitcache"
+    cache.mkdir()
+    (cache / "task_A.json").write_text(
+        '{"id":"msg_a","type":"worker_done","payload":"{\\"taskId\\":\\"task_A\\"}"}')
+    empty = '{"ok":true,"result":{"count":0,"messages":[]}}'
+    env = {"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+           "HMAD_AWAIT_CACHE_DIR": str(cache), "HMAD_STUB_ORCA_STDOUT": empty}
+    assert run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env).returncode == 0
+    again = run(["await", "task_A", "--timeout", "2"], substrate="orca", env=env)
+    assert again.returncode == 1, "a consumed report must not be replayed forever"
 
 
 def test_await_unackable_batch_fails_loud_instead_of_spinning(tmp_path):

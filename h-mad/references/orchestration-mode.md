@@ -200,14 +200,27 @@ orca orchestration worker-start --task <id> --worktree current --agent codex \
   --timeout-ms 180000 --json      # → state:"ready", stage:"input_accepted"
 ```
 
-- `worker-start` composes worktree + terminal + **readiness** + dispatch, and
-  *"exits 0 only for ready"*. Its response carries `state`/`stage`, so
-  `stage: "input_accepted"` is positive confirmation the agent took the prompt.
-- Raw `dispatch` has no readiness contract. Measured: a `codex` pane that
-  `terminal wait --for tui-idle` reported **satisfied** was still
-  `Starting MCP servers (0/3)` and could not accept input. `dispatch` returned
-  `ok:true`, `status:"dispatched"`, **`injected:false`**, and exit 0 — a silent
-  no-op that a fanout awaiting that module would sit on until timeout.
+- `worker-start` composes worktree + terminal + readiness + dispatch, and
+  *"exits 0 only for ready"*. Its response carries `state`/`stage`.
+- **`stage: "input_accepted"` is not proof the agent will act on the prompt.**
+  Measured 2026-08-03: a `worker-start` returning `state:"ready"`,
+  `stage:"input_accepted"` delivered the prompt into a codex pane still showing
+  `Starting MCP servers (0/3)`; the TUI redrew over it and the module never ran.
+  The stage means the input was *handed to the terminal*, not that the agent
+  consumed it. So `worker-start` is the better front door — it owns worktree,
+  terminal, and dispatch as one step — but the **completion signal remains the
+  worker's own `worker_done` / report-file**, never the launch response. Never
+  treat a successful `worker-start` as a module in flight; treat it as a module
+  that has been asked.
+- Raw `dispatch` has no readiness contract: it reports the task row, not whether
+  the worker was told. **`--inject` is what delivers**, and its absence is
+  silent — `ok:true`, `status:"dispatched"`, `injected:false`, exit 0.
+  (Corrected 2026-08-03: an earlier revision of this section blamed pane
+  readiness for an observed `injected:false`. A controlled retest on a fully
+  booted pane settled it — without `--inject` → `injected:false`, with it →
+  `injected:true`. The flag was the variable, not readiness. `hmad-dispatch`
+  always passes `--inject`, so h-mad was never exposed; the wrapper now also
+  asserts `injected != false` so a future silent no-op fails loudly.)
 - Recovery from that state is worse than the failure. The task wedges
   (`only ready tasks can be dispatched`); `task-update --status ready` clears the
   task but **orphans the terminal binding** (`Terminal … already has an active
@@ -229,6 +242,17 @@ unacknowledged — then the batch genuinely has no match, and the loop must ack 
 advance. That path is live-verified: a 2-message batch with no match extracted
 `deliveryId`, sent `--ack`, re-checked, and drained the queue `count: 2 → 0`,
 exiting **non-zero** on the timeout rather than the old exit-0 false completion.
+
+**The ack destroys every report in the delivery, so `await` parks them first.**
+The drain above is not selective: it took a *sibling's* completed report with it,
+and `await <that sibling>` then timed out for a module that had genuinely
+finished (reproduced live — module A reported `FANOUT-A-OK`, a later `await` for
+a different task acked the batch, and A became unreachable). In a fanout modules
+finish in one order and are awaited in another, so this is the normal path.
+`await` now caches every `worker_done` it sees **before** acking, keyed by task
+id, and checks that cache before going to the runtime. Cache location:
+`HMAD_AWAIT_CACHE_DIR`, else `await-cache/` beside the pin file. Entries are
+consumed on read — it is a hand-off buffer, not a log.
 
 ### Progress checkpoints (best-effort)
 

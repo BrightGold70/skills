@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 [ "${HMAD_STUB_FAIL:-}" = "1" ] && { printf '%s' '{"ok":false,"error":"boom"}'; exit 0; }
+# J19: model the REAL mailbox drain. A live `check --ack <id>` acknowledges the
+# whole delivery, and every later check returns an EMPTY batch -- measured
+# 2026-08-03, count 2 -> 0. Without this the stub replays the same batch forever,
+# so a test asserting "the acked report is gone" passes before any fix exists
+# (observed: the sibling-cache test passed against unmodified code, because the
+# second await simply re-matched from the replayed batch).
+# Opt-in via HMAD_STUB_ORCA_ACK_STATE so every pre-J19 test keeps replay semantics.
+if [ -n "${HMAD_STUB_ORCA_ACK_STATE:-}" ] && [ "${1:-}" = "orchestration" ] && [ "${2:-}" = "check" ]; then
+  if [ -f "$HMAD_STUB_ORCA_ACK_STATE" ]; then
+    printf '%s' '{"ok":true,"result":{"count":0,"messages":[]}}'; exit 0
+  fi
+  case " $* " in *" --ack "*) : > "$HMAD_STUB_ORCA_ACK_STATE" ;; esac
+fi
 if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "set" ]; then
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
