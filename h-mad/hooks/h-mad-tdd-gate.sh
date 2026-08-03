@@ -13,7 +13,50 @@
 
 set -euo pipefail
 
-STATE_FILE="${CLAUDE_PROJECT_DIR:-.}/docs/.bkit-memory.json"
+_resolve_state_file() {
+  # Find the orchestrator state that governs the file being written.
+  #
+  # This used to be a bare "${CLAUDE_PROJECT_DIR:-.}/docs/.bkit-memory.json",
+  # which assumes the state sits at the repo root. HemaSuite keeps its state at
+  # `hematology-paper-writer/docs/.bkit-memory.json`, so that path never existed
+  # and the fast-path below ("no state file -> allow") fired on EVERY write: a
+  # full Phase 5 ran there believing production writes were gated. They were not,
+  # and nothing said so — a gate that stands down silently is indistinguishable
+  # from a gate that approves.
+  local target="$1"
+  local root="${CLAUDE_PROJECT_DIR:-.}" root_abs=""
+  root_abs="$(cd "$root" 2>/dev/null && pwd -P)" || root_abs=""
+
+  # 1. Repo-root layout — the common single-project case, and back-compat.
+  if [ -n "$root_abs" ] && [ -f "$root_abs/docs/.bkit-memory.json" ]; then
+    printf '%s\n' "$root_abs/docs/.bkit-memory.json"
+    return 0
+  fi
+
+  # 2. Sub-project layout — walk UP from the file being written.
+  [ -n "$target" ] || return 1
+  local dir
+  dir="$(cd "$(dirname "$target")" 2>/dev/null && pwd -P)" || return 1
+  # Only walk within the project. A state file in a PARENT of this project
+  # belongs to a different project, and adopting it would let one repo's Phase 5
+  # gate writes in an unrelated sibling — a false block with nothing in the
+  # current repo to explain it.
+  if [ -n "$root_abs" ]; then
+    case "$dir/" in
+      "$root_abs"/*) ;;
+      *) return 1 ;;
+    esac
+  fi
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+    if [ -f "$dir/docs/.bkit-memory.json" ]; then
+      printf '%s\n' "$dir/docs/.bkit-memory.json"
+      return 0
+    fi
+    [ -n "$root_abs" ] && [ "$dir" = "$root_abs" ] && break
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
 
 # Claude Code PreToolUse hooks receive tool input as JSON via stdin.
 # Positional arg is supported for direct invocation / testing.
@@ -32,7 +75,15 @@ except Exception:
 " 2>/dev/null || true)
 fi
 
-# Fast path: no state file → no orchestrator → allow
+# Resolved AFTER the target path, because a sub-project's state is found by
+# walking up from the file being written — there is nothing else to search from.
+STATE_FILE="$(_resolve_state_file "$TARGET_PATH" || true)"
+
+# Fast path: no state file anywhere → no orchestrator → allow.
+# This fail-open is correct for a project that simply does not use h-mad. It was
+# wrong only because the search could not see a state file that existed.
+# An unresolved search yields "", and `[ ! -f "" ]` is true, so this one test
+# covers both "not found" and "found but gone".
 [ ! -f "$STATE_FILE" ] && exit 0
 
 # Need jq to parse state
@@ -56,8 +107,19 @@ ACTIVE=$(jq -r '
 [ -z "$TARGET_PATH" ] && exit 0
 
 # Allow test files, fixtures, docs, config files unconditionally.
+# Test FILES are matched on the basename, not the whole path. `*test_*.py`
+# matched "test_" anywhere, including a parent directory — so a production file
+# under `test_helpers/` (or any dir with `test_` in its name) was silently
+# exempted from the gate. Same silent-stand-down class as the state-file bug
+# above, and found by its test harness: pytest's own tmp dirs are named
+# `test_<name>0`, which exempted every fixture written under them.
+case "${TARGET_PATH##*/}" in
+  test_*.py|*_test.py|conftest*.py)
+    exit 0 ;;
+esac
+# Test DIRECTORIES stay path-matched, anchored to a full segment.
 case "$TARGET_PATH" in
-  *test_*.py|*/tests/*|*conftest*.py|*/fixtures/*)
+  */tests/*|*/fixtures/*)
     exit 0 ;;
   *.md|*.yaml|*.yml|*.json|*.toml|*.txt|*.rst|*.cfg|*.ini)
     exit 0 ;;
