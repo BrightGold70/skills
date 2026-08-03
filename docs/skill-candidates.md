@@ -10,9 +10,13 @@ reason) · `done` (legacy spelling of LANDED).
 
 ## Open, highest recurrence first (reconciled 2026-08-03)
 
-**One `candidate: yes` is open: `live-e2e-pane-janitor` (rec 4, 2026-08-03 later session).** All four
-recurrences were inside a single session, which is weaker evidence than four separate sessions —
-weigh that before promoting. The prior holder, `orca-verb-live-reconcile`, was promoted 2026-08-03
+**One `candidate: yes` is open: `live-e2e-pane-janitor` (rec 6, spanning two 2026-08-03 sessions).**
+The "all recurrences inside one session" caveat that held it back is now **gone** — the
+orca-defects session hit it twice more independently, and grew its scope: probe *dispatches* must be
+settled (`task-update --status completed`) as well as panes closed, because `worker-abandon` and
+`worker-stop` both fail to release one. **This now meets the re-scout promote trigger below**
+(rec ≥3, `candidate: yes`, fresh recurrence in a later session block). The prior holder,
+`orca-verb-live-reconcile`, was promoted 2026-08-03
 to `invariants.base.md` §"Wrapper–runtime reconciliation", generalized off Orca since that file is
 project-agnostic. Its recurrence count reached 5 on the day it landed: the two create-response `.id`
 bugs, the live `check` probe that surfaced `run_required`, and — hours later, in the run that
@@ -28,6 +32,7 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 
 | rec | candidate | status |
 |---|---|---|
+| 6 | `live-e2e-pane-janitor` | *yes* — **OPEN, and the only actionable row.** Close scratch panes by elimination AND settle their dispatches; two sessions, 2026-08-03 |
 | 9 | `close-a-filed-defect cycle` | **LANDED** — SKILL.md §Working a `skill-monitoring` item |
 | 9 | `H-MAD phase-doc + agy-audit-gate loop` | *maybe* — already the /h-mad skill |
 | 6 | `audit→fix→subagent-review→merge loop` | *maybe* — already the /h-mad skill |
@@ -45,7 +50,9 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 | 1 | `reconcile a handoff's PR claims via gh` | **LANDED** (2026-08-03) — handoff SKILL.md Step 3 "PR state". Was filed `candidate: no`, but its own reason named the upgrade ("belongs in the handoff skill's READ reconciliation"); the `no` meant *not a standalone skill* and nobody routed it. |
 
 **Re-scout trigger:** promote only when a *fresh* recurrence (rec ≥3, `candidate: yes`) appears in a
-later session block. As of 2026-08-03 there is none — the backlog is drained of actionable items.
+later session block. **As of the 2026-08-03 orca-defects session this has FIRED**, for
+`live-e2e-pane-janitor` — see the paragraph above. It is the one actionable row; everything else
+remains drained.
 
 **A `no` can still name an upgrade.** The verdict answers "is this a new skill?", which is not the
 same question as "should an existing skill change?". Read the *reason* on every `no` and `maybe`
@@ -213,7 +220,26 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 ## 2026-08-03 — agent-identity-and-await-correctness
 
-- **live-e2e-pane-janitor**: after a live orchestration probe, enumerate panes in the worktree and close the ones this session created — by ELIMINATION against a known-good set, since `worker-start` panes inherit the worktree name and are indistinguishable by title. Hand-rolled the same `terminal list --json` → filter → `terminal close` pipeline 4× this session, each time re-typing the operator's keep-list; getting it wrong closes the operator's own agent pane — recurrence: 4 (all within one session) — candidate: yes
-- **two-arm-probe-before-asserting-a-cause**: when attributing an observed failure to a cause, run the *controlled pair* (with/without the one variable) before writing the cause down. I blamed pane readiness for an `injected:false` and shipped that causality in a doc + PR body; a 2-command retest on a booted pane showed the missing `--inject` flag was the whole story — recurrence: 2 (this, plus the title-only "no agents running" conclusion the operator corrected the same session) — candidate: maybe (`invariants.base.md` §"Assumption verification" already mandates executing assumptions; this is the narrower "isolate ONE variable" case and may just be a line there)
+- **live-e2e-pane-janitor**: after a live orchestration probe, enumerate panes in the worktree and close the ones this session created — by ELIMINATION against a known-good set, since `worker-start` panes inherit the worktree name and are indistinguishable by title. Hand-rolled the same `terminal list --json` → filter → `terminal close` pipeline 4× this session, each time re-typing the operator's keep-list; getting it wrong closes the operator's own agent pane — recurrence: 6 (4 on 2026-08-03 agent-identity + 2 more in the 2026-08-03 orca-defects session, so **no longer single-session**) — candidate: yes — **scope grew: panes are only half.** The orca-defects session had to settle 5 probe *dispatches* (`task-update --status completed`) as well as close 4 panes, because an unsettled dispatch wedges its terminal permanently — `worker-abandon`/`worker-stop` both return `dispatch_not_found` for it (see `docs/orca-bug-worker-release-dispatch-not-found.md`). A janitor that closes panes without settling their dispatches leaves the Run dirty.
+- **two-arm-probe-before-asserting-a-cause**: when attributing an observed failure to a cause, run the *controlled pair* (with/without the one variable) before writing the cause down. I blamed pane readiness for an `injected:false` and shipped that causality in a doc + PR body; a 2-command retest on a booted pane showed the missing `--inject` flag was the whole story — recurrence: 4 (this; the title-only "no agents running" conclusion the operator corrected the same session; then BOTH carried repros in the 2026-08-03 orca-defects session, each falsified by a control that removed the blamed step) — candidate: maybe (`invariants.base.md` §"Assumption verification" already mandates executing assumptions; this is the narrower "isolate ONE variable" case and may just be a line there) — **promoted to memory instead of a skill:** `feedback_carried_repro_is_not_evidence`, which states it as "run the repro AND a control that removes the step it blames". Still worth the `invariants.base.md` line; leave open until that lands.
 - **stub-must-model-the-destructive-step**: a stub that replays state the real system CONSUMES makes a test pass before the fix exists. The orca stub replayed an acked delivery forever, so a sibling-cache test re-matched from the queue and pinned nothing — it passed against unmodified code — recurrence: 1 — candidate: maybe (close to `invariants.base.md` §"Test discrimination", but that rule is about asserting the right thing, not about the fixture lying)
 - **mutation-anchor-drift-after-self-edit**: `h_mad_mutation_harness.py` REFUSED 3 runs this session with `anchor matched 0 times`, twice because my own edits had moved the anchored lines between writing the spec and running it. The verdict is correct and load-bearing (REFUSED measures nothing), but the recovery is manual re-grepping. A near-miss hint on 0 matches would close the loop — recurrence: 3 — candidate: maybe (harness enhancement, not a new skill)
+
+## 2026-08-03 — orca-defects-and-preflight-decision
+
+- **live-e2e-pane-janitor** (recurrence, not a new row): hand-rolled scratch-terminal creation +
+  `terminal close` twice more, and this time also had to settle 5 probe dispatches. See the row
+  above — count is now 6 and spans two sessions.
+- **mutation-spec-shares-one-anchor**: when several mutations target the SAME line with different
+  replacements (exit code / stream routing / message content), the spec is five near-identical
+  blocks differing only in `replace`. That shape is what proved the content assertions load-bearing
+  in J22 — the two mutations that keep exit+stream and strip only the text are the ones a
+  returncode-only test survives. Worth a spec-generator or a documented recipe rather than
+  retyping the anchor five times — recurrence: 1 — candidate: maybe (it is a *pattern for writing
+  specs*, and the harness already exists; a §recipe in `invariants.base.md` §"Mutation verification"
+  may be the whole fix)
+- **give-the-transport-e2e-real-work**: a transport e2e whose payload is a smoke string proves the
+  transport and nothing else; the same run with a real review task as its payload proved the
+  transport AND falsified a bug doc I had written 20 minutes earlier. Costs nothing extra —
+  recurrence: 1 — candidate: no (judgement when authoring a probe, not a pipeline; captured as a
+  learning + `feedback_carried_repro_is_not_evidence`)
