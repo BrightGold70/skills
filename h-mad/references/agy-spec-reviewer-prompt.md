@@ -67,6 +67,8 @@ VERDICT: <COMPLIANT | DRIFT>
 
 If COMPLIANT: confirm the implementation matches the task spec. No further action needed.
 
+**A `wiring` task is the one case where COMPLIANT must not read as "the connection works".** This review is diff-based, and **presence is not enforcement** (`invariants.base.md` §"Connection enforcement"): a call site you can see in the diff looks identical whether or not any test would fail when it is removed. Judge only what a diff can settle — that the connection the task named is present and matches the spec — and say so explicitly rather than implying the wire is proven. Whether it is *enforced* is established downstream by the wire-scoped revert, and by nothing you can see here. Never let a present call site count as evidence a wired property holds.
+
 If DRIFT: list each issue with:
 - File:line reference
 - What's missing or extra vs the impl-plan task

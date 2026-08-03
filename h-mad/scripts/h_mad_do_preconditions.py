@@ -7,9 +7,23 @@ Checks:
   latest feature.plan.audit.v*.md has must-fix=0 (awk gate)
   latest feature.design.audit.v*.md has must-fix=0 (awk gate)
 
-Prints: OK (exit 0)
-   or:  MISSING:<path>  (exit 1)
-   or:  DIRTY:<path>  (exit 1)
+Verdicts, printed as a canonical token:
+
+    PRECONDITION: PASS                        exit 0
+    PRECONDITION: FAIL issues=2               exit 0
+    PRECONDITION: UNREADABLE                  exit 2
+
+followed by the detail lines (`MISSING:<path>` / `DIRTY:<path>`) that say which
+prerequisite is not met.
+
+`FAIL` exits 0 because it is a **verdict**, not an operational error
+(`invariants.base.md` §"Audit-gate signal discipline"): a non-zero exit
+registers as a Claude Code `PostToolUseFailure` and leaks into coexisting
+plugins' error handling. This check used to exit 1 on a normal FAIL and print no
+token at all, which left a caller no way to obey "read the token, never `$?`" —
+the instruction to branch on the exit code was the only thing it *could* do.
+Non-zero is now reserved for the one genuine operational error: a repo root that
+cannot be read, where nothing was checked and no verdict exists.
 """
 from __future__ import annotations
 
@@ -64,10 +78,28 @@ def main() -> int:
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--feature", required=True)
     args = parser.parse_args()
-    rc, lines = check(args.repo_root, args.feature)
+
+    # The one genuine operational error: nothing could be checked, so there is no
+    # verdict to report. Reporting FAIL here would blame the feature for a bad
+    # path — the same misrouting an unreadable plan used to cause at 5b.
+    if not args.repo_root.is_dir():
+        print(f"ERROR: --repo-root is not a directory: {args.repo_root}", file=sys.stderr)
+        print("PRECONDITION: UNREADABLE")
+        print(
+            "  nothing was checked, so this is not a verdict about the feature — "
+            "check the --repo-root path."
+        )
+        return 2
+
+    has_issues, lines = check(args.repo_root, args.feature)
+    if has_issues:
+        print(f"PRECONDITION: FAIL issues={len(lines)}")
+    else:
+        print("PRECONDITION: PASS")
     for line in lines:
         print(line)
-    return rc
+    # Exit 0 on either verdict; the caller reads the token, never `$?`.
+    return 0
 
 
 if __name__ == "__main__":
