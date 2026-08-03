@@ -2,7 +2,7 @@
 
 > Used by `~/.claude/skills/h-mad/SKILL.md` Phase 5e (GREEN) spec-compliance review.
 > Orchestrator stages this template at `/tmp/h_mad_<feature>_5e_review_<N>.txt` with
-> `<INLINE_*>` placeholders substituted, then dispatches via `hmad-dispatch send`
+> `INLINE_*` placeholders substituted, then dispatches via `hmad-dispatch send`
 > file-indirection (substrate-agnostic; see `references/agent-substrate.md`, F-12
 > discipline preserved).
 

@@ -7,7 +7,7 @@
 > — the axis a green suite and a `STATUS: DONE` cannot self-certify.
 >
 > The orchestrator stages this template at `/tmp/h_mad_<feature>_5e-verify_<N>.txt` with
-> `<INLINE_*>` placeholders substituted, then dispatches it — **default `hmad-dispatch exec`**
+> `INLINE_*` placeholders substituted, then dispatches it — **default `hmad-dispatch exec`**
 > (headless, hard exit code, no scrape; monitor with `--log`), or the pane path via
 > `hmad-dispatch send` for the iterative loop. Substrate-agnostic file-indirection; see
 > `references/agent-substrate.md` (F-12 discipline preserved).

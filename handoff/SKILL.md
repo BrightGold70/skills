@@ -93,6 +93,12 @@ In parallel:
 - `git status --short` — does the working-tree state match the doc's "Uncommitted changes" claim? (Doc says "none" but tree is dirty → flag. Doc lists specific files but tree is clean → flag, the work was probably committed since.)
 - For each file path cited in Next Steps and Files Touched, check existence. If a path no longer exists (renamed/moved/deleted), flag it — that Next Step needs adjusting before the user picks it up.
 - `git log --oneline -5` — has anything new landed since the handoff was written? If the doc references commits that aren't in `git log`, the branch may have been rebased; mention it.
+- **PR state** — if the doc's Next Steps or Open Items name a PR (`#N`, "merge PR", "waiting on review"), check it before restoring that todo. A PR claim is the one piece of handoff state that lives entirely off the local machine, so every other check in this list passes while it is stale — and "merge PR #18" survived into a resume as the top Next Step when #18 had merged hours earlier. Both halves, because a squash-merge lands under a rewritten title and `gh` may be unavailable or unauthenticated:
+  ```bash
+  gh pr view <N> --json state,mergedAt,title 2>/dev/null   # OPEN | MERGED | CLOSED
+  git log --oneline -50 | grep -F '(#<N>)'                 # squash title fallback
+  ```
+  Merged or closed → say so and drop the todo rather than restoring it. If `gh` errors (no CLI, not authenticated, not a GitHub remote), fall back to the `git log` grep and say the PR state is unverified — do **not** silently assume it is still open.
 - **Remote ↔ local sync** — Step 0 already fast-forwarded the clean-behind case before reading; this bullet re-checks and covers what Step 0 deliberately skipped (dirty/diverged/ahead). The working tree may have moved on the remote since the handoff (another machine, a teammate, a CI bot, or a `/handoff` WRITE push from a different session). Before the user starts any new action, reconcile against the remote so they don't branch off a stale base:
   - `git fetch` (quiet; if no remote or no upstream, skip this bullet silently — `git rev-parse --abbrev-ref @{u}` errors → no upstream).
   - `git rev-list --left-right --count @{u}...HEAD` → `<behind>	<ahead>`.
@@ -243,7 +249,7 @@ on top, one line per entry, tags backtick-quoted for grep cleanliness).
 
 ```
 Learning saved to docs/learnings.md:
-  2026-04-30 · gotcha · `lightrag,nan-embed` — qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2-norm poisons)
+  - 2026-04-30 · gotcha · [0.7] · `lightrag,nan-embed` — qwen3-embedding NaN's on long inputs; substitute random unit vector not zero (L2-norm poisons)
 ```
 
 Then stop — this is a single-shot operation, not a gateway to more work.
