@@ -81,7 +81,23 @@ def check(record: dict, git: dict, now: str | None = None) -> list[dict[str, Any
         })
 
     # 2. Implementation shipped, but the phase counter never advanced.
-    if branch and impl_commits > 0 and _phase_num(record.get("last_completed_phase")) < 5:
+    #
+    # A phase that is still RUNNING has not completed, so its counter sitting one
+    # short is the correct value — not a stale one. A record mid-step5 reads
+    # last_completed_phase=4 with implementation commits already on the branch,
+    # because earlier tasks in the phase shipped while the phase itself continues.
+    # Flagging that told an operator to "advance the counter" on a healthy run and
+    # buried the real signal in noise (hit live on grounding-shadow-measurement:
+    # lcp=4, 18 feature commits, Task 5 genuinely outstanding).
+    #
+    # Suppress ONLY the exactly-one-behind case, which is what mid-phase means.
+    # A cleared phase (nothing in flight), a LATER phase in flight (so Phase 5
+    # did complete), or a counter behind by more than the running phase explains
+    # are all still the genuine staleness this check exists for.
+    completed = _phase_num(record.get("last_completed_phase"))
+    in_flight = _phase_num(record.get("phase"))
+    mid_phase = in_flight > 0 and completed == in_flight - 1
+    if branch and impl_commits > 0 and completed < 5 and not mid_phase:
         findings.append({
             "code": "phase_counter_behind",
             "detail": (

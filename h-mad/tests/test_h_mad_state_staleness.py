@@ -85,6 +85,59 @@ class TestPhaseCounterBehind:
                "impl_commit_count": 12}
         assert "phase_counter_behind" in codes(st.check(rec, git))
 
+    def test_mid_phase5_with_a_correct_counter_is_not_flagged(self):
+        # THE false positive. A record actively executing step5 has
+        # last_completed_phase=4 BECAUSE Phase 5 is not finished — that is the
+        # correct value, not a stale one. Implementation commits exist because
+        # earlier tasks in the phase shipped; the phase itself is still running.
+        # Hit live on grounding-shadow-measurement: lcp=4 with 18 feature
+        # commits, Task 5 genuinely outstanding.
+        rec = dict(BASE, last_completed_phase=4, phase="step5")
+        git = {"branch_exists": True, "latest_commit_ts": "2026-08-03T00:00:00Z",
+               "impl_commit_count": 18}
+        assert "phase_counter_behind" not in codes(st.check(rec, git)), (
+            "flagged a record that is correctly mid-Phase-5; the counter is not behind"
+        )
+
+    def test_no_run_in_flight_with_shipped_work_is_still_flagged(self):
+        # Counter-direction 1: nothing in flight (phase cleared) but commits
+        # shipped and the counter never advanced — the genuine staleness this
+        # check exists for. A resume would re-enter Phase 5 and redo the work.
+        rec = dict(BASE, last_completed_phase=4, phase=None)
+        git = {"branch_exists": True, "latest_commit_ts": "2026-08-03T00:00:00Z",
+               "impl_commit_count": 18}
+        assert "phase_counter_behind" in codes(st.check(rec, git))
+
+    def test_a_later_phase_in_flight_with_a_phase4_counter_is_still_flagged(self):
+        # Counter-direction 2: executing step6 means Phase 5 COMPLETED, so a
+        # counter of 4 is genuinely behind. Suppressing on "any live phase"
+        # would silence this.
+        rec = dict(BASE, last_completed_phase=4, phase="step6")
+        git = {"branch_exists": True, "latest_commit_ts": "2026-08-03T00:00:00Z",
+               "impl_commit_count": 18}
+        assert "phase_counter_behind" in codes(st.check(rec, git))
+
+    def test_a_counter_more_than_one_behind_the_live_phase_is_still_flagged(self):
+        # Counter-direction 3: mid-step5 should mean lcp=4. lcp=2 is behind by
+        # more than the phase in flight explains.
+        rec = dict(BASE, last_completed_phase=2, phase="step5")
+        git = {"branch_exists": True, "latest_commit_ts": "2026-08-03T00:00:00Z",
+               "impl_commit_count": 18}
+        assert "phase_counter_behind" in codes(st.check(rec, git))
+
+    def test_no_branch_but_commits_counted_is_not_flagged(self):
+        # Isolates the `branch` guard. The neighbouring NO_GIT test cannot:
+        # it sets branch_exists=False AND impl_commit_count=0, so either
+        # condition alone suppresses the finding and deleting the branch check
+        # leaves it green. Caught by mutation.
+        rec = dict(BASE, last_completed_phase=4, phase=None)
+        git = {"branch_exists": False, "latest_commit_ts": "2026-08-03T00:00:00Z",
+               "impl_commit_count": 18}
+        assert "phase_counter_behind" not in codes(st.check(rec, git)), (
+            "flagged a feature with no branch; the commit count alone says nothing "
+            "about whether THIS feature shipped"
+        )
+
     def test_no_feature_branch_means_no_claim(self):
         assert "phase_counter_behind" not in codes(st.check(dict(BASE), NO_GIT))
 
