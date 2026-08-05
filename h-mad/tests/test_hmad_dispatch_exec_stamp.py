@@ -284,3 +284,227 @@ def test_ac_4_8_write_preserves_caller_stdin_and_gives_orca_eof(tmp_path):
                extra_env={"HMAD_STUB_ORCA_STDIN_CAPTURE": seen})
     assert r.returncode == 0
     assert seen.read_text() == ""
+
+
+# --- Task 6--10 wiring REDs -------------------------------------------------
+
+def _exec_dispatch(tmp_path, *, substrate="orca", rc="0", last="STATUS: DONE",
+                   sleep=None, timeout="6", state=None, capture=None, **extra):
+    """Run the public exec path with only the test agent/substrate binaries."""
+    names = ["codex", "orca"] if substrate == "orca" else ["codex", "cmux"]
+    b = _bindir(tmp_path, names)
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("wire test prompt")
+    env = {"_BINDIR": b, "HMAD_STUB_CODEX_RC": rc,
+           "HMAD_STUB_CODEX_LAST": last}
+    if sleep is not None:
+        env["HMAD_STUB_CODEX_SLEEP"] = sleep
+    if state is not None:
+        env["HMAD_STUB_ORCA_STATE"] = state
+    env.update(extra)
+    # The stateful Orca stub advertises its synthetic worktree at /x.
+    # codex's stub does not require that directory to exist, so use that
+    # advertised path to exercise the resolver's non-active target.
+    cd_dir = "/x" if substrate == "orca" else str(tmp_path)
+    args = ["exec", "codex", str(prompt), "--cd", cd_dir]
+    if timeout is not None:
+        args += ["--timeout", timeout]
+    return run(args, substrate=substrate, env=env,
+                capture=capture)
+
+
+def _orca_calls(path):
+    return path.read_text().splitlines() if path.exists() else []
+
+
+def test_stamp_targets_the_cd_worktree_not_active(tmp_path):
+    cap = tmp_path / "calls"
+    entries = [_entry("/x/repo", "repo-id", "keep-me"),
+               _entry("/x/other", "active", "active", active=True)]
+    b = _bindir(tmp_path, ["orca"])
+    env = {"PATH": f"{b}:/usr/bin:/bin", "HMAD_SUBSTRATE": "orca",
+           "HMAD_STUB_ORCA_WT_PS_STDOUT": _payload(entries),
+           "HMAD_STUB_CAPTURE": cap}
+    # Keep the resolver and bounded runner intact: this is a call-site pin, not
+    # a leaf test with a resolver shim.
+    extra = _function("_exec_wt_target") + "\n" + _function("_exec_run")
+    r = _call("_exec_stamp", "start", "codex", "skills", "/x/repo/src",
+              env=env, extra=extra)
+    assert r.returncode == 0, r.stderr
+    sets = [line for line in _orca_calls(cap) if "worktree set" in line]
+    assert sets, "_exec_stamp did not call worktree set"
+    assert "--worktree repo-id" in sets[-1]
+    assert "--worktree active" not in sets[-1]
+
+
+def test_stamp_abandons_write_when_resolver_fails(tmp_path):
+    cap = tmp_path / "calls"
+    r = _stamp(tmp_path, "start", target="", extra_env={
+        "HMAD_STUB_CAPTURE": cap})
+    assert r.returncode == 0
+    assert not [line for line in _orca_calls(cap) if "worktree set" in line]
+
+
+def test_start_stamp_is_written_before_the_agent_runs(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap)
+    assert r.returncode == 0, r.stderr
+    calls = _orca_calls(cap)
+    worktree = next((i for i, line in enumerate(calls) if "worktree set" in line), None)
+    codex = next((i for i, line in enumerate(calls) if line.startswith("codex ")), None)
+    assert worktree is not None, "no pre-agent worktree set was recorded"
+    assert codex is not None and worktree < codex
+
+
+def test_start_stamp_is_silent_on_cmux(tmp_path):
+    cap = tmp_path / "calls"
+    r = _exec_dispatch(tmp_path, substrate="cmux", capture=cap)
+    assert r.returncode == 0, r.stderr
+    assert not any("worktree set" in line for line in _orca_calls(cap))
+
+
+def test_exit_stamp_carries_agent_rc_and_verdict(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, rc="7", last="VERDICT: DONE")
+    assert r.returncode == 7, r.stderr
+    sets = [line for line in _orca_calls(cap) if "worktree set" in line]
+    assert any("codex" in line and "rc=7" in line and "DONE" in line for line in sets)
+
+
+def test_exit_stamp_is_written_for_empty_final_message(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, last="")
+    assert r.returncode == 3, r.stderr
+    assert any("worktree set" in line and "rc=3" in line for line in _orca_calls(cap))
+
+
+def test_heartbeat_stamps_across_three_intervals(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.3",
+                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    assert r.returncode == 0, r.stderr
+    beats = [line for line in _orca_calls(cap) if "running" in line and "worktree set" in line]
+    assert len(beats) >= 3, f"expected at least three heartbeat writes, got {beats!r}"
+
+
+def test_heartbeat_elapsed_values_are_monotonic(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
+                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    assert r.returncode == 0, r.stderr
+    values = [int(m.group(1)) for line in _orca_calls(cap)
+              if "worktree set" in line and "running" in line
+              for m in [re.search(r"running · (\d+)m", line)] if m]
+    assert len(values) >= 3 and values == sorted(values)
+
+
+def test_heartbeat_without_timeout_keeps_the_same_cadence(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
+                       timeout=None, HMAD_EXEC_HEARTBEAT_SEC="1")
+    assert r.returncode == 0, r.stderr
+    assert len([line for line in _orca_calls(cap)
+                if "worktree set" in line and "running" in line]) >= 3
+
+
+def test_zero_heartbeat_still_has_start_and_exit_but_no_beats(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="1.2",
+                       HMAD_EXEC_HEARTBEAT_SEC="0")
+    assert r.returncode == 0, r.stderr
+    lines = _orca_calls(cap)
+    writes = [line for line in lines if "worktree set" in line]
+    # `running` cannot discriminate a beat from a start: the START stamp's own state
+    # text is `running · 0m`, so an assertion that no write contains "running" fails
+    # against a correct implementation. Count the writes instead — with the heartbeat
+    # disabled there must be EXACTLY the two lifecycle stamps (start, exit), and a
+    # single leaked beat pushes the count to 3 over this 1.2s run.
+    assert len(writes) == 2, writes
+    assert any("running" in line for line in writes), writes   # the start stamp
+    assert any("rc=" in line for line in writes), writes        # the exit stamp
+
+
+def test_heartbeat_preserves_handoff_and_one_span_after_three_beats(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    state.write_text("handoff: keep-me")
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.3",
+                       HMAD_EXEC_HEARTBEAT_SEC="1")
+    assert r.returncode == 0, r.stderr
+    comment = state.read_text()
+    assert "handoff: keep-me" in comment
+    assert comment.count("h-mad: ") == 1
+    assert comment.count("⟦/h-mad⟧") == 1
+
+
+def test_heartbeat_shorter_than_stamp_timeout_terminates(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    started = time.monotonic()
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="1.3",
+                       timeout="5", HMAD_EXEC_HEARTBEAT_SEC="1",
+                       HMAD_EXEC_STAMP_TIMEOUT="2")
+    assert time.monotonic() - started < 5
+    assert r.returncode == 0, r.stderr
+    assert any("running" in line for line in _orca_calls(cap))
+
+
+def test_heartbeat_keeps_inherited_stdin_intact(tmp_path):
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    seen = tmp_path / "agent.stdin"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, sleep="3.2",
+                       HMAD_EXEC_HEARTBEAT_SEC="1", HMAD_STUB_STDIN_CAPTURE=seen)
+    assert r.returncode == 0, r.stderr
+    assert "wire test prompt" in seen.read_text()
+    assert "===HMAD-DISPATCH-BOUNDARY===" in seen.read_text()
+    assert any("running" in line for line in _orca_calls(cap))
+
+
+def test_exec_run_without_heartbeat_never_stamps_from_environment(tmp_path):
+    stamps = tmp_path / "stamps"
+    extra = f'_exec_stamp() {{ printf x >> {shlex.quote(str(stamps))}; }}'
+    body = _function("_exec_run")
+    r = subprocess.run(["bash", "-c", f"{body}\n{extra}\n_exec_run '' bash -c 'sleep 3'"],
+                       capture_output=True, text=True,
+                       env={**os.environ, "HMAD_EXEC_HEARTBEAT_SEC": "1"})
+    assert r.returncode == 0, r.stderr
+    assert not stamps.exists() or stamps.read_text() == ""
+
+
+def test_exit_notify_fires_once_with_rc(tmp_path):
+    cap = tmp_path / "calls"
+    b = _bindir(tmp_path, ["codex", "cmux"])
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("notify wire")
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_STUB_CODEX_RC": "7",
+                 "HMAD_STUB_CODEX_LAST": "VERDICT: DONE"}, capture=cap)
+    assert r.returncode == 7, r.stderr
+    notifies = [line for line in _orca_calls(cap) if line.startswith("cmux notify ")]
+    assert len(notifies) == 1
+    assert "rc=7" in notifies[0] and "DONE" in notifies[0]
+
+
+def test_notify_failure_does_not_change_exec_rc_or_stdout(tmp_path):
+    cap = tmp_path / "calls"
+    b = _bindir(tmp_path, ["codex", "cmux"])
+    failing = b / "cmux"
+    failing.unlink()
+    failing.write_text("#!/bin/sh\nprintf 'cmux %s\\n' \"$*\" >> \"$HMAD_STUB_CAPTURE\"\nexit 9\n")
+    failing.chmod(0o755)
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("notify failure")
+    r = run(["exec", "codex", str(prompt), "--cd", str(tmp_path)], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_STUB_CODEX_RC": "4",
+                 "HMAD_STUB_CODEX_LAST": "STATUS: DONE"}, capture=cap)
+    assert r.returncode == 4
+    assert r.stdout.strip() == "STATUS: DONE"
+    assert any("cmux notify" in line for line in _orca_calls(cap))

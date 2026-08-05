@@ -1887,7 +1887,7 @@ _exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
     exit)  state="rc=$rc · ${verdict:-no-verdict}" ;;
     *) return 0 ;;
   esac
-  stamp="h-mad: $agent $label · $state"$'\342\236\246'"/h-mad"$'\342\237\247'
+  stamp="h-mad: $agent $label · $state"$'\342\237\246'"/h-mad"$'\342\237\247'
   if declare -F _exec_comment_compose >/dev/null 2>&1; then
     composed="$(_exec_comment_compose "$current" "$stamp")" || return 0
   else
@@ -1920,7 +1920,9 @@ _exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
 
 _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cmd...>
   local heartbeat=0
+  local hb_agent="" hb_label="" hb_cd_dir="" hb_interval=0
   if [ "${1:-}" = "--heartbeat" ]; then
+    hb_agent="${2:-}" hb_label="${3:-}" hb_cd_dir="${4:-}" hb_interval="${5:-0}"
     heartbeat=1
     shift 5
   fi
@@ -1946,6 +1948,7 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
   # the 1s a whole-second sleep leaves.
   local deadline=0 poll=0.25
   if [ -n "$secs" ]; then deadline=$(( SECONDS + secs )); fi
+  local last_beat="$SECONDS"
   "$@" <&0 &
   local pid=$!
   if [ "$had_m" -eq 0 ]; then set +m; fi
@@ -1962,6 +1965,11 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
       done
       kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null; return 124
+    fi
+    if [ "$heartbeat" -eq 1 ] && [ "$hb_interval" -gt 0 ] \
+      && [ $(( SECONDS - last_beat )) -ge "$hb_interval" ]; then
+      _exec_stamp beat "$hb_agent" "$hb_label" "$hb_cd_dir" || true
+      last_beat="$SECONDS"
     fi
     sleep "$poll"
   done
@@ -2013,6 +2021,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   command -v "$agent" >/dev/null 2>&1 || {
     echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  local label; label="$(basename "$cd_dir")"
 
   local auto_log=""
   if [ -z "$log" ]; then
@@ -2023,7 +2032,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
 
   # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
   # it — the exit code is the whole point of this verb. rc stays 0 on success.
-  local rc=0 final_empty=0
+  local rc=0 final_empty=0 verdict=""
   # J23: append the SAME boundary `send` appends, so verdict recovery can tell our
   # echoed prompt from the agent's answer. Delivered to both backends: codex echoes
   # its stdin into the transcript (the defect), and agy does not — but a caller can
@@ -2032,6 +2041,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   local boundary; boundary="$(_dispatch_boundary)"
   local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
   { cat "$promptfile"; printf '\n%s\n' "$boundary"; } > "$bounded_prompt"
+  _exec_stamp start "$agent" "$label" "$cd_dir" || true
+  local heartbeat_sec="${HMAD_EXEC_HEARTBEAT_SEC:-120}"
   if [ "$agent" = codex ]; then
     local last; last="$(mktemp -t hmad_exec_last.XXXXXX)" || { rm -f "$bounded_prompt"; return 1; }
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
@@ -2042,8 +2053,10 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # NOT tailable). Transcript always goes to the log (a direct redirect, not a
     # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
     # run. rc comes from the codex process.
-    _exec_run "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
+    _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
+      "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
     if [ -s "$last" ]; then
+      verdict="$(cat "$last")"
       [ -n "$out" ] && cp "$last" "$out"
       cat "$last"
       [ -n "$auto_log" ] && cat "$log" >&2 || true
@@ -2078,9 +2091,11 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # from $log means a caller-supplied --log that already holds transcript content
     # is not clobbered, so verdict recovery can still find it on an empty response.
     # Direct redirect, not a pipe, so agy's exit code survives.
-    ( cd "$cd_dir" && _exec_run "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
+    ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
+      "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
     cat "$resp_file" >> "$log"
     resp="$(cat "$resp_file" 2>/dev/null)"
+    verdict="$resp"
     if [ -n "$resp" ]; then
       [ -n "$out" ] && printf '%s\n' "$resp" > "$out"
       printf '%s\n' "$resp"
@@ -2108,6 +2123,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
     if [ -n "$recovered" ]; then
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
+      verdict="$recovered"
       printf '%s\n' "$recovered"
       [ -n "$out" ] && printf '%s\n' "$recovered" > "$out" || true
     fi
@@ -2126,6 +2142,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
       echo "hmad-dispatch: exec: tree delta: n/a ($cd_dir not a git repo)" >&2
     fi
   fi
+
+  _exec_stamp exit "$agent" "$label" "$cd_dir" "$rc" "${verdict:-no-verdict}" || true
+  _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" || true
 
   echo "hmad-dispatch: $agent exec rc=$rc" >&2
   return "$rc"

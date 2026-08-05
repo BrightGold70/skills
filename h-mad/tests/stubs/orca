@@ -41,6 +41,13 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_WT
   exit 0
 fi
 if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_STATE:-}" ]; then
+  # A worktree whose comment has never been set is a real state, and it is the
+  # state EVERY stateful test starts in. `jq --rawfile` on a path that does not
+  # exist yet aborts ("Could not open") and emits nothing, so the stub returned no
+  # payload at all and `_exec_wt_target` correctly abandoned the stamp -- making
+  # every start/beat/exit write unobservable and reading as an unwired call site.
+  # Seed the file instead: absent means empty comment, not absent worktree.
+  [ -e "$HMAD_STUB_ORCA_STATE" ] || : > "$HMAD_STUB_ORCA_STATE"
   jq -n --rawfile comment "$HMAD_STUB_ORCA_STATE" \
     '{ok:true,result:{truncated:false,worktrees:[{worktreeId:"state-wt",path:"/x",comment:$comment}]}}'
   exit 0
