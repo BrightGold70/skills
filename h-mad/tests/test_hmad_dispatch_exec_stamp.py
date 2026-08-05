@@ -626,3 +626,52 @@ def test_ac_4_3_agent_rc_survives_every_surface_failing(tmp_path, agent_rc):
         r = _exec_dispatch(sub, substrate="orca", rc=agent_rc, last="STATUS: DONE",
                            timeout="6", state=sub / "orca.state", **{knob: "9"})
         assert r.returncode == int(agent_rc), (knob, r.returncode, r.stderr)
+
+
+# --- Live-e2e regressions. Found by running a real dispatch under Orca, not by any
+# stubbed test: the real worktree card had grown to 513 spans / 38,329 bytes.
+
+def test_compose_replaces_a_span_containing_glob_metacharacters():
+    """The span being replaced carries markdown; `*` and `[` are glob metacharacters.
+
+    `prefix="${current%$rest}"` with $rest UNQUOTED makes bash treat it as a pattern,
+    not a literal. Production verdicts embed the agent's markdown report -- links
+    (`[x](y)`) and bold (`**x**`) -- so the suffix-strip silently fails, `prefix`
+    stays equal to `current`, and the result is the whole comment twice. Every
+    earlier test used short glob-free strings, so this never fired.
+    """
+    stamp = "h-mad: codex skills · running · 1s⟦/h-mad⟧"
+    current = "handoff: keep · h-mad: rc=0 · see [rep.md](/tmp/x) **bold**⟦/h-mad⟧"
+    out = _call("_exec_comment_compose", current, stamp).stdout
+    assert out.count("h-mad: ") == 1, out
+    assert out.count("⟦/h-mad⟧") == 1, out
+    assert out.startswith("handoff: keep"), out
+
+
+def test_compose_is_idempotent_against_a_glob_bearing_span():
+    """Repeated composes over a markdown-bearing span must not grow the comment."""
+    current = "handoff: keep · h-mad: rc=0 · [a](b) **c** *d*⟦/h-mad⟧"
+    for i in range(5):
+        stamp = f"h-mad: codex skills · running · {i}s⟦/h-mad⟧"
+        current = _call("_exec_comment_compose", current, stamp).stdout
+    assert current.count("h-mad: ") == 1, current
+    assert len(current) < 200, len(current)
+
+
+def test_exit_stamp_verdict_is_a_token_not_the_whole_final_message(tmp_path):
+    """A worktree comment is a one-line card field, not a transcript sink.
+
+    `_cmd_exec` passed the agent's ENTIRE final message as the verdict, so real
+    cards carried multi-line reports complete with markdown. Cap it to the verdict
+    token the contract defines.
+    """
+    cap = tmp_path / "calls"
+    state = tmp_path / "orca.state"
+    multiline = "Implemented tests only.\n\n- Full suite: `1051 passed`\n\nSTATUS: DONE"
+    r = _exec_dispatch(tmp_path, state=state, capture=cap, last=multiline)
+    assert r.returncode == 0, r.stderr
+    writes = [l for l in _orca_calls(cap) if "worktree set" in l]
+    assert writes, "no comment write recorded"
+    exit_write = writes[-1]
+    assert "\n" not in exit_write.split("--comment", 1)[-1][:400], exit_write
+    assert "Full suite" not in exit_write, exit_write

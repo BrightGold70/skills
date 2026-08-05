@@ -1805,7 +1805,14 @@ _exec_comment_compose() {
     *"h-mad: "*)
       local rest prefix suffix
       rest="${current#*h-mad: }"
-      prefix="${current%$rest}"
+      # QUOTE $rest. In `${var%pattern}` the pattern is glob-matched, so an unquoted
+      # $rest carrying `*`, `[`, `?` or `\` is read as a pattern rather than a literal
+      # suffix. Production verdicts embed the agent's markdown report -- links
+      # `[x](y)`, bold `**x**` -- so the strip silently failed, `prefix` stayed equal
+      # to `current`, and the result was the whole comment twice. Measured live: the
+      # real worktree card reached 513 spans / 38,329 bytes, doubling on every stamp.
+      # Every unit test used short glob-free strings, so none of them fired it.
+      prefix="${current%"$rest"}"
       prefix="${prefix%h-mad: }"
       case "$rest" in
         *"⟦/h-mad⟧"*)
@@ -1863,6 +1870,20 @@ _exec_wt_target() {  # <cd_dir> — selector and base64 comment, or rc 1
 
 _exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
   local kind="$1" agent="$2" label="$3" cd_dir="$4" rc="${5:-0}" verdict="${6:-}"
+
+  # Sanitise the verdict before it can reach a worktree comment. `_cmd_exec` sets
+  # verdict to the agent's ENTIRE final message (`verdict="$(cat "$last")"`), which
+  # is a multi-line markdown report. Two consequences, both measured live on the real
+  # card: the comment became a transcript sink, and -- because the agent's text can
+  # itself contain `⟦/h-mad⟧` -- it forged a span terminator and broke the very
+  # boundary the composer keys on. So: first line only, span markers stripped, capped.
+  if [ -n "$verdict" ]; then
+    verdict="${verdict%%$'\n'*}"
+    verdict="${verdict//h-mad: /}"
+    verdict="${verdict//$'\342\237\246'\/h-mad$'\342\237\247'/}"
+    [ "${#verdict}" -le 48 ] || verdict="${verdict:0:45}..."
+  fi
+
   local sub="${HMAD_SUBSTRATE:-}"
   if declare -F _detect_substrate >/dev/null 2>&1; then
     sub="$(_detect_substrate 2>/dev/null || true)"
