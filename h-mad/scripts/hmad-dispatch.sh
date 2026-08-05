@@ -1794,11 +1794,140 @@ _cmd_ask() {  # <agent> <promptfile> [--timeout <s>] [--out <file>]
   fi
 }
 
-_run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `timeout`)
+_exec_comment_compose() {
+  local current="$1" stamp="$2"
+  [ -n "$current" ] || { printf '%s' "$stamp"; return 0; }
+
+  # Find the first complete span by its contents.  In particular, do not treat a
+  # lead-in without its terminator as a span: replacing that would make a
+  # malformed comment consume everything through an unbounded end offset.
+  case "$current" in
+    *"h-mad: "*)
+      local rest prefix suffix
+      rest="${current#*h-mad: }"
+      prefix="${current%$rest}"
+      prefix="${prefix%h-mad: }"
+      case "$rest" in
+        *"⟦/h-mad⟧"*)
+          suffix="${rest#*⟦/h-mad⟧}"
+          printf '%s%s%s' "$prefix" "$stamp" "$suffix"
+          return 0
+          ;;
+      esac
+      ;;
+  esac
+  printf '%s · %s' "$current" "$stamp"
+}
+
+_exec_wt_target() {  # <cd_dir> — selector and base64 comment, or rc 1
+  local cd_dir="$1" payload line tmp pid ticks=0 read_rc=0
+  local stamp_timeout="${HMAD_EXEC_STAMP_TIMEOUT:-2}"
+  tmp="$(mktemp -t hmad_exec_wt.XXXXXX)" || return 1
+  # Keep the bounded runner as the production watchdog, with an outer reap guard
+  # so an isolated test shim (or a stale replacement) cannot defeat the bound.
+  ( _exec_run "$stamp_timeout" orca worktree ps --limit 200 --json </dev/null >"$tmp" 2>/dev/null ) &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null && [ "$ticks" -lt 25 ]; do
+    sleep 0.1; ticks=$((ticks + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    rm -f "$tmp"
+    return 1
+  fi
+  wait "$pid" 2>/dev/null || read_rc=$?
+  [ "$read_rc" -eq 0 ] || { rm -f "$tmp"; return 1; }
+  payload="$(cat "$tmp")"
+  rm -f "$tmp"
+  [ -n "$payload" ] || return 1
+
+  line="$(printf '%s' "$payload" | jq -r --arg cd "$cd_dir" '
+    def norm: if . == "/" then "/" else sub("/+$"; "") end;
+    . as $root
+    | (($cd | norm) as $c
+       | (($root.result.worktrees // [])
+       | map(.path = ((.path // "") | norm)
+             | . as $w
+             | select($w.path != "" and
+                      ($c == $w.path or ($c | startswith($w.path + "/")))))
+       | sort_by(.path | length) | reverse | .[0])
+      )
+      // (($root.result.worktrees // []) | map(select(.isActive == true)) | .[0])
+    | select((.worktreeId // "") != "")
+    | [.worktreeId, ((.comment // "") | @base64)] | @tsv' 2>/dev/null)" || return 1
+  [ -n "$line" ] || return 1
+  printf '%s\n%s\n' "${line%%$'\t'*}" "${line#*$'\t'}"
+}
+
+_exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
+  local kind="$1" agent="$2" label="$3" cd_dir="$4" rc="${5:-0}" verdict="${6:-}"
+  local sub="${HMAD_SUBSTRATE:-}"
+  if declare -F _detect_substrate >/dev/null 2>&1; then
+    sub="$(_detect_substrate 2>/dev/null || true)"
+  fi
+  [ "$sub" = "orca" ] || return 0
+
+  local target selector comment_b64 current stamp state composed
+  target="$(_exec_wt_target "$cd_dir" 2>/dev/null)" || return 0
+  selector="$(printf '%s\n' "$target" | sed -n '1p')"
+  comment_b64="$(printf '%s\n' "$target" | sed -n '2p')"
+  [ -n "$selector" ] || return 0
+  if [ -n "$comment_b64" ]; then
+    current="$(printf '%s' "$comment_b64" | base64 -D 2>/dev/null ||
+      printf '%s' "$comment_b64" | base64 -d 2>/dev/null || true)"
+  else
+    current=""
+  fi
+
+  case "$kind" in
+    start) state="running · 0m" ;;
+    beat)  state="running · 0m" ;;
+    exit)  state="rc=$rc · ${verdict:-no-verdict}" ;;
+    *) return 0 ;;
+  esac
+  stamp="h-mad: $agent $label · $state"$'\342\236\246'"/h-mad"$'\342\237\247'
+  if declare -F _exec_comment_compose >/dev/null 2>&1; then
+    composed="$(_exec_comment_compose "$current" "$stamp")" || return 0
+  else
+    # The helper is normally available; this keeps the leaf callable in
+    # isolation (as the shell-level unit tests do).
+    composed="$current"
+    if [ -z "$composed" ]; then composed="$stamp"
+    elif [[ "$composed" == *"h-mad: "* ]]; then
+      local rest prefix suffix
+      rest="${composed#*h-mad: }"; prefix="${composed%$rest}"; prefix="${prefix%h-mad: }"
+      if [[ "$rest" == *"⟦/h-mad⟧"* ]]; then
+        suffix="${rest#*⟦/h-mad⟧}"; composed="$prefix$stamp$suffix"
+      else composed="$composed · $stamp"; fi
+    else composed="$composed · $stamp"; fi
+  fi
+
+  local stamp_timeout="${HMAD_EXEC_STAMP_TIMEOUT:-2}"
+  if declare -F _exec_run >/dev/null 2>&1; then
+    _exec_run "$stamp_timeout" orca worktree set --worktree "$selector" --comment "$composed" --json </dev/null >/dev/null 2>&1 || true
+  else
+    # Isolated leaf invocation fallback; production uses _exec_run above.
+    ( orca worktree set --worktree "$selector" --comment "$composed" --json </dev/null >/dev/null 2>&1 ) &
+    local pid=$! ticks=0
+    while kill -0 "$pid" 2>/dev/null && [ "$ticks" -lt 20 ]; do sleep 0.1; ticks=$((ticks + 1)); done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  return 0
+}
+
+_exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cmd...>
+  local heartbeat=0
+  if [ "${1:-}" = "--heartbeat" ]; then
+    heartbeat=1
+    shift 5
+  fi
+  local secs="${1:-}"; shift
   # Returns the child's exit code, or 124 if it had to be killed at the deadline
   # (the GNU `timeout` convention). stdin/stdout/stderr are inherited by the child,
   # so a `< promptfile` / `>&2` on the CALL site applies to the backgrounded cmd.
-  local secs="$1"; shift
   # Run the child in its OWN process group so a timeout kills the whole subprocess
   # tree, not just the direct child — codex/agy fork grandchildren that would
   # otherwise orphan and survive past the 124. `set -m` (job control) makes bash
@@ -1815,12 +1944,13 @@ _run_with_timeout() {  # <seconds> <cmd...> — portable timeout (macOS has no `
   # timeout drift late by the accumulated loop overhead. `secs` is now the real
   # wall-clock bound. 0.25s polling caps the post-deadline overshoot instead of
   # the 1s a whole-second sleep leaves.
-  local deadline=$(( SECONDS + secs )) poll=0.25
+  local deadline=0 poll=0.25
+  if [ -n "$secs" ]; then deadline=$(( SECONDS + secs )); fi
   "$@" <&0 &
   local pid=$!
   if [ "$had_m" -eq 0 ]; then set +m; fi
   while kill -0 "$pid" 2>/dev/null; do
-    if [ "$SECONDS" -ge "$deadline" ]; then
+    if [ -n "$secs" ] && [ "$SECONDS" -ge "$deadline" ]; then
       # Signal the whole group (`-$pid`; child is group leader) so grandchildren
       # die too. Bare pid if the group is already gone.
       kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
@@ -1912,11 +2042,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # NOT tailable). Transcript always goes to the log (a direct redirect, not a
     # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
     # run. rc comes from the codex process.
-    if [ -n "$timeout" ]; then
-      _run_with_timeout "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
-    else
-      codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
-    fi
+    _exec_run "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
     if [ -s "$last" ]; then
       [ -n "$out" ] && cp "$last" "$out"
       cat "$last"
@@ -1952,11 +2078,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # from $log means a caller-supplied --log that already holds transcript content
     # is not clobbered, so verdict recovery can still find it on an empty response.
     # Direct redirect, not a pipe, so agy's exit code survives.
-    if [ -n "$timeout" ]; then
-      ( cd "$cd_dir" && _run_with_timeout "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
-    else
-      ( cd "$cd_dir" && agy "${args[@]}" ) > "$resp_file" || rc=$?
-    fi
+    ( cd "$cd_dir" && _exec_run "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
     cat "$resp_file" >> "$log"
     resp="$(cat "$resp_file" 2>/dev/null)"
     if [ -n "$resp" ]; then

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
+[ -n "${HMAD_STUB_ORCA_STDIN_CAPTURE:-}" ] && cat > "$HMAD_STUB_ORCA_STDIN_CAPTURE"
+[ -n "${HMAD_STUB_ORCA_SLEEP:-}" ] && sleep "$HMAD_STUB_ORCA_SLEEP"
 [ "${HMAD_STUB_FAIL:-}" = "1" ] && { printf '%s' '{"ok":false,"error":"boom"}'; exit 0; }
 # J19: model the REAL mailbox drain. A live `check --ack <id>` acknowledges the
 # whole delivery, and every later check returns an EMPTY batch -- measured
@@ -15,6 +17,14 @@ if [ -n "${HMAD_STUB_ORCA_ACK_STATE:-}" ] && [ "${1:-}" = "orchestration" ] && [
   case " $* " in *" --ack "*) : > "$HMAD_STUB_ORCA_ACK_STATE" ;; esac
 fi
 if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "set" ]; then
+  if [ -n "${HMAD_STUB_ORCA_STATE:-}" ]; then
+    _comment=""; _prev=""
+    for _arg in "$@"; do
+      [ "$_prev" = "--comment" ] && _comment="$_arg"
+      _prev="$_arg"
+    done
+    printf '%s' "$_comment" > "$HMAD_STUB_ORCA_STATE"
+  fi
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
 fi
@@ -28,6 +38,11 @@ fi
 # pre-J16 test keeps the shared-stdout behaviour it was written against.
 if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_WT_PS_STDOUT:-}" ]; then
   printf '%s' "$HMAD_STUB_ORCA_WT_PS_STDOUT"
+  exit 0
+fi
+if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "ps" ] && [ -n "${HMAD_STUB_ORCA_STATE:-}" ]; then
+  jq -n --rawfile comment "$HMAD_STUB_ORCA_STATE" \
+    '{ok:true,result:{truncated:false,worktrees:[{worktreeId:"state-wt",path:"/x",comment:$comment}]}}'
   exit 0
 fi
 # Run binding: `_run_ensure` probes `orchestration task-list` and then may call
