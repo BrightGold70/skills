@@ -80,9 +80,17 @@ Recorded because the pattern matters more than the fixes:
 
 ## Carry
 
-- **Live e2e not run.** Every dispatch this session was stubbed or headless; no real Orca
-  worktree card was observed receiving a start → heartbeat → exit trail. That is the one claim
-  this feature makes that only a live run can settle.
+- ~~**Live e2e not run.**~~ **DONE 2026-08-06 — and it found two production defects the whole
+  gate stack missed.** The real card had grown to **513 spans / 38,329 bytes**.
+  (1) `prefix="${current%$rest}"` left `$rest` unquoted, so bash glob-matched it rather than
+  stripping a literal suffix; production verdicts embed the agent's markdown (`[x](y)`, `**x**`),
+  the strip failed, and every stamp emitted the comment **twice** — reproduced exactly by feeding
+  the real card back through the composer (513 → 1026). Every unit test used short glob-free
+  strings. (2) `verdict` was the agent's entire final message, making the card a transcript sink
+  and — since that text can contain `⟦/h-mad⟧` — forging the span boundary the composer keys on.
+  Both fixed in `63fca45`, mutation-verified. Re-run live: start → heartbeat (elapsed advancing)
+  → exit with agent/rc/token, exactly one span, operator's handoff checkpoint preserved
+  byte-for-byte, card bounded at 183 bytes.
 - **6a-prime ran via `exec agy`, not a pane**, deviating from SKILL.md's pane preflight. Recording
   `SKIPPED_NO_PANE` would have been false — a real review ran and found a real defect. The
   mandate is arguably now mis-specified for the exec-default era.
@@ -95,3 +103,5 @@ Recorded because the pattern matters more than the fixes:
 ## Version History
 
 - v1.0: Phase 7 closure report.
+- v1.1: Live e2e carry closed. Two production defects found and fixed (`63fca45`); the report's
+  own prediction that only a live run could settle this held.
