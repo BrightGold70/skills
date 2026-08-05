@@ -8,7 +8,7 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
-## Open, highest recurrence first (reconciled 2026-08-03)
+## Open, highest recurrence first (reconciled 2026-08-05)
 
 **One `candidate: yes` is open: `live-e2e-pane-janitor` (rec 6, spanning two 2026-08-03 sessions).**
 The "all recurrences inside one session" caveat that held it back is now **gone** — the
@@ -52,7 +52,9 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 **Re-scout trigger:** promote only when a *fresh* recurrence (rec ≥3, `candidate: yes`) appears in a
 later session block. **As of the 2026-08-03 orca-defects session this has FIRED**, for
 `live-e2e-pane-janitor` — see the paragraph above. It is the one actionable row; everything else
-remains drained.
+remains drained. **Re-checked 2026-08-05** (exec-verdict-laundering session): still open, still
+nothing shipped — `hmad-dispatch` has no `terminal close` verb — and no new recurrence, because that
+session ran entirely on stubs and created no scratch panes. Count stays 6.
 
 **A `no` can still name an upgrade.** The verdict answers "is this a new skill?", which is not the
 same question as "should an existing skill change?". Read the *reason* on every `no` and `maybe`
@@ -235,11 +237,38 @@ before concluding a row is inert — one row sat inert for a day while naming it
   blocks differing only in `replace`. That shape is what proved the content assertions load-bearing
   in J22 — the two mutations that keep exit+stream and strip only the text are the ones a
   returncode-only test survives. Worth a spec-generator or a documented recipe rather than
-  retyping the anchor five times — recurrence: 1 — candidate: maybe (it is a *pattern for writing
-  specs*, and the harness already exists; a §recipe in `invariants.base.md` §"Mutation verification"
-  may be the whole fix)
+  retyping the anchor five times — recurrence: 2 (J22, then J23 the same day with 8 mutations across
+  two guards) — candidate: maybe (it is a *pattern for writing specs*, and the harness already
+  exists; a §recipe in `invariants.base.md` §"Mutation verification" may be the whole fix)
+  — **J23 sharpened what the recipe would have to say**, and it is not just "vary one field": the
+  two mutations that SURVIVED the first pass were both weak tests of mine, and the diagnosis
+  (weak test / equivalent mutant / pre-existing weak test) is the part that has no recipe yet. Also
+  a concrete discriminator rule worth writing down: a first-vs-last-occurrence mutant survives
+  whenever the sought item is last in BOTH regions, so the discriminating case must put the decoys
+  between the markers and leave the tail empty.
 - **give-the-transport-e2e-real-work**: a transport e2e whose payload is a smoke string proves the
   transport and nothing else; the same run with a real review task as its payload proved the
   transport AND falsified a bug doc I had written 20 minutes earlier. Costs nothing extra —
   recurrence: 1 — candidate: no (judgement when authoring a probe, not a pipeline; captured as a
   learning + `feedback_carried_repro_is_not_evidence`)
+
+## 2026-08-05 — exec-verdict-laundering-fixed
+
+- **live-e2e-pane-janitor** (no new recurrence): this session ran no orchestration probes, so it
+  created no scratch panes. Row above stays open at 6, unchanged. Re-verified nothing shipped —
+  `hmad-dispatch` still has no `terminal close` verb.
+- **mutation-spec-shares-one-anchor** (recurrence, not a new row): second spec written the same way,
+  8 mutations across two guards. Bumped to 2 above, with what J23 added to the recipe.
+- **replay-the-incident-artifact-against-your-own-fix**: keep the artifact that motivated a defect
+  and run the fix against it before closing. J23's boundary slice passed every RED test and still
+  fabricated a verdict on the real 20,770-byte log, because that log predates the marker the fix
+  keys on — a hole no test written from the same understanding as the code could have found. Note
+  `invariants.base.md` §"Incident replay" already mandates replaying a fix against historical data;
+  what is new is that the *artifact* has to be preserved at handover time to make it possible —
+  recurrence: 1 — candidate: no (the rule exists; the gap is that briefs should name and preserve
+  the artifact path, which the `exec-verdict-laundering` brief did do and is why this worked)
+- **verify-a-handover-brief's-CAUSE-with-a-control**: a brief can be right about the symptom and
+  wrong about the cause; only a control that removes the blamed step separates them. Both handovers
+  this session carried a stated cause, and one was wrong — recurrence: 2 — candidate: no (captured
+  as memory `feedback_carried_repro_is_not_evidence`, which is where it belongs; it is judgement at
+  read-time, not a pipeline)
