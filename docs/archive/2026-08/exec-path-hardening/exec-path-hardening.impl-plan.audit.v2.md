@@ -1,0 +1,15 @@
+## Summary
+The implementation plan is thoroughly structured with excellent test coverage, idempotency checks, and compliance with most invariants. However, there are a few critical gaps regarding `_exec_run`'s signature not accepting the context variables required for heartbeats, a contradiction about where the heartbeat interval env var is read, a mismatched mutation anchor, and an untestable claim regarding shell redirections in `argv`. 
+
+## Must-fix
+- `_exec_run` signature vs heartbeat arguments gap — Task 5 defines `_exec_run` with a zero-argument `[--heartbeat]` flag. However, Task 9 requires it to emit `_exec_stamp beat <agent> <label> <cd_dir>`. The generic wrapper has no way to obtain these three required variables unless the flag accepts arguments (e.g., `--heartbeat <agent> <label> <cd_dir>`) or the variables are explicitly exported by the caller.
+- Contradiction on env var consumption — The Design document explicitly claims `HMAD_EXEC_HEARTBEAT_SEC` is "Read only by `_cmd_exec`". However, Task 9 specifies evaluating the interval (`SECONDS - last_beat >= HMAD_EXEC_HEARTBEAT_SEC`) directly inside `_exec_run`'s poll loop, and Task 5 provides no parameter to pass this interval. Either `_exec_run` reads the env var itself (contradicting the design), or the interval must be explicitly passed as an argument.
+- Mutation anchor mismatch — In Task 4, M-6 mutates the `worktree set` write call (dropping `</dev/null`), but claims the RED result will be caught by Task 3's AC-3.10. AC-3.10 is scoped strictly to `_exec_wt_target` (the read call). A mutation on the write call will not fail a unit test of the read call. M-6 must be tied to an assertion that exercises the write call (such as AC-9.7 or a new AC in Task 4).
+- Untestable AC condition (Redirection in argv) — In Task 3, AC-3.10 states "The orca argv recorded by the stub shows the call did not inherit the caller's stdin". Shell redirections (e.g., `</dev/null`) alter file descriptors and do not appear in a command's `argv`. The stub's `argv` capture cannot prove the presence of `</dev/null`. The AC must rely on checking the caller's remaining stdin (the sentinel) or have the stub inspect its `fd 0`, rather than asserting on `argv`.
+
+## Should-fix
+- Missing mutation anchor for read call — While Task 4 has a mutation anchor (M-6) to ensure the write call's `</dev/null` is not dropped, there is no explicit mutation anchor to verify the `</dev/null` guard on the read call (`orca worktree ps`) in Task 3. A mutation anchor should be added for the read call's guard tied to AC-3.10 to ensure it is permanently enforced.
+- Incomplete assertion in Task 10 — The description for Task 10 specifies that both `rc` and the verdict are passed in the `_cmd_notify` body, but AC-10.2 only asserts the presence of `rc=<n>`. The AC should also assert that the body contains the verdict token to fully verify the stated behavior.
+
+## Nit
+- Test stub labeled as Production file — In Task 2, `h-mad/tests/stubs/orca` is listed as the "Production file". While it is the target of the modification, it's a test stub, not production code. Labeling it as "Test stub" would be more accurate.

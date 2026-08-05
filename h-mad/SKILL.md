@@ -343,6 +343,12 @@ supported, on their natural side of 5d/5e:
   Because it is a subprocess, it needs **no pane and no identity resolution** — the
   one thing the pane path can still fail at for an un-owned agent.
 
+Set `HMAD_EXEC_HEARTBEAT_SEC` to control the `exec` watchdog heartbeat interval in
+seconds; it defaults to `120`, and `0` disables heartbeats. The feature adds
+best-effort start, heartbeat, and exit worktree-comment checkpoints (mobile-visible
+under Orca and a no-op on cmux), plus a best-effort desktop notification at exit.
+These observability signals cannot change stdout or `rc`.
+
 ```bash
 # 5d/5e codex (implement), exit-code path. --log streams the live transcript to a
 # tailable file — headless is not blind. Background it and tail to watch:
@@ -365,6 +371,7 @@ The verdict comes from `--out` (the `--output-last-message` file / captured resp
 which only lands at completion — so `--out` is NOT tailable. `--log` is: it streams
 the live transcript (codex) or response (agy) to `<file>` as it runs, without
 disturbing the verdict on stdout or the exit code. Tail it to monitor a headless run.
+`--log` appends on both backends, so a caller-supplied log retains its prior content.
 
 **`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
 completed, `124` = watchdog timeout, non-zero = crash/abort); it does **not** mean
@@ -414,7 +421,8 @@ Recover in this order:
 1. **`--log`** — it survived when `--out` and the report file did not, and it holds the
    live transcript, including the diffs the agent applied. This is the strongest reason
    to pass `--log` on every `exec` dispatch: it is the one channel observed to outlive
-   the others. **Codex only.** For `exec agy` the two are the *same* channel: `agy
+   the others. It appends on both backends, so a caller-supplied log retains prior
+   content. For `exec agy` the two are the *same* channel: `agy
    --print` emits one response and the wrapper writes it to `--out` and `--log`
    byte-identically (verified on both cycles of a real design audit — `diff` clean at
    2.9 KB and at 358 B). When an agy exec comes back short, `--log` holds nothing `--out`
