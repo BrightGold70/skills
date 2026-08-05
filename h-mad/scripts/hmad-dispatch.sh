@@ -2036,8 +2036,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   # J23: append the SAME boundary `send` appends, so verdict recovery can tell our
   # echoed prompt from the agent's answer. Delivered to both backends: codex echoes
   # its stdin into the transcript (the defect), and agy does not — but a caller can
-  # point --log at a file that already holds echoed content, and one mechanism on
-  # both paths is cheaper to reason about than two.
+  # point --log at a file that already holds echoed content. Both backends append
+  # their transcript to a caller-supplied log, preserving its existing content.
   local boundary; boundary="$(_dispatch_boundary)"
   local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
   { cat "$promptfile"; printf '\n%s\n' "$boundary"; } > "$bounded_prompt"
@@ -2054,7 +2054,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
     # run. rc comes from the codex process.
     _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
-      "$timeout" codex "${args[@]}" - < "$bounded_prompt" > "$log" 2>&1 || rc=$?
+      "$timeout" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
       [ -n "$out" ] && cp "$last" "$out"

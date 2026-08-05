@@ -22,6 +22,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import pytest
+
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -174,6 +176,63 @@ def test_codex_exec_log_preserves_exit_code(tmp_path):
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
             env=_env(b, HMAD_STUB_CODEX_RC="7"))
     assert r.returncode == 7, r.stderr
+
+
+@pytest.mark.parametrize(
+    ("backend", "transcript", "env_key"),
+    [
+        pytest.param("codex", "[codex] appended transcript...\n", "HMAD_STUB_CODEX_STDOUT",
+                     id="AC-11.1-codex-MUST_FAIL"),
+        pytest.param("agy", "VERDICT: COMPLIANT\n", "HMAD_STUB_AGY_RESP",
+                     id="AC-11.2-agy-REGRESSION_PASS"),
+    ],
+)
+def test_exec_log_preserves_caller_bytes_and_appends_transcript(
+    tmp_path, backend, transcript, env_key
+):
+    """AC-11.1/11.2: both surfaces preserve the caller log byte-for-byte."""
+    b = _bindir(tmp_path, [backend])
+    log = tmp_path / f"{backend}.log"
+    log.write_bytes(b"PRIOR")
+    r = run(
+        ["exec", backend, str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+        env=_env(b, **{env_key: transcript.rstrip("\n")}),
+    )
+    assert r.returncode == 0, r.stderr
+    assert log.read_bytes() == b"PRIOR" + transcript.encode()
+
+
+def test_exec_without_log_keeps_auto_temp_path_and_removes_it_on_clean_path(tmp_path):
+    """REGRESSION AC-11.4: auto-log naming and clean-path cleanup remain unchanged."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(
+        ["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+        env=_env(b, HMAD_STUB_CODEX_LAST="STATUS: CLEAN"),
+    )
+    assert r.returncode == 0, r.stderr
+    transcript = next(
+        (
+            line.split("transcript -> ", 1)[1].strip()
+            for line in r.stderr.splitlines()
+            if "transcript -> " in line
+        ),
+        None,
+    )
+    assert transcript is not None
+    assert Path(transcript).name.startswith("hmad_exec_log.")
+    assert not Path(transcript).exists()
+
+
+def test_dispatch_boundary_comment_states_append_contract():
+    """AC-11.5: the boundary rationale explicitly documents surviving log content."""
+    source = WRAPPER.read_text()
+    comment = source.split("  # J23: append the SAME boundary", 1)[1].split(
+        "  local boundary;", 1
+    )[0]
+    lowered = comment.lower()
+    assert "append" in lowered
+    assert "caller-supplied" in lowered
+    assert "log" in lowered
 
 
 # --- empty final-message recovery (RED: expected to fail until GREEN) --------

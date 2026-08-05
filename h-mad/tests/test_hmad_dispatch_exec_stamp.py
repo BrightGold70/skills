@@ -48,6 +48,49 @@ def _entry(path, selector, comment=None, active=False, omit_comment=False):
     return value
 
 
+def _skill_doc() -> str:
+    return (Path(__file__).resolve().parent.parent / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_skill_docs_describe_exec_heartbeat_knob():
+    """AC-12.1 MUST_FAIL: document the default heartbeat and disabling value."""
+    doc = _skill_doc()
+    match = re.search(r"HMAD_EXEC_HEARTBEAT_SEC", doc)
+    assert match is not None
+    window = doc[match.start() : match.start() + 400].lower()
+    assert "120" in window
+    assert re.search(r"\b0\b", window)
+    assert "disabl" in window
+
+
+def test_skill_docs_describe_log_append_without_codex_truncation_claim():
+    """AC-12.2 MUST_FAIL: document append semantics and no codex truncation claim."""
+    doc = _skill_doc()
+    lowered = doc.lower()
+    assert re.search(r"--log.{0,250}append|append.{0,250}--log", lowered, re.DOTALL)
+    assert not re.search(
+        r"codex.{0,180}--log.{0,180}(?:truncat|overwrite)|"
+        r"--log.{0,180}codex.{0,180}(?:truncat|overwrite)",
+        lowered,
+        re.DOTALL,
+    )
+
+
+def test_skill_frontmatter_name_and_description_are_unchanged():
+    """REGRESSION AC-12.3: skill identity metadata remains byte-for-byte unchanged."""
+    frontmatter = _skill_doc().split("---", 2)[1]
+    assert frontmatter == (
+        "\n"
+        "name: h-mad\n"
+        "description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workflow "
+        "end-to-end. Standalone — no external skill dependencies (spec-kit, b-mad, or pdca). "
+        "All phase protocols are built-in. Project-agnostic; splices project-specific Axis B "
+        "invariants from `<PROJECT_ROOT>/.h-mad/invariants.md` into audit prompts at dispatch "
+        "time. Use when user invokes /h-mad \"<feature>\", /h-mad do \"<feature>\", /h-mad "
+        "status, or /h-mad reset \"<feature>\".\n"
+    )
+
+
 STAMP = "h-mad: codex skills · running · 4m⟦/h-mad⟧"
 
 
