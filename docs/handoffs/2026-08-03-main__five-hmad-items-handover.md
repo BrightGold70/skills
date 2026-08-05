@@ -3,6 +3,7 @@
 **Date:** 2026-08-03
 **Branch:** main
 **Project:** /Users/kimhawk/orca/skills
+**Handover-From:** HemaSuite · feature/196-grounding-shadow-measurement · session d185c497-29e4-4de0-ac43-d3770b39d1d0
 
 > **This is a HANDOVER, not a session closeout.** Five items were being tracked in a session
 > working `~/orca/HemaSuite`, which consumes the h-mad skill but does not own it. All five are

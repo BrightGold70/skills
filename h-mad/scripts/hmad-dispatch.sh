@@ -1881,9 +1881,20 @@ _exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
     current=""
   fi
 
+  # Elapsed is measured from the dispatch start recorded by `_cmd_exec`, NOT from
+  # this function's entry. It is reported in SECONDS below a minute and minutes
+  # above it: a heartbeat exists to tell "still working" from "died", and a
+  # minute-granularity counter reads `0m` for the whole first minute, so the first
+  # informative change would arrive 60s after the operator started wondering.
+  local elapsed=0
+  if [ -n "${_HMAD_EXEC_T0:-}" ]; then elapsed=$(( SECONDS - _HMAD_EXEC_T0 )); fi
+  [ "$elapsed" -ge 0 ] || elapsed=0
+  local elapsed_txt
+  if [ "$elapsed" -lt 60 ]; then elapsed_txt="${elapsed}s"; else elapsed_txt="$(( elapsed / 60 ))m"; fi
+
   case "$kind" in
-    start) state="running · 0m" ;;
-    beat)  state="running · 0m" ;;
+    start) state="running · 0s" ;;
+    beat)  state="running · $elapsed_txt" ;;
     exit)  state="rc=$rc · ${verdict:-no-verdict}" ;;
     *) return 0 ;;
   esac
@@ -2041,6 +2052,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   local boundary; boundary="$(_dispatch_boundary)"
   local bounded_prompt; bounded_prompt="$(mktemp -t hmad_exec_prompt.XXXXXX)" || return 1
   { cat "$promptfile"; printf '\n%s\n' "$boundary"; } > "$bounded_prompt"
+  # Dispatch-start marker for the heartbeat's elapsed field. Set before the start
+  # stamp so every stamp in this dispatch measures from the same origin.
+  _HMAD_EXEC_T0="$SECONDS"
   _exec_stamp start "$agent" "$label" "$cd_dir" || true
   local heartbeat_sec="${HMAD_EXEC_HEARTBEAT_SEC:-120}"
   if [ "$agent" = codex ]; then

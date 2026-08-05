@@ -127,7 +127,7 @@ than replacing to an unbounded end offset.
    | kind | `<state>` |
    |---|---|
    | `start` | `running · 0m` |
-   | `beat` | `running · <elapsed>m` (elapsed off `SECONDS`, monotonic non-decreasing) |
+   | `beat` | `running · <elapsed>` — seconds below a minute (`42s`), minutes above it (`7m`), measured from the dispatch start marker `_HMAD_EXEC_T0` set by `_cmd_exec` |
    | `exit` | `rc=<rc> · <verdict\|no-verdict>` |
 
    So an exit span reads `h-mad: codex skills · rc=0 · DONE⟦/h-mad⟧`, carrying all three
@@ -540,6 +540,12 @@ unchanged. Complies.
   hazard and would have cleared the guard. The corrected control inherits one descriptor and
   shows the agent's prompt truncated by exactly the bytes the stamp consumed (A9); the test
   is now required to inherit rather than re-open. Probes deleted after use.
+- v1.5: Phase 6a-prime finding. The `beat` state was specified as `<elapsed>m` and shipped
+  hardcoded as `running · 0m`; the elapsed field is now measured from a dispatch-start marker
+  and reported in seconds below a minute. Minute granularity was itself part of the defect's
+  cover: it reads `0m` for the whole first minute, so no short test could observe the field
+  advancing, and the monotonic AC was satisfied vacuously by a constant. See the report's
+  §"What 6a-prime caught".
 - v1.4: Design audit cycle 4 — 5 must-fix. (1) **Infinite recursion**: `_exec_run` owns the
   heartbeat hook and `_exec_stamp` calls `_exec_run`, so any `HMAD_EXEC_HEARTBEAT_SEC` shorter
   than the stamp timeout recursed `_exec_stamp → _exec_run → _exec_stamp` unbounded — reachable

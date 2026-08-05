@@ -442,8 +442,15 @@ def test_heartbeat_elapsed_values_are_monotonic(tmp_path):
     assert r.returncode == 0, r.stderr
     values = [int(m.group(1)) for line in _orca_calls(cap)
               if "worktree set" in line and "running" in line
-              for m in [re.search(r"running · (\d+)m", line)] if m]
-    assert len(values) >= 3 and values == sorted(values)
+              for m in [re.search(r"running · (\d+)s", line)] if m]
+    # `values == sorted(values)` alone is satisfied by a CONSTANT sequence, and that
+    # is exactly how a hardcoded `running · 0m` shipped through a green suite, a
+    # clean mutation sweep and five wire-scoped reverts: [0, 0, 0] is sorted. The
+    # heartbeat exists to tell "still working" from "died", so the elapsed field must
+    # actually advance — require strict growth across the run, not mere ordering.
+    assert len(values) >= 3, values
+    assert values == sorted(values), values
+    assert values[-1] > values[0], values
 
 
 def test_heartbeat_without_timeout_keeps_the_same_cadence(tmp_path):
