@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 [ -n "${HMAD_STUB_ORCA_STDIN_CAPTURE:-}" ] && cat > "$HMAD_STUB_ORCA_STDIN_CAPTURE"
+# Forced-failure knob for the FR-4 non-interference tests: exit non-zero AFTER the
+# argv capture above, so the call is still recorded while the surface "fails".
+# Without this the tests that claim "every surface stubbed failing" set an env var
+# nothing reads and pass vacuously.
+[ -n "${HMAD_STUB_ORCA_RC:-}" ] && exit "$HMAD_STUB_ORCA_RC"
 [ -n "${HMAD_STUB_ORCA_SLEEP:-}" ] && sleep "$HMAD_STUB_ORCA_SLEEP"
 [ "${HMAD_STUB_FAIL:-}" = "1" ] && { printf '%s' '{"ok":false,"error":"boom"}'; exit 0; }
 # J19: model the REAL mailbox drain. A live `check --ack <id>` acknowledges the
@@ -25,6 +30,11 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "set" ]; then
     done
     printf '%s' "$_comment" > "$HMAD_STUB_ORCA_STATE"
   fi
+  # Write-only failure knob: lets a test fail the `worktree set` while the
+  # `worktree ps` READ still succeeds. Without it, a blanket failure knob makes the
+  # resolver fail first and _exec_stamp returns early, so the write path -- and any
+  # rc leak from it -- is never reached and the test cannot discriminate.
+  [ -n "${HMAD_STUB_ORCA_SET_RC:-}" ] && exit "$HMAD_STUB_ORCA_SET_RC"
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
 fi

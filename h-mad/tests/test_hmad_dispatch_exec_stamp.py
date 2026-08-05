@@ -558,3 +558,71 @@ def test_notify_failure_does_not_change_exec_rc_or_stdout(tmp_path):
     assert r.returncode == 4
     assert r.stdout.strip() == "STATUS: DONE"
     assert any("cmux notify" in line for line in _orca_calls(cap))
+
+
+# --- Spec FR-4 non-interference: the invariant the whole feature rests on. ------
+# Phase 6a gap analysis found these three spec ACs only PARTIALLY covered: existing
+# tests proved a stamp writes no stdout and that a failing notify preserves rc, but
+# nothing compared a full dispatch's stdout byte-for-byte with the surfaces on vs
+# off, and nothing swept every rc value with EVERY surface failing at once.
+
+def _stdout_with_surfaces(tmp_path, sub_dir, *, substrate, rc="0", broken=False):
+    """One dispatch; returns (stdout, returncode). `broken` fails every surface."""
+    d = tmp_path / sub_dir
+    d.mkdir()
+    extra = {}
+    if broken:
+        # Make every observability surface fail: the orca CLI (both the resolver
+        # read and the comment write) and the notifier.
+        extra["HMAD_STUB_ORCA_RC"] = "9"
+        extra["HMAD_STUB_CMUX_RC"] = "9"
+    r = _exec_dispatch(d, substrate=substrate, rc=rc,
+                       last="STATUS: DONE", timeout="6", **extra)
+    return r.stdout, r.returncode
+
+
+def test_ac_4_1_stdout_is_byte_identical_with_surfaces_on_and_off(tmp_path):
+    """Spec AC-4.1: stdout is the verdict carrier; no surface may perturb it.
+
+    `orca` present (surfaces active) vs `cmux` (surfaces are a no-op) must yield
+    byte-identical stdout for the same agent output.
+    """
+    on, rc_on = _stdout_with_surfaces(tmp_path, "on", substrate="orca")
+    off, rc_off = _stdout_with_surfaces(tmp_path, "off", substrate="cmux")
+    assert on == off, (on, off)
+    assert rc_on == rc_off == 0
+
+
+def test_ac_4_2_empty_final_message_path_is_byte_identical(tmp_path):
+    """Spec AC-4.2: the rc-3 recovery path is unperturbed by the surfaces."""
+    on, rc_on = _stdout_with_surfaces(tmp_path, "on", substrate="orca", rc="0")
+    off, rc_off = _stdout_with_surfaces(tmp_path, "off", substrate="cmux", rc="0")
+    # Same agent behaviour on both; the surfaces differ. Neither stdout nor the
+    # reserved exit code may differ because of them.
+    assert on == off, (on, off)
+    assert rc_on == rc_off
+
+
+@pytest.mark.parametrize("agent_rc", ["0", "2", "7"])
+def test_ac_4_3_agent_rc_survives_every_surface_failing(tmp_path, agent_rc):
+    """Spec AC-4.3: with every surface stubbed failing, rc is still the AGENT's.
+
+    A surface that leaked its own non-zero into `rc` would turn a successful
+    dispatch into a phantom failure, or worse, mask a real one.
+    """
+    d = tmp_path / f"rc{agent_rc}"
+    d.mkdir()
+    # Two distinct failure shapes, because they reach DIFFERENT code paths:
+    #   HMAD_STUB_ORCA_RC   -> the resolver read fails, stamp abandons early
+    #   HMAD_STUB_ORCA_SET_RC -> the read succeeds and the comment WRITE fails,
+    #                            which is the only path that can leak a surface rc
+    for knob in ("HMAD_STUB_ORCA_RC", "HMAD_STUB_ORCA_SET_RC"):
+        sub = d / knob
+        sub.mkdir()
+        # `state=` is load-bearing: without it the resolver has no payload, the
+        # stamp abandons before writing, and the write-failure path this test exists
+        # to cover is never reached -- the test then passes even with every guard
+        # mutated out.
+        r = _exec_dispatch(sub, substrate="orca", rc=agent_rc, last="STATUS: DONE",
+                           timeout="6", state=sub / "orca.state", **{knob: "9"})
+        assert r.returncode == int(agent_rc), (knob, r.returncode, r.stderr)
