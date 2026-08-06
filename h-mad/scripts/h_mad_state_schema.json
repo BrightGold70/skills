@@ -90,12 +90,13 @@
       "format": "date-time"
     },
     "archreview": {
-      "description": "Phase 6a-prime outcome. SKIPPED_NO_PANE records that no reviewer pane resolved and the operator elected to proceed; it is never equivalent to READY_TO_MERGE and must surface in the Phase 7 report.",
+      "description": "Phase 6a-prime outcome. SKIPPED_NO_PANE records that no reviewer pane resolved; it now BLOCKS Phase 7 - a headless `exec agy` review satisfies the gate. SKIPPED_OPERATOR_OVERRIDE is the deliberate operator escape when no reviewer exists at all; it closes the feature but surfaces as a warning. Neither is ever equivalent to READY_TO_MERGE, and both must surface in the Phase 7 report.",
       "enum": [
         "READY_TO_MERGE",
         "WITH_FIXES",
         "NO",
-        "SKIPPED_NO_PANE"
+        "SKIPPED_NO_PANE",
+        "SKIPPED_OPERATOR_OVERRIDE"
       ]
     },
     "production_paths_needing_red_tests": {

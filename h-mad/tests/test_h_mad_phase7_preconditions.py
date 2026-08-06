@@ -128,6 +128,28 @@ class TestSkippedArchreviewIsReportedNotBlocking:
         rec = dict(READY, archreview="NO")
         assert "archreview_failed" in codes(p7.check(rec, a))
 
+    def test_operator_override_is_ready_with_warning(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_OPERATOR_OVERRIDE")
+        result = p7.check(rec, a)
+        assert result["ready"] is True
+        assert any(
+            warning["code"] == "archreview_overridden"
+            for warning in result["warnings"]
+        ), "operator override must be surfaced as a warning"
+
+    def test_operator_override_warning_requires_phase7_report_disclosure(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_OPERATOR_OVERRIDE")
+        result = p7.check(rec, a)
+        assert any(
+            "Phase 7 report" in warning["detail"]
+            and "not READY_TO_MERGE" in warning["detail"]
+            for warning in result["warnings"]
+        ), "override warning must disclose the Phase 7 report and non-READY status"
+
 
 class TestCli:
     def store(self, tmp_path, rec):

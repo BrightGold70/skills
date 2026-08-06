@@ -242,6 +242,19 @@ class TestCli:
         run(p, "--feature", "demo", "--set", "halt_reason=step5d:red_not_all_failing")
         assert read(p)["demo"]["halt_reason"] == "step5d:red_not_all_failing"
 
+    def test_accepts_operator_override_and_round_trips(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        r = run(p, "--feature", "demo", "--set", "archreview=SKIPPED_OPERATOR_OVERRIDE")
+        assert r.returncode == 0
+        assert read(p)["demo"]["archreview"] == "SKIPPED_OPERATOR_OVERRIDE"
+
+    def test_rejects_misspelled_operator_override_without_writing(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--set", "archreview=SKIPPED_OVERRIDE")
+        assert r.returncode == 2
+        assert p.read_bytes() == before
+
     def test_rejection_exits_2_and_writes_nothing(self, tmp_path):
         p = store(tmp_path, {"demo": dict(VALID)})
         before = p.read_text()

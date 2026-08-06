@@ -217,6 +217,11 @@ elif archreview == "SKIPPED_NO_PANE":
       A deletion is not a substitute; net assertion count must not fall. (Task 2's
       `test_skipping_is_explicitly_not_a_pass` keeps its name deliberately — it is the continuity
       marker, and its name is true under both the old and new contracts.)
+- [ ] AC-2.5: Rename the enclosing class `TestSkippedArchreviewIsReportedNotBlocking`, whose name
+      asserts the **old** contract and becomes false the moment this task lands. Suggested:
+      `TestArchreviewLadder`. Same reasoning as AC-2.4 — a container name that contradicts its
+      contents is trusted by the next reader over the assertions inside it. Task 1's two override
+      tests were added to this class during RED and move with it.
 
 > **AC-2.3 is deliberately NOT in this task.** It requires an unknown `SKIPPED_FOO` to block,
 > which is the catch-all `else` that Task 4 adds. At this task an unrecognised value still falls

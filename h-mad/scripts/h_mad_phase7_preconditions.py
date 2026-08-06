@@ -99,6 +99,15 @@ def check(record: dict, analysis_path: Path) -> dict:
                 "into the Phase 7 report — it is not READY_TO_MERGE."
             ),
         })
+    elif archreview == "SKIPPED_OPERATOR_OVERRIDE":
+        warnings.append({
+            "code": "archreview_overridden",
+            "detail": (
+                "6a-prime was skipped by explicit operator override. Carry "
+                "SKIPPED_OPERATOR_OVERRIDE into the Phase 7 report - no architectural "
+                "review happened; this is not READY_TO_MERGE."
+            ),
+        })
 
     return {"ready": not blockers, "blockers": blockers, "warnings": warnings}
 
