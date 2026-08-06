@@ -111,6 +111,20 @@ def check(record: dict, analysis_path: Path) -> dict:
                 "review happened; this is not READY_TO_MERGE."
             ),
         })
+    elif archreview == "READY_TO_MERGE":
+        pass                        # the only clean pass
+    else:                           # absent, None, or any unrecognised value
+        blockers.append({
+            "code": "archreview_not_run",
+            "detail": (
+                "no architectural review recorded (orchestrator_state[<feature>]"
+                ".archreview is absent or unrecognised). Run 6a-prime headlessly "
+                "with `hmad-dispatch exec agy`, then record the extracted "
+                "ASSESSMENT with `h_mad_state_write.py <state> --feature "
+                "<feature> --set archreview=<value>`. A feature cannot close "
+                "without one."
+            ),
+        })
 
     return {"ready": not blockers, "blockers": blockers, "warnings": warnings}
 
