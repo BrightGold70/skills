@@ -92,11 +92,14 @@ def check(record: dict, analysis_path: Path) -> dict:
             "detail": f"6a-prime returned {archreview}",
         })
     elif archreview == "SKIPPED_NO_PANE":
-        warnings.append({
+        blockers.append({
             "code": "archreview_skipped",
             "detail": (
-                "6a-prime did not run (no reviewer pane). Carry SKIPPED_NO_PANE "
-                "into the Phase 7 report — it is not READY_TO_MERGE."
+                "6a-prime did not run (no reviewer pane). A headless review "
+                "satisfies the gate: `hmad-dispatch exec agy` needs no pane. If "
+                "no reviewer exists at all, record "
+                "archreview=SKIPPED_OPERATOR_OVERRIDE as a deliberate operator "
+                "decision - it closes with a warning."
             ),
         })
     elif archreview == "SKIPPED_OPERATOR_OVERRIDE":

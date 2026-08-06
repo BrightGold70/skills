@@ -138,7 +138,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
    python3 ~/.claude/skills/h-mad/scripts/h_mad_phase7_preconditions.py \
      docs/.bkit-memory.json --feature <feature>
    ```
-   Parse the **token**, not `$?` (exit 0 on any verdict, 2 on operational error). `PHASE7: BLOCKED` → halt `step7:verification_not_run` and address each blocker. It refuses to close a feature that never ran Phase 6, whose analysis is missing or states no match rate, whose rate is below threshold, whose 6a-prime returned `WITH_FIXES`/`NO`, or that carries an open halt. A `SKIPPED_NO_PANE` archreview is a **warning**, not a blocker — carry it into the report per §6a-prime. Then `h_mad_telemetry.py record`, inline report + archive (`references/inline-protocols.md §Phase 7`), then `git add -A && git commit && git push origin main`.
+   Parse the **token**, not `$?` (exit 0 on any verdict, 2 on operational error). `PHASE7: BLOCKED` → halt `step7:verification_not_run` and address each blocker. It refuses to close a feature that never ran Phase 6, whose analysis is missing or states no match rate, whose rate is below threshold, whose 6a-prime returned `WITH_FIXES`/`NO`, or that carries an open halt. A `SKIPPED_NO_PANE` archreview **blocks** the gate — a headless `exec agy` review satisfies the gate. Then `h_mad_telemetry.py record`, inline report + archive (`references/inline-protocols.md §Phase 7`), then `git add -A && git commit && git push origin main`.
 
 ## Phase 5 (Implementation) sub-steps
 

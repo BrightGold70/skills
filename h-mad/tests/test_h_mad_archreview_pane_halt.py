@@ -83,6 +83,16 @@ class TestSkipIsRecorded:
         section = p[start:]
         assert "SKIPPED_NO_PANE" in section or "architectural review" in section.lower()
 
+    def test_phase_7_skip_blocks_and_headless_review_satisfies_gate(self):
+        s = skill()
+        start = s.index("7. **Closure (autonomous)**")
+        end = s.index("\n## Phase 5", start)
+        section = s[start:end]
+        assert (
+            "A `SKIPPED_NO_PANE` archreview **blocks** the gate — "
+            "a headless `exec agy` review satisfies the gate."
+        ) in section
+
     def test_skipping_is_explicitly_not_a_pass(self):
         s = skill()
         idx = s.find("**6a-prime**")

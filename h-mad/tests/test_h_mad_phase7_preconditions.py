@@ -107,20 +107,33 @@ class TestBlockers:
         assert result["ready"] is False
 
 
-class TestSkippedArchreviewIsReportedNotBlocking:
-    """#10 allows a deliberate skip; it must reach the report, not the gate."""
+class TestArchreviewLadder:
+    """Archreview outcomes have distinct gate and reporting semantics."""
 
-    def test_skipped_archreview_does_not_block(self, tmp_path):
+    def test_skipped_archreview_blocks(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
         rec = dict(READY, archreview="SKIPPED_NO_PANE")
-        assert p7.check(rec, a)["ready"] is True
+        result = p7.check(rec, a)
+        assert result["ready"] is False
+        assert "archreview_skipped" in codes(result)
 
-    def test_skipped_archreview_is_surfaced_as_a_warning(self, tmp_path):
+    def test_skipped_archreview_is_a_blocker_not_a_warning(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
         rec = dict(READY, archreview="SKIPPED_NO_PANE")
-        assert any("archreview" in w["code"] for w in p7.check(rec, a)["warnings"])
+        result = p7.check(rec, a)
+        assert any(b["code"] == "archreview_skipped" for b in result["blockers"])
+        assert all(w["code"] != "archreview_skipped" for w in result["warnings"])
+
+    def test_skipped_archreview_blocker_points_to_headless_review(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_NO_PANE")
+        result = p7.check(rec, a)
+        blocker = next(b for b in result["blockers"] if b["code"] == "archreview_skipped")
+        assert "exec agy" in blocker["detail"]
+        assert "satisfies the gate" in blocker["detail"]
 
     def test_failed_archreview_does_block(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
