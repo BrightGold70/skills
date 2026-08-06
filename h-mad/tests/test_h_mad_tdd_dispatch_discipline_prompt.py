@@ -76,3 +76,22 @@ def test_skill_author_callform_rule_present() -> None:
 def test_skill_pin_reverify_rule_present() -> None:
     body = _norm(SKILL.read_text(encoding="utf-8"))
     assert _norm("Re-verify every impl-plan pin") in body
+
+
+def test_implementer_mandates_hostile_payloads_for_agent_human_fixtures() -> None:
+    body = _norm(IMPLEMENTER.read_text(encoding="utf-8"))
+    literal = (
+        "Drive any fixture value that originates from an agent or a human with a hostile payload"
+        " using HMAD_STUB_HOSTILE."
+    )
+    assert _norm(literal) in body, (
+        "implementer prompt missing hostile-payload mandate for agent/human fixture values"
+    )
+
+
+def test_implementer_explains_tidy_ascii_fixture_gate_blindness() -> None:
+    body = _norm(IMPLEMENTER.read_text(encoding="utf-8"))
+    literal = "Tidy ASCII fixtures let a real defect through every gate."
+    assert _norm(literal) in body, (
+        "implementer prompt missing rationale that tidy ASCII fixtures can pass every gate"
+    )
