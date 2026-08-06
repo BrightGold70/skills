@@ -165,17 +165,31 @@ than cargo-cult it.
 
 ## Implementation Order
 
-Follows the plan's landing order exactly; the chain is a safety property, not a preference.
+The chain is a safety property, not a preference: **both means must land before both blockers.**
 
-1. **FR-4** — `SKILL.md` preflight + auto-record + override route, with its doc tests. Until
+1. **FR-3** — enum value + `archreview_overridden` warning branch. The escape must exist before
+   either blocker arms, **and the enum must accept `SKIPPED_OPERATOR_OVERRIDE` before FR-4
+   instructs anyone to write it.**
+2. **FR-4** — `SKILL.md` preflight + auto-record + override route, with its doc tests. Until
    this lands nothing produces an `archreview` value in the ordinary case.
-2. **FR-3** — enum value + `archreview_overridden` warning branch. The escape must exist before
-   either blocker arms.
 3. **FR-2** — `SKIPPED_NO_PANE` warning → blocker, with the remedy text.
 4. **FR-1** — the catch-all `archreview_not_run` blocker. Last: strictest, and the only one that
    fires on records nobody edited.
 5. **FR-5** — stub corpus (independent of the chain).
 6. **FR-6** — template mandate (depends on FR-5 existing to name).
+
+**FR-3 and FR-4 were swapped at 5b audit cycle 1 (v1.2 below).** v1.1 of this design ordered them
+FR-4 → FR-3, which opens a window in which `SKILL.md` documents writing
+`archreview=SKIPPED_OPERATOR_OVERRIDE` while the schema still rejects it. Confirmed by running
+the writer rather than reasoning about it:
+
+```
+$ h_mad_state_write.py <state> --feature gate-blindness-hardening \
+    --set archreview=SKIPPED_OPERATOR_OVERRIDE
+ERROR: record for 'gate-blindness-hardening' would not validate; refusing to write.
+```
+
+The safety property is untouched — FR-3 arms no blocker, so nothing can strand on it.
 
 ## Data Model / Schema Changes
 
@@ -312,3 +326,10 @@ Complies.
   check it. The probe was re-run fresh (a carried result is not evidence) and its command and
   full output are now inlined, with `absent=0` called out as the load-bearing number — it is
   the count of records the new `archreview_not_run` blocker would fire on.
+- v1.2: Back-propagated from the 5b impl-plan audit (cycles 1 and 4). §"Implementation Order"
+  swapped FR-4 and FR-3: ordering FR-4 first documents a value the schema does not yet accept,
+  so the writer refuses it — verified by running the writer, not argued. The safety property the
+  order protects (both means before both blockers) is preserved, since FR-3 arms no blocker.
+  Cycle 4 flagged this design as the remaining half of a cross-doc contradiction after the
+  impl-plan had already been corrected; both now agree. The design's §"Detailed Design" table and
+  ladder are unaffected — only the landing sequence changed.

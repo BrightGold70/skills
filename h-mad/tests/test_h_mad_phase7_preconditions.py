@@ -34,6 +34,7 @@ READY = {
     "iterate_cycles": 0,
     "halt_reason": None,
     "halt_ts": None,
+    "archreview": "READY_TO_MERGE",
 }
 
 ANALYSIS = "# Analysis: demo\n\n## Match Rate: 96%\n\n## Verdict\nAdvance.\n"
@@ -107,26 +108,124 @@ class TestBlockers:
         assert result["ready"] is False
 
 
-class TestSkippedArchreviewIsReportedNotBlocking:
-    """#10 allows a deliberate skip; it must reach the report, not the gate."""
+class TestArchreviewLadder:
+    """Archreview outcomes have distinct gate and reporting semantics."""
 
-    def test_skipped_archreview_does_not_block(self, tmp_path):
+    def test_missing_archreview_blocks_as_not_run(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY)
+        rec.pop("archreview")
+        result = p7.check(rec, a)
+        assert result["ready"] is False
+        assert "archreview_not_run" in codes(result)
+
+    def test_null_archreview_blocks_as_not_run(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview=None)
+        result = p7.check(rec, a)
+        assert result["ready"] is False
+        assert "archreview_not_run" in codes(result)
+
+    def test_missing_archreview_blocker_explains_how_to_populate_it(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY)
+        rec.pop("archreview")
+        result = p7.check(rec, a)
+        blocker = next(
+            b for b in result["blockers"] if b["code"] == "archreview_not_run"
+        )
+        detail = blocker["detail"]
+        assert "archreview" in detail
+        assert "6a-prime" in detail
+        assert "record" in detail.lower()
+
+    def test_unknown_skipped_archreview_blocks_without_warning(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_FOO")
+        result = p7.check(rec, a)
+        assert result["ready"] is False
+        assert "archreview_not_run" in codes(result)
+        assert all(w["code"] != "archreview_not_run" for w in result["warnings"])
+
+    def test_only_explicit_passes_are_ready_across_archreview_values(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        cases = [
+            ("READY_TO_MERGE", True),
+            ("WITH_FIXES", False),
+            ("NO", False),
+            ("SKIPPED_NO_PANE", False),
+            ("SKIPPED_OPERATOR_OVERRIDE", True),
+            ("SKIPPED_FOO", False),
+            (None, False),
+            ("__ABSENT__", False),
+        ]
+        observed = []
+        for value, expected_ready in cases:
+            rec = dict(READY)
+            if value == "__ABSENT__":
+                rec.pop("archreview")
+            else:
+                rec["archreview"] = value
+            observed.append((value, p7.check(rec, a)["ready"], expected_ready))
+        assert observed == [(value, expected, expected) for value, expected in cases]
+
+    def test_skipped_archreview_blocks(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
         rec = dict(READY, archreview="SKIPPED_NO_PANE")
-        assert p7.check(rec, a)["ready"] is True
+        result = p7.check(rec, a)
+        assert result["ready"] is False
+        assert "archreview_skipped" in codes(result)
 
-    def test_skipped_archreview_is_surfaced_as_a_warning(self, tmp_path):
+    def test_skipped_archreview_is_a_blocker_not_a_warning(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
         rec = dict(READY, archreview="SKIPPED_NO_PANE")
-        assert any("archreview" in w["code"] for w in p7.check(rec, a)["warnings"])
+        result = p7.check(rec, a)
+        assert any(b["code"] == "archreview_skipped" for b in result["blockers"])
+        assert all(w["code"] != "archreview_skipped" for w in result["warnings"])
+
+    def test_skipped_archreview_blocker_points_to_headless_review(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_NO_PANE")
+        result = p7.check(rec, a)
+        blocker = next(b for b in result["blockers"] if b["code"] == "archreview_skipped")
+        assert "exec agy" in blocker["detail"]
+        assert "satisfies the gate" in blocker["detail"]
 
     def test_failed_archreview_does_block(self, tmp_path):
         a = tmp_path / "demo.analysis.md"
         a.write_text(ANALYSIS)
         rec = dict(READY, archreview="NO")
         assert "archreview_failed" in codes(p7.check(rec, a))
+
+    def test_operator_override_is_ready_with_warning(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_OPERATOR_OVERRIDE")
+        result = p7.check(rec, a)
+        assert result["ready"] is True
+        assert any(
+            warning["code"] == "archreview_overridden"
+            for warning in result["warnings"]
+        ), "operator override must be surfaced as a warning"
+
+    def test_operator_override_warning_requires_phase7_report_disclosure(self, tmp_path):
+        a = tmp_path / "demo.analysis.md"
+        a.write_text(ANALYSIS)
+        rec = dict(READY, archreview="SKIPPED_OPERATOR_OVERRIDE")
+        result = p7.check(rec, a)
+        assert any(
+            "Phase 7 report" in warning["detail"]
+            and "not READY_TO_MERGE" in warning["detail"]
+            for warning in result["warnings"]
+        ), "override warning must disclose the Phase 7 report and non-READY status"
 
 
 class TestCli:

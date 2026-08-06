@@ -37,6 +37,24 @@ def protocols() -> str:
     return PROTOCOLS.read_text(encoding="utf-8")
 
 
+def section_6a_prime() -> str:
+    """The §6a-prime bullet, sliced at its real boundary.
+
+    These tests used a magic `s[idx : idx + 1600]` window. The bullet is now
+    1707 characters, so the last 107 sat outside every assertion — and the ban
+    on prescribing `h_mad_state_validate.py` passed only because the sentence
+    mentioning it fell past the cliff. The nearest required phrase had 76
+    characters of margin, so any added sentence would have silently pushed a
+    guard out of scope and broken it for an unrelated reason.
+    """
+    s = skill()
+    start = s.find("**6a-prime**")
+    assert start != -1, "§6a-prime bullet not found"
+    end = s.find("- **6a**", start)
+    assert end != -1, "§6a-prime bullet has no terminating `- **6a**`"
+    return s[start:end]
+
+
 class TestPreflightHalt:
     def test_skill_md_defines_the_halt(self):
         assert HALT in skill()
@@ -46,25 +64,27 @@ class TestPreflightHalt:
         no way forward."""
         assert HALT in recovery()
 
-    def test_preflight_checks_the_pane_before_dispatching(self):
-        """Mirrors 5d: confirm alive, refuse if missing."""
-        s = skill()
-        idx = s.find("**6a-prime**")
-        assert idx != -1
-        section = s[idx : idx + 1600]
-        assert "alive" in section.lower()
+    def test_preflight_requires_the_agy_cli_not_a_pane(self):
+        """The preflight checks for the executable, not a resolved reviewer pane."""
+        section = section_6a_prime()
+        assert "command -v agy" in section
+        # Assert the OLD prescription is gone, rather than banning the substring
+        # "resolved pane": the sibling test requires the section to say it does
+        # NOT require a resolved pane, and a blanket ban would contradict it —
+        # making the two tests mutually unsatisfiable and GREEN unreachable.
+        assert "hmad-dispatch alive agy" not in section
+        assert "alive agy" not in section
 
-    def test_names_unresolved_as_the_trigger(self):
-        """`UNRESOLVED` is what `hmad-dispatch env` actually prints."""
-        s = skill()
-        idx = s.find("**6a-prime**")
-        assert "UNRESOLVED" in s[idx : idx + 1600]
+    def test_names_cli_absence_as_the_trigger(self):
+        """The retained halt is now for an unavailable `agy` CLI."""
+        section = section_6a_prime()
+        assert "the `agy` CLI is absent" in section
 
 
 class TestSkipIsRecorded:
-    def test_state_records_a_skipped_review(self):
-        s = skill()
-        assert "SKIPPED_NO_PANE" in s
+    def test_state_records_the_operator_override(self):
+        section = section_6a_prime()
+        assert "SKIPPED_OPERATOR_OVERRIDE" in section
 
     def test_skip_surfaces_in_the_phase_7_report(self):
         """A closure report that omits this lets a feature ship looking
@@ -74,13 +94,64 @@ class TestSkipIsRecorded:
         section = p[start:]
         assert "SKIPPED_NO_PANE" in section or "architectural review" in section.lower()
 
-    def test_skipping_is_explicitly_not_a_pass(self):
+    def test_phase_7_skip_blocks_and_headless_review_satisfies_gate(self):
         s = skill()
-        idx = s.find("**6a-prime**")
-        section = s[idx : idx + 1600].lower()
-        assert "not" in section and (
-            "ready_to_merge" in section or "pass" in section
+        start = s.index("7. **Closure (autonomous)**")
+        end = s.index("\n## Phase 5", start)
+        section = s[start:end]
+        assert (
+            "A `SKIPPED_NO_PANE` archreview **blocks** the gate — "
+            "a headless `exec agy` review satisfies the gate."
+        ) in section
+
+    def test_skipping_is_explicitly_not_a_pass(self):
+        # NB: do NOT .lower() the section — the asserted phrase carries the
+        # upper-case enum value, so a lowercased haystack can never match it and
+        # the test would fail even with the sentence present verbatim.
+        section = section_6a_prime()
+        assert "`SKIPPED_OPERATOR_OVERRIDE` is not a pass" in section
+
+    def test_exec_agy_satisfies_the_gate_without_a_resolved_pane(self):
+        section = section_6a_prime()
+        assert "`exec agy` satisfies the gate" in section
+        assert "does not require a resolved pane" in section
+
+    def test_no_pane_is_not_the_ordinary_skip_response(self):
+        section = section_6a_prime()
+        assert "SKIPPED_OPERATOR_OVERRIDE" in section
+        assert "SKIPPED_NO_PANE" not in section
+
+    def test_state_writes_extracted_assessment_to_archreview(self):
+        section = section_6a_prime()
+        assert (
+            "write the extracted `ASSESSMENT:` into "
+            "`orchestrator_state[<feature>].archreview`" in section
         )
+
+    def test_state_write_is_verified_by_readback_comparison(self):
+        section = section_6a_prime()
+        assert (
+            "read `orchestrator_state[<feature>].archreview` back and compare it "
+            "to the value written" in section
+        )
+        # Assert the validator is NOT PRESCRIBED, rather than banning the string.
+        # The section legitimately names it in order to warn against it, and a
+        # blanket ban forbade the warning as well as the mistake — it passed only
+        # because that sentence happened to fall outside the old 1600-char window.
+        assert "do not rely on h_mad_state_validate.py --strict-only" in section
+
+    def test_extraction_capture_is_line_scoped(self):
+        """The extractor prints its `[H-MAD]` marker to STDOUT, so the obvious
+        `$(...)` capture yields two lines and the writer refuses the value.
+
+        Observed live on this feature's own 6a-prime: the write was rejected and
+        the read-back reported `None`. This section is the first consumer that
+        captures the extractor's output instead of reading it by eye, so the
+        instruction has to say so or it walks the reader into the trap.
+        """
+        section = section_6a_prime()
+        assert "prints its `[H-MAD]` marker to stdout" in section
+        assert "sed -n 's/^ASSESSMENT: //p'" in section
 
 
 class TestExistingHaltsIntact:

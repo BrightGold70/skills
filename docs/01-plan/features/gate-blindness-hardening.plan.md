@@ -94,13 +94,20 @@ merely stop asserting the old one; a deletion is not a substitute.
 **No blocker may land before the means of satisfying it exists.** The rule covers FR-1 as well
 as FR-2; v1.0 stated it for FR-2 only, which left the sharper deadlock unguarded:
 
-1. **FR-4** — headless review accepted **and its verdict auto-recorded**. Until this lands there
+1. **FR-3** — the `SKIPPED_OPERATOR_OVERRIDE` escape exists, so a genuinely reviewer-less run
+   has somewhere to go before either blocker is armed — **and so the enum accepts the value
+   before FR-4 instructs anyone to write it.**
+2. **FR-4** — headless review accepted **and its verdict auto-recorded**. Until this lands there
    is no ordinary way to *produce* an `archreview` value at all.
-2. **FR-3** — the `SKIPPED_OPERATOR_OVERRIDE` escape exists, so a genuinely reviewer-less run
-   has somewhere to go before either blocker is armed.
 3. **FR-2** — a recorded skip now blocks.
 4. **FR-1** — an *absent* review now blocks. Last, because it is the strictest and because it is
    the one that fires on records nobody edited.
+
+**FR-3 precedes FR-4 (corrected at 5b audit cycle 1).** v1.1 of this plan ordered them the other
+way, which opens a window where `SKILL.md` documents writing `archreview=SKIPPED_OPERATOR_OVERRIDE`
+while `h_mad_state_write.py` still refuses it — confirmed by running the writer. The property
+this ordering protects is *both means before both blockers*, and that is unchanged: FR-3 arms no
+blocker.
 
 Landing FR-1 before FR-4 is the specific deadlock: the field would become mandatory while
 nothing yet writes it and no override exists. Via the symlink this repo *is* the live skill, so
@@ -152,7 +159,8 @@ live defect proved we never test.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Inverted assertions get deleted rather than re-pointed | The gate's contract silently loses coverage — the exact failure this feature exists to prevent | A5 enumerates all six up front; each must assert the new contract positively; net assertion count must not fall |
-| A blocker lands before the way to satisfy it | A run cannot close and has no override — and via the symlink, **this feature's own Phase 7 is the first victim** | Strict ordering, all four: **FR-4 → FR-3 → FR-2 → FR-1** (see §"Landing order") |
+| A blocker lands before the way to satisfy it | A run cannot close and has no override — and via the symlink, **this feature's own Phase 7 is the first victim** | Strict ordering, all four: **FR-3 → FR-4 → FR-2 → FR-1** (see §"Landing order") |
+| Protocol text documents a value the schema rejects | 6a-prime instructs a write the writer refuses, in the window between FR-4 and FR-3 | FR-3 lands first, so the enum accepts the override before anything documents writing it (found at 5b cycle 1, verified by running the writer) |
 | The new blocker strands **this** feature's own Phase 7 | Self-inflicted deadlock via the symlink | 6a-prime for this feature runs headless under the new contract — dogfooding it is the acceptance evidence |
 | Hostile corpus breaks existing tests | Unrelated triage inside a gate feature | Opt-in knob, unset = today; assert the full 1143 with it unset |
 | `markers` corpus corrupts the stub's own JSON | Fixture becomes unusable | Emit as JSON-encoded data; pin a round-trip test |
@@ -202,3 +210,10 @@ should-fix = 0 → Phase 4 design.
   files: `test_h_mad_archreview_pane_halt.py` already holds the pane pins being retargeted, and
   `test_h_mad_tdd_dispatch_discipline_prompt.py` already asserts clauses of the implementer
   template.
+- v1.2: Back-propagated from the 5b impl-plan audit (cycles 1 and 4). The landing order is now
+  **FR-3 → FR-4 → FR-2 → FR-1**: ordering FR-4 first documents `SKIPPED_OPERATOR_OVERRIDE`
+  before the schema accepts it, and the writer refuses it — verified by running the writer rather
+  than reasoning about it. The safety property is unchanged (both means precede both blockers);
+  only the internal order of the two means moved. A matching risk row was added. Note v1.1's
+  entry above records the older `FR-4 → FR-3` sequence as authored at the time; this entry
+  supersedes it.
