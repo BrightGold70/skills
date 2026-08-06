@@ -34,7 +34,7 @@ that *describe the /h-mad skill that already exists*, kept as provenance, not wo
 |---|---|---|
 | 6 | `live-e2e-pane-janitor` | *yes* — **OPEN, and the only actionable row.** Close scratch panes by elimination AND settle their dispatches; two sessions, 2026-08-03 |
 | 9 | `close-a-filed-defect cycle` | **LANDED** — SKILL.md §Working a `skill-monitoring` item |
-| 9 | `H-MAD phase-doc + agy-audit-gate loop` | *maybe* — already the /h-mad skill |
+| 27 | `H-MAD phase-doc + agy-audit-gate loop` | *maybe* — already the /h-mad skill. **+18 on 2026-08-06** (two features, 5 audit phases). The judgement is the skill; the MECHANICAL prefix is not — assemble → 4 residual-slot greps → `exec agy` → `report-wait` → gate is byte-identical every cycle |
 | 6 | `audit→fix→subagent-review→merge loop` | *maybe* — already the /h-mad skill |
 | 4 | `agy-skill-review` | **LANDED** (2026-08-03) — `references/agy-skill-reviewer-prompt.md` + SKILL.md §Reviewing a skill with agy |
 | 3 | `test-pinned-the-defect check` | **LANDED** — invariants.base.md §Regression provenance |
@@ -272,3 +272,25 @@ before concluding a row is inert — one row sat inert for a day while naming it
   this session carried a stated cause, and one was wrong — recurrence: 2 — candidate: no (captured
   as memory `feedback_carried_repro_is_not_evidence`, which is where it belongs; it is judgement at
   read-time, not a pipeline)
+
+## 2026-08-06 — gate-blindness-hardening-at-phase-5
+
+- **wire-scoped-revert-runner**: revert ONE call site (callee + tests intact), assert a NAMED pin
+  test fails, restore, assert it passes again — with an anchor-matches-exactly-once guard, because a
+  revert that never landed reports as a pass. Hand-rolled 8× this session (W1–W5 on
+  `exec-path-hardening`, plus the glob-quoting, heartbeat and non-interference guards), and my first
+  attempt at looping it silently mangled its own shell variables so every pin selected 0 tests —
+  which `pytest` exits 0 for — recurrence: 8 — candidate: maybe — **largely SUPERSEDED by
+  `h_mad_mutation_harness.py`**, which already does exact find/replace, refuses an anchor not
+  matching exactly once, restores on every path and re-runs to prove the restore. Two real gaps
+  remain: it targets the whole suite (~105 s × N, vs ~1 s for a single named pin), and it reports
+  `SURVIVED` rather than naming *which* pin failed to bite. File as an enhancement to that harness
+  (`--target <nodeid>`), not as a new skill.
+
+- **live-state-replay-probe**: reproduce a suspected defect by feeding REAL production state back
+  through the pure function under test, rather than a synthetic fixture. Turned "the card looks
+  wrong" into a deterministic 513 → 1026 doubling in one command, and a paired glob-free control
+  falsified the mechanism cleanly — recurrence: 1 — candidate: no (one occurrence, and it is
+  judgement at debug-time rather than a pipeline; captured as memory
+  `feedback_hostile_fixtures_over_tidy_ascii`)
+
