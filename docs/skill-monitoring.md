@@ -941,3 +941,126 @@ _Append new findings below as later runs surface them. Flip Status + link the co
 >
 > The conclusion ("the guard is fine") and the proposed reasoning ("it never fired") are different
 > things, and only one of them is worth keeping.
+
+---
+
+## Orchestration correctness + exec verdict integrity (2026-08-03 → 2026-08-06)
+
+Backfilled 2026-08-06. J19–J23 were assigned in code comments and tests as they were fixed but
+never filed here, so the registry stopped tracking the exec/orchestration path after J18. J24–J27
+are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-hardening`.
+
+| ID | Sev | Status | One-line |
+|---|---|---|---|
+| J19 | 🔴 | **FIXED** `7929470` | `ok:true` is not delivery — a dispatch can return `injected:false` and exit 0; and acking a delivery to advance the queue DISCARDS every sibling report in it |
+| J20 | 🔴 | **FIXED** `f33dda1` | Orca still DELIVERS a `worker_done` it lifecycle-rejected — matching on taskId alone launders a rejection into a completion |
+| J21 | 🟡 | **FIXED** `1052c33` | a lifecycle rejection was acked off the queue and the await then timed out silently, discarding the only explanation of why that module would never report |
+| J22 | 🟢 | **WONTFIX (decided)** `1134192` | a wrapper-side dispatch pane-readiness pre-flight was considered and deliberately rejected |
+| J23 | 🔴 | **FIXED** `c5f6084`, `49cfc9f` | `exec` recovery read the prompt's own echoed contract block as the agent's verdict, and the tree-delta counter was whole-repo rather than `--cd`-scoped |
+| J24 | 🔴 | **FIXED** `63fca45` | worktree-comment span replacement was glob-unsafe (`${current%$rest}` unquoted), so agent markdown made the strip silently fail and doubled the card |
+| J25 | 🔴 | **FIXED** `379b881` | the Phase-7 `archreview` ladder had no `else`, so a record that never wrote the field returned `PHASE7: READY blockers=0` |
+| J26 | 🟡 | **MONITORING** | `h_mad_extract_verdict.py` prints its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yields two lines and any writer fed that value refuses it |
+| J27 | 🟡 | **FIXED** `733a5f8` | doc tests sliced a magic 1600-char window; the section had already outgrown it, so a guard's scope depended on prose length |
+
+- 🔴 **J19 — `ok:true` is not delivery, and `--ack` is destructive.** Two defects in one fix.
+  Measured 2026-08-03: `orchestration dispatch` can return `ok:true`, `status:"dispatched"`,
+  `injected:false` and exit 0 — the task row is created and the worker is never told, so `await`
+  sits until timeout with no diagnostic. Separately, one Orca Delivery holds **all** pending
+  messages and `--ack` destroys the whole batch: a 2-message batch acked to `count: 0`, and
+  `await <the other task>` then timed out for a module that had genuinely reported. In a fanout,
+  modules finish in one order and are awaited in another, so that is the normal path, not an edge
+  case. Fixed by an `injected=false` guard plus `_await_cache_put`, which parks every `worker_done`
+  in a delivery before acking. The guard's own first implementation used jq's `//`, which treats
+  `false` as null-ish and so never fired on exactly the value it hunted — caught by its own test,
+  and the reason it now uses `has()`.
+
+- 🔴 **J20 — a lifecycle-REJECTED report is not a completion.** Orca validates `worker_done` and
+  can reject one (`missing_dispatch_id`, `sender_not_assignee`) while **still delivering it**, with
+  `_orcaLifecycleRejection` in the payload. Matching on `taskId` alone therefore accepts a report
+  the runtime itself refused — a false completion, which is the worst possible failure for a gate
+  whose entire job is to decide whether work finished. Now parked separately, never as valid.
+
+- 🟡 **J21 — the rejection is the explanation, so do not discard it.** Once J20 stopped treating a
+  rejected report as success, the naive fix (drop it) made `await` time out with no reason given,
+  and whoever awaited first would have acked the only explanation off the queue permanently.
+  `await` now surfaces the rejection and stops, rather than waiting out the clock. [[J20]]
+
+- 🟢 **J22 — deciding NOT to build a guard, recorded so it is not re-proposed.** A pane-readiness
+  pre-flight before `dispatch` looks obviously right and is wrong on three counts, all measured:
+  Orca refuses `--inject` into an agentless pane **atomically** (non-zero exit, empty stdout,
+  `dispatch: null` afterwards — no row, no binding, nothing to clean up); a wrapper check would open
+  a TOCTOU window the atomic path does not have; and it would have to re-derive "is an agent here"
+  from signals separately proven unreliable — `terminal read` yields 0 lines for an idle
+  restart-surviving pane, and hand-started panes are absent from `worktree ps`'s `agents[]`. It
+  would false-refuse healthy panes. Kept as a row because the absence of a guard is invisible, and
+  the next reader will otherwise propose it again.
+
+- 🔴 **J23 — `exec` laundered its own prompt into a verdict.** `codex exec … -` echoes the piped
+  prompt into its transcript, so a recovery that greps the whole log reads the prompt's own output
+  contract. Shipped a real false verdict on 2026-08-03: a dispatch that died on revoked auth
+  returned `STATUS: NEEDS_CONTEXT` — the last option of its own contract block — and wrote it to
+  `--out`, where the extractor accepted it. `agy --print` does **not** echo (the prompt is an arg),
+  so the two backends genuinely need different recovery rules. Fixed by appending the same
+  `===HMAD-DISPATCH-BOUNDARY===` that `send` uses and recovering only past its last occurrence;
+  for codex a transcript with no boundary recovers **nothing** rather than guessing. The second
+  half of the same fix: `git -C <subdir> status --porcelain` reports the **entire** work tree, so
+  the "tree delta" that was supposed to prove work landed in `--cd` silently counted dirt from
+  elsewhere in the repo. Found by replaying the real incident log against the fix — a different
+  test from the unit tests, and the one that exposed a residual no-boundary hole that had passed
+  RED. [[J26]]
+
+- 🔴 **J24 — tidy fixtures made a defect class unreachable.** `prefix="${current%$rest}"` left
+  `$rest` **unquoted**, so bash glob-matched it instead of stripping a literal suffix. Production
+  verdicts embed the agent's markdown (`[x](y)`, `**bold**`), so the strip failed and every stamp
+  emitted the whole comment twice; the real worktree card reached **513 spans / 38,329 bytes**, and
+  feeding it back through the composer reproduced it exactly (513 → 1026). This survived **1063
+  tests, a clean 5/5 mutation sweep, five wire-scoped reverts and a clean architectural review**,
+  and was found only by a live run — because every fixture used short glob-free ASCII. The bug was
+  not under-tested; it was **unreachable**. The general shape: a fixture corpus is itself a
+  coverage boundary, and one made entirely of tidy ASCII silently excludes whole defect classes.
+  Closed on the fixture side by J25's feature (`HMAD_STUB_HOSTILE`). [[J25]]
+
+- 🔴 **J25 — the architectural review was optional by OMISSION.** `h_mad_phase7_preconditions.py`
+  branched on `WITH_FIXES`/`NO` and `SKIPPED_NO_PANE` with **no `else`**, so a record that never
+  wrote `archreview` returned `PHASE7: READY blockers=0`. The documented `SKIPPED_NO_PANE` escape
+  was not even needed to close a feature with no architectural review — simply never recording one
+  was enough, and nothing marked the omission. Compounding it, §6a-prime's preflight required a
+  resolved reviewer *pane*, which fails in the ordinary `exec`-default session, so the protocol
+  steered runs straight into the hole. Fixed by `gate-blindness-hardening` (`379b881`): the ladder
+  is now total, a skip blocks, a deliberate operator override closes with a warning, and 6a-prime
+  is satisfied headlessly and records its own verdict. Proven on the identical record with the
+  field removed — the old gate returned `READY`, the new one blocks. [[J24]] [[J26]] [[J27]]
+
+- 🟡 **J26 — `h_mad_extract_verdict.py` prints its marker to stdout.** `h_mad_extract_verdict.py:232`
+  emits `[H-MAD] <feature> phase<N> <key>_<value>` with a plain `print()`, on the line directly
+  after the verdict. Every consumer until now read the token by eye or grepped it, so this never
+  bit; §6a-prime's new auto-record step is the first that **captures** the output into a variable
+  and feeds it to `h_mad_state_write.py`, and the obvious `$(… | sed 's/^ASSESSMENT: //')` yields
+  two lines. Observed live 2026-08-06 on `gate-blindness-hardening`'s own 6a-prime: the writer
+  refused the malformed value and the read-back check reported `None`.
+
+  **Mitigated in docs only** — §6a-prime now names the hazard and prescribes
+  `sed -n 's/^ASSESSMENT: //p'`. The script is unchanged, so the trap is still there for the next
+  caller that captures rather than reads. Fix direction: route the `[H-MAD]` marker to **stderr**,
+  as the gate scripts already do for their own diagnostics, so stdout carries only the verdict.
+  Not done blind because other consumers may capture combined output today; needs a sweep of every
+  `h_mad_extract_verdict.py` caller first. Status stays MONITORING until that sweep happens.
+
+- 🟡 **J27 — a doc test's scope depended on prose length.** The §6a-prime doc tests sliced a magic
+  `s[idx : idx + 1600]` window. The section had already grown to **1707** characters, so its last
+  107 sat outside every assertion, and the nearest required phrase had **76 characters of margin**.
+  Two consequences, both real: a fix that added 299 characters would have pushed three unrelated
+  guards out of scope and broken them for a reason having nothing to do with their subject; and a
+  ban on the substring `h_mad_state_validate.py` passed **only because** the sentence warning
+  against that validator fell past the cliff. Fixed in `733a5f8` by slicing at the real bullet
+  boundary via a `section_6a_prime()` helper, and by replacing the blanket ban with a positive
+  assertion of the warning — a string ban forbids naming an anti-pattern in order to warn about it.
+  Mutation-verified including a mutation that reverts the boundary slicing. [[J25]]
+
+> **Registry-hygiene note, 2026-08-06.** J19–J23 were fixed between 2026-08-03 and 2026-08-05 and
+> referenced by ID in code comments and test docstrings the whole time, but never filed here — so
+> for two weeks this registry read as though the exec/orchestration path had no known findings
+> after J18. The IDs were reconstructed from those in-code references rather than reassigned, so
+> every `J19`–`J23` mention already in the tree still resolves. The lesson is the one the J18 audit
+> already recorded from the other direction: **a row that is never written is the same coverage
+> hole as a row that is never flipped.**
