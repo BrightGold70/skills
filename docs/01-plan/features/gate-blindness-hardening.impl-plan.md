@@ -217,6 +217,12 @@ elif archreview == "SKIPPED_NO_PANE":
       A deletion is not a substitute; net assertion count must not fall. (Task 2's
       `test_skipping_is_explicitly_not_a_pass` keeps its name deliberately — it is the continuity
       marker, and its name is true under both the old and new contracts.)
+- [ ] AC-2.6: Update `SKILL.md`'s **Phase 7 bullet** (the `7. **Closure (autonomous)**` item,
+      around line 141), which states "A `SKIPPED_NO_PANE` archreview is a **warning**, not a
+      blocker — carry it into the report per §6a-prime." That sentence becomes false the moment
+      this task lands. It is outside the §6a-prime slice the Task 2 doc tests assert on, so no
+      existing test covers it — add one, or it silently contradicts the gate. Found while
+      verifying Task 2.
 - [ ] AC-2.5: Rename the enclosing class `TestSkippedArchreviewIsReportedNotBlocking`, whose name
       asserts the **old** contract and becomes false the moment this task lands. Suggested:
       `TestArchreviewLadder`. Same reasoning as AC-2.4 — a container name that contradicts its
