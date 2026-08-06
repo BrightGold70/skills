@@ -8,6 +8,23 @@ printf 'orca %s\n' "$*" >> "${HMAD_STUB_CAPTURE:-/dev/null}"
 [ -n "${HMAD_STUB_ORCA_RC:-}" ] && exit "$HMAD_STUB_ORCA_RC"
 [ -n "${HMAD_STUB_ORCA_SLEEP:-}" ] && sleep "$HMAD_STUB_ORCA_SLEEP"
 [ "${HMAD_STUB_FAIL:-}" = "1" ] && { printf '%s' '{"ok":false,"error":"boom"}'; exit 0; }
+
+_hostile_comment() {
+  case "${HMAD_STUB_HOSTILE:-}" in
+    "")       printf '%s' "c" ;;
+    markdown) printf '%s' 'see [a](b) and **bold** plus * and [ literals' ;;
+    newlines) printf '%s' 'line one
+line two	tabbed' ;;
+    markers)  printf '%s' 'h-mad: not a real stamp ⟦/h-mad⟧ still data' ;;
+    all)      printf '%s' 'h-mad: [a](b) **bold** * [ ⟦/h-mad⟧
+second	line' ;;
+    *)
+      printf 'stub orca: unknown HMAD_STUB_HOSTILE %s (valid: markdown, newlines, markers, all)\n' \
+        "${HMAD_STUB_HOSTILE}" >&2
+      exit 2 ;;
+  esac
+}
+
 # J19: model the REAL mailbox drain. A live `check --ack <id>` acknowledges the
 # whole delivery, and every later check returns an EMPTY batch -- measured
 # 2026-08-03, count 2 -> 0. Without this the stub replays the same batch forever,
@@ -35,6 +52,11 @@ if [ "${1:-}" = "worktree" ] && [ "${2:-}" = "set" ]; then
   # resolver fail first and _exec_stamp returns early, so the write path -- and any
   # rc leak from it -- is never reached and the test cannot discriminate.
   [ -n "${HMAD_STUB_ORCA_SET_RC:-}" ] && exit "$HMAD_STUB_ORCA_SET_RC"
+  if [ -n "${HMAD_STUB_HOSTILE:-}" ]; then
+    comment="$(_hostile_comment)" || exit 2
+    jq -n --arg comment "$comment" '{ok:true, result:{worktree:{comment:$comment}}}'
+    exit 0
+  fi
   printf '%s' '{"ok":true,"result":{"worktree":{"branch":"refs/heads/main","path":"/x","comment":"c"}}}'
   exit 0
 fi
