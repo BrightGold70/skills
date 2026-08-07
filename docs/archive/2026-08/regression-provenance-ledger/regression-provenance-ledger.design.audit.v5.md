@@ -1,0 +1,15 @@
+## Summary
+The design provides a highly robust, pure-core verifier that rigorously isolates IO and neatly solves the `rc=4` abort hazard by resolving node IDs against a whole-suite collection before running them. Live-registry protection and connection enforcement invariants are thoughtfully applied. 
+
+Axis C (Spec Reconciliation): All Acceptance Criteria are `implemented-as-written`. The design fully satisfies the spec without unauthorized narrowing, integrating the AST challenge at 5f and establishing a safe, mechanical handling of tombstones.
+
+## Must-fix
+- Axis A (Gap: Unverified renames drop the verdict) — `partition()` correctly extracts unresolvable renamed successors into an `unverified_renames` set to prevent `rc=4` aborts. However, the design does not map this set to the gate's `FAIL` condition or output counts. Spec AC-4.3 requires that a rename that cannot be verified is treated as superseded (which explicitly requires naming the feature). Dropping `unverified_renames` on the floor means an invalid rename whose successor pin is deleted would silently pass. The design must specify that `unverified_renames > 0` triggers a `FAIL`.
+- Axis A (Contradiction: `git_show` vs `load_base` SHA validation) — The design delegates SHA validation to conflicting locations. Under "Tombstones and the BASE comparison", it states `git_show(sha, path)` "validates the SHA" and that `load_base()` is just a parser on top of it. The next paragraph contradicts this: "`load_base()` validates the SHA before reading the path... and only then reads the path". Because the AST challenge calls `git_show` directly, the SHA validation MUST live inside `git_show`. If `load_base` performs it, the AST challenge will receive an unvalidated SHA and could silently treat an invalid `--base` as "file did not exist at BASE".
+
+## Should-fix
+- Axis A (Precedence gap for UNTRACKED) — The architecture overview lists `trackedness(path) → UNTRACKED` before `load(path) → records`. If an untracked registry short-circuits here, it won't have loaded the records to emit the required `registered=N` count (AC-3.4 requires this on every verdict). Furthermore, if the registry is untracked but contains a broken pin, the design does not explicitly state whether the `UNTRACKED` short-circuit skips pytest execution entirely or if `FAIL` overrides it. Clarify the execution order and precedence.
+- Axis A (Path reconciliation gap) — The AST challenge matches changed files from `git diff --name-only` against the `Production file` list parsed from the impl-plan tasks. `git diff` produces repository-relative paths, whereas impl-plans often use bare basenames or arbitrary prefixes. The design should specify how it normalizes these paths (e.g., using `basename` or suffix matching) to prevent false positives where legitimate task claims fall into `unattributed`.
+
+## Nit
+- Axis A (Cross-doc drift) — The Plan listed the shape challenge deliverable under `h_mad_wire_pin_gate.py`. The Design places it in `h_mad_wire_registry.py` as the `challenge` subcommand. This makes sense since the challenge now runs at 5f alongside the verifier, but it diverges from the Plan's table.
