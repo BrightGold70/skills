@@ -8,9 +8,16 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
-## Open, highest recurrence first (reconciled 2026-08-05)
+## Open, highest recurrence first (reconciled 2026-08-07)
 
-**One `candidate: yes` is open: `live-e2e-pane-janitor` (rec 6, spanning two 2026-08-03 sessions).**
+**Two `candidate: yes` are open.** `live-e2e-pane-janitor` (rec 6) — re-verified 2026-08-07 and
+still genuinely open: no implementation exists, and only handoff commits mention it. The 2026-08-07
+session did no live pane probes, so nothing about it changed. Newly added: **`audit-cycle-background-dispatch`**
+(rec 8) — but read its reason before treating it as a skill, because it names its own insertion
+point: `h-mad/SKILL.md` §"Exit-code dispatch for 5d/5e" documents `--log` tailing while assuming a
+foreground dispatch, and the harness's 10-minute command cap kills exactly that.
+
+**One `candidate: yes` was open at the prior reconcile: `live-e2e-pane-janitor` (rec 6, spanning two 2026-08-03 sessions).**
 The "all recurrences inside one session" caveat that held it back is now **gone** — the
 orca-defects session hit it twice more independently, and grew its scope: probe *dispatches* must be
 settled (`task-update --status completed`) as well as panes closed, because `worker-abandon` and
@@ -294,3 +301,26 @@ before concluding a row is inert — one row sat inert for a day while naming it
   judgement at debug-time rather than a pipeline; captured as memory
   `feedback_hostile_fixtures_over_tidy_ascii`)
 
+
+## 2026-08-07 — gate-blindness-shipped-rpl-at-phase-5
+
+- **audit-cycle-background-dispatch**: a foreground `hmad-dispatch exec agy <prompt> --timeout 900`
+  is killed by the harness's 10-minute command cap, not by the dispatch's own timeout — so the
+  wrapper's `--out`/`--log` never land while the **report file does**. Every audit cycle after that
+  used `nohup hmad-dispatch exec agy … & ` followed by `hmad-dispatch report-wait "$RP" --timeout 540`,
+  hand-rolled each time. Recurrence: 8 (plan cycles 3-5, design cycles 1-8 this session; plus the
+  one foreground cycle that was killed and had to be recovered from the report file) —
+  candidate: yes — **the fix is probably a SKILL.md line, not a new skill.** The insertion point is
+  `h-mad/SKILL.md` §"Exit-code dispatch for 5d/5e", which already documents `--log` tailing for
+  monitoring but assumes the dispatch runs in the foreground. Naming the harness cap and the
+  background + `report-wait` shape there would remove the need to rediscover it per session.
+  Note this is *not* the documented "missing report" recovery: the report arrived fine, it was the
+  caller that was killed.
+
+- **audit-loop-runner**: the full assemble → residual-placeholder preflight → dispatch →
+  `report-wait` → `h_mad_audit_gate.py` → apply fixes → bump version-history loop, run 13 times
+  this session (5 plan cycles, 8 design cycles) with the same six commands retyped each round.
+  Recurrence: 13 — candidate: maybe — this *is* the `/h-mad` skill's documented Phase-3/4 loop, so
+  it is parked provenance rather than a new skill; what is missing is only the mechanical wrapper.
+  Worth promoting only if a future session finds the retyping is where cycles actually go wrong,
+  rather than merely being tedious.
