@@ -139,13 +139,21 @@ reported as an internal inconsistency, not silently counted as verified.
 ### Verdict grammar
 
 ```
-WIREREG: PASS      registered=N verified=K broken=0 missing=0 unverified_renames=0   exit 0
-WIREREG: FAIL      registered=N verified=K broken=J missing=M unverified_renames=R   exit 0
-                     (J>0, or M>0, or R>0)
-WIREREG: UNTRACKED registered=N verified=K broken=J missing=M unverified_renames=R   exit 0
+WIREREG: PASS      registered=N verified=K broken=0 missing=0 unverified_renames=0
+                                                              undeclared_removals=0  exit 0
+WIREREG: FAIL      registered=N verified=K broken=J missing=M unverified_renames=R
+                                                              undeclared_removals=U  exit 0
+                     (J>0, or M>0, or R>0, or U>0)
+WIREREG: UNTRACKED registered=N verified=K broken=J missing=M unverified_renames=R
+                                                              undeclared_removals=U  exit 0
                      (never PASS)
                    → missing --base, invalid --base, unreadable registry             exit 2
 ```
+
+`undeclared_removals=U` carries FR-4's `compare()` result. It is in the grammar because AC-4.1
+makes an undeclared removal a `FAIL`, and v1.6's amendment — *a count that drives a FAIL must be in
+the grammar* — applies to it: without the count, that verdict prints `FAIL` beside `broken=0
+missing=0 unverified_renames=0` and is unreadable.
 
 **`UNTRACKED` does not short-circuit the run.** Trackedness is determined early but reported at the
 end, after loading and verifying, so `registered=N` and the other counts are real on that verdict
@@ -262,14 +270,49 @@ changed file claimed by **no** task is reported separately as `unattributed` —
 dropped, because an unclaimed production change is itself worth surfacing. A file claimed by more
 than one task is attributed to all of them and counted once.
 
-**The changed-file set comes from `git diff --name-only --diff-filter=AM <base> HEAD -- '*.py'`**,
-filtered to production paths (test paths are never challenged).
+**The changed-file set comes from `git diff --name-status --diff-filter=d <base> HEAD -- '*.py'`**,
+run with `cwd=repo`, filtered to production paths (test paths are never challenged) and to files not
+already claimed by a `wiring` task.
 
-`--diff-filter=AM` is load-bearing, not tidiness: a plain `--name-only` includes files **deleted**
-in HEAD, and parsing the HEAD version of a deleted file raises `FileNotFoundError` — crashing the
-verifier at 5f rather than reporting a verdict. Probed on a real deletion commit: plain **62**
-paths, `--diff-filter=AM` **61**, deletions **1**. A deleted file cannot add a cross-boundary call,
-so excluding it loses nothing.
+Excluding deletions is load-bearing, not tidiness: an unfiltered diff includes files **deleted** in
+HEAD, and parsing the HEAD version of a deleted file raises `FileNotFoundError` — crashing the
+verifier at 5f rather than reporting a verdict. Probed on a real deletion commit: unfiltered **62**
+paths, deletions **1**. A deleted file cannot add a cross-boundary call, so excluding it loses
+nothing.
+
+**The exclusion is `d`, not an `AM` allowlist — corrected at impl-plan audit cycle 4.** `AM` also
+satisfies the deletion constraint, but it silently drops **renames**. Probed on a tree carrying all
+four statuses at once:
+
+```
+A pkg/brandnew.py   D pkg/doomed.py   M pkg/keep.py   R073 pkg/tomove.py -> pkg/moved.py
+
+--diff-filter=AM -> brandnew.py, keep.py                   # moved.py silently absent
+--diff-filter=d  -> brandnew.py, keep.py, moved.py         # rename kept, deletion still excluded
+```
+
+`pkg/moved.py` had gained a new function in the same commit, so under `AM` a rename is a free pass
+and every cross-boundary call it introduces is invisible. The earlier probe exercised only a
+deletion, which is how the gap survived to the impl-plan. `d` is exclusion-based, so a git status
+letter this design did not anticipate is included rather than dropped.
+
+**And `--name-status`, not `--name-only`, because a renamed file's BASE version lives at its OLD
+path.** `--name-only` prints just the new path, so `git_show(base, new_path, repo)` returns `None`,
+the file reads as brand-new, and every *pre-existing* cross-boundary call in it is reported as an
+addition — trading the false negative above for a false-positive flood. Probed:
+
+```
+$ git diff --name-status --diff-filter=d BASE HEAD -- '*.py'
+R062<TAB>pkg/tomove.py<TAB>pkg/moved.py
+
+$ git show BASE:pkg/moved.py    fatal: path 'pkg/moved.py' exists on disk, but not in 'BASE'
+$ git show BASE:pkg/tomove.py   import json…                     # the real BASE version
+```
+
+Each changed file therefore resolves to a `(base_path, head_path)` pair: equal for `M`, old→new for
+`R`, and `base_path = None` for a true addition — which the caller must handle as an empty BASE AST
+rather than passing `None` into `git_show`. Attribution matches on `head_path`, since that is what
+an impl-plan's `Production file` names.
 
 **Both sides are normalised to repo-relative POSIX paths before matching.** `git diff --name-only`
 emits repo-relative paths **regardless of the cwd it runs from** — probed from the repo root and
@@ -357,7 +400,7 @@ that disables the redirection branch, which no test using that branch can detect
 | AST shape challenge (warning-only), **at 5f** — 5b has no production diff to compare | `h-mad/scripts/h_mad_wire_registry.py` (`challenge` subcommand) | new | FR-5 |
 | Boundary map consumed by the shape challenge; absent ⇒ no boundaries ⇒ challenge never fires | `.h-mad/boundaries.json` (per-repo data) | **new** | FR-5 (AC-5.4) |
 | Live `.h-mad/wires.jsonl` snapshot/restore guard | `h-mad/tests/conftest.py` | modify | J18 protection |
-| 5b registers · 5f re-verifies · three named halts with `[H-MAD]` markers | `h-mad/SKILL.md` | modify | FR-2, FR-6 |
+| 5b registers (invocation carries `--feature`) · 5f re-verifies · **five** named halts with `[H-MAD]` markers | `h-mad/SKILL.md` | modify | FR-2, FR-6 |
 | Registry + verifier unit tests | `h-mad/tests/test_h_mad_wire_registry.py` | **new** | FR-1–FR-4 |
 | Registration wire pins (both directions) + shape-challenge tests | `h-mad/tests/test_h_mad_wire_pin_gate.py` | modify | FR-5, FR-6 |
 
@@ -418,13 +461,32 @@ without it, so its absence is exit 2 like `verify`'s); `--impl-plan` (required, 
 shapes and production-file claims, parsed via the 5b gate's `_parse_tasks`); `--boundaries`
 (default `.h-mad/boundaries.json`, absent ⇒ no boundaries ⇒ no crossings possible);
 `--ack` (default the impl-plan's audit sidecar, read for `## Acknowledged-not-fixed`).
-Output: `WIRECHALLENGE: challenges=N acknowledged=K unattributed=U stale=S`, always exit 0 —
-it is verdict-neutral by construction (AC-5.2).
+Output: `WIRECHALLENGE: challenges=N acknowledged=K unattributed=U dangling=D stale=S ambiguous=A`,
+or `WIRECHALLENGE: NOT_COMPARED reason=<no_production_diff|no_boundaries>` when the comparison could
+not be performed at all — always exit 0, verdict-neutral by construction (AC-5.2).
+
+`dangling=D` is separate from `unattributed=U` deliberately: a changed file nobody claimed and a
+claim matching no changed file are opposite directions with opposite remedies, so summing them makes
+both unactionable. `ambiguous=A` counts module stems resolving to two files, which are reported
+rather than resolved, because picking one would fabricate a crossing. `NOT_COMPARED` is a distinct
+token rather than prose because `challenges=0` from a run that looked and from a run that *could
+not* look are otherwise the same string — the silent no-op this feature exists to remove.
 
 - `--registry` default `.h-mad/wires.jsonl`; absent file ⇒ `PASS registered=0`.
 - `--base` omitted ⇒ **exit 2** (the FR-4 comparison cannot run).
-- New `[H-MAD]` halt reasons consumed by `SKILL.md` §5f: `step5f:wire_regression:<id>`,
-  `step5f:wire_pin_missing:<id>`, `step5f:registry_untracked`.
+- `h_mad_wire_pin_gate.py` takes a new `--feature <name>` flag supplying `owning_feature`. It is
+  **not** derived from the plan's filename: the gate is routinely run on `/tmp` fixtures, so a
+  filename-derived value would register wires under stems like `test_plan`, and a wrong
+  `owning_feature` is worse than a missing one. Absent the flag the gate registers nothing and says
+  so, leaving the `WIREPIN:` verdict unaffected. `SKILL.md`'s 5b invocation must pass it, or
+  registration is a silent no-op in production.
+- **Five** `[H-MAD]` halt reasons consumed by `SKILL.md` §5f — one per `FAIL` driver, since a
+  verdict exits 0 and the marker is the only diagnosable signal: `step5f:wire_regression:<id>` on
+  `broken`, `step5f:wire_pin_missing:<id>` on an undeclared `missing`, `step5f:registry_untracked`
+  on `UNTRACKED`, `step5f:undeclared_removal:<id>` on an undeclared removal (AC-4.1), and
+  `step5f:unverified_rename:<id>` on an unverifiable rename (AC-4.3). The last two were added at
+  impl-plan audit cycle 1: both were already `FAIL` conditions with no marker, so a run could halt
+  anonymously.
 - `h_mad_wire_pin_gate.check()` signature and `WIREPIN:` grammar unchanged — additive only.
 
 ## Error Handling Strategy
@@ -517,8 +579,10 @@ gate calls it rather than re-implementing. `WIRE`/`WIRE-PIN` parsing stays in th
 in-flight feature is unaffected. `WIREPIN:` grammar and `check()`'s signature are unchanged;
 additions only. No orchestrator-state schema change.
 
-**Base — marker discipline.** Three named halts, each emitting `[H-MAD]`, so a 5f stop is
-diagnosable from logs alone (`invariants.base.md:61`). Complies.
+**Base — marker discipline.** Five named halts — one per `FAIL` driver — each emitting `[H-MAD]`, so
+a 5f stop is diagnosable from logs alone (`invariants.base.md:61`). The set named in `SKILL.md` is
+asserted equal to the set the verifier can emit, so neither side can gain a reason without the
+other. Complies.
 
 **Base — operator-override preservation.** FR-5 is warning-only and verdict-neutral, so the operator
 is never blocked by an unproven heuristic; FR-4 provenance is the deliberate, recorded escape for a
@@ -664,3 +728,24 @@ in the same commit; frontmatter `name`/`description` unchanged. Complies.
   Added `superseding_feature` (required when `removal_provenance == "superseded"`). The three
   tombstone fields answer three different questions and none substitutes for another: who removed
   it, what feature replaced it, which test now carries the guarantee.
+- v1.9: **Back-propagated from impl-plan audit cycles 1–7.** Phase 5b surfaced defects in this
+  design, not merely in the plan derived from it; the impl-plan audit's cross-doc consistency check
+  (cycle 7) refused to let them be deferred to 6a-prime, which was correct — a stale design would
+  have made the 6a-prime architectural review flag correct Phase-5 code as drift. Changes:
+  - **`--diff-filter=AM` → `--name-status --diff-filter=d`.** `AM` is an allowlist and silently
+    drops renames; probed on a tree carrying `A`/`M`/`D`/`R` at once, a file renamed *and* extended
+    with a new function was absent from the changed set entirely, so every cross-boundary call a
+    rename introduces was invisible. The v1.x probe had exercised only a deletion. `d` is
+    exclusion-based and preserves the `FileNotFoundError` constraint (verified: every path it
+    returns exists at HEAD). Separately, `--name-only` yields only a rename's new path, making
+    `git_show(base, new_path, repo)` return `None` so the file reads as brand-new and its
+    *pre-existing* calls all fire — hence `--name-status` and the `(base_path, head_path)` pair.
+  - **Three named halts → five.** AC-4.1 (undeclared removal) and AC-4.3 (unverifiable rename) were
+    already `FAIL` conditions with no `[H-MAD]` marker. Since a verdict exits 0, such a run halts
+    anonymously — marker discipline violated by omission.
+  - **`undeclared_removals=U` added to the `WIREREG:` grammar**, per this design's own v1.6
+    amendment that a count driving a `FAIL` must be in the grammar; `compare()`'s result had none.
+  - **`WIRECHALLENGE:` gains `dangling=D`, `ambiguous=A`, and a `NOT_COMPARED` token** so a run that
+    could not compare is distinguishable from one that compared and found nothing.
+  - **`--feature` flag specified** as the source of `owning_feature`, explicitly not the plan's
+    filename, with the requirement that `SKILL.md`'s 5b invocation carries it.
