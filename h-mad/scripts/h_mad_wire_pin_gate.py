@@ -36,6 +36,8 @@ import re
 import sys
 from pathlib import Path
 
+import h_mad_wire_registry
+
 # A task header, in the conventions shipped plans actually use:
 #   `## Task 3: wire_bad`     `## Task 1 — wire_bad`
 #   `## Task 0 (B9 gate): x`  `## M1 — TRIAL_FAMILY frozenset`   `### M5 — route`
@@ -86,6 +88,13 @@ _SHAPE_QUALIFIER_RE = re.compile(r"[(,;–—].*$", re.DOTALL)
 # closed: an unrecognised value is a hiding place, exactly like a missing one.
 # The set is the template's own alternation (`references/inline-protocols.md` §Phase 5a).
 _SHAPE_RE = re.compile(r"^(new-behaviours?|new-behaviors?|refactor|wiring)(?![\w-])", re.IGNORECASE)
+
+# WIRE values come from human-authored plans and the shipped template uses a
+# Unicode right arrow. Keep the allowlist explicit and longest-first so `-->`
+# is consumed as one token rather than as `-` followed by `->`.
+_WIRE_ARROW_RE = re.compile("|".join(
+    re.escape(arrow) for arrow in ("-->", "->", "=>", "→", "⟶", "➜", "➔")
+))
 
 
 def _clean(value: str) -> str:
@@ -239,15 +248,65 @@ def check(plan_path: Path) -> dict:
     }
 
 
+def _register_wiring_tasks(
+    tasks: list[dict], registry: Path, feature: str
+) -> tuple[int, int]:
+    """Register real wires from wiring tasks as one registry batch.
+
+    Returns ``(registered, skipped)``. Registration is deliberately independent
+    of the gate verdict, but a malformed WIRE must be visible rather than being
+    mistaken for a plan with nothing to register.
+    """
+    entries = []
+    skipped = 0
+    for task in tasks:
+        if task["shape"] != "wiring":
+            continue
+        wire = task["wire"]
+        pin = task["pin"]
+        if not _is_real_value(wire) or not _is_real_value(pin):
+            skipped += 1
+            continue
+        match = _WIRE_ARROW_RE.search(wire)
+        if match is None:
+            skipped += 1
+            print(
+                f"  registration skipped: {task['id']} ({task['name']}): "
+                f"WIRE has no recognised arrow: {wire!r}"
+            )
+            continue
+        caller, callee = wire.replace("`", "").split(match.group(0), 1)
+        caller, callee = caller.strip(), callee.strip()
+        pin = pin.replace("`", "").strip()
+        if not caller or not callee or not pin:
+            skipped += 1
+            continue
+        entries.append(
+            {
+                "kind": "wire",
+                "id": task["id"],
+                "caller": caller,
+                "callee": callee,
+                "pin": pin,
+                "owning_feature": feature,
+            }
+        )
+    if entries:
+        h_mad_wire_registry.register(entries, registry)
+    return len(entries), skipped
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5b wire-pin gate")
     parser.add_argument("impl_plan", type=Path)
+    parser.add_argument("--feature")
+    parser.add_argument(
+        "--registry", type=Path, default=Path(h_mad_wire_registry.DEFAULT_REGISTRY)
+    )
     args = parser.parse_args(argv)
-
-    # "<feature>.impl-plan.md" -> "<feature>" (project-agnostic, same as the audit gate).
-    # Derived from the path, so it is available even when the plan cannot be read —
-    # the UNREADABLE marker below needs it.
-    feature = args.impl_plan.name.split(".")[0] or "unknown"
+    # The legacy human-facing marker still uses the conventional filename stem when
+    # no feature flag is supplied. Registry ownership below never uses this value.
+    display_feature = args.feature or args.impl_plan.name.split(".")[0] or "unknown"
 
     try:
         result = check(args.impl_plan)
@@ -270,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             "operational error, not a verdict about the plan's contents. Check the "
             "path exists and is a readable file (halt `step5b:impl_plan_unreadable`)."
         )
-        print(f"[H-MAD] {feature} wirepin UNREADABLE")
+        print(f"[H-MAD] {display_feature} wirepin UNREADABLE")
         return 2
 
     print(
@@ -284,6 +343,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  unshaped: {item}")
     for item in result["mislabeled"]:
         print(f"  mislabeled: {item}")
+    if result["verdict"] == "PASS":
+        if args.feature:
+            tasks = _parse_tasks(args.impl_plan.read_text(encoding="utf-8"))
+            registered, skipped = _register_wiring_tasks(tasks, args.registry, args.feature)
+            print(f"  registration: registered={registered} skipped={skipped}")
+        else:
+            print("  registration skipped: --feature is required")
     if result["verdict"] == "UNSHAPED":
         # Same halt, two different plans behind it. `tasks=0` is not a missing
         # field — it is a plan the parser could not see a task in, and handing that
@@ -302,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
                 "A wiring task here would ship its connection untested through every "
                 "later gate; add the field (see references/inline-protocols.md §Phase 5a)."
             )
-    print(f"[H-MAD] {feature} wirepin {result['verdict']}")
+    print(f"[H-MAD] {display_feature} wirepin {result['verdict']}")
     return 2 if result["verdict"] == "UNSHAPED" else 0
 
 

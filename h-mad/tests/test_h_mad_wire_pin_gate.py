@@ -15,6 +15,8 @@ so the caller reads the token, never `$?`.
 
 import subprocess
 import sys
+import inspect
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,8 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 GATE = SCRIPTS / "h_mad_wire_pin_gate.py"
 
 sys.path.insert(0, str(SCRIPTS))
+import h_mad_wire_pin_gate as gate  # noqa: E402
+import h_mad_wire_registry as registry  # noqa: E402
 from h_mad_wire_pin_gate import check  # noqa: E402
 
 
@@ -557,3 +561,248 @@ def test_gate_is_stdlib_only() -> None:
     source = GATE.read_text(encoding="utf-8")
     for banned in ("import yaml", "import requests", "from pydantic", "import jsonschema"):
         assert banned not in source, f"{banned} would break the bare-python3 callers"
+
+
+# --- registration wire --------------------------------------------------
+
+
+def _run_main_with_registration_args(
+    monkeypatch: pytest.MonkeyPatch,
+    plan: Path,
+    registry_path: Path,
+    feature: str | None = "regression-provenance-ledger",
+) -> int:
+    """Call main with the additive CLI namespace expected by Task 5.
+
+    The RED phase must not add argparse or production wiring. Injecting the
+    future namespace lets these tests reach the existing caller and fail on the
+    observable absence of the register call, rather than on an import-shaped
+    missing symbol or an argparse setup detail.
+    """
+    monkeypatch.setattr(
+        gate.argparse.ArgumentParser,
+        "parse_args",
+        lambda self, argv=None: SimpleNamespace(
+            impl_plan=plan, registry=registry_path, feature=feature
+        ),
+    )
+    return gate.main([str(plan)])
+
+
+class TestRegistrationWire:
+    def test_passing_wiring_task_is_registered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """WIREPIN: PASS reaches the existing registry writer through main()."""
+        plan = _plan(tmp_path, _task(1, "dispatch"))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert rc == 0
+        records = registry.load(registry_path)
+        assert len(records) == 1, (
+            "WIREPIN: PASS did not register the wiring task through main(); "
+            "this is a caller-behaviour failure, not a missing registry symbol"
+        )
+        record = records[0]
+        assert record["kind"] == "wire"
+        assert record["caller"] == "engine/run.py:dispatch"
+        assert record["callee"] == "tools.shadow.measure"
+        assert record["pin"] == "test_run_calls_measure"
+        assert record["owning_feature"] == "regression-provenance-ledger"
+
+    def test_new_behaviour_task_registers_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = _plan(
+            tmp_path,
+            _task(
+                1,
+                "pure_helper",
+                shape="new-behaviour",
+                wire=None,
+                pin=None,
+            ),
+        )
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert rc == 0
+        assert registry.load(registry_path) == [], (
+            "registration over-fired for a non-wiring task"
+        )
+
+    def test_wirepin_fail_registers_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        plan = _plan(tmp_path, _task(1, pin=None))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert rc == 0
+        assert "WIREPIN: FAIL" in capsys.readouterr().out
+        assert not registry_path.exists(), "a FAIL verdict must not register wires"
+
+    def test_failed_gate_registers_no_well_formed_sibling(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A failure in one task must block registration of every task."""
+        body = _task(1, "wire_ok") + _task(2, "unshaped", shape=None, wire=None, pin=None)
+        plan = _plan(tmp_path, body)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert rc == 0
+        assert "WIREPIN: FAIL" in capsys.readouterr().out
+        assert not registry_path.exists(), (
+            "a FAIL verdict must block registration, including the well-formed sibling"
+        )
+
+    def test_n_wiring_tasks_use_one_batch_register_call(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        body = "".join(_task(n, f"dispatch_{n}") for n in range(1, 4))
+        plan = _plan(tmp_path, body)
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        calls: list[tuple[list[dict], Path]] = []
+        real_register = registry.register
+
+        def recording_register(entries: list[dict], path: Path) -> list[dict]:
+            calls.append((entries, path))
+            return real_register(entries, path)
+
+        monkeypatch.setattr(registry, "register", recording_register)
+        _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert len(calls) == 1, "one registry write must cover the whole plan"
+        entries, called_path = calls[0]
+        assert called_path == registry_path
+        assert len(entries) == 3
+
+    def test_register_wiring_tasks_ignores_real_wire_on_non_wiring_shape(
+        self, tmp_path: Path
+    ) -> None:
+        """The registration helper itself only accepts wiring-shaped tasks."""
+        tasks = [
+            {
+                "id": "Task 1",
+                "shape": "new-behaviour",
+                "wire": "`engine/run.py:dispatch` -> `tools.shadow.measure`",
+                "pin": "`test_run_calls_measure`",
+            }
+        ]
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        registered, skipped = gate._register_wiring_tasks(tasks, registry_path, "demo")
+
+        assert registered == 0
+        assert skipped == 0
+        assert not registry_path.exists()
+
+    @pytest.mark.parametrize(
+        "arrow",
+        ["→", "-->", "=>", "⟶", "➜", "➔"],
+        ids=["unicode-right-arrow", "long-ascii-arrow", "equals-arrow", "long-unicode-arrow", "heavy-curved-arrow", "curved-arrow"],
+    )
+    def test_accepted_wire_arrows_register(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arrow: str
+    ) -> None:
+        plan = _plan(
+            tmp_path,
+            _task(1, wire=f"`engine/run.py:dispatch` {arrow} `tools.shadow.measure`"),
+        )
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        records = registry.load(registry_path)
+        assert len(records) == 1
+        assert records[0]["caller"] == "engine/run.py:dispatch"
+        assert records[0]["callee"] == "tools.shadow.measure"
+
+    def test_template_wire_arrow_registers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        template = Path.home() / ".claude/skills/h-mad/references/inline-protocols.md"
+        template_text = template.read_text(encoding="utf-8")
+        template_wire = next(
+            line
+            for line in template_text.splitlines()
+            if line.lstrip().startswith("**WIRE**")
+        )
+        arrow = next(
+            candidate
+            for candidate in ("-->", "->", "=>", "→", "⟶", "➜", "➔")
+            if candidate in template_wire
+        )
+        plan = _plan(
+            tmp_path,
+            _task(1, wire=f"`engine/run.py:dispatch` {arrow} `tools.shadow.measure`"),
+        )
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        assert len(registry.load(registry_path)) == 1
+
+    def test_wire_without_arrow_is_visible_and_not_registered(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        plan = _plan(
+            tmp_path,
+            _task(1, wire="`engine/run.py:dispatch` calls `tools.shadow.measure`"),
+        )
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+
+        output = capsys.readouterr().out
+        assert rc == 0
+        assert "WIREPIN: PASS" in output
+        assert "registration: registered=0 skipped=1" in output
+        assert "Task 1" in output
+        assert "no recognised arrow" in output
+        assert "calls" in output
+        assert not registry_path.exists()
+
+    def test_missing_feature_skips_registration_and_reports_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        plan = _plan(tmp_path, _task(1))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path, feature=None)
+
+        assert rc == 0
+        output = capsys.readouterr().out
+        assert "WIREPIN: PASS" in output
+        assert "registration skipped" in output.lower()
+        assert not registry_path.exists()
+
+    def test_feature_comes_from_flag_not_fixture_filename(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        plan = tmp_path / "test_plan.impl-plan.md"
+        plan.write_text(HEADER + _task(1), encoding="utf-8")
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+
+        _run_main_with_registration_args(monkeypatch, plan, registry_path, feature="real-feature")
+
+        records = registry.load(registry_path)
+        assert records
+        assert records[0]["owning_feature"] == "real-feature"
+        assert records[0]["owning_feature"] != "test_plan"
+
+
+def test_check_signature_and_wirepin_grammar_are_additive_only() -> None:
+    signature = inspect.signature(check)
+    assert list(signature.parameters) == ["plan_path"]
+    assert signature.parameters["plan_path"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    assert check.__annotations__.keys() == {"plan_path", "return"}
