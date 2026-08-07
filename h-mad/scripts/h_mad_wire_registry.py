@@ -85,6 +85,53 @@ def register(entries: list[dict], path: Path) -> list[dict]:
     return stored
 
 
+def git_show(sha: str, path: str, repo: Path) -> str | None:
+    """Validate the SHA, then read the path at it; None means path absent."""
+    validated = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if validated.returncode != 0:
+        raise RegistryError(f"invalid commit SHA: {sha}")
+    shown = subprocess.run(
+        ["git", "show", f"{sha}:{path}"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if shown.returncode == 0:
+        return shown.stdout
+    if shown.returncode == 128:
+        return None
+    raise RegistryError(f"unable to read {path} at commit {sha}")
+
+
+def load_base(sha: str, path: str, repo: Path) -> list[dict]:
+    """Parse JSONL from a committed registry; an absent file is empty."""
+    text = git_show(sha, path, repo)
+    if text is None:
+        return []
+    records: list[dict] = []
+    for line_number, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            raise RegistryError(f"invalid registry line {line_number}: {exc}") from exc
+    return records
+
+
+def compare(base_records: list[dict], head_records: list[dict]) -> list[dict]:
+    """Return BASE records whose ids are absent at HEAD."""
+    head_ids = {record["id"] for record in head_records}
+    return [record for record in base_records if record["id"] not in head_ids]
+
+
 def partition(
     records: list[dict], collected: set[str]
 ) -> tuple[list[dict], list[dict], list[dict]]:

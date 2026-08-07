@@ -1,5 +1,7 @@
 """RED tests for the Phase-5d wire registry schema and runtime read-back."""
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +23,29 @@ def _entry(**overrides: object) -> dict:
     }
     record.update(overrides)
     return record
+
+
+def _git(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def _commit_registry(repo: Path, records: list[dict]) -> str:
+    path = repo / ".h-mad" / "wires.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "registry")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _git_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    return repo
 
 
 @pytest.mark.parametrize("field", ["kind", "id", "caller", "callee", "pin", "owning_feature"])
@@ -216,3 +241,46 @@ def test_run_pins_reports_unclassified_pin_as_internal_inconsistency(
     record = _entry(pin="tests/test_unknown.py::test_unknown")
     assert registry.run_pins([record], tmp_path) == ([], [])
     assert "INTERNAL INCONSISTENCY" in capsys.readouterr().out
+
+
+def test_git_show_reads_a_path_at_a_valid_commit(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    sha = _commit_registry(repo, [_entry()])
+    assert registry.git_show(sha, ".h-mad/wires.jsonl", repo) == (
+        json.dumps(_entry()) + "\n"
+    )
+
+
+def test_git_show_rejects_an_invalid_sha(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    _commit_registry(repo, [_entry()])
+    with pytest.raises(registry.RegistryError, match="invalid.*SHA|commit"):
+        registry.git_show("not-a-commit", ".h-mad/wires.jsonl", repo)
+
+
+def test_load_base_treats_a_path_absent_at_a_valid_commit_as_empty(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    sha = _commit_registry(repo, [])
+    (repo / ".h-mad" / "wires.jsonl").unlink()
+    _git(repo, "add", "-u")
+    _git(repo, "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "remove registry")
+    assert registry.load_base(sha, ".h-mad/missing.jsonl", repo) == []
+
+
+def test_compare_returns_the_base_record_for_an_undeclared_removal() -> None:
+    removed = _entry(id="wire-removed", owning_feature="feature-owner")
+    assert registry.compare([removed], []) == [removed]
+
+
+def test_compare_is_pure_and_does_not_call_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: pytest.fail("git"))
+    record = _entry(id="wire-removed")
+    assert registry.compare([record], []) == [record]
+
+
+def test_compare_does_not_report_a_tombstoned_id_present_at_head() -> None:
+    tombstone = _entry(
+        id="wire-removed", status="removed", removal_provenance="pinned-a-defect",
+        removed_by_feature="fix",
+    )
+    assert registry.compare([tombstone], [tombstone]) == []
