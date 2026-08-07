@@ -1,6 +1,8 @@
 """RED tests for the Phase-5d wire registry schema and runtime read-back."""
 
 import json
+import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -46,6 +48,68 @@ def _git_repo(tmp_path: Path) -> Path:
     repo.mkdir()
     _git(repo, "init", "-q")
     return repo
+
+
+def _section(text: str, heading: str) -> str:
+    """Return a named Markdown section, bounded by the next same/higher heading."""
+    match = re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$", text)
+    assert match, f"missing section {heading!r}"
+    level = len(match.group("marks"))
+    end = re.search(rf"(?m)^#{{1,{level}}} ", text[match.end():])
+    body_end = match.end() + end.start() if end else len(text)
+    return text[match.end():body_end]
+
+
+def _skill_text() -> str:
+    return (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+
+
+def _emitted_halt_reasons() -> set[str]:
+    source = (SCRIPTS / "h_mad_wire_registry.py").read_text(encoding="utf-8")
+    ast.parse(source)  # Ensure extraction is against valid executable source.
+    emitted = set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|undeclared_removal|unverified_rename):\{record\['id'\]\}|step5f:registry_untracked", source))
+    return {value.replace("{record['id']}", "<id>") for value in emitted}
+
+
+def _documented_halt_reasons(text: str) -> set[str]:
+    return set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|undeclared_removal|unverified_rename):<id>|step5f:registry_untracked", text))
+
+
+def test_skill_phase5b_documents_featured_wire_registration_and_executable_flags() -> None:
+    phase5 = _section(_skill_text(), "Phase 5 (Implementation) sub-steps")
+    line = next(line for line in phase5.splitlines() if "h_mad_wire_pin_gate.py" in line)
+    assert "--feature <feature>" in line
+    assert ".h-mad/wires.jsonl" in phase5
+    assert "auto-register" in phase5 and "passing `wiring`" in phase5
+
+    gate = ast.parse((SCRIPTS / "h_mad_wire_pin_gate.py").read_text(encoding="utf-8"))
+    flags = {
+        option.value
+        for node in ast.walk(gate)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_argument"
+        for option in node.args
+        if isinstance(option, ast.Constant) and isinstance(option.value, str) and option.value.startswith("--")
+    }
+    assert "--feature" in flags
+
+
+def test_skill_phase5f_documents_reverification_and_warning_only_challenge() -> None:
+    phase5 = _section(_skill_text(), "Phase 5 (Implementation) sub-steps")
+    assert "h_mad_wire_registry.py verify --base <5c sha>" in phase5
+    assert "challenge" in phase5
+    assert "--rootdir" in phase5 and "--testpath" in phase5
+    assert "warning-only" in phase5 and "verdict-neutral" in phase5
+
+
+def test_skill_documents_exactly_all_registry_halt_reasons() -> None:
+    assert _documented_halt_reasons(_skill_text()) == _emitted_halt_reasons()
+
+
+def test_skill_inventory_lists_wire_registry_helper() -> None:
+    inventory = _section(_skill_text(), "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)")
+    assert "h_mad_wire_registry.py" in inventory
 
 
 @pytest.mark.parametrize("field", ["kind", "id", "caller", "callee", "pin", "owning_feature"])
