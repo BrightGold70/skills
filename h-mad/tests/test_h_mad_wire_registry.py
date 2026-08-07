@@ -206,7 +206,110 @@ def test_collect_returns_pytest_node_ids(tmp_path: Path, monkeypatch: pytest.Mon
         returncode = 0
 
     monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
-    assert registry.collect(tmp_path) == {"tests/test_a.py::test_one", "tests/test_b.py::test_two"}
+    assert registry.collect(tmp_path, [Path("tests")]) == {"tests/test_a.py::test_one", "tests/test_b.py::test_two"}
+
+
+def test_collect_raises_on_collection_failure_with_stderr_tail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Result:
+        stdout = ""
+        stderr = "Traceback\nModuleNotFoundError: No module named pytest\n"
+        returncode = 1
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    with pytest.raises(registry.RegistryError) as excinfo:
+        registry.collect(tmp_path, [Path("tests")])
+    assert "exit code 1" in str(excinfo.value)
+    assert "No module named pytest" in str(excinfo.value)
+
+
+def test_collect_raises_on_collection_failure_with_stdout_diagnostic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Result:
+        stdout = "ERROR tests/test_broken.py\nInterrupted: 23 errors during collection\n"
+        stderr = ""
+        returncode = 2
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    with pytest.raises(registry.RegistryError) as excinfo:
+        registry.collect(tmp_path, [Path("tests")])
+    message = str(excinfo.value)
+    assert "exit code 2" in message
+    assert "Interrupted: 23 errors during collection" in message
+    assert "stderr (last 20 lines): <empty>" in message
+
+
+def test_collect_failure_includes_both_stdout_and_stderr_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Result:
+        stdout = "ERROR tests/test_broken.py\n"
+        stderr = "Traceback\nModuleNotFoundError: No module named broken_dependency\n"
+        returncode = 2
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    with pytest.raises(registry.RegistryError) as excinfo:
+        registry.collect(tmp_path, [Path("tests")])
+    message = str(excinfo.value)
+    assert "ERROR tests/test_broken.py" in message
+    assert "No module named broken_dependency" in message
+
+
+def test_collect_accepts_pytest_no_tests_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class Result:
+        stdout = "no tests collected\n"
+        stderr = ""
+        returncode = 5
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    assert registry.collect(tmp_path, [Path("tests")]) == set()
+
+
+def test_collect_emits_repo_relative_ids_from_a_real_throwaway_repo(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    test_path = repo / "h-mad" / "tests" / "test_wire.py"
+    test_path.parent.mkdir(parents=True)
+    test_path.write_text("def test_registered_wire():\n    assert True\n", encoding="utf-8")
+
+    collected = registry.collect(repo, [Path("h-mad/tests")])
+
+    assert "h-mad/tests/test_wire.py::test_registered_wire" in collected
+    assert "tests/test_wire.py::test_registered_wire" not in collected
+
+
+def test_run_pins_resolves_a_repo_relative_pin_in_a_real_throwaway_repo(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    test_path = repo / "h-mad" / "tests" / "test_wire.py"
+    test_path.parent.mkdir(parents=True)
+    test_path.write_text("def test_registered_wire():\n    assert True\n", encoding="utf-8")
+    record = _entry(pin="h-mad/tests/test_wire.py::test_registered_wire")
+
+    verified, broken = registry.run_pins([record], repo)
+
+    assert [item["id"] for item in verified] == ["wire-1"]
+    assert broken == []
+
+
+def test_verify_marks_an_existing_registered_pin_verified_end_to_end(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    test_path = repo / "h-mad" / "tests" / "test_wire.py"
+    test_path.parent.mkdir(parents=True)
+    test_path.write_text("def test_registered_wire():\n    assert True\n", encoding="utf-8")
+    record = _entry(pin="h-mad/tests/test_wire.py::test_registered_wire")
+    registry_path = repo / ".h-mad" / "wires.jsonl"
+    registry.register([record], registry_path)
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "registry")
+
+    result = registry.verify(
+        registry_path, "HEAD", repo, repo, [Path("h-mad/tests")]
+    )
+
+    assert result["verdict"] == "PASS"
+    assert result["verified"] == 1
+    assert result["missing"] == 0
 
 
 def test_run_pins_empty_does_not_spawn_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -284,3 +387,216 @@ def test_compare_does_not_report_a_tombstoned_id_present_at_head() -> None:
         removed_by_feature="fix",
     )
     assert registry.compare([tombstone], [tombstone]) == []
+
+
+def _valid_registry(path: Path, *records: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+
+
+def test_trackedness_reports_ignored_and_untracked_with_different_remedies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _git_repo(tmp_path)
+    path = repo / ".h-mad" / "wires.jsonl"
+    path.parent.mkdir()
+    path.write_text("{}\n", encoding="utf-8")
+
+    class Ignored:
+        returncode = 0
+
+    class Untracked:
+        returncode = 1
+
+    monkeypatch.setattr(
+        registry.subprocess, "run",
+        lambda command, *args, **kwargs: Ignored() if command[1] == "check-ignore" else Untracked(),
+    )
+    ignored, ignored_remedy = registry.trackedness(path, repo)
+    monkeypatch.setattr(
+        registry.subprocess, "run",
+        lambda command, *args, **kwargs: Untracked(),
+    )
+    untracked, untracked_remedy = registry.trackedness(path, repo)
+    assert not ignored and not untracked
+    assert ignored_remedy != untracked_remedy
+    assert "!.h-mad/wires.jsonl" in ignored_remedy
+    assert "git add" in untracked_remedy
+
+
+def test_absent_registry_is_pass_and_skips_trackedness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / ".h-mad" / "wires.jsonl"
+    monkeypatch.setattr(registry, "trackedness", lambda *args: pytest.fail("trackedness called"))
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+    assert result["verdict"] == "PASS"
+    assert result["registered"] == 0
+
+
+@pytest.mark.parametrize("field", ["broken", "missing", "unverified_renames", "undeclared_removals"])
+def test_each_failure_count_drives_fail_and_is_in_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry())
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+    if field == "broken":
+        monkeypatch.setattr(registry, "collect", lambda *args: {"test_pin"})
+        monkeypatch.setattr(registry, "run_pins", lambda *args: ([], [_entry()]))
+    elif field == "missing":
+        monkeypatch.setattr(registry, "run_pins", lambda *args: ([], []))
+    elif field == "unverified_renames":
+        renamed = _entry(status="removed", removal_provenance="renamed", removed_by_feature="x", successor_pin="gone")
+        registry.load(path)
+        path.write_text(json.dumps(renamed) + "\n", encoding="utf-8")
+    else:
+        base = _entry(id="old")
+        monkeypatch.setattr(registry, "load_base", lambda *args: [base])
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+    assert result["verdict"] == "FAIL"
+    assert result[field] > 0
+    assert f"{field}={result[field]}" in result["token"]
+
+
+def test_active_base_record_absent_at_head_is_an_undeclared_removal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path)
+    active = _entry(id="active-base")
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [active])
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+
+    assert result["undeclared_removals"] == 1
+    assert result["verdict"] == "FAIL"
+    assert "step5f:undeclared_removal:active-base" in capsys.readouterr().out
+
+
+def test_tombstoned_base_record_absent_at_head_is_not_an_undeclared_removal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path)
+    tombstone = _entry(
+        id="declared-tombstone", status="removed",
+        removal_provenance="pinned-a-defect", removed_by_feature="fix",
+    )
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [tombstone])
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+
+    output = capsys.readouterr().out
+    assert result["undeclared_removals"] == 0
+    assert result["verdict"] == "PASS"
+    assert "step5f:" not in output
+    assert "declared-tombstone" not in output
+
+
+def test_only_active_record_drives_mixed_base_removal_count_and_halt_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path)
+    active = _entry(id="active-base")
+    tombstone = _entry(
+        id="declared-tombstone", status="removed",
+        removal_provenance="pinned-a-defect", removed_by_feature="fix",
+    )
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [active, tombstone])
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+
+    output = capsys.readouterr().out
+    assert result["undeclared_removals"] == 1
+    assert [record["id"] for record in result["undeclared_removal_records"]] == ["active-base"]
+    assert "step5f:undeclared_removal:active-base" in output
+    assert "step5f:undeclared_removal:declared-tombstone" not in output
+
+
+def test_untracked_broken_registry_keeps_counts_and_detail_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    bad = _entry(id="bad", pin="test_bad")
+    _valid_registry(path, bad)
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (False, "git add wires.jsonl"))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    monkeypatch.setattr(registry, "collect", lambda *args: {bad["pin"]})
+    monkeypatch.setattr(registry, "run_pins", lambda *args: ([], [bad]))
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path)
+    assert result["verdict"] == "UNTRACKED"
+    assert result["registered"] == 1 and result["broken"] == 1
+    assert "step5f:wire_regression:bad" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("reason, record", [
+    ("step5f:wire_regression:bad", _entry(id="bad")),
+    ("step5f:wire_pin_missing:missing", _entry(id="missing", pin="gone")),
+    ("step5f:undeclared_removal:removed", _entry(id="removed")),
+    ("step5f:unverified_rename:renamed", _entry(id="renamed", status="removed", removal_provenance="renamed", removed_by_feature="x", successor_pin="gone")),
+])
+def test_fail_drivers_emit_named_halt_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], reason: str, record: dict
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    if record["id"] == "removed":
+        _valid_registry(path)
+    else:
+        _valid_registry(path, record)
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+    monkeypatch.setattr(registry, "run_pins", lambda *args: ([], [record]) if record["id"] == "bad" else ([], []))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [record] if record["id"] == "removed" else [])
+    registry.verify(path, "HEAD", tmp_path, tmp_path)
+    assert reason in capsys.readouterr().out
+
+
+def test_main_missing_base_is_exit_2_and_verdicts_are_exit_0(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo = _git_repo(tmp_path)
+    path = repo / "wires.jsonl"
+    assert registry.main(["verify", "--registry", str(path)]) == 2
+    _valid_registry(path)
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "registry")
+    assert registry.main([
+        "verify", "--registry", str(path), "--base", "HEAD", "--rootdir", str(tmp_path),
+        "--repo", str(repo), "--testpath", ".",
+    ]) == 0
+    assert "WIREREG:" in capsys.readouterr().out
+
+
+def test_main_collection_failure_is_cannot_judge_exit_2_not_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry())
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    monkeypatch.setattr(
+        registry.subprocess,
+        "run",
+        lambda *args, **kwargs: type(
+            "Result", (), {
+                "stdout": "",
+                "stderr": "ModuleNotFoundError: No module named pytest\n",
+                "returncode": 1,
+            }
+        )(),
+    )
+
+    exit_code = registry.main(
+        ["verify", "--registry", str(path), "--base", "HEAD", "--rootdir", str(tmp_path), "--repo", str(tmp_path)]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "[H-MAD]" in output
+    assert "WIREREG: FAIL" not in output

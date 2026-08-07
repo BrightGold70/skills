@@ -158,15 +158,31 @@ def partition(
     return resolving, missing, unverified_renames
 
 
-def collect(rootdir: Path) -> set[str]:
-    """Collect pytest node ids under rootdir."""
+DEFAULT_TESTPATHS = (Path("h-mad/tests"),)
+
+
+def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path]) -> set[str]:
+    """Collect repo-relative pytest node ids from the requested test paths."""
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q"],
-        cwd=rootdir,
+        [
+            sys.executable, "-m", "pytest", *[str(path) for path in testpaths],
+            "--collect-only", "-q",
+        ],
+        cwd=repo,
         capture_output=True,
         text=True,
         check=False,
     )
+    if result.returncode not in (0, 5):
+        stdout_lines = (getattr(result, "stdout", "") or "").splitlines()
+        stderr_lines = (getattr(result, "stderr", "") or "").splitlines()
+        stdout_tail = "\n".join(stdout_lines[-20:]).strip() or "<empty>"
+        stderr_tail = "\n".join(stderr_lines[-20:]).strip() or "<empty>"
+        raise RegistryError(
+            f"pytest collection failed with exit code {result.returncode}; "
+            f"stdout (last 20 lines): {stdout_tail}; "
+            f"stderr (last 20 lines): {stderr_tail}"
+        )
     node_ids: set[str] = set()
     for line in result.stdout.splitlines():
         line = line.strip()
@@ -175,14 +191,14 @@ def collect(rootdir: Path) -> set[str]:
     return node_ids
 
 
-def run_pins(resolving: list[dict], rootdir: Path) -> tuple[list[dict], list[dict]]:
+def run_pins(resolving: list[dict], repo: Path) -> tuple[list[dict], list[dict]]:
     """Run resolving pytest pins and return (verified, broken)."""
     if not resolving:
         return [], []
     pins = [record["pin"] for record in resolving]
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-rA", *pins],
-        cwd=rootdir,
+        cwd=repo,
         capture_output=True,
         text=True,
         check=False,
@@ -207,3 +223,121 @@ def run_pins(resolving: list[dict], rootdir: Path) -> tuple[list[dict], list[dic
         else:
             print(f"INTERNAL INCONSISTENCY: unclassified pin {pin}")
     return verified, broken
+
+
+def trackedness(path: Path, repo: Path) -> tuple[bool, str | None]:
+    try:
+        display = path.relative_to(repo).as_posix()
+    except ValueError:
+        display = str(path)
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", display], cwd=repo, check=False,
+        capture_output=True, text=True,
+    ).returncode == 0
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", display], cwd=repo, check=False,
+        capture_output=True, text=True,
+    ).returncode == 0
+    if ignored:
+        return False, f"add !{display} to .gitignore (then git add {display})"
+    if not tracked:
+        return False, f"git add {display}"
+    return True, None
+
+
+def verify(
+    registry: Path,
+    base: str,
+    rootdir: Path,
+    repo: Path,
+    testpaths: tuple[Path, ...] | list[Path] = DEFAULT_TESTPATHS,
+) -> dict:
+    if not registry.exists():
+        return {
+            "verdict": "PASS", "registered": 0, "verified": 0, "broken": 0,
+            "missing": 0, "unverified_renames": 0, "undeclared_removals": 0,
+            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 unverified_renames=0 undeclared_removals=0",
+            "remedy": None,
+        }
+    tracked, remedy = trackedness(registry, repo)
+    head = load(registry)
+    base_records = load_base(base, DEFAULT_REGISTRY, repo)
+    collected = collect(rootdir, testpaths)
+    resolving, missing, unverified_renames = partition(head, collected)
+    verified, broken = run_pins(resolving, rootdir)
+    undeclared = [record for record in compare(base_records, head) if record.get("status", "active") == "active"]
+
+    drivers: list[str] = []
+    if broken:
+        for record in broken:
+            drivers.append(f"step5f:wire_regression:{record['id']}")
+    if missing:
+        for record in missing:
+            drivers.append(f"step5f:wire_pin_missing:{record['id']}")
+    if undeclared:
+        for record in undeclared:
+            drivers.append(f"step5f:undeclared_removal:{record['id']}")
+    if unverified_renames:
+        for record in unverified_renames:
+            drivers.append(f"step5f:unverified_rename:{record['id']}")
+    if not tracked:
+        drivers.append("step5f:registry_untracked")
+    for reason in drivers:
+        print(f"[H-MAD] {reason}")
+    verdict = "UNTRACKED" if not tracked else "FAIL" if drivers else "PASS"
+    token = (
+        f"WIREREG: {verdict} registered={len(head)} verified={len(verified)} "
+        f"broken={len(broken)} missing={len(missing)} "
+        f"unverified_renames={len(unverified_renames)} undeclared_removals={len(undeclared)}"
+    )
+    return {
+        "verdict": verdict, "registered": len(head), "verified": len(verified),
+        "broken": len(broken), "missing": len(missing),
+        "unverified_renames": len(unverified_renames), "undeclared_removals": len(undeclared),
+        "token": token, "remedy": remedy,
+        "verified_records": verified, "broken_records": broken, "missing_records": missing,
+        "unverified_rename_records": unverified_renames, "undeclared_removal_records": undeclared,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    verify_parser = subparsers.add_parser("verify")
+    verify_parser.add_argument("--registry", type=Path, default=Path(DEFAULT_REGISTRY))
+    verify_parser.add_argument("--base")
+    verify_parser.add_argument(
+        "--rootdir", type=Path, default=Path("."),
+        help="repository root used as pytest cwd (default: .)",
+    )
+    verify_parser.add_argument("--repo", type=Path, default=Path("."))
+    verify_parser.add_argument(
+        "--testpath", type=Path, action="append", dest="testpaths",
+        help="test path passed to pytest; repeatable (default: h-mad/tests)",
+    )
+    subparsers.add_parser("register")
+    subparsers.add_parser("challenge")
+    args = parser.parse_args(argv)
+    if args.command != "verify":
+        return 0
+    if not args.base:
+        print("verify requires --base", file=sys.stderr)
+        return 2
+    try:
+        result = verify(
+            args.registry, args.base, args.rootdir, args.repo,
+            args.testpaths if args.testpaths is not None else DEFAULT_TESTPATHS,
+        )
+    except (OSError, RegistryError) as exc:
+        print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
+        return 2
+    print(result["token"])
+    if result.get("remedy"):
+        print(result["remedy"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
