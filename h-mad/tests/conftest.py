@@ -60,3 +60,39 @@ def _protect_live_pin_file():
         "to confirm your agent handles.",
         pytrace=False,
     )
+
+
+def _live_wire_registry_file() -> Path:
+    """The repository's real wire registry, independent of the test cwd."""
+    try:
+        root = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
+        return REPO_ROOT / ".h-mad" / "wires.jsonl"
+    return Path(root) / ".h-mad" / "wires.jsonl"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _protect_live_wire_registry():
+    target = _live_wire_registry_file()
+    before = target.read_bytes() if target.is_file() else None
+    yield
+    after = target.read_bytes() if target.is_file() else None
+    # J18 guard mutation anchor.
+    if after == before:
+        return
+    if before is None:
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(before)
+    pytest.fail(
+        f"the test suite modified the live wire registry {target} and it has been "
+        "restored. Some test is not isolating its registry path, or a mutation "
+        "disabled the path-redirection branch in the wire registry writer.",
+        pytrace=False,
+    )
