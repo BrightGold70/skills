@@ -217,13 +217,13 @@ extends that parser rather than duplicating it.
 |---|---|---|
 | Registry record schema + writer. Required fields per AC-1.1: `kind`, `id`, `caller`, `callee`, `pin`, `owning_feature`, `registered_ts`; plus `status` and, on a tombstone, `removal_provenance`, `removed_by_feature`, and `successor_pin` for `renamed`. Dedupe by `id`, validated `kind` enum, loud malformed-line failure naming the line number | `h-mad/scripts/h_mad_wire_registry.py` | FR-1 |
 | Live-registry protection: extend `conftest.py`'s session-scoped autouse guard to snapshot/restore `.h-mad/wires.jsonl` (J18 class — the writer is a path resolver) | `h-mad/tests/conftest.py` | FR-1, base invariant |
-| Resolve-first verifier + `WIREREG:` token with `registered/verified/broken/missing` | `h-mad/scripts/h_mad_wire_registry.py` | FR-2 |
+| Resolve-first verifier + `WIREREG:` token with `registered/verified/broken/missing/unverified_renames/undeclared_removals` | `h-mad/scripts/h_mad_wire_registry.py` | FR-2 |
 | Trackedness detection + `UNTRACKED` verdict + repo-specific remedy text | `h-mad/scripts/h_mad_wire_registry.py` | FR-3 |
 | Tombstone removal (`status: removed` + provenance enum at the same `id`) + `BASE..HEAD` absent-vs-tombstoned comparison + mechanical `renamed` check | `h-mad/scripts/h_mad_wire_registry.py` | FR-4 |
 | Shape challenge (warning-only) + raised/acknowledged counts + configurable boundaries | `h-mad/scripts/h_mad_wire_pin_gate.py` | FR-5 |
 | Auto-registration on a passing 5b wiring task, verified by read-back | `h-mad/scripts/h_mad_wire_pin_gate.py` | FR-6 |
 | **Connection-enforcement test for the 5b→writer link** — the impl-plan task that adds registration MUST be `wiring` shape and carry a `WIRE-PIN` that fails when the *call* from the 5b gate to the registry writer is removed while the writer itself is left intact | `h-mad/tests/…` (pin), impl-plan (declaration) | FR-6, base invariant |
-| Protocol: 5b registers, 5f re-verifies. The 5f step MUST name its halt reasons and emit an `[H-MAD]` marker on each — `step5f:wire_regression:<id>` on `broken`, `step5f:wire_pin_missing:<id>` on an undeclared `missing`, `step5f:registry_untracked` on `UNTRACKED` — so a halted run is diagnosable from logs alone (`invariants.base.md:61`) | `h-mad/SKILL.md` | FR-2, FR-6, base invariant |
+| Protocol: 5b registers (invocation carries `--feature`), 5f re-verifies. The 5f step MUST name a halt reason per `FAIL` driver and emit an `[H-MAD]` marker on each — `step5f:wire_regression:<id>` on `broken`, `step5f:wire_pin_missing:<id>` on an undeclared `missing`, `step5f:registry_untracked` on `UNTRACKED`, `step5f:undeclared_removal:<id>` on an undeclared removal, `step5f:unverified_rename:<id>` on an unverifiable rename — so a halted run is diagnosable from logs alone (`invariants.base.md:61`) | `h-mad/SKILL.md` | FR-2, FR-6, base invariant |
 | Unit tests for all of the above | `h-mad/tests/test_h_mad_wire_registry.py` (new) | FR-1–FR-4 |
 | Doc tests for the protocol contract | `h-mad/tests/test_h_mad_wire_pin_gate.py` or a doc-test home | FR-5, FR-6 |
 
@@ -360,3 +360,18 @@ should-fix = 0 → Phase 4 design.
   undiagnosably from logs. The 5f deliverable now names three halt reasons —
   `step5f:wire_regression:<id>`, `step5f:wire_pin_missing:<id>`, `step5f:registry_untracked` —
   each with an `[H-MAD]` marker.
+- v1.5: **Back-propagated from impl-plan audit cycles 1–8 (design v1.9).** Nothing here was found by
+  a plan audit — impl-plan audits inline the paired *design*, never the paired plan, so eight clean
+  impl-plan cycles verified impl-plan ↔ design and structurally could not see this document drift.
+  Recorded because that blind spot is the reason it drifted, not an incidental note:
+  - **Three halt reasons → five.** AC-4.1 (undeclared removal) and AC-4.3 (unverifiable rename) were
+    already `FAIL` conditions with no `[H-MAD]` marker. v1.4 above added marker discipline for the
+    three drivers it knew about; these two were driving a `FAIL` with no announcement, which is the
+    same defect v1.4 fixed, in the two cases it missed.
+  - **`WIREREG:` token gains `unverified_renames` and `undeclared_removals`**, per the rule that a
+    count driving a `FAIL` must be in the grammar — otherwise such a verdict prints `FAIL` beside
+    all-zero counts.
+  - The 5b invocation carries `--feature`, which supplies `owning_feature`; without it registration
+    is a silent no-op.
+  See the design's v1.9 entry for the two probed git-command corrections (`--name-status
+  --diff-filter=d`) that do not surface in this document's wording.
