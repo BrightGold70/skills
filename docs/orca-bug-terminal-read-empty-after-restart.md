@@ -4,6 +4,27 @@
 **Type:** Bug (silent data loss — success-shaped empty result)
 **Environment:** macOS 26.5.2 · Orca `appVersion` 1.4.164 · runtime `5bf0c6d1-…`
 
+> **STATUS 2026-08-07 — NOT FILED. Needs the check in §"Open question" before it is.**
+> Re-examined on Orca **1.4.175**. The `terminal read` payload is unchanged — still exactly
+> `handle, status, tail, truncated, limited, oldestCursor, nextCursor, latestCursor,
+> returnedLineCount`, with no field distinguishing a discarded buffer from a silent one. So the
+> proposed fix has not landed.
+>
+> **But this report's central claim needs narrowing before it is filed.** It says the two states
+> are "byte-identical in the response" — true of `terminal read`, and the reason we could not
+> branch. It is *not* true of the caller's total information: `terminal list` also exposes
+> `orphaned` and `lastOutputAt`, which were never examined when this was written. Measured today
+> across 9 live panes, the correlation is clean:
+>
+> | panes | `orphaned` | `lastOutputAt` | `returnedLineCount` |
+> |---|---|---|---|
+> | 8 | `false` | populated | 2–65 |
+> | 1 | `true` | `null` | **0** |
+>
+> A maintainer could reasonably answer "`lastOutputAt: null` is your flag" and close it. That
+> answer may well be wrong for the case this report is actually about — see below — but the report
+> as written does not address it, and filing it in that state spends credibility for nothing.
+
 ## Summary
 
 A terminal that survives an Orca app restart loses its scrollback, and `orca terminal read` reports
@@ -123,3 +144,49 @@ internally and merely unexposed. If it is not tracked, that is the fix; if it is
 Our side declines to bind on an empty read rather than treating it as evidence — `_orca_find`
 Pass 3, see `h-mad/references/orchestration-mode.md` §"Worker identity resolution". Related:
 `docs/orca-feature-request-terminal-identity.md`.*
+
+---
+
+## Open question — the one check that decides whether this is filable
+
+**Is `lastOutputAt: null` actually true for the case this report is about?**
+
+The pane measured today (`orphaned: true`, `lastOutputAt: null`, read all-zeros) is a pane whose
+worktree is gone. It is arguably *correctly* empty — there is no process and nothing to have
+printed. That is **not** this report's case.
+
+This report's case is a pane that is **healthy**: `connected: true`, `status: "running"`, a live
+agent process in it (the original observation had codex pid 88221, up 11h43m, cwd in the
+worktree), which had produced plenty of output *before* an app restart and none since. The
+question is whether such a pane reports:
+
+- `lastOutputAt: null` — in which case the caller already has its branch, this is a documentation
+  gap at most, and the report should be withdrawn or reduced to "say so in the guide"; or
+- `lastOutputAt: <a pre-restart timestamp>` — in which case the pane looks healthy *and* looks to
+  have produced output, the read is empty, and there is genuinely nothing to branch on. That is
+  the real bug, and it is worth filing.
+
+**Why it is unresolved.** Reproducing it requires quitting and relaunching the Orca app while a
+live agent pane is idle — destructive to whatever session is running, so it was not done
+opportunistically. The natural experiment did not help: every restart-surviving pane in the
+current runtime has since produced output, which this report already predicts repopulates the
+buffer.
+
+**To settle it, next time Orca is restarted for unrelated reasons**, before touching anything:
+
+```console
+$ orca terminal list --json     # for a pane with a live agent, idle since the restart:
+                                #   note orphaned, lastOutputAt, incarnationId
+$ orca terminal read --terminal <that handle> --json
+```
+
+If `lastOutputAt` is non-null while the read is all-zeros, file it — that is the pair of readings
+this report always needed and never had. If it is null, close this WONTFIX and note that
+`lastOutputAt` is the documented branch.
+
+## Note on the identity claim
+
+The closing paragraph says all three identity routes fail at once for a hand-started pane. One
+third of that has since changed: `orca worktree ps` exposes `agents[].agentType` keyed by
+`paneKey`, and our resolver's Pass 0 joins on it successfully. The "completely unaddressable"
+wording overstates the current state and should be softened before filing.

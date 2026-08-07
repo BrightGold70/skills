@@ -1,8 +1,13 @@
 # Bug: `worker-abandon` / `worker-stop` report `dispatch_not_found` for a dispatch `dispatch-show` returns as active
 
 **Component:** Orca runtime — `orca orchestration worker-abandon`, `orca orchestration worker-stop`
-**Type:** Bug (correctness — a documented recovery path is unreachable)
-**Environment:** macOS 26.5.2 · Orca `appVersion` 1.4.164 · runtime `5bf0c6d1-…` · orchestration experimental feature enabled
+**Type:** Bug (correctness — a documented recovery path is unreachable; misleading error)
+**Environment:** macOS 26.5.2 · orchestration experimental feature enabled
+**Re-verified 2026-08-07 on Orca 1.4.175** — eleven builds after the original observation on
+1.4.164 (runtime `871c7cbb-…`, vs `5bf0c6d1-…` originally). Same result, verbatim, with a fresh
+terminal, task and dispatch id (`ctx_e1041e747d52`). The positive control below is new and was run
+on 1.4.175. Note `appVersion` is no longer exposed in the CLI's `_meta` envelope on this build —
+the version above is from the app bundle's `CFBundleShortVersionString`.
 
 ## Summary
 
@@ -60,19 +65,50 @@ Reproduced twice, on two different freshly-created terminals, with two different
 `worker-abandon` in the second run — the failure is immediate and does not require any
 intermediate state change.
 
-## Scope of what was measured
+## Cause — measured, via the positive control
 
-Both failing dispatches were created by the low-level `orchestration dispatch` path, so they
-carry `launch_token_hash: null`, `capability_hash: null`, `process_incarnation: null`. A plausible
-cause is that `worker-abandon`/`worker-stop` resolve only dispatches minted by `worker-start`,
-while `dispatch-show` and the terminal-binding check read the dispatch table directly.
+Both failing dispatches were created by the low-level `orchestration dispatch` path, so they carry
+`launch_token_hash: null`, `capability_hash: null`, `process_incarnation: null`.
 
-**That cause is a hypothesis, not something this report measured.** The positive control — the
-same two verbs against a `worker-start`-created dispatch — was not run, because `worker-start`
-requires a live recognized agent in the target terminal (`agent_unconfigured` on a plain shell)
-and spawning one was out of scope for the repro. If the hypothesis holds, the surface bug is
-still real: `dispatch-show` returns a dispatch that the release verbs treat as nonexistent, with
-no field distinguishing the two classes.
+**The positive control has now been run, and it confirms the scoping.** The same verb against a
+`worker-start`-created dispatch, on the same runtime minutes later:
+
+```console
+$ orca orchestration worker-start --task <task> --agent codex --worktree current --json   # ok:true
+$ orca orchestration dispatch-show --task <task> --json
+    → {"id":"ctx_0f6f82769296","status":"dispatched",
+       "capability_hash":"030330260603acb0…",           # ← populated
+       "process_incarnation":"47c13b8f-…",              # ← populated
+       "assignee_pane_key":"5d4ca30d…:eb4923a5…"}       # ← populated
+
+$ orca orchestration worker-abandon --dispatch ctx_0f6f82769296 --json
+{"ok":true,"result":{"dispatchId":"ctx_0f6f82769296","state":"abandoned",
+  "alreadySettled":false,"stale":false,"processAction":"none", …}}          # ← works
+```
+
+Afterwards the dispatch reads `status: "failed"` with `capability_revoked_at` stamped — the
+correct provenance, and exactly what the low-level path cannot obtain.
+
+So the two classes behave differently by design:
+
+| dispatch created by | `capability_hash` / `process_incarnation` | `worker-abandon` |
+|---|---|---|
+| `worker-start` (supervised) | populated | `ok:true`, `state: "abandoned"`, capability revoked |
+| `dispatch` (low-level) | `null` | **`dispatch_not_found`** |
+
+This makes the report narrower and, we think, more actionable. The defect is **not** that
+`worker-abandon` is broken. It is that:
+
+1. **`dispatch_not_found` is the wrong error for a dispatch that demonstrably exists** — the caller
+   read the id back from `dispatch-show` seconds earlier, and `dispatch` itself names the same id
+   when refusing a second dispatch to the pane. "Was not found" sends you looking for a lifecycle
+   or id bug that is not there.
+2. **The low-level `dispatch` path has no release verb at all.** `worker-start` dispatches can be
+   abandoned; `dispatch` dispatches can only be falsified as `completed`.
+3. **Nothing in the `dispatch-show` payload marks which class a dispatch is in**, so a caller
+   cannot tell in advance which release path applies. The distinguishing fields
+   (`capability_hash`, `process_incarnation`, `assignee_pane_key`) are present but undocumented
+   as lifecycle-relevant.
 
 ## Workaround (and why it is not a fix)
 
@@ -98,16 +134,28 @@ not a terminal state), so `completed` is the only value that works.
 that `dispatch-show` returns, fence it, and free the assignee terminal — recording the outcome as
 abandoned/stopped rather than completed.
 
-## Proposed fix (either is sufficient)
+## Proposed fix
 
-1. **Resolve the id from the same source `dispatch-show` reads.** If the release verbs are scoped
-   to a `worker-start` registry, widen them to the dispatch table so any live dispatch is
-   fenceable.
-2. **If the scoping is deliberate, make it visible and say so in the error.** Add a field to the
-   `dispatch-show` payload marking which lifecycle verbs apply, and replace `dispatch_not_found`
-   with an error that names the actual constraint (e.g. `dispatch_not_supervised`) plus the
-   supported release path. A generic "was not found" for an id the caller just read back from the
-   API is the part that makes this expensive to diagnose.
+The scoping is now confirmed deliberate, so **(2) is the ask**; (1) is offered only if widening is
+cheaper than documenting.
+
+1. **Widen the release verbs to the dispatch table**, so any live dispatch is fenceable regardless
+   of how it was minted.
+2. **Make the constraint visible, and stop calling it "not found".** Concretely:
+   - replace `dispatch_not_found` with an error naming the real constraint — e.g.
+     `dispatch_not_supervised` — and pointing at the supported release path for that class;
+   - add a field to the `dispatch-show` payload marking which lifecycle verbs apply, so a caller
+     can branch *before* it needs to release. The information already exists implicitly in
+     `capability_hash` / `process_incarnation` / `assignee_pane_key`; it is just not documented as
+     lifecycle-relevant, and inferring policy from three incidentally-null fields is not something
+     a caller should have to reverse-engineer.
+
+   Even the error-message change alone would have saved this investigation: a generic "was not
+   found" for an id the caller read back from the API two commands earlier is what makes this
+   expensive to diagnose.
+
+Either way, the low-level path still needs *some* way to record an abandoned worker as abandoned
+rather than completed — see below.
 
 ## Why it matters
 
