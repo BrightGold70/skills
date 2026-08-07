@@ -141,17 +141,25 @@ class TestSkipIsRecorded:
         assert "do not rely on h_mad_state_validate.py --strict-only" in section
 
     def test_extraction_capture_is_line_scoped(self):
-        """The extractor prints its `[H-MAD]` marker to STDOUT, so the obvious
-        `$(...)` capture yields two lines and the writer refuses the value.
+        """The instruction must prescribe a line-scoped capture.
 
-        Observed live on this feature's own 6a-prime: the write was rejected and
-        the read-back reported `None`. This section is the first consumer that
-        captures the extractor's output instead of reading it by eye, so the
-        instruction has to say so or it walks the reader into the trap.
+        Originally this pinned the *defect* (J26): the extractor printed its
+        `[H-MAD]` marker to stdout, so a bare `$(...)` yielded two lines and
+        `h_mad_state_write.py` refused the value — observed live on
+        gate-blindness-hardening's own 6a-prime, where the read-back reported
+        `None`. J26 is now FIXED: the marker goes to stderr.
+
+        So the assertion on the old stdout wording is gone — keeping it would pin
+        a statement about the code that is no longer true. The `sed -n` guidance
+        stays and is still asserted: the extractor is the one script whose stdout
+        is a value rather than a report, and a line-scoped capture cannot be broken
+        by anything a future version adds to stdout.
         """
         section = section_6a_prime()
-        assert "prints its `[H-MAD]` marker to stdout" in section
         assert "sed -n 's/^ASSESSMENT: //p'" in section
+        assert "stderr" in section
+        # The superseded claim must NOT come back.
+        assert "prints its `[H-MAD]` marker to stdout" not in section
 
 
 class TestExistingHaltsIntact:

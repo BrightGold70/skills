@@ -257,12 +257,34 @@ class TestCli:
         assert r.stdout.strip() == f"{key}: {value}"
 
     def test_emits_hmad_marker_when_asked(self, tmp_path):
+        # J26: the marker goes to STDERR. This script differs in kind from its
+        # siblings — theirs print a report to be READ, this one prints a value to
+        # be CAPTURED — so its stdout must carry the verdict and nothing else.
         r = self.run(
             "STATUS: DONE\n",
             "--key", "STATUS", "--feature", "myfeat", "--phase", "5e",
             tmp_path=tmp_path,
         )
-        assert "[H-MAD] myfeat phase5e" in r.stdout
+        assert "[H-MAD] myfeat phase5e" in r.stderr
+
+    def test_stdout_is_only_the_verdict_so_a_bare_capture_is_safe(self, tmp_path):
+        """J26, the defect this pins: the marker used to land on stdout, so the
+        obvious `V=$(... )` yielded TWO lines and `h_mad_state_write.py` refused
+        the malformed value. Observed live on gate-blindness-hardening's own
+        6a-prime — the write was rejected and the read-back reported `None`.
+
+        Asserting `in r.stdout` is not enough: the bug was an EXTRA line, so only
+        an exact single-line equality can catch it.
+        """
+        r = self.run(
+            "ASSESSMENT: READY_TO_MERGE\n",
+            "--key", "ASSESSMENT", "--feature", "myfeat", "--phase", "6a-prime",
+            tmp_path=tmp_path,
+        )
+        assert r.returncode == 0
+        assert r.stdout.strip() == "ASSESSMENT: READY_TO_MERGE"
+        assert r.stdout.strip().count("\n") == 0
+        assert "[H-MAD]" not in r.stdout
 
     def test_after_marker_bare_flag_slices_echo(self, tmp_path):
         r = self.run(ECHOED_CONTRACT, "--key", "STATUS", "--after-marker",

@@ -229,7 +229,18 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"{args.key}: {value}")
     if args.feature:
-        print(f"[H-MAD] {args.feature} phase{args.phase} {args.key.lower()}_{value}")
+        # J26 — this marker goes to STDERR, unlike every sibling h-mad script,
+        # which prints its `[H-MAD]` marker to stdout. That is deliberate, and the
+        # inconsistency is the point: the siblings' stdout is a REPORT to be read
+        # (`GATE: PASS must=0 should=0`), while this script's stdout is a VALUE to
+        # be captured — extracting a verdict for programmatic use is its whole job.
+        # On stdout the marker made `V=$(...)` yield two lines, and
+        # `h_mad_state_write.py` refused the malformed value; observed live on
+        # gate-blindness-hardening's 6a-prime, where the read-back reported `None`.
+        print(
+            f"[H-MAD] {args.feature} phase{args.phase} {args.key.lower()}_{value}",
+            file=sys.stderr,
+        )
     return 0
 
 

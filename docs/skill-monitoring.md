@@ -959,7 +959,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 | J23 | 🔴 | **FIXED** `c5f6084`, `49cfc9f` | `exec` recovery read the prompt's own echoed contract block as the agent's verdict, and the tree-delta counter was whole-repo rather than `--cd`-scoped |
 | J24 | 🔴 | **FIXED** `63fca45` | worktree-comment span replacement was glob-unsafe (`${current%$rest}` unquoted), so agent markdown made the strip silently fail and doubled the card |
 | J25 | 🔴 | **FIXED** `379b881` | the Phase-7 `archreview` ladder had no `else`, so a record that never wrote the field returned `PHASE7: READY blockers=0` |
-| J26 | 🟡 | **MONITORING** | `h_mad_extract_verdict.py` prints its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yields two lines and any writer fed that value refuses it |
+| J26 | 🟢 | **FIXED** `<pending>` | `h_mad_extract_verdict.py` printed its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yielded two lines and any writer fed that value refused it. Marker now on stderr; stdout carries only the verdict |
 | J27 | 🟡 | **FIXED** `733a5f8` | doc tests sliced a magic 1600-char window; the section had already outgrown it, so a guard's scope depended on prose length |
 
 - 🔴 **J19 — `ok:true` is not delivery, and `--ack` is destructive.** Two defects in one fix.
@@ -1039,12 +1039,40 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   two lines. Observed live 2026-08-06 on `gate-blindness-hardening`'s own 6a-prime: the writer
   refused the malformed value and the read-back check reported `None`.
 
-  **Mitigated in docs only** — §6a-prime now names the hazard and prescribes
-  `sed -n 's/^ASSESSMENT: //p'`. The script is unchanged, so the trap is still there for the next
-  caller that captures rather than reads. Fix direction: route the `[H-MAD]` marker to **stderr**,
-  as the gate scripts already do for their own diagnostics, so stdout carries only the verdict.
-  Not done blind because other consumers may capture combined output today; needs a sweep of every
-  `h_mad_extract_verdict.py` caller first. Status stays MONITORING until that sweep happens.
+  **FIXED 2026-08-07.** The marker now goes to `sys.stderr`; stdout carries only `KEY: value`.
+
+  **The sweep this row was blocked on is done, and it found nothing to break.** Across both repos,
+  **no code captures this script's stdout at all** — every `h_mad_extract_verdict.py` mention in
+  `hmad-dispatch.sh` (`:1677`, `:1766`, `:2017`) is a *comment*, and there is no `$(...)` or
+  backtick capture of it anywhere in `.sh` or `.py`. The only consumer that captures is a human or
+  orchestrator following §6a-prime — which is exactly the one that got bitten.
+
+  **This row's stated fix direction was wrong about its own justification, and that is worth
+  recording.** It said to route the marker to stderr "as the gate scripts already do". They do not.
+  Every sibling prints its `[H-MAD]` marker to **stdout** — `h_mad_audit_gate.py:179`,
+  `h_mad_mutation_harness.py:301`, `h_mad_phase7_preconditions.py:168`,
+  `h_mad_state_staleness.py:210`, `h_mad_state_validate.py:235`, `h_mad_state_write.py:283`,
+  `h_mad_wire_pin_gate.py:371`, `h_mad_wire_registry.py:500`. So `h_mad_extract_verdict.py` was
+  *consistent*, not anomalous, and the filed remedy would have made it the only outlier.
+
+  The fix is still right, on different grounds: this script differs in **kind** from its siblings.
+  Their stdout is a report to be READ (`GATE: PASS must=0 should=0`); its stdout is a value to be
+  CAPTURED — extracting a verdict for programmatic use is the whole job. That asymmetry justifies
+  the inconsistency. Anyone later "harmonising" the markers should read this paragraph first.
+
+  Two tests pinned the defect as an acceptance criterion and were corrected rather than deleted
+  (regression provenance): `test_emits_hmad_marker_when_asked` asserted the marker was in
+  `r.stdout`, and `test_extraction_capture_is_line_scoped` asserted `SKILL.md` *says* the marker is
+  on stdout. Both now assert the fixed behaviour, and the new
+  `test_stdout_is_only_the_verdict_so_a_bare_capture_is_safe` uses exact single-line equality —
+  `in r.stdout` cannot catch this defect, because the bug was an EXTRA line.
+
+  §6a-prime keeps the `sed -n 's/^ASSESSMENT: //p'` prescription: a bare `$(...)` is now safe, but
+  a line-scoped capture cannot be broken by anything a future version adds to stdout.
+
+  Mutations: `ALL_CAUGHT mutations=3 caught=3 survived=0 refused=0` (marker back on stdout; both
+  doc guards). Dogfooded end-to-end — bare capture → `h_mad_state_write.py` → read-back, the exact
+  path that returned `None` on gate-blindness-hardening.
 
 - 🟡 **J27 — a doc test's scope depended on prose length.** The §6a-prime doc tests sliced a magic
   `s[idx : idx + 1600]` window. The section had already grown to **1707** characters, so its last
