@@ -137,3 +137,82 @@ def test_wire_registry_guard_mutation_is_caught_by_harness(tmp_path: Path) -> No
     }), encoding="utf-8")
     result = run_spec(spec)
     assert result["verdict"] == "ALL_CAUGHT", result
+
+
+def test_partition_separates_resolving_and_missing_active_records() -> None:
+    records = [_entry(pin="test_present"), _entry(id="wire-2", pin="test_absent")]
+    resolving, missing, unverified = registry.partition(records, {"test_present"})
+    assert [record["id"] for record in resolving] == ["wire-1"]
+    assert [record["id"] for record in missing] == ["wire-2"]
+    assert unverified == []
+
+
+def test_partition_does_not_report_removed_pin_as_missing() -> None:
+    tombstone = _entry(
+        status="removed", removal_provenance="pinned-a-defect", removed_by_feature="fix"
+    )
+    assert registry.partition([tombstone], set()) == ([], [], [])
+
+
+def test_partition_resolves_present_rename_and_unverifies_absent_rename() -> None:
+    present = _entry(
+        id="old-present", status="removed", removal_provenance="renamed",
+        removed_by_feature="rename", successor_pin="test_new",
+    )
+    absent = _entry(
+        id="old-absent", status="removed", removal_provenance="renamed",
+        removed_by_feature="rename", successor_pin="test_gone",
+    )
+    resolving, missing, unverified = registry.partition([present, absent], {"test_new"})
+    assert [(record["id"], record["pin"]) for record in resolving] == [("old-present", "test_new")]
+    assert missing == []
+    assert [record["id"] for record in unverified] == ["old-absent"]
+
+
+def test_partition_is_pure_without_subprocess_or_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: pytest.fail("subprocess"))
+    records = [_entry(pin="test_present")]
+    assert registry.partition(records, {"test_present"})[0] == records
+
+
+def test_collect_returns_pytest_node_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    class Result:
+        stdout = "tests/test_a.py::test_one\ntests/test_b.py::test_two\n2 tests collected\n"
+        returncode = 0
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    assert registry.collect(tmp_path) == {"tests/test_a.py::test_one", "tests/test_b.py::test_two"}
+
+
+def test_run_pins_empty_does_not_spawn_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: pytest.fail("spawned"))
+    assert registry.run_pins([], tmp_path) == ([], [])
+
+
+def test_run_pins_attributes_failed_pin_and_owning_feature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Result:
+        stdout = "PASSED tests/test_ok.py::test_ok\nFAILED tests/test_bad.py::test_bad - assert False\n"
+        returncode = 1
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    good = _entry(id="good", pin="tests/test_ok.py::test_ok")
+    bad = _entry(id="bad", pin="tests/test_bad.py::test_bad", owning_feature="feature-x")
+    verified, broken = registry.run_pins([good, bad], tmp_path)
+    assert [record["id"] for record in verified] == ["good"]
+    assert [record["id"] for record in broken] == ["bad"]
+    assert "feature-x" in capsys.readouterr().out
+
+
+def test_run_pins_reports_unclassified_pin_as_internal_inconsistency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Result:
+        stdout = ""
+        returncode = 0
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
+    record = _entry(pin="tests/test_unknown.py::test_unknown")
+    assert registry.run_pins([record], tmp_path) == ([], [])
+    assert "INTERNAL INCONSISTENCY" in capsys.readouterr().out

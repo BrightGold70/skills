@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -80,3 +83,80 @@ def register(entries: list[dict], path: Path) -> list[dict]:
     if stored != records:
         raise RegistryError("registry read-back mismatch")
     return stored
+
+
+def partition(
+    records: list[dict], collected: set[str]
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """-> (resolving, missing, unverified_renames). Pure; no subprocess, no git."""
+    resolving: list[dict] = []
+    missing: list[dict] = []
+    unverified_renames: list[dict] = []
+    for record in records:
+        if record.get("status", "active") == "active":
+            if record["pin"] in collected:
+                resolving.append(record)
+            else:
+                missing.append(record)
+            continue
+        if record.get("removal_provenance") != "renamed":
+            continue
+        successor = record["successor_pin"]
+        if successor in collected:
+            resolved = dict(record)
+            resolved["pin"] = successor
+            resolving.append(resolved)
+        else:
+            unverified_renames.append(record)
+    return resolving, missing, unverified_renames
+
+
+def collect(rootdir: Path) -> set[str]:
+    """Collect pytest node ids under rootdir."""
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+        cwd=rootdir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    node_ids: set[str] = set()
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if "::" in line and not line.endswith(" tests collected"):
+            node_ids.add(line)
+    return node_ids
+
+
+def run_pins(resolving: list[dict], rootdir: Path) -> tuple[list[dict], list[dict]]:
+    """Run resolving pytest pins and return (verified, broken)."""
+    if not resolving:
+        return [], []
+    pins = [record["pin"] for record in resolving]
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-rA", *pins],
+        cwd=rootdir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    passed: set[str] = set()
+    failed: set[str] = set()
+    for line in result.stdout.splitlines():
+        match = re.match(r"^(PASSED|FAILED)\s+(\S+)", line.strip())
+        if not match:
+            continue
+        (passed if match.group(1) == "PASSED" else failed).add(match.group(2))
+
+    verified: list[dict] = []
+    broken: list[dict] = []
+    for record in resolving:
+        pin = record["pin"]
+        if pin in failed:
+            broken.append(record)
+            print(f"BROKEN {record['owning_feature']}: {pin}")
+        elif pin in passed:
+            verified.append(record)
+        else:
+            print(f"INTERNAL INCONSISTENCY: unclassified pin {pin}")
+    return verified, broken
