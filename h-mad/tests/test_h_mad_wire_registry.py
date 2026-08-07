@@ -100,6 +100,8 @@ def test_skill_phase5f_documents_reverification_and_warning_only_challenge() -> 
     assert "h_mad_wire_registry.py verify --base <5c sha>" in phase5
     assert "challenge" in phase5
     assert "--rootdir" in phase5 and "--testpath" in phase5
+    assert "--testpath <project-test-root>" in phase5
+    assert "collectable test root" in phase5
     assert "warning-only" in phase5 and "verdict-neutral" in phase5
 
 
@@ -397,7 +399,7 @@ def test_run_pins_attributes_failed_pin_and_owning_feature(
     assert "feature-x" in capsys.readouterr().out
 
 
-def test_run_pins_reports_unclassified_pin_as_internal_inconsistency(
+def test_run_pins_fails_closed_for_a_pin_absent_from_pytest_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     class Result:
@@ -406,8 +408,99 @@ def test_run_pins_reports_unclassified_pin_as_internal_inconsistency(
 
     monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: Result())
     record = _entry(pin="tests/test_unknown.py::test_unknown")
-    assert registry.run_pins([record], tmp_path) == ([], [])
-    assert "INTERNAL INCONSISTENCY" in capsys.readouterr().out
+    assert registry.run_pins([record], tmp_path) == ([], [record])
+    output = capsys.readouterr().out
+    assert "ABSENT FROM PYTEST OUTPUT" in output
+    assert "INTERNAL INCONSISTENCY" not in output
+
+
+def test_run_pins_fails_closed_for_real_error_skip_and_xfail_outcomes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _git_repo(tmp_path)
+    test_path = repo / "tests" / "test_wire.py"
+    test_path.parent.mkdir()
+    test_path.write_text(
+        "import pytest\n\n"
+        "@pytest.fixture\n"
+        "def exploding_fixture():\n"
+        "    raise RuntimeError('setup exploded')\n\n"
+        "def test_error(exploding_fixture):\n"
+        "    assert False\n\n"
+        "@pytest.mark.skip(reason='deliberately skipped')\n"
+        "def test_skipped():\n"
+        "    assert False\n\n"
+        "@pytest.mark.xfail(reason='deliberately expected failure')\n"
+        "def test_xfailed():\n"
+        "    assert False\n",
+        encoding="utf-8",
+    )
+    records = [
+        _entry(id="error", pin="tests/test_wire.py::test_error"),
+        _entry(id="skipped", pin="tests/test_wire.py::test_skipped"),
+        _entry(id="xfailed", pin="tests/test_wire.py::test_xfailed"),
+    ]
+
+    verified, broken = registry.run_pins(records, repo)
+
+    assert verified == []
+    assert [record["id"] for record in broken] == ["error", "skipped", "xfailed"]
+    output = capsys.readouterr().out
+    assert "ERROR" in output and records[0]["pin"] in output
+    assert "SKIPPED" in output and records[1]["pin"] in output
+    assert "XFAIL" in output and records[2]["pin"] in output
+
+    registry_path = repo / "wires.jsonl"
+    _valid_registry(registry_path, *records)
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    result = registry.verify(registry_path, "HEAD", repo, repo, [Path("tests")])
+    assert result["verdict"] == "FAIL"
+    output = capsys.readouterr().out
+    assert all(f"step5f:wire_regression:{record['id']}" in output for record in records)
+
+
+def test_register_cli_writes_requested_record(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "custom" / "wires.jsonl"
+    assert registry.main([
+        "register", "--registry", str(path), "--id", "cli-wire",
+        "--caller", "engine.run", "--callee", "tools.measure",
+        "--pin", "tests/test_wire.py::test_wire", "--feature", "feature-x",
+    ]) == 0
+    stored = registry.load(path)
+    assert stored[0]["id"] == "cli-wire"
+    assert stored[0]["owning_feature"] == "feature-x"
+    assert "registered=1" in capsys.readouterr().out
+
+
+def test_register_cli_requires_all_record_fields(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        registry.main(["register", "--registry", str(tmp_path / "wires.jsonl")])
+    assert exc.value.code == 2
+
+
+def test_verify_uses_custom_registry_path_for_base_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _git_repo(tmp_path)
+    path = repo / "custom" / "wires.jsonl"
+    _valid_registry(path, _entry())
+    _git(repo, "add", ".")
+    base = _git(repo, "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "registry")
+    seen: list[str] = []
+
+    def fake_load_base(sha: str, base_path: str, base_repo: Path) -> list[dict]:
+        seen.append(base_path)
+        return []
+
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", fake_load_base)
+    monkeypatch.setattr(registry, "collect", lambda *args: set())
+    monkeypatch.setattr(registry, "run_pins", lambda *args: ([], []))
+
+    registry.verify(path, base, repo, repo, [Path("tests")])
+
+    assert seen == ["custom/wires.jsonl"]
 
 
 def test_changed_files_uses_name_status_and_keeps_renames(tmp_path: Path) -> None:

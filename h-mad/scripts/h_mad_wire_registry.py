@@ -403,32 +403,40 @@ def run_pins(resolving: list[dict], repo: Path) -> tuple[list[dict], list[dict]]
         return [], []
     pins = [record["pin"] for record in resolving]
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-rA", *pins],
+        [sys.executable, "-m", "pytest", "-q", "-rA", "-vv", *pins],
         cwd=repo,
         capture_output=True,
         text=True,
         check=False,
     )
-    passed: set[str] = set()
-    failed: set[str] = set()
+    outcomes: dict[str, str] = {}
+    statuses = ("PASSED", "FAILED", "ERROR", "SKIPPED", "XFAIL", "XPASS")
     for line in result.stdout.splitlines():
-        match = re.match(r"^(PASSED|FAILED)\s+(\S+)", line.strip())
-        if not match:
-            continue
-        (passed if match.group(1) == "PASSED" else failed).add(match.group(2))
+        status = next((value for value in statuses if re.search(rf"\b{value}\b", line)), None)
+        if status:
+            for pin in pins:
+                if pin in line:
+                    outcomes[pin] = status
 
     verified: list[dict] = []
     broken: list[dict] = []
     for record in resolving:
         pin = record["pin"]
-        if pin in failed:
-            broken.append(record)
-            print(f"BROKEN {record['owning_feature']}: {pin}")
-        elif pin in passed:
+        if outcomes.get(pin) == "PASSED":
             verified.append(record)
         else:
-            print(f"INTERNAL INCONSISTENCY: unclassified pin {pin}")
+            broken.append(record)
+            reason = outcomes.get(pin, "ABSENT FROM PYTEST OUTPUT")
+            print(f"BROKEN {record['owning_feature']}: {pin} ({reason})")
     return verified, broken
+
+
+def _registry_base_path(registry: Path, repo: Path) -> str:
+    """Return the registry's repo-relative POSIX path, or the default safely."""
+    try:
+        return registry.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return DEFAULT_REGISTRY
 
 
 def trackedness(path: Path, repo: Path) -> tuple[bool, str | None]:
@@ -467,7 +475,7 @@ def verify(
         }
     tracked, remedy = trackedness(registry, repo)
     head = load(registry)
-    base_records = load_base(base, DEFAULT_REGISTRY, repo)
+    base_records = load_base(base, _registry_base_path(registry, repo), repo)
     collected = collect(rootdir, testpaths)
     resolving, missing, unverified_renames = partition(head, collected)
     verified, broken = run_pins(resolving, rootdir)
@@ -523,7 +531,13 @@ def main(argv: list[str] | None = None) -> int:
         "--testpath", type=Path, action="append", dest="testpaths",
         help="test path passed to pytest; repeatable (default: h-mad/tests)",
     )
-    subparsers.add_parser("register")
+    register_parser = subparsers.add_parser("register")
+    register_parser.add_argument("--registry", type=Path, default=Path(DEFAULT_REGISTRY))
+    register_parser.add_argument("--id", required=True)
+    register_parser.add_argument("--caller", required=True)
+    register_parser.add_argument("--callee", required=True)
+    register_parser.add_argument("--pin", required=True)
+    register_parser.add_argument("--feature", required=True)
     challenge_parser = subparsers.add_parser("challenge")
     challenge_parser.add_argument("--base")
     challenge_parser.add_argument("--impl-plan", type=Path, default=Path(".h-mad/impl-plan.md"))
@@ -543,6 +557,18 @@ def main(argv: list[str] | None = None) -> int:
         print(result["token"])
         for detail in result.get("details", []):
             print(detail)
+        return 0
+    if args.command == "register":
+        try:
+            stored = register([{
+                "kind": "wire", "id": args.id, "caller": args.caller,
+                "callee": args.callee, "pin": args.pin,
+                "owning_feature": args.feature,
+            }], args.registry)
+        except (OSError, RegistryError) as exc:
+            print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
+            return 2
+        print(f"WIREREG: REGISTER registered={len(stored)} registry={args.registry}")
         return 0
     if args.command != "verify":
         return 0
