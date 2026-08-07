@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import ast
+import fnmatch
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from h_mad_audit_gate import _acknowledged_from_text
 
 VALID_KINDS: frozenset[str] = frozenset({"wire"})
 VALID_PROVENANCE: frozenset[str] = frozenset({"superseded", "pinned-a-defect", "renamed"})
@@ -108,6 +112,208 @@ def git_show(sha: str, path: str, repo: Path) -> str | None:
     if shown.returncode == 128:
         return None
     raise RegistryError(f"unable to read {path} at commit {sha}")
+
+
+def changed_files(base: str, repo: Path) -> list[tuple[str | None, str]]:
+    result = subprocess.run(
+        ["git", "diff", "--name-status", "--diff-filter=d", base, "HEAD", "--", "*.py"],
+        cwd=repo, capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        raise RegistryError(result.stderr.strip() or "unable to inspect changed files")
+    changed: list[tuple[str | None, str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if not fields:
+            continue
+        status = fields[0]
+        if status.startswith("R") and len(fields) >= 3:
+            changed.append((fields[1], fields[2]))
+        elif len(fields) >= 2:
+            changed.append((None if status.startswith("A") else fields[1], fields[1]))
+    return changed
+
+
+def build_module_index(repo: Path) -> dict[str, list[Path]]:
+    index: dict[str, list[Path]] = {}
+    for path in repo.rglob("*.py"):
+        if ".git" in path.parts:
+            continue
+        rel = path.relative_to(repo)
+        parts = list(rel.with_suffix("").parts)
+        if parts[-1] == "__init__":
+            parts.pop()
+        names = [rel.stem]
+        if parts:
+            names.append(".".join(parts))
+        for name in names:
+            index.setdefault(name, []).append(path)
+    return index
+
+
+def ast_targets(source: str) -> set[str]:
+    tree = ast.parse(source)
+    targets: set[str] = set()
+
+    def dotted(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            parent = dotted(node.value)
+            return f"{parent}.{node.attr}" if parent else node.attr
+        return None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            targets.add(node.module)
+        elif isinstance(node, ast.Call):
+            target = dotted(node.func)
+            if target:
+                targets.add(target)
+    return targets
+
+
+def challenge(base: str, impl_plan: Path, boundaries: Path, ack: Path, repo: Path) -> dict:
+    changed = [pair for pair in changed_files(base, repo) if not _is_test_path(pair[1])]
+    if not changed:
+        return _challenge_result("WIRECHALLENGE: NOT_COMPARED reason=no_production_diff", [], [], [], [], [])
+    if not boundaries.exists():
+        return _challenge_result("WIRECHALLENGE: NOT_COMPARED reason=no_boundaries", [], [], [], [], [])
+
+    try:
+        boundary_map = json.loads(boundaries.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RegistryError(f"invalid boundaries: {exc}") from exc
+    if not boundary_map:
+        return _challenge_result("WIRECHALLENGE: NOT_COMPARED reason=no_boundaries", [], [], [], [], [])
+
+    from h_mad_wire_pin_gate import _parse_tasks
+    tasks = _parse_tasks(impl_plan.read_text(encoding="utf-8"))
+    claims = _production_claims(impl_plan, tasks)
+    normalized_claims = {_normal_path(value, repo): task for value, task in claims.items()}
+    changed_heads = {_normal_path(head, repo) for _, head in changed}
+    matched_claims = {
+        head: _claim_for(head, normalized_claims)
+        for head in changed_heads
+    }
+    dangling = [
+        f"{task['id']}: {path}"
+        for path, task in normalized_claims.items()
+        if not any(claim_path == path for claim_path in matched_claims.values())
+    ]
+    unattributed = [head for _, head in changed if matched_claims.get(_normal_path(head, repo)) is None]
+    wiring_heads = {
+        head for head in changed_heads
+        if matched_claims.get(head) is not None
+        and normalized_claims[matched_claims[head]].get("shape") == "wiring"
+    }
+    index = build_module_index(repo)
+    details: list[str] = []
+    ambiguous: list[str] = []
+    raised: list[str] = []
+    for base_path, head_path in changed:
+        rel_head = _normal_path(head_path, repo)
+        claim_path = matched_claims.get(rel_head)
+        task = normalized_claims.get(claim_path) if claim_path else None
+        if not task or rel_head in wiring_heads:
+            continue
+        head_source = head_path_obj = repo / head_path
+        head_text = head_source.read_text(encoding="utf-8")
+        base_text = "" if base_path is None else (git_show(base, base_path, repo) or "")
+        added_targets = ast_targets(head_text) - ast_targets(base_text)
+        caller_boundary = _boundary_for(rel_head, boundary_map)
+        if caller_boundary is None:
+            continue
+        for target in sorted(added_targets):
+            candidates = _resolve_target(target, index)
+            if len(candidates) > 1:
+                item = f"{rel_head}: {target} -> {', '.join(sorted(_rel(p, repo) for p in candidates))}"
+                ambiguous.append(item)
+                details.append(f"AMBIGUOUS {item}")
+                continue
+            if not candidates:
+                continue
+            target_rel = _rel(candidates[0], repo)
+            target_boundary = _boundary_for(target_rel, boundary_map)
+            if target_boundary and target_boundary != caller_boundary:
+                item = f"{task['id']} {rel_head}: {target} ({caller_boundary} -> {target_boundary})"
+                raised.append(item)
+                details.append(f"CHALLENGE {item}")
+    acknowledged = _acknowledged_from_text(ack.read_text(encoding="utf-8")) if ack.exists() else set()
+    acknowledged_items = [item for item in raised if item in acknowledged]
+    stale = sorted(acknowledged - set(raised))
+    token = (
+        f"WIRECHALLENGE: challenges={len(raised)} acknowledged={len(acknowledged_items)} "
+        f"unattributed={len(unattributed)} dangling={len(dangling)} stale={len(stale)} ambiguous={len(ambiguous)}"
+    )
+    details.extend(f"UNATTRIBUTED {item}" for item in unattributed)
+    details.extend(f"DANGLING {item}" for item in dangling)
+    details.extend(f"STALE {item}" for item in stale)
+    return _challenge_result(token, raised, acknowledged_items, unattributed, dangling, ambiguous, details)
+
+
+def _challenge_result(token: str, challenges: list[str], acknowledged: list[str], unattributed: list[str], dangling: list[str], ambiguous: list[str], details: list[str] | None = None) -> dict:
+    return {
+        "token": token, "challenges": len(challenges), "acknowledged": len(acknowledged),
+        "unattributed": len(unattributed), "dangling": len(dangling), "stale": 0,
+        "ambiguous": len(ambiguous), "details": details or [],
+    }
+
+
+def _is_test_path(path: str) -> bool:
+    parts = Path(path).parts
+    return "tests" in parts or Path(path).name.startswith("test_")
+
+
+def _rel(path: Path, repo: Path) -> str:
+    return path.relative_to(repo).as_posix()
+
+
+def _normal_path(value: str, repo: Path) -> str:
+    path = Path(value.replace("\\", "/"))
+    if path.is_absolute():
+        try:
+            path = path.relative_to(repo)
+        except ValueError:
+            pass
+    return path.as_posix().removeprefix("./")
+
+
+def _claim_for(head: str, claims: dict[str, dict]) -> str | None:
+    if head in claims:
+        return head
+    matches = [claim for claim in claims if head.endswith("/" + claim) or claim.endswith("/" + head)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _production_claims(plan: Path, tasks: list[dict]) -> dict[str, dict]:
+    lines = plan.read_text(encoding="utf-8").splitlines()
+    result: dict[str, dict] = {}
+    task_index = -1
+    for line in lines:
+        if line.lstrip().startswith("## Task ") or re.match(r"^\s*#{2,3}\s+[MT]\d+", line):
+            task_index += 1
+        match = re.match(r"^\s*(?:[-*•]\s+)?\*{0,2}Production file\*{0,2}\s*:\s*(.*)$", line, re.I)
+        if match and 0 <= task_index < len(tasks):
+            result[match.group(1).strip().strip('`')] = tasks[task_index]
+    return result
+
+
+def _boundary_for(path: str, mapping: dict) -> str | None:
+    for pattern, name in mapping.items():
+        if fnmatch.fnmatch(path, pattern):
+            return str(name)
+    return None
+
+
+def _resolve_target(target: str, index: dict[str, list[Path]]) -> list[Path]:
+    candidates: list[Path] = []
+    for key in (target, target.split(".")[0]):
+        if key in index:
+            candidates.extend(index[key])
+    return list(dict.fromkeys(candidates))
 
 
 def load_base(sha: str, path: str, repo: Path) -> list[dict]:
@@ -318,8 +524,26 @@ def main(argv: list[str] | None = None) -> int:
         help="test path passed to pytest; repeatable (default: h-mad/tests)",
     )
     subparsers.add_parser("register")
-    subparsers.add_parser("challenge")
+    challenge_parser = subparsers.add_parser("challenge")
+    challenge_parser.add_argument("--base")
+    challenge_parser.add_argument("--impl-plan", type=Path, default=Path(".h-mad/impl-plan.md"))
+    challenge_parser.add_argument("--boundaries", type=Path, default=Path(".h-mad/boundaries.json"))
+    challenge_parser.add_argument("--ack", "--ack-file", dest="ack", type=Path, default=Path(".h-mad/audit.md"))
+    challenge_parser.add_argument("--repo", type=Path, default=Path("."))
     args = parser.parse_args(argv)
+    if args.command == "challenge":
+        if not args.base:
+            print("challenge requires --base", file=sys.stderr)
+            return 2
+        try:
+            result = challenge(args.base, args.impl_plan, args.boundaries, args.ack, args.repo)
+        except (OSError, RegistryError, SyntaxError) as exc:
+            print(f"[H-MAD] wire_challenge UNREADABLE: {exc}")
+            return 2
+        print(result["token"])
+        for detail in result.get("details", []):
+            print(detail)
+        return 0
     if args.command != "verify":
         return 0
     if not args.base:

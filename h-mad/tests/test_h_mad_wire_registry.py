@@ -346,6 +346,179 @@ def test_run_pins_reports_unclassified_pin_as_internal_inconsistency(
     assert "INTERNAL INCONSISTENCY" in capsys.readouterr().out
 
 
+def test_changed_files_uses_name_status_and_keeps_renames(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    for name, text in {
+        "added.py": "x = 1\n", "deleted.py": "x = 1\n", "kept.py": "x = 2\n",
+        "old.py": "x = 3\n" * 10,
+    }.items():
+        (repo / name).write_text(text, encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "brandnew.py").write_text("x = 9\n", encoding="utf-8")
+    (repo / "added.py").write_text("x = 4\n", encoding="utf-8")
+    (repo / "deleted.py").unlink()
+    (repo / "kept.py").write_text("x = 5\n", encoding="utf-8")
+    (repo / "old.py").rename(repo / "new.py")
+    (repo / "new.py").write_text("x = 3\n" * 10 + "y = 6\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    result = registry.changed_files(base, repo)
+    assert (None, "brandnew.py") in result
+    assert ("kept.py", "kept.py") in result
+    assert ("old.py", "new.py") in result
+    assert all(head != "deleted.py" for _, head in result)
+
+
+def test_ast_targets_are_structural_and_ignore_reindenting() -> None:
+    source = "import json\nfrom pkg import thing\n\ndef f():\n    return pkg.call(thing(x))\n"
+    assert registry.ast_targets(source) == {"json", "pkg", "thing", "pkg.call"}
+    wrapped = "import json\nfrom pkg import thing\n\ndef f():\n    return pkg.call(\n        thing(x)\n    )\n"
+    assert registry.ast_targets(source) == registry.ast_targets(wrapped)
+
+
+def test_challenge_without_boundaries_is_not_compared(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    (repo / "module.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "module.py").write_text("x = 2\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    result = registry.challenge(base, repo / "plan.md", repo / "boundaries.json", repo / "ack.md", repo)
+    assert result["token"] == "WIRECHALLENGE: NOT_COMPARED reason=no_boundaries"
+
+
+def test_challenge_reports_no_production_diff_as_not_compared(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    (repo / "module.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_module.py").write_text("def test_old(): pass\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "tests" / "test_module.py").write_text(
+        "import module\n\ndef test_new():\n    module.changed()\n", encoding="utf-8"
+    )
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    boundaries = tmp_path / "boundaries.json"
+    boundaries.write_text(json.dumps({"module.py": "engine"}), encoding="utf-8")
+
+    result = registry.challenge(base, tmp_path / "plan.md", boundaries, tmp_path / "ack.md", repo)
+
+    assert result["token"] == "WIRECHALLENGE: NOT_COMPARED reason=no_production_diff"
+    assert "challenges=0" not in result["token"]
+
+
+def test_challenge_exempts_a_wiring_claim_with_a_cross_boundary_call(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    (repo / "caller.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "callee.py").write_text("def run(): pass\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "caller.py").write_text("import callee\n\ndef call():\n    callee.run()\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "## Task 1: connect caller\n**Task shape**: `wiring`\n"
+        "**Production file**: `caller.py`\n",
+        encoding="utf-8",
+    )
+    boundaries = tmp_path / "boundaries.json"
+    boundaries.write_text(json.dumps({"caller.py": "engine", "callee.py": "tools"}), encoding="utf-8")
+
+    result = registry.challenge(base, plan, boundaries, tmp_path / "ack.md", repo)
+
+    assert result["challenges"] == 0
+    assert "challenges=0" in result["token"]
+    assert result["unattributed"] == 0
+
+
+def test_challenge_uses_base_path_for_a_renamed_file_ast_diff(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    (repo / "old.py").write_text(
+        "import callee\n\ndef call():\n    callee.existing()\n", encoding="utf-8"
+    )
+    (repo / "callee.py").write_text("def existing(): pass\ndef added(): pass\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "old.py").rename(repo / "new.py")
+    (repo / "new.py").write_text(
+        "import callee\n\ndef call():\n    callee.existing()\n    callee.added()\n", encoding="utf-8"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "## Task 1: add call\n**Task shape**: `new-behaviour`\n"
+        "**Production file**: `new.py`\n",
+        encoding="utf-8",
+    )
+    boundaries = tmp_path / "boundaries.json"
+    boundaries.write_text(json.dumps({"new.py": "engine", "callee.py": "tools"}), encoding="utf-8")
+
+    result = registry.challenge(base, plan, boundaries, tmp_path / "ack.md", repo)
+
+    assert result["challenges"] == 1
+    assert len(result["details"]) == 1
+    assert "callee.added" in result["details"][0]
+
+
+def test_challenge_ignores_test_file_cross_boundary_calls(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    (repo / "caller.py").write_text("def call(): pass\n", encoding="utf-8")
+    (repo / "callee.py").write_text("def run(): pass\n", encoding="utf-8")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_caller.py").write_text("def test_old(): pass\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "tests" / "test_caller.py").write_text(
+        "import callee\n\ndef test_new():\n    callee.run()\n", encoding="utf-8"
+    )
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "head")
+    plan = tmp_path / "plan.md"
+    plan.write_text(
+        "## Task 1: test call\n**Task shape**: `new-behaviour`\n"
+        "**Production file**: `tests/test_caller.py`\n",
+        encoding="utf-8",
+    )
+    boundaries = tmp_path / "boundaries.json"
+    boundaries.write_text(
+        json.dumps({"tests/test_caller.py": "engine", "callee.py": "tools"}), encoding="utf-8"
+    )
+
+    result = registry.challenge(base, plan, boundaries, tmp_path / "ack.md", repo)
+
+    assert result["challenges"] == 0
+    assert result["unattributed"] == 0
+    assert result["token"] == "WIRECHALLENGE: NOT_COMPARED reason=no_production_diff"
+
+
+def test_challenge_cli_requires_base(tmp_path: Path) -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "h_mad_wire_registry.py"
+    result = subprocess.run([sys.executable, str(script), "challenge"], capture_output=True, text=True)
+    assert result.returncode == 2
+
+
+def test_challenge_cli_is_verdict_neutral(tmp_path: Path) -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "h_mad_wire_registry.py"
+    repo = _git_repo(tmp_path)
+    (repo / "module.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-m", "base")
+    result = subprocess.run([sys.executable, str(script), "challenge", "--base", "HEAD", "--repo", str(repo)], capture_output=True, text=True)
+    assert result.returncode == 0
+
+
 def test_git_show_reads_a_path_at_a_valid_commit(tmp_path: Path) -> None:
     repo = _git_repo(tmp_path)
     sha = _commit_registry(repo, [_entry()])
