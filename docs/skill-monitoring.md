@@ -959,7 +959,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 | J23 | 🔴 | **FIXED** `c5f6084`, `49cfc9f` | `exec` recovery read the prompt's own echoed contract block as the agent's verdict, and the tree-delta counter was whole-repo rather than `--cd`-scoped |
 | J24 | 🔴 | **FIXED** `63fca45` | worktree-comment span replacement was glob-unsafe (`${current%$rest}` unquoted), so agent markdown made the strip silently fail and doubled the card |
 | J25 | 🔴 | **FIXED** `379b881` | the Phase-7 `archreview` ladder had no `else`, so a record that never wrote the field returned `PHASE7: READY blockers=0` |
-| J26 | 🟢 | **FIXED** `<pending>` | `h_mad_extract_verdict.py` printed its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yielded two lines and any writer fed that value refused it. Marker now on stderr; stdout carries only the verdict |
+| J26 | 🟢 | **FIXED** `e3213d6` | `h_mad_extract_verdict.py` printed its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yielded two lines and any writer fed that value refused it. Marker now on stderr; stdout carries only the verdict |
 | J27 | 🟡 | **FIXED** `733a5f8` | doc tests sliced a magic 1600-char window; the section had already outgrown it, so a guard's scope depended on prose length |
 
 - 🔴 **J19 — `ok:true` is not delivery, and `--ack` is destructive.** Two defects in one fix.
