@@ -38,6 +38,13 @@ action; this check deliberately does not relink anything under `~/.claude` on it
 
 `INSTALL: UNREADABLE` is a cannot-judge (exit 2), not a pass — nothing was examined.
 
+**No `INSTALL:` line at all — the script is missing, or the command errored — is itself the
+finding: halt `bootstrap:install_broken`.** An absent checker is evidence *of* the condition
+being checked, because the commonest way for this script not to exist is a `~/.claude/skills/h-mad`
+that predates it — which is exactly the stale copy the check is for. This is the one branch where
+"read the token, never `$?`" needs saying out loud: there is no token to read, and treating
+silence as consent reproduces the original defect in the one place it is most likely to occur.
+
 Two properties of this check are worth knowing rather than rediscovering:
 
 - **It is a copy detecting its own staleness.** If `~/.claude/skills/h-mad` is a stale copy,

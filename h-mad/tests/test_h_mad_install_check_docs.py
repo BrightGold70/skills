@@ -79,6 +79,15 @@ def test_bootstrap_records_the_self_staleness_limit():
     assert "stale copy" in _bootstrap()
 
 
+def test_bootstrap_treats_a_missing_checker_as_the_finding():
+    """The commonest way for the script to be absent is an install that predates
+    it — i.e. the exact stale copy the check exists for. Silence must not read
+    as consent in the one place the original defect is most likely to sit."""
+    body = " ".join(_bootstrap().split())
+    assert "No `INSTALL:` line at all" in body
+    assert "bootstrap:install_broken" in body
+
+
 # ── the script must actually implement what the doc promises ─────────────────
 
 def test_every_detail_line_named_in_the_docs_exists_in_the_script():

@@ -149,6 +149,24 @@ def test_dangling_skills_symlink_is_caught(tmp_path):
     assert "SKILL_DANGLING:" in proc.stdout
 
 
+def test_dangling_hook_symlink_is_caught(tmp_path):
+    """Distinct from HOOK_NOT_INSTALLED: the link exists, its target does not.
+
+    The remedies differ — one wants a link created, the other wants a broken one
+    repointed — so a check that collapsed them would name the wrong fix.
+    """
+    co = _checkout(tmp_path)
+    skills_link = tmp_path / "skills-h-mad"
+    skills_link.symlink_to(co)
+    hook_link = tmp_path / "hooks-h-mad-tdd-gate.sh"
+    hook_link.symlink_to(tmp_path / "gone" / "h-mad-tdd-gate.sh")
+
+    proc = _run(skills_link, hook_link)
+    assert _token(proc).startswith("INSTALL: FAIL")
+    assert "HOOK_DANGLING:" in proc.stdout
+    assert "HOOK_NOT_INSTALLED:" not in proc.stdout
+
+
 def test_absent_skills_link_is_caught(tmp_path):
     co = _checkout(tmp_path)
     hook_link = tmp_path / "hooks-h-mad-tdd-gate.sh"
