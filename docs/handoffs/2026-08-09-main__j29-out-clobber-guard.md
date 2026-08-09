@@ -11,10 +11,18 @@ claim it made (install gate PASS, both plugin patches PRESENT and behaviourally 
 suite green at its recorded 1207), then closed its one buildable item: J29's `--out`
 clobber guard. Shipped as `d53e385` — TDD, mutation-tested, suite 1207 → 1213. The
 durable learning is persisted separately in `503fd84`. Both pushed; tree clean at
-`origin/main`. The three HemaSuite-owned items from the prior handoff were **not worked**
-— they are handed over in that repo's own
-`docs/handoffs/2026-08-09-main__hemasuite-items-handover.md`, and one of them got worse.
-Nothing is blocked or in flight here.
+`origin/main`. The three HemaSuite-owned items from the prior handoff are handed over in
+that repo's own `docs/handoffs/2026-08-09-main__hemasuite-items-handover.md`; one of them
+(the "6 failing consumer tests") was then investigated and **closed — it does not
+reproduce**, 48 passed / 0 failed under a properly provisioned venv. Nothing is blocked or
+in flight here.
+
+> **Correction (same day).** As first pushed (`7bb62bc`), this doc said the HemaSuite
+> consumer suite "is now known to be *unrunnable*, not merely failing". That was wrong —
+> it came from an existence check run under zsh, which aborts the whole command when any
+> glob fails to match, so `ls -d .venv venv */.venv */venv` listed nothing and was read as
+> "no venv exists". A venv had existed since Apr 19. See the HemaSuite handoff's own
+> Correction block, and the zsh learning below.
 
 ## Key Learnings
 
@@ -46,9 +54,17 @@ Nothing is blocked or in flight here.
   CC plugin-hook drop (#57317) the hook names itself. Worth knowing because "patch missing
   after update" and "hook not firing" look alike from the session banner.
 - **`hematology-paper-writer/` is tracked in THIS repo — 239 files — while the HemaSuite
-  consumer items concern the copy at `/Users/kimhawk/Coding/HemaSuite`.** Unexplained. Two
-  copies of a consumer is exactly the mechanism that produces the coupled-suite drift the
-  prior handoff recorded. Not investigated.
+  consumer items concern the copy at `/Users/kimhawk/Coding/HemaSuite`.** ~~Two copies of a
+  consumer is exactly the mechanism that produces the coupled-suite drift the prior handoff
+  recorded.~~ Since corrected: the copy here holds **no** `tests/test_h_mad_*.py`, so it is
+  not a second consumer suite and cannot be a drift source. Why the directory is tracked
+  twice is still unexplained.
+- **`ls -d a b */c */d` under zsh is a trap: `nomatch` aborts the WHOLE command on the
+  first pattern that misses, so an empty result means "one glob missed", not "none of these
+  exist".** It produced a false "no virtualenv exists" conclusion that reached two pushed
+  handoffs, and bit a second time the same session (`ls requirements*.txt *.cfg *.toml`
+  died on `*.cfg`). bash degrades gracefully and reports the matches it found. When the
+  answer drives a conclusion, run the check under `bash -c` or test one path at a time.
 - **A repo-wide TODO/FIXME audit came back essentially empty, which is itself the result.**
   21 hits, 19 of them non-debt (template scaffolding meant to be filled in, prose *about*
   TODO markers, one eval fixture). `h-mad/` has zero. The only two real ones are
@@ -68,11 +84,13 @@ Nothing is blocked or in flight here.
 3. If J28 recurs (a dispatch returning exit 0 having produced nothing), **capture the
    transcript before re-running anything** — re-running is what destroyed the evidence the
    first time. `docs/skill-monitoring.md` J28.
-4. [suggested] Resolve the duplicate `hematology-paper-writer/` — `git ls-files
+4. [suggested] Explain the duplicate `hematology-paper-writer/` — `git ls-files
    hematology-paper-writer | wc -l` says 239 here, and there is a second copy at
-   `/Users/kimhawk/Coding/HemaSuite/hematology-paper-writer`. Establish which one the
-   `~/.claude/skills` symlink chain actually reaches before either is edited; a consumer
-   suite drifting from its skill is what two copies produce.
+   `/Users/kimhawk/Coding/HemaSuite/hematology-paper-writer`. No longer urgent: the copy
+   here holds no h-mad consumer tests, and the consumer resolves the skill through
+   `~/.claude/skills/h-mad` (verified → this repo's `h-mad/`), so neither copy shadows the
+   other. The open question is only why it is tracked twice —
+   `diff -rq hematology-paper-writer /Users/kimhawk/Coding/HemaSuite/hematology-paper-writer`
 5. [suggested] Consider whether an unwritable `--out` should fail soft — today it takes
    the whole dispatch to rc=1 with empty stdout, so a typo'd directory loses a verdict
    that the agent successfully produced. `h-mad/scripts/hmad-dispatch.sh` write sites.
@@ -85,11 +103,18 @@ Nothing is blocked or in flight here.
 - **Known remaining false positive (accepted)** — pipe-to-shell *text* inside a quoted
   heredoc body is still denied by bkit ENH-310; the `pipe-shell` vector scans the full
   string by design. Pinned by `QH-06`. No action intended.
-- **Duplicate `hematology-paper-writer/`** — status: not investigated. See Next Step 4.
-- **HemaSuite items (3)** — status: handed over, not worked. See
-  `/Users/kimhawk/Coding/HemaSuite/docs/handoffs/2026-08-09-main__hemasuite-items-handover.md`.
-  One of them was widened this session: its test suite is now known to be *unrunnable*,
-  not merely failing.
+- **Duplicate `hematology-paper-writer/`** — status: partially investigated; it holds no
+  h-mad consumer tests, so it is not a drift source. Why it is tracked twice is open. See
+  Next Step 4.
+- **HemaSuite items** — status: handed over; see
+  `/Users/kimhawk/Coding/HemaSuite/docs/handoffs/2026-08-09-main__hemasuite-items-handover.md`
+  (corrected there as `de5d450c`). ~~One of them was widened this session: its test suite is
+  now known to be *unrunnable*, not merely failing.~~ The opposite: the consumer suite was
+  provisioned and measured at **48 passed / 0 failed** under CPython 3.14.3 against the live
+  skill, so the "6 failures" item is **closed — does not reproduce**. What remains open
+  there is undeclared test dependencies (`pytest`, `jsonschema`, `pytest-asyncio`) — one of
+  which, `jsonschema`, is **F8 in this repo's `docs/skill-monitoring.md`, still open, with a
+  workaround path (`/opt/anaconda3/bin/python3`) that no longer exists on this machine**.
 
 ## Context for Next Session
 
