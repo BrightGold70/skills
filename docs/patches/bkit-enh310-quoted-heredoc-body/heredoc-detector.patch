@@ -1,0 +1,84 @@
+--- a/lib/defense/heredoc-detector.js
++++ b/lib/defense/heredoc-detector.js
+@@ -239,6 +239,57 @@
+ ]);
+
+ /**
++ * Excise the BODIES of quoted-tag heredocs (`<<'TAG'` / `<<"TAG"`), preserving
++ * the heredoc markers and the terminator line.
++ *
++ * Rationale (ENH-310 false-positive class):
++ *   bash performs NO expansion inside a quoted-tag heredoc body — that is a
++ *   language guarantee, not heuristic quote-parsing. Text sitting in such a body
++ *   can never become shell syntax, so a `$(cmd <<TAG …)` sequence appearing
++ *   there is inert prose (e.g. documentation about this very guard), not a
++ *   command substitution.
++ *
++ * Scope of the exemption — deliberately narrow:
++ *   ONLY the 'sub' vector consults the reduced text. 'pipe-shell',
++ *   'eval-source' and 'sudo' continue to scan the FULL command string, because
++ *   a quoted-tag body piped to a shell IS executed verbatim (see CR-22/CR-23)
++ *   even though it is never expanded. Unquoted `<<TAG` bodies are never excised
++ *   at all, since `$()` in those bodies does expand.
++ *
++ * Markers survive, so a genuine `$(cat <<'EOF' … EOF)` still matches critically:
++ * the `$(`, the `<<'EOF'` and the closing `)` are all outside the excised body.
++ *
++ * Pure function — no IO, consistent with design invariant #1.
++ *
++ * @param {string} text
++ * @returns {string}
++ */
++function stripQuotedHeredocBodies(text) {
++  const START = /<<-?[ \t]*(['"])(\w+)\1/;
++  let out = '';
++  let remaining = text;
++
++  for (;;) {
++    const m = remaining.match(START);
++    if (!m) break;
++
++    const tag = m[2];
++    const startEnd = m.index + m[0].length;
++    const nl = remaining.indexOf('\n', startEnd);
++    if (nl === -1) break; // single-line command — no body to excise
++
++    const after = remaining.slice(nl + 1);
++    const tm = after.match(new RegExp(`^[ \\t]*${tag}[ \\t]*$`, 'm'));
++    if (!tm) break; // unterminated heredoc — leave text untouched (fail safe)
++
++    out += remaining.slice(0, nl + 1) + '__BKIT_QUOTED_HEREDOC_BODY__\n';
++    remaining = after.slice(tm.index); // resume at the terminator line
++  }
++
++  return out + remaining;
++}
++
++/**
+  * Detect heredoc-pipe bypass attempt in a Bash command string.
+  *
+  * Pure function — same input always returns the same verdict. No IO.
+@@ -261,9 +312,13 @@
+     .replace(/\\`/g, '__BKIT_ESCAPED_BACKTICK__')
+     .replace(/\\<</g, '__BKIT_ESCAPED_HEREDOC__');
+
++  // Quoted-tag heredoc bodies are inert prose for the 'sub' vector only.
++  // See stripQuotedHeredocBodies() for why the exemption stops there.
++  const subScanText = stripQuotedHeredocBodies(stripped);
++
+   // Evaluate critical patterns first; short-circuit on first hit.
+   for (const p of CRITICAL_PATTERNS) {
+-    if (p.re.test(stripped)) {
++    if (p.re.test(p.vector === 'sub' ? subScanText : stripped)) {
+       return {
+         matched: true,
+         severity: 'critical',
+@@ -305,6 +360,8 @@
+
+ module.exports = {
+   detect,
++  // Exposed for contract tests — see ENH-310 false-positive class.
++  stripQuotedHeredocBodies,
+   // Exposed for contract tests + observability — DO NOT mutate at runtime
+   // (Object.freeze enforces immutability; mutation in non-strict mode is silent,
+   // in strict mode throws).

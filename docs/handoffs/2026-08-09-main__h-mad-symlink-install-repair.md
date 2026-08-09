@@ -62,8 +62,16 @@ three references agree, and reran the suite (`1173 passed, 2 skipped` — unchan
   commit idiom, denied at `PreToolUse` (fix: write the message to a file, `git commit -F <file>`).
   It then bit a **plain, correctly-formed** `python3 - <<'PY'` whose *string contents* merely quoted
   an example of the forbidden pattern. Earlier plain heredocs in the same session passed fine, so the
-  trigger is the substring, not the shell construct. Any command whose text mentions the pattern —
-  including one documenting it — must go through a script file.
+  trigger is the substring, not the shell construct.
+  **Since fixed** — see `docs/patches/bkit-enh310-quoted-heredoc-body/`. A quoted heredoc tag
+  disables all expansion in the body (verified against real bash), so those bodies are now excised
+  before the `sub`-vector patterns run. bkit's suite went 53/53 → 62/62; a 23-case differential
+  corpus showed 0 unintended regressions. The patch lives in a version-pinned plugin cache, so
+  `verify.js` in that directory must be re-run after any bkit update.
+- **One earlier claim of mine was wrong and is worth not repeating**: `echo "… $(cat <<TAG … TAG) …"`
+  is *not* a false positive. `$()` is active inside double quotes — `echo "x $(echo hi) y"` prints
+  `x hi y` — so that command genuinely asks bash to run the substitution. Denying it is the guard
+  working. Only the *quoted-tag heredoc body* case was ever the bug.
 - **`learn.py` hard-rejects a pattern >200 chars** (`ERROR: pattern exceeds 200 chars (208)`) and
   exits non-zero, but entries queued *before* the failing one in the same invocation are already
   written — so a batch that trips the limit lands partially. Re-run only the rejected entry; the

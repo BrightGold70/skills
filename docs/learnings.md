@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-09 · gotcha · [0.7] · `hooks,claude-code,false-positive,handoff:2026-08-09-main__h-mad-symlink-install-repair` — security-guidance's security_reminder_hook.py blocks on bare substring 'exec(' so regex .exec() trips it, but only ONCE per file+rule per session - an immediate retry succeeds
+- 2026-08-09 · pattern · [0.9] · `bash,security,parsing,handoff:2026-08-09-main__h-mad-symlink-install-repair` — A quoted heredoc tag (<<'TAG') disables ALL expansion in the body - a bash guarantee, not a heuristic. That makes it a safe basis for narrowing a scanner, unlike parsing quotes
+- 2026-08-09 · solution · [0.9] · `bkit,hooks,patch,enh310,handoff:2026-08-09-main__h-mad-symlink-install-repair` — bkit ENH-310 false positive FIXED locally (bkit 2.1.19): quoted-tag heredoc bodies now excised for the sub vector. Re-run docs/patches/bkit-enh310-quoted-heredoc-body/verify.js after any bkit update
 - 2026-08-09 · pattern · [0.7] · `hooks,claude-code,blast-radius,handoff:2026-08-09-main__h-mad-symlink-install-repair` — settings.json PreToolUse hooks fire in EVERY project, so a repo-scoped find under-measures blast radius when a hook's state-resolution changes - sweep all project roots
 - 2026-08-09 · pattern · [0.7] · `verification,hooks,claude-code,handoff:2026-08-09-main__h-mad-symlink-install-repair` — A green test suite can't confirm a hook-registration change if the tests invoke the hook directly and never read settings.json - verify the arming surface with a real tool call
 - 2026-08-09 · gotcha · [0.5] · `handoff-skill,learnings,handoff:2026-08-09-main__h-mad-symlink-install-repair` — learn.py rejects patterns >200 chars and exits non-zero, but entries earlier in the same batch already wrote - a tripped batch lands partially; re-run only the rejected entry
