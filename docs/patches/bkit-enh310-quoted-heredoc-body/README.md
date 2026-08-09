@@ -76,6 +76,16 @@ If the patch no longer applies cleanly, check whether upstream fixed it themselv
 forcing it — `verify.js` returning exit 0 with the patch symbol **MISSING** would mean
 exactly that, and the local patch should then be dropped rather than re-applied.
 
+**The 9 `QH-*` tests do not survive an update.** They were added to bkit's own
+`tests/qa/v2114-defense-heredoc.test.js`, which lives in the same version-pinned cache and is
+replaced wholesale. `verify.js` is the durable check and covers the same behaviour, which is
+why it asserts absolute expectations rather than diffing against a saved original. The `QH-*`
+sources are preserved in `UPSTREAM-REPORT.md` if you want to re-add them.
+
+*Recovery procedure tested 2026-08-09*: reverting the lib file made `verify.js` exit 1, the
+`patch -p1` above applied cleanly, and the result was **byte-identical** to the original
+patched file.
+
 ## Verification evidence (2026-08-09)
 
 - bkit's own suite: **53/53 → 62/62** with 9 added `QH-*` tests. No pre-existing test changed.
