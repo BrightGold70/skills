@@ -1092,3 +1092,37 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 > every `J19`–`J23` mention already in the tree still resolves. The lesson is the one the J18 audit
 > already recorded from the other direction: **a row that is never written is the same coverage
 > hole as a row that is never flipped.**
+
+## Surfaced by the agy skill review of the install-check work (2026-08-09)
+
+- 🟡 **J28 — an `exec agy` dispatch returned exit 0 having produced nothing, and has not
+  reproduced.** Observed once, live: `hmad-dispatch exec agy <7,539 B prompt> --cd <repo> --out
+  <report> --log <run.log> --timeout 900`, launched backgrounded, completed with **exit 0, empty
+  stdout, and neither `--out` nor `--log` created**. The identical command re-run in the foreground
+  produced a full report in ~5 min. **Not filed as a diagnosis, because three plausible ones were
+  tested and all failed**, and the registry-hygiene note above cuts both ways — a row asserting a
+  wrong cause is worse than no row:
+  - *No controlling terminal breaks `_exec_run`'s `set -m`.* **Refuted.** Extracted the real
+    function and drove it with a trivial child under no TTY (`[ -t 0 ]` false, `[ -t 1 ]` false):
+    `set -m` returns 0, the child runs, and the exit code propagates (`rc=7` for an `exit 7` child,
+    `rc=0` with `--heartbeat`).
+  - *Backgrounding the dispatch breaks it.* **Refuted.** The same verb backgrounded with a 65 B
+    prompt completed in ~20 s and wrote both files.
+  - *Two dispatches racing on one `--out`/`--log` starve one of them.* **Refuted** — see J29; both
+    completed and both printed their own verdict.
+  The original run had one confounder not present in any replication: a second `exec agy` was
+  started in the foreground against the **same** `--out`/`--log` while it was still running, so its
+  artefacts cannot be attributed to either run. **Under monitoring.** If it recurs, capture the
+  transcript before re-running anything, since re-running is what destroyed the evidence the first
+  time. Do not "fix" this without a reproduction.
+
+- 🟡 **J29 — `--out` is last-writer-wins across concurrent dispatches, silently; `--log` is not.**
+  Verified deliberately while testing J28: two `exec agy` dispatches run concurrently against the
+  same `--out` and `--log` both succeeded, but `--out` ended up holding **only the second
+  responder's** answer while `--log` held both (it appends by design —
+  `hmad-dispatch.sh` documents "Both backends append their transcript to a caller-supplied log,
+  preserving its existing content"). So a caller who reads `--out` after a concurrent pair silently
+  loses one verdict, and — because both dispatches exit 0 — nothing distinguishes that from a
+  dispatch that was never run. **Lesson/opt:** give every dispatch its own `--out`, or have `exec`
+  refuse to overwrite a non-empty `--out` it did not create. The cheap guard is the refusal; the
+  cheap discipline is one path per dispatch.
