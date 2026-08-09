@@ -1,8 +1,13 @@
-# Upstream report (DRAFT — not filed)
+# Upstream report — FILED
 
-Target: `popup-studio-ai/bkit-claude-code`
-Prepared 2026-08-09. **Not submitted** — awaiting the user's go-ahead, since filing is a
-public, outward-facing action.
+**Filed 2026-08-09:** https://github.com/popup-studio-ai/bkit-claude-code/issues/145
+
+Target: `popup-studio-ai/bkit-claude-code`. The posted issue inlines the diff and the
+suggested tests (the attached-patch reference below does not exist for them), and omits all
+local paths. Text below is the source draft.
+
+If upstream ships the fix, drop the local patch rather than re-applying it — `verify.js`
+returning exit 0 with the patch symbol **MISSING** is exactly that signal.
 
 ---
 

@@ -1,0 +1,47 @@
+--- a/hooks/security_reminder_hook.py
++++ b/hooks/security_reminder_hook.py
+@@ -7,6 +7,7 @@
+ import json
+ import os
+ import random
++import re
+ import sys
+ from datetime import datetime
+
+@@ -68,7 +69,16 @@
+     },
+     {
+         "ruleName": "child_process_exec",
+-        "substrings": ["child_process.exec", "exec(", "execSync("],
++        # "child_process.exec" and "execSync(" stay as plain substrings — both
++        # are specific enough that a method-call false positive is unlikely.
++        #
++        # The bare "exec(" substring was REMOVED: it matched any `x.exec(y)`,
++        # most commonly JavaScript regex `.exec()`, and this hook blocks rather
++        # than warns. The regex below keeps the real signal (a bare `exec(`
++        # call, e.g. `const { exec } = require("child_process"); exec(cmd)`)
++        # while ignoring method calls and identifiers that merely end in "exec".
++        "substrings": ["child_process.exec", "execSync("],
++        "regexes": [r"(?<![\w.$])exec\s*\("],
+         "reminder": """⚠️ Security Warning: Using child_process.exec() can lead to command injection vulnerabilities.
+
+ This codebase provides a safer alternative: src/utils/execFileNoThrow.ts
+@@ -196,6 +206,18 @@
+                 if substring in content:
+                     return pattern["ruleName"], pattern["reminder"]
+
++        # Check content-based regex patterns.
++        #
++        # Plain substrings cannot distinguish a bare call from a method call:
++        # "exec(" matches `regex.exec(str)`, `START.exec(text)` and any
++        # `something.exec(...)`, none of which are child_process. Since this
++        # hook BLOCKS (sys.exit(2)), that false positive stops legitimate
++        # edits. Regexes let a rule require a bare call instead.
++        if "regexes" in pattern and content:
++            for regex in pattern["regexes"]:
++                if re.search(regex, content):
++                    return pattern["ruleName"], pattern["reminder"]
++
+     return None, None
+
+

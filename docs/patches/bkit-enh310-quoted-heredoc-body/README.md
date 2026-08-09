@@ -1,7 +1,7 @@
 # bkit ENH-310 — quoted-tag heredoc bodies are inert
 
-**Status:** applied locally to bkit `2.1.19` on 2026-08-09. Not yet reported upstream.
-**Upstream:** `popup-studio-ai/bkit-claude-code`
+**Status:** applied locally to bkit `2.1.19` on 2026-08-09.
+**Upstream:** filed as [popup-studio-ai/bkit-claude-code#145](https://github.com/popup-studio-ai/bkit-claude-code/issues/145) — drop this patch if it ships.
 **Target file:** `~/.claude/plugins/cache/bkit-marketplace/bkit/<version>/lib/defense/heredoc-detector.js`
 
 ## Why this directory exists
