@@ -18,10 +18,39 @@ description: Orchestrate the 7-phase H-MAD (Hawk Multi-Agents Development) workf
 ## First-run auto-bootstrap
 
 Before any feature-level operation, check:
-1. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
-2. Does `docs/.bkit-memory.json` exist?
+1. Is the **skill itself** installed correctly? Run
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_install_check.py` and read the
+   `INSTALL:` token — never `$?`, which is 0 on both verdicts by design.
+2. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
+3. Does `docs/.bkit-memory.json` exist?
 
-If either is missing → run bootstrap automatically, then continue with the requested operation.
+If 2 or 3 is missing → run bootstrap automatically, then continue with the requested operation.
+
+`INSTALL: FAIL` → **halt `bootstrap:install_broken`** and surface the detail lines. Do not
+bootstrap and do not proceed: the install is what decides *which* copy of every script and
+prompt the run uses, so continuing means every later gate measures an unknown tree. The
+detail lines name the remedy directly — `SKILL_NOT_SYMLINK` wants the directory replaced
+with a symlink into the checkout, `HOOK_NOT_INSTALLED` wants
+`~/.claude/hooks/h-mad-tdd-gate.sh` linked to `<checkout>/hooks/h-mad-tdd-gate.sh`, and
+`SPLIT_INSTALL` means the two links resolve into *different* checkouts, so the gate you arm
+and the gate the suites exercise are different files. Repairing the install is an operator
+action; this check deliberately does not relink anything under `~/.claude` on its own.
+
+`INSTALL: UNREADABLE` is a cannot-judge (exit 2), not a pass — nothing was examined.
+
+Two properties of this check are worth knowing rather than rediscovering:
+
+- **It is a copy detecting its own staleness.** If `~/.claude/skills/h-mad` is a stale copy,
+  the script that runs is the *stale* one, so it can only report divergences the old copy is
+  new enough to know about — and a copy predating this check reports nothing at all. A green
+  `INSTALL: PASS` from an unknown vintage is therefore weaker evidence than it looks; the
+  independent confirmation is that `ls -la` shows both paths as symlinks.
+- **Both failure modes are silent by construction.** A stale copy keeps loading and running
+  (the frontmatter is byte-identical, and both copies self-report the same version), and an
+  absent hook link still leaves the gate *armed* whenever `settings.json` points at the
+  skills path instead — so the tests and `references/codex-implementer-prompt.md` reference
+  a path that does not exist while everything appears to work. Neither shows up as an error
+  anywhere else, which is the whole reason this check exists.
 
 ## Bootstrap action
 
@@ -825,6 +854,14 @@ The retry-guidance stream was historically triggered by the audit gate itself: t
 
 Workaround for the **separate** autopilot Stop-hook nag (not addressed by the gate fix): `export DISABLE_OMC=1` (or `OMC_SKIP_HOOKS=persistent-mode`) for the session. Never switch to the OMC autopilot skill mid-`/h-mad`.
 
+**bkit and security-guidance install content-scanning `PreToolUse` hooks that deny, not warn.** Neither is an h-mad defect — `/h-mad` never prescribes the idioms involved — but both collide with operator habits during the commit-heavy phases, and the failure mode reads as a tool error rather than a policy decision.
+
+- **bkit ENH-310** (`lib/defense/heredoc-detector.js`) denies a heredoc inside a command substitution, which is exactly the standard multi-line commit idiom `git commit -m "$(cat <<'EOF' … EOF)"`. Use `git commit -F <file>` instead — write the message to a file, then pass it. This matters at Phase 7 and at every `chore(handoff)` commit.
+- The match is on **raw command text**, not shell structure, so a command whose *quoted body* merely mentions the pattern is denied too — including one documenting the guard. Writing a plan, report, or handoff that quotes it must go through a script file. (Reported upstream as `popup-studio-ai/bkit-claude-code#145`; a local fix exempting quoted-tag heredoc bodies is carried in `docs/patches/bkit-enh310-quoted-heredoc-body/` in this repository.)
+- **security-guidance** (`hooks/security_reminder_hook.py`) matches bare substrings against `Edit`/`Write` content with no file-type gating, so a `.md` or `.patch` is scanned for JavaScript and Python constructs. It calls `sys.exit(2)`, so the write is refused. Warnings dedupe on `{file_path}-{rule_name}` for the session and `check_patterns()` returns on the **first** match — so a document mentioning N flagged constructs costs **N refused writes**, surfacing one rule at a time, and an immediate retry of the identical write succeeds each time. Retry rather than editing the prose to appease the scanner; the flagged strings are usually the subject matter. (Reported as `anthropics/claude-plugins-official#5085`; local fix in `docs/patches/claude-security-guidance-bare-exec/`.)
+
+Both local patches live in version-pinned plugin caches that a plugin update replaces wholesale, so each patch directory carries a `verify` script — re-run them after any plugin update, and drop the patch if upstream ships the fix.
+
 ## State schema
 
 See `references/state-schema.md`. Validate with:
@@ -1075,6 +1112,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
 - `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
+- `h_mad_install_check.py` — verifies the skill's **own** install shape (the two symlinks §"First-run auto-bootstrap" depends on): `check()` + CLI printing `INSTALL: PASS|FAIL issues=N|UNREADABLE` followed by `SKILL_NOT_SYMLINK:`/`SKILL_NOT_INSTALLED:`/`SKILL_DANGLING:`/`SKILL_NOT_A_CHECKOUT:`/`HOOK_NOT_INSTALLED:`/`HOOK_DANGLING:`/`SPLIT_INSTALL:` detail lines, exit 0 on a verdict / 2 only when no path was given. Read the token, never `$?`. Reads paths and repairs nothing — relinking `~/.claude` is an operator action.
 - `h_mad_resume_decision.py` — smart-resume decision
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify`): `check()` + CLI printing `PRECONDITION: PASS|FAIL issues=N|UNREADABLE` followed by `MISSING:`/`DIRTY:` detail lines, exit 0 on a verdict / 2 only when `--repo-root` cannot be read. Read the token, never `$?`.
 - `h_mad_derive_test_path.sh` — production-path → test-path mapper
