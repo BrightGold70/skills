@@ -15,6 +15,10 @@ than re-copying. Repairing it exposed a second, entirely missing link — `~/.cl
 — which 13 tests and `references/codex-implementer-prompt.md` both depend on. Done and verified:
 1173 passed / 2 skipped through the install path. No repo files changed.
 
+**Session continued after the first closeout** and drove the remaining items to zero: deleted the
+pre-repair backup, repointed `settings.json:129` to the documented `~/.claude/hooks/…` path so all
+three references agree, and reran the suite (`1173 passed, 2 skipped` — unchanged). Nothing open.
+
 ## Key Learnings
 
 - **h-mad's canonical install is a symlink, and nothing enforces it.** `SKILL.md:774` ("`~/.claude/skills/h-mad`
@@ -43,23 +47,48 @@ than re-copying. Repairing it exposed a second, entirely missing link — `~/.cl
   (`hematology-paper-writer/docs/.bkit-memory.json`, `clinical-statistics-analyzer/docs/.bkit-memory.json`)
   — the very case the docstring names. Checked: none carry an `orchestrator_state`, so nothing is
   armed. Worth re-checking after any future h-mad run leaves state behind.
+- **The arming check has to be machine-wide, not repo-scoped.** `settings.json` `PreToolUse` hooks
+  fire in *every* project, so a repo-scoped `find` under-measures the blast radius. Swept `~/Coding`
+  and `~/orca`: four `.bkit-memory.json` files, none with an `orchestrator_state`.
+  `/Users/kimhawk/Coding/HemaSuite` — the tree the test docstring names as the motivating fail-open
+  — has no state file at all, which the gate treats as "no orchestrator → allow"
+  (`test_no_state_anywhere_still_allows`). Nothing armed anywhere.
+- **A green h-mad suite cannot confirm an arming-path change.** The tests invoke
+  `~/.claude/hooks/h-mad-tdd-gate.sh` directly and never read `settings.json`, so they went green the
+  moment that symlink existed and stayed green across the `settings.json` edit. Verifying the arming
+  surface needs a real `Write` through the harness, which is a separate check from the suite.
+- **bkit's ENH-310 heredoc guard is a *text match on the command string*, not nesting detection.**
+  It first bit the legitimate case — `git commit -m "$(cat <<'EOF' … EOF)"`, the standard multi-line
+  commit idiom, denied at `PreToolUse` (fix: write the message to a file, `git commit -F <file>`).
+  It then bit a **plain, correctly-formed** `python3 - <<'PY'` whose *string contents* merely quoted
+  an example of the forbidden pattern. Earlier plain heredocs in the same session passed fine, so the
+  trigger is the substring, not the shell construct. Any command whose text mentions the pattern —
+  including one documenting it — must go through a script file.
+- **`learn.py` hard-rejects a pattern >200 chars** (`ERROR: pattern exceeds 200 chars (208)`) and
+  exits non-zero, but entries queued *before* the failing one in the same invocation are already
+  written — so a batch that trips the limit lands partially. Re-run only the rejected entry; the
+  same-day dedupe makes a full re-run safe either way.
 
 ## Next Steps
 
-1. Confirm the duplicate skill entry cleared — the `h-mad.bak-20260808` skill should be gone from the
-   listing next session; only `h-mad` should appear.
-2. Delete the backup once confident: `rm -rf ~/.claude/h-mad.bak-20260808` (stale May-23 copy, superseded).
-3. Future "update h-mad from github" is now just `git -C /Users/kimhawk/orca/skills pull` — the symlink
-   makes the checkout the live skill. No resync step.
+1. Confirm the duplicate skill entry cleared — `h-mad.bak-20260808` should be gone from the skill
+   listing next session; only `h-mad` should appear. (Directory is deleted; the stale *listing* entry
+   is cached until a fresh session, so this is the one item that can only be checked later.)
+2. Future "update h-mad from github" is now just `git -C /Users/kimhawk/orca/skills pull` — the symlink
+   makes the checkout the live skill. No resync step, no re-copy.
+3. If a future h-mad run leaves `orchestrator_state` behind, re-run the machine-wide arming sweep before
+   assuming writes are unblocked — the gate resolves sub-project state that the old one fail-opened on.
+
+**Done this session** (were Next Steps #2/#3 and both Open Items at first closeout):
+- `rm -rf ~/.claude/h-mad.bak-20260808` — verified target first (real dir, 116K, 11158-byte SKILL.md,
+  7 scripts, no symlinks pointing out), then deleted; both live symlinks confirmed intact after.
+- `settings.json:129` repointed to `bash ~/.claude/hooks/h-mad-tdd-gate.sh` — one-line diff, JSON
+  re-validated, hook exercised directly (`exit=0`) and end-to-end through a real `Write`.
 
 ## Open / Blocked Items
 
-- `~/.claude/h-mad.bak-20260808` — status: deferred (intentional retention). Stale pre-repair copy kept
-  as a rollback path; delete when the symlink install has a few sessions of confidence behind it.
-- `settings.json:129` still arms the gate via `~/.claude/skills/h-mad/hooks/h-mad-tdd-gate.sh` rather
-  than the documented `~/.claude/hooks/…` path — status: deliberately not changed. Both paths now
-  resolve to the same physical file through the symlinks, it is the sole arming registration (no
-  double-fire), and rewriting it would be churn with zero behavior change.
+None. Both items from the first closeout are resolved (see "Done this session" above), the repo is
+clean and at `origin/main`, and nothing is blocked or in flight.
 
 ## Context for Next Session
 
@@ -67,7 +96,8 @@ than re-copying. Repairing it exposed a second, entirely missing link — `~/.cl
 - None in the repo. All changes were to the user-global install:
   - `~/.claude/skills/h-mad` — stale directory replaced with symlink → `/Users/kimhawk/orca/skills/h-mad`
   - `~/.claude/hooks/h-mad-tdd-gate.sh` — new symlink → `/Users/kimhawk/orca/skills/h-mad/hooks/h-mad-tdd-gate.sh`
-  - `~/.claude/h-mad.bak-20260808` — backup of the pre-repair copy (moved out of `skills/`)
+  - `~/.claude/settings.json:129` — arming path repointed to `bash ~/.claude/hooks/h-mad-tdd-gate.sh`
+  - `~/.claude/h-mad.bak-20260808` — backup of the pre-repair copy; created, then deleted this session
 
 **Uncommitted changes:** none (repo tree clean throughout; `git status --short` empty)
 
@@ -76,8 +106,11 @@ than re-copying. Repairing it exposed a second, entirely missing link — `~/.cl
 cd /Users/kimhawk/orca/skills
 git checkout main
 
-# confirm the install is intact
-ls -la ~/.claude/skills/h-mad ~/.claude/hooks/h-mad-tdd-gate.sh   # both must be symlinks into this repo
+# confirm the install is intact — both must be symlinks into this repo
+ls -la ~/.claude/skills/h-mad ~/.claude/hooks/h-mad-tdd-gate.sh
+
+# confirm the gate is armed at the documented path
+grep -n "h-mad" ~/.claude/settings.json   # expect: bash ~/.claude/hooks/h-mad-tdd-gate.sh
 
 # confirm the skill still works through the install path (not the repo path)
 python3 -m pytest ~/.claude/skills/h-mad/tests/ -q --tb=line     # expect 1173 passed, 2 skipped
@@ -89,6 +122,13 @@ python3 -m pytest ~/.claude/skills/h-mad/tests/ -q --tb=line     # expect 1173 p
 - `pytest ~/.claude/skills/h-mad/tests/` → `1173 passed, 2 skipped in 107.10s`
 - The 2 skips are `tests/test_h_mad_state_validate_fallback.py:116,151`, both gated on "no live state
   file" — correct here, since no `docs/.bkit-memory.json` exists in this project.
+- Post-change rerun after the backup deletion and the `settings.json` edit: `1173 passed, 2 skipped in
+  106.99s` — identical, same two skips.
+- `settings.json` edit verified independently of the suite (which never reads it): `python3 -m json.tool`
+  → valid, hook invoked directly with a synthetic `Write` payload → `exit=0`, and a real `Write` passed
+  through the `PreToolUse` registration at the new path.
+- Machine-wide arming sweep over `~/Coding` and `~/orca`: four `.bkit-memory.json`, none with an
+  `orchestrator_state`. Nothing armed.
 
 **Related docs:**
 - `h-mad/SKILL.md:774` — "Editing this skill while a run is in flight" (why the install is a symlink,
