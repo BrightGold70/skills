@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-09 · gotcha · [0.5] · `h-mad,hmad-dispatch,monitoring-log,j29,session:2026-08-09` — J29 own remedy was wrong: refuse an --out that CHANGED since dispatch start, not one merely non-empty — the documented no_verdict recovery re-dispatches to the SAME templated path.
 - 2026-08-09 · pattern · [0.7] · `h-mad,invariants,prompt-size,handoff:2026-08-09-main__guard-patches-and-h-mad-install-gate` — Adding a rule to a file inlined verbatim into every prompt has a global byte cost. Recalibrate the size fixture rather than widen the band - the band is the assertion
 - 2026-08-09 · gotcha · [0.7] · `git,stale-clone,commit-hygiene,handoff:2026-08-09-main__guard-patches-and-h-mad-install-gate` — Verify commit-message claims against the TARGET commit, not the base your clone has. A 1519-commit-stale clone made an importer list in a commit message silently wrong
 - 2026-08-09 · pattern · [0.7] · `review,testing,mutation,handoff:2026-08-09-main__guard-patches-and-h-mad-install-gate` — Mutation-test a review finding that claims a test is non-discriminating - it decides which claims are real. Of 3 alleged word-matching doc-tests, 2 bit and only 1 did not
