@@ -2008,6 +2008,44 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
   wait "$pid"
 }
 
+# J29: `--out` is last-writer-wins across concurrent dispatches, silently. Two
+# `exec` runs pointed at one path both exit 0 and the file keeps only the SECOND
+# responder's answer, so a caller who reads `--out` loses a verdict with nothing
+# to distinguish that from a dispatch that never ran. (`--log` has no such defect:
+# both backends APPEND to a caller-supplied log, which is what let the lost half
+# be recovered at all.)
+#
+# Fingerprint at dispatch start, re-check at write time. An ABSENT and an EMPTY
+# file collapse to the same state deliberately -- neither holds a verdict, so
+# neither is worth preserving.
+_out_fingerprint() {  # <file>
+  [ -s "$1" ] || return 0
+  cksum < "$1" 2>/dev/null || true
+}
+
+# Refuse to overwrite an `--out` whose content changed since this dispatch
+# started. Returns 0 when writing is safe.
+#
+# The check is at WRITE time and keyed on CHANGE, not a pre-flight
+# `[ -s "$out" ]` refusal -- that distinction is load-bearing.
+# references/failure-recovery.md's `<phase>:no_verdict` remedy is to re-dispatch,
+# and SKILL.md's --out paths are templated per feature+module, so a legitimate
+# retry arrives at the same path holding the failed attempt's own short
+# narration. Refusing on merely non-empty would refuse the documented recovery.
+# Only a change between start and write implies a second writer.
+#
+# Deliberately does NOT touch rc: this function's caller returns the AGENT's exit
+# code ("did the CLI run"), which _exec_stamp and _cmd_notify both consume. The
+# verdict still reaches stdout and the transcript, so nothing is lost -- what J29
+# records is the SILENCE, and this stderr line is what cures it.
+_out_clobber_ok() {  # <file> <fingerprint-at-dispatch-start>
+  local f="$1" fp0="$2" fp_now
+  fp_now="$(_out_fingerprint "$f")"
+  [ "$fp_now" = "$fp0" ] && return 0
+  echo "hmad-dispatch: exec: REFUSING to overwrite --out $f — its content changed while this dispatch ran (another dispatch wrote there; J29). Existing file preserved; this dispatch's answer is on stdout and in the transcript." >&2
+  return 1
+}
+
 _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
@@ -2062,6 +2100,13 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     echo "hmad-dispatch: exec: transcript -> $log" >&2
   fi
 
+  # J29: snapshot --out BEFORE the agent runs, so each write site below can tell
+  # "the caller handed us a stale file" (legitimate — the no_verdict remedy
+  # re-dispatches to the same templated path) from "another dispatch wrote here
+  # while we ran" (the clobber). Empty for an absent/empty file.
+  local out_fp=""
+  [ -n "$out" ] && out_fp="$(_out_fingerprint "$out")"
+
   # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
   # it — the exit code is the whole point of this verb. rc stays 0 on success.
   local rc=0 final_empty=0 verdict=""
@@ -2092,7 +2137,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
       "$timeout" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
-      [ -n "$out" ] && cp "$last" "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && cp "$last" "$out"
       cat "$last"
       [ -n "$auto_log" ] && cat "$log" >&2 || true
       [ -n "$auto_log" ] && rm -f "$log"
@@ -2132,7 +2177,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     resp="$(cat "$resp_file" 2>/dev/null)"
     verdict="$resp"
     if [ -n "$resp" ]; then
-      [ -n "$out" ] && printf '%s\n' "$resp" > "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$resp" > "$out"
       printf '%s\n' "$resp"
       [ -n "$auto_log" ] && cat "$log" >&2 || true
       [ -n "$auto_log" ] && rm -f "$log"
@@ -2160,7 +2205,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
       verdict="$recovered"
       printf '%s\n' "$recovered"
-      [ -n "$out" ] && printf '%s\n' "$recovered" > "$out" || true
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$recovered" > "$out" || true
     fi
     if git -C "$cd_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local delta

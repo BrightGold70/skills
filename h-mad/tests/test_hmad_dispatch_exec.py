@@ -27,7 +27,7 @@ import pytest
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_hmad_dispatch import _bindir, _git_repo, run  # noqa: E402
+from test_hmad_dispatch import SKILL_MD_TEXT, _bindir, _git_repo, run  # noqa: E402
 
 
 # J23: `exec` appends the same boundary `send` does, so verdict recovery can tell our
@@ -770,3 +770,126 @@ def test_codex_recovers_a_verdict_written_after_a_quoted_boundary(tmp_path):
     assert r.returncode == 1, r.stderr
     assert r.stdout.strip() == "STATUS: DONE_WITH_CONCERNS", r.stdout
     assert out.read_text().strip() == "STATUS: DONE_WITH_CONCERNS"
+
+
+# --- J29: the --out clobber guard ---------------------------------------------
+#
+# `--out` is last-writer-wins across concurrent dispatches, silently. Verified
+# deliberately while chasing J28: two `exec agy` runs pointed at one `--out` both
+# exited 0, and the file held only the SECOND responder's answer. Because both
+# exited 0, nothing distinguished that from a dispatch that was never run.
+# (`--log` is exempt by design -- both backends APPEND to a caller-supplied log,
+# which is what let verdict recovery find the lost half.)
+#
+# The guard is WRITE-TIME and keyed on "changed under our watch", not a pre-flight
+# `[ -s "$out" ]` refusal, and that choice is load-bearing. references/failure-
+# recovery.md instructs the operator to RE-DISPATCH after a `<phase>:no_verdict`,
+# and SKILL.md's --out paths are templated per feature+module
+# (`/tmp/rev_<feature>_<module>.txt`) -- deterministic, so the retry lands on the
+# SAME path, which the failed attempt already left non-empty with its short
+# narration. A pre-flight refusal would refuse h-mad's own documented recovery.
+# What is refused is narrower: the file changed BETWEEN dispatch start and the
+# write, which only a second writer can cause.
+
+
+def test_agy_exec_refuses_to_clobber_an_out_a_rival_wrote_while_it_ran(tmp_path):
+    """J29 proper: the rival's verdict survives instead of being silently lost."""
+    b = _bindir(tmp_path, ["agy"])
+    out = tmp_path / "rev_feature_module.txt"          # the templated shared path
+    rival = "VERDICT: NON_COMPLIANT — the other dispatch"
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--out", str(out)],
+            env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT",
+                     HMAD_STUB_AGY_RIVAL_OUT=str(out), HMAD_STUB_AGY_RIVAL=rival))
+    assert out.read_text().strip() == rival, \
+        "the rival's verdict must survive — silently losing one is the J29 defect"
+    assert "VERDICT: COMPLIANT" in r.stdout, \
+        "our own verdict is not lost either: stdout is still the primary channel"
+    assert "REFUSING to overwrite --out" in r.stderr
+    # rc stays the AGENT's exit code. The function's contract is `$?` == "did the
+    # CLI run"; _exec_stamp and _cmd_notify both consume it. The defect J29 records
+    # is SILENCE, and stderr is what cures that.
+    assert r.returncode == 0, r.stderr
+
+
+def test_codex_exec_refuses_to_clobber_an_out_a_rival_wrote_while_it_ran(tmp_path):
+    """Same guard on the codex write site (`cp` from the last-message file)."""
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "exec_feature_module.txt"
+    rival = "STATUS: BLOCKED — the other dispatch"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="STATUS: DONE",
+                     HMAD_STUB_CODEX_RIVAL_OUT=str(out), HMAD_STUB_CODEX_RIVAL=rival))
+    assert out.read_text().strip() == rival
+    assert r.stdout.strip() == "STATUS: DONE"
+    assert "REFUSING to overwrite --out" in r.stderr
+    assert r.returncode == 0, r.stderr
+
+
+def test_exec_still_overwrites_a_stale_out_left_by_a_previous_attempt(tmp_path):
+    """The guard must NOT refuse h-mad's own documented retry.
+
+    failure-recovery.md's `<phase>:no_verdict` remedy is to re-dispatch, and the
+    --out path is templated per feature+module, so attempt 2 arrives at a file
+    attempt 1 already filled with exactly the shape that failed: a short narration
+    with no sentinel. Unchanged since this dispatch started == nobody else wrote ==
+    safe to overwrite. Without this test the guard could be "refuse whenever the
+    file is non-empty", which passes the two tests above and breaks the protocol.
+    """
+    b = _bindir(tmp_path, ["agy"])
+    out = tmp_path / "rev_feature_module.txt"
+    out.write_text("narration naming real Must-fix items, no sentinel — the "
+                   "no_verdict shape\n")
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--out", str(out)],
+            env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT"))
+    assert r.returncode == 0, r.stderr
+    assert out.read_text().strip() == "VERDICT: COMPLIANT", \
+        "a stale --out from this caller's own failed attempt must still be replaced"
+    assert "REFUSING" not in r.stderr
+
+
+def test_codex_verdict_recovery_also_respects_the_clobber_guard(tmp_path):
+    """The third write site — the EMPTY-final-message recovery path — is guarded too.
+
+    Recovery is exactly when a rival is most likely to have finished first, and it
+    is the site where a silent clobber is most damaging: it overwrites a real
+    verdict with one salvaged from a transcript.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    out = tmp_path / "exec_feature_module.txt"
+    rival = "STATUS: DONE — the other dispatch"
+    r = run(["exec", "codex", str(_prompt(tmp_path, _CONTRACT_BLOCK)),
+             "--cd", str(tmp_path), "--out", str(out)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1",
+                     HMAD_STUB_CODEX_STDOUT="ran the task\nSTATUS: BLOCKED",
+                     HMAD_STUB_CODEX_RIVAL_OUT=str(out), HMAD_STUB_CODEX_RIVAL=rival))
+    assert r.returncode == 1, r.stderr
+    assert "verdict recovered from log" in r.stderr, "recovery itself must still run"
+    assert r.stdout.strip() == "STATUS: BLOCKED", "the recovered verdict reaches stdout"
+    assert out.read_text().strip() == rival, "but it must not clobber the rival's"
+    assert "REFUSING to overwrite --out" in r.stderr
+
+
+def test_exec_without_out_is_unaffected_by_the_guard(tmp_path):
+    """`--out` is optional; the guard must not fire (or crash) when it is absent."""
+    b = _bindir(tmp_path, ["agy"])
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_AGY_RESP="VERDICT: COMPLIANT"))
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "VERDICT: COMPLIANT"
+    assert "REFUSING" not in r.stderr
+
+
+def test_skill_md_documents_the_out_clobber_guard():
+    """A guard the operator cannot read about is a guard they will work around.
+
+    The anchor is asserted to match at least once BEFORE any content assertion:
+    a zero-match anchor leaves the doc unpinned while the suite stays green, which
+    is the failure mode that bit twice in the 2026-08-09 mutation runs.
+    """
+    anchor = "refuses to overwrite an `--out` whose content changed"
+    assert SKILL_MD_TEXT.count(anchor) > 0, \
+        f"anchor matched 0 times — SKILL.md does not document the J29 guard: {anchor!r}"

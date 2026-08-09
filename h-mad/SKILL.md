@@ -423,6 +423,17 @@ the live transcript (codex) or response (agy) to `<file>` as it runs, without
 disturbing the verdict on stdout or the exit code. Tail it to monitor a headless run.
 `--log` appends on both backends, so a caller-supplied log retains its prior content.
 
+**Give every dispatch its own `--out`.** It is last-writer-wins: two dispatches
+sharing one path both exit `0` and the file keeps only the second answer, so a
+lost verdict is indistinguishable from a dispatch that never ran (J29). As a
+backstop `exec` refuses to overwrite an `--out` whose content changed
+while it ran — the other dispatch's file is preserved, this one's answer still
+reaches stdout and `--log`, a `REFUSING to overwrite --out` line goes to stderr,
+and `rc` is untouched (it answers "did the CLI run", nothing else). A stale
+`--out` left by *this* caller's own failed attempt is unchanged since start and
+so is still overwritten — which is what keeps the `no_verdict` re-dispatch remedy
+(`references/failure-recovery.md`) working against its templated path.
+
 **`rc` and the token are different questions.** `rc` is operational (`0` = the CLI
 completed, `124` = watchdog timeout, non-zero = crash/abort); it does **not** mean
 the TDD task passed. Read the `STATUS:`/`VERDICT:` token exactly as the pane path

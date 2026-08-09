@@ -1116,7 +1116,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   transcript before re-running anything, since re-running is what destroyed the evidence the first
   time. Do not "fix" this without a reproduction.
 
-- 🟡 **J29 — `--out` is last-writer-wins across concurrent dispatches, silently; `--log` is not.**
+- 🟢 **J29 — `--out` is last-writer-wins across concurrent dispatches, silently; `--log` is not.**
   Verified deliberately while testing J28: two `exec agy` dispatches run concurrently against the
   same `--out` and `--log` both succeeded, but `--out` ended up holding **only the second
   responder's** answer while `--log` held both (it appends by design —
@@ -1126,3 +1126,15 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   dispatch that was never run. **Lesson/opt:** give every dispatch its own `--out`, or have `exec`
   refuse to overwrite a non-empty `--out` it did not create. The cheap guard is the refusal; the
   cheap discipline is one path per dispatch.
+  `GUARDED` 2026-08-09 — `exec` now fingerprints `--out` before dispatch and refuses to overwrite it
+  at all three write sites (codex `cp`, agy `printf`, and the empty-final-message recovery) when the
+  content changed in between. The refusal is keyed on **change**, not on non-emptiness: the literal
+  reading above ("refuse a non-empty `--out`") would have refused h-mad's own documented recovery,
+  since `references/failure-recovery.md`'s `no_verdict` remedy re-dispatches to a path templated per
+  feature+module (`/tmp/rev_<feature>_<module>.txt`) that the failed attempt already filled with its
+  short narration. A mutation run confirms the distinction is load-bearing — swapping the change
+  check for `[ -s "$out" ]` kills only `test_exec_still_overwrites_a_stale_out_left_by_a_previous_attempt`.
+  `rc` is deliberately untouched (it answers "did the CLI run"); the cure for a silent loss is the
+  stderr line plus the preserved file, not a new exit code. The *discipline* half stands unchanged:
+  one `--out` per dispatch. `hmad-dispatch.sh` `_out_clobber_ok`, SKILL.md §"Give every dispatch its
+  own `--out`", 6 tests in `test_hmad_dispatch_exec.py`.

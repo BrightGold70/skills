@@ -35,4 +35,13 @@ done
 # Streamed transcript (the run log) goes to stdout; the wrapper routes it to stderr.
 printf '%s\n' "${HMAD_STUB_CODEX_STDOUT:-[codex] running task...}"
 [ -n "${HMAD_STUB_CODEX_TOUCH:-}" ] && touch "$HMAD_STUB_CODEX_TOUCH"
+
+# J29: simulate a CONCURRENT dispatch landing its own verdict in a shared --out
+# while this one is still running. Writing from inside the stub is what puts the
+# rival's content there in the only window that matters -- after the wrapper
+# snapshotted the file and before it writes its own answer. (TOUCH above cannot
+# stand in: an empty file is indistinguishable from no file for this guard.)
+if [ -n "${HMAD_STUB_CODEX_RIVAL_OUT:-}" ]; then
+  printf '%s\n' "${HMAD_STUB_CODEX_RIVAL:-}" > "$HMAD_STUB_CODEX_RIVAL_OUT"
+fi
 exit "${HMAD_STUB_CODEX_RC:-0}"
