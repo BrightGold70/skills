@@ -29,14 +29,27 @@ If 2 or 3 is missing → run bootstrap automatically, then continue with the req
 `INSTALL: FAIL` → **halt `bootstrap:install_broken`** and surface the detail lines. Do not
 bootstrap and do not proceed: the install is what decides *which* copy of every script and
 prompt the run uses, so continuing means every later gate measures an unknown tree. The
-detail lines name the remedy directly — `SKILL_NOT_SYMLINK` wants the directory replaced
-with a symlink into the checkout, `HOOK_NOT_INSTALLED` wants
-`~/.claude/hooks/h-mad-tdd-gate.sh` linked to `<checkout>/hooks/h-mad-tdd-gate.sh`, and
-`SPLIT_INSTALL` means the two links resolve into *different* checkouts, so the gate you arm
-and the gate the suites exercise are different files. Repairing the install is an operator
-action; this check deliberately does not relink anything under `~/.claude` on its own.
+detail lines each name one remedy, and all seven have one:
 
-`INSTALL: UNREADABLE` is a cannot-judge (exit 2), not a pass — nothing was examined.
+| detail line | what it means | remedy |
+|---|---|---|
+| `SKILL_NOT_INSTALLED` | no `~/.claude/skills/h-mad` at all | `ln -s <checkout> ~/.claude/skills/h-mad` |
+| `SKILL_NOT_SYMLINK` | a real directory — a stale **copy** | remove it, then symlink as above |
+| `SKILL_DANGLING` | symlink whose target is gone (checkout moved/deleted) | repoint it at the current checkout |
+| `SKILL_NOT_A_CHECKOUT` | symlink resolves somewhere without `SKILL.md` | repoint it at a real h-mad checkout |
+| `HOOK_NOT_INSTALLED` | no `~/.claude/hooks/h-mad-tdd-gate.sh` | `ln -s <checkout>/hooks/h-mad-tdd-gate.sh ~/.claude/hooks/h-mad-tdd-gate.sh` |
+| `HOOK_DANGLING` | hook symlink whose target is gone | repoint it at the same checkout as the skills link |
+| `SPLIT_INSTALL` | both links resolve, into **different** checkouts | repoint whichever is wrong so both name one checkout |
+
+`SPLIT_INSTALL` is the one worth reading twice: each link looks correct on its own, so the
+gate you arm and the gate the suites exercise are different files. Repairing the install is an
+operator action; this check deliberately does not relink anything under `~/.claude` on its own.
+
+`INSTALL: UNREADABLE` is a cannot-judge (exit 2), not a pass — nothing was examined, so it is
+not a verdict about any install. **Halt `bootstrap:install_unreadable`**, distinct from
+`install_broken` so a bad invocation is never recorded as a bad install. It fires only when a
+path argument is empty, which means the caller passed one — re-run the documented command with
+no arguments, which uses the defaults, and read the token again.
 
 **No `INSTALL:` line at all — the script is missing, or the command errored — is itself the
 finding: halt `bootstrap:install_broken`.** An absent checker is evidence *of* the condition

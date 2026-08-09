@@ -75,8 +75,45 @@ def test_bootstrap_records_unreadable_as_a_cannot_judge():
 
 
 def test_bootstrap_records_the_self_staleness_limit():
-    """A stale copy runs the stale checker, so PASS from an unknown vintage is weak."""
-    assert "stale copy" in _bootstrap()
+    """A stale copy runs the stale checker, so PASS from an unknown vintage is weak.
+
+    Asserted as a LITERAL sentence. The first version of this test matched the
+    phrase "stale copy", which also occurs in the missing-checker rule below it —
+    so it passed with the whole limitation deleted. Caught by mutation
+    (`invariants.base.md` §"Test discrimination": a check that cannot fail is
+    decoration), not by review or by a green run.
+    """
+    body = " ".join(_bootstrap().split())
+    assert "It is a copy detecting its own staleness" in body
+    assert "can only report divergences the old copy is new enough to know about" in body, (
+        "the rule must state WHY a PASS from an unknown vintage is weak evidence"
+    )
+
+
+def test_bootstrap_gives_unreadable_its_own_halt_reason():
+    """A bad invocation must not be recorded as a bad install."""
+    body = " ".join(_bootstrap().split())
+    assert "bootstrap:install_unreadable" in body
+    assert "distinct from" in body
+
+
+def test_every_detail_line_has_a_named_remedy():
+    """A rule without an adjacent runnable remedy is 'hazard named, command
+    withheld' — an agent handed a rule it cannot obey improvises."""
+    body = _bootstrap()
+    for token in (
+        "SKILL_NOT_INSTALLED",
+        "SKILL_NOT_SYMLINK",
+        "SKILL_DANGLING",
+        "SKILL_NOT_A_CHECKOUT",
+        "HOOK_NOT_INSTALLED",
+        "HOOK_DANGLING",
+        "SPLIT_INSTALL",
+    ):
+        assert token in body, f"{token} has no remedy named in the bootstrap protocol"
+    # The two link-creating remedies must be runnable, not described.
+    assert "ln -s <checkout> ~/.claude/skills/h-mad" in body
+    assert "ln -s <checkout>/hooks/h-mad-tdd-gate.sh" in body
 
 
 def test_bootstrap_treats_a_missing_checker_as_the_finding():
