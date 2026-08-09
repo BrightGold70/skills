@@ -91,6 +91,30 @@
   handles, while the run reported 642 passed. Before mutating anything that decides *where* state is
   written, snapshot the real target and restore it, or run in a sandboxed working directory.
 
+## Guard narrowing
+- When a change **deliberately makes a guard accept something it used to reject**, the relaxation
+  MUST be shown to be *exactly* the intended case: run a corpus of inputs through the old and new
+  logic and diff the verdicts, then account for **every** input whose verdict softened. A green
+  suite is not evidence here — it encodes the cases someone already thought of, which is the wrong
+  population when the question is "what else did this let through?". This is the inverse of
+  §"Mutation verification": that proves a guard still bites, this proves a loosening did not widen.
+- The relaxation MUST rest on a **guarantee of the thing being parsed**, not on a heuristic that
+  re-implements it. Narrowing a scanner by "ignoring quoted regions" means re-deriving the target
+  language's quoting rules in a regex, which is how a bypass gets introduced; narrowing it by a rule
+  the language itself guarantees is safe. Verify that guarantee **against the real interpreter**,
+  not its documentation (§"Assumption verification").
+- Both halves were load-bearing when this was written. Narrowing a heredoc scanner so it stopped
+  denying inert prose, a 23-input differential corpus flagged one case as a regression; running the
+  shape through real `bash` showed the body genuinely never expands, so the *test expectation* was
+  wrong and the code was right. Without the corpus that case ships as either an unnoticed hole or a
+  "fix" applied to correct behaviour — and nothing else would have distinguished them. The same run
+  confirmed the intended relaxations numbered exactly two, and that the remaining 21 verdicts were
+  untouched.
+- A narrowing is scoped by **which checks consult the reduced input**, not by the reduction itself.
+  Exempting the quoted region from *one* class of check while every other class kept scanning the
+  full input is what kept the change from widening; a blanket exemption would have disabled
+  detections that were still correct for reasons unrelated to the false positive.
+
 ## Connection enforcement
 - A task whose deliverable is a **connection** — a call site, an import, a registration, a route, a
   flag or value propagated across a boundary — MUST ship a test that **fails when the connection

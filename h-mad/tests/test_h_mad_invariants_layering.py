@@ -138,6 +138,43 @@ def test_base_rule_mutation_verification_states_the_literal_instruction():
     )
 
 
+def test_base_rule_guard_narrowing_states_the_literal_instruction():
+    # Added 2026-08-09 after narrowing a heredoc scanner that was denying inert
+    # prose. The suite stayed green throughout — it encodes the cases someone
+    # already thought of, which is the wrong population for "what else did this
+    # let through?". A 23-input differential corpus is what caught the one case
+    # whose verdict changed unexpectedly, and running the shape through real
+    # `bash` is what settled whether the code or the expectation was wrong.
+    #
+    # Asserted as LITERAL sentences, per the reasoning in the mutation-
+    # verification test above: a rule that can vanish without failing a test is
+    # not in the rubric. Whitespace-normalised so a reflow cannot break it.
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    assert "## Guard narrowing" in text
+    assert "accept something it used to reject" in text, (
+        "the rule must name the situation it governs — a deliberate relaxation"
+    )
+    assert "diff the verdicts" in text, (
+        "the rule must prescribe the differential, not merely warn about risk"
+    )
+    assert "A green suite is not evidence here" in text, (
+        "the rule must block the specific fallacy: trusting the existing suite"
+    )
+    assert "not on a heuristic that re-implements it" in text, (
+        "the rule must require a guarantee of the parsed thing, not a re-derivation"
+    )
+
+
+def test_base_rule_guard_narrowing_is_paired_with_mutation_verification():
+    """The two are inverses and only make sense as a pair: one proves a guard
+    still bites, the other proves a loosening did not widen."""
+    text = " ".join(BASE.read_text(encoding="utf-8").split())
+    narrowing = text.index("## Guard narrowing")
+    assert 'inverse of §"Mutation verification"' in text[narrowing:], (
+        "the narrowing rule must point at its inverse, or a reader applies only one"
+    )
+
+
 def test_base_rule_incident_replay_states_the_literal_instruction():
     # Wave 4b candidate `replay-the-incident-against-the-fix` (recurrence 4),
     # reinforced by `replay-detector-against-history` (recurrence 3): 14
