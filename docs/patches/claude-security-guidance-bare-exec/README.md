@@ -1,7 +1,7 @@
 # security-guidance — bare `"exec("` substring blocks legitimate edits
 
-**Status:** applied locally on 2026-08-09. Upstream report drafted, **not filed**.
-**Upstream:** `anthropics/claude-plugins-official` (plugin `security-guidance`)
+**Status:** applied locally on 2026-08-09.
+**Upstream:** filed as [anthropics/claude-plugins-official#5085](https://github.com/anthropics/claude-plugins-official/issues/5085) — drop this patch if it ships.
 **Target file:** `~/.claude/plugins/cache/claude-plugins-official/security-guidance/unknown/hooks/security_reminder_hook.py`
 
 ## Why this directory exists

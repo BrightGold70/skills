@@ -138,6 +138,13 @@ python3 -m pytest ~/.claude/skills/h-mad/tests/ -q --tb=line     # expect 1173 p
 - Machine-wide arming sweep over `~/Coding` and `~/orca`: four `.bkit-memory.json`, none with an
   `orchestrator_state`. Nothing armed.
 
+**Plugin guard patches spun out of this session** (both local patches live in volatile plugin
+caches — run each `verify.*` after any plugin update; drop the patch if upstream ships the fix):
+- `docs/patches/bkit-enh310-quoted-heredoc-body/` — filed as
+  [popup-studio-ai/bkit-claude-code#145](https://github.com/popup-studio-ai/bkit-claude-code/issues/145)
+- `docs/patches/claude-security-guidance-bare-exec/` — filed as
+  [anthropics/claude-plugins-official#5085](https://github.com/anthropics/claude-plugins-official/issues/5085)
+
 **Related docs:**
 - `h-mad/SKILL.md:774` — "Editing this skill while a run is in flight" (why the install is a symlink,
   and the worktree discipline that follows from it)
