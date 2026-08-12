@@ -961,6 +961,8 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 | J25 | 🔴 | **FIXED** `379b881` | the Phase-7 `archreview` ladder had no `else`, so a record that never wrote the field returned `PHASE7: READY blockers=0` |
 | J26 | 🟢 | **FIXED** `e3213d6` | `h_mad_extract_verdict.py` printed its `[H-MAD]` marker to **stdout**, so a `$(...)` capture yielded two lines and any writer fed that value refused it. Marker now on stderr; stdout carries only the verdict |
 | J27 | 🟡 | **FIXED** `733a5f8` | doc tests sliced a magic 1600-char window; the section had already outgrown it, so a guard's scope depended on prose length |
+| J30 | 🔴 | MONITORING | **the reproduced form of [[J28]]**: `exec agy` drops BOTH output contracts (report-file **and** sentinel) on ~260 KB audit prompts — 5/5 dispatches, rc=0, narrating success. It *does* write a report, to a path of its own choosing: a workspace **dotfile**, or `~/.gemini/antigravity-cli/scratch/` while narrating "the current workspace" |
+| J31 | 🔴 | **FIXED** `9eb47ae` (issue #39) | `h_mad_do_preconditions` reached past `has_gate_sections` into `classify()`, so an audit report with **no** gate headings scored `must_count=0` and CLEARED the Phase-5 gate — failing open, while the audit-gate CLI returned `GATE: INVALID` on the same file. New `INVALID:` detail line, distinct from `DIRTY:` |
 
 - 🔴 **J19 — `ok:true` is not delivery, and `--ack` is destructive.** Two defects in one fix.
   Measured 2026-08-03: `orchestration dispatch` can return `ok:true`, `status:"dispatched"`,
@@ -1084,6 +1086,46 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   boundary via a `section_6a_prime()` helper, and by replacing the blanket ban with a positive
   assertion of the warning — a string ban forbids naming an anti-pattern in order to warn about it.
   Mutation-verified including a mutation that reverts the boundary slicing. [[J25]]
+
+- 🔴 **J30 — `exec agy` drops its output contract on ~260 KB prompts, and writes the report
+  somewhere you did not ask for.** This is **[[J28]] reproduced, with the missing variable named**:
+  J28 recorded a single `exec agy` returning exit 0 having produced nothing and closed as
+  unreproduced. It reproduces 5/5 once prompt size is controlled for, which is why one-off attempts
+  at ordinary size did not repeat it — the anomaly was never random, it was size-gated. Treat J28 as
+  the first sighting and this row as its mechanism.
+  Measured across the `guideline-seeder-config-plumbing` design
+  audits (2026-08-11): **5 of 5** dispatches at ~260 KB returned `rc=0` having honoured *neither*
+  transport — no `--report-file`, no `<AUDIT_SENTINEL>` pair — while narrating that the audit was
+  complete. This is the same claim-execution divergence catalogued as **F-10** in `AGENTS.md`, at a
+  prompt size an order of magnitude past the ~92 KB pane frontier and ~88 KB assembled-audit
+  maximum the skill documents, so no current guidance covers it.
+
+  **The failure is not that the work was skipped — it is that the artifact is unfindable.** agy
+  wrote a real report each time, at a path of its own choosing: once as a workspace **dotfile**
+  (`.design.audit.v14.md`), which is invisible to the `*audit.v14*` glob the orchestrator searches —
+  this is exactly how cycle 13 concluded "no file was written" and re-dispatched over completed
+  work — and once into `~/.gemini/antigravity-cli/scratch/` while narrating "the current workspace".
+
+  Two consequences for the gate. First, `h_mad_extract_report.py` exits 2 and the cycle halts, which
+  is the *correct* failure (silence never scores as a clean gate) but sends you to the documented
+  `no_verdict` remedy — `clear` and re-dispatch — which is wrong here: the audit already ran, and
+  re-dispatching a ~260 KB prompt costs another full cycle to reproduce the same drop. Second, the
+  §"A missing report on the `exec` path" recovery is explicitly scoped to *implementer* dispatches
+  and disclaims audits ("the same bytes twice"), so an audit at this size currently has **no**
+  documented recovery path at all.
+
+  Recovery that worked: search for the artifact before re-dispatching — include dotfiles
+  (`ls -a`, and a glob that does not assume the `audit.vN` stem) and `~/.gemini/antigravity-cli/
+  scratch/` — then transcribe it into the gate's schema by hand and **falsify every premise against
+  the source** (§"Verifying a review finding before acting on it"); a report recovered from an
+  off-contract path has had no schema enforcement applied to it whatsoever.
+
+  Related but distinct from the already-documented intermittent empty-slot case (2026-08-01, 358 B
+  of narration at ordinary prompt size): that one is intermittent and cured by filling the
+  report-file slot, whereas this reproduced **5/5 with the slot filled**. Size is the discriminator,
+  and the fix direction is therefore a size ceiling on audit dispatch, not another transport.
+  **Unverified:** the exact threshold between the ~88 KB known-good assembled audit and the ~260 KB
+  known-bad, and whether the drop is agy-side or a `--print` truncation. [[J23]]
 
 > **Registry-hygiene note, 2026-08-06.** J19–J23 were fixed between 2026-08-03 and 2026-08-05 and
 > referenced by ID in code comments and test docstrings the whole time, but never filed here — so

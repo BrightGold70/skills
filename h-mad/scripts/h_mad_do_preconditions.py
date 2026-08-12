@@ -31,14 +31,42 @@ import argparse
 import sys
 from pathlib import Path
 
-from h_mad_audit_gate import classify, _acknowledged_from_text
+from h_mad_audit_gate import classify, has_gate_sections, _acknowledged_from_text
 from h_mad_cycle_counts import latest_audit_path
 
 
 def _count_must_fix(path: Path) -> int:
+    """Count unwaived Must-fix findings in a report already known to be scoreable.
+
+    Counting only. It answers "how many findings", never "is this a real report" —
+    `_audit_issue` owns that question via `has_gate_sections`. Keeping the two
+    separate is deliberate: conflating them is what let a report with no findings
+    *section* read as a report with no findings (#39).
+    """
     text = path.read_text()
     acknowledged = _acknowledged_from_text(text)
     return classify(text, acknowledged=acknowledged)["must_count"]
+
+
+def _audit_issue(path: Path) -> str | None:
+    """Classify one audit report. `None` = clean; otherwise the issue detail line.
+
+    Routes the unscoreable case through the SHARED `has_gate_sections` rather than
+    re-deriving it (#39). This caller used to reach straight into `classify()`, so a
+    report with no `## Must-fix`/`## Should-fix` headings scored `must_count=0` and
+    CLEARED the Phase-5 gate — failing open, while the audit-gate CLI returned
+    `GATE: INVALID` on the very same file. Re-deriving the check is exactly how the
+    two drifted apart, so the guard must stay shared.
+
+    `INVALID` is deliberately distinct from `DIRTY`: an unscoreable report has no
+    findings to go and fix, it needs re-obtaining, and collapsing the two would hand
+    the operator the wrong remedy.
+    """
+    if not has_gate_sections(path.read_text()):
+        return f"INVALID:{path}"
+    if _count_must_fix(path) > 0:
+        return f"DIRTY:{path}"
+    return None
 
 
 def check(repo_root: Path, feature: str) -> tuple[int, list[str]]:
@@ -59,16 +87,20 @@ def check(repo_root: Path, feature: str) -> tuple[int, list[str]]:
     )
     if plan_audit is None:
         issues.append(f"MISSING:{plan_features}/{feature}.plan.audit.v*.md")
-    elif _count_must_fix(plan_audit) > 0:
-        issues.append(f"DIRTY:{plan_audit}")
+    else:
+        plan_issue = _audit_issue(plan_audit)
+        if plan_issue is not None:
+            issues.append(plan_issue)
 
     design_audit = latest_audit_path(
         repo_root / "docs", feature, "design", include_archive=False
     )
     if design_audit is None:
         issues.append(f"MISSING:{design_features}/{feature}.design.audit.v*.md")
-    elif _count_must_fix(design_audit) > 0:
-        issues.append(f"DIRTY:{design_audit}")
+    else:
+        design_issue = _audit_issue(design_audit)
+        if design_issue is not None:
+            issues.append(design_issue)
 
     return (1 if issues else 0, issues or ["OK"])
 
