@@ -21,10 +21,14 @@ Before any feature-level operation, check:
 1. Is the **skill itself** installed correctly? Run
    `python3 ~/.claude/skills/h-mad/scripts/h_mad_install_check.py` and read the
    `INSTALL:` token — never `$?`, which is 0 on both verdicts by design.
-2. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
-3. Does `docs/.bkit-memory.json` exist?
+2. Are the hooks **wired**, not merely installed? Run
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_hook_wiring.py` and read the `WIRING:`
+   token. This one never halts — see §"Wired, not just installed" — but it is not
+   optional to *run*: an unwired gate is silent in exactly the way a passing one is.
+3. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
+4. Does `docs/.bkit-memory.json` exist?
 
-If 2 or 3 is missing → run bootstrap automatically, then continue with the requested operation.
+If 3 or 4 is missing → run bootstrap automatically, then continue with the requested operation.
 
 `INSTALL: FAIL` → **halt `bootstrap:install_broken`** and surface the detail lines. Do not
 bootstrap and do not proceed: the install is what decides *which* copy of every script and
@@ -57,6 +61,41 @@ being checked, because the commonest way for this script not to exist is a `~/.c
 that predates it — which is exactly the stale copy the check is for. This is the one branch where
 "read the token, never `$?`" needs saying out loud: there is no token to read, and treating
 silence as consent reproduces the original defect in the one place it is most likely to occur.
+
+### Wired, not just installed
+
+`INSTALL:` proves the two symlinks resolve. It cannot prove any settings file *references* them,
+and an unwired hook is silent in the worst direction: writes and `advisor()` calls sail through
+exactly as they would if the gate had approved them. Run the wiring check alongside it:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_hook_wiring.py
+# WIRING: PASS
+# WIRING: FAIL issues=1  +  detail lines
+# WIRING: UNKNOWN reason=no_settings      (exit 2 — nothing was read)
+```
+
+**This is a separate verdict from `INSTALL:` on purpose, and it must never halt bootstrap.**
+Wiring depends on enumerating settings sources this check cannot be certain it has seen — managed
+policy, a `--settings` override, a plugin's own hooks, a project root above the directory it was
+pointed at. A false `INSTALL: FAIL` halts the run and no local edit clears it, which is strictly
+worse than a missed check. Treat `WIRING: FAIL` as a repair to make, not a reason to stop.
+
+| detail line | what it means | remedy |
+|---|---|---|
+| `HOOK_NOT_WIRED:<hook>` | no `PreToolUse` entry anywhere names it | add `{ "matcher": "<tools>", "hooks": [{ "type": "command", "command": "bash $HOME/.claude/skills/h-mad/hooks/<hook>" }] }` to `~/.claude/settings.json` |
+| `HOOK_WIRED_WRONG_MATCHER:<hook> matcher=… uncovered=…` | referenced, but no entry's matcher can fire on the named tools | widen the matcher to cover them — `Write\|Edit` for the TDD gate, `advisor` for the advisor gate |
+| `HOOK_WIRED_STALE_PATH:<hook> -> <path>` | the command names a path that does not exist | repoint the command at `$HOME/.claude/skills/h-mad/hooks/<hook>`, which rides the verified skills symlink |
+
+`uncovered=` is the field to read on a wrong matcher: a `Write`-only matcher gates half the TDD
+gate's surface and stands down on every `Edit` — it looks wired, and it is, to the wrong half.
+Sources searched are the user scope (`CLAUDE_CONFIG_DIR` when set, else `~/.claude`) plus every
+`.claude/settings*.json` from the working directory **up**, because that is how project settings
+resolve; a hook wired by an ancestor still counts. `UNKNOWN` means no settings file was readable
+at all — a cannot-judge, carrying no `issues=` so it cannot be mistaken for a clean count.
+
+Wiring can only be confirmed **live**, and hooks are snapshotted at session start, so this check
+reports what the *next* session will load, not what this one is running.
 
 Two properties of this check are worth knowing rather than rediscovering:
 
@@ -1000,26 +1039,47 @@ It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`, so it works 
 the current turn** — tool results already in flight are not in it. It is a floor, which is why the
 ceiling is 45 and not 50.
 
-### Above the ceiling, substitute — a ladder, not a menu
+### Which advisory channel — routed by what the advice must SEE
 
-1. **Schedule it early instead of substituting late.** `advisor()` is cheapest in Phases 1–3
-   (design, spec, plan) and that is also where its own docs say it adds the most value: before an
-   approach crystallises. Budget one call there. Treat the late "before declaring done" call as the
-   optional one — it is the expensive one, and by Phase 6 the artifacts exist to review instead.
-2. **`hmad-dispatch exec agy` over the artifacts** — H-MAD's native substitute, and the right one
-   at Phase 5b/6a. It reviews in its **own** context and only its report (~2k) returns, and it is
-   an independent model, so the stronger-second-opinion property survives. It gets *fresh* context,
-   so it must be handed durables — the impl-plan, the diff, the state file — which every H-MAD gate
-   already produces. See `references/agy-architectural-reviewer-prompt.md` and the 6a-prime flow.
-3. **`Agent(subagent_type: "fork")`** when the review genuinely needs the *conversation*, not the
-   artifacts. A fork inherits the full transcript at ~zero cost to your window (only its report
-   returns) — but it runs on **your** model, so you trade away the stronger-reviewer property that
-   is the whole point of `advisor()`. Use it for "did I miss something in what I just did", not for
-   "is this design right".
-4. **`/compact` first, then call** — last resort, and only when you specifically need advisor's
+`advisor()` is not the default advisory channel for an H-MAD run; **agy is**. Route by the
+question's required input, not by how hard the question feels — "hard vs easy" is unjudgeable in
+the moment and collapses under pressure, while "what does this advice have to read?" is a fact
+about the question:
+
+| the advice needs | channel | why |
+|---|---|---|
+| **artifacts** — design, spec, plan, diff, code, state | `hmad-dispatch exec agy` | it reads them itself, in its own context; only its report (~2k) returns |
+| **this session's trajectory** — what was tried, what is assumed, where reasoning bent | `Agent(subagent_type: "fork")` | inherits the transcript at ~zero cost to your window, but runs on **your** model |
+| **both** the trajectory *and* a stronger reviewer | `advisor()` | the only thing that supplies both — and the only one that costs a second copy of the session |
+
+Everything H-MAD produces at a gate is an artifact, which is why agy is the reflex and `advisor()`
+the exception. The rule to hold: **`advisor()` is for the hardest calls only** — reserve it, and
+never spend it on a question agy could answer by reading the repo.
+
+1. **`hmad-dispatch exec agy <promptfile>` — the default.** Reflex in Phases 1–4 (brainstorm,
+   spec, plan, design) and at 6/6a-prime, where the work *is* static and a fresh independent
+   reviewer is exactly what is wanted. It is an independent model, so the stronger-second-opinion
+   property survives; it gets *fresh* context, so hand it durables. See
+   `references/agy-architectural-reviewer-prompt.md` and the 6a-prime flow.
+2. **`Agent(subagent_type: "fork")`** when the question is about the conversation and model
+   strength is not the point — "did I miss something in what I just did", not "is this design
+   right".
+3. **`advisor()`, below the ceiling.** Cheapest in Phases 1–3, and its own docs say that is also
+   where it adds the most value: before an approach crystallises. Budget one call there. The late
+   "before declaring done" call is the optional one — it is the expensive one, and by Phase 6 the
+   artifacts exist to review instead.
+4. **`/compact` first, then `advisor()`** — last resort, and only when you specifically need the
    full-history view at a high baseline. Compacting is lossy, and late-session review is valuable
    *because* of the accumulated detail, so this degrades exactly what you are paying for.
    Compacting **after** the overflow recovers nothing.
+
+**What defaulting to agy costs you: trajectory awareness.** agy runs fresh and has zero knowledge
+of the dead ends you just explored, so a bare "what should I do here?" gets back, confidently, the
+naive fix you rolled back five minutes ago. When you consult it while *stuck*, the prompt must
+carry your failed attempts explicitly — what you tried, what the output was, why you reverted —
+or you are paying for a review of a problem it cannot see. That is also the boundary: **5d/5e
+(the RED/GREEN loop) and 6b (iterate) are where agy is the wrong tool**, because there the
+trajectory is the whole of the evidence.
 
 ### Making it mechanical — the advisor gate hook
 
@@ -1457,6 +1517,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_wire_registry.py` — Phase-5 wire registry: records passing `wiring` pins and re-verifies them at 5f, emitting the documented `[H-MAD]` halt reasons; its challenge command is warning-only and verdict-neutral. Stdlib-only.
 - `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
 - `h_mad_context_budget.py` — orchestrator context budget: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
+- `h_mad_hook_wiring.py` — hook-wiring check: `check()` + CLI printing `WIRING: PASS|FAIL issues=N`, exit 0 on a verdict / 2 on `WIRING: UNKNOWN reason=no_settings` (no readable settings file, so nothing was examined — it carries no `issues=`). Detail lines `HOOK_NOT_WIRED:`/`HOOK_WIRED_WRONG_MATCHER:`/`HOOK_WIRED_STALE_PATH:`. Deliberately a separate verdict from `INSTALL:` so a settings source this check cannot see can never halt bootstrap (§"Wired, not just installed"). Searches the user scope honouring `CLAUDE_CONFIG_DIR` and every `.claude/settings*.json` up the tree, matches on the hook **basename** inside the command (the live wiring is `bash $HOME/…/hook.sh`, an unexpanded variable in a longer line), and treats match-all matchers before regex so `*` cannot raise. Stdlib-only.
 - `h_mad_doc_shape_check.py` — doc-superset guard for saved phase documents (run at Phase 3/4/7 save, see `references/inline-protocols.md`): `check_document()` + CLI printing one `DOC-SHAPE: PASS|FAIL|SKIP path=… type=…` line per path, exit 0 on a verdict / 2 on an unreadable path (with no partial verdict stream). `SKIP` is the correct verdict for h-mad's brainstorm/spec/impl-plan/audit documents — they sit outside the external validator's detection by design and have no superset contract. FAIL reports dropped required sections *and* plan-plus escalation literals in a plan's prose: the templates are compliant and tested, but the authored body is not the template, and the escalation literals are ordinary words an author has no reason to suspect. The section tables and literals are h-mad's own copy so the check runs standalone (§"Standalone / no plugin dependency"); `tests/test_h_mad_doc_shape_check.py::TestMirrorFidelity` diffs the tables, the literals, and the verdicts against the live external validator when installed and fails on drift, which is what keeps the mirror honest (§"Single-source verdicts"). Stdlib-only.
 
 ### file-issue-then-fix-under-TDD

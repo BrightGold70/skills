@@ -29,8 +29,8 @@
   {
    "name": "drop-fork-tradeoff",
    "file": "SKILL.md",
-   "find": "but it runs on **your** model",
-   "replace": "and it is strictly better"
+   "find": "but runs on **your** model",
+   "replace": "and is strictly better"
   },
   {
    "name": "drop-snapshot-warning",
@@ -79,6 +79,30 @@
    "file": "SKILL.md",
    "find": "it protects only sessions where it is wired",
    "replace": "it protects everything"
+  },
+  {
+   "name": "advisor-becomes-default-again",
+   "file": "SKILL.md",
+   "find": "`advisor()` is not the default advisory channel for an H-MAD run; **agy is**.",
+   "replace": "`advisor()` is the default advisory channel for an H-MAD run."
+  },
+  {
+   "name": "route-by-difficulty",
+   "file": "SKILL.md",
+   "find": "not by how hard the question feels",
+   "replace": "by how hard the question feels"
+  },
+  {
+   "name": "drop-trajectory-warning",
+   "file": "SKILL.md",
+   "find": "naive fix you rolled back five minutes ago",
+   "replace": "useful answer"
+  },
+  {
+   "name": "drop-agy-wrong-phases",
+   "file": "SKILL.md",
+   "find": "**5d/5e\n(the RED/GREEN loop) and 6b (iterate) are where agy is the wrong tool**",
+   "replace": "agy works everywhere"
   }
  ]
 }

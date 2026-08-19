@@ -131,28 +131,50 @@ class TestTheCeiling:
         assert "false `OK`" in s
 
 
-class TestTheSubstituteLadder:
-    def test_ranks_early_scheduling_first(self):
+class TestChannelRouting:
+    def test_agy_is_the_default_not_advisor(self):
+        """The whole point of the section: advisor() is the exception. If this line
+        softens, the expensive channel silently becomes the default again."""
         s = _section()
-        assert "Schedule it early" in s
+        assert "**agy is**" in s
+        assert "hardest calls only" in s
 
-    def test_names_exec_agy_as_the_native_substitute_over_artifacts(self):
+    def test_routes_by_required_input_not_by_difficulty(self):
+        """"Hard vs easy" is unjudgeable in the moment; "what must this advice read"
+        is a fact about the question."""
+        s = _section()
+        assert "required input" in s
+        assert "unjudgeable in the moment" in s
+        # the NEGATION is the load-bearing half: naming the required input while
+        # still inviting a difficulty judgement leaves the old, unusable rule in place
+        assert "not by how hard the question feels" in s
+
+    def test_the_three_channels_and_their_distinguishing_property(self):
         s = _section()
         assert "hmad-dispatch exec agy" in s
-        assert "own** context" in s or "own context" in s
-        assert "durables" in s or "impl-plan" in s
-
-    def test_names_fork_and_its_tradeoff(self):
-        """A fork is free for the window but runs on the SAME model. Omitting the
-        tradeoff makes it look like a strict upgrade over advisor()."""
-        s = _section()
         assert 'subagent_type: "fork"' in s
         assert "your** model" in s or "your model" in s
+        assert "second copy of the session" in s
 
-    def test_ranks_compact_last_and_says_before_not_after(self):
+    def test_names_the_cost_of_defaulting_to_agy(self):
+        """A fresh reviewer confidently re-proposes the thing you just reverted.
+        Without this warning the default is a trap when you are stuck."""
         s = _section()
-        assert "/compact" in s
-        assert "lossy" in s
+        assert "trajectory awareness" in s
+        assert "rolled back five minutes ago" in s
+        assert "failed attempts" in s
+
+    def test_maps_the_phases_both_ways(self):
+        s = _section()
+        assert "Phases 1–4" in s
+        assert "6a-prime" in s
+        assert "5d/5e" in s and "6b" in s
+        assert "wrong tool" in s
+
+    def test_keeps_advisor_early_and_compact_last(self):
+        s = _section()
+        assert "Phases 1–3" in s
+        assert "/compact" in s and "lossy" in s
         assert "**after** the overflow recovers nothing" in s
 
     def test_bans_batching_the_call_into_a_heavy_turn(self):
