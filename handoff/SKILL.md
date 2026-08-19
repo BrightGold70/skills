@@ -43,6 +43,16 @@ After the handoff markdown is written (and not on `--dry-run`), leave a durable,
 
 - Gate on substrate: run `hmad-dispatch env`; proceed only if it reports `substrate: orca`. (`hmad-dispatch` is the h-mad wrapper; if it is not on PATH, skip this step.)
 - Preserve a foreign note: the worktree comment is a single shared field. First read `.worktree.comment` via `hmad-dispatch worktree-current`. If it is non-empty AND does not already start with `handoff:`, `handover:`, `taken over:` or `h-mad` (i.e. a human wrote it, not a prior stamp), keep it — append the checkpoint after it (`<existing> — handoff: …`) rather than clobbering. An empty comment or a prior skill stamp is replaced outright.
+- **Prove the read before acting on an empty result — this is the one destructive instance.** "Comment is empty" and "I could not read the comment" produce the same value and lead to opposite correct actions: the first says replace, the second says do not touch a field you cannot see. A wrong accessor, a non-zero exit, or unparseable output therefore **clobbers a human's note** while looking like the documented happy path. So require the container, not just a falsy value:
+
+  ```python
+  d = json.load(sys.stdin)
+  if "worktree" not in d or "comment" not in d["worktree"]:
+      sys.exit("[handoff] worktree_comment_skipped: could not read comment — refusing to overwrite")
+  existing = d["worktree"]["comment"] or ""    # only NOW is empty meaningful
+  ```
+
+  Skipping the stamp costs a checkpoint; overwriting costs someone's note. Take the skip. (`worktree`/`comment` are post-unwrap keys — see READ Step 3 and `h-mad/references/agent-substrate.md` §"The `.result` envelope".)
 
   **All four prefixes, not just `handoff:`.** This skill writes three of them — WRITE stamps `handoff:`, HANDOVER Step 4 stamps `handover:`, TAKEOVER stamps `taken over:` — and HANDOVER's own preserve rule already lists them. A WRITE that knows only `handoff:` treats its sibling modes' stamps as human notes and appends to them, so a worktree accumulates `handover: … — handoff: … — handoff: …` instead of carrying one current checkpoint. Keep this list and HANDOVER Step 4's identical.
 - Stamp: `hmad-dispatch worktree-comment active "handoff: <slug> · <status> · next: <next-step>"`, where `<slug>` is the handoff doc's slug, `<status>` a 2–4 word state, `<next-step>` the top Next Step.
@@ -178,6 +188,18 @@ In parallel:
 - **Orca worktree reconcile** (Orca only) — if `hmad-dispatch env` reports `substrate: orca`, reconcile against Orca's worktree model, which persists across sessions and the mobile app where git+PID state does not:
   - `hmad-dispatch worktree-current` → the payload is `{"worktree":{…}}`; read `.worktree.branch`, `.worktree.path`, `.worktree.comment`. Compare branch/path to the doc's Branch/worktree — **but `.worktree.branch` is a full ref (`refs/heads/main`) while the doc and `git rev-parse --abbrev-ref HEAD` use the short name (`main`), so strip the `refs/heads/` prefix before comparing** or every resume reports a phantom mismatch. A genuine mismatch is a divergence line (you may be in the wrong worktree). `.worktree.comment` is the last checkpoint the writing session left (see WRITE stamp) — quote it if present.
   - `hmad-dispatch worktree-ps` → the payload is `{"worktrees":[…],"totalCount","truncated"}`; iterate `.worktrees[]` and list each as `<.branch> · <.comment>` (branch is again a full ref — strip `refs/heads/`) so in-flight siblings (parallel agents, queued fanout modules) are visible before you act. If `.truncated` is true, say so — the list is capped (raise the cap with `worktree-ps --limit <n>`).
+
+    **Assert the `worktrees` key before reporting a count.** "0 siblings" and "I read the wrong key" produce identical output, so a bare count is not evidence until the container is proven present — report `container missing` as its own outcome, distinct from an empty list:
+
+    ```python
+    d = json.load(sys.stdin)
+    if "worktrees" not in d:          # NOT `d.get("worktrees", [])` — that silently becomes 0
+        print("worktree-ps: container missing — not an empty list", file=sys.stderr)
+    else:
+        for w in d["worktrees"]: ...
+    ```
+
+    **These paths are post-unwrap.** `hmad-dispatch` emits the contents of orca's `.result` envelope, which is why `worktrees`/`worktree` are read at top level here. Raw `orca … --json` nests them under `.result` (`.result.worktrees[]`, `.result.terminals[]`), so a snippet copied from this bullet onto a raw `orca` call measures nothing and says `0`. Full rule: `h-mad/references/agent-substrate.md` §"The `.result` envelope — assert the container before reading a count".
   - Read-only: use only `worktree-current`/`worktree-ps`/`worktree-list` (the last one is what the Parked-item bullet above uses for `childWorktreeIds`); never `worktree-comment`/`create`/`rm` here, and never call `orca` directly. A non-zero result emits `[handoff] worktree_reconcile_skipped` and the reconcile falls through to the git+PID checks above unchanged.
 
 A divergence is not a failure — it's just information the user needs before acting. State each one as a single sentence.
@@ -468,6 +490,8 @@ hmad-dispatch worktree-comment "<target-worktree>" "<composed-value>"
 
 If the target is not in `worktree-ps` at all, skip the stamp — it is an enrichment, never a gate — and say so rather than stamping the wrong worktree.
 
+The snippet's `['worktrees']` and `WORKTREE-NOT-FOUND` are load-bearing in opposite directions and neither is decoration: the subscript raises loudly if the container is absent (never soften it to `.get('worktrees', [])`, which turns a wrong key into a silent "no such worktree"), and the `for`/`else` distinguishes *scanned the list, target absent* from *never scanned anything*. As in READ Step 3, these keys are **post-unwrap** — `hmad-dispatch` strips orca's `.result` envelope, so a raw `orca worktree ps --json` needs `.result.worktrees[]` instead. See `h-mad/references/agent-substrate.md` §"The `.result` envelope".
+
 ### Step 5: Deliver — via `orca-cli`, not by reimplementing it
 
 Invoke the **`orca-cli` skill by name** (the Skill tool — it is a registered skill, so do not go hunting for a file path) and use its Full Handoffs commands: `worktree create --no-parent --agent <agent> --prompt …` for a new lane, `terminal send --terminal <handle> --text … --enter` for an existing one.
@@ -475,6 +499,8 @@ Invoke the **`orca-cli` skill by name** (the Skill tool — it is a registered s
 `--no-parent` is the **default, not a rule**: it makes the handover an independent top-level lane, which is what "this is no longer mine" usually means. Drop it — and pass a parent/base instead — when the user actually asked for stacked work ("hand this to a child worktree", "branch from current", a named base). Hardcoding it there silently strips the lineage they asked for, and Orca's own guide conditions the flag the same way. Those flag names are a hint, not the contract — that skill defers to the `orca` binary's own version-matched guide, which is the only source that cannot drift from the binary you are about to run.
 
 **Send the path, not the payload.** The prompt should name the brief and the location block, then stop — a prompt carrying the whole document decays the moment the doc is updated, and there is then no single source of truth about what was handed over.
+
+**A successful send is not a pickup.** `terminal send` answers `accepted: true, bytesWritten: <n>`, and that is the *write* succeeding: the bytes reached a live pty handle. It is not evidence the receiving session read the prompt or acted on it — `bytesWritten` measures your payload, not their behaviour, and is non-zero into a pane that is wedged, mid-redraw, or running something else. A `connected: true` listing rules out only the **stale-pin** failure (writing into a handle that no longer exists); it says nothing about whether anyone picked the work up. Report the transfer accordingly: say the brief was delivered to `<handle>` and that acceptance was by a live handle, not that the receiver started. Pickup is proven only by something the receiver produces (a claim on the feature, a commit, a `taken over:` stamp) — and waiting for that is supervision, i.e. the `orchestration` skill and a different ask, per Step 6. The same distinction on h-mad's other delivery surfaces: `h-mad/references/orchestration-mode.md` §`worker-start`.
 
 ### Step 6: Let go
 

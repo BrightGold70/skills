@@ -915,9 +915,14 @@ a stale overdrawn frame (J3).
 
 If you bypass the wrapper and scrape a pane read-only with the raw CLI
 (`orca terminal read --terminal <handle> --limit <n> --json`), the scrollback
-lines live at `.result.terminal.tail[]` — **not** `.rows[]` or `.lines[]` (a wrong
-jq path returns empty and reads as "no match"). `jq -r '.result.terminal.tail[]?'`
-to grep a live pane; `--limit <n>` pulls more retained rows.
+lines live at `.result.terminal.tail[]` — **not** `.rows[]` or `.lines[]`.
+`jq -r '.result.terminal.tail[]?'` to grep a live pane; `--limit <n>` pulls more
+retained rows. This is one instance of the `.result` envelope rule, which applies
+to every raw `orca … --json` call and is stated once in
+`references/agent-substrate.md` §"The `.result` envelope — assert the container
+before reading a count": a wrong path yields empty, empty reads as "no match", and
+the two are indistinguishable until you assert the container with `jq -e`. Read it
+before writing any parser against a raw orca payload.
 
 It takes the **last** matching line, validates the value against the contract,
 and exits 2 printing nothing when the line is absent, empty, off-contract, or the

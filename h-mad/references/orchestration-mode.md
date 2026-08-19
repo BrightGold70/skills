@@ -253,6 +253,21 @@ orca orchestration worker-start --task <id> --worktree current --agent codex \
   worker's own `worker_done` / report-file**, never the launch response. Never
   treat a successful `worker-start` as a module in flight; treat it as a module
   that has been asked.
+- **`accepted: true` / `bytesWritten: <n>` from `orca terminal send` is the same
+  class, on a different surface.** It means the bytes reached a live pty handle —
+  the write succeeded. It is *not* proof the receiving session read the prompt,
+  parsed it, or acted on it. `bytesWritten` in particular measures your payload,
+  not their behaviour: it is non-zero for a pane that is wedged, mid-redraw, or
+  running something else entirely. A `connected: true` listing rules out only the
+  **stale-pin** failure (writing into a handle that no longer exists) — it says
+  nothing about pickup. So the three delivery surfaces all report the same thing
+  in different words: `stage:"input_accepted"` (worker-start), `injected:true`
+  (dispatch), `accepted:true`/`bytesWritten` (terminal send) each confirm *handed
+  to the terminal*, and none confirms *consumed by the agent*. Pickup is only ever
+  proven by something the receiver produces — `worker_done`, a report-file, a
+  commit, a verdict line. If you want that confirmation you are asking for
+  supervision, which is the `orchestration` skill and a different request; a
+  handover deliberately does not wait for it.
 - Raw `dispatch` has no readiness contract: it reports the task row, not whether
   the worker was told. **`--inject` is what delivers**, and its absence is
   silent — `ok:true`, `status:"dispatched"`, `injected:false`, exit 0.

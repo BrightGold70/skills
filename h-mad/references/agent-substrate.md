@@ -258,3 +258,36 @@ capture unreliable in ways cmux/Codex are not. Observed live and worked around:
 - Wait: `orca terminal wait --terminal <handle> --for exit|tui-idle [--timeout-ms <n>]`.
 - Read: `orca terminal read --terminal <handle> [--limit <n>]`.
 - List: `orca terminal list --json` returns terminal handles at `.result.terminals[].handle`.
+
+### The `.result` envelope — assert the container before reading a count
+
+**Every raw `orca … --json` payload is enveloped under `.result`.** There is no
+top-level `terminals`, `worktrees`, `task`, `automation`, or `messages` key. A bare
+top-level accessor does not error — it yields empty, and **empty-from-a-wrong-path is
+indistinguishable from a genuinely empty result**. That is the whole hazard: `terminals: 0`
+is the same output whether no terminal exists or you spelled the path wrong, so the number
+carries no information until the container is proven to exist. This is the same doctrine as
+`WIREPIN: UNREADABLE` carrying no `tasks=` count — **a cannot-read must not read as a
+nothing-found**, and existence and content are two columns, never one.
+
+So before reading any length, count, or `[]` iteration out of an orca payload, assert the
+container:
+
+```bash
+printf '%s' "$json" | jq -e '.result.terminals' >/dev/null || { echo "container missing — not an empty list" >&2; return 1; }
+```
+
+`scripts/hmad-dispatch.sh` is the reference implementation: `jq -e '.result.worktrees' >/dev/null 2>&1 || return 1`
+guards the `worktree ps` parse before anything iterates it, and every jq path in that file is
+`.result.…`-rooted. Copy that shape rather than inventing a local one.
+
+Measured 2026-08-20: a hand-written parser read a top-level `terminals` key out of
+`orca terminal list --json` and reported `terminals: 0` for a lane the same session had used
+minutes earlier. It was caught only because zero contradicted something already known — which
+is not a detection method. Two sibling traps landed the same session, all one class.
+
+**`hmad-dispatch` unwraps the envelope for you.** Its verbs emit the *contents* of `.result`,
+so wrapper output is read at top level (`.worktree`, `.worktrees[]`) and raw `orca` output is
+read at `.result.…`. Mixing the two conventions is the most common way into this trap: a
+snippet copied from wrapper docs onto a raw call silently measures nothing. Whenever you drop
+from `hmad-dispatch` to raw `orca`, re-root every path.
