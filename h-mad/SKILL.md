@@ -560,11 +560,15 @@ work is how a second, conflicting implementation gets written over a correct one
 **All three steps are scoped to an implementer dispatch — do not apply them to `exec
 agy`.** They exist because a codex RED/GREEN leaves artifacts in the working tree, which
 is both the thing to recover from and the reason a blind re-dispatch is destructive. An
-audit writes nothing to the tree: step 1 is the same bytes twice (above), and steps 2–3
-have no delta to enumerate and no code to re-derive a verdict from. A short or
-sentinel-less agy exec is therefore a plain `<phase>:no_verdict` halt, and its documented
-route is the opposite of this one — re-read, then `hmad-dispatch clear agy` and
-re-dispatch (audits are idempotent, so that is safe). Never score the narration: the 358 B
+audit writes nothing to the tree, so steps 2–3 have no delta to enumerate and no code to
+re-derive a verdict from. **Step 1 is the exception and it now carries real weight:** it
+used to be the same bytes twice, but under `--output-format stream-json` an agy `--log`
+holds the whole event stream, so it is worth reading on its own before anything else.
+A short or sentinel-less agy exec is therefore a plain `<phase>:no_verdict` halt whose
+documented route is the opposite of this one — read the stream with
+`hmad-dispatch progress <log> --lines 50` first, and only if the report is genuinely
+absent, re-read, then `hmad-dispatch clear agy` and re-dispatch (audits are idempotent,
+so that is safe). Never score the narration: the 358 B
 case named real findings and would have read as a substantive review to a human skimming
 it, while carrying no schema the gate can count.
 
