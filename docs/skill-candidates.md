@@ -8,13 +8,14 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
-## Open, highest recurrence first (reconciled 2026-08-19)
+## Open, highest recurrence first (reconciled 2026-08-20)
 
 **Two `candidate: yes` are open**, and neither is the one that was loudest.
 `live-e2e-pane-janitor` (rec 6 → **8**) — still open, but **re-scope before building**: the hard
 half (identifying which panes this session created) is now solved by `exec-pane`'s slot registry
 `.h-mad/panes/<handle>.cd`, so what remains is only closing probe panes created outside that verb.
-`vendored-plugin patch kit` (rec 2) — untouched.
+`vendored-plugin patch kit` (rec 2) — untouched. Both re-checked against source on 2026-08-20 and
+still open; see that session's block below.
 
 **`audit-cycle-background-dispatch` (rec 8) is now LANDED** (2026-08-19). It called itself right:
 a SKILL.md fix, not a new skill. `h-mad/SKILL.md` now backgrounds every dispatch example, bans
@@ -388,3 +389,37 @@ session bore on it.
   rather than trusting the brief. Recurrence: 1 — candidate: no. Already covered by the handoff
   skill's §"Take over handed-over work" point 2 ("Verify the premises before adopting them"); noting
   it only as a live confirmation that the step earns its place.
+
+## 2026-08-20 — advisor-context-budget-and-hook-wiring
+
+Open rows re-checked against source, not against their labels: `live-e2e-pane-janitor` — still
+open, unchanged by this session (`grep -c pane-janitor` over `hmad-dispatch` returns 0; the only
+cleanup verb is still `worktree-rm`). `vendored-plugin patch kit` — untouched, no third vendored
+patch appeared. Neither flips.
+
+- **verdict-token gate scaffold**: h-mad hand-rolls one shape over and over — `check()` + a CLI
+  printing `TOKEN: PASS|FAIL issues=N`, exit 0 on a verdict / 2 on a cannot-judge that carries **no
+  count**, a doc table mapping every detail line to a runnable remedy, a bidirectional docs test
+  (token in script ⇔ token in SKILL.md), and a parked mutation spec. Counted from SKILL.md's own
+  helper registry: **12 distinct verdict tokens** (`CTXBUDGET`, `DOC-SHAPE`, `GATE`, `INSTALL`,
+  `ISSUEFIX`, `MUTATION`, `PHASE7`, `PRECONDITION`, `STATE`, `STATE-WRITE`, `WIREPIN`, `WIRING`),
+  two of them written this session from scratch — recurrence: 12 — candidate: maybe — **read the
+  reason before promoting.** This is not a new skill; it is a generator or a template belonging
+  *inside* h-mad (`scripts/` plus the matching test + mutation-spec stubs). The parts that actually
+  cost time twice today were the invariants, not the code: cannot-judge must carry no count, the
+  CLI must exit 0 on a verdict, and the docs table must be pinned bidirectionally or it drifts. A
+  scaffold that emits those three by construction is worth more than one that emits argparse.
+
+- **background-poll-until**: `sleep` is blocked in the foreground, so waiting on a long job means
+  `run_in_background` plus `until [ -s <outfile> ]; do sleep N; done`. Hand-rolled 4× this session
+  for one 3-minute pytest suite, and got it wrong twice (an empty output file reads as "still
+  running" whether the job is running or its output never landed) — recurrence: 4 — candidate: no
+  — the harness already re-invokes on completion, so the correct fix is to stop polling at all and
+  let the task notification arrive. Recorded because the *wrong* reflex recurred, not because a
+  skill is missing.
+
+- **mutation-spec parking**: mutation specs were being written to `/tmp` and evaporating, so a
+  guard nobody could re-run was indistinguishable from one nobody had checked. Four specs now live
+  at `h-mad/tests/mutation-specs/*.json` and are re-runnable by path — recurrence: 1 — candidate:
+  no — this shipped as a repo convention this session; it is a note for whoever wonders where the
+  specs went, not a candidate.
