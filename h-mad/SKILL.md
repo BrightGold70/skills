@@ -521,10 +521,16 @@ would type into an agent's TUI if the guess were wrong. `--no-reuse` forces a fr
 because the shell rewrites the title via OSC on every prompt — a pane renamed to
 `h-mad slot · idle` reads back as `~/orca/skills` the moment it reaches a prompt.
 
-Known, deliberate window: `--wait` returns as soon as the rc file lands, ~1-2s before the
-pane finishes rendering its last digest and releases its slot. A second dispatch fired
-inside that window creates a second pane instead of reusing. Closing it would mean adding
-latency to the verdict, which is the wrong trade.
+`--wait` still returns the moment the rc file lands, ~1-2s before the pane finishes its
+last digest and releases the slot — the verdict must not wait on cosmetics. A dispatch
+fired inside that gap used to create a second pane; it no longer does. A pane drops a
+`.finishing` marker as soon as its dispatch completes, and a claim that finds nothing idle
+waits (default 8s, `--reuse-wait`, or `HMAD_PANE_REUSE_WAIT_SEC`) **only** for a slot
+carrying that marker. A busy slot without one is genuinely working, so it is never waited
+on — which is what keeps Phase 5 parallel fanout from paying the wait on every dispatch.
+The wait costs no verdict latency: it happens before the dispatch starts, not after it
+ends. It also refreshes its view of which panes are live as it waits, so a pane that dies
+mid-wait ends the wait instead of running it out, and its stale marker is reaped.
 
 `--split` with no value means **this** terminal — the only unambiguous reading of "the
 same surface". It refuses rather than guessing a pane from `terminal list`: guessing

@@ -2641,7 +2641,49 @@ _pane_slot_register() {  # <handle> <cd_dir>
 # $ORCA_TERMINAL_HANDLE, so it needs nothing spliced in but the directory.
 _pane_slot_release_snippet() {  # <slot-dir>
   local d; d="$(_shq "$1")"
-  printf 'rmdir %s/"$ORCA_TERMINAL_HANDLE".busy 2>/dev/null; : > %s/"$ORCA_TERMINAL_HANDLE".idle' "$d" "$d"
+  printf 'rm -f %s/"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null; rmdir %s/"$ORCA_TERMINAL_HANDLE".busy 2>/dev/null; : > %s/"$ORCA_TERMINAL_HANDLE".idle' "$d" "$d" "$d"
+}
+
+# Marker a pane drops the moment its DISPATCH is done but before the pane itself
+# is, i.e. for the ~1-2s it still needs to render its final digest.
+#
+# This exists to close a real gap without paying for it. `--wait` returns as soon
+# as the rc file lands, which is CORRECT -- the verdict should not wait on
+# cosmetics -- but it means a caller who immediately dispatches again finds the
+# slot still `.busy` and creates a second pane. The naive fixes are both bad:
+# releasing the slot earlier would let the next dispatch `send` keystrokes into a
+# pane whose previous command is STILL RUNNING (the text would go to that
+# command's stdin and never reach a prompt), and having every claim wait a few
+# seconds would tax Phase 5 parallel fanout, where the busy panes are genuinely
+# busy and waiting is pure delay.
+#
+# The marker separates the two cases exactly: `.finishing` means "free within
+# seconds, worth waiting for", its absence means "actually working, do not wait".
+_pane_slot_finishing_snippet() {  # <slot-dir>
+  printf ': > %s/"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null || true' "$(_shq "$1")"
+}
+
+# Is any slot for <cd_dir> about to free? Used only to decide whether waiting is
+# worthwhile; the claim itself still goes through _pane_slot_claim.
+_pane_slot_finishing_exists() {  # <cd_dir> <live-handles>
+  local cd_dir="$1" live="$2" d f h
+  d="$(_pane_slot_dir)"
+  [ -d "$d" ] || return 1
+  for f in "$d"/*.finishing; do
+    [ -e "$f" ] || continue
+    h="$(basename "$f" .finishing)"
+    # A dead pane's marker is worth reaping here rather than waiting on: nothing
+    # else will ever clear it, and leaving it makes every later dispatch in this
+    # worktree pay the full --reuse-wait for a slot that cannot arrive.
+    if ! printf '%s\n' "$live" | grep -qx -- "$h"; then
+      rm -f "$f" "$d/$h.cd" "$d/$h.idle" 2>/dev/null || true
+      rmdir "$d/$h.busy" 2>/dev/null || true
+      continue
+    fi
+    [ "$(cat "$d/$h.cd" 2>/dev/null)" = "$cd_dir" ] || continue
+    return 0
+  done
+  return 1
 }
 
 # `exec-pane` — run a headless `exec` inside a VISIBLE Orca zsh pane.
@@ -2686,6 +2728,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   local cd_dir="" model="" out="" log="" timeout="" sandbox="" effort=""
   local split_handle="" want_split=0 new_tab=0 title="" direction="horizontal"
   local poll=6 focus=0 do_wait=0 wait_timeout=0 reuse=1
+  local reuse_wait="${HMAD_PANE_REUSE_WAIT_SEC:-8}"
   while [ $# -gt 0 ]; do case "$1" in
     # --- passthrough to `exec` ---
     --cd) cd_dir="$2"; shift 2 ;;
@@ -2719,6 +2762,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
       ;;
     --new-tab) new_tab=1; shift ;;
     --no-reuse) reuse=0; shift ;;
+    --reuse-wait) reuse_wait="$2"; shift 2 ;;
     --title) title="$2"; shift 2 ;;
     --direction) direction="$2"; shift 2 ;;
     --poll) poll="$2"; shift 2 ;;
@@ -2736,6 +2780,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
     *) echo "hmad-dispatch: exec-pane: --direction must be horizontal|vertical" >&2; return 2 ;;
   esac
   case "$poll" in ''|*[!0-9]*) echo "hmad-dispatch: exec-pane: --poll must be an integer" >&2; return 2 ;; esac
+  case "$reuse_wait" in ''|*[!0-9]*) echo "hmad-dispatch: exec-pane: --reuse-wait must be an integer (seconds)" >&2; return 2 ;; esac
   # --focus is a `terminal create` flag; `terminal split` has no equivalent. Parsing
   # it and then ignoring it on the split path is exactly the silent flag drop this
   # wrapper bans everywhere else (tests/test_hmad_dispatch_unknown_flags.py). Refuse.
@@ -2788,7 +2833,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   # exit -- and never on `terminal wait --for exit`, whose exit code is a lie
   # (trap 2). The trailing marker is what a human reads as "this pane is done".
   local pane_cmd
-  pane_cmd="{ $inner ; echo \$? > $(_shq "$rc_file") ; } & _hmad_dp=\$!;"
+  pane_cmd="{ $inner ; echo \$? > $(_shq "$rc_file") ; $(_pane_slot_finishing_snippet "$(_pane_slot_dir)") ; } & _hmad_dp=\$!;"
   pane_cmd="$pane_cmd while kill -0 \$_hmad_dp 2>/dev/null; do $(_shq "$self") progress $(_shq "$log") --lines 8 --pid \$_hmad_dp; sleep $poll; done;"
   pane_cmd="$pane_cmd $(_shq "$self") progress $(_shq "$log") --lines 12;"
   pane_cmd="$pane_cmd echo \"HMAD-PANE-DONE rc=\$(cat $(_shq "$rc_file") 2>/dev/null)\";"
@@ -2808,6 +2853,35 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
     live="$(_orca_json '.result.terminals[]?.handle' terminal list --json 2>/dev/null || true)"
     if [ -n "$live" ]; then
       handle="$(_pane_slot_claim "$cd_dir" "$live")" || handle=""
+      # Nothing idle yet — but a pane whose dispatch just finished is still
+      # rendering its last digest and will free within a second or two. Wait for
+      # THAT, and only that: a slot with no `.finishing` marker is genuinely
+      # working, and waiting on it would tax parallel fanout for nothing. Costs no
+      # verdict latency either way, because this runs before the dispatch starts.
+      if [ -z "$handle" ] && [ "$reuse_wait" -gt 0 ] \
+        && _pane_slot_finishing_exists "$cd_dir" "$live"; then
+        local ticks=0 max_ticks=$(( reuse_wait * 5 ))
+        while [ "$ticks" -lt "$max_ticks" ]; do
+          sleep 0.2; ticks=$(( ticks + 1 ))
+          # REFRESH the liveness view every ~2s. `live` was captured once before
+          # the loop, and both the claim and the give-up check consult it — so
+          # against a stale list a pane that DIES mid-wait still looks alive, its
+          # `.finishing` marker is never removed by anyone, and the loop runs the
+          # full --reuse-wait before creating. The give-up check below cannot do
+          # what its name says without this. Every 2s rather than every tick: one
+          # `orca terminal list` per 200ms would cost more than the wait saves.
+          if [ $(( ticks % 10 )) -eq 0 ]; then
+            live="$(_orca_json '.result.terminals[]?.handle' terminal list --json 2>/dev/null || true)"
+            [ -n "$live" ] || break
+          fi
+          handle="$(_pane_slot_claim "$cd_dir" "$live")" || handle=""
+          [ -n "$handle" ] && break
+          # The pane died between dropping the marker and releasing: nothing will
+          # ever clear `.finishing`, so the slot is not coming. Reap and stop.
+          _pane_slot_finishing_exists "$cd_dir" "$live" || break
+        done
+        [ -n "$handle" ] || echo "hmad-dispatch: exec-pane: a pane was finishing but did not free within ${reuse_wait}s; creating a new one" >&2
+      fi
     fi
     if [ -n "$handle" ]; then
       # `send --enter` submits the line to a shell sitting at a prompt. Safe here

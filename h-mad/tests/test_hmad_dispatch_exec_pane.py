@@ -22,6 +22,8 @@ signal CANNOT be produced, not merely that the happy path works.
 import os
 import re
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -543,6 +545,232 @@ def test_explicit_split_bypasses_the_pool(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "terminal split" in _orca_calls(cap)
     assert "terminal send" not in _orca_calls(cap)
+
+
+def test_a_finishing_slot_is_waited_for_and_then_reused(tmp_path):
+    """THE window this closes.
+
+    `--wait` returns when the rc file lands, ~1-2s before the pane finishes
+    rendering and releases its slot. A caller dispatching again in that gap used
+    to create a second pane. Now the claim waits for a slot that announced it is
+    finishing -- which costs no VERDICT latency, because it happens before the
+    dispatch starts rather than after it ends.
+    """
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.busy").mkdir()
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    (d / "term_IDLE.finishing").write_text("")
+
+    # the pane frees its slot shortly after the dispatch starts looking
+    def free_it():
+        time.sleep(1.5)
+        (d / "term_IDLE.finishing").unlink()
+        (d / "term_IDLE.busy").rmdir()
+        (d / "term_IDLE.idle").write_text("")
+    t = threading.Thread(target=free_it); t.start()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "15"], env=env)
+    t.join()
+    assert r.returncode == 0, r.stderr
+    assert "reused idle pane" in r.stderr
+    assert "terminal create" not in _orca_calls(cap)
+    assert r.stdout.strip() == "term_IDLE"
+
+
+def test_a_genuinely_busy_slot_is_not_waited_for(tmp_path):
+    """The other half, and the reason the marker exists at all. Phase 5 parallel
+    fanout dispatches concurrently into panes that are really working; waiting on
+    those would add the reuse-wait to every parallel dispatch for nothing. No
+    `.finishing` marker means no wait."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_BUSY"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_BUSY.busy").mkdir()
+    (d / "term_BUSY.cd").write_text(str(tmp_path))
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "30"], env=env)
+    elapsed = time.time() - t0
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert elapsed < 10, f"waited {elapsed:.1f}s on a slot that never claimed to be finishing"
+
+
+def test_waiting_gives_up_and_creates_rather_than_hanging(tmp_path):
+    """A pane can die between dropping the marker and releasing. The dispatch must
+    still happen -- a stuck marker cannot become an indefinite stall."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_STUCK"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_STUCK.busy").mkdir()
+    (d / "term_STUCK.cd").write_text(str(tmp_path))
+    (d / "term_STUCK.finishing").write_text("")
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "3"], env=env)
+    elapsed = time.time() - t0
+    assert r.returncode == 0, r.stderr
+    assert "did not free within 3s" in r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert elapsed < 20
+
+
+def test_a_finishing_slot_whose_pane_died_stops_the_wait_early(tmp_path):
+    """If the pane is gone, the slot is never coming. Burning the full reuse-wait
+    on it delays a dispatch that was always going to need a new pane."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_SOMETHING_ELSE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_GONE.busy").mkdir()
+    (d / "term_GONE.cd").write_text(str(tmp_path))
+    (d / "term_GONE.finishing").write_text("")
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "30"], env=env)
+    elapsed = time.time() - t0
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert elapsed < 10, f"waited {elapsed:.1f}s for a dead pane's slot"
+
+
+def test_the_pane_marks_itself_finishing_as_soon_as_rc_lands(tmp_path):
+    """The marker has to go down with the rc write, inside the same subshell --
+    not after the final render, which is the very interval it exists to cover."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    env = _env(b)
+    run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    cmd = _pane_cmd(cap)
+    assert ".finishing" in cmd
+    subshell = cmd.split("&", 1)[0]
+    assert "echo $? >" in subshell and ".finishing" in subshell, subshell[:300]
+    # and it is cleared on release, before the slot goes idle
+    assert cmd.index('"$ORCA_TERMINAL_HANDLE".finishing 2>/dev/null; rmdir') < cmd.index('.idle')
+
+
+def test_reuse_wait_zero_disables_the_wait(tmp_path):
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.busy").mkdir()
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    (d / "term_IDLE.finishing").write_text("")
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "0"], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert time.time() - t0 < 10
+
+
+def test_reuse_wait_rejects_a_non_integer(tmp_path):
+    b = _bindir(tmp_path, ["agy"], tmp_path / "orca.txt")
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--reuse-wait", "soon"], env=_env(b))
+    assert r.returncode == 2
+    assert "must be an integer" in r.stderr
+
+
+def _orca_live_from_file(tmp_path, live_file, capture):
+    """orca stub that reads its live-handle list from a file at CALL time.
+
+    A static stub cannot express "the pane was alive when we started waiting and
+    died while we waited", which is the only path the give-up check covers -- a
+    pane that was already dead is rejected before the loop is ever entered. Two
+    surviving mutants hid behind exactly that gap.
+    """
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    d = b / "agy"; d.write_text((STUBS / "agy").read_text()); d.chmod(0o755)
+    script = "\n".join([
+        "#!/usr/bin/env bash",
+        'printf "%s\\n" "$*" >> ' + str(capture),
+        'case "$1 $2" in',
+        '  "terminal list")',
+        '    hs=""',
+        '    while read -r h; do [ -n "$h" ] && hs="$hs{\\"handle\\":\\"$h\\"},"; done < ' + str(live_file),
+        '    echo "{\\"ok\\":true,\\"result\\":{\\"terminals\\":[${hs%,}]}}" ;;',
+        '  "terminal send")   echo ' + repr_sh('{"ok":true,"result":{}}') + ' ;;',
+        '  "terminal create") echo ' + repr_sh('{"ok":true,"result":{"terminal":{"handle":"term_NEW"}}}') + ' ;;',
+        '  *) echo ' + repr_sh('{"ok":true,"result":{}}') + ' ;;',
+        'esac',
+        'exit 0',
+        '',
+    ])
+    (b / "orca").write_text(script)
+    (b / "orca").chmod(0o755)
+    return b
+
+
+def test_a_pane_that_dies_DURING_the_wait_stops_it_early(tmp_path):
+    """The give-up check reads the live-handle list, which is captured once before
+    the loop. Against that stale list a pane that dies mid-wait still looks alive,
+    its `.finishing` marker is never cleared by anyone, and the loop burns the full
+    --reuse-wait. Only a stub whose liveness CHANGES can catch that."""
+    cap = tmp_path / "orca.txt"
+    live_file = tmp_path / "live.txt"
+    live_file.write_text("term_DYING\n")
+    b = _orca_live_from_file(tmp_path, live_file, cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_DYING.busy").mkdir()
+    (d / "term_DYING.cd").write_text(str(tmp_path))
+    (d / "term_DYING.finishing").write_text("")
+
+    def kill_it():
+        time.sleep(2.5)
+        live_file.write_text("term_OTHER\n")     # the pane is gone; slot never frees
+    t = threading.Thread(target=kill_it); t.start()
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "40"], env=env)
+    elapsed = time.time() - t0
+    t.join()
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert elapsed < 25, f"waited {elapsed:.1f}s for a pane that died mid-wait"
+
+
+def test_a_dead_panes_finishing_marker_is_reaped(tmp_path):
+    """Nothing else ever clears it, so leaving it makes EVERY later dispatch in
+    this worktree pay the full --reuse-wait for a slot that cannot arrive."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_ALIVE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_GONE.busy").mkdir()
+    (d / "term_GONE.cd").write_text(str(tmp_path))
+    (d / "term_GONE.finishing").write_text("")
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    assert not (d / "term_GONE.finishing").exists(), "dead marker survived"
+    assert not (d / "term_GONE.busy").exists()
+    assert not (d / "term_GONE.cd").exists()
+
+
+def test_a_finishing_slot_in_another_worktree_is_not_waited_for(tmp_path):
+    """It can never be claimed by this dispatch, so waiting on it is pure delay --
+    and it would delay EVERY dispatch in every other worktree."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_OTHERWT"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_OTHERWT.busy").mkdir()
+    (d / "term_OTHERWT.cd").write_text("/a/different/worktree")
+    (d / "term_OTHERWT.finishing").write_text("")
+    t0 = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--reuse-wait", "30"], env=env)
+    elapsed = time.time() - t0
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert elapsed < 10, f"waited {elapsed:.1f}s on another worktree's slot"
 
 
 def test_wait_polls_the_rc_file_sub_second(tmp_path):
