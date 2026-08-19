@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-ps | worktree-rm
+# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -1369,6 +1369,20 @@ _cmd_worktree_ps() {  # [--limit <n>]
   _orca_json '.result | tojson' "${args[@]}"
 }
 
+# `list` is NOT an alias for `ps`. `ps` is a compact orchestration summary; `list`
+# carries the full worktree records -- including `childWorktreeIds` and `lineage`,
+# which is what a resume needs to recover where a parked item actually lives. The
+# handoff skill required exactly that field and, with no verb exposing it, had to
+# prescribe a raw `orca worktree list` in violation of its own "all Orca access
+# goes through hmad-dispatch" rule.
+_cmd_worktree_list() {  # [--limit <n>]
+  _require_orca worktree-list || return $?
+  local args=(worktree list)
+  while [ $# -gt 0 ]; do case "$1" in --limit) args+=(--limit "$2"); shift 2 ;; *) _unknown_opt worktree-list "$1"; return $? ;; esac; done
+  args+=(--json)
+  _orca_json '.result | tojson' "${args[@]}"
+}
+
 # Selector -> filesystem path, or empty when it cannot be resolved to exactly one
 # existing directory. Empty is "cannot check", never "safe to destroy".
 _worktree_path() {  # $1 selector -> path on stdout, or empty + rc 1
@@ -2434,6 +2448,7 @@ main() {
     worktree-create) _cmd_worktree_create "$@" ;;
     worktree-current) _cmd_worktree_current "$@" ;;
     worktree-ps) _cmd_worktree_ps "$@" ;;
+    worktree-list) _cmd_worktree_list "$@" ;;
     worktree-rm) _cmd_worktree_rm "$@" ;;
     file-diff) _cmd_file_diff "$@" ;;
     file-open-changed) _cmd_file_open_changed "$@" ;;

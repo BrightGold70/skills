@@ -166,7 +166,7 @@ In parallel:
   - **Behind, dirty tree** OR **diverged** (behind > 0 AND ahead > 0): do NOT auto-pull — flag it ("N behind / M ahead, uncommitted changes present" or "branches have diverged — rebase/merge needed") and let the user resolve. A surprise merge/rebase mid-resume is worse than a one-line warning.
   - **Ahead only** (unpushed local commits): flag as information ("M local commits not yet pushed") — relevant because the prior session may have committed without pushing.
 - **In-flight processes** — for each PID cited in In-Flight Processes / Open Items / Next Steps, run `ps -p <PID> -o pid,etime,stat`. For each cited log path, `ls -la <log>` to read size + mtime. Surface one of: "still running, N min elapsed (matches handoff trajectory)" / "exited" / "log unchanged for N hours — likely dead, treat as historical". This is the single most load-bearing reconciliation when the handoff hands off live work; never skip it. If the doc is days old, treat all in-flight claims as historical without bothering to check `ps` (the PID has been recycled and reporting on a stranger's process is worse than silence).
-- **Parked-item location** — if an Open/Blocked item is parked feature-work whose `repo · branch · worktree` the doc did NOT record (an older handoff, before this was required), recover the location before restoring its todo instead of guessing: check `orca worktree list` (a child worktree's `childWorktreeIds`/comment), the session scratchpad for `codex_*_{red,green,verify}.txt` (H-MAD TDD prompts carry `REPO:`/`BRANCH:`/`FEATURE:` verbatim), and `.h-mad/telemetry.jsonl` for the feature's last phase. Also reconcile whether the parked branch has since merged — "parked, nothing committed" can be stale, and the owed work may now be verification-only on the merged code. Resolve the default branch rather than assuming `main`, then check both directions:
+- **Parked-item location** — if an Open/Blocked item is parked feature-work whose `repo · branch · worktree` the doc did NOT record (an older handoff, before this was required), recover the location before restoring its todo instead of guessing: check `hmad-dispatch worktree-list` (a child worktree's `childWorktreeIds`/comment — `worktree-ps` is a compact orchestration summary and does not carry them), the session scratchpad for `codex_*_{red,green,verify}.txt` (H-MAD TDD prompts carry `REPO:`/`BRANCH:`/`FEATURE:` verbatim), and `.h-mad/telemetry.jsonl` for the feature's last phase. Also reconcile whether the parked branch has since merged — "parked, nothing committed" can be stale, and the owed work may now be verification-only on the merged code. Resolve the default branch rather than assuming `main`, then check both directions:
 
   ```bash
   DEF="$(git -C <repo> symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
@@ -186,19 +186,29 @@ A divergence is not a failure — it's just information the user needs before ac
 
 Skip this unless the doc carries a `**Handover-From:**` line. If it does, the work arrived from another lane and READ's default behaviour is **half a protocol**: it restores the todos and never claims anything. The sender released ownership and stopped watching; if you do not take it, the feature is owned by nobody, and a third session can start the same work without either of you seeing a collision.
 
-**1. Claim it — this is the step with no other home.** If the brief names a feature and a state file exists, ask the oracle first, exactly as HANDOVER does:
+**1. Claim it — this is the step with no other home.** If the brief names a feature, locate the
+state file the same way HANDOVER Step 2 does (`find`, never a `**/` glob — see the fail-open noted
+there) and ask the oracle first:
 
 ```bash
-python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
-  --state "$STATE" --feature "<feature>" --session-id "<your-session-id>"
+find . -name .bkit-memory.json -path '*/docs/*' -not -path '*/.git/*' 2>/dev/null | head -1
+```
+
+No state file means nothing is claimed — say so, skip to point 2, and do not invent one. Otherwise
+pass the path it printed:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
+  --state "<the path the find printed>" \
+  --feature "<feature>" --session-id "<your-session-id>"
 ```
 
 - `owned_elsewhere` → someone **live** holds it. Do not take it; surface the collision. The handover may have raced another session, and that is a real finding, not a formality.
 - anything else → claim it:
 
 ```bash
-python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py "$STATE" \
-  --feature "<feature>" --claim "<your-session-id>"
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
+  "<the path the find printed>" --feature "<feature>" --claim "<your-session-id>"
 ```
 
 A stale claim is takeable by plain `--claim` — reach for `--force` only against a **live** owner, which the oracle just told you there isn't. If the brief says a claim was left deliberately unreleased (a dead session's), that is the one it means; taking it is your decision to make and now is when you make it.
@@ -228,7 +238,7 @@ After reconciliation and TodoList restore, give the user a brief resume report:
 ```
 ## Session resumed
 
-**Handoff:** docs/handoffs/2026-04-30-lightrag-guideline-rag.md
+**Handoff:** docs/handoffs/2026-04-30-main__lightrag-guideline-rag.md
 **Branch:** main (matches)
 **Remote:** 2 behind origin/main → fast-forwarded to `a1b2c3d`
 **Uncommitted changes:** 2 files (matches handoff)
@@ -349,17 +359,31 @@ This is the step with no other home, and the one whose absence is silent.
 **First find the state file.** h-mad keeps the claim in its orchestrator state — the JSON path h-mad's own SKILL.md passes to `h_mad_state_write.py` in its Phase-0 snippet, `docs/.bkit-memory.json` relative to the project root in every current project. Locate it rather than assuming:
 
 ```bash
-STATE="$(ls <target-repo>/**/docs/.bkit-memory.json 2>/dev/null | head -1)"
+STATE="$(find <target-repo> -name .bkit-memory.json -path '*/docs/*' \
+           -not -path '*/.git/*' -not -path '*/archive/*' 2>/dev/null | head -1)"
 [ -n "$STATE" ] || echo "no h-mad state file under <target-repo> — nothing is claimed, skip to Step 3"
 ```
 
+`find`, not `<repo>/**/docs/.bkit-memory.json` — **the glob is a silent fail-open.** Bash ships with
+`globstar` off, where `**` collapses to a single `*`: a real state file two directories down is not
+matched, `$STATE` comes back empty, and this step concludes "nothing is claimed" and skips the
+release entirely. That is the exact outcome this step exists to prevent, arrived at without a
+single error message. (Measured both shells: bash finds a depth-2 file only with `globstar` on;
+zsh finds it, but on *no* match prints `no matches found` past the `2>/dev/null`, since the failure
+is the shell's own glob expansion rather than anything `find`/`ls` emitted.)
+
 No state file means no claim to release. Say so and move on; do not invent one.
+
+**Substitute the printed path into the blocks below — do not carry it in a shell variable.**
+Each block runs as its own tool call in a fresh shell, so an assignment made here has already
+expired by the next one; `--state ""` then fails outright, or worse, reads as "no claim".
 
 **Then ask who holds it — do not eyeball the timestamp.** `h_mad_resume_decision.py` is the liveness oracle, and it applies the *same* staleness window the writer does, so its answer and `--claim`'s behaviour cannot disagree:
 
 ```bash
-python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py \
-  --state "$STATE" --feature "<feature>" --session-id "<your-session-id>"
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
+  --state "<the path the find printed>" \
+  --feature "<feature>" --session-id "<your-session-id>"
 ```
 
 - **`owned_elsewhere`** → the owner is **LIVE**. The work is not yours to hand over. Stop and surface it — releasing here would yank a feature out from under a running session.
@@ -370,7 +394,8 @@ Read the owner and heartbeat for the brief — the receiver needs to know a clai
 ```bash
 python3 -c "import json,sys; s=json.load(open(sys.argv[1])).get('orchestrator_state') or {}; \
 r=s.get(sys.argv[2]); print('NO SUCH FEATURE — nothing claimed' if r is None else \
-('owner: %s | heartbeat: %s' % (r.get('owner_session_id'), r.get('owner_heartbeat_ts'))))" "$STATE" "<feature>"
+('owner: %s | heartbeat: %s' % (r.get('owner_session_id'), r.get('owner_heartbeat_ts'))))" \
+  "<state-path from the find above>" "<feature>"
 ```
 
 Use `.get()` throughout: a state file that exists but has no record for this feature is the **normal** case for loosely-tracked or newly-named work, and indexing it directly raises `KeyError` and halts the handover with a traceback instead of the correct answer, which is "nothing is claimed, carry on".
@@ -378,8 +403,8 @@ Use `.get()` throughout: a state file that exists but has no record for this fea
 **Then release**, so the receiver inherits a free claim:
 
 ```bash
-python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py "$STATE" \
-  --feature "<feature>" --release
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
+  "<state-path from the find above>" --feature "<feature>" --release
 ```
 
 Hand work over without this and the receiver inherits a feature still owned by a session that has stopped. Depending on the version they run, `--claim` either refuses outright or makes them reach for `--force` — and `--force` is the verb for taking a feature from a session that is still *live*. Training a receiver to pass it routinely wears out the one guard protecting a running session.
@@ -501,7 +526,7 @@ After writing the handoff file, append (prepend, technically — newest first) a
 Format — newest entries at the top:
 
 ```
-- 2026-04-28 · HemaSuite/guideline-category-facet · Shipped guideline-category-facet end-to-end via TDD multi-agent cowork · `/Users/kimhawk/Coding/HemaSuite/docs/handoffs/2026-04-28-guideline-category-facet.md`
+- 2026-04-28 · HemaSuite/guideline-category-facet · Shipped guideline-category-facet end-to-end via TDD multi-agent cowork · `/Users/kimhawk/Coding/HemaSuite/docs/handoffs/2026-04-28-main__guideline-category-facet.md`
 ```
 
 Each entry has four pipe-free segments separated by `·`: ISO date, `<project-slug>/<handoff-slug>`, a one-line summary lifted from the doc's Session Summary (≤100 chars), and the absolute path in backticks. Use absolute paths (not `~/`) so a `grep` is unambiguous.
@@ -594,7 +619,7 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 
 - <item> — status: in progress | blocked on <reason> | deferred
 
-**If an item is parked feature-work that lives outside this repo/branch/session** (a separate H-MAD feature, a sibling worktree, another repo), you MUST record where it lives, or the next session cannot find it without a forensic hunt: `repo: <abs path> · branch: <name> · worktree: <path or "none">` plus the key artifact paths (the RED/GREEN/verify prompt files, the plan/spec, the scratchpad dir). "Parked in its own worktree" with no path is the failure mode this line exists to prevent — a resume then has to reconstruct the location from `orca worktree list`, scratchpad prompts, and telemetry.
+**If an item is parked feature-work that lives outside this repo/branch/session** (a separate H-MAD feature, a sibling worktree, another repo), you MUST record where it lives, or the next session cannot find it without a forensic hunt: `repo: <abs path> · branch: <name> · worktree: <path or "none">` plus the key artifact paths (the RED/GREEN/verify prompt files, the plan/spec, the scratchpad dir). "Parked in its own worktree" with no path is the failure mode this line exists to prevent — a resume then has to reconstruct the location from `hmad-dispatch worktree-list`, scratchpad prompts, and telemetry.
   - Example: `Task 3 audit — status: parked. repo: /Users/x/orca/HemaSuite/hematology-paper-writer · branch: feature/191 · worktree: none (merged) · prompts: <scratchpad>/codex_task3_{red,green,verify}.txt`
   - **Recording the location is not the same as handing it over.** If the item belongs to another repo/worktree *and ownership should move with it*, run HANDOVER mode rather than parking it here — a foreign item documented only in this doc is invisible to the session that would actually act on it. See §"Route foreign-worktree work before closing out"; the entry here then becomes a pointer to the brief you wrote there.
 
@@ -735,21 +760,36 @@ git diff --stat HEAD        # sanity-check scope
 
 ### Commit
 
-Stage the **actual absolute paths** written in §Save (`$FILE` and `handoff_paths.py learnings`), not a cwd-relative `docs/handoffs/…` — under a linked worktree the cwd path points at the wrong tree and would stage nothing.
+Stage the **actual absolute paths** written in §Save, not a cwd-relative `docs/handoffs/…` — under a linked worktree the cwd path points at the wrong tree and would stage nothing.
+
+This block re-derives `HP` rather than inheriting it from §Save: **shell variables do not survive
+between tool calls**, so `$HP`, `$DIR` and `$BR` set back there are already empty here — and an
+empty `HP` does not merely error, it makes `ROOT` empty, which sends the branch below down the
+"linked worktree" path that skips the commit on purpose. Re-deriving `ROOT` and `LEARN` is safe
+because both are pure functions of the repo. `$FILE` is **not** — §Save's concurrency guard may
+have appended a `-2`/`-<HHMMSS>` discriminator, so re-deriving it would name a file that does not
+exist. Substitute the literal path §Save actually wrote.
 
 ```bash
+HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
 ROOT="$(python3 "$HP" root)"                 # canonical main-worktree root
 LEARN="$(python3 "$HP" learnings)"
+echo "$ROOT" "$LEARN"                        # carry these forward as literals too
 ```
 
 - **On the main worktree** (`ROOT` == `git rev-parse --show-toplevel`): stage + commit normally:
   ```bash
-  git add "$FILE" "$LEARN"
+  git add "<the handoff path §Save wrote>" "<the learnings path echoed above>"
   git add docs/skill-candidates.md 2>/dev/null || true   # only if scout ran
   git commit -m "chore(handoff): YYYY-MM-DD <slug>
 
   Session closeout: <one-line summary from Session Summary>."
   ```
+  Literal paths, not `$FILE`/`$LEARN` — this is a separate tool call and those are empty here.
+  `git add ""` at least fails loudly (`fatal: empty string is not a valid pathspec`). The
+  dangerous one is above it: an empty `HP` makes `ROOT` empty, `ROOT` then never equals the
+  toplevel, and the branch below concludes "linked worktree" and **deliberately does not
+  commit** — on the main worktree, reporting the skip as correct behaviour. Measured, both.
 - **On a linked worktree** (`ROOT` != current toplevel): the handoff + learnings were written into the **main** tree, not here. Do **not** auto-commit into the main worktree's branch — it may be mid-work on an unrelated branch, and a surprise handoff commit there is worse than none. The file is already written and shared (that is the durability win); note in your report that committing/pushing it is a deliberate step to run from the main worktree if cross-machine persistence is wanted.
 
 Do not use `git add -A` — only stage the handoff and learnings files.

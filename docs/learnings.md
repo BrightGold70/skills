@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-19 · gotcha · [0.9] · `shell,skill-authoring,claude-code,handoff` — Shell vars do not survive between Bash tool calls, so a doc's later code block sees them EMPTY. Worst case is not an error: empty ROOT failed an equality test and routed to a branch that skips committing on purpose.
+- 2026-08-19 · gotcha · [0.9] · `bash,zsh,glob,handoff,silent-failure` — bash ships globstar OFF, so <dir>/**/x matches ONE level and a real depth-2 file is NOT found — a locator then reports 'nothing here' with no error. zsh matches but errors past 2>/dev/null on no-match. Use find.
 - 2026-08-19 · gotcha · [0.9] · `bkit,pdca,h-mad,doc-templates` — bkit isPlanPlus reclassifies a plan on a case-SENSITIVE substring of its CONTENT (plan-plus, Plan-Plus, Plan Plus, Brainstorming-Enhanced, Intent Discovery), demanding 13 sections h-mad lacks. A compliant template is not a compliant doc.
 - 2026-08-19 · gotcha · [0.9] · `pytest,testing,self-inflicted,h-mad` — A module-level def appended after a test class silently ends that class: methods below it become nested and stop being collected. Suite still reports green — I lost 10 tests this way. Assert the collected COUNT.
 - 2026-08-09 · gotcha · [0.7] · `zsh,shell,globbing,verification,handoff:2026-08-09-main__j29-out-clobber-guard` — zsh nomatch aborts the WHOLE command when ANY glob misses: 'ls -d .venv venv */.venv */venv' listed nothing and read as 'no venv exists'. Empty output means one pattern missed. Use bash -c.

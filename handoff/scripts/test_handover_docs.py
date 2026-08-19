@@ -167,7 +167,10 @@ def test_frontmatter_carries_handover_triggers_and_the_boundary() -> None:
 REVIEW_FIXES = [
     # M1 — the release step named a placeholder and no way to inspect the claim.
     (
-        "python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py",
+        # Pinned on the script name, not the path: the rule is "ask the oracle",
+        # and the invocation moved to the ${CLAUDE_SKILLS_ROOT:-…} form the rest of
+        # this skill uses for its own scripts.
+        "h_mad_resume_decision.py",
         "M1: the liveness question needs an oracle, not an eyeballed timestamp — "
         "and this one shares the writer's staleness window so they cannot disagree",
     ),
@@ -513,3 +516,119 @@ def test_the_reason_is_stated_not_just_the_list() -> None:
     assert "treats its sibling modes' stamps as human notes" in _norm(SKILL), (
         "without the why, a future edit trims the list back to the mode it is reading"
     )
+
+
+# --- Structural invariants of the runnable guidance -------------------------
+#
+# The four checks below are not literal pins. Each one encodes a defect that was
+# measured in this file's own instructions and would otherwise be free to come
+# back the next time a block is edited or copied.
+
+
+def _fenced_blocks() -> list[tuple[int, str, str]]:
+    """(first-line-number, enclosing heading, body) for every fenced block."""
+    import re
+
+    lines = SKILL.read_text(encoding="utf-8").splitlines()
+    out: list[tuple[int, str, str]] = []
+    cur: list[str] | None = None
+    start = 0
+    section = "(top)"
+    block_section = "(top)"
+    for lineno, line in enumerate(lines, 1):
+        heading = re.match(r"^#{2,4} (.+)", line)
+        if heading:
+            section = heading.group(1)
+        if line.strip().startswith("```"):
+            if cur is None:
+                cur, start, block_section = [], lineno, section
+            else:
+                out.append((start, block_section, "\n".join(cur)))
+                cur = None
+            continue
+        if cur is not None:
+            cur.append(line)
+    return out
+
+
+def test_every_fenced_block_defines_the_shell_vars_it_uses() -> None:
+    """Shell state does NOT survive between tool calls, so each block must stand alone.
+
+    Measured: §Commit used `$HP`, `$FILE` and `$LEARN`, all set in an earlier
+    block of an earlier section. In a fresh shell they expand to empty, so the
+    documented finale ran `python3 "" root` and `git add ""`. Step 3.5 used
+    `$STATE` that nothing in READ ever set.
+    """
+    import re
+
+    offenders = []
+    for start, section, body in _fenced_blocks():
+        used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]{1,})\}?", body))
+        used -= {"HOME", "PATH", "CLAUDE_SKILLS_ROOT"}
+        defined = set(re.findall(r"^\s*([A-Z][A-Z0-9_]*)=", body, re.M))
+        if used - defined:
+            offenders.append(f"line {start} [{section}]: {sorted(used - defined)}")
+    assert not offenders, (
+        "fenced blocks use shell variables they do not define:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_no_recursive_glob_in_any_fenced_block() -> None:
+    """`**/` is a silent fail-open under the shell this skill actually runs in.
+
+    Measured: with bash's default `globstar` off, `<repo>/**/docs/.bkit-memory.json`
+    matches only ONE directory level, so a real state file two levels down is not
+    found — and HANDOVER Step 2 then reports "nothing is claimed" and skips the
+    release. Under zsh an unmatched `**/` additionally errors past `2>/dev/null`.
+    Use `find` instead.
+    """
+    offenders = [
+        f"line {start} [{section}]"
+        for start, section, body in _fenced_blocks()
+        if "**/" in body
+    ]
+    assert not offenders, (
+        "recursive-glob patterns found (use `find`): " + ", ".join(offenders)
+    )
+
+
+def test_orca_is_only_ever_reached_through_the_wrapper() -> None:
+    """The skill states twice that it never calls `orca` directly. Prose must agree.
+
+    Measured: two steps prescribed `orca worktree list` for `childWorktreeIds`,
+    which no wrapper verb exposed at the time — so the rule was unsatisfiable and
+    the instructions simply contradicted it. `hmad-dispatch worktree-list` now
+    carries that payload. Lines that tell the reader NOT to run something are
+    exempt: they are the rule being stated, not broken.
+    """
+    import re
+
+    offenders = []
+    for lineno, line in enumerate(SKILL.read_text(encoding="utf-8").splitlines(), 1):
+        for match in re.finditer(r"`orca ([a-z][a-z-]*)", line):
+            if line.lstrip().startswith("- Don't") or "never call" in line:
+                continue
+            offenders.append(f"line {lineno}: orca {match.group(1)}")
+    assert not offenders, (
+        "direct `orca` invocations outside the sanctioned don't-lines: "
+        + "; ".join(offenders)
+    )
+
+
+def test_example_handoff_filenames_carry_the_branch_separator() -> None:
+    """Every example must show the `<branch>__<slug>` form READ actually matches.
+
+    An example in the older `YYYY-MM-DD-<slug>.md` shape teaches a filename that
+    READ's exact-branch check cannot find, in the two places a reader is most
+    likely to copy from: the resume report and the INDEX entry.
+    """
+    import re
+
+    text = SKILL.read_text(encoding="utf-8")
+    bad = [
+        name
+        for name in re.findall(r"handoffs/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9_.-]+\.md)", text)
+        if "__" not in name
+    ]
+    assert not bad, f"example handoff filenames missing the `__` separator: {bad}"

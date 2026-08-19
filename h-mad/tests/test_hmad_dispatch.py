@@ -4338,3 +4338,51 @@ def test_no_verdict_remedies_say_from_start_not_a_bigger_tail():
             f"{path.name} still prescribes a bigger tail"
         )
         assert "--from-start" in text, f"{path.name} never names the full-buffer read"
+
+
+def test_worktree_list_argv_and_passthrough(tmp_path):
+    # The handoff skill needs `childWorktreeIds`, which `orca worktree ps` does not
+    # carry -- `list` and `ps` are different orca subcommands, not aliases. Without
+    # this verb the skill's own "never call `orca` directly" rule is unsatisfiable,
+    # so two of its steps prescribed a raw `orca worktree list` instead.
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    canned = '{"result":{"worktrees":[{"childWorktreeIds":[]}]}}'
+    r = run(["worktree-list"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": canned}, capture=cap)
+    assert r.returncode == 0
+    assert cap.read_text() == "orca worktree list --json\n"
+    assert r.stdout == '{"worktrees":[{"childWorktreeIds":[]}]}\n'
+
+    limit_cap = tmp_path / "limit-cap.txt"
+    limited = run(["worktree-list", "--limit", "3"], substrate="orca",
+                  env={"_BINDIR": b}, capture=limit_cap)
+    assert limited.returncode == 0
+    assert limit_cap.read_text() == "orca worktree list --limit 3 --json\n"
+
+
+def test_worktree_list_rejects_ok_false_envelope(tmp_path):
+    # F11: an exit-0 `"ok":false` envelope must not pass through as data.
+    b = _bindir(tmp_path, ["orca"])
+    r = run(["worktree-list"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_STUB_FAIL": "1"})
+    assert r.returncode != 0
+    assert "boom" in r.stderr
+    assert r.stdout == ""
+
+
+def test_worktree_list_refuses_cmux(tmp_path):
+    b = _bindir(tmp_path, ["cmux", "orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["worktree-list"], substrate="cmux", env={"_BINDIR": b}, capture=cap)
+    assert r.returncode == 2
+    assert "requires orchestration mode (substrate=orca)" in r.stderr
+    assert not cap.exists()
+
+
+def test_worktree_list_is_documented_in_the_verb_line(tmp_path):
+    # A verb absent from the header verb list is a verb nobody discovers.
+    text = (SKILL / "scripts" / "hmad-dispatch.sh").read_text()
+    header = [ln for ln in text.splitlines()[:10] if ln.startswith("# Verbs:")]
+    assert header, "the header verb line is gone"
+    assert "worktree-list" in header[0]
