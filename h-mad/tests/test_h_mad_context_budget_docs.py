@@ -160,6 +160,41 @@ class TestTheSubstituteLadder:
         assert "snapshotted at call time" in s
 
 
+class TestMechanicalEnforcement:
+    def test_names_the_hook_and_the_settings_wiring(self):
+        s = _section()
+        assert "h-mad-advisor-gate.sh" in s
+        assert '"matcher": "advisor"' in s
+
+    def test_says_wiring_takes_effect_next_session(self):
+        """Hooks are snapshotted at session start. Without this, the session that
+        wires it looks broken and the hook gets removed as non-functional."""
+        s = _section()
+        assert "NEXT session" in s
+
+    def test_gives_a_live_fire_test_and_names_silent_stand_down_as_the_finding(self):
+        s = _section()
+        assert "HMAD_CONTEXT_WINDOW=1000" in s
+        assert "stands down silently" in s
+
+    def test_states_the_fail_open_direction_and_why(self):
+        """A gate that blocked on a cannot-judge would deny the early cheap call
+        the ladder recommends -- worse than no gate."""
+        s = _section()
+        assert "fails open" in s
+        assert "set -euo" in s
+
+    def test_names_the_override_and_why_it_exists(self):
+        s = _section()
+        assert "HMAD_ADVISOR_OVERRIDE=1" in s
+        assert "deleted from" in s
+
+    def test_states_the_two_limits(self):
+        s = _section()
+        assert "only sessions where it is wired" in s
+        assert "defaults to 1M" in s
+
+
 def test_never_list_carries_the_rule():
     """A rule that lives only in a prose section is advisory. The NEVER list is
     where this skill's non-negotiables are read from."""
@@ -168,6 +203,7 @@ def test_never_list_carries_the_rule():
     assert "advisor()" in never
     assert "45%" in never
     assert "CTXBUDGET:" in never
+    assert "h-mad-advisor-gate.sh" in never
 
 
 def test_helper_script_is_listed():

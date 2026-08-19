@@ -1,0 +1,26 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_advisor_gate.py", "-q"],
+ "mutations": [
+  {"name": "set-e-turns-cannot-judge-into-a-block", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "set -uo pipefail", "replace": "set -euo pipefail"},
+  {"name": "unknown-blocks", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "  *) exit 0 ;;   # OK, UNKNOWN, no token at all -> allow. Cannot-judge is not a block.",
+   "replace": "  *) exit 2 ;;"},
+  {"name": "gate-every-tool", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "[ \"$TOOL_NAME\" = \"advisor\" ] || exit 0", "replace": "true"},
+  {"name": "no-override-escape", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "[ \"${HMAD_ADVISOR_OVERRIDE:-}\" = \"1\" ] && exit 0", "replace": "true"},
+  {"name": "ignore-the-handed-transcript", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "[ \"$TRANSCRIPT\" != \"-\" ] && [ -f \"$TRANSCRIPT\" ] && ARGS+=(--transcript \"$TRANSCRIPT\")",
+   "replace": "true"},
+  {"name": "missing-checker-blocks", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "[ -f \"$BUDGET\" ] || exit 0   # no checker -> allow; this hook never blocks blind",
+   "replace": "[ -f \"$BUDGET\" ] || exit 2"},
+  {"name": "deny-teaches-no-substitute", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "  echo \"  1. hmad-dispatch exec agy <promptfile>   — reviews in its own context; only its report (~2k) returns\"",
+   "replace": "  echo \"  1. do something else\""},
+  {"name": "ceiling-not-configurable", "file": "hooks/h-mad-advisor-gate.sh",
+   "find": "CEILING=\"${HMAD_CONTEXT_CEILING:-45}\"", "replace": "CEILING=\"45\""}
+ ]
+}

@@ -1021,6 +1021,47 @@ ceiling is 45 and not 50.
    *because* of the accumulated detail, so this degrades exactly what you are paying for.
    Compacting **after** the overflow recovers nothing.
 
+### Making it mechanical — the advisor gate hook
+
+A rule that only lives in prose is one the orchestrator talks itself out of, and it is most
+tempting to do so at exactly the point where being wrong ends the run. `hooks/h-mad-advisor-gate.sh`
+turns the ceiling into a refusal. Wire it in `~/.claude/settings.json`:
+
+```json
+{ "matcher": "advisor", "hooks": [{ "type": "command",
+  "command": "bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-gate.sh" }] }
+```
+
+It rides the `~/.claude/skills/h-mad` symlink on purpose. A second hook symlink would add a
+`SPLIT_INSTALL` failure mode for no gain, and the skills link is already verified by
+`h_mad_install_check.py`.
+
+**Hooks are snapshotted at session start, so wiring it takes effect in the NEXT session, not this
+one.** That also means you cannot verify from the session that wired it. The live-fire test, first
+thing next session, is one call with the window shrunk so the ceiling is certain to trip:
+
+```bash
+HMAD_CONTEXT_WINDOW=1000 claude    # then make one advisor() call — it MUST be denied
+```
+
+If it sails through, the matcher never fired, and **that is the finding** — a gate that stands
+down silently is indistinguishable from a gate that approves.
+
+The gate blocks `advisor` and nothing else, and it **fails open** on every cannot-judge: no
+transcript, no usage record yet, no budget script, an unparseable payload, or any verdict that is
+not `DENY`. That is deliberate in the same direction as the ceiling itself — a fresh session is
+too young to measure and is also the cheapest moment to call, so a cannot-judge that blocked would
+deny exactly the call the ladder recommends. (This is why the hook is `set -uo pipefail` and not
+`set -euo`: the budget script exits 2 on `UNKNOWN`, and under `set -e` that rc propagates out of
+the hook, where 2 means *block*.) The deny names the substitutes and the escape hatch,
+`HMAD_ADVISOR_OVERRIDE=1`, because a refusal that teaches no way out gets deleted from
+`settings.json` — and then the rule is gone entirely rather than ignored once.
+
+Two limits worth stating: it protects only sessions where it is wired (elsewhere the rule is
+documentation), and `HMAD_CONTEXT_WINDOW` defaults to 1M — a smaller-window model needs it
+exported or the percentage is wrong in the permissive direction. The deny prints the window it
+assumed for that reason.
+
 **Never batch `advisor()` into a heavy turn.** Its input is snapshotted at call time, so the 40
 files you read in the same turn are inside the copy. Call it, then do the reading.
 
@@ -1082,7 +1123,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
-- Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing.
+- Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Enforced by `hooks/h-mad-advisor-gate.sh` in any session where it is wired; documentation everywhere else.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
 ## Editing this skill while a run is in flight

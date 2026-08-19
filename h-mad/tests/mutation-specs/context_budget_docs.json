@@ -55,6 +55,30 @@
    "file": "SKILL.md",
    "find": "It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`",
    "replace": "It finds a transcript"
+  },
+  {
+   "name": "drop-next-session-caveat",
+   "file": "SKILL.md",
+   "find": "takes effect in the NEXT session, not this\none",
+   "replace": "takes effect immediately, in this\nsession"
+  },
+  {
+   "name": "drop-live-fire-test",
+   "file": "SKILL.md",
+   "find": "HMAD_CONTEXT_WINDOW=1000 claude    # then make one advisor() call \u2014 it MUST be denied",
+   "replace": "claude"
+  },
+  {
+   "name": "drop-fail-open-rationale",
+   "file": "SKILL.md",
+   "find": "and it **fails open** on every cannot-judge",
+   "replace": "and it blocks on every cannot-judge"
+  },
+  {
+   "name": "drop-wiring-limit",
+   "file": "SKILL.md",
+   "find": "it protects only sessions where it is wired",
+   "replace": "it protects everything"
   }
  ]
 }
