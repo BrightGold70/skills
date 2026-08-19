@@ -46,6 +46,13 @@
   `report` → `docs/04-report/...`) MUST be supersets that satisfy that validator's required
   sections AND retain the existing h-mad sections. Dropping an h-mad section or failing the
   validator is a violation.
+- The contract binds the **saved document**, not only the template it came from. Where such a
+  validator reclassifies a document by a substring of its *content* — bkit's `isPlanPlus` promotes
+  a plan to a larger required-section list on seeing `Plan-Plus`, `Plan Plus`, `plan-plus`,
+  `Brainstorming-Enhanced`, or `Intent Discovery` anywhere in the file — a generated document
+  carrying that substring is a violation even though the template is clean. Guard it mechanically
+  (`scripts/h_mad_doc_shape_check.py`); the literals are unremarkable prose, so an author cannot
+  be expected to avoid them from memory.
 
 ## Operator-override preservation
 - The `## Acknowledged-not-fixed` sidecar override mechanism MUST remain functional for all

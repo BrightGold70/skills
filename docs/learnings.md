@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-19 · gotcha · [0.9] · `bkit,pdca,h-mad,doc-templates` — bkit isPlanPlus reclassifies a plan on a case-SENSITIVE substring of its CONTENT (plan-plus, Plan-Plus, Plan Plus, Brainstorming-Enhanced, Intent Discovery), demanding 13 sections h-mad lacks. A compliant template is not a compliant doc.
+- 2026-08-19 · gotcha · [0.9] · `pytest,testing,self-inflicted,h-mad` — A module-level def appended after a test class silently ends that class: methods below it become nested and stop being collected. Suite still reports green — I lost 10 tests this way. Assert the collected COUNT.
 - 2026-08-09 · gotcha · [0.7] · `zsh,shell,globbing,verification,handoff:2026-08-09-main__j29-out-clobber-guard` — zsh nomatch aborts the WHOLE command when ANY glob misses: 'ls -d .venv venv */.venv */venv' listed nothing and read as 'no venv exists'. Empty output means one pattern missed. Use bash -c.
 - 2026-08-09 · gotcha · [0.5] · `h-mad,hmad-dispatch,monitoring-log,j29,session:2026-08-09` — J29 own remedy was wrong: refuse an --out that CHANGED since dispatch start, not one merely non-empty — the documented no_verdict recovery re-dispatches to the SAME templated path.
 - 2026-08-09 · pattern · [0.7] · `h-mad,invariants,prompt-size,handoff:2026-08-09-main__guard-patches-and-h-mad-install-gate` — Adding a rule to a file inlined verbatim into every prompt has a global byte cost. Recalibrate the size fixture rather than widen the band - the band is the assertion

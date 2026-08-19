@@ -170,7 +170,24 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```
 
 3. Save to `docs/01-plan/features/<feature>.plan.md`.
-4. Prompt: "Plan v1.0 ready. Review and approve, then I'll run the audit cycle."
+4. Verify the saved document's shape — the template is compliant, the *authored body* may not be:
+
+   ```bash
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_doc_shape_check.py \
+     docs/01-plan/features/<feature>.plan.md
+   ```
+
+   `DOC-SHAPE: FAIL` reports either dropped superset sections or a **plan-plus
+   escalation literal** in the prose. Fix before prompting for approval.
+
+   The escalation literals are `Plan-Plus`, `Plan Plus`, `plan-plus`,
+   `Brainstorming-Enhanced`, and `Intent Discovery` — matched case-sensitively as
+   plain substrings anywhere in the file, including inside a code block or a
+   quotation. An external validator reclassifies a plan that contains any of them
+   as a different, larger document type this template cannot satisfy, so a plan
+   that needs to *discuss* one must name it indirectly ("the escalation literals",
+   "bkit's plan-plus refinement" spelled without the hyphen, etc.).
+5. Prompt: "Plan v1.0 ready. Review and approve, then I'll run the audit cycle."
 
 **Advance gate**: User explicitly marks v1.0 approved. Then audit cycle begins (see SKILL.md §Audit prompt assembly).
 
@@ -237,7 +254,16 @@ Standalone replacements for all external skill calls. No spec-kit, b-mad, or pdc
    ```
 
 4. Save to `docs/02-design/features/<feature>.design.md`.
-5. Prompt: "Design v1.0 ready. Review and approve, then I'll run the audit cycle."
+5. Verify the saved document's shape (see Phase 3 step 4 for what `DOC-SHAPE: FAIL` means):
+
+   ```bash
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_doc_shape_check.py \
+     docs/02-design/features/<feature>.design.md
+   ```
+
+   A design may name the plan-plus escalation literals freely — the external
+   reclassification applies to plan documents only.
+6. Prompt: "Design v1.0 ready. Review and approve, then I'll run the audit cycle."
 
 **Advance gate**: User explicitly marks v1.0 approved. Then audit cycle begins.
 
@@ -482,6 +508,15 @@ Draft and save to `docs/04-report/features/<feature>.report.md`:
 
 ## Version History
 - v1.0: Initial report draft.
+```
+
+Verify the saved document's shape before archiving — once archived under
+`docs/archive/`, the report is no longer at a path the external validator detects,
+so a dropped section becomes invisible rather than fixed:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_doc_shape_check.py \
+  docs/04-report/features/<feature>.report.md
 ```
 
 ### 7c — Archive

@@ -2,13 +2,30 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT_DIR = REPO_ROOT / "h-mad" / "scripts"
 INLINE_PROTOCOLS = REPO_ROOT / "h-mad" / "references" / "inline-protocols.md"
+
+sys.path.insert(0, str(SCRIPT_DIR))
+
+# Single-sourced from the checker (`invariants.base.md` §"Single-source
+# verdicts"). A second hardcoded copy here would be free to drift from both the
+# checker and the live validator while every test stayed green — and it had
+# already drifted: the local trigger list was missing the lowercase `plan-plus`
+# literal, which the external check tests case-sensitively as a distinct string.
+# `test_h_mad_doc_shape_check.py::TestMirrorFidelity` holds the imported tables
+# to the live validator.
+from h_mad_doc_shape_check import (  # noqa: E402
+    PLAN_PLUS_TRIGGERS as TRIGGER_LITERALS,
+    REQUIRED_SECTIONS as BKIT_REQUIRED,
+)
+
 VALIDATOR = (
     Path.home()
     / ".claude"
@@ -30,33 +47,6 @@ PHASE_TYPES = {
     "7": "report",
 }
 
-BKIT_REQUIRED = {
-    "plan": [
-        "Executive Summary",
-        "Overview",
-        "Scope",
-        "Requirements",
-        "Success Criteria",
-        "Risks and Mitigation",
-        "Architecture Considerations",
-        "Convention Prerequisites",
-        "Next Steps",
-        "Version History",
-    ],
-    "design": [
-        "Executive Summary",
-        "Overview",
-        "Architecture",
-        "Detailed Design",
-        "Implementation Order",
-        "Test Plan",
-        "Version History",
-    ],
-    "report": [
-        "Executive Summary",
-        "Version History",
-    ],
-}
 
 PRIOR_HMAD_HEADINGS = {
     "plan": [
@@ -85,13 +75,6 @@ PRIOR_HMAD_HEADINGS = {
         "Carry Items",
     ],
 }
-
-TRIGGER_LITERALS = [
-    "Intent Discovery",
-    "Plan-Plus",
-    "Plan Plus",
-    "Brainstorming-Enhanced",
-]
 
 
 def _phase_segment(text: str, phase: str) -> str:
