@@ -26,7 +26,9 @@ If still ambiguous, default to **WRITE** for session-end invocations and **READ*
 
 ## WRITE mode flags
 
-Parse flags from the invocation before doing anything else. Flags apply only to WRITE mode.
+Parse flags from the invocation before doing anything else. The flags in the table below are
+WRITE-only. READ has one flag of its own, `--here` (§"Fresh-context precondition"); it is not
+listed here because it is a precondition override rather than a WRITE behaviour switch.
 
 | Flag | Default | Effect |
 |---|---|---|
@@ -58,19 +60,30 @@ should not survive into the next one. Reading one into a session that is already
 the worst of both — stale assumptions from the live conversation silently outranking the
 document you just read, and no signal that it happened.
 
+**This applies to every READ entry point, not to a literal `/handoff read`.** `/handoff resume`,
+"load handoff", "where did we leave off", "pick up where we left off", "continue from last
+session", a bare "resume" — anything the §"Mode routing" table sends to READ arrives here first.
+Routing decides the mode; the mode decides the steps. There is no path into Step 0 that skips 0a.
+
 **Fresh** means the resume request arrives at the start of the session: no substantive prior work
 in this conversation — no edits, no builds, no unrelated investigation. Being invoked right after
 `/clear` is the canonical case.
 
-If the session is **not** fresh, stop here. Print exactly this and do nothing else — do not sync,
-do not locate, do not read:
+If the session is **not** fresh, stop here. Print this and do nothing else — do not sync, do not
+locate, do not read:
 
 ```
 Resume needs a clean context. Run:
 
     /clear
-    /handoff read
+    <the invocation they used>
 ```
+
+**Echo back the invocation they actually used** — `/handoff resume` if that is what they typed,
+`/handoff read` if that is. Handing someone a command they did not use reads as a correction and
+invites them to wonder whether the two differ (they do not; both route to READ). If the trigger
+was prose rather than a command — "where did we leave off" — print `/handoff read`, which is the
+shortest thing that gets them back here.
 
 Then wait. The user runs those two lines and READ re-enters at Step 0a with a fresh session,
 which passes silently.
