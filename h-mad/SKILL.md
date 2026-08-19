@@ -466,10 +466,65 @@ nobody reports is not observability.
 polling every few seconds spends more context watching the work than doing it. One poll
 per 30–60s is enough, and doing other work between polls is the point of backgrounding.
 
+### Making a dispatch visible in Orca (zsh shell pane)
+
+`progress` is for **you** (the orchestrator) — it costs context on every poll. When a
+**human** wants to watch, run the dispatch in a real zsh pane inside Orca instead: the
+pane renders in Orca's UI process, so it costs the orchestrator **zero** context and is
+visible on mobile. The two are complementary; the pane is the cheaper channel whenever a
+person is the audience.
+
+This is NOT a return to the pane dispatch path. That path failed on **agent identity
+resolution** (which pane holds agy vs codex — orca#9870), tui-idle false-idle, and TUI
+scraping. A *shell* pane has none of those: the handle comes back from `terminal
+split`/`terminal create` at creation, a shell command genuinely completes, and the verdict
+still comes from `--out` — a file — not from a scrape. The pane is a **viewport**, never a
+transport.
+
+```bash
+# Split the worktree's existing shell so the dispatch lands on the SAME surface.
+# `terminal create --worktree <sel> --title <t> --command …` instead for its own tab.
+orca terminal split --terminal <handle> --direction horizontal --command \
+  "hmad-dispatch exec agy <prompt> --out <o> --log <l> --timeout 900 & dp=\$!; \
+   while kill -0 \$dp 2>/dev/null; do hmad-dispatch progress <l> --lines 6 --pid \$dp; sleep 6; done; \
+   wait \$dp; echo \$? > <o>.rc; echo DISPATCH-DONE"
+```
+
+Three findings, each measured live on 2026-08-19, each of which silently breaks a naive
+version of this:
+
+1. **A pane running `exec` bare is BLIND.** `exec` redirects the agent's stream into
+   `--log`, so the pane shows only the echoed command line and then nothing until the run
+   ends — the exact blindness this whole section exists to cure, relocated somewhere
+   prettier. Measured: at t+14s the pane held one line while `--log` already had three
+   events. **The pane must tail or digest the log itself**, which is what the loop above
+   does. (`tail -f <l>` also works here and is the one place it is appropriate — a human
+   pane, never an orchestrator tool call.)
+
+2. **`orca terminal wait --for exit` does NOT carry the command's exit code.** A pane
+   running `sleep 2; exit 9` reported `{"satisfied":true,"status":"exited","exitCode":0}`.
+   Reading that as the dispatch rc turns **every failure into a success** — the same
+   `$?`-shaped defect §"Audit-gate signal discipline" forbids elsewhere. Capture rc from
+   the command itself (`echo $? > <o>.rc`, verified returning 3 and 7 correctly), or use
+   `report-wait`, which polls a path plus a `.done` marker and is transport-agnostic.
+
+3. **`wait --for exit` is unusable here in both directions.** End the command with `exit`
+   and the shell dies: `wait` satisfies, the code is still wrong, and the scrollback goes
+   with it. Let it return to a prompt (what you want — the scrollback is the point) and
+   `wait --for exit` **times out**, because the shell is still alive. Neither shape gives
+   a completion signal, so do not build one on it.
+
+The verdict path is untouched by any of this: `--out` still holds the response, `--log`
+still holds the stream, and `h_mad_extract_verdict.py` still reads the file. Never scrape
+the pane for a verdict.
+
+### Dispatch channels and their guarantees
+
 The verdict comes from `--out` (the `--output-last-message` file / captured response),
 which only lands at completion — so `--out` is NOT tailable. `--log` is: it streams
-the live transcript (codex) or response (agy) to `<file>` as it runs, without
-disturbing the verdict on stdout or the exit code. Tail it to monitor a headless run.
+the live transcript to `<file>` as it runs — plain text for codex, the NDJSON event
+stream for agy — without disturbing the verdict on stdout or the exit code. Watch it
+with `hmad-dispatch progress`, never `tail -f` (see §"Watching a headless dispatch").
 `--log` appends on both backends, so a caller-supplied log retains its prior content.
 
 **Give every dispatch its own `--out`.** It is last-writer-wins: two dispatches
