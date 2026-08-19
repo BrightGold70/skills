@@ -65,6 +65,12 @@ def _env(bindir, **extra):
     env["PATH"] = f"{bindir}:{env['PATH']}"
     env["HMAD_SUBSTRATE"] = "orca"
     env.pop("ORCA_TERMINAL_HANDLE", None)
+    # Isolate the slot registry PER TEST. Without this the default location is
+    # `<git-root>/.h-mad/panes`, and the suite wrote `term_NEW.busy` / `term_SPLIT.cd`
+    # into the real repo -- invisible to `git status` because `.h-mad/` is ignored,
+    # and able to hand a PRODUCTION dispatch a handle that only ever existed in a
+    # stub. Caught by looking for the leak rather than by any assertion.
+    env.setdefault("HMAD_PANE_SLOT_DIR", str(Path(bindir).parent / "slots"))
     env.update({k: str(v) for k, v in extra.items()})
     return env
 
@@ -360,6 +366,209 @@ def test_unknown_agent_and_missing_prompt_are_refused(tmp_path):
     b = _bindir(tmp_path, ["agy"], tmp_path / "orca.txt")
     assert run(["exec-pane", "gemini", str(_prompt(tmp_path))], env=_env(b)).returncode == 2
     assert run(["exec-pane", "agy", str(tmp_path / "nope.md")], env=_env(b)).returncode == 2
+
+
+def repr_sh(x):
+    """Single-quote a JSON blob for a bash `echo`."""
+    return "'" + x + "'"
+
+
+# --------------------------------------------------------------------------
+# the slot pool — reuse an idle h-mad pane instead of piling up tabs
+# --------------------------------------------------------------------------
+
+def _slots(env):
+    return Path(env["HMAD_PANE_SLOT_DIR"])
+
+
+def _orca_with_live(tmp_path, live_handles, capture):
+    """An orca stub whose `terminal list` reports the given live handles."""
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    d = b / "agy"; d.write_text((STUBS / "agy").read_text()); d.chmod(0o755)
+    terms = ",".join('{"handle":"%s"}' % h for h in live_handles)
+    script = "\n".join([
+        "#!/usr/bin/env bash",
+        'printf "%s\\n" "$*" >> ' + str(capture),
+        'case "$1 $2" in',
+        '  "terminal list")   echo ' + repr_sh('{"ok":true,"result":{"terminals":[' + terms + ']}}') + ' ;;',
+        '  "terminal send")   echo ' + repr_sh('{"ok":true,"result":{}}') + ' ;;',
+        '  "terminal split")  echo ' + repr_sh('{"ok":true,"result":{"split":{"handle":"term_SPLIT"}}}') + ' ;;',
+        '  "terminal create") echo ' + repr_sh('{"ok":true,"result":{"terminal":{"handle":"term_NEW"}}}') + ' ;;',
+        '  *) echo ' + repr_sh('{"ok":true,"result":{}}') + ' ;;',
+        'esac',
+        'exit 0',
+        '',
+    ])
+    (b / "orca").write_text(script)
+    (b / "orca").chmod(0o755)
+    return b
+
+
+def test_a_new_pane_registers_itself_as_a_busy_slot(tmp_path):
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    env = _env(b)
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    d = _slots(env)
+    assert (d / "term_NEW.busy").is_dir()
+    assert (d / "term_NEW.cd").read_text() == str(tmp_path)
+
+
+def test_an_idle_slot_is_reused_instead_of_creating_a_tab(tmp_path):
+    """The whole point: one h-mad pane per worktree, reused -- not a new tab per
+    dispatch piling up until a human closes them by hand."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.idle").write_text("")
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    calls = _orca_calls(cap)
+    assert "terminal send" in calls and "--terminal term_IDLE" in calls
+    assert "terminal create" not in calls
+    assert "--enter" in calls
+    assert r.stdout.strip() == "term_IDLE"
+    assert "reused idle pane" in r.stderr
+    assert not (d / "term_IDLE.idle").exists()
+    assert (d / "term_IDLE.busy").is_dir()
+
+
+def test_a_slot_for_a_different_worktree_is_not_reused(tmp_path):
+    """A pane's cwd is its worktree; dispatching one repo's audit into another
+    repo's pane would run in the wrong tree."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.idle").write_text("")
+    (d / "term_IDLE.cd").write_text("/somewhere/else")
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+
+
+def test_a_slot_whose_pane_is_gone_is_reaped_not_dispatched_into(tmp_path):
+    """Panes get closed. Sending into a dead handle looks like a dispatch that
+    silently never ran, and nothing else would ever clean the entry up."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_SOMETHING_ELSE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_DEAD.idle").write_text("")
+    (d / "term_DEAD.cd").write_text(str(tmp_path))
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    calls = _orca_calls(cap)
+    assert "--terminal term_DEAD" not in calls
+    assert "terminal create" in calls
+    assert not (d / "term_DEAD.idle").exists(), "stale slot was not reaped"
+    assert not (d / "term_DEAD.cd").exists()
+
+
+def test_a_busy_slot_is_never_handed_out(tmp_path):
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_BUSY"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_BUSY.busy").mkdir()
+    (d / "term_BUSY.cd").write_text(str(tmp_path))
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "--terminal term_BUSY" not in _orca_calls(cap)
+    assert "terminal create" in _orca_calls(cap)
+
+
+def test_two_dispatches_cannot_claim_the_same_slot(tmp_path):
+    """Phase 5 parallel fanout dispatches concurrently, so this race is real. The
+    claim is `mkdir`, which is atomic; a check-then-write would send two different
+    dispatches into ONE pane and the second would overwrite the first."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.idle").write_text("")
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    procs = [subprocess.Popen(
+        ["bash", str(WRAPPER), "exec-pane", "agy", str(_prompt(tmp_path, f"p{i}.md")),
+         "--cd", str(tmp_path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env) for i in range(2)]
+    outs = [p.communicate() for p in procs]
+    assert all(p.returncode == 0 for p in procs), outs
+    reused = [o for o, e in outs if o.strip() == "term_IDLE"]
+    assert len(reused) == 1, f"slot handed out {len(reused)} times"
+
+
+def test_the_pane_releases_its_own_slot_when_it_finishes(tmp_path):
+    """Release is the pane's job because only the pane knows when it is done, and
+    it must come LAST -- releasing before the DONE marker prints would let the next
+    dispatch overwrite a verdict a human is still reading."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    env = _env(b)
+    run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    cmd = _pane_cmd(cap)
+    assert "ORCA_TERMINAL_HANDLE" in cmd
+    assert ".idle" in cmd and ".busy" in cmd
+    assert cmd.index("HMAD-PANE-DONE") < cmd.index('"$ORCA_TERMINAL_HANDLE".idle')
+
+
+def test_no_reuse_forces_a_fresh_pane(tmp_path):
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.idle").write_text("")
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--no-reuse"], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "terminal create" in _orca_calls(cap)
+    assert "terminal send" not in _orca_calls(cap)
+
+
+def test_explicit_split_bypasses_the_pool(tmp_path):
+    """--split names a surface on purpose; silently redirecting to a pooled pane
+    would put the dispatch somewhere the caller did not ask for."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_with_live(tmp_path, ["term_IDLE"], cap)
+    env = _env(b)
+    d = _slots(env); d.mkdir(parents=True, exist_ok=True)
+    (d / "term_IDLE.idle").write_text("")
+    (d / "term_IDLE.cd").write_text(str(tmp_path))
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--split", "term_TARGET"], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "terminal split" in _orca_calls(cap)
+    assert "terminal send" not in _orca_calls(cap)
+
+
+def test_wait_polls_the_rc_file_sub_second(tmp_path):
+    """The complaint that started this: a dispatch finished and the result was
+    picked up seconds-to-minutes later. `exec` itself returns within ~1s of the
+    agent's result (measured), so any perceptible delay is the WAIT, not the work.
+    A 2s rc poll was adding more than the whole rest of the tail."""
+    src = WRAPPER.read_text()
+    body = src.split("_cmd_exec_pane()", 1)[1]
+    assert "sleep 0.5" in body, "the rc poll is no longer sub-second"
+    assert "sleep 2;" not in body
+
+
+def test_wait_timeout_is_still_measured_in_seconds(tmp_path):
+    """The poll counter switched to half-seconds; if the timeout comparison did not
+    switch with it, --wait-timeout 20 would fire after 10s and report a timeout on
+    a dispatch that was working fine."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    import time as _t
+    t0 = _t.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--wait", "--wait-timeout", "6"], env=_env(b))
+    elapsed = _t.time() - t0
+    assert r.returncode == 124
+    assert elapsed >= 5.0, f"timed out after only {elapsed:.1f}s; unit mismatch"
 
 
 def test_wait_blocks_on_the_rc_file_and_returns_that_code(tmp_path):

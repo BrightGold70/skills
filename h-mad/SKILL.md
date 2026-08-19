@@ -462,9 +462,20 @@ to answer. Between polls, surface one short line naming the agent, the elapsed t
 the current step — e.g. `agy 5e-review · 4m · tool run_command (pytest -q)`. A live log
 nobody reports is not observability.
 
-**Poll on the work's timescale, not the clock's.** Audits and implements run in minutes;
-polling every few seconds spends more context watching the work than doing it. One poll
-per 30–60s is enough, and doing other work between polls is the point of backgrounding.
+**Do not poll on a timer when you only need the result.** A 30–60s poll cadence means
+learning that a dispatch finished up to a minute after it did — which is pure added
+latency, not observability. `exec` returns within ~1s of the agent producing its result
+(measured: result at t+23.44s, `exec` returned at t+24.43s), so the delay is entirely in
+how you wait. Instead:
+
+- **Run the blocking form as a BACKGROUND command** (`exec-pane … --wait`, or
+  `exec … &`) so the harness re-invokes you the moment it exits. That is a completion
+  *signal*, not a poll, and it costs no context while waiting.
+- **Poll `progress` only when you actually want the intermediate state** — to relay a
+  status line, or to decide whether to keep waiting. Then one poll per 30–60s is right,
+  and doing other work between polls is the point of backgrounding.
+
+`--wait` itself polls the rc file at 0.5s, so it adds well under a second.
 
 ### Making a dispatch visible in Orca (zsh shell pane)
 
@@ -496,6 +507,24 @@ hmad-dispatch exec-pane agy <prompt> --cd <repo> --out <o> --title "5e-review ag
 # DROP-IN for `exec`: blocks until done, stdout = the response, rc = the dispatch's.
 hmad-dispatch exec-pane agy <prompt> --cd <repo> --out <o> --wait --wait-timeout 1200
 ```
+
+**Panes are pooled and reused.** By default `exec-pane` looks for an idle pane it
+created earlier in the same worktree and dispatches into that one, so you end up with a
+single h-mad pane per worktree rather than a new tab per dispatch piling up until you
+close them by hand. Only panes this verb created are ever reused: each registers and
+releases its own slot from inside itself, so a pooled pane is provably a shell and
+provably idle. Foreign panes are never probed — proving one is an idle shell is not
+possible from Orca metadata (there is no busy/idle field), and probing by sending text
+would type into an agent's TUI if the guess were wrong. `--no-reuse` forces a fresh pane;
+`--split`/`--new-tab` bypass the pool entirely. Slot state lives in files under
+`.h-mad/panes/` (override with `HMAD_PANE_SLOT_DIR`) rather than in the tab title,
+because the shell rewrites the title via OSC on every prompt — a pane renamed to
+`h-mad slot · idle` reads back as `~/orca/skills` the moment it reaches a prompt.
+
+Known, deliberate window: `--wait` returns as soon as the rc file lands, ~1-2s before the
+pane finishes rendering its last digest and releases its slot. A second dispatch fired
+inside that window creates a second pane instead of reusing. Closing it would mean adding
+latency to the verdict, which is the wrong trade.
 
 `--split` with no value means **this** terminal — the only unambiguous reading of "the
 same surface". It refuses rather than guessing a pane from `terminal list`: guessing

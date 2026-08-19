@@ -2575,6 +2575,75 @@ _self_path() {
   printf '%s/%s' "$d" "$(basename "${BASH_SOURCE[0]}")"
 }
 
+# ---------------------------------------------------------------------------
+# Pane slot pool.
+#
+# WHY A REGISTRY AND NOT A TITLE. The obvious marker for "this is an h-mad pane
+# and it is idle" is the tab title, and it does not work: the user's zsh emits an
+# OSC title sequence on every prompt, so a pane renamed to `h-mad slot · idle`
+# reverts to `~/orca/skills` the moment it returns to a prompt. Measured live --
+# `orca terminal rename` succeeded and the title read back as the shell's. (Same
+# root cause as the agent-identity note in references/agent-substrate.md: `.title`
+# is the OSC title else the shared tab title.) So slot state lives in FILES the
+# shell cannot rewrite.
+#
+# WHY ONLY OUR OWN PANES. Reusing an arbitrary "looks empty" pane means proving a
+# foreign pane is a shell at a prompt, and no Orca metadata says so -- there is no
+# busy/idle field, only `preview`. Probing by sending text is not safe either: if
+# the pane is an agent TUI, the probe is typed in as a prompt. So the pool holds
+# only panes THIS verb created, which are provably shells, and each pane registers
+# and releases its own slot using $ORCA_TERMINAL_HANDLE (verified set inside a
+# pane created by `terminal create`). A caller who knows a foreign pane is an idle
+# shell can still opt in explicitly with `--split <handle>`; that is their call to
+# make, not a heuristic's.
+_pane_slot_dir() {
+  printf '%s\n' "${HMAD_PANE_SLOT_DIR:-$(dirname "$(_pin_file)")/panes}"
+}
+
+# Claim an idle slot for <cd_dir>, or print nothing. Prints the handle on success.
+#
+# The claim is `mkdir`, which is atomic and portable: two dispatches racing for
+# the same slot cannot both win, and Phase 5 parallel fanout means that race is
+# real rather than theoretical. Slots whose pane no longer exists are reaped in
+# passing -- a closed pane must never be handed out, and nothing else would ever
+# clean it up.
+_pane_slot_claim() {  # <cd_dir> <live-handles-newline-separated>
+  local cd_dir="$1" live="$2" d f h
+  d="$(_pane_slot_dir)"
+  [ -d "$d" ] || return 0
+  for f in "$d"/*.idle; do
+    [ -e "$f" ] || continue
+    h="$(basename "$f" .idle)"
+    if ! printf '%s\n' "$live" | grep -qx -- "$h"; then
+      rm -f "$f" "$d/$h.cd" 2>/dev/null || true
+      rmdir "$d/$h.busy" 2>/dev/null || true
+      continue
+    fi
+    [ "$(cat "$d/$h.cd" 2>/dev/null)" = "$cd_dir" ] || continue
+    mkdir "$d/$h.busy" 2>/dev/null || continue   # lost the race; try the next slot
+    rm -f "$f" 2>/dev/null || true
+    printf '%s\n' "$h"
+    return 0
+  done
+  return 0
+}
+
+# Register a freshly created pane as a busy slot.
+_pane_slot_register() {  # <handle> <cd_dir>
+  local d; d="$(_pane_slot_dir)"
+  mkdir -p "$d" 2>/dev/null || return 0
+  printf '%s' "$2" > "$d/$1.cd" 2>/dev/null || true
+  mkdir "$d/$1.busy" 2>/dev/null || true
+  rm -f "$d/$1.idle" 2>/dev/null || true
+}
+
+# The shell fragment a pane runs to release its own slot. Uses the pane's own
+# $ORCA_TERMINAL_HANDLE, so it needs nothing spliced in but the directory.
+_pane_slot_release_snippet() {  # <slot-dir>
+  local d; d="$(_shq "$1")"
+  printf 'rmdir %s/"$ORCA_TERMINAL_HANDLE".busy 2>/dev/null; : > %s/"$ORCA_TERMINAL_HANDLE".idle' "$d" "$d"
+}
+
 # `exec-pane` — run a headless `exec` inside a VISIBLE Orca zsh pane.
 #
 # WHY THIS IS NOT THE OLD PANE PATH. The pane dispatch path failed on agent
@@ -2616,7 +2685,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
 
   local cd_dir="" model="" out="" log="" timeout="" sandbox="" effort=""
   local split_handle="" want_split=0 new_tab=0 title="" direction="horizontal"
-  local poll=6 focus=0 do_wait=0 wait_timeout=0
+  local poll=6 focus=0 do_wait=0 wait_timeout=0 reuse=1
   while [ $# -gt 0 ]; do case "$1" in
     # --- passthrough to `exec` ---
     --cd) cd_dir="$2"; shift 2 ;;
@@ -2649,6 +2718,7 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
       fi
       ;;
     --new-tab) new_tab=1; shift ;;
+    --no-reuse) reuse=0; shift ;;
     --title) title="$2"; shift 2 ;;
     --direction) direction="$2"; shift 2 ;;
     --poll) poll="$2"; shift 2 ;;
@@ -2721,12 +2791,41 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   pane_cmd="{ $inner ; echo \$? > $(_shq "$rc_file") ; } & _hmad_dp=\$!;"
   pane_cmd="$pane_cmd while kill -0 \$_hmad_dp 2>/dev/null; do $(_shq "$self") progress $(_shq "$log") --lines 8 --pid \$_hmad_dp; sleep $poll; done;"
   pane_cmd="$pane_cmd $(_shq "$self") progress $(_shq "$log") --lines 12;"
-  pane_cmd="$pane_cmd echo \"HMAD-PANE-DONE rc=\$(cat $(_shq "$rc_file") 2>/dev/null)\""
+  pane_cmd="$pane_cmd echo \"HMAD-PANE-DONE rc=\$(cat $(_shq "$rc_file") 2>/dev/null)\";"
+  # Release LAST, so a slot only returns to the pool once the marker a human reads
+  # is already on screen. Releasing earlier would let the next dispatch overwrite
+  # the pane while its predecessor's verdict was still the thing being looked at.
+  pane_cmd="$pane_cmd $(_pane_slot_release_snippet "$(_pane_slot_dir)")"
 
   [ -n "$title" ] || title="h-mad $agent"
 
-  local handle
-  if [ -n "$split_handle" ]; then
+  local handle="" reused=0
+  # Prefer an idle pane this verb already created in this worktree. A human ends
+  # up with ONE h-mad pane per worktree that gets reused, instead of a new tab per
+  # dispatch piling up until they close them by hand.
+  if [ "$reuse" -eq 1 ] && [ -z "$split_handle" ] && [ "$new_tab" -eq 0 ]; then
+    local live
+    live="$(_orca_json '.result.terminals[]?.handle' terminal list --json 2>/dev/null || true)"
+    if [ -n "$live" ]; then
+      handle="$(_pane_slot_claim "$cd_dir" "$live")" || handle=""
+    fi
+    if [ -n "$handle" ]; then
+      # `send --enter` submits the line to a shell sitting at a prompt. Safe here
+      # and only here: this pane is one we created, so it is provably a shell and
+      # provably idle (it wrote its own .idle marker after finishing).
+      if _orca_json '' terminal send --terminal "$handle" --text "$pane_cmd" --enter --json >/dev/null 2>&1; then
+        reused=1
+      else
+        # Hand the slot back rather than stranding it; fall through to create.
+        rmdir "$(_pane_slot_dir)/$handle.busy" 2>/dev/null || true
+        : > "$(_pane_slot_dir)/$handle.idle" 2>/dev/null || true
+        handle=""
+      fi
+    fi
+  fi
+  if [ -n "$handle" ]; then
+    : # reused an idle slot; nothing to create
+  elif [ -n "$split_handle" ]; then
     handle="$(_orca_json '.result.split.handle' terminal split \
       --terminal "$split_handle" --direction "$direction" --command "$pane_cmd" --json)" || return 1
   else
@@ -2735,11 +2834,16 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
     handle="$(_orca_json '.result.terminal.handle' "${create_args[@]}")" || return 1
   fi
   [ -n "$handle" ] || { echo "hmad-dispatch: exec-pane: Orca returned no terminal handle" >&2; return 1; }
+  # Only NEW panes join the pool. A pane created by `--split <handle>` of someone
+  # else's tab is still ours (we made the child pane), so it registers too; the
+  # thing that never joins is a foreign pane we merely sent to.
+  [ "$reused" -eq 1 ] || _pane_slot_register "$handle" "$cd_dir"
 
   # Plain if, not `${v:+a}${v:-b}` — when v IS set BOTH halves expand (the second
   # is ":-", which only substitutes on UNSET), so the handle printed twice.
   local placement="new tab"
   [ -n "$split_handle" ] && placement="split of $split_handle"
+  [ "$reused" -eq 1 ] && placement="reused idle pane"
   echo "hmad-dispatch: exec-pane: $agent in pane $handle ($placement)" >&2
   echo "hmad-dispatch: exec-pane: log=$log rc=$rc_file${out:+ out=$out}" >&2
 
@@ -2754,11 +2858,16 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   # --wait: block on the rc FILE, never on `terminal wait` (traps 2 and 3).
   local waited=0 rc=0
   while [ ! -s "$rc_file" ]; do
-    if [ "$wait_timeout" -gt 0 ] && [ "$waited" -ge "$wait_timeout" ]; then
+    # `waited` counts half-seconds; compare against the timeout in the same unit.
+    if [ "$wait_timeout" -gt 0 ] && [ "$waited" -ge $(( wait_timeout * 2 )) ]; then
       echo "hmad-dispatch: exec-pane: timed out after ${wait_timeout}s waiting for $rc_file — the pane is still live; read it or poll 'hmad-dispatch progress $log'" >&2
       return 124
     fi
-    sleep 2; waited=$(( waited + 2 ))
+    # 0.5s, not 2s. `exec` itself returns within ~1s of the agent producing its
+    # result (measured: result at t+23.44s, exec returned t+24.43s), so a 2s poll
+    # was adding more delay than the whole rest of the tail. The cost is a stat()
+    # every half second on a run that takes minutes.
+    sleep 0.5; waited=$(( waited + 1 ))
   done
   rc="$(tr -dc '0-9' < "$rc_file")"
   [ -n "$rc" ] || rc=1
