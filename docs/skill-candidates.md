@@ -8,6 +8,24 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
+**What counts as open:** `yes` + `maybe`. A `no` is a verdict the scout already gave, not an
+undecided row — it needs no further judgement, only a reason if it is ever promoted to `DECLINED`.
+A terminal marker (`**LANDED**` / `**SUPERSEDED**` / `**DECLINED**`) wins over any `candidate:`
+value in the same row, because both conventions are in use here: some rows *replace* the value
+(`candidate: **SUPERSEDED**`), others leave `candidate: yes` and append `— **SUPERSEDED** (…)`.
+
+**Recurrence bumps are not candidates.** A row whose bold name is followed by
+`(recurrence, not a new row)`, `(no new recurrence)`, `(existing row, recurrence bumped)`, or
+`(row ~N)` is a note on an existing row. It carries no verdict of its own — the verdict lives on the
+canonical row — and counting it as a candidate inflates every total. Mark them that way when
+appending, and never write a bare `candidate: <value>` inside one: prose such as "still
+candidate: yes" is indistinguishable from a verdict to every counter that has run over this file.
+
+**Count with the parser, not with `grep -c`.** `handoff/scripts/skill_candidates_census.py` applies
+all three rules above and prints the bump rows it excluded so the number is auditable. A single-line
+`grep -cE '^- \*\*.*candidate: \**yes'` misses continuation lines, misreads appended terminal
+markers, and counts bumps — it has produced a wrong census of this backlog three times.
+
 ## Open, highest recurrence first (reconciled 2026-08-20)
 
 **Two `candidate: yes` are open**, and neither is the one that was loudest.
@@ -371,8 +389,9 @@ open, but materially eased — see its row note. `vendored-plugin patch kit` unt
 session bore on it.
 
 - **live-e2e-pane-janitor** *(existing row, recurrence bumped)*: this session created and hand-closed
-  ~10 Orca panes across tracer probes and live e2e runs. Recurrence: 6 → **8**. Still
-  candidate: yes, but **the hard half is now solved elsewhere**: `exec-pane`'s slot registry
+  ~10 Orca panes across tracer probes and live e2e runs. Recurrence: 6 → **8**. Still open on the
+  canonical row above (no verdict is recorded here — see the legend), but **the hard half is now
+  solved elsewhere**: `exec-pane`'s slot registry
   (`.h-mad/panes/<handle>.cd`) is exactly the "known-good set" the row wanted, so identifying which
   panes are h-mad's no longer needs elimination. What remains is closing probe panes created outside
   `exec-pane` — a smaller job than the row was originally scoped for. Re-scope before building.
