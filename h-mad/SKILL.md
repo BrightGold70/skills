@@ -497,8 +497,8 @@ version of this:
    `--log`, so the pane shows only the echoed command line and then nothing until the run
    ends — the exact blindness this whole section exists to cure, relocated somewhere
    prettier. Measured: at t+14s the pane held one line while `--log` already had three
-   events. **The pane must tail or digest the log itself**, which is what the loop above
-   does. (`tail -f <l>` also works here and is the one place it is appropriate — a human
+   events. **The pane must tail or digest the log itself**, which is why
+   `exec-pane` always provisions a `--log` and always builds the digest loop. (`tail -f <l>` also works here and is the one place it is appropriate — a human
    pane, never an orchestrator tool call.)
 
 2. **`orca terminal wait --for exit` does NOT carry the command's exit code.** A pane
@@ -507,6 +507,7 @@ version of this:
    `$?`-shaped defect §"Audit-gate signal discipline" forbids elsewhere. Capture rc from
    the command itself (`echo $? > <o>.rc`, verified returning 3 and 7 correctly), or use
    `report-wait`, which polls a path plus a `.done` marker and is transport-agnostic.
+   `exec-pane` never calls `terminal wait` at all.
 
 3. **`wait --for exit` is unusable here in both directions.** End the command with `exit`
    and the shell dies: `wait` satisfies, the code is still wrong, and the scrollback goes

@@ -2557,6 +2557,212 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   return "$rc"
 }
 
+# Single-quote a string for safe interpolation into a shell command line. The
+# pane's command text is handed to `orca terminal split/create --command` and run
+# by a shell, so every path we splice in has to survive spaces, quotes and glob
+# characters. Wrapping in single quotes and escaping embedded single quotes is
+# POSIX-portable and identical under zsh (the pane's shell) and bash.
+_shq() {  # <string>
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# Absolute path to THIS script, so the pane invokes the same wrapper the
+# coordinator is running rather than whatever `hmad-dispatch` a login shell finds
+# on PATH -- which, in a skill installed under several roots, need not be this
+# file at all.
+_self_path() {
+  local d; d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
+  printf '%s/%s' "$d" "$(basename "${BASH_SOURCE[0]}")"
+}
+
+# `exec-pane` — run a headless `exec` inside a VISIBLE Orca zsh pane.
+#
+# WHY THIS IS NOT THE OLD PANE PATH. The pane dispatch path failed on agent
+# identity resolution (which pane holds agy vs codex -- orca#9870), on tui-idle
+# false-idle, and on scraping a TUI for a verdict. None of those apply here: the
+# pane runs a SHELL, its handle is returned at creation, a shell command really
+# completes, and the verdict still comes from `--out`, a file. The pane is a
+# VIEWPORT, never a transport. Nothing reads it to decide anything.
+#
+# WHY IT EXISTS AT ALL, given `progress`. `progress` is the ORCHESTRATOR's
+# channel and it costs context on every poll. The pane renders in Orca's UI
+# process, so for a HUMAN audience it costs the orchestrator nothing and is
+# visible on mobile. The two are complementary, and this verb is what makes the
+# cheap one available without hand-assembling the command each time.
+#
+# THREE MEASURED TRAPS THIS VERB EXISTS TO PRE-EMPT (2026-08-19):
+#
+#   1. A pane running `exec` BARE IS BLIND. `exec` redirects the agent's stream
+#      into `--log`, so the pane shows the echoed command and then nothing until
+#      the run ends -- the same blindness, relocated somewhere prettier (measured:
+#      at t+14s the pane held one line while --log already had three events). So
+#      this verb ALWAYS provisions a `--log` and always builds the in-pane digest
+#      loop. A caller cannot accidentally get the blind shape.
+#   2. `orca terminal wait --for exit` DOES NOT CARRY THE COMMAND'S EXIT CODE. A
+#      pane running `sleep 2; exit 9` reported exitCode 0. So rc is written by the
+#      dispatch itself into a file, and this verb never consults `terminal wait`.
+#   3. `wait --for exit` has NO usable completion shape either way: ending the
+#      command with `exit` kills the shell (code still wrong, scrollback lost),
+#      and returning to a prompt makes it time out. Completion is the rc file
+#      appearing -- the same file-and-marker discipline `report-wait` uses.
+_cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
+  _need "${1:-}" agent || return $?
+  _need "${2:-}" promptfile || return $?
+  local agent="$1" promptfile="$2"; shift 2
+  case "$agent" in codex|agy) ;;
+    *) echo "hmad-dispatch: exec-pane: unknown agent '$agent' (expected codex|agy)" >&2; return 2 ;;
+  esac
+  [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
+
+  local cd_dir="" model="" out="" log="" timeout="" sandbox="" effort=""
+  local split_handle="" want_split=0 new_tab=0 title="" direction="horizontal"
+  local poll=6 focus=0 do_wait=0 wait_timeout=0
+  while [ $# -gt 0 ]; do case "$1" in
+    # --- passthrough to `exec` ---
+    --cd) cd_dir="$2"; shift 2 ;;
+    --model) model="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --log) log="$2"; shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    --sandbox) sandbox="$2"; shift 2 ;;
+    --effort) effort="$2"; shift 2 ;;
+    # --- pane placement ---
+    # `--split` with no value means THIS terminal, which is the only unambiguous
+    # reading of "the same surface": ORCA_TERMINAL_HANDLE is set by Orca for the
+    # pane we are running in. Guessing a pane from `terminal list` would reopen
+    # the identity-resolution problem this verb is built to avoid, and could drop
+    # a shell into an AGENT's tab.
+    # --split takes an OPTIONAL handle, written as an explicit lookahead rather
+    # than a nested `case` on $2. A `case` arm matching a flag-shaped value would
+    # end with the wrapper's banned silent-flag-drop pattern — a bare catch-all
+    # that shifts — which tests/test_hmad_dispatch_unknown_flags.py greps the
+    # whole file for. The grep is a blunt substring match by design (it caught
+    # this arm, and then caught the comment that first described it verbatim),
+    # and that bluntness is worth more than the two lines it costs here.
+    --split)
+      want_split=1; shift
+      if [ $# -gt 0 ]; then
+        case "$1" in
+          -*) : ;;                                  # a flag: --split took no value
+          *) split_handle="$1"; shift ;;
+        esac
+      fi
+      ;;
+    --new-tab) new_tab=1; shift ;;
+    --title) title="$2"; shift 2 ;;
+    --direction) direction="$2"; shift 2 ;;
+    --poll) poll="$2"; shift 2 ;;
+    --focus) focus=1; shift ;;
+    --wait) do_wait=1; shift ;;
+    --wait-timeout) wait_timeout="$2"; shift 2 ;;
+    *) _unknown_opt exec-pane "$1"; return $? ;;
+  esac; done
+
+  [ "$agent" = codex ] && [ -n "$effort" ] && {
+    echo "hmad-dispatch: exec-pane: --effort is agy-only" >&2; return 2; }
+  [ "$want_split" -eq 1 ] && [ "$new_tab" -eq 1 ] && {
+    echo "hmad-dispatch: exec-pane: --split and --new-tab are mutually exclusive" >&2; return 2; }
+  case "$direction" in horizontal|vertical) ;;
+    *) echo "hmad-dispatch: exec-pane: --direction must be horizontal|vertical" >&2; return 2 ;;
+  esac
+  case "$poll" in ''|*[!0-9]*) echo "hmad-dispatch: exec-pane: --poll must be an integer" >&2; return 2 ;; esac
+  [ "$poll" -ge 1 ] || { echo "hmad-dispatch: exec-pane: --poll must be >= 1" >&2; return 2; }
+
+  # Refuse rather than silently fall back to headless `exec`. A caller reaching
+  # for this verb wants a pane to look at; quietly running headless would leave
+  # them watching for a pane that never appears -- the same blindness, now with a
+  # success exit code on top of it.
+  _require_orca exec-pane || return $?
+  command -v "$agent" >/dev/null 2>&1 || {
+    echo "hmad-dispatch: exec-pane requires the $agent CLI on PATH" >&2; return 2; }
+
+  [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+  if [ "$want_split" -eq 1 ] && [ -z "$split_handle" ]; then
+    split_handle="${ORCA_TERMINAL_HANDLE:-}"
+    [ -n "$split_handle" ] || {
+      echo "hmad-dispatch: exec-pane: --split with no handle needs ORCA_TERMINAL_HANDLE (set by Orca for the pane you are in); it is unset. Pass --split <handle> explicitly, or use --new-tab." >&2
+      return 2; }
+  fi
+
+  # A log is NOT optional here: it is the pane's only live signal (trap 1). If the
+  # caller did not pass one, provision it and say where it went.
+  if [ -z "$log" ]; then
+    log="$(mktemp -t hmad_pane_log.XXXXXX)" || return 1
+    echo "hmad-dispatch: exec-pane: transcript -> $log" >&2
+  fi
+  # rc lands beside the artifact the caller already tracks, so a watcher polling
+  # for completion has one predictable path.
+  local rc_file
+  if [ -n "$out" ]; then rc_file="${out}.rc"; else rc_file="${log}.rc"; fi
+  rm -f "$rc_file" 2>/dev/null || true
+
+  local self; self="$(_self_path)" || return 1
+
+  # Build the dispatch command. Every interpolated value is single-quoted, so a
+  # path containing a space or a quote cannot split the command line.
+  local inner="$(_shq "$self") exec $agent $(_shq "$promptfile") --cd $(_shq "$cd_dir") --log $(_shq "$log")"
+  [ -n "$out" ]     && inner="$inner --out $(_shq "$out")"
+  [ -n "$model" ]   && inner="$inner --model $(_shq "$model")"
+  [ -n "$timeout" ] && inner="$inner --timeout $(_shq "$timeout")"
+  [ -n "$sandbox" ] && inner="$inner --sandbox $(_shq "$sandbox")"
+  [ -n "$effort" ]  && inner="$inner --effort $(_shq "$effort")"
+
+  # The dispatch writes its OWN rc from inside the same subshell, so completion
+  # never depends on `wait` reaping a job the poll loop may already have seen
+  # exit -- and never on `terminal wait --for exit`, whose exit code is a lie
+  # (trap 2). The trailing marker is what a human reads as "this pane is done".
+  local pane_cmd
+  pane_cmd="{ $inner ; echo \$? > $(_shq "$rc_file") ; } & _hmad_dp=\$!;"
+  pane_cmd="$pane_cmd while kill -0 \$_hmad_dp 2>/dev/null; do $(_shq "$self") progress $(_shq "$log") --lines 8 --pid \$_hmad_dp; sleep $poll; done;"
+  pane_cmd="$pane_cmd $(_shq "$self") progress $(_shq "$log") --lines 12;"
+  pane_cmd="$pane_cmd echo \"HMAD-PANE-DONE rc=\$(cat $(_shq "$rc_file") 2>/dev/null)\""
+
+  [ -n "$title" ] || title="h-mad $agent"
+
+  local handle
+  if [ -n "$split_handle" ]; then
+    handle="$(_orca_json '.result.split.handle' terminal split \
+      --terminal "$split_handle" --direction "$direction" --command "$pane_cmd" --json)" || return 1
+  else
+    local create_args=(terminal create --worktree "path:$cd_dir" --title "$title" --command "$pane_cmd" --json)
+    [ "$focus" -eq 1 ] && create_args+=(--focus)
+    handle="$(_orca_json '.result.terminal.handle' "${create_args[@]}")" || return 1
+  fi
+  [ -n "$handle" ] || { echo "hmad-dispatch: exec-pane: Orca returned no terminal handle" >&2; return 1; }
+
+  # Plain if, not `${v:+a}${v:-b}` — when v IS set BOTH halves expand (the second
+  # is ":-", which only substitutes on UNSET), so the handle printed twice.
+  local placement="new tab"
+  [ -n "$split_handle" ] && placement="split of $split_handle"
+  echo "hmad-dispatch: exec-pane: $agent in pane $handle ($placement)" >&2
+  echo "hmad-dispatch: exec-pane: log=$log rc=$rc_file${out:+ out=$out}" >&2
+
+  if [ "$do_wait" -eq 0 ]; then
+    # Non-blocking: the handle is the useful value, so it is the only thing on
+    # stdout. With --wait the contract switches to `exec`'s (stdout = response),
+    # which is why the two are documented as different shapes rather than one.
+    printf '%s\n' "$handle"
+    return 0
+  fi
+
+  # --wait: block on the rc FILE, never on `terminal wait` (traps 2 and 3).
+  local waited=0 rc=0
+  while [ ! -s "$rc_file" ]; do
+    if [ "$wait_timeout" -gt 0 ] && [ "$waited" -ge "$wait_timeout" ]; then
+      echo "hmad-dispatch: exec-pane: timed out after ${wait_timeout}s waiting for $rc_file — the pane is still live; read it or poll 'hmad-dispatch progress $log'" >&2
+      return 124
+    fi
+    sleep 2; waited=$(( waited + 2 ))
+  done
+  rc="$(tr -dc '0-9' < "$rc_file")"
+  [ -n "$rc" ] || rc=1
+  # Match `exec`'s contract so --wait is a drop-in: stdout is the response.
+  if [ -n "$out" ] && [ -s "$out" ]; then cat "$out"; fi
+  echo "hmad-dispatch: exec-pane: $agent rc=$rc (pane $handle left open; close with 'orca terminal close --terminal $handle')" >&2
+  return "$rc"
+}
+
 _cmd_clear() { _send_text "$1" "/clear"; }
 
 # Cancel a running/wedged agent turn by sending Ctrl-C (0x03). A bare Enter is
@@ -2750,6 +2956,7 @@ main() {
     alive)  _cmd_alive "$@" ;;
     notify) _cmd_notify "$@" ;;
     progress) _cmd_progress "$@" ;;
+    exec-pane) _cmd_exec_pane "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
     dispatch) _cmd_dispatch "$@" ;;
