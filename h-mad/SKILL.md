@@ -500,7 +500,10 @@ mode: leave the report-file slot empty. Report-file mode belongs to the pane pat
 **Exception — `exec agy` on an audit phase: fill the report-file slot.** That rule is
 codex-shaped, where `--output-last-message` *is* the deliverable. On an audit the report
 is the deliverable, and `agy --print` surfaces only the agent's **last** message, so the
-report has exactly one fragile channel. Measured 2026-08-01,
+report has exactly one fragile channel for the DELIVERABLE. (Since `exec agy` moved to
+`--output-format stream-json` the `--log` stream does retain earlier turns' text, which is
+a recovery route — see `references/failure-recovery.md`. It is not a second delivery
+channel, so fill the report slot anyway.) Measured 2026-08-01,
 `grounding-shadow-measurement` design cycle 2: 358 bytes of narration ("I have completed
 the audit and output the results as requested") naming the two Must-fix items it had
 actually found, with no `<AUDIT_SENTINEL>` pair — `h_mad_extract_report.py` exit 2. Cycle

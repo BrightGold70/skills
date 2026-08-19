@@ -2140,6 +2140,12 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
       # tool call and a dead process look identical in the log — the transcript
       # simply stops growing in both cases. Non-JSON by design and prefixed `#`,
       # which every reader of an NDJSON log already tolerates.
+      # Beat and agent share the log through separate O_APPEND fds, so a beat
+      # can in principle land mid-line and corrupt one JSON event. Accepted, not
+      # unnoticed: every reader here is `fromjson? // empty`, which skips a
+      # malformed line rather than aborting, and a corrupted `result` still falls
+      # through to the text_delta recovery. Degraded, never broken. The same
+      # tolerance covers a caller-supplied --log with no trailing newline.
       if [ -n "${_HMAD_EXEC_BEAT_LOG:-}" ]; then
         printf '#hmad-beat %s %s running %ss\n' \
           "$(date -u +%H:%M:%SZ)" "$hb_agent" "$(( SECONDS - ${_HMAD_EXEC_T0:-0} ))" \
