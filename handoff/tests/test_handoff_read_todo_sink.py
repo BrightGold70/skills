@@ -1,10 +1,15 @@
 """READ Step 4 must never be a no-op, and Step 5 must name the sink it used.
 
 The defect these pin was invisible in exactly the way that matters: Step 4 said
-"use the TodoList tool", the tool did not exist in the install, and every other
-part of READ succeeded. The reconciliation was correct, the action queue was
-never written, and the report distinguished neither -- `**Todos restored:** N`
+"use the TodoList tool", no such tool was in that session's tool set, and every
+other part of READ succeeded. The reconciliation was correct, the action queue
+was never written, and the report distinguished neither -- `**Todos restored:** N`
 prints identically whether N items reached a durable list or nothing at all.
+
+Availability is per-SESSION, not per-install: `TaskCreate` served 465 calls on
+this machine through 2026-08-19 and was absent the next morning with no config
+change. So the ladder's job is not "cope with a machine that lacks the tool" but
+"re-probe every resume and use the best sink that exists right now".
 
 Guidance is the whole fix (no user config can add a built-in tool), so the
 guidance is what gets pinned. Literals are whitespace-normalised so a markdown
@@ -40,7 +45,7 @@ def test_step4_states_the_tool_is_not_guaranteed() -> None:
             "an unconditional instruction is the bug, not the tool's absence",
         ),
         (
-            "no user config can add a built-in",
+            "user config can add a built-in tool",
             "without this a reader burns the session trying to re-enable the tool",
         ),
     ]:
@@ -142,3 +147,65 @@ def test_no_unconditional_todo_tool_instruction_remains() -> None:
         if re.search(r"[Uu]se the TodoList tool|[Uu]se TodoWrite|[Cc]reate TodoWrite", ln)
     ]
     assert not bad, f"unconditional todo-tool instruction survives: {bad}"
+
+
+# --- the corrected diagnosis (2026-08-20) -----------------------------------
+#
+# The first fix shipped with the report's reasoning intact: "zero TodoWrite
+# tool_use calls across every transcript" therefore "no todo tool on this
+# machine". Both halves were wrong in a way the conclusion hid -- the name in
+# use was TaskCreate (465 calls), and counting calls measures USE, not
+# AVAILABILITY. The tool was live through 2026-08-19 and gone the next morning.
+# A reader who believes "this install has no todo tool" stops probing, and rung 1
+# stays dead after it comes back.
+
+
+def test_presence_is_documented_as_varying_not_permanent() -> None:
+    for literal, why in [
+        (
+            "its presence varies between sessions on the same machine",
+            "'this install has no todo tool' makes a reader stop probing; the "
+            "tool returned availability is per-session",
+        ),
+        (
+            "a live check every time, never a fact you carry from the last resume",
+            "the check has to re-run, or the ladder freezes on rung 2 forever",
+        ),
+    ]:
+        require(literal, why)
+
+
+def test_the_invalid_inference_is_named_so_it_is_not_repeated() -> None:
+    for literal, why in [
+        (
+            "Absence of calls is not absence of the tool",
+            "counting tool_use is the measurement that produced the wrong diagnosis",
+        ),
+        (
+            "byte-identical to one where it never existed",
+            "the indistinguishability is the reason the method cannot work, not a caveat",
+        ),
+        (
+            "A mention is not a tool",
+            "hook matchers and agent catalogs carry the name and prove nothing",
+        ),
+    ]:
+        require(literal, why)
+
+
+def test_rung_one_is_preferred_when_present() -> None:
+    require(
+        "Prefer this rung when it exists",
+        "a durable fallback that outranks the real todo list is a regression: "
+        "rung 1 is the only sink the user can see and tick off",
+    )
+
+
+def test_no_claim_that_the_tool_is_permanently_absent() -> None:
+    for banned in (
+        "some Claude Code installs ship no",
+        "zero `TodoWrite` tool_use calls",
+    ):
+        assert " ".join(banned.split()) not in DOC, (
+            f"the retracted claim survives in SKILL.md: {banned!r}"
+        )
