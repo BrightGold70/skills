@@ -8,14 +8,18 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
-## Open, highest recurrence first (reconciled 2026-08-07)
+## Open, highest recurrence first (reconciled 2026-08-19)
 
-**Two `candidate: yes` are open.** `live-e2e-pane-janitor` (rec 6) — re-verified 2026-08-07 and
-still genuinely open: no implementation exists, and only handoff commits mention it. The 2026-08-07
-session did no live pane probes, so nothing about it changed. Newly added: **`audit-cycle-background-dispatch`**
-(rec 8) — but read its reason before treating it as a skill, because it names its own insertion
-point: `h-mad/SKILL.md` §"Exit-code dispatch for 5d/5e" documents `--log` tailing while assuming a
-foreground dispatch, and the harness's 10-minute command cap kills exactly that.
+**Two `candidate: yes` are open**, and neither is the one that was loudest.
+`live-e2e-pane-janitor` (rec 6 → **8**) — still open, but **re-scope before building**: the hard
+half (identifying which panes this session created) is now solved by `exec-pane`'s slot registry
+`.h-mad/panes/<handle>.cd`, so what remains is only closing probe panes created outside that verb.
+`vendored-plugin patch kit` (rec 2) — untouched.
+
+**`audit-cycle-background-dispatch` (rec 8) is now LANDED** (2026-08-19). It called itself right:
+a SKILL.md fix, not a new skill. `h-mad/SKILL.md` now backgrounds every dispatch example, bans
+`tail -f` (an orchestrator cannot run it — it never returns), and points at the new bounded
+`hmad-dispatch progress <log>` instead.
 
 **One `candidate: yes` was open at the prior reconcile: `live-e2e-pane-janitor` (rec 6, spanning two 2026-08-03 sessions).**
 The "all recurrences inside one session" caveat that held it back is now **gone** — the
@@ -229,7 +233,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 ## 2026-08-03 — agent-identity-and-await-correctness
 
-- **live-e2e-pane-janitor**: after a live orchestration probe, enumerate panes in the worktree and close the ones this session created — by ELIMINATION against a known-good set, since `worker-start` panes inherit the worktree name and are indistinguishable by title. Hand-rolled the same `terminal list --json` → filter → `terminal close` pipeline 4× this session, each time re-typing the operator's keep-list; getting it wrong closes the operator's own agent pane — recurrence: 7 (4 on 2026-08-03 agent-identity + 2 in the 2026-08-03 orca-defects session + 1 on 2026-08-07 re-verifying the same bug docs) — candidate: yes — **scope grew: panes are only half.** The orca-defects session had to settle 5 probe *dispatches* (`task-update --status completed`) as well as close 4 panes, because an unsettled dispatch wedges its terminal permanently — `worker-abandon`/`worker-stop` both return `dispatch_not_found` for it (see `docs/orca-bug-worker-release-dispatch-not-found.md`). A janitor that closes panes without settling their dispatches leaves the Run dirty. **Confirmed again 2026-08-07 and now has an upstream issue:** the same dance ran once more (throwaway pane + `worker-start` control pane, both needing `task-update --status completed` before `terminal close`), and the underlying defect is filed as stablyai/orca#13005 — so the janitor's need is not going away by itself. Still no implementation: no `pane-janitor` anywhere, and `hmad-dispatch` has `worktree-rm` but no pane/dispatch cleanup verb.
+- **live-e2e-pane-janitor** *(still open; partially eased 2026-08-19 — see note at end of row)*: after a live orchestration probe, enumerate panes in the worktree and close the ones this session created — by ELIMINATION against a known-good set, since `worker-start` panes inherit the worktree name and are indistinguishable by title. Hand-rolled the same `terminal list --json` → filter → `terminal close` pipeline 4× this session, each time re-typing the operator's keep-list; getting it wrong closes the operator's own agent pane — recurrence: 7 (4 on 2026-08-03 agent-identity + 2 in the 2026-08-03 orca-defects session + 1 on 2026-08-07 re-verifying the same bug docs) — candidate: yes — **scope grew: panes are only half.** The orca-defects session had to settle 5 probe *dispatches* (`task-update --status completed`) as well as close 4 panes, because an unsettled dispatch wedges its terminal permanently — `worker-abandon`/`worker-stop` both return `dispatch_not_found` for it (see `docs/orca-bug-worker-release-dispatch-not-found.md`). A janitor that closes panes without settling their dispatches leaves the Run dirty. **Confirmed again 2026-08-07 and now has an upstream issue:** the same dance ran once more (throwaway pane + `worker-start` control pane, both needing `task-update --status completed` before `terminal close`), and the underlying defect is filed as stablyai/orca#13005 — so the janitor's need is not going away by itself. Still no implementation: no `pane-janitor` anywhere, and `hmad-dispatch` has `worktree-rm` but no pane/dispatch cleanup verb.
 - **two-arm-probe-before-asserting-a-cause**: when attributing an observed failure to a cause, run the *controlled pair* (with/without the one variable) before writing the cause down. I blamed pane readiness for an `injected:false` and shipped that causality in a doc + PR body; a 2-command retest on a booted pane showed the missing `--inject` flag was the whole story — recurrence: 4 (this; the title-only "no agents running" conclusion the operator corrected the same session; then BOTH carried repros in the 2026-08-03 orca-defects session, each falsified by a control that removed the blamed step) — candidate: maybe (`invariants.base.md` §"Assumption verification" already mandates executing assumptions; this is the narrower "isolate ONE variable" case and may just be a line there) — **promoted to memory instead of a skill:** `feedback_carried_repro_is_not_evidence`, which states it as "run the repro AND a control that removes the step it blames". Still worth the `invariants.base.md` line; leave open until that lands.
 - **stub-must-model-the-destructive-step**: a stub that replays state the real system CONSUMES makes a test pass before the fix exists. The orca stub replayed an acked delivery forever, so a sibling-cache test re-matched from the queue and pinned nothing — it passed against unmodified code — recurrence: 1 — candidate: maybe (close to `invariants.base.md` §"Test discrimination", but that rule is about asserting the right thing, not about the fixture lying)
 - **mutation-anchor-drift-after-self-edit**: `h_mad_mutation_harness.py` REFUSED 3 runs this session with `anchor matched 0 times`, twice because my own edits had moved the anchored lines between writing the spec and running it. The verdict is correct and load-bearing (REFUSED measures nothing), but the recovery is manual re-grepping. A near-miss hint on 0 matches would close the loop — recurrence: 3 — candidate: maybe (harness enhancement, not a new skill)
@@ -316,6 +320,13 @@ before concluding a row is inert — one row sat inert for a day while naming it
   background + `report-wait` shape there would remove the need to rediscover it per session.
   Note this is *not* the documented "missing report" recovery: the report arrived fine, it was the
   caller that was killed.
+  → **LANDED** (2026-08-19) — `h-mad/SKILL.md` §"Exit-code dispatch for 5d/5e" now shows every
+  example backgrounded (`… & dispatch_pid=$!`), and §"Watching a headless dispatch" bans `tail -f`
+  outright ("it never returns, so it consumes your whole tool-call budget") in favour of the new
+  bounded `hmad-dispatch progress <log> --pid $!`. §"Do not poll on a timer when you only need the
+  result" additionally says to run the blocking form as a BACKGROUND command so the harness
+  re-invokes on exit — a completion signal rather than a poll. The row called it right: it was a
+  SKILL.md fix, not a new skill. Commits `e78b46a`, `d29f37e`, `83d0a33`.
 
 - **audit-loop-runner**: the full assemble → residual-placeholder preflight → dispatch →
   `report-wait` → `h_mad_audit_gate.py` → apply fixes → bump version-history loop, run 13 times
@@ -350,3 +361,30 @@ before concluding a row is inert — one row sat inert for a day while naming it
 ## 2026-08-09 — j29-out-clobber-guard
 
 - **mutation-pin the design decision, not just the behaviour**: after implementing a guard, apply the *obvious alternative reading* as a mutant and confirm a test kills it — recurrence: 2 (2026-08-09 guard-narrowing corpus; this session's `[ -s "$out" ]`-vs-change-keyed mutant) — candidate: **maybe** — the two instances share a shape: the naive reading passes every behavioural test and only the one test encoding the *rejected* alternative distinguishes them. Not yet a skill because both sightings are the same author on the same day; revisit if a third appears in a different area.
+
+## 2026-08-19 — headless-dispatch-visibility
+
+Reconciled first: **`audit-cycle-background-dispatch` → LANDED** (row updated in place above; its
+own stated insertion point is exactly what shipped). `live-e2e-pane-janitor` re-verified and still
+open, but materially eased — see its row note. `vendored-plugin patch kit` untouched, nothing this
+session bore on it.
+
+- **live-e2e-pane-janitor** *(existing row, recurrence bumped)*: this session created and hand-closed
+  ~10 Orca panes across tracer probes and live e2e runs. Recurrence: 6 → **8**. Still
+  candidate: yes, but **the hard half is now solved elsewhere**: `exec-pane`'s slot registry
+  (`.h-mad/panes/<handle>.cd`) is exactly the "known-good set" the row wanted, so identifying which
+  panes are h-mad's no longer needs elimination. What remains is closing probe panes created outside
+  `exec-pane` — a smaller job than the row was originally scoped for. Re-scope before building.
+- **shell mutation-test loop**: hand-rolled the same scaffold 4× this session (write a python
+  mutation applier keyed by name, loop: restore backup → apply → `bash -n` → run the targeted test
+  file → classify KILLED/SURVIVED → restore). Recurrence: 4 — candidate: **no, verify against the
+  bundled harness first**. `h-mad/scripts/h_mad_mutation_harness.py <spec.json>` already exists and
+  takes a JSON spec; I did not check whether its spec format covers shell-file mutations with
+  arbitrary test commands before reinventing it. That is precisely the "a different tool can already
+  do the job" trap this scout warns about, committed live. **Next session: read the harness's spec
+  schema and either use it or record why it does not fit — do not hand-roll a fifth time.**
+- **evidence-first premise check on an inbound handover**: the inbound brief this session closed had
+  a central claim that was already false when written, caught only by diffing the pre-session commit
+  rather than trusting the brief. Recurrence: 1 — candidate: no. Already covered by the handoff
+  skill's §"Take over handed-over work" point 2 ("Verify the premises before adopting them"); noting
+  it only as a live confirmation that the step earns its place.
