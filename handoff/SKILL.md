@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
+description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the TodoList; READ halts before doing anything when the session is not fresh, printing the `/clear` + re-invoke sequence for the user to run (no tool can trigger /clear), and switches output to caveman-ultra when that skill is installed. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
 ---
 
 # Handoff
@@ -49,6 +49,52 @@ After the handoff markdown is written (and not on `--dry-run`), leave a durable,
 ---
 
 ## Reading a handoff (resume mode)
+
+### Step 0a: Fresh-context precondition — HALT if the session is not clean
+
+Run this before everything, including Step 0. A resume is a *replacement* of context, not an
+addition to it: the handoff exists precisely because the prior session's working assumptions
+should not survive into the next one. Reading one into a session that is already loaded gets you
+the worst of both — stale assumptions from the live conversation silently outranking the
+document you just read, and no signal that it happened.
+
+**Fresh** means the resume request arrives at the start of the session: no substantive prior work
+in this conversation — no edits, no builds, no unrelated investigation. Being invoked right after
+`/clear` is the canonical case.
+
+If the session is **not** fresh, stop here. Print exactly this and do nothing else — do not sync,
+do not locate, do not read:
+
+```
+Resume needs a clean context. Run:
+
+    /clear
+    /handoff read
+```
+
+Then wait. The user runs those two lines and READ re-enters at Step 0a with a fresh session,
+which passes silently.
+
+**Override**: if the user has explicitly asked to resume in place — "resume here", "don't clear",
+"resume in place", or a `--here` flag — skip the halt, and say in the Step 5 report that the
+resume ran against an existing context so they know which state won any conflict. Never infer the
+override from impatience or from a repeated invocation; it has to be asked for.
+
+### Step 0b: Terse output mode (best-effort)
+
+Once Step 0a passes, invoke the caveman skill at ultra intensity before locating anything:
+
+```
+Skill(skill: "caveman:caveman", args: "ultra")
+```
+
+A resume report is dense reference material the user scans rather than reads, which is what that
+mode is for. It applies to the report and to the rest of the session; the user reverts with
+`stop caveman` or `/caveman full`.
+
+This is **best-effort and never a dependency**. If the skill is not installed the invocation
+fails — proceed to Step 0 silently and say nothing about it. READ must work identically on a
+machine that has never heard of caveman.
 
 ### Step 0: Sync local with the remote BEFORE locating/reading
 
@@ -193,6 +239,12 @@ Then stop. Don't start executing tasks — the user reads the report and decides
 
 ### Read-mode don'ts
 
+- Don't run Step 0a's halt check *after* doing work — it is the first action of READ, ahead of the
+  remote sync. Syncing, locating and reading a doc you are about to tell the user to discard by
+  `/clear` wastes the round trip and, worse, half-loads the context the halt exists to keep clean.
+- Don't offer to run `/clear` yourself. It is a built-in CLI command with no tool behind it — only
+  the user can trigger it, and it would wipe this skill mid-run. Print the two lines and wait.
+- Don't let a missing caveman skill (Step 0b) fail the resume, and don't announce its absence.
 - Don't rewrite or update the handoff doc in read mode — it's a historical record.
 - Don't run tests or builds as part of reconciliation.
 - Don't assume the in-flight process is still running if the doc is >4h old.
