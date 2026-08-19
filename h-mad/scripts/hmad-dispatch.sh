@@ -2666,6 +2666,11 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
     *) echo "hmad-dispatch: exec-pane: --direction must be horizontal|vertical" >&2; return 2 ;;
   esac
   case "$poll" in ''|*[!0-9]*) echo "hmad-dispatch: exec-pane: --poll must be an integer" >&2; return 2 ;; esac
+  # --focus is a `terminal create` flag; `terminal split` has no equivalent. Parsing
+  # it and then ignoring it on the split path is exactly the silent flag drop this
+  # wrapper bans everywhere else (tests/test_hmad_dispatch_unknown_flags.py). Refuse.
+  [ "$focus" -eq 1 ] && [ "$want_split" -eq 1 ] && {
+    echo "hmad-dispatch: exec-pane: --focus applies to a new tab only; 'terminal split' has no focus flag. Drop --focus, or use --new-tab." >&2; return 2; }
   [ "$poll" -ge 1 ] || { echo "hmad-dispatch: exec-pane: --poll must be >= 1" >&2; return 2; }
 
   # Refuse rather than silently fall back to headless `exec`. A caller reaching

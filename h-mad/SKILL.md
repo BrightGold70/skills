@@ -481,17 +481,42 @@ split`/`terminal create` at creation, a shell command genuinely completes, and t
 still comes from `--out` — a file — not from a scrape. The pane is a **viewport**, never a
 transport.
 
+Use the **`exec-pane`** verb — do not hand-assemble this. It builds the in-pane
+digest loop and the rc capture for you, which is what makes the three traps below
+unreachable rather than merely documented.
+
 ```bash
-# Split the worktree's existing shell so the dispatch lands on the SAME surface.
-# `terminal create --worktree <sel> --title <t> --command …` instead for its own tab.
-orca terminal split --terminal <handle> --direction horizontal --command \
-  "hmad-dispatch exec agy <prompt> --out <o> --log <l> --timeout 900 & dp=\$!; \
-   while kill -0 \$dp 2>/dev/null; do hmad-dispatch progress <l> --lines 6 --pid \$dp; sleep 6; done; \
-   wait \$dp; echo \$? > <o>.rc; echo DISPATCH-DONE"
+# SAME SURFACE: split the pane you are in (uses ORCA_TERMINAL_HANDLE, set by Orca).
+hmad-dispatch exec-pane agy <prompt> --cd <repo> --out <o> --log <l> --timeout 900 --split
+# → returns immediately; stdout is the new pane's handle.
+
+# OWN TAB (the default — no guessing which pane to split):
+hmad-dispatch exec-pane agy <prompt> --cd <repo> --out <o> --title "5e-review agy"
+
+# DROP-IN for `exec`: blocks until done, stdout = the response, rc = the dispatch's.
+hmad-dispatch exec-pane agy <prompt> --cd <repo> --out <o> --wait --wait-timeout 1200
 ```
 
-Three findings, each measured live on 2026-08-19, each of which silently breaks a naive
-version of this:
+`--split` with no value means **this** terminal — the only unambiguous reading of "the
+same surface". It refuses rather than guessing a pane from `terminal list`: guessing
+reopens the identity-resolution problem this verb exists to avoid, and could drop a
+shell into an *agent's* tab. Pass `--split <handle>` for a specific pane, `--new-tab` to
+force a tab. Outside Orca the verb **refuses** instead of quietly running headless — a
+silent fallback leaves you watching for a pane that never appears, with a success exit
+code on top. Also: `--direction horizontal|vertical`, `--poll <sec>` (in-pane digest
+interval, default 6), `--focus` (new tab only), and `--model/--timeout/--sandbox/--effort`
+passed through to `exec`.
+
+**Two output contracts, deliberately different.** Without `--wait`, stdout is the pane
+handle — the useful value while the run is in flight. With `--wait`, stdout is the
+response, matching `exec` so the verb is a drop-in. `--wait` blocks on the rc **file**
+and clears any stale rc first: `--out` paths are templated per feature+module and the
+`no_verdict` remedy re-dispatches to the same path, so a leftover rc would otherwise
+hand back the *previous* run's exit code instantly.
+
+Three findings, each measured live on 2026-08-19. `exec-pane` closes all three in code;
+they are recorded here because anyone assembling a pane command by hand will hit them,
+and because the verb's shape is otherwise hard to justify:
 
 1. **A pane running `exec` bare is BLIND.** `exec` redirects the agent's stream into
    `--log`, so the pane shows only the echoed command line and then nothing until the run

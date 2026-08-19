@@ -325,6 +325,30 @@ def test_rejects_bad_pane_options(tmp_path, args, msg):
     assert msg in r.stderr
 
 
+def test_focus_with_split_is_refused_not_silently_dropped(tmp_path):
+    """`terminal split` has no focus flag. Accepting --focus and ignoring it is
+    the silent flag drop this wrapper bans everywhere else -- the caller believes
+    they asked for focus and never learns otherwise."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--split", "term_X", "--focus"], env=_env(b))
+    assert r.returncode == 2
+    assert "--focus" in r.stderr and "new tab only" in r.stderr
+    assert _orca_calls(cap) == ""
+
+
+def test_focus_reaches_terminal_create_on_the_new_tab_path(tmp_path):
+    """The other half of the same guard: refusing it on split is only defensible
+    if it actually does something on the path it belongs to."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["agy"], cap)
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--focus"],
+            env=_env(b))
+    assert r.returncode == 0, r.stderr
+    assert "--focus" in _orca_calls(cap)
+
+
 def test_effort_is_agy_only(tmp_path):
     b = _bindir(tmp_path, ["codex"], tmp_path / "orca.txt")
     r = run(["exec-pane", "codex", str(_prompt(tmp_path)), "--effort", "high"], env=_env(b))
