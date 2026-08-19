@@ -947,6 +947,83 @@ Reviewing a skill you *depend on* is worth doing even when you cannot patch it: 
 defects in our own integration were found by reviewing `orca-cli`, both in a code path no test
 had ever exercised.
 
+## Orchestrator context hygiene (your own window)
+
+The section below clears the *agents'* panes. This one is about **your** window — the
+orchestrator's — which is the one that actually ends a run when it fills. An H-MAD feature is a
+long session by construction (7 phases, N audit cycles, a live e2e), so the orchestrator's window
+is a consumable resource that has to be budgeted, not a background fact.
+
+### `advisor()` costs a second full copy of the session
+
+`advisor()` takes **no parameters**: the payload is the entire transcript, forwarded to
+`claude-fable-5` and billed into the **same turn's** input. There is no way to send it less — the
+only two levers are how big the transcript is and whether you call it at all. Measured on session
+`97490faf` (2026-08-19), three calls, one ratio:
+
+| baseline | advisor turn | ratio |
+|---|---|---|
+| 245,617 | 499,633 | 2.03× |
+| 302,589 | 606,450 | 2.00× |
+| 525,742 | **1,056,891** | 2.01× |
+
+The third call blew a 1M window from ~50% used. **At 50% used, one advisor call = 100%.** The
+spike is transient, not cumulative — the next turn drops back onto the normal growth curve — but a
+run that overflows mid-phase is over, and the overflow is not recoverable by compacting afterwards.
+
+The trap is that nothing at the call site prices it. The visible return is ~4KB of advice, and the
+cost scales with session age, so the identical call that was free in Phase 1 is fatal in Phase 6 —
+which is exactly where the tool's own "call before declaring done" guidance points. Session start
+is not free either: an H-MAD session opens at **~86k tokens before any work** (this skill plus
+`handoff`, the CLAUDE.md chain, the memory index, hook injections). Count it.
+
+### Hard ceiling: never call `advisor()` above ~45% window used
+
+At the measured 2.0×, anything above 50% cannot fit; 45% is the margin, because the number you can
+measure is a floor (see below). Measure it, don't estimate it — the `<total_tokens>` reminder is
+budget *remaining*, not window *used*, and answers a different question:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_context_budget.py
+# CTXBUDGET: OK   used=98353 window=1000000 pct=9.8 projected=196706 ceiling=45
+# CTXBUDGET: DENY used=525742 window=1000000 pct=52.6 projected=1051484 ceiling=45
+```
+
+Read the `CTXBUDGET:` token, never `$?` — like every other H-MAD gate it exits 0 on a verdict, and
+exits 2 only on `UNKNOWN` (a cannot-judge: no transcript, or no usage record yet), which carries
+**no `used=`** precisely so it cannot be mistaken for an `OK`. `--window` (or
+`HMAD_CONTEXT_WINDOW`) sets the model's window; the default is 1M.
+
+It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`, so it works from any cwd — a subdirectory, a linked worktree, anywhere. Two path-derived shortcuts it deliberately does not lead with: the project-dir slug is the *session's* root, not the process's cwd (run from `<repo>/h-mad` it names a directory that does not exist and the tool is `UNKNOWN` forever — safe, and useless, which is how a check stops being run), and newest-mtime picks the most recently written session in the project, which with two Claude sessions open on one repo is not necessarily yours — and a fresh sibling reads small, so that one fails toward a false `OK`. Override with `--transcript` when you need a specific file.
+
+`used=` is the last recorded assistant turn's `input + cache_creation + cache_read`, so it **lags
+the current turn** — tool results already in flight are not in it. It is a floor, which is why the
+ceiling is 45 and not 50.
+
+### Above the ceiling, substitute — a ladder, not a menu
+
+1. **Schedule it early instead of substituting late.** `advisor()` is cheapest in Phases 1–3
+   (design, spec, plan) and that is also where its own docs say it adds the most value: before an
+   approach crystallises. Budget one call there. Treat the late "before declaring done" call as the
+   optional one — it is the expensive one, and by Phase 6 the artifacts exist to review instead.
+2. **`hmad-dispatch exec agy` over the artifacts** — H-MAD's native substitute, and the right one
+   at Phase 5b/6a. It reviews in its **own** context and only its report (~2k) returns, and it is
+   an independent model, so the stronger-second-opinion property survives. It gets *fresh* context,
+   so it must be handed durables — the impl-plan, the diff, the state file — which every H-MAD gate
+   already produces. See `references/agy-architectural-reviewer-prompt.md` and the 6a-prime flow.
+3. **`Agent(subagent_type: "fork")`** when the review genuinely needs the *conversation*, not the
+   artifacts. A fork inherits the full transcript at ~zero cost to your window (only its report
+   returns) — but it runs on **your** model, so you trade away the stronger-reviewer property that
+   is the whole point of `advisor()`. Use it for "did I miss something in what I just did", not for
+   "is this design right".
+4. **`/compact` first, then call** — last resort, and only when you specifically need advisor's
+   full-history view at a high baseline. Compacting is lossy, and late-session review is valuable
+   *because* of the accumulated detail, so this degrades exactly what you are paying for.
+   Compacting **after** the overflow recovers nothing.
+
+**Never batch `advisor()` into a heavy turn.** Its input is snapshotted at call time, so the 40
+files you read in the same turn are inside the copy. Call it, then do the reading.
+
 ## Agent-pane context hygiene
 
 The codex and agy agents are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `hmad-dispatch read` output you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
@@ -1005,6 +1082,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
+- Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
 ## Editing this skill while a run is in flight
@@ -1337,6 +1415,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_wire_pin_gate.py` — Phase-5b wire-pin gate: `check()` + CLI printing `WIREPIN: PASS|FAIL|UNSHAPED tasks=N wiring=M unpinned=K mislabeled=J` (or a bare `WIREPIN: UNREADABLE`, counts omitted because nothing was parsed) + `[H-MAD]` marker, exit 0 on a verdict / 2 on `UNSHAPED` or an unreadable plan. Refuses a `wiring`-shaped task whose `WIRE`/`WIRE-PIN` is absent, still a template placeholder, or filler — and, in the other direction, a task carrying a real `WIRE`/`WIRE-PIN` under a non-`wiring` shape, which is how a pinned wiring task is demoted to a PASS by editing one word. Stdlib-only.
 - `h_mad_wire_registry.py` — Phase-5 wire registry: records passing `wiring` pins and re-verifies them at 5f, emitting the documented `[H-MAD]` halt reasons; its challenge command is warning-only and verdict-neutral. Stdlib-only.
 - `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
+- `h_mad_context_budget.py` — orchestrator context budget: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
 - `h_mad_doc_shape_check.py` — doc-superset guard for saved phase documents (run at Phase 3/4/7 save, see `references/inline-protocols.md`): `check_document()` + CLI printing one `DOC-SHAPE: PASS|FAIL|SKIP path=… type=…` line per path, exit 0 on a verdict / 2 on an unreadable path (with no partial verdict stream). `SKIP` is the correct verdict for h-mad's brainstorm/spec/impl-plan/audit documents — they sit outside the external validator's detection by design and have no superset contract. FAIL reports dropped required sections *and* plan-plus escalation literals in a plan's prose: the templates are compliant and tested, but the authored body is not the template, and the escalation literals are ordinary words an author has no reason to suspect. The section tables and literals are h-mad's own copy so the check runs standalone (§"Standalone / no plugin dependency"); `tests/test_h_mad_doc_shape_check.py::TestMirrorFidelity` diffs the tables, the literals, and the verdicts against the live external validator when installed and fails on drift, which is what keeps the mirror honest (§"Single-source verdicts"). Stdlib-only.
 
 ### file-issue-then-fix-under-TDD

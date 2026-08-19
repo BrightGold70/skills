@@ -1,0 +1,60 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_context_budget_docs.py",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "soften-ceiling-in-never-list",
+   "file": "SKILL.md",
+   "find": "- Never call `advisor()` above ~45% window used",
+   "replace": "- Avoid calling `advisor()` late in a session"
+  },
+  {
+   "name": "drop-the-50-percent-line",
+   "file": "SKILL.md",
+   "find": "**At 50% used, one advisor call = 100%.**",
+   "replace": "It gets expensive."
+  },
+  {
+   "name": "drop-no-parameters",
+   "file": "SKILL.md",
+   "find": "takes **no parameters**: the payload is the entire transcript",
+   "replace": "sends context"
+  },
+  {
+   "name": "drop-fork-tradeoff",
+   "file": "SKILL.md",
+   "find": "but it runs on **your** model",
+   "replace": "and it is strictly better"
+  },
+  {
+   "name": "drop-snapshot-warning",
+   "file": "SKILL.md",
+   "find": "Its input is snapshotted at call time",
+   "replace": "It is best kept small"
+  },
+  {
+   "name": "promote-compact-over-substitute",
+   "file": "SKILL.md",
+   "find": "Compacting is lossy",
+   "replace": "Compacting is free"
+  },
+  {
+   "name": "drop-helper-from-list",
+   "file": "SKILL.md",
+   "find": "- `h_mad_context_budget.py` \u2014 orchestrator context budget",
+   "replace": "- `h_mad_ctx_unused.py` \u2014 orchestrator context budget"
+  },
+  {
+   "name": "drop-resolution-paragraph",
+   "file": "SKILL.md",
+   "find": "It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`",
+   "replace": "It finds a transcript"
+  }
+ ]
+}

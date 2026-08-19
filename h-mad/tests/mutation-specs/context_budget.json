@@ -1,0 +1,66 @@
+{
+ "mutations": [
+  {
+   "name": "drop-sidechain-filter",
+   "find": "if not isinstance(obj, dict) or obj.get(\"isSidechain\"):",
+   "replace": "if not isinstance(obj, dict):",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "sum-across-turns",
+   "find": "                    found = total",
+   "replace": "                    found = (found or 0) + total",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "cache-read-only",
+   "find": "                    \"input_tokens\",\n                    \"cache_creation_input_tokens\",\n                    \"cache_read_input_tokens\",",
+   "replace": "                    \"cache_read_input_tokens\",",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "always-ok",
+   "find": "verdict = \"OK\" if pct <= args.ceiling else \"DENY\"",
+   "replace": "verdict = \"OK\"",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "unknown-carries-used",
+   "find": "print(\"CTXBUDGET: UNKNOWN reason=no_usage\")",
+   "replace": "print(\"CTXBUDGET: UNKNOWN reason=no_usage used=0\")",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "no-usage-reads-zero",
+   "find": "                if total > 0:\n                    found = total",
+   "replace": "                found = total",
+   "file": "scripts/h_mad_context_budget.py"
+  },
+  {
+   "name": "session-id-ignored",
+   "file": "scripts/h_mad_context_budget.py",
+   "find": "    session = os.environ.get(\"CLAUDE_CODE_SESSION_ID\", \"\").strip()",
+   "replace": "    session = \"\""
+  },
+  {
+   "name": "session-id-unvalidated",
+   "file": "scripts/h_mad_context_budget.py",
+   "find": "    if session and not set(session) - set(\n            \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_\"):",
+   "replace": "    if session:"
+  },
+  {
+   "name": "no-ancestor-walk",
+   "file": "scripts/h_mad_context_budget.py",
+   "find": "    for candidate in (cwd, *cwd.parents):",
+   "replace": "    for candidate in (cwd,):"
+  }
+ ],
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_context_budget.py",
+  "-q"
+ ],
+ "root": "/Users/kimhawk/orca/skills/h-mad"
+}
