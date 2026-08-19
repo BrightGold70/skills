@@ -1678,6 +1678,125 @@ _dispatch_boundary() {
   printf '%s\n' "${HMAD_DISPATCH_BOUNDARY:-===HMAD-DISPATCH-BOUNDARY===}"
 }
 
+# ---------------------------------------------------------------------------
+# Live-progress channel for the headless `exec` path.
+#
+# WHY THIS EXISTS. `exec` is the dispatch path h-mad defaults to precisely
+# because the pane path could not resolve agy/codex surfaces reliably. But the
+# headless path traded that away for total blindness: a foreground `exec` inside
+# an orchestrator's shell tool prints nothing until the process exits, so a
+# 15-minute audit is a blank screen, indistinguishable from a wedged one.
+#
+# The two backends were NOT equally blind, and the docs said they were:
+#   codex — `codex exec` writes its transcript to stdout as it runs, and
+#           `_cmd_exec` redirects that straight into $log. `--log` really was
+#           live here. Measured: log grew 811 -> 1446 bytes across a 48s run.
+#   agy   — `agy --print` (text) emits NOTHING until the turn completes, and
+#           `_cmd_exec` captured it to a temp file and only THEN appended to
+#           $log. So agy's `--log` held zero bytes for the whole run and a
+#           `tail -f` on it showed nothing until the end. That is the defect the
+#           operator saw as "no process visible for agy".
+#           `agy --log-file` is not a substitute: it is language-server noise
+#           (auth/gRPC/http traces), carrying no step or tool information.
+#
+# THE FIX. agy grows `--output-format stream-json`, which emits one NDJSON event
+# per line, flushed live (measured: 2 -> 5 -> 6 -> 9 -> 11 -> 12 lines across a
+# 48s run). That stream goes append-direct into $log, so `--log` is now live for
+# BOTH backends and the doc's claim becomes true.
+#
+# THE COST, AND WHY IT IS CONTAINED. stream-json changes agy's stdout format,
+# and agy's stdout WAS the verdict. So the verdict is no longer read from the
+# stream: it is extracted from the `result` event's `.response` field, which
+# carries byte-identical text to what `--print` text mode printed. The external
+# contract is unchanged on every channel a caller reads -- `exec` stdout is the
+# response text, `--out` is the response text, `$?` is still "did the CLI run".
+# Only the LOG's format changed, and only for agy.
+
+# Extract agy's final response from an NDJSON transcript region.
+#
+# Scoped to lines AFTER $2 so a caller-supplied --log holding a PRIOR dispatch's
+# stream cannot donate its stale `result` event to this one -- the same
+# last-writer hazard J29 records for --out, arriving here by a different route.
+# `fromjson? // empty` tolerates non-JSON lines, which the log legitimately
+# carries: pre-existing caller content, and our own `#hmad-beat` lines.
+#
+# Falls back to concatenated `agent_response` text_delta when no `result` event
+# exists -- the shape a watchdog KILL leaves behind, where the turn produced text
+# but never got to announce completion.
+#
+# Deliberately reads `.response` regardless of `.status`: agy emits
+# status "ERROR" alongside a perfectly good response when a single tool call was
+# denied mid-turn (measured: a blocked read_file produced status ERROR, rc 0, and
+# the full correct answer). Dropping that response would manufacture a
+# no_verdict halt out of a run that answered.
+_agy_ndjson_response() {  # <logfile> <lines-before-this-dispatch>
+  local log="$1" skip="${2:-0}" region resp
+  [ -s "$log" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  region="$(tail -n "+$(( skip + 1 ))" "$log" 2>/dev/null)" || return 0
+  [ -n "$region" ] || return 0
+  # `-Rs` (raw + slurp) reads the whole region as ONE string, splits it, and runs
+  # `fromjson?` per line. That combination is load-bearing in both directions:
+  #
+  #   * plain `-s` aborts the entire slurp on the first non-JSON line, and the
+  #     region legitimately contains them (`#hmad-beat`, caller-supplied text).
+  #   * per-line `-r` streaming survives those lines but emits the response as
+  #     SEPARATE OUTPUT LINES, so any downstream `tail -1` silently truncates a
+  #     multi-line verdict to its final line. Measured on a fixture whose
+  #     response was "ASSESSMENT: READY_TO_MERGE\nSome detail here." — the
+  #     verdict line was dropped and only the detail survived, which would have
+  #     turned a passing architectural review into an unextractable one.
+  #
+  # Selecting the last matching EVENT and printing its response whole keeps the
+  # response an opaque blob at every step.
+  resp="$(printf '%s\n' "$region" | jq -Rs '
+      split("\n")
+      | map(fromjson? // empty)
+      | map(select(.event == "result") | .result.response // empty)
+      | last // empty' -r 2>/dev/null)" || resp=""
+  if [ -z "$resp" ]; then
+    resp="$(printf '%s\n' "$region" | jq -Rs '
+        split("\n")
+        | map(fromjson? // empty)
+        | map(select(.event == "step_update")
+              | .step_update
+              | select(.step_type == "agent_response")
+              | .text_delta // empty)
+        | join("")' -r 2>/dev/null)" || resp=""
+  fi
+  printf '%s' "$resp"
+}
+
+# Classify a transcript so `progress` renders it with the right lens.
+_exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
+  local log="$1"
+  [ -f "$log" ] || { printf 'missing'; return 0; }
+  [ -s "$log" ] || { printf 'empty'; return 0; }
+  # Whitespace-tolerant on purpose. Real agy emits compact JSON, but a
+  # serializer that inserts a space after the colon would otherwise be
+  # classified as a codex text transcript and rendered with the wrong lens —
+  # which is exactly what a test fixture built with `json.dumps` did, silently
+  # exercising the codex branch in a test named for the agy one.
+  if grep -aqE '^[[:space:]]*\{[[:space:]]*"event"[[:space:]]*:[[:space:]]*"(init|step_update|result)"' "$log" 2>/dev/null; then
+    printf 'agy-ndjson'
+  else
+    printf 'codex-text'
+  fi
+}
+
+# Seconds since the file was last written. The liveness signal that separates
+# "thinking for a long time" from "died": a live agent keeps touching its
+# transcript, a dead one does not. Portable across BSD (-f %m) and GNU (-c %Y).
+_exec_log_age() {  # <logfile> -> seconds, or empty when unknowable
+  local log="$1" mt now
+  [ -f "$log" ] || return 0
+  mt="$(stat -f %m "$log" 2>/dev/null || stat -c %Y "$log" 2>/dev/null)" || return 0
+  [ -n "$mt" ] || return 0
+  now="$(date +%s)"
+  printf '%s' "$(( now - mt ))"
+}
+
+# ---------------------------------------------------------------------------
 _verdict_after_boundary() {  # $1 = transcript, $2 = boundary, $3 = echo_expected (1|0)
   # Recover the agent's LAST verdict line, reading only the region the agent could
   # have written — everything after the final echo of our own boundary.
@@ -2015,6 +2134,17 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
     if [ "$heartbeat" -eq 1 ] && [ "$hb_interval" -gt 0 ] \
       && [ $(( SECONDS - last_beat )) -ge "$hb_interval" ]; then
       _exec_stamp beat "$hb_agent" "$hb_label" "$hb_cd_dir" || true
+      # Also beat into the TRANSCRIPT, not only the Orca worktree comment. The
+      # comment is the mobile-visible channel; the transcript is the one a
+      # terminal watcher and `progress` read. Without a beat here, a long silent
+      # tool call and a dead process look identical in the log — the transcript
+      # simply stops growing in both cases. Non-JSON by design and prefixed `#`,
+      # which every reader of an NDJSON log already tolerates.
+      if [ -n "${_HMAD_EXEC_BEAT_LOG:-}" ]; then
+        printf '#hmad-beat %s %s running %ss\n' \
+          "$(date -u +%H:%M:%SZ)" "$hb_agent" "$(( SECONDS - ${_HMAD_EXEC_T0:-0} ))" \
+          >> "${_HMAD_EXEC_BEAT_LOG}" 2>/dev/null || true
+      fi
       last_beat="$SECONDS"
     fi
     sleep "$poll"
@@ -2058,6 +2188,142 @@ _out_clobber_ok() {  # <file> <fingerprint-at-dispatch-start>
   [ "$fp_now" = "$fp0" ] && return 0
   echo "hmad-dispatch: exec: REFUSING to overwrite --out $f — its content changed while this dispatch ran (another dispatch wrote there; J29). Existing file preserved; this dispatch's answer is on stdout and in the transcript." >&2
   return 1
+}
+
+# Render a bounded digest of an exec transcript. Shared by the `progress` verb
+# and by the auto-log dump at the end of an agy dispatch.
+#
+# BOUNDED IS THE POINT. The caller of `progress` is usually an orchestrator
+# polling every 30-60s, and an unbounded dump would spend more context on
+# watching the work than on doing it. One line per event, tool payloads reduced
+# to a name and a short argument, output capped at <lines>.
+_render_progress() {  # <logfile> [lines]
+  local log="$1" n="${2:-25}" fmt
+  fmt="$(_exec_log_format "$log")"
+  case "$fmt" in
+    missing) echo "  (no transcript at $log — dispatch not started, or --log not passed)"; return 0 ;;
+    empty)   echo "  (transcript empty — agent started, nothing emitted yet)"; return 0 ;;
+  esac
+  if [ "$fmt" = agy-ndjson ] && command -v jq >/dev/null 2>&1; then
+    # `fromjson? // empty` skips our own #hmad-beat lines and any pre-existing
+    # caller content without aborting the stream.
+    tail -n 400 "$log" 2>/dev/null | jq -R -r '
+      fromjson? // empty
+      | if .event == "init" then
+          "  · session start (cwd " + ((.init.cwd // "?") | split("/") | last) + ")"
+        elif .event == "step_update" then
+          (.step_update // {}) as $u
+          | ($u.duration_seconds // 0 | floor | tostring) as $d
+          | if $u.step_type == "tool" then
+              "  · tool " + ($u.tool_name // "?") + " " + ($u.state // "?")
+              + (if $u.state == "ACTIVE" then ""
+                 else " (" + $d + "s)" end)
+              + (($u.tool_info.parameters // {} | tostring | .[0:70]) as $p
+                 | if $p == "{}" then "" else " " + $p end)
+            elif $u.step_type == "agent_response" then
+              "  · agent thinking/reply (" + $d + "s"
+              + (if ($u.usage.total_tokens // 0) > 0
+                 then ", " + ($u.usage.total_tokens | tostring) + " tok" else "" end) + ")"
+            else
+              "  · " + ($u.step_type // "step") + " " + ($u.state // "")
+            end
+        elif .event == "result" then
+          "  · RESULT status=" + (.result.status // "?")
+          + " turns=" + ((.result.num_turns // 0) | tostring)
+          + " " + ((.result.duration_seconds // 0) | floor | tostring) + "s"
+        else empty end' 2>/dev/null | tail -n "$n"
+  else
+    # codex text transcript, rendered ONLY past the echoed prompt.
+    #
+    # J23, arriving by a new route. `codex exec ... -` echoes its stdin into the
+    # transcript, and a dispatch prompt states its output contract by listing the
+    # legal STATUS values one per line. So a naive tail of a codex log shows
+    # `STATUS: <something>` seconds into the run — measured live at t=14s on a
+    # 45s dispatch, before the agent had run a single command. A watcher reading
+    # that as "the verdict already arrived" is the exact misreading
+    # `_verdict_after_boundary` exists to prevent; a progress view that
+    # resurrects it would be worse than no progress view, because it fabricates
+    # confidence.
+    #
+    # Same boundary, same single source, same last-occurrence bias toward silence.
+    local bpat bline body
+    bpat="$(_dispatch_boundary)"
+    # `|| true` is load-bearing under `set -euo pipefail`: grep exits 1 on NO
+    # MATCH, which is the normal early-run state here (the boundary has not been
+    # echoed yet), and a bare assignment propagates that status straight into
+    # `set -e`. Without it `progress` died silently mid-render and exited 1 —
+    # turning the watch verb into another thing that tells you nothing.
+    bline="$(grep -aFn -- "$bpat" "$log" 2>/dev/null | tail -1 | cut -d: -f1)" || true
+    if [ -z "$bline" ]; then
+      # No echoed boundary yet means codex is still echoing our prompt: every
+      # byte in the file so far is OURS. Say so rather than showing it back.
+      echo "  (prompt still echoing — no agent output yet)"
+      return 0
+    fi
+    # `hook:` lines are pure framework bookkeeping and outnumber the real events
+    # roughly 2:1; dropping them is what makes a 25-line window actually cover
+    # the last 25 things the agent DID.
+    body="$(tail -n "+$(( bline + 1 ))" "$log" 2>/dev/null \
+      | grep -av '^hook: ' | grep -a . | tail -n "$n" | sed 's/^/  /')"
+    if [ -n "$body" ]; then printf '%s\n' "$body"
+    else echo "  (agent has not emitted output yet)"; fi
+  fi
+}
+
+# `progress <logfile>` — a bounded, NON-BLOCKING snapshot of a running dispatch.
+#
+# WHY A VERB AND NOT `tail -f`. The documented way to watch an exec used to be
+# `tail -f <log>`, which an orchestrating agent cannot run: it never exits, so it
+# consumes the whole shell-tool timeout and returns nothing useful. `progress`
+# returns immediately, which makes it pollable in a loop between other work, and
+# bounded, which makes polling affordable.
+#
+# The header answers the question the operator actually has — "is it alive?" —
+# before any transcript content: a live agent keeps touching its transcript, so
+# time-since-last-write separates "thinking hard" from "died". STALE is a
+# threshold on that age, not on total runtime; it deliberately sits above the
+# heartbeat interval so a healthy silent run cannot be reported as stale.
+_cmd_progress() {  # <logfile> [--lines <n>] [--pid <pid>]
+  _need "${1:-}" logfile || return $?
+  local log="$1"; shift
+  local n=25 pid="" stale="${HMAD_PROGRESS_STALE_SEC:-}"
+  while [ $# -gt 0 ]; do case "$1" in
+    --lines) n="$2"; shift 2 ;;
+    --pid) pid="$2"; shift 2 ;;
+    *) _unknown_opt progress "$1"; return $? ;;
+  esac; done
+  # Default the stale threshold to 2x the heartbeat, so a beat that lands on
+  # schedule always refutes staleness even if the agent itself is silent.
+  [ -n "$stale" ] || stale=$(( ${HMAD_EXEC_HEARTBEAT_SEC:-120} * 2 ))
+
+  local fmt age lines_n size proc="unknown"
+  fmt="$(_exec_log_format "$log")"
+  age="$(_exec_log_age "$log")"
+  lines_n=0; size=0
+  if [ -f "$log" ]; then
+    lines_n="$(wc -l < "$log" 2>/dev/null | tr -d ' ')"
+    size="$(wc -c < "$log" 2>/dev/null | tr -d ' ')"
+  fi
+  if [ -n "$pid" ]; then
+    if kill -0 "$pid" 2>/dev/null; then proc="alive"; else proc="exited"; fi
+  fi
+
+  local liveness="unknown"
+  if [ -n "$age" ]; then
+    if [ "$age" -le "$stale" ]; then liveness="LIVE (last write ${age}s ago)"
+    else liveness="STALE (no write for ${age}s — exceeded ${stale}s)"; fi
+  fi
+
+  echo "hmad-dispatch: progress $log"
+  echo "  format: $fmt · lines: ${lines_n:-0} · bytes: ${size:-0}"
+  echo "  liveness: $liveness${pid:+ · pid $pid: $proc}"
+  echo "  --- last $n events ---"
+  _render_progress "$log" "$n"
+  # Exit 0 on every observable state on purpose. `progress` REPORTS liveness; it
+  # is not a gate. A non-zero here would invite `progress ... && continue`, which
+  # is the `$?`-branching habit the audit-gate signal discipline forbids — read
+  # the `liveness:` line, do not branch on the exit code.
+  return 0
 }
 
 _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
@@ -2123,7 +2389,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
 
   # `|| rc=$?` keeps a non-zero agent exit from tripping `set -e` before we capture
   # it — the exit code is the whole point of this verb. rc stays 0 on success.
-  local rc=0 final_empty=0 verdict=""
+  local rc=0 final_empty=0 verdict="" pre_lines=0
   # J23: append the SAME boundary `send` appends, so verdict recovery can tell our
   # echoed prompt from the agent's answer. Delivered to both backends: codex echoes
   # its stdin into the transcript (the defect), and agy does not — but a caller can
@@ -2147,8 +2413,10 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # NOT tailable). Transcript always goes to the log (a direct redirect, not a
     # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
     # run. rc comes from the codex process.
+    _HMAD_EXEC_BEAT_LOG="$log"
     _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
       "$timeout" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
+    _HMAD_EXEC_BEAT_LOG=""
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
       [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && cp "$last" "$out"
@@ -2176,29 +2444,43 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     [ -n "$effort" ] && args+=(--effort "$effort")
     [ -n "$sandbox" ] && args+=(--sandbox)
     [ -n "$timeout" ] && args+=(--print-timeout "${timeout}s")
+    # stream-json BEFORE --print, like every other flag: `--print` consumes the
+    # next token as its prompt, so a flag placed after it is eaten as the prompt
+    # and the real prompt is dropped (the failure documented above — agy just
+    # greeted). This is the live-progress channel; see `_agy_ndjson_response`.
+    args+=(--output-format stream-json)
     args+=(--print "$prompt")
-    local resp resp_file
-    resp_file="$(mktemp -t hmad_exec_resp.XXXXXX)" || return 1
-    # Response captured to its own file (stdout ONLY — agy --print puts just the
-    # response there; keeping stderr out preserves a clean verdict), then appended
-    # to the transcript log and read back. Keeping the response capture separate
-    # from $log means a caller-supplied --log that already holds transcript content
-    # is not clobbered, so verdict recovery can still find it on an empty response.
-    # Direct redirect, not a pipe, so agy's exit code survives.
+    local resp
+    # Line count of any PRE-EXISTING log content, captured before the agent runs.
+    # Everything the response extractor reads is scoped past this mark, so a
+    # caller pointing --log at a file that already holds a previous dispatch's
+    # stream cannot have that run's `result` event mistaken for this one's.
+    if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
+    [ -n "$pre_lines" ] || pre_lines=0
+    # Append-direct into $log, NOT into a private temp file: that indirection is
+    # exactly what made agy's --log dead-until-exit. Direct redirect (no pipe, no
+    # process substitution) so agy's exit code survives and every NDJSON line is
+    # on disk the moment agy flushes it — which is what makes `tail -f "$log"`
+    # and `hmad-dispatch progress "$log"` show work in flight.
+    # Appending (>>) preserves any caller-supplied content already in the file.
+    _HMAD_EXEC_BEAT_LOG="$log"
     ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
-      "$timeout" agy "${args[@]}" ) > "$resp_file" || rc=$?
-    cat "$resp_file" >> "$log"
-    resp="$(cat "$resp_file" 2>/dev/null)"
+      "$timeout" agy "${args[@]}" ) >> "$log" 2>/dev/null || rc=$?
+    _HMAD_EXEC_BEAT_LOG=""
+    resp="$(_agy_ndjson_response "$log" "$pre_lines")"
     verdict="$resp"
     if [ -n "$resp" ]; then
       [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$resp" > "$out"
       printf '%s\n' "$resp"
-      [ -n "$auto_log" ] && cat "$log" >&2 || true
+      # An auto-log is dumped as a DIGEST, not raw: the raw stream is NDJSON with
+      # full tool payloads embedded, and spraying that at stderr buries the very
+      # signal the operator opened it for. `progress` renders the same events as
+      # one line each.
+      [ -n "$auto_log" ] && _render_progress "$log" 40 >&2 || true
       [ -n "$auto_log" ] && rm -f "$log"
     else
       final_empty=1
     fi
-    rm -f "$resp_file"
   fi
   rm -f "$bounded_prompt"
 
@@ -2214,7 +2496,32 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     local recovered
     local echo_expected=0
     [ "$agent" = codex ] && echo_expected=1
-    recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
+    if [ "$agent" = agy ]; then
+      # agy's transcript is NDJSON now, so the line-oriented recovery below finds
+      # nothing: a `^STATUS:` anchor cannot match text nested inside a JSON
+      # string. Recover through the stream's own structure instead. This is also
+      # STRICTLY better than what the text-mode path could do — a watchdog KILL
+      # used to leave an empty capture file and nothing else, whereas the stream
+      # has every completed agent_response already on disk.
+      recovered="$(_agy_ndjson_response "$log" "$pre_lines")"
+      # Only a verdict-carrying line is worth promoting to --out; a partial
+      # narration is not, and writing one would hand the caller a fabricated
+      # answer of exactly the kind J23 records.
+      if [ -n "$recovered" ] \
+        && ! printf '%s\n' "$recovered" | grep -aqE '^(STATUS|VERDICT|ASSESSMENT):'; then
+        recovered=""
+      fi
+      # DEGRADED fallback, kept deliberately. The structured read above assumes
+      # the transcript is the NDJSON stream this wrapper asked for, and there are
+      # real ways for it not to be: an agy build that does not know
+      # `--output-format`, a caller-supplied --log holding plain-text content, or
+      # a stream that died before its first event. The line-oriented scan is what
+      # `exec agy` recovery has always used and it costs nothing to keep behind
+      # the structured path, so the change is additive rather than a swap.
+      [ -n "$recovered" ] || recovered="$(_verdict_after_boundary "$log" "$boundary" 0)"
+    else
+      recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
+    fi
     if [ -n "$recovered" ]; then
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
       verdict="$recovered"
@@ -2436,6 +2743,7 @@ main() {
     wait)   _cmd_wait "$@" ;;
     alive)  _cmd_alive "$@" ;;
     notify) _cmd_notify "$@" ;;
+    progress) _cmd_progress "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
     dispatch) _cmd_dispatch "$@" ;;

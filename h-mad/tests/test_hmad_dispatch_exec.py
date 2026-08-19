@@ -199,7 +199,16 @@ def test_exec_log_preserves_caller_bytes_and_appends_transcript(
         env=_env(b, **{env_key: transcript.rstrip("\n")}),
     )
     assert r.returncode == 0, r.stderr
-    assert log.read_bytes() == b"PRIOR" + transcript.encode()
+    # The caller's bytes must survive UNTOUCHED at the head of the file — that is
+    # the whole AC. What follows them is the backend's transcript, whose FORMAT
+    # differs by backend: codex appends plain text, agy appends the NDJSON event
+    # stream it now emits so the log is watchable while the dispatch runs. So the
+    # invariant is asserted as a prefix plus a recoverable payload, not as an
+    # exact concatenation that would silently re-pin agy to the un-tailable
+    # text mode this test's own AC never asked for.
+    written = log.read_bytes()
+    assert written.startswith(b"PRIOR")
+    assert transcript.strip() in written.decode()
 
 
 def test_exec_without_log_keeps_auto_temp_path_and_removes_it_on_clean_path(tmp_path):
@@ -303,7 +312,13 @@ def test_codex_empty_message_reports_git_tree_delta(tmp_path):
 
 
 def test_agy_empty_response_recovers_verdict_from_caller_log(tmp_path):
-    """AC-2.2 / AC-3.1: an empty agy response still recovers its transcript."""
+    """AC-2.2 / AC-3.1: an empty agy response still recovers its transcript.
+
+    Guards the DEGRADED recovery route specifically: the transcript here carries
+    a bare verdict line and no `result` event, so the structured NDJSON read
+    finds nothing and the line-oriented scan has to carry it. That is the shape
+    an agy build without `--output-format` support would leave behind.
+    """
     b = _bindir(tmp_path, ["agy"])
     log = tmp_path / "agy.log"
     r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],

@@ -8,7 +8,10 @@
 > Stage this template with the `INLINE_*` slots substituted, then dispatch headless:
 >
 > ```bash
-> hmad-dispatch exec agy <prompt-file> --cd <repo> --out <report.md> --log <run.log> --timeout 900
+> hmad-dispatch exec agy <prompt-file> --cd <repo> --out <report.md> --log <run.log> --timeout 900 &
+> dispatch_pid=$!
+> hmad-dispatch progress <run.log> --pid $dispatch_pid   # bounded, returns immediately; poll, do NOT `tail -f`
+> wait $dispatch_pid
 > ```
 >
 > `exec` is pane-independent, so a stale pin does not block it — it needs only the `agy` CLI on

@@ -9,15 +9,55 @@ if [ -n "${HMAD_STUB_AGY_PROMPT_CAPTURE:-}" ]; then
   printf '%s' "${!#}" > "$HMAD_STUB_AGY_PROMPT_CAPTURE"
 fi
 
-# Simulate a long-running task so the wrapper's --timeout watchdog can fire.
-[ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
 
-# The response (agy --print writes it straight to stdout). `${VAR-default}`
-# allows an explicitly empty response while retaining the old default.
+# The response. `${VAR-default}` allows an explicitly empty response while
+# retaining the old default.
 if [ -n "${HMAD_STUB_AGY_RESP+x}" ]; then
-  [ -n "$HMAD_STUB_AGY_RESP" ] && printf '%s\n' "$HMAD_STUB_AGY_RESP"
+  _resp="$HMAD_STUB_AGY_RESP"
 else
-  printf '%s\n' 'VERDICT: COMPLIANT'
+  _resp='VERDICT: COMPLIANT'
+fi
+
+# Which output format did the wrapper ask for? Real agy prints ONLY the response
+# to stdout under the default text format, and one NDJSON event per line under
+# `--output-format stream-json`. The stub has to honour that distinction or the
+# tests stop testing the wrapper's real input: the wrapper now selects
+# stream-json precisely so a caller can watch a dispatch in flight, and a stub
+# that answers in text no matter what would let a broken selection pass.
+_streaming=0
+for _a in "$@"; do
+  [ "$_a" = "stream-json" ] && _streaming=1
+done
+
+if [ "$_streaming" -eq 1 ]; then
+  # Real agy emits `init` at session start, long before the turn finishes
+  # (measured live: the transcript held init + two step events 12s into a 60s
+  # run). Emitting the head of the stream BEFORE the simulated work is what
+  # makes the stub able to fail a "did the log fill during the run" test —
+  # sleeping first would make every backend look un-tailable and the liveness
+  # test would pass vacuously against a broken wrapper.
+  # Mirror the real event shapes (verified against a live `agy --output-format
+  # stream-json` run): an `init`, `step_update`s as work happens, and a final
+  # `result` carrying the whole response. Emitted line-by-line so a liveness
+  # test can observe the file growing before the process exits.
+  printf '{"event":"init","conversation_id":"stub","init":{"cwd":"%s","tools":["run_command"],"permission_mode":"always-proceed"}}\n' "$PWD"
+  printf '%s\n' '{"event":"step_update","step_update":{"conversation_id":"stub","step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"name":"run_command","parameters":{"CommandLine":"stub-work"}}}}'
+  printf '%s\n' '{"event":"step_update","step_update":{"conversation_id":"stub","step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","duration_seconds":1.5,"tool_info":{"parameters":{"CommandLine":"stub-work"}}}}'
+  # Simulate a long-running task so the wrapper's --timeout watchdog can fire.
+  [ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
+
+  # An EMPTY response emits no `result` — the shape a killed or crashed turn
+  # leaves behind, which is what drives the wrapper's final_empty path.
+  if [ -n "$_resp" ]; then
+    if command -v jq >/dev/null 2>&1; then
+      jq -cn --arg r "$_resp" '{event:"result",result:{conversation_id:"stub",status:"OK",response:$r,num_turns:1,duration_seconds:2}}'
+    else
+      python3 -c 'import json,sys; print(json.dumps({"event":"result","result":{"conversation_id":"stub","status":"OK","response":sys.argv[1],"num_turns":1,"duration_seconds":2}}))' "$_resp"
+    fi
+  fi
+else
+  [ -n "${HMAD_STUB_AGY_SLEEP:-}" ] && sleep "$HMAD_STUB_AGY_SLEEP"
+  [ -n "$_resp" ] && printf '%s\n' "$_resp"
 fi
 # Test-only escape hatch: populate the wrapper's redirected transcript without
 # making the agent response non-empty. Existing knobs and behavior are unchanged.

@@ -388,10 +388,13 @@ supported, on their natural side of 5d/5e:
 
 - **`exec codex`** — the RED/GREEN IMPLEMENTER dispatch (writes tests + impl). Prompt
   via stdin; final message via `--output-last-message`; default `--sandbox workspace-write`.
-- **`exec agy`** — the 5e-review (and Phase 3/4/5b audit) dispatch. `agy --print`
-  prints the response to stdout; a headless replacement for the agy `ask` scrape.
-  Because it is a subprocess, it needs **no pane and no identity resolution** — the
-  one thing the pane path can still fail at for an un-owned agent.
+- **`exec agy`** — the 5e-review (and Phase 3/4/5b audit) dispatch. Runs `agy --print`
+  under `--output-format stream-json`, so the transcript is a live NDJSON event stream
+  and the wrapper lifts the final response out of the stream's `result` event. A
+  headless replacement for the agy `ask` scrape. Because it is a subprocess, it needs
+  **no pane and no identity resolution** — the one thing the pane path can still fail
+  at for an un-owned agent. The format switch is confined to the `--log` channel:
+  `exec` stdout and `--out` still carry the response text verbatim.
 
 Set `HMAD_EXEC_HEARTBEAT_SEC` to control the `exec` watchdog heartbeat interval in
 seconds; it defaults to `120`, and `0` disables heartbeats. The feature adds
@@ -399,23 +402,69 @@ best-effort start, heartbeat, and exit worktree-comment checkpoints (mobile-visi
 under Orca and a no-op on cmux), plus a best-effort desktop notification at exit.
 These observability signals cannot change stdout or `rc`.
 
+**Pass `--log` on every `exec` dispatch, background it, and poll `progress`.** Both
+backends now write their transcript to `--log` while the run is in flight, so headless
+is not blind — but only if you dispatch in a way that lets you look. A FOREGROUND `exec`
+prints nothing until the process exits, which is what turns a 15-minute audit into a
+blank screen indistinguishable from a wedged one.
+
+**Do not use `tail -f` to watch.** It never returns, so it consumes your whole tool-call
+budget and yields nothing; it is for a human at a terminal, not for you. Use
+`hmad-dispatch progress <log>`, which returns immediately with a bounded digest.
+
 ```bash
-# 5d/5e codex (implement), exit-code path. --log streams the live transcript to a
-# tailable file — headless is not blind. Background it and tail to watch:
+# 5d/5e codex (implement), exit-code path. Background + poll:
 hmad-dispatch exec codex <promptfile> --out /tmp/exec_<feature>_<module>.txt \
   --log /tmp/exec_<feature>_<module>.log --timeout 900 &
-tail -f /tmp/exec_<feature>_<module>.log   # Ctrl-C to stop watching; the run continues
-wait                                        # reap the dispatch
+dispatch_pid=$!
+hmad-dispatch progress /tmp/exec_<feature>_<module>.log --pid $dispatch_pid
+wait $dispatch_pid                      # reap the dispatch
 rc=$?                                   # operational: did the CLI run at all
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/exec_<feature>_<module>.txt --key STATUS --feature <feature> --phase 5d
 
-# 5e-review agy (audit), exit-code path — no pane to resolve:
+# 5e-review agy (audit), exit-code path — no pane to resolve. Background it too:
 hmad-dispatch exec agy <promptfile> --out /tmp/rev_<feature>_<module>.txt \
-  --log /tmp/rev_<feature>_<module>.log --timeout 600
+  --log /tmp/rev_<feature>_<module>.log --timeout 600 &
+dispatch_pid=$!
+hmad-dispatch progress /tmp/rev_<feature>_<module>.log --pid $dispatch_pid
+wait $dispatch_pid
 python3 ~/.claude/skills/h-mad/scripts/h_mad_extract_verdict.py \
   /tmp/rev_<feature>_<module>.txt --key VERDICT --feature <feature> --phase 5e
 ```
+
+### Watching a headless dispatch
+
+`hmad-dispatch progress <logfile> [--lines <n>] [--pid <pid>]` prints a bounded,
+non-blocking snapshot: transcript format, size, **liveness** (seconds since the last
+write, classified `LIVE`/`STALE`), optional process state, and a digest of the last
+`n` events — one line per event, tool names and arguments included for agy, framework
+`hook:` noise dropped for codex.
+
+Read the `liveness:` line; **never branch on `progress`'s exit code**, which is 0 for
+every observable state by design (a gate-shaped exit invites `progress … && continue`,
+the `$?`-branching habit §"Audit-gate signal discipline" forbids). `progress` reports,
+it does not decide.
+
+- `LIVE` — the agent touched its transcript recently. Keep waiting.
+- `STALE` — no write for longer than twice the heartbeat (`HMAD_EXEC_HEARTBEAT_SEC`,
+  default 120s). Combined with `--pid …: exited`, that is a dead dispatch, not a slow
+  one. The wrapper also writes `#hmad-beat` lines into the transcript on the heartbeat,
+  so a genuinely silent-but-alive run still moves the clock — a transcript that stops
+  growing entirely means the process stopped, not that the agent is thinking.
+- `format: empty` vs `format: missing` — "started, nothing emitted yet" vs "never
+  started, or `--log` was not passed". They demand opposite actions (wait vs
+  re-dispatch); do not collapse them.
+
+**Relay what you see.** Polling into your own context and staying silent leaves the
+operator exactly as blind as before, which is the whole complaint this machinery exists
+to answer. Between polls, surface one short line naming the agent, the elapsed time, and
+the current step — e.g. `agy 5e-review · 4m · tool run_command (pytest -q)`. A live log
+nobody reports is not observability.
+
+**Poll on the work's timescale, not the clock's.** Audits and implements run in minutes;
+polling every few seconds spends more context watching the work than doing it. One poll
+per 30–60s is enough, and doing other work between polls is the point of backgrounding.
 
 The verdict comes from `--out` (the `--output-last-message` file / captured response),
 which only lands at completion — so `--out` is NOT tailable. `--log` is: it streams
@@ -483,11 +532,14 @@ Recover in this order:
    live transcript, including the diffs the agent applied. This is the strongest reason
    to pass `--log` on every `exec` dispatch: it is the one channel observed to outlive
    the others. It appends on both backends, so a caller-supplied log retains prior
-   content. For `exec agy` the two are the *same* channel: `agy
-   --print` emits one response and the wrapper writes it to `--out` and `--log`
-   byte-identically (verified on both cycles of a real design audit — `diff` clean at
-   2.9 KB and at 358 B). When an agy exec comes back short, `--log` holds nothing `--out`
-   did not, and reading it is not recovery — it is the same bytes twice.
+   content. **This used to be pointless for `exec agy` and no longer is.** While agy ran
+   in text mode the two channels were byte-identical (verified on both cycles of a real
+   design audit — `diff` clean at 2.9 KB and at 358 B), so reading `--log` after a short
+   agy exec was the same bytes twice. Under `--output-format stream-json` the log holds
+   the whole event stream — every tool call, its arguments, its duration — while `--out`
+   holds only the final response. So on an agy exec that came back short, `--log` now
+   carries strictly more than `--out`: read it, and read it with
+   `hmad-dispatch progress`, which digests the stream instead of dumping raw NDJSON.
 2. **`git status` / `git diff`** — enumerate what actually landed. Artifacts present with
    no report means the work happened and the reporting channel failed, which is a
    different situation from a crash before any write.
@@ -741,7 +793,10 @@ A skill is not a feature: there is no impl-plan task and no Codex report, so nei
 `references/agy-skill-reviewer-prompt.md` — fill its `INLINE_*` slots and dispatch headless:
 
 ```bash
-hmad-dispatch exec agy <prompt-file> --cd <repo> --out <report.md> --log <run.log> --timeout 900
+hmad-dispatch exec agy <prompt-file> --cd <repo> --out <report.md> --log <run.log> --timeout 900 &
+dispatch_pid=$!
+hmad-dispatch progress <run.log> --pid $dispatch_pid   # bounded, returns immediately; poll, do NOT `tail -f`
+wait $dispatch_pid
 ```
 
 `exec` is pane-independent — it needs only the `agy` CLI on PATH, so a `PREFLIGHT: FAIL` from a
