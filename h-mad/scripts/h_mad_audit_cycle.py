@@ -66,6 +66,7 @@ def _has_complete_report(report_path: Path) -> bool:
 
 def _copy_collected_report(report_path: Path, collected_path: Path) -> Path:
     collected_path.parent.mkdir(parents=True, exist_ok=True)
+    collected_path.unlink(missing_ok=True)
     collected_path.write_bytes(report_path.read_bytes())
     if not collected_path.exists() or collected_path.stat().st_size <= 0:
         raise OperationalError(f"collected report was empty after copy: {collected_path}")
@@ -142,6 +143,7 @@ def _run_extract_report(
 
 def _write_collected_report(report_text: str, collected_path: Path) -> Path:
     collected_path.parent.mkdir(parents=True, exist_ok=True)
+    collected_path.unlink(missing_ok=True)
     collected_path.write_text(report_text, encoding="utf-8")
     if not collected_path.exists() or not collected_path.read_text(encoding="utf-8"):
         raise OperationalError(f"collected report was empty after write: {collected_path}")
@@ -421,47 +423,51 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if pass_specs:
-        results: list[PassResult] = []
-        for spec in pass_specs:
-            delivered, collected_path = collect(
-                spec,
-                grace=args.grace,
-                project_root=args.project_root,
-                feature=args.feature,
-                phase=args.phase,
-                cycle=args.cycle,
-            )
-            if delivered != "none":
-                if collected_path is None:
-                    raise OperationalError(
-                        f"missing collected path after delivered output for p{spec.index}"
+        try:
+            results: list[PassResult] = []
+            for spec in pass_specs:
+                delivered, collected_path = collect(
+                    spec,
+                    grace=args.grace,
+                    project_root=args.project_root,
+                    feature=args.feature,
+                    phase=args.phase,
+                    cycle=args.cycle,
+                )
+                if delivered != "none":
+                    if collected_path is None:
+                        raise OperationalError(
+                            f"missing collected path after delivered output for p{spec.index}"
+                        )
+                    verdict, must, should, findings = gate(
+                        collected_path,
+                        ack_file=args.ack_file,
                     )
-                verdict, must, should, findings = gate(
-                    collected_path,
-                    ack_file=args.ack_file,
+                else:
+                    verdict, must, should, findings = None, 0, 0, []
+                results.append(
+                    PassResult(
+                        index=spec.index,
+                        delivered=delivered,
+                        collected_path=collected_path,
+                        verdict=verdict,
+                        must=must,
+                        should=should,
+                        findings=findings,
+                    )
                 )
-            else:
-                verdict, must, should, findings = None, 0, 0, []
-            results.append(
-                PassResult(
-                    index=spec.index,
-                    delivered=delivered,
-                    collected_path=collected_path,
-                    verdict=verdict,
-                    must=must,
-                    should=should,
-                    findings=findings,
-                )
+            verdict, reason = combine(results)
+            text = render(
+                results,
+                verdict,
+                reason,
+                feature=args.feature,
+                size_status=args.size_status,
+                passes=args.passes,
             )
-        verdict, reason = combine(results)
-        text = render(
-            results,
-            verdict,
-            reason,
-            feature=args.feature,
-            size_status=args.size_status,
-            passes=args.passes,
-        )
+        except OperationalError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 4
         print(text, end="")
         return 0
 

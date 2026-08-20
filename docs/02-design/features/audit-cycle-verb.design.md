@@ -137,9 +137,22 @@ def main(argv) -> int
    → write to `collected_path`, `("out", collected_path)`.
 4. otherwise `("none", None)`.
 
-**Every write is verified by re-reading.** After copying or writing `collected_path`, the helper
-asserts `collected_path.exists() and collected_path.stat().st_size > 0` before the pass is recorded
-as delivered. A write that raised no exception is not evidence the bytes landed — the same rule the
+**Every write is verified by re-reading — and the destination is unlinked FIRST, or the re-read is
+blind.** `collected_path` is NOT covered by the shell's pre-dispatch clearing, which touches only the
+`/tmp` stem. So on a re-run of the same cycle (`v3` re-run after a failure) the previous run's report
+already sits at exactly that path, and a write that silently lands nothing leaves `exists()` and
+`st_size > 0` both **True on the OLD file's metadata** — the stale report is then scored as this
+run's. Measured:
+
+```
+stale file at destination + write lands nothing
+  guard says the write landed: True
+  content actually scored   : 'STALE REPORT from the previous run'
+```
+
+The helper therefore calls `collected_path.unlink(missing_ok=True)` immediately before the write.
+Only then does it assert `collected_path.exists() and collected_path.stat().st_size > 0` before the
+pass is recorded as delivered. A write that raised no exception is not evidence the bytes landed — the same rule the
 shell applies to its `rm`, in the other direction. A silently-empty collected report would gate as
 `GATE: INVALID` and be reported as `no_gate_sections`, sending the operator to inspect a report the
 agent actually delivered correctly.
@@ -435,9 +448,11 @@ test whose subject is the REAL gate's behaviour cannot use a stub, because a stu
 behaves as configured.** Both exemptions exist because `premise_items` and the per-pass gating
 decision are each pinned to what `h_mad_audit_gate.py` actually does:
 
-- `test_premise_items_match_gate_count` — `premise_items` deliberately mirrors the gate's prose
-  fall-back, which makes it a **reimplementation**, and a reimplementation is only verified by a
-  differential test against the original. Run against a stub it asserts that the mirror matches the
+- `test_premise_items_match_gate_count` — the **in-process read inside `gate()`** applies the gate's
+  prose fall-back, and a second read of the same file is only verified by a differential test
+  against the original. (The subject is `gate()`'s read, not `premise_items`, which does no parsing
+  — the test keeps its name because what it pins is that the findings `premise_items` *receives*
+  match what the real gate counted.) Run against a stub it asserts that the mirror matches the
   test author's own fixture, which is the thing least likely to be wrong; the real gate's edge cases
   (`• ` bullets, `**Note:**` exclusion, stripped indentation, the prose fall-back itself) go
   untested. It runs the real gate over bulleted, prose, `• `-rendered and acknowledged-filtered
@@ -474,7 +489,7 @@ mutation is invisible against inputs that never trip the guard: delayed report d
 | `test_render_pass_has_no_premise_items` | both clean | one line stating the checklist is empty |
 | `test_ack_file_forwarded` | sidecar clears p2's only finding | cycle `PASS`; both gate stubs saw `--ack-file` |
 | `test_verb_assemble_halt_no_dispatch` | pass 2 assembly halts | zero dispatches; `UNVERIFIED reason=assemble_halt:p2` |
-| `test_verb_clears_all_three_channels` | stale report + stale out | both removed and asserted before dispatch |
+| `test_verb_clears_all_three_channels` | stale report, stale `.done` marker AND stale `--out` — all three | **all three** removed and asserted before dispatch |
 | `test_verb_unremovable_path` | read-only parent | exit 3, no `AUDITCYCLE:` line |
 | `test_verb_prompt_divergence` | plan edited between assemblies | `UNVERIFIED reason=prompt_divergence`, exit 0 |
 | `test_verb_passes_one` | `--passes 1` | exactly one dispatch |
@@ -483,12 +498,20 @@ mutation is invisible against inputs that never trip the guard: delayed report d
 | `test_completed_cycle_emits_token` | both passes deliver and gate | exactly one `AUDITCYCLE:` line on stdout — **anchors the shell→helper connection mutation** |
 | `test_verb_invalid_passes` | `--passes 0` and `--passes -1` | exit 2, no `AUDITCYCLE:` line, **zero** dispatches — pins the guard against a zero-dispatch cycle |
 | `test_main_invalid_yields_unverified` | three fixtures: report missing **both** sections, missing **only `## Must-fix`**, missing **only `## Should-fix`** | each yields end-to-end `AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p<i>` — AC-10.4 says *either* section, and the single-section cases are the ones a future `has_gate_sections` relaxation would silently break |
-| `test_verb_assemble_no_token_is_operational_error` | assembly exits 0 emitting no `ASSEMBLE:` token | exit 4, no `AUDITCYCLE:` line, **zero** dispatches — **anchors connection mutation 2** (the token-emptiness guard) |
-| `test_main_delivered_none_is_unverified` | one delivering pass, one `delivered=none`, driven through `main()` | `AUDITCYCLE: UNVERIFIED reason=no_report:p<i>` — **anchors connection mutation 10**. Must run `main()`: the `delivered != "none"` guard lives there, so a `combine()`-level test bypasses the mutated line and the mutation survives green |
+| `test_verb_assemble_no_token_is_operational_error` | assembly exits 0 emitting no `ASSEMBLE:` token | exit 4, no `AUDITCYCLE:` line, **zero** dispatches — **anchors the token-emptiness guard mutation** (impl-plan Task 8 row 2) |
+| `test_main_delivered_none_is_unverified` | one delivering pass, one `delivered=none`, driven through `main()` | `AUDITCYCLE: UNVERIFIED reason=no_report:p<i>` — **anchors the `main()` gate-invocation guard mutation** (impl-plan Task 8 row 10). NOTE there are TWO distinct guards spelled `delivered != "none"`, and this row anchors the second: `combine()` uses it as the qualifier on the operational-error raise (`delivered != "none" AND verdict is None`), while `main()` uses it to decide whether to call `gate()` at all. This row targets `main()`'s, so a `combine()`-level test bypasses the mutated line: the `delivered != "none"` guard lives there, so a `combine()`-level test bypasses the mutated line and the mutation survives green |
 | `test_verb_fail_dispatch_count` | cycle verdict is FAIL | no further `exec agy` dispatch (AC-1.2). A **verb** test by necessity — the helper never dispatches, so no helper test can observe it |
+| `test_gate_count_mismatch_is_operational_error` | stub gate reports `must=2` for a file carrying 1 finding | `gate()` raises `OperationalError`; cycle exits 4 with NO `AUDITCYCLE:` line — **the negative test for `len(findings) == must`**. Without it, deleting that assertion survives on a green suite |
+| `test_collected_write_failure_is_operational_error` | a STALE report from a previous run already at `collected_path`, PLUS `Path.write_bytes`/`write_text` monkeypatched to a SILENT NO-OP | `collect()` raises `OperationalError` — **the negative test for the `exists() and st_size > 0` re-read**. A read-only destination dir does NOT work here: the guard sits *after* the write, so `write_bytes` raises `PermissionError` first and the cycle crashes for a different reason — deleting the guard would still crash and the mutation would survive. The fixture must make the write appear to SUCCEED and leave nothing behind, which is the only shape that reaches the guard. The stale file is required too: without the `unlink`, the guard reads the OLD file and passes, so a fixture with an empty destination would pass for the wrong reason and the mutation would survive |
+| `test_verb_assemble_nonzero_exit_is_operational_error` | `h_mad_assemble_audit.py` exits non-zero (unreadable inputs) | exit 4, no `AUDITCYCLE:` line, zero dispatches — AC-2.4. Distinct from the absent-token case (AC-2.5), which is a different guard |
+| `test_verb_no_self_invocation` | emitted command trace | contains no nested `audit-cycle` (AC-1.1) |
+| `test_verb_writes_only_reports` | sandboxed docs tree snapshotted before/after | the only new files are the per-pass collected reports (AC-1.3) |
+| `test_verb_phase_validated_before_clearing` | invalid `--phase` with stale channels present on disk | exit 2, and the stale files are STILL THERE — validation runs before any `rm`, so an invalid phase cannot delete a real cycle's channels (AC-1.4) |
+| `test_premise_items_formats_no_citation` / `..._formats_supplied_path_line` | a must-fix bullet with and without a `path:line` | `(no citation)` marker and the cited path respectively (AC-7.2, AC-7.3) |
+| `test_premise_items_match_gate_count` | bulleted, prose, `• `-rendered and acknowledged-filtered reports, **real gate**, AND a sample of REAL collected reports from `docs/0{1,2}-*/features/*.audit.v*.p*.md` | `len(items) == must` AND the payloads equal the gate's own — the differential test for `gate()`'s in-process read. The real-artifact half is required by `invariants.base.md` §"Reimplementation parity" — synthetic fixtures only encode the author's own model of the format, and this repo already holds 55+ real agent-produced reports |
 | `test_docs_token_pinned` | token in script ⇔ token in SKILL.md | fails if either drops it |
 
-The three rows marked *anchors* are the positive tests the plan's connection-mutation table removes
+The rows marked *anchors* are the positive tests the plan's connection-mutation table removes
 against. A mutation with no failing test to catch it is not a verified connection — the mutation
 runs, the suite stays green, and the harness reports the connection enforced. They are listed here
 explicitly because a test plan that omits them still looks complete.
@@ -538,6 +561,79 @@ their observed output is cited in the plan's Architecture Considerations: `exec`
 behaviour, the concatenation under-count, and `GATE: INVALID`'s counts.
 
 ## Version History
+- v1.21 (Phase-4 re-audit cycle 22 — **both passes gated clean, must=0 should=0**; one nit, raised
+  independently by both). The nit was introduced by v1.20 one cycle earlier: the scenario column
+  was updated to name all three channels while the verification column still said "both
+  removed". Fixing one half of a pair and leaving the other stale, again. Re-gated at cycle 23
+  rather than declaring PASS on a gate that never saw this edit.
+- v1.20 (Phase-4 re-audit cycle 21 — 1 must-fix, 2 nits; **p1 gated clean**, so the sides flipped
+  again). The must-fix was a genuine ambiguity: **two distinct guards are spelled
+  `delivered != "none"`** — `combine()`:287 uses it as the qualifier on the operational-error
+  raise, `main()`:434 uses it to decide whether to invoke `gate()` at all. The Test Plan row
+  asserted the guard "lives in `main()`" while the `combine` code block showed one too, leaving
+  the mutation anchor ambiguous. Both are now named explicitly at the row.
+  Nit applied: `test_verb_clears_all_three_channels` scenario now names all three channels
+  including the `.done` marker, matching its own name and AC-3.3.
+  **Nit REFUTED — its prescription would have broken the shipped helper.** p1 read `--grace 5`
+  in the Architecture Overview as contradicting `--report-grace` in the API section and asked
+  for the full name everywhere. They are two different surfaces: `--report-grace` is the VERB's
+  flag (API section, the verb's CLI) and `--grace` is the HELPER's own
+  (`h_mad_audit_cycle.py:406`, and the Architecture Overview line is the HELPER invocation).
+  The impl-plan already documents the mapping. Renaming the helper's flag would break shipped
+  code and contradict the plan; recorded here so the next reviewer does not re-file it.
+- v1.19 (Phase-4 re-audit cycle 20 — 1 must-fix, 1 should-fix; p2 gated clean). **A real defect in
+  the SHIPPED helper, proven live**: `collected_path` is not covered by the pre-dispatch clearing
+  (which touches only the `/tmp` stem), so on a re-run the previous run's report sits at that
+  exact path and a silently-failed write leaves `exists()`/`st_size > 0` True on the OLD file —
+  the stale report is scored as this run's. The helper now unlinks the destination immediately
+  before writing. This also corrected v1.18's fixture, which reached the guard only with an
+  empty destination: the write-failure test now requires a STALE file present as well, or it
+  passes for the wrong reason and the mutation survives.
+  Should-fix: `test_premise_items_match_gate_count` now runs against REAL collected reports as
+  well as synthetic shapes, per `invariants.base.md` §"Reimplementation parity" ("AND against
+  the real artifacts on disk") — synthetic fixtures only encode the author's own model of the
+  format, and this repo holds 55+ real agent-produced reports to draw on.
+- v1.18 (Phase-4 re-audit cycle 19 — 1 must-fix; p2 gated clean). **The finding was against a row
+  v1.17 itself added**, and it was right: `test_collected_write_failure_is_operational_error`
+  prescribed a read-only destination directory, but `_copy_collected_report` writes BEFORE it
+  checks — `collected_path.write_bytes(...)` then `if not collected_path.exists() or ...`. A
+  read-only parent therefore raises `PermissionError` at the write, never reaching the guard, so
+  deleting the guard still crashes and the mutation SURVIVES while looking caught. The fixture
+  now monkeypatches the write to a silent no-op, which is the only shape that reaches the guard.
+  This is the third consecutive cycle in which a fix introduced the next cycle's finding
+  (v1.15 -> the dangling mutation numbers and the stale "three rows"; v1.17 -> this). A guard's
+  negative test must fail for the GUARD's reason, not merely fail.
+- v1.17 (Phase-4 re-audit cycle 18 — 3 must-fix, 1 should-fix, 1 nit; the passes agreed on the
+  two guard gaps and diverged on the rest). **Two of these are real COVERAGE gaps in already
+  shipped code, not documentation gaps** — verified against the suite before applying:
+  1. Nothing tests that `gate()`'s `len(findings) == must` assertion FIRES. Deleting the
+     assertion survives a green 49-test suite, so the guard has no discrimination coverage.
+  2. Nothing forces the `collected_path` re-read (`exists() and st_size > 0`) to fail —
+     `chmod` appears 0 times in the suite, so no read-only-destination fixture exists. The
+     shell's equivalent guard IS covered (`test_verb_unremovable_path`); the Python one is not.
+  Both now have Test Plan rows, and both are owed as CODE in Phase 5 against the shipped
+  helper — recorded rather than silently carried.
+  Also added: the AC-2.4 assemble-non-zero-exit row (distinct guard from AC-2.5's absent
+  token), and the rows for tests the design text cites but the table omitted
+  (`test_verb_no_self_invocation`, `test_verb_writes_only_reports`, the `--phase`-before-
+  clearing ordering test, the two premise-formatting tests, and
+  `test_premise_items_match_gate_count`).
+  Nit: "The three rows marked *anchors*" was wrong because **v1.15 added two more anchor
+  rows and left the count** — the second time the errata edit introduced its own drift.
+- v1.16 (Phase-4 RE-AUDIT of the v1.15 errata, cycle 17 — operator ruled the errata must be
+  re-gated rather than accepted). Two findings, both real, and **the second was introduced by
+  the v1.15 edit itself** — which is the case for re-gating rather than accepting errata:
+  1. Must-fix (p1; p2 gated clean): the doc asserted BOTH that `premise_items` "does no parsing
+     at all" and that it "deliberately mirrors the gate's prose fall-back, which makes it a
+     reimplementation". The second is stale from before v1.9 moved extraction into `gate()`.
+     The Test Strategy rationale now names `gate()`'s in-process read as the subject. The
+     finding's prescription ("the test should be testing gate()") was ALREADY satisfied by the
+     shipped test, which deletes the stub dir and runs the real gate — so this is a doc fix,
+     not a code change.
+  2. Nit (p2): the Test Plan rows added by v1.15 cited "connection mutation 2" and "mutation
+     10" — numbers belonging to the impl-plan's 12-row table. This design carries no numbered
+     mutation table and the plan's has 6 unnumbered rows, so both references dangled. They now
+     name the guard and cite the impl-plan explicitly.
 - v1.15 (errata, applied during Phase 5b — no design DECISION changed): three corrections of
   demonstrated fact, each measured during the impl-plan audit cycles.
   1. `gate()`'s `len(findings) == must` assertion is now explicitly ordered AFTER the `INVALID`

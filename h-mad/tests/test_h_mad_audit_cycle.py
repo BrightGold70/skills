@@ -12,6 +12,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO_ROOT / "h-mad" / "scripts"
+REAL_AUDIT_REPORTS = tuple(
+    sorted(
+        [
+            *REPO_ROOT.glob("docs/01-plan/features/*.audit.v*.p*.md"),
+            *REPO_ROOT.glob("docs/02-design/features/*.audit.v*.p*.md"),
+        ]
+    )[:8]
+)
 
 
 def audit_cycle():
@@ -1277,6 +1285,60 @@ def test_gate_invalid_discards_counts(
     assert gate(report, ack_file=None) == ("INVALID", 0, 0, [])
 
 
+def test_gate_count_mismatch_is_operational_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+    report = tmp_path / "dispatch" / "p1.report.md"
+    body = "## Must-fix\n- one live must-fix finding\n\n## Should-fix\nNone\n"
+    write_done_report(report, body)
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md"
+    collected.parent.mkdir(parents=True)
+    collected.write_text(body, encoding="utf-8")
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {"hostile-feature.plan.audit.v1.p1.md": ("FAIL", 2, 0)},
+    )
+
+    with pytest.raises(ac.OperationalError, match="gate count mismatch"):
+        ac.gate(collected, ack_file=None)
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=[report]
+    )
+
+    assert rc == 4
+    assert "gate count mismatch" in stderr
+    assert auditcycle_lines(stdout) == []
+
+
+def test_collected_write_failure_is_operational_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    report = tmp_path / "dispatch" / "p1.report.md"
+    write_done_report(report, HOSTILE_PASS_REPORT)
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v3.p1.md"
+    collected.parent.mkdir(parents=True)
+    collected.write_text("STALE REPORT from the previous run", encoding="utf-8")
+
+    monkeypatch.setattr(Path, "write_bytes", lambda self, data: 0)
+    monkeypatch.setattr(Path, "write_text", lambda self, data, *args, **kwargs: 0)
+
+    with pytest.raises(ac.OperationalError, match="collected report was empty after copy"):
+        ac.collect(
+            pass_spec(1, report),
+            grace=0.2,
+            project_root=tmp_path,
+            feature="hostile-feature",
+            phase="plan",
+            cycle=3,
+        )
+
+
 def test_ack_file_forwarded(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -1420,6 +1482,29 @@ def expected_gate_payloads(text: str, acknowledged: set[str]) -> list[str]:
     return []
 
 
+def assert_premise_items_match_gate(
+    ac,
+    report: Path,
+    *,
+    ack_file: Path | None,
+    expected: list[str],
+) -> None:
+    real_args = ["--ack-file", str(ack_file)] if ack_file is not None else []
+    real = run_real_gate(report, *real_args)
+    assert real.returncode == 0
+    must = gate_must(real.stdout)
+
+    gate = getattr(ac, "gate", None)
+    assert callable(gate), "gate() must expose findings from the same parser the real gate uses"
+    verdict, gate_must_count, should, findings = gate(report, ack_file=ack_file)
+    payloads = [finding["text"] for finding in findings]
+
+    assert verdict in {"PASS", "FAIL"}
+    assert gate_must_count == must
+    assert len(payloads) == must
+    assert payloads == expected
+
+
 @pytest.mark.parametrize(
     ("body", "ack_body"),
     [
@@ -1460,18 +1545,24 @@ def test_premise_items_match_gate_count(
 
         acknowledged = _read_ack_file(ack_file)
 
-    real = run_real_gate(report, "--ack-file", str(ack_file))
-    assert real.returncode == 0
-    must = gate_must(real.stdout)
+    assert_premise_items_match_gate(
+        ac,
+        report,
+        ack_file=ack_file,
+        expected=expected_gate_payloads(body, acknowledged),
+    )
 
-    gate = getattr(ac, "gate", None)
-    assert callable(gate), "gate() must expose findings from the same parser the real gate uses"
-    verdict, gate_must_count, should, findings = gate(report, ack_file=ack_file)
-    payloads = [finding["text"] for finding in findings]
-    expected = expected_gate_payloads(body, acknowledged)
 
-    assert verdict == "FAIL"
-    assert should == 0
-    assert gate_must_count == must
-    assert len(payloads) == must
-    assert payloads == expected
+@pytest.mark.parametrize("report", REAL_AUDIT_REPORTS, ids=lambda path: path.name)
+def test_premise_items_match_gate_count_real_artifacts(
+    monkeypatch: pytest.MonkeyPatch, report: Path
+) -> None:
+    ac = audit_cycle()
+    monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
+
+    assert_premise_items_match_gate(
+        ac,
+        report,
+        ack_file=None,
+        expected=expected_gate_payloads(report.read_text(encoding="utf-8"), set()),
+    )
