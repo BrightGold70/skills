@@ -167,6 +167,18 @@ reads the last `GATE:` line. Three verdicts across two exit codes:
 `INVALID`'s counts are dropped at the boundary rather than carried and ignored downstream, so no
 later code can read them by accident.
 
+**`INVALID` short-circuits before the in-process findings read — the `len(findings) == must`
+assertion must not run on it.** Measured 2026-08-20: `has_gate_sections` is
+`all(section in seen ...)`, so `INVALID` fires when **either** blocking section is absent, not only
+when both are. A report carrying a populated `## Must-fix` and no `## Should-fix` therefore yields
+subprocess `GATE: INVALID must=0` against an in-process `classify` of `must_count=2`, and an
+unconditional assertion raises `2 == 0` — crashing the cycle at exit 4 on exactly the input AC-10.4
+requires to yield `UNVERIFIED reason=no_gate_sections:p<i>` at exit 0. `gate()` therefore returns
+`("INVALID", 0, 0, [])` immediately, performing no in-process read at all. The assertion binds the
+two pathways only where both pathways ran; a verdict that discarded its counts has nothing to bind.
+(Spec AC-5.6 says a report "lacking **both**" headers is refused, where the code refuses on either;
+the code's behaviour is what is designed against here.)
+
 **`combine` — operational error first, then cannot-judge, then FAIL.**
 
 ```
@@ -470,7 +482,10 @@ mutation is invisible against inputs that never trip the guard: delayed report d
 | `test_fail_in_either_pass_fails_cycle` | p1 PASS, p2 FAIL (and the reverse) | cycle `FAIL` both ways — **anchors the `h_mad_audit_gate.py` connection mutation** |
 | `test_completed_cycle_emits_token` | both passes deliver and gate | exactly one `AUDITCYCLE:` line on stdout — **anchors the shell→helper connection mutation** |
 | `test_verb_invalid_passes` | `--passes 0` and `--passes -1` | exit 2, no `AUDITCYCLE:` line, **zero** dispatches — pins the guard against a zero-dispatch cycle |
-| `test_combine_invalid_yields_unverified` | three fixtures: report missing **both** sections, missing **only `## Must-fix`**, missing **only `## Should-fix`** | each yields end-to-end `AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p<i>` — AC-10.4 says *either* section, and the single-section cases are the ones a future `has_gate_sections` relaxation would silently break |
+| `test_main_invalid_yields_unverified` | three fixtures: report missing **both** sections, missing **only `## Must-fix`**, missing **only `## Should-fix`** | each yields end-to-end `AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p<i>` — AC-10.4 says *either* section, and the single-section cases are the ones a future `has_gate_sections` relaxation would silently break |
+| `test_verb_assemble_no_token_is_operational_error` | assembly exits 0 emitting no `ASSEMBLE:` token | exit 4, no `AUDITCYCLE:` line, **zero** dispatches — **anchors connection mutation 2** (the token-emptiness guard) |
+| `test_main_delivered_none_is_unverified` | one delivering pass, one `delivered=none`, driven through `main()` | `AUDITCYCLE: UNVERIFIED reason=no_report:p<i>` — **anchors connection mutation 10**. Must run `main()`: the `delivered != "none"` guard lives there, so a `combine()`-level test bypasses the mutated line and the mutation survives green |
+| `test_verb_fail_dispatch_count` | cycle verdict is FAIL | no further `exec agy` dispatch (AC-1.2). A **verb** test by necessity — the helper never dispatches, so no helper test can observe it |
 | `test_docs_token_pinned` | token in script ⇔ token in SKILL.md | fails if either drops it |
 
 The three rows marked *anchors* are the positive tests the plan's connection-mutation table removes
@@ -500,8 +515,9 @@ explicitly handled as a verdict rather than propagated as failure.
 **Single-source contract** (base) — complies. Exactly one verdict formatter (`render`), reached by
 both the normal and no-pass paths, so the token has one definition.
 
-**No-plugin-dependency** (base) — complies. Stdlib-only Python, POSIX shell, no new external
-dependency; `agy` was already required by the path this verb replaces.
+**No-plugin-dependency** (base) — complies. Stdlib-only Python and **bash** (`hmad-dispatch.sh`
+is `#!/usr/bin/env bash` and already uses `local`, `[[`, `$(( ))` and array expansion at
+`hmad-dispatch.sh:1921`), no new external dependency; `agy` was already required by the path this verb replaces.
 
 **Operator-override preservation** (base) — complies. `--ack-file` is forwarded to every per-pass
 gate, so the `## Acknowledged-not-fixed` escape works identically through the verb and by hand.
@@ -522,6 +538,18 @@ their observed output is cited in the plan's Architecture Considerations: `exec`
 behaviour, the concatenation under-count, and `GATE: INVALID`'s counts.
 
 ## Version History
+- v1.15 (errata, applied during Phase 5b — no design DECISION changed): three corrections of
+  demonstrated fact, each measured during the impl-plan audit cycles.
+  1. `gate()`'s `len(findings) == must` assertion is now explicitly ordered AFTER the `INVALID`
+     short-circuit. Unordered, it crashes at exit 4 on a report with a populated `## Must-fix`
+     and no `## Should-fix` — the exact input AC-10.4 requires to yield `UNVERIFIED` at exit 0.
+  2. "POSIX shell" corrected to bash: `hmad-dispatch.sh` is `#!/usr/bin/env bash` with 212 bash
+     constructs and an existing array expansion at `:1921`. The invariant's substance — no new
+     external dependency — is unchanged and still holds.
+  3. Test Plan: `test_combine_invalid_yields_unverified` renamed `test_main_...` (it asserts an
+     end-to-end string, and a `test_combine_` prefix invites the unit-vs-`main()` confusion that
+     produced a wrong mutation anchor), and the three anchor tests the impl-plan's connection
+     mutations depend on are added — they were required by the mutation table and absent here.
 
 - v1.0: Initial design draft.
 - v1.1: Design-audit cycle-1 revisions (13 distinct must-fixes across two passes). The sharpest was
@@ -615,7 +643,7 @@ behaviour, the concatenation under-count, and `GATE: INVALID`'s counts.
   requirement and left the superseded "only an empty or absent file" clause beside it, so the
   criterion described two different rules for one revision. Rewritten as an explicit two-branch
   rule (spec v1.15). Test Plan gains `test_verb_invalid_passes` (the `--passes < 1` guard had no
-  anchoring test) and `test_combine_invalid_yields_unverified` (AC-10.4 asks for the *cycle's*
+  anchoring test) and `test_main_invalid_yields_unverified` (AC-10.4 asks for the *cycle's*
   outcome on a header-less report, not just the gate's `INVALID` return).
 - v1.13: Design-audit cycle-14 (2 must + 1 should from one pass; the other gated clean). The
   substantive one: the Test Strategy stubbed subprocesses **via `PATH`** while the helper resolves
