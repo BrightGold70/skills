@@ -155,6 +155,22 @@ def main(argv) -> int: ...
       emitted on every path including the no-pass form.
 - [ ] AC-2.2: `--halt-reason assemble_halt:p2` with no `--pass` renders
       `AUDITCYCLE: UNVERIFIED reason=assemble_halt:p2 passes=2 size_status=verified` and exits 0.
+- [ ] **`--pass` is NOT declared in Task 1's argparse.** Task 4 adds the flag together with the
+      collect-and-gate path that gives it meaning. Until then, supplying `--pass` must fail with
+      argparse's own "unrecognized arguments", exit 2, and print **no** `AUDITCYCLE:` line
+      (`test_main_rejects_pass_flag_until_task4`).
+- [ ] **`main()` requires exactly one mode.** With neither `--pass` nor `--halt-reason` it exits 2
+      with `ERROR:` on stderr and prints **no** `AUDITCYCLE:` line
+      (`test_main_without_mode_is_operational_error`). There is no fall-through to
+      `combine([])`/`render([], …)`.
+
+      Both tests assert the **absence** of an `AUDITCYCLE:`-prefixed line, not merely a non-PASS
+      verdict, because the defect they pin is a *fabricated* verdict. Measured 2026-08-20: the
+      first Task 1 implementation declared `--pass`, never read it, and fell through to
+      `combine([])` — so two nonexistent report paths, one carrying `rc=1`, produced
+      `AUDITCYCLE: PASS passes=2 size_status=verified must=0 should=0` at exit 0. All 19 tests
+      were green over it, because none drove `main()` with `--pass`. A helper whose entire purpose
+      is refusing to report an unmeasured verdict shipped one.
 - [ ] `test_script_resolution_default`: with `HMAD_AUDIT_CYCLE_SCRIPT_DIR` unset, `_script()` returns
       the real sibling paths, so the test override cannot silently become the production path.
 - [ ] Every test sandboxes `--project-root` to `tmp_path`; no test writes under the repository's
@@ -277,7 +293,11 @@ def _run_extract_report(out_path: Path, *, feature: str, phase: str,
 **WIRE** (`wiring` shape only): `h-mad/scripts/h_mad_audit_cycle.py:gate` → `h_mad_audit_gate.py`
 **WIRE-PIN** (`wiring` shape only): `test_fail_in_either_pass_fails_cycle`
 
-**Description**: Introduces `gate()` and `main()`'s full collect-and-gate path. `gate()` runs
+**Description**: Introduces `gate()`, the `--pass` CLI flag, and `main()`'s full collect-and-gate
+path — the three arrive **together**, deliberately. Task 1 does not declare `--pass` at all,
+because a flag that is parsed and then ignored is how a fabricated `AUDITCYCLE: PASS` shipped once
+already (see Task 1's ACs). This task is where `--pass` first becomes meaningful, so it is where the
+flag is first accepted. `gate()` runs
 `h_mad_audit_gate.py <collected> [--ack-file <p>]` **once per collected pass report** — never on a
 concatenation — and takes the verdict from the last `GATE:` line on stdout, never from the exit code.
 `GATE: INVALID` arrives at exit 2 and is a **verdict**, routed by its token; its `must=0 should=0`
