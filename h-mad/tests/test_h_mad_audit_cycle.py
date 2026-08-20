@@ -122,6 +122,48 @@ def report_wait_calls(calls_path: Path) -> list[list[str]]:
     return [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines()]
 
 
+def install_extract_report_stub(
+    script_dir: Path,
+    *,
+    return_code: int = 0,
+    stdout_text: str = HOSTILE_REPORT,
+) -> Path:
+    calls_path = script_dir / "extract_report_calls.jsonl"
+    stub_path = script_dir / "h_mad_extract_report.py"
+    stub_path.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env python3
+            import json
+            import sys
+            from pathlib import Path
+
+            calls_path = Path({str(calls_path)!r})
+            calls_path.write_text(
+                calls_path.read_text(encoding="utf-8") + json.dumps(sys.argv[1:]) + "\\n"
+                if calls_path.exists()
+                else json.dumps(sys.argv[1:]) + "\\n",
+                encoding="utf-8",
+            )
+            rc = {return_code}
+            if rc == 0:
+                sys.stdout.write({stdout_text!r})
+            else:
+                sys.stderr.write("extract stub failure\\n")
+            sys.exit(rc)
+            """
+        ),
+        encoding="utf-8",
+    )
+    return calls_path
+
+
+def extract_report_calls(calls_path: Path) -> list[list[str]]:
+    if not calls_path.exists():
+        return []
+    return [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines()]
+
+
 def test_script_resolution_default(monkeypatch: pytest.MonkeyPatch) -> None:
     ac = audit_cycle()
     monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
@@ -276,6 +318,124 @@ def test_collect_report_wait_operational_error_on_unexpected_nonzero(
         )
 
     assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "0.2"]]
+
+
+def test_collect_falls_back_to_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ac = audit_cycle()
+    wait_calls_path = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    extract_calls_path = install_extract_report_stub(wait_calls_path.parent)
+    report_path = tmp_path / "dispatch" / "p3.report.md"
+    report_path.parent.mkdir()
+    out_path = report_path.with_suffix(".out")
+    out_path.write_text(
+        "\n".join(
+            [
+                "echoed prompt text",
+                "===HMAD-DISPATCH-BOUNDARY===",
+                "AUDIT-hostile-feature-design-v8-BEGIN",
+                HOSTILE_REPORT,
+                "AUDIT-hostile-feature-design-v8-END",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    delivered, collected_path = ac.collect(
+        pass_spec(3, report_path),
+        grace=0.2,
+        project_root=tmp_path,
+        feature="hostile-feature",
+        phase="design",
+        cycle=8,
+    )
+
+    expected_path = tmp_path / "docs/02-design/features/hostile-feature.design.audit.v8.p3.md"
+    assert delivered == "out"
+    assert collected_path == expected_path
+    assert collected_path is not None
+    assert collected_path.exists()
+    assert collected_path.stat().st_size > 0
+    assert collected_path.read_text(encoding="utf-8") == HOSTILE_REPORT
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert extract_report_calls(extract_calls_path) == [
+        [
+            str(out_path),
+            "--feature",
+            "hostile-feature",
+            "--phase",
+            "design",
+            "--cycle",
+            "8",
+            "--after-marker",
+        ]
+    ]
+
+
+def test_collect_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ac = audit_cycle()
+    wait_calls_path = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    extract_calls_path = install_extract_report_stub(wait_calls_path.parent, return_code=2)
+    report_path = tmp_path / "dispatch" / "p4.report.md"
+    report_path.parent.mkdir()
+
+    delivered, collected_path = ac.collect(
+        pass_spec(4, report_path),
+        grace=0.2,
+        project_root=tmp_path,
+        feature="hostile-feature",
+        phase="impl-plan",
+        cycle=9,
+    )
+
+    assert delivered == "none"
+    assert collected_path is None
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert extract_report_calls(extract_calls_path) == [
+        [
+            str(report_path.with_suffix(".out")),
+            "--feature",
+            "hostile-feature",
+            "--phase",
+            "impl-plan",
+            "--cycle",
+            "9",
+            "--after-marker",
+        ]
+    ]
+
+
+def test_collect_extract_report_operational_error_on_unexpected_nonzero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    wait_calls_path = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    extract_calls_path = install_extract_report_stub(wait_calls_path.parent, return_code=5)
+    report_path = tmp_path / "dispatch" / "p5.report.md"
+    report_path.parent.mkdir()
+
+    with pytest.raises(ac.OperationalError, match="extract_report.*p5"):
+        ac.collect(
+            pass_spec(5, report_path),
+            grace=0.2,
+            project_root=tmp_path,
+            feature="hostile-feature",
+            phase="plan",
+            cycle=10,
+        )
+
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert extract_report_calls(extract_calls_path) == [
+        [
+            str(report_path.with_suffix(".out")),
+            "--feature",
+            "hostile-feature",
+            "--phase",
+            "plan",
+            "--cycle",
+            "10",
+            "--after-marker",
+        ]
+    ]
 
 
 def test_combine_passes_when_all_passes_passed() -> None:

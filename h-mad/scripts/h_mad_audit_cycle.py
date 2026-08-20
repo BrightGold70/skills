@@ -100,6 +100,51 @@ def _run_report_wait(report_path: Path, grace: float) -> bool:
     raise OperationalError(f"report_wait exited {result.returncode} for {report_path}")
 
 
+def _run_extract_report(
+    out_path: Path, *, feature: str, phase: str, cycle: int
+) -> str:
+    """Report text, or '' when nothing is there."""
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_script("h_mad_extract_report.py")),
+                str(out_path),
+                "--feature",
+                feature,
+                "--phase",
+                phase,
+                "--cycle",
+                str(cycle),
+                "--after-marker",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise OperationalError(f"extract_report failed for {out_path}: {exc}") from exc
+
+    if result.returncode == 0:
+        return result.stdout
+    if result.returncode == 2:
+        return ""
+    detail = _one_line(result.stderr or result.stdout)
+    if detail:
+        raise OperationalError(
+            f"extract_report exited {result.returncode} for {out_path}: {detail}"
+        )
+    raise OperationalError(f"extract_report exited {result.returncode} for {out_path}")
+
+
+def _write_collected_report(report_text: str, collected_path: Path) -> Path:
+    collected_path.parent.mkdir(parents=True, exist_ok=True)
+    collected_path.write_text(report_text, encoding="utf-8")
+    if not collected_path.exists() or not collected_path.read_text(encoding="utf-8"):
+        raise OperationalError(f"collected report was empty after write: {collected_path}")
+    return collected_path
+
+
 def collect(
     spec: PassSpec,
     *,
@@ -123,6 +168,12 @@ def collect(
 
     if _run_report_wait(spec.report_path, grace):
         return "report-file", _copy_collected_report(spec.report_path, collected_path)
+
+    report_text = _run_extract_report(
+        spec.out_path, feature=feature, phase=phase, cycle=cycle
+    )
+    if report_text:
+        return "out", _write_collected_report(report_text, collected_path)
 
     return "none", None
 
