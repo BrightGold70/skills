@@ -1,4 +1,4 @@
-# Handoff — audit-cycle-verb: Phase 5a/5b/5c gated, Task 1 shipped, Tasks 2–9 not started
+# Handoff — audit-cycle-verb: Phase 5a/5b/5c gated, Tasks 1–4 shipped (helper complete), Tasks 5–9 not started
 
 **Date:** 2026-08-20
 **Branch:** feature/audit-cycle-verb
@@ -7,13 +7,21 @@
 ## Session Summary
 
 Resumed `audit-cycle-verb` at `enter_autonomous` (Phase 5) and took it through 5a, 5b, 5c and
-Task 1 of 5d/5e. The impl-plan was authored, audited over **nine two-pass cycles (55 findings,
-zero deferrals)** and gated clean on both passes, the wire-pin gate registered all six wires, and
-Task 1 (`h_mad_audit_cycle.py` verdict core) shipped RED→GREEN with a revert test and an
-independent agy review. **Tasks 2–9 have not started; no `collect`, `gate`, or shell verb exists
+Tasks 1–4 of 5d/5e — **the Python helper `h_mad_audit_cycle.py` is now complete and its central
+claim is demonstrated live**: a prose-only finding plus a bulleted finding gate per-pass to
+`must=2`, while the same two reports concatenated gate to `must=1`. The impl-plan was authored,
+audited over **nine two-pass cycles (55 findings, zero deferrals)** and gated clean on both passes,
+and the wire-pin gate registered all six wires. Each of Tasks 1–4 shipped RED→GREEN with a revert
+test, a wire-scoped revert plus force mutation where it is a `wiring` task, and an independent agy
+spec review. Suite: 49 tests. **Tasks 5–9 have not started; no shell verb, no mutation specs, no SKILL.md changes exist
 yet.** The feature is claimed by this session's id — release or take it over on resume.
 
-Two commits on the branch: `41efe98` (5a/5b) and `b5a4e2e` (Task 1). **Neither is pushed.**
+Six commits on the branch, **none pushed**: `41efe98` (5a/5b) · `b5a4e2e` (Task 1) ·
+`f772feb` (handoff) · `01ec313` (Task 2) · `30be94b` (Task 3) · `45f5704` (Task 4).
+
+**Nine defects were caught across Tasks 1–4, every one of them under a green suite.** Four of
+the five in Task 4 were found by running the binary end-to-end against the design's documented
+shapes — not by the 49-test suite and not by a reviewer.
 
 ## Key Learnings
 
@@ -36,6 +44,33 @@ Two commits on the branch: `41efe98` (5a/5b) and `b5a4e2e` (Task 1). **Neither i
   with `--pass`, so the hardcoded `[]` was unreachable by every test. **Only the independent agy
   spec review caught it** — reading against the ACs rather than executing. The second lane is not
   ceremony.
+- **Five more defects in Task 4 alone, all under a green 43–49 test suite.** (a) `main()`
+  hardcoded `cycle=1` and never declared `--cycle`, so every cycle's reports would land at
+  `…audit.v1.p<i>.md` and the Task 7 verb — which passes `--cycle N` — could never have run;
+  (b) `--grace` was `type=float` while `h_mad_report_wait.py --timeout` is `type=int`, so EVERY
+  real fall-through-to-wait crashed, including on the default — invisible because ten tests stub
+  that binary and the stub accepts what it rejects; (c) the premise checklist printed on
+  `UNVERIFIED`; (d) the verdict line injected `reason=` into FAIL, breaking AC-8.1's shape;
+  (e) `render()` gated `delivered=` on "did any pass deliver?" instead of "was anything
+  dispatched?", so an all-`none` post-dispatch cycle printed byte-identically to the no-pass form.
+- **The recurring root cause is a constant standing in for a real input, with no test supplying
+  that input.** `combine([])` in Task 1, `cycle=1` in Task 4. A green suite cannot see an input it
+  never provides. Ask a reviewer to hunt that *class* by name — it found none remaining.
+- **Tests written after an implementation inherit its assumptions.** Several Task 4 tests DID
+  assert the verdict line — they asserted what the code emitted, not what the design specifies.
+  Assert against the design's documented shapes.
+- **Run the binary end-to-end against the design's shapes.** Four of Task 4's five defects came
+  from a probe written to *demonstrate* the feature, not from the suite and not from a reviewer.
+- **`grep -c` exits 1 on zero matches**, so a guard whose success is "no matches" reports the whole
+  command as failed. And `grep -qx '.*<testname>'` can never match a pytest `FAILED` line, because
+  pytest appends ` - AssertionError…`; that produced a **false "wire NOT enforced"** on a wire that
+  was enforced. Print the exact failing-test list beside any such check.
+- **An unlanded mutation plus a green suite reads as "connection enforced".** One wire-scoped
+  regex failed to match and the run then printed an empty failing set. Every mutation this session
+  asserts its anchor matches **exactly once** before applying, and refuses otherwise.
+- **Ask reviewers for the verdict token unbolded on its own line.** One returned
+  `**VERDICT: COMPLIANT**`; `h_mad_extract_verdict.py` correctly rejected it, which turns the
+  extractor from authoritative into something a human overrides by eye.
 - **Bare `python3` on this box is 3.14 with no pytest.** Use `/opt/anaconda3/bin/python3.11`. A
   plain `python3 -m pytest` returns `No module named pytest`, which reads like a broken test run.
 - **`--log` appends across runs, so a raw error count is not a per-run measurement.** A re-dispatch
@@ -62,20 +97,20 @@ Two commits on the branch: `41efe98` (5a/5b) and `b5a4e2e` (Task 1). **Neither i
 ## Next Steps
 
 1. **Re-claim the feature** — `python3 ~/.claude/skills/h-mad/scripts/h_mad_resume_decision.py --state docs/.bkit-memory.json --feature audit-cycle-verb --session-id "<sid>"` then `--claim "<sid>"`. It is currently owned by session `eea70bac`, which has stopped.
-2. **Task 2 RED** — helper → `h_mad_report_wait.py`, collection rungs 1–2. WIRE-PIN `test_collect_delayed_report` (the delayed fixture is the ONLY shape that reaches the wait; the happy path returns at rung 1 and the mutation would survive). Task text: `docs/01-plan/features/audit-cycle-verb.impl-plan.md`.
+2. **Task 5 RED** — the `audit-cycle` verb's arg validation, path templating, clearing + `[ ! -e ]` assertions, per-pass assembly, token combine and identity assertion. WIRE-PIN `test_verb_assemble_halt_no_dispatch`. Task text: `docs/01-plan/features/audit-cycle-verb.impl-plan.md`.
 3. **Reuse the dispatch recipe verbatim** — assemble prompt from the impl-plan task + `~/.claude/skills/h-mad/references/codex-implementer-prompt.md`, then `hmad-dispatch exec codex <prompt> --cd /Users/kimhawk/orca/skills --model gpt-5.5 --out <o> --log <l> --timeout 900`, backgrounded.
-4. **Then Tasks 3→9 in order** (each depends on the prior): 3 extract_report rung 3 · 4 gate + `--pass` + main's collect-and-gate path · 5 verb assembly · 6 verb `_cmd_exec agy` · 7 verb→helper · 8 both mutation specs · 9 SKILL.md + docs token test.
-5. **Do not let Task 4 skip the `--pass` boundary** — Task 4 adds the flag *and* the collect-and-gate path together. A flag parsed and ignored is what produced this session's fabricated-PASS defect.
+4. **Then Tasks 6→9 in order**: 6 verb → `_cmd_exec agy` · 7 verb → helper · 8 both mutation specs · 9 SKILL.md + docs token test.
+5. **Tasks 5–7 are where Task 4's fixes get exercised for real** — the verb passes `--cycle N` (which `main()` did not accept until this session) and consumes the `delivered=` shape. Run the verb end-to-end before believing its tests.
 6. **5f** — `h_mad_wire_registry.py verify --base 41efe98 --rootdir /Users/kimhawk/orca/skills --testpath h-mad/tests`, then `challenge --base 41efe98` (warning-only), then the full suite.
-7. **Push** — `git push -u origin feature/audit-cycle-verb` (2 commits unpushed).
+7. **Push** — `git push -u origin feature/audit-cycle-verb` (6 commits unpushed).
 
 ## Open / Blocked Items
 
-- **Tasks 2–9 of audit-cycle-verb** — status: not started, unblocked. `repo: /Users/kimhawk/orca/skills · branch: feature/audit-cycle-verb · worktree: none (main worktree)`. Artifacts: `docs/01-plan/features/audit-cycle-verb.{spec,plan,impl-plan}.md`, `docs/02-design/features/audit-cycle-verb.design.md`, 18 impl-plan audit reports `…impl-plan.audit.v{1..9}.p{1,2}.md`, registry `.h-mad/wires.jsonl` (6 rows).
+- **Tasks 5–9 of audit-cycle-verb** — status: not started, unblocked. `repo: /Users/kimhawk/orca/skills · branch: feature/audit-cycle-verb · worktree: none (main worktree)`. Artifacts: `docs/01-plan/features/audit-cycle-verb.{spec,plan,impl-plan}.md`, `docs/02-design/features/audit-cycle-verb.design.md`, 18 impl-plan audit reports `…impl-plan.audit.v{1..9}.p{1,2}.md`, registry `.h-mad/wires.jsonl` (6 rows).
 - **h-mad claim** — status: **held by session `eea70bac`** (this one). Not released, because the work is mid-Phase-5 and the next session should take it deliberately rather than inherit an unowned feature. Plain `--claim` will take it once stale.
 - **`phase = "step5"` is still armed** — deliberate. It keeps the TDD gate blocking Claude-authored production `.py`. Do NOT write `phase = null` before 5g completes.
-- **Anti-gaming verify pass for Task 1 not run** — status: owed. `references/codex-verifier-prompt.md`. The agy spec review (COMPLIANT on re-review) and the revert test are done; the independent module-count/test-discrimination/full-suite pass is not.
-- **Design amended to v1.15 during Phase 5b** — status: informational, needs your ruling. Errata only, no decision changed: the `INVALID` short-circuit ordering, "POSIX shell" → bash, and three anchor tests added to the Test Plan. If you want that re-gated through a Phase-4 re-audit rather than accepted as errata, say so before Task 4.
+- **Anti-gaming verify pass not run for ANY of Tasks 1–4** — status: owed. `references/codex-verifier-prompt.md`. The agy spec review (COMPLIANT on re-review) and the revert test are done; the independent module-count/test-discrimination/full-suite pass is not.
+- **Design amended to v1.15 during Phase 5b** — status: informational, needs your ruling. Errata only, no decision changed: the `INVALID` short-circuit ordering, "POSIX shell" → bash, and three anchor tests added to the Test Plan. If you want that re-gated through a Phase-4 re-audit rather than accepted as errata, say so before Task 5.
 - **`PREFLIGHT: FAIL unresolved=codex,agy`** — status: known, not blocking. Zero candidate panes in this worktree; `exec` is pane-independent and both CLIs are on PATH. Only the `send`/pane path is affected.
 - **Carry-forward, untouched this session** — the 249-row skill-candidate reconcile, advisor-gate live-fire (`HMAD_CONTEXT_WINDOW=1000 claude`), wiring-checker sanity vs a broken matcher, `HMAD_CONTEXT_WINDOW` derived-vs-defaulted, and the 4-file task-tool sweep. All in `.omc/notepad.md`.
 
@@ -89,7 +124,7 @@ Two commits on the branch: `41efe98` (5a/5b) and `b5a4e2e` (Task 1). **Neither i
 - `h-mad/tests/test_h_mad_audit_cycle.py` (new, 21 tests)
 - `.h-mad/wires.jsonl`, `docs/.bkit-memory.json` (gitignored state)
 
-**Uncommitted changes:** none. Two commits unpushed (`41efe98`, `b5a4e2e`).
+**Uncommitted changes:** none. Six commits unpushed (`41efe98` … `45f5704`).
 
 **To resume:**
 ```bash
