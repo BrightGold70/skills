@@ -26,9 +26,20 @@ all three rules above and prints the bump rows it excluded so the number is audi
 `grep -cE '^- \*\*.*candidate: \**yes'` misses continuation lines, misreads appended terminal
 markers, and counts bumps — it has produced a wrong census of this backlog three times.
 
-## Open, highest recurrence first (reconciled 2026-08-20)
+## Open, highest recurrence first (reconciled 2026-08-20, again after Phase-5 Tasks 1-4)
 
-**Two `candidate: yes` are open**, and neither is the one that was loudest.
+**Three `candidate: yes` are open** (census: OPEN yes+maybe = 35 of 104). The newest is
+`h-mad Phase-5 per-task TDD dispatch driver` (rec 8) — see the 2026-08-20 Tasks 1-4 block at the
+end. The other two were re-verified against source in the same pass and neither has shipped:
+no `pane-janitor` exists anywhere and `hmad-dispatch` still has no pane/dispatch cleanup verb;
+`docs/patches/` still holds exactly 2 directories, so the patch kit still waits on a third.
+
+Of the two rows the Tasks 1-4 block adds beyond that driver, one is **SUPERSEDED on arrival** by
+`h_mad_mutation_harness.py` (I hand-rolled its contract 6 times anyway and hit the exact failure it
+prevents), and one is a `maybe` that names its own insertion point in `h-mad/SKILL.md` rather than
+asking for a skill.
+
+**Two `candidate: yes` were open before this session**, and neither is the one that was loudest.
 `live-e2e-pane-janitor` (rec 6 → **8**) — still open, but **re-scope before building**: the hard
 half (identifying which panes this session created) is now solved by `exec-pane`'s slot registry
 `.h-mad/panes/<handle>.cd`, so what remains is only closing probe panes created outside that verb.
@@ -456,3 +467,9 @@ implementation), and this session used the `exec` path exclusively so no new rec
 note still holds: `exec-pane`'s slot registry solved the hard half, so re-scope before building.
 `vendored-plugin patch kit` — `docs/patches/` holds **2** directories against its own stated
 threshold of a third vendored patch; untouched this session.
+
+## 2026-08-20 — audit-cycle-verb Phase 5 Tasks 1-4
+
+- **h-mad Phase-5 per-task TDD dispatch driver**: assemble a codex RED (then GREEN) prompt from `<feature>.impl-plan.md` §"Task N" + `references/codex-implementer-prompt.md`, substitute the INLINE_* slots, dispatch `exec codex --model gpt-5.5` backgrounded, extract the `STATUS:` token from the report file with the `--out` fallback, then re-run pytest INDEPENDENTLY rather than trusting the verdict — recurrence: 8 this session (T1 RED+GREEN, T2, T3, T4, plus 3 fix cycles) — candidate: yes — every step is mechanical and identical per task; the only per-task input is the task number and a short list of task-specific constraints. Hand-assembling it is also where two real mistakes crept in: forgetting `--model gpt-5.5` (the config default cannot execute tools at all) and using bare `python3` (3.14, no pytest). A driver would carry both as defaults. Note the one genuinely per-task judgement it must NOT automate away: labelling which existing tests are regression guards, since "guard changed" and "test weakened" are otherwise indistinguishable.
+- **wire-scoped revert + force-direction mutation runner**: for a `wiring` task, cut the CALL with the callee intact and assert the WIRE-PIN fails, then force the caller past its guard and assert the converse test fails — recurrence: 6 this session (3 wiring tasks x 2 directions) — candidate: no — **SUPERSEDED** by `h-mad/scripts/h_mad_mutation_harness.py`, which already does exactly this contract (exact find/replace, refuse unless the anchor matches exactly once, restore on every path including interrupt, re-run the suite to prove the restore landed). I hand-rolled the dance 6 times anyway, and hit the failure the harness exists to prevent: one wire-scoped regex did not match, the run printed an EMPTY failing set, and an unlanded mutation plus a green suite reads as "connection enforced". The reusable gap is not a new skill — it is that Phase 5e should invoke the harness per wiring task rather than leaving it to Task 8's spec authoring.
+- **design-shape end-to-end probe**: after GREEN, run the built binary directly against the design's documented output shapes (every verdict line, every field-presence rule) instead of only running the suite — recurrence: 4 this session — candidate: maybe — it found **four of Task 4's five defects**, none of which the 49-test suite or the independent reviewer saw: a hardcoded `cycle=1` behind an undeclared `--cycle`, a float/int mismatch that crashed every real wait behind 10 stubbed tests, a checklist printed on a cannot-judge verdict, and a verdict line that did not match its own AC. Probably belongs as an explicit obligation in `h-mad/SKILL.md` §"Phase 5 (Implementation) sub-steps" — beside the revert test — rather than as a standalone skill, since it has no fixed command, only a fixed question: *does the running binary emit what the design says it emits?*
