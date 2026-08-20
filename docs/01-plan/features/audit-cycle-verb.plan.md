@@ -33,12 +33,13 @@ hmad-dispatch audit-cycle --feature <name> --phase plan|design|impl-plan --cycle
                           [--passes <K>]            # default 2
                           [--ack-file <path>]       # forwarded to every per-pass gate
                           [--report-grace <sec>]    # default 5; post-reap grace wait
-                          [--report-timeout <sec>]  # default 600; pre-reap path only
                           [--timeout <sec>]         # per-pass exec watchdog
 ```
 
 `--feature`, `--phase`, `--cycle` and `--project-root` are forwarded to
-`h_mad_assemble_audit.py` and to `h_mad_extract_report.py`. `--ack-file` is forwarded to **every**
+`h_mad_assemble_audit.py`; `h_mad_extract_report.py` receives `--feature`, `--phase`, `--cycle`
+and `--after-marker` only — **it has no `--project-root` flag** (verified against `--help`), so
+forwarding one would abort the fallback at the moment it is needed most. `--ack-file` is forwarded to **every**
 per-pass `h_mad_audit_gate.py` invocation, so the `## Acknowledged-not-fixed` operator escape hatch
 works identically through the verb and through a hand-run cycle — a capability the operator has
 today and must not lose by adopting the verb.
@@ -250,11 +251,9 @@ than the full wait:**
 4. Still nothing → `h_mad_extract_report.py` on that pass's `--out` (`delivered=out`), then
    `delivered=none` if that is empty too.
 
-`--report-timeout` therefore applies only to the pre-reap path and is retained for a future
-non-blocking mode; the reap-first flow is bounded by the dispatch's own `--timeout` plus the grace.
-Supporting observation: across three hand-run cycles of this feature's own plan audit, all six
-passes had a non-empty report file present the moment `wait` returned — step 2 hit every time and
-no wait was ever needed.
+`--report-timeout` is **not offered at all** — the reap-first flow is the only collection path, so
+the flag would reach no logic, and a CLI control that silently does nothing invites tuning a
+timeout that cannot apply. The collection bound is the dispatch's own `--timeout` plus the grace.
 
 **Every collection channel is cleared before dispatch, and every removal is verified by re-reading.**
 Both scored channels carry the same hazard, and guarding only one leaves the hole open on the other:
@@ -489,3 +488,8 @@ agy, gate on must-fix and should-fix, revise and re-audit until both are zero.
   the prompt byte-identity assertion) had no discrimination coverage. A guard added in response to a
   finding feels already-justified, which is exactly why it escapes the mutation spec; both now carry
   a permissive mutation and a condition-creating fixture.
+- v1.11: Two corrections from the design audit. A finding said the design dropped `--project-root`
+  from the `h_mad_extract_report.py` call — its facts were right (the docs disagreed) and its
+  direction was backwards: **that script has no such flag**, so the plan was wrong and forwarding it
+  would abort the fallback exactly when it is needed. Also drops `--report-timeout`, which the
+  design gives no logic to reach.

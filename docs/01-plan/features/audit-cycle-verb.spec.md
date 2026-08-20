@@ -90,25 +90,41 @@ dropped by being forgotten.
 - **Description**: For each pass the verb first waits on the report-file slot, then falls back to
   extracting a sentinel-framed report from that pass's `--out`.
 - **Acceptance Criteria**:
-  - AC-4.1: The verb **reaps each backgrounded dispatch first**, then tests that pass's report path
-    directly. A non-empty file is `delivered=report-file` with no wait at all. Only an empty or
-    absent file leads to `h_mad_report_wait.py <report-path>`, and then with a **grace** timeout
-    (`--report-grace`, default 5s), not a full wait. (Revised in v1.3: the original criterion called
-    `report_wait` first with `--report-timeout` default 600s. `report_wait` polls a path and knows
-    nothing about a process, so *both* naive orderings can hang for the full timeout — collecting
+  - AC-4.1: The verb **reaps each backgrounded dispatch first**, then decides per pass from the
+    report path:
+    - non-empty **and** `<report-path>.done` exists → `delivered=report-file`, **no wait at all**;
+    - anything else — absent, empty, or non-empty with no `.done` — → `h_mad_report_wait.py
+      <report-path>` with a **grace** timeout (`--report-grace`, default 5s), never a full wait.
+
+    The `.done` requirement is why the second branch is not simply "empty or absent": the agent
+    writes the report and *then* marks `.done`, so a non-empty report without the marker is a torn
+    write caught mid-flush, and accepting it on size alone would gate a truncated report (typically
+    `GATE: INVALID`, its `## Should-fix` section not yet written). `report_wait` blocks on exactly
+    that marker — probed 2026-08-20: a present file with no `.done` times out at exit 1, identically
+    to a file that never arrived.
+
+    Reap-first, and a grace rather than a full wait, because `report_wait` polls a path and knows
+    nothing about a process: *both* naive orderings can hang for the full timeout — collecting
     before reaping hangs when a dispatch dies without writing, and reaping then waiting fully hangs
     when the agent delivered via `--out`. Once a dispatch has exited, no longer wait can change the
-    outcome.)
-  - AC-4.1b: `--report-timeout` (default 600s) is retained on the CLI and applies only to a
-    pre-reap collection path. It is not used by the reap-first flow, whose bound is the dispatch's
-    own `--timeout` plus the grace.
+    outcome. (Revised v1.3 to reap-first; narrowed v1.14 to require `.done`; the superseded "only an
+    empty or absent file" clause removed v1.15, where it had survived alongside its own replacement.)
+  - AC-4.1b: `--report-timeout` is **not offered**. The reap-first flow is the only collection path,
+    so the flag would reach no logic; a control that silently does nothing reads as supported and
+    invites tuning a timeout that cannot apply. The collection bound is the dispatch's own
+    `--timeout` plus `--report-grace`. (Inverted in v1.10: previously retained "for a future
+    non-blocking mode", which the design showed was a flag with no reachable logic.)
   - AC-4.2: When `report_wait` times out **or** delivers an empty body, the verb falls back to
     `h_mad_extract_report.py <out-path> --feature <f> --phase <p> --cycle <N> --after-marker`.
   - AC-4.3: The fallback extraction passes `--after-marker`, so an echoed prompt containing the
     template's own sentinel pair cannot be scored as the agent's report.
   - AC-4.4: Each pass's collected report is written to
-    `<audit-dir>/<feature>.<phase>.audit.v<N>.p<i>.md`, one file per pass, and the paths are named
-    on the verb's output.
+    `<audit-dir>/<feature>.<phase>.audit.v<N>.p<i>.md`, and on a **PASS or FAIL** verdict the paths
+    are named on the verb's output via a `reports:` line. The write is verified by re-reading
+    (exists and non-empty) before the pass is recorded as delivered.
+  - AC-4.4b: On `UNVERIFIED` the `reports:` line is omitted, including when some passes did deliver.
+    Naming a partial set of reports on a cannot-judge cycle presents them as the cycle's result,
+    which is the claim `UNVERIFIED` exists to withhold. (Narrowed in v1.13.)
   - AC-4.5: The verb reports the delivering channel per pass as `delivered=report-file|out|none`,
     so the report-file failure rate remains measurable across cycles.
   - AC-4.6: A pass whose report is empty or absent on **both** channels is recorded as
@@ -121,8 +137,13 @@ dropped by being forgotten.
 - **Acceptance Criteria**:
   - AC-5.1: `h_mad_audit_gate.py` is invoked once per collected pass report, on that pass's own
     file. The verb never concatenates two pass reports into one file and gates the concatenation.
-  - AC-5.2: The cycle verdict is `PASS` iff every pass returned `GATE: PASS`; if any pass returned
-    `GATE: FAIL` the cycle verdict is `FAIL`.
+  - AC-5.2: Verdict precedence is **cannot-judge, then FAIL, then PASS**. If any pass is a
+    cannot-judge (`delivered=none` or `GATE: INVALID`) the cycle is `UNVERIFIED` regardless of the
+    other passes; otherwise, if any pass returned `GATE: FAIL` the cycle is `FAIL`; otherwise every
+    pass returned `GATE: PASS` and the cycle is `PASS`. (Narrowed in v1.17: this previously said
+    FAIL follows unconditionally from any `GATE: FAIL`, which contradicted AC-6.1 — a cycle where
+    one pass measured nothing is not a cycle that found problems, and reporting FAIL would let a
+    re-run "fix" it by chance.)
   - AC-5.3: Per-pass counts appear on the verdict output as `p<i>=<must>/<should>` for each pass.
   - AC-5.4: The aggregate `must=`/`should=` fields are the **sums** of the per-pass counts, and the
     verb's output states that the sum may double-count a finding both passes reported.
@@ -141,9 +162,13 @@ dropped by being forgotten.
     than scored. The gate already detects this and returns `GATE: INVALID` (verified 2026-08-20 on
     both a narration-only report and an empty file), so the verb composes it unmodified and routes
     on the token. **`GATE: INVALID` carries `must=0 should=0`** — counts it did not measure — so the
-    verb MUST key on the verdict word and MUST NOT read those counts; doing otherwise scores a
-    header-less report as a clean pass, which is the exact failure AC-6.1 exists to prevent. The
-    pass becomes `delivered=none` per AC-4.6.
+    verb MUST key on the verdict word and MUST NOT read those counts. The pass routes to the
+    cannot-judge verdict with `reason=no_gate_sections:p<i>`, and its `delivered=` value is left
+    **as measured** (`report-file` or `out`). (Revised in v1.11: this previously said the pass
+    "becomes `delivered=none`", which would have made `no_gate_sections` unreachable — `combine`
+    tests `delivered == "none"` first, so `no_report:p<i>` would always win and AC-6.3's distinction
+    would be dead code. Something that arrived but could not be scored is not the same event as
+    nothing arriving, and the operator responses differ: inspect the report versus re-dispatch.)
   - AC-5.7: `--ack-file <path>`, when passed, is forwarded to every per-pass gate invocation, so the
     operator escape hatch works identically to a hand-run cycle.
 
@@ -166,8 +191,13 @@ dropped by being forgotten.
     (the per-pass prompts differed beyond the report-path line, so the passes would audit different
     documents — a cannot-judge verdict at exit 0, never an operational error), `no_report:p<i>`, and
     `no_gate_sections:p<i>`.
-  - AC-6.4: On `UNVERIFIED`, the per-pass `delivered=` fields are still printed, so the operator can
-    see which pass failed and on which channel.
+  - AC-6.4: On a **post-dispatch** `UNVERIFIED`, the per-pass `delivered=` fields are still printed,
+    so the operator can see which pass failed and on which channel.
+  - AC-6.4b: A **pre-dispatch** `UNVERIFIED` — `reason=assemble_halt:p<i>` or
+    `reason=prompt_divergence` — prints no `delivered=` fields, because no dispatch occurred and no
+    collection channel exists to report on. Printing `delivered=none,none` there would be a
+    measurement the cycle never took, the same defect as a cannot-judge carrying counts (AC-6.1).
+    (Added in v1.12: AC-6.4 was written unconditionally before the no-pass halt path existed.)
 
 ### FR-7: Premise-check checklist
 
@@ -231,7 +261,13 @@ dropped by being forgotten.
   - AC-10.3: A test asserts AC-5.1's motivating case directly: a pass report whose only finding is
     prose (no bullet) combined with a bulleted pass report yields `FAIL` with that prose finding
     counted, which a concatenation-based implementation fails.
-  - AC-10.4: A test asserts that a `## Must-fix`-less report yields `UNVERIFIED`, not `PASS`.
+  - AC-10.4: A test asserts that a report **missing either gate section** yields `UNVERIFIED` at the
+    cycle level, not `PASS`. Probed 2026-08-20: `has_gate_sections` requires **both** `## Must-fix`
+    and `## Should-fix`, so a report carrying only one of them gates `INVALID` exactly as a report
+    carrying neither does — `## Should-fix`-only is *not* a clean pass. The test asserts the cycle's
+    `AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p<i>`, not merely the gate's `INVALID` return,
+    since the AC is about the cycle's outcome. (Reworded in v1.16 from "a `## Must-fix`-less
+    report", which implied the missing section had to be that one.)
   - AC-10.5: A mutation spec exists for the gating logic, and every mutation is caught (guard
     mutated to its permissive value → a test fails).
   - AC-10.5b: The spec covers the **shell-level** guards as well as the Python ones — the
@@ -299,6 +335,23 @@ dropped by being forgotten.
 - v1.5: AC-6.3 gains `prompt_divergence`, classified as a cannot-judge verdict at exit 0.
 - v1.6: AC-3.3 extended to clear `<out-path>` as well as the report paths, with AC-3.3b recording
   why `--log` is deliberately exempt.
+- v1.17: AC-5.2 restated as an explicit three-way precedence so it no longer contradicts AC-6.1.
+- v1.16: AC-10.4 reworded to "missing either gate section". An audit finding argued a
+  `## Should-fix`-only report is a clean pass needing `PASS`; probing the gate disproved that — it
+  returns `INVALID` for either section missing. The wording mismatch was real, the stated reason was
+  not.
+- v1.15: AC-4.1 rewritten as a two-branch rule. The v1.14 edit added the `.done` requirement but
+  left the superseded "only an empty or absent file" clause in the same criterion, so AC-4.1
+  contradicted itself for one revision.
+- v1.14: AC-4.1 requires the `.done` marker, closing a torn-write window found by probe.
+- v1.13: AC-4.4 scoped to PASS/FAIL with AC-4.4b covering the UNVERIFIED omission, and the collected
+  write is now verified by re-reading.
+- v1.12: AC-6.4 scoped to post-dispatch UNVERIFIED; AC-6.4b covers the pre-dispatch halts, which
+  have no channels to report and must not print invented ones.
+- v1.11: AC-5.6 corrected — an INVALID pass keeps its measured `delivered=` value instead of being
+  forced to `none`, which would have made `no_gate_sections:p<i>` unreachable. Found by a design
+  audit that argued the spec was wrong and the design right.
+- v1.10: AC-4.1b inverted — `--report-timeout` removed, not retained; no logic reaches it.
 - v1.9: AC-10.5b added — the two shell-level guards get discrimination coverage with
   condition-creating fixtures.
 - v1.8: AC-2.2 and AC-2.3 made multi-pass aware — assembly runs per pass, so there are N tokens and

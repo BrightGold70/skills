@@ -1,0 +1,15 @@
+AUDIT-audit-cycle-verb-design-v15-BEGIN
+## Summary
+The design provides a robust, zero-dependency implementation of the `audit-cycle` verb, correctly isolating per-pass execution channels and maintaining strict signal discipline. The decision to enforce per-pass gating and assert byte-identity of the prompts resolves critical failure modes of a naive union approach. However, there are `Must-fix` gaps regarding operator-override preservation (the in-process gate read omits the sidecar) and strict adherence to the spec's edge cases for Cannot-Judge vs FAIL routing and test conditions.
+
+## Must-fix
+- **Axis B (Operator-override preservation / Single-source contract)** — The design states that `gate()` uses `_acknowledged_from_text (from the report and any --ack-file)` to filter the extracted bullets so that its `len(findings) == must` assertion holds against the subprocess output. However, it omits resolving and passing the **sidecar** file (which `h_mad_audit_gate.py` resolves and reads automatically). If the helper's in-process read does not locate and include the sidecar text, any item acknowledged via the sidecar will be excluded by the subprocess but kept by the helper, causing a mismatched count assertion and crashing the cycle on a legitimate operator override.
+- **Axis C (Spec restatement for AC-5.2)** — Spec wording: "AC-5.2: The cycle verdict is PASS iff every pass returned GATE: PASS; if any pass returned GATE: FAIL the cycle verdict is FAIL." / Design wording: "Cannot-judge outranks FAIL... if any(r.verdict == "FAIL" for r in results): return "FAIL", None" (checked after "none" and "INVALID"). The design correctly narrows the spec by making the FAIL verdict conditional on no pass resulting in a cannot-judge (`UNVERIFIED`). However, because the spec unconditionally dictates FAIL if *any* pass is FAIL, this divergence must be explicitly encoded in the spec so the implementation isn't measured against a contradictory rule.
+- **Axis C (Spec narrowing for AC-10.4)** — Spec wording: "AC-10.4: A test asserts that a report missing either gate section yields UNVERIFIED at the cycle level..." / Design wording: "`test_combine_invalid_yields_unverified` | header-less report from one pass | end-to-end AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p<i>". The design narrows the test requirement from missing *either* gate section (e.g. a `## Should-fix`-only report) to "header-less" (missing both). The spec was explicitly updated in v1.16 to require testing the missing-either condition; the test must explicitly assert on a report missing exactly one section to prevent regressions.
+
+## Should-fix
+None
+
+## Nit
+- In the Test Plan section, the design states "The three rows marked *anchors* are the positive tests the plan's connection-mutation table removes against." The plan actually specifies 6 connections that require removal tests, and the design's test plan successfully covers all 6. Highlighting only 3 as anchors undersells the completeness of the test suite and creates a minor contradiction with the plan.
+AUDIT-audit-cycle-verb-design-v15-END
