@@ -1,6 +1,7 @@
 import importlib
 import json
 import re
+import subprocess
 import sys
 import threading
 import textwrap
@@ -21,7 +22,7 @@ def audit_cycle():
 def pass_result(
     *,
     index: int,
-    delivered: str = "report",
+    delivered: str = "report-file",
     verdict: str | None = "PASS",
     must: int = 0,
     should: int = 0,
@@ -54,6 +55,37 @@ INLINE_* placeholders
 AUDITCYCLE: hostile line inside report body
 ```
 """
+
+HOSTILE_PASS_REPORT = """# Audit body with hostile reviewer payload
+
+## Must-fix
+None
+
+## Should-fix
+None
+
+## Notes
+human-origin text: {{INLINE_MARKER}} [link](target) **bold**
+second line with AUDITCYCLE: fake marker
+"""
+
+HOSTILE_FAIL_REPORT = """# Audit body with hostile reviewer payload
+
+## Must-fix
+- blocking human finding with {{INLINE_MARKER}} [link](target) **bold**
+
+## Should-fix
+None
+
+## Notes
+second line with AUDITCYCLE: fake marker
+"""
+
+
+def write_done_report(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    Path(str(path) + ".done").touch()
 
 
 def pass_spec(index: int, report_path: Path) -> object:
@@ -164,6 +196,92 @@ def extract_report_calls(calls_path: Path) -> list[list[str]]:
     return [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines()]
 
 
+def install_audit_gate_stub(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    verdicts: dict[str, tuple[str, int, int]],
+    *,
+    existing_script_dir: Path | None = None,
+) -> Path:
+    script_dir = existing_script_dir or tmp_path / "gate-stubs"
+    script_dir.mkdir(exist_ok=True)
+    calls_path = script_dir / "audit_gate_calls.jsonl"
+    stub_path = script_dir / "h_mad_audit_gate.py"
+    stub_path.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env python3
+            import json
+            import sys
+            from pathlib import Path
+
+            calls_path = Path({str(calls_path)!r})
+            calls_path.write_text(
+                calls_path.read_text(encoding="utf-8") + json.dumps(sys.argv[1:]) + "\\n"
+                if calls_path.exists()
+                else json.dumps(sys.argv[1:]) + "\\n",
+                encoding="utf-8",
+            )
+            verdicts = {verdicts!r}
+            audit_file = Path(sys.argv[1])
+            verdict, must, should = verdicts[audit_file.name]
+            print(f"GATE: {{verdict}} must={{must}} should={{should}}")
+            print(f"[H-MAD] {{audit_file.stem}} gate {{verdict}}")
+            sys.exit(2 if verdict == "INVALID" else 0)
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", str(script_dir))
+    monkeypatch.setenv("HMAD_STUB_HOSTILE", "all")
+    return calls_path
+
+
+def audit_gate_calls(calls_path: Path) -> list[list[str]]:
+    if not calls_path.exists():
+        return []
+    return [json.loads(line) for line in calls_path.read_text(encoding="utf-8").splitlines()]
+
+
+def pass_arg(index: int, report_path: Path, rc: int = 0) -> str:
+    return f"{index}:{report_path}:{report_path.with_suffix('.out')}:{rc}"
+
+
+def run_collect_cycle(
+    ac,
+    *,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    report_paths: list[Path],
+    cycle: int = 1,
+    extra_args: list[str] | None = None,
+) -> tuple[int, str, str]:
+    argv = [
+        "--feature",
+        "hostile-feature",
+        "--phase",
+        "plan",
+        "--cycle",
+        str(cycle),
+        "--project-root",
+        str(tmp_path),
+        "--passes",
+        str(len(report_paths)),
+        "--size-status",
+        "verified",
+        "--grace",
+        "0.2",
+    ]
+    for index, report_path in enumerate(report_paths, start=1):
+        argv.extend(["--pass", pass_arg(index, report_path)])
+    if extra_args:
+        argv.extend(extra_args)
+
+    rc = ac.main(argv)
+    captured = capsys.readouterr()
+    return rc, captured.out, captured.err
+
+
 def test_script_resolution_default(monkeypatch: pytest.MonkeyPatch) -> None:
     ac = audit_cycle()
     monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
@@ -251,7 +369,7 @@ def test_collect_delayed_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert collected_path == expected_path
     assert collected_path != report_path
     assert collected_path.read_text(encoding="utf-8") == HOSTILE_REPORT
-    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "2.5"]]
+    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "3"]]
 
 
 def test_collect_nonempty_report_without_done_routes_to_wait(
@@ -274,7 +392,7 @@ def test_collect_nonempty_report_without_done_routes_to_wait(
 
     assert delivered == "none"
     assert collected_path is None
-    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "1"]]
 
 
 def test_collect_report_wait_timeout_yields_none(
@@ -296,7 +414,28 @@ def test_collect_report_wait_timeout_yields_none(
 
     assert delivered == "none"
     assert collected_path is None
-    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "1"]]
+
+
+def test_collect_real_report_wait_accepts_float_grace_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
+    monkeypatch.setenv("HMAD_REPORT_POLL_INTERVAL", "0")
+    report_path = tmp_path / "dispatch" / "never.report.md"
+    report_path.parent.mkdir()
+
+    delivered, collected_path = ac.collect(
+        pass_spec(1, report_path),
+        grace=0.2,
+        project_root=tmp_path,
+        feature="hostile-feature",
+        phase="plan",
+        cycle=1,
+    )
+
+    assert (delivered, collected_path) == ("none", None)
 
 
 def test_collect_report_wait_operational_error_on_unexpected_nonzero(
@@ -317,7 +456,7 @@ def test_collect_report_wait_operational_error_on_unexpected_nonzero(
             cycle=1,
         )
 
-    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(calls_path) == [[str(report_path), "--timeout", "1"]]
 
 
 def test_collect_falls_back_to_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -356,7 +495,7 @@ def test_collect_falls_back_to_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert collected_path.exists()
     assert collected_path.stat().st_size > 0
     assert collected_path.read_text(encoding="utf-8") == HOSTILE_REPORT
-    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
     assert extract_report_calls(extract_calls_path) == [
         [
             str(out_path),
@@ -389,7 +528,7 @@ def test_collect_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
     assert delivered == "none"
     assert collected_path is None
-    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
     assert extract_report_calls(extract_calls_path) == [
         [
             str(report_path.with_suffix(".out")),
@@ -423,7 +562,7 @@ def test_collect_extract_report_operational_error_on_unexpected_nonzero(
             cycle=10,
         )
 
-    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "0.2"]]
+    assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
     assert extract_report_calls(extract_calls_path) == [
         [
             str(report_path.with_suffix(".out")),
@@ -479,7 +618,7 @@ def test_combine_distinguishes_missing_report_from_invalid_gate_sections() -> No
         "UNVERIFIED",
         "no_report:p1",
     )
-    assert ac.combine([pass_result(index=1, delivered="report", verdict="INVALID")]) == (
+    assert ac.combine([pass_result(index=1, delivered="report-file", verdict="INVALID")]) == (
         "UNVERIFIED",
         "no_gate_sections:p1",
     )
@@ -489,7 +628,7 @@ def test_combine_raises_when_delivered_pass_has_no_gate_token() -> None:
     ac = audit_cycle()
 
     with pytest.raises(ac.OperationalError, match="GATE.*p1"):
-        ac.combine([pass_result(index=1, delivered="report", verdict=None)])
+        ac.combine([pass_result(index=1, delivered="report-file", verdict=None)])
 
 
 def test_combine_allows_missing_report_without_gate_token() -> None:
@@ -533,9 +672,12 @@ def test_premise_items_formats_supplied_path_line_without_parsing_text() -> None
     ]
 
 
-def test_render_unverified_omits_count_and_per_pass_fields() -> None:
+def test_render_post_dispatch_unverified_all_none_includes_delivered_for_every_pass() -> None:
     ac = audit_cycle()
-    results = [pass_result(index=1, delivered="none", verdict=None)]
+    results = [
+        pass_result(index=1, delivered="none", verdict=None),
+        pass_result(index=2, delivered="none", verdict=None),
+    ]
 
     text = ac.render(
         results,
@@ -543,18 +685,73 @@ def test_render_unverified_omits_count_and_per_pass_fields() -> None:
         "no_report:p1",
         feature="hostile-feature",
         size_status="verified",
-        passes=1,
+        passes=2,
     )
     line = auditcycle_lines(text)[0]
 
-    assert line == "AUDITCYCLE: UNVERIFIED reason=no_report:p1 passes=1 size_status=verified"
+    assert (
+        line
+        == "AUDITCYCLE: UNVERIFIED reason=no_report:p1 passes=2 delivered=none,none size_status=verified"
+    )
     assert not re.search(r"\b(?:must|should|p\d+)=", line)
+
+
+def test_render_pre_dispatch_unverified_omits_delivered() -> None:
+    ac = audit_cycle()
+
+    text = ac.render(
+        [],
+        "UNVERIFIED",
+        "assemble_halt:p2",
+        feature="hostile-feature",
+        size_status="verified",
+        passes=2,
+    )
+    line = auditcycle_lines(text)[0]
+
+    assert line == "AUDITCYCLE: UNVERIFIED reason=assemble_halt:p2 passes=2 size_status=verified"
+    assert "delivered=" not in line
+    assert not re.search(r"\b(?:must|should|p\d+)=", line)
+
+
+def test_render_unverified_omits_premise_checklist() -> None:
+    ac = audit_cycle()
+    results = [
+        pass_result(
+            index=1,
+            delivered="report-file",
+            verdict="FAIL",
+            must=1,
+            findings=[
+                {
+                    "severity": "must",
+                    "text": "A bulleted finding",
+                    "path": None,
+                    "line": None,
+                }
+            ],
+        ),
+        pass_result(index=2, delivered="none", verdict=None),
+    ]
+
+    text = ac.render(
+        results,
+        "UNVERIFIED",
+        "no_report:p2",
+        feature="hostile-feature",
+        size_status="verified",
+        passes=2,
+    )
+
+    assert "Premise checklist" not in text
+    assert "reports:" not in text
+    assert "note:" not in text
 
 
 def test_render_post_dispatch_unverified_includes_delivered_for_every_pass() -> None:
     ac = audit_cycle()
     results = [
-        pass_result(index=1, delivered="report", verdict="PASS"),
+        pass_result(index=1, delivered="report-file", verdict="PASS"),
         pass_result(index=2, delivered="none", verdict=None),
     ]
 
@@ -568,7 +765,83 @@ def test_render_post_dispatch_unverified_includes_delivered_for_every_pass() -> 
     )
     line = auditcycle_lines(text)[0]
 
-    assert "delivered=p1:report,p2:none" in line
+    assert (
+        line
+        == "AUDITCYCLE: UNVERIFIED reason=no_report:p2 passes=2 delivered=report-file,none size_status=verified"
+    )
+    assert not re.search(r"\b(?:must|should|p\d+)=", line)
+
+
+def test_render_pass_verdict_line_matches_ac_8_1() -> None:
+    ac = audit_cycle()
+    results = [
+        pass_result(index=1, delivered="report-file", verdict="PASS", must=0, should=0),
+        pass_result(index=2, delivered="report-file", verdict="PASS", must=0, should=0),
+    ]
+
+    text = ac.render(
+        results,
+        "PASS",
+        None,
+        feature="feature",
+        size_status="verified",
+        passes=2,
+    )
+    line = auditcycle_lines(text)[0]
+
+    assert line == (
+        "AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 "
+        "delivered=report-file,report-file size_status=verified"
+    )
+    assert "reason=" not in line
+
+
+def test_render_fail_verdict_line_matches_ac_8_1() -> None:
+    ac = audit_cycle()
+    results = [
+        pass_result(index=1, delivered="report-file", verdict="FAIL", must=2, should=0),
+        pass_result(index=2, delivered="out", verdict="FAIL", must=2, should=1),
+    ]
+
+    text = ac.render(
+        results,
+        "FAIL",
+        "findings:p1",
+        feature="feature",
+        size_status="verified",
+        passes=2,
+    )
+    line = auditcycle_lines(text)[0]
+
+    assert line == (
+        "AUDITCYCLE: FAIL must=4 should=1 passes=2 p1=2/0 p2=2/1 "
+        "delivered=report-file,out size_status=verified"
+    )
+    assert "reason=" not in line
+
+
+def test_render_unverified_verdict_line_matches_ac_8_1() -> None:
+    ac = audit_cycle()
+    results = [
+        pass_result(index=1, delivered="report-file", verdict="PASS", must=0, should=0),
+        pass_result(index=2, delivered="none", verdict=None, must=0, should=0),
+    ]
+
+    text = ac.render(
+        results,
+        "UNVERIFIED",
+        "no_report:p2",
+        feature="feature",
+        size_status="verified",
+        passes=2,
+    )
+    line = auditcycle_lines(text)[0]
+
+    assert line == (
+        "AUDITCYCLE: UNVERIFIED reason=no_report:p2 passes=2 "
+        "delivered=report-file,none size_status=verified"
+    )
+    assert not re.search(r"\b(?:must|should|p\d+)=", line)
 
 
 def test_render_pass_has_no_premise_items() -> None:
@@ -618,6 +891,8 @@ def test_main_rejects_unknown_phase_without_auditcycle(capsys: pytest.CaptureFix
             "feature",
             "--phase",
             "bogus",
+            "--cycle",
+            "1",
             "--project-root",
             str(tmp_path),
             "--passes",
@@ -642,6 +917,8 @@ def test_main_rejects_non_positive_pass_count_without_auditcycle(
                 "feature",
                 "--phase",
                 "plan",
+                "--cycle",
+                "1",
                 "--project-root",
                 str(tmp_path),
                 "--passes",
@@ -653,10 +930,10 @@ def test_main_rejects_non_positive_pass_count_without_auditcycle(
         assert "AUDITCYCLE:" not in captured.out
 
 
-def test_main_rejects_pass_flag_until_task4(
-    capsys: pytest.CaptureFixture, tmp_path: Path
-) -> None:
+def test_main_requires_cycle(capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
     ac = audit_cycle()
+    report_path = tmp_path / "dispatch" / "p1.report.md"
+    write_done_report(report_path, HOSTILE_PASS_REPORT)
 
     rc = ac.main(
         [
@@ -667,16 +944,89 @@ def test_main_rejects_pass_flag_until_task4(
             "--project-root",
             str(tmp_path),
             "--passes",
-            "2",
+            "1",
             "--pass",
-            "1:/nonexistent/a.md:/nonexistent/a.out:0",
+            pass_arg(1, report_path),
         ]
     )
     captured = capsys.readouterr()
 
     assert rc == 2
-    assert "unrecognized arguments: --pass" in captured.err
-    assert auditcycle_lines(captured.out) == []
+    assert "AUDITCYCLE:" not in captured.out
+
+
+def test_main_cycle_reaches_collected_path(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+    report_path = tmp_path / "dispatch" / "p1.report.md"
+    write_done_report(report_path, HOSTILE_PASS_REPORT)
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v3.p1.md"
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {"hostile-feature.plan.audit.v3.p1.md": ("PASS", 0, 0)},
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac,
+        tmp_path=tmp_path,
+        capsys=capsys,
+        report_paths=[report_path],
+        cycle=3,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    assert collected.exists()
+    assert not (
+        tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md"
+    ).exists()
+    assert str(collected) in stdout
+
+
+def test_main_pass_flag_drives_collect_and_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    p2 = tmp_path / "dispatch" / "p2.report.md"
+    write_done_report(p1, HOSTILE_PASS_REPORT)
+    write_done_report(p2, HOSTILE_PASS_REPORT)
+    calls_path = install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {
+            "hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0),
+            "hostile-feature.plan.audit.v1.p2.md": ("PASS", 0, 0),
+        },
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=[p1, p2]
+    )
+    collected = [
+        tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md",
+        tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p2.md",
+    ]
+
+    assert rc == 0, "--pass must be accepted and drive collect-and-gate"
+    assert stderr == ""
+    line = auditcycle_lines(stdout)[0]
+    assert line.startswith("AUDITCYCLE: PASS")
+    assert "must=0" in line
+    assert "should=0" in line
+    assert "p1=0/0" in line
+    assert "p2=0/0" in line
+    assert "reports: " + " ".join(str(path) for path in collected) in stdout
+    assert (
+        "note: must=/should= are sums across passes and may double-count a finding both passes reported"
+        in stdout
+    )
+    assert audit_gate_calls(calls_path) == [[str(collected[0])], [str(collected[1])]]
 
 
 def test_main_without_mode_is_operational_error(
@@ -690,6 +1040,8 @@ def test_main_without_mode_is_operational_error(
             "feature",
             "--phase",
             "plan",
+            "--cycle",
+            "1",
             "--project-root",
             str(tmp_path),
             "--passes",
@@ -714,6 +1066,8 @@ def test_main_no_pass_halt_reason_renders_unverified_and_exits_zero(
             "feature",
             "--phase",
             "plan",
+            "--cycle",
+            "1",
             "--project-root",
             str(tmp_path),
             "--passes",
@@ -745,6 +1099,8 @@ def test_main_no_pass_prompt_divergence_renders_single_auditcycle_line(
             "feature",
             "--phase",
             "design",
+            "--cycle",
+            "1",
             "--project-root",
             str(tmp_path),
             "--passes",
@@ -763,3 +1119,359 @@ def test_main_no_pass_prompt_divergence_renders_single_auditcycle_line(
     ]
     assert captured.out.count("AUDITCYCLE:") == 1
     assert "[H-MAD] feature audit-cycle UNVERIFIED" in captured.out
+
+
+def test_fail_in_either_pass_fails_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+
+    for failing_index in (1, 2):
+        case_dir = tmp_path / f"case-{failing_index}"
+        p1 = case_dir / "dispatch" / "p1.report.md"
+        p2 = case_dir / "dispatch" / "p2.report.md"
+        write_done_report(p1, HOSTILE_FAIL_REPORT if failing_index == 1 else HOSTILE_PASS_REPORT)
+        write_done_report(p2, HOSTILE_FAIL_REPORT if failing_index == 2 else HOSTILE_PASS_REPORT)
+        calls_path = install_audit_gate_stub(
+            monkeypatch,
+            case_dir,
+            {
+                "hostile-feature.plan.audit.v1.p1.md": (
+                    "FAIL" if failing_index == 1 else "PASS",
+                    1 if failing_index == 1 else 0,
+                    0,
+                ),
+                "hostile-feature.plan.audit.v1.p2.md": (
+                    "FAIL" if failing_index == 2 else "PASS",
+                    1 if failing_index == 2 else 0,
+                    0,
+                ),
+            },
+        )
+
+        rc, stdout, stderr = run_collect_cycle(
+            ac, tmp_path=case_dir, capsys=capsys, report_paths=[p1, p2]
+        )
+        collected = [
+            case_dir / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md",
+            case_dir / "docs/01-plan/features/hostile-feature.plan.audit.v1.p2.md",
+        ]
+
+        assert audit_gate_calls(calls_path) == [
+            [str(collected[0])],
+            [str(collected[1])],
+        ], f"p{failing_index} FAIL case must invoke the gate once per collected pass"
+        assert rc == 0, f"p{failing_index} FAIL must make the audit cycle fail"
+        assert stderr == ""
+        line = auditcycle_lines(stdout)[0]
+        assert line.startswith("AUDITCYCLE: FAIL")
+        assert "must=1" in line
+        assert "should=0" in line
+        assert "p1=" in line and "p2=" in line
+        assert "reports: " + " ".join(str(path) for path in collected) in stdout
+        assert (
+            "note: must=/should= are sums across passes and may double-count a finding both passes reported"
+            in stdout
+        )
+
+
+def test_main_delivered_none_is_unverified(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    p2 = tmp_path / "dispatch" / "p2.report.md"
+    write_done_report(p1, HOSTILE_PASS_REPORT)
+    calls_path = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {"hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0)},
+        existing_script_dir=calls_path.parent,
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=[p1, p2]
+    )
+
+    assert rc == 0, "delivered=none must yield UNVERIFIED instead of gating a missing report"
+    assert stderr == ""
+    assert auditcycle_lines(stdout) == [
+        "AUDITCYCLE: UNVERIFIED reason=no_report:p2 passes=2 delivered=report-file,none size_status=verified"
+    ]
+    assert "reports:" not in stdout
+    assert "note: must=/should=" not in stdout
+    assert report_wait_calls(calls_path) == [[str(p2), "--timeout", "1"]]
+
+
+@pytest.mark.parametrize(
+    ("name", "body"),
+    [
+        (
+            "missing_both",
+            "# hostile malformed report\nhuman text with {{INLINE_MARKER}} and **markdown**\n",
+        ),
+        (
+            "missing_must",
+            "# hostile malformed report\n## Should-fix\n- should-only finding\n",
+        ),
+        (
+            "missing_should",
+            "# hostile malformed report\n## Must-fix\n- must one\n- must two\n",
+        ),
+    ],
+)
+def test_main_invalid_yields_unverified(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+    name: str,
+    body: str,
+) -> None:
+    ac = audit_cycle()
+    p1 = tmp_path / name / "dispatch" / "p1.report.md"
+    p2 = tmp_path / name / "dispatch" / "p2.report.md"
+    write_done_report(p1, body)
+    write_done_report(p2, HOSTILE_PASS_REPORT)
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path / name,
+        {
+            "hostile-feature.plan.audit.v1.p1.md": ("INVALID", 99, 77),
+            "hostile-feature.plan.audit.v1.p2.md": ("PASS", 0, 0),
+        },
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path / name, capsys=capsys, report_paths=[p1, p2]
+    )
+
+    assert rc == 0, f"{name} INVALID must short-circuit to UNVERIFIED without crashing"
+    assert stderr == ""
+    assert auditcycle_lines(stdout) == [
+        "AUDITCYCLE: UNVERIFIED reason=no_gate_sections:p1 passes=2 delivered=report-file,report-file size_status=verified"
+    ]
+    assert "reports:" not in stdout
+    assert "note: must=/should=" not in stdout
+
+
+def test_gate_invalid_discards_counts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    report = tmp_path / "hostile-feature.plan.audit.v1.p1.md"
+    report.write_text("## Must-fix\n- counted in-process\n## Notes\nhostile {{INLINE}}\n", encoding="utf-8")
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {"hostile-feature.plan.audit.v1.p1.md": ("INVALID", 99, 77)},
+    )
+
+    gate = getattr(ac, "gate", None)
+    assert callable(gate), "gate() must exist to discard INVALID subprocess counts"
+
+    assert gate(report, ack_file=None) == ("INVALID", 0, 0, [])
+
+
+def test_ack_file_forwarded(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    p2 = tmp_path / "dispatch" / "p2.report.md"
+    write_done_report(p1, HOSTILE_PASS_REPORT)
+    write_done_report(
+        p2,
+        HOSTILE_FAIL_REPORT.replace(
+            "blocking human finding with {{INLINE_MARKER}} [link](target) **bold**",
+            "acknowledged hostile finding with {{INLINE_MARKER}} [link](target) **bold**",
+        ),
+    )
+    ack_file = tmp_path / "ack.md"
+    ack_file.write_text(
+        "- acknowledged hostile finding with {{INLINE_MARKER}} [link](target) **bold**\n",
+        encoding="utf-8",
+    )
+    calls_path = install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {
+            "hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0),
+            "hostile-feature.plan.audit.v1.p2.md": ("PASS", 0, 0),
+        },
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac,
+        tmp_path=tmp_path,
+        capsys=capsys,
+        report_paths=[p1, p2],
+        extra_args=["--ack-file", str(ack_file)],
+    )
+    collected = [
+        tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md",
+        tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p2.md",
+    ]
+
+    assert rc == 0, "ack-file-cleared p2 finding must allow cycle PASS"
+    assert stderr == ""
+    assert auditcycle_lines(stdout)[0].startswith("AUDITCYCLE: PASS")
+    assert "must=0" in auditcycle_lines(stdout)[0]
+    assert audit_gate_calls(calls_path) == [
+        [str(collected[0]), "--ack-file", str(ack_file)],
+        [str(collected[1]), "--ack-file", str(ack_file)],
+    ]
+
+
+def run_real_gate(audit_file: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_DIR / "h_mad_audit_gate.py"), str(audit_file), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def gate_must(stdout: str) -> int:
+    match = re.search(r"^GATE: \S+ must=(\d+) should=(\d+)$", stdout, re.MULTILINE)
+    assert match, f"real gate output must include a GATE count line, got: {stdout!r}"
+    return int(match.group(1))
+
+
+def test_prose_plus_bullet_not_concatenated(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    ac = audit_cycle()
+    monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    p2 = tmp_path / "dispatch" / "p2.report.md"
+    prose_fixture = REPO_ROOT / "h-mad/tests/fixtures/audit-cycle-prose-only.md"
+    bullet_fixture = REPO_ROOT / "h-mad/tests/fixtures/audit-cycle-single-bullet.md"
+    write_done_report(p1, prose_fixture.read_text(encoding="utf-8"))
+    write_done_report(p2, bullet_fixture.read_text(encoding="utf-8"))
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=[p1, p2]
+    )
+    concat = tmp_path / "concat.md"
+    concat.write_text(
+        prose_fixture.read_text(encoding="utf-8")
+        + "\n"
+        + bullet_fixture.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    concatenated = run_real_gate(concat)
+
+    assert rc == 0, "separate per-pass real gates must complete the cycle"
+    assert stderr == ""
+    line = auditcycle_lines(stdout)[0]
+    assert line.startswith("AUDITCYCLE: FAIL")
+    assert "must=2" in line
+    assert "p1=1/0" in line
+    assert "p2=1/0" in line
+    assert concatenated.returncode == 0
+    assert gate_must(concatenated.stdout) == 1
+
+
+def expected_gate_payloads(text: str, acknowledged: set[str]) -> list[str]:
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from h_mad_audit_gate import _BULLET_MARKERS, _payload
+
+    payloads: list[str] = []
+    in_must = False
+    must_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "## Must-fix":
+            in_must = True
+            continue
+        if stripped.startswith("## "):
+            in_must = False
+            continue
+        if in_must and stripped:
+            must_lines.append(line)
+
+    non_none = [
+        _payload(line)
+        for line in must_lines
+        if _payload(line) and _payload(line).lower() != "none"
+    ]
+    bullets = [
+        _payload(line)
+        for line in must_lines
+        if any(line.strip().startswith(marker) for marker in _BULLET_MARKERS)
+        and _payload(line)
+        and _payload(line).lower() != "none"
+        and _payload(line) not in acknowledged
+    ]
+    if bullets:
+        return bullets
+    joined = " ".join(payload for payload in non_none if payload)
+    if joined and joined not in acknowledged:
+        return [joined]
+    return []
+
+
+@pytest.mark.parametrize(
+    ("body", "ack_body"),
+    [
+        (
+            "## Must-fix\n- hostile bullet {{INLINE_MARKER}} [link](target)\n## Should-fix\nNone\n",
+            "",
+        ),
+        (
+            "## Must-fix\nhostile prose {{INLINE_MARKER}} with **markdown**\n## Should-fix\nNone\n",
+            "",
+        ),
+        (
+            "## Must-fix\n• hostile unicode bullet {{INLINE_MARKER}}\n## Should-fix\nNone\n",
+            "",
+        ),
+        (
+            "## Must-fix\n- acknowledged hostile bullet {{INLINE_MARKER}}\n- live hostile bullet {{INLINE_MARKER}}\n## Should-fix\nNone\n",
+            "- acknowledged hostile bullet {{INLINE_MARKER}}\n",
+        ),
+    ],
+)
+def test_premise_items_match_gate_count(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    body: str,
+    ack_body: str,
+) -> None:
+    ac = audit_cycle()
+    monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
+    report = tmp_path / "hostile-feature.plan.audit.v1.p1.md"
+    report.write_text(body, encoding="utf-8")
+    ack_file = tmp_path / "ack.md"
+    ack_file.write_text(ack_body, encoding="utf-8")
+    acknowledged = set()
+    if ack_body:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from h_mad_audit_gate import _read_ack_file
+
+        acknowledged = _read_ack_file(ack_file)
+
+    real = run_real_gate(report, "--ack-file", str(ack_file))
+    assert real.returncode == 0
+    must = gate_must(real.stdout)
+
+    gate = getattr(ac, "gate", None)
+    assert callable(gate), "gate() must expose findings from the same parser the real gate uses"
+    verdict, gate_must_count, should, findings = gate(report, ack_file=ack_file)
+    payloads = [finding["text"] for finding in findings]
+    expected = expected_gate_payloads(body, acknowledged)
+
+    assert verdict == "FAIL"
+    assert should == 0
+    assert gate_must_count == must
+    assert len(payloads) == must
+    assert payloads == expected
