@@ -1,6 +1,6 @@
-# Handoff — audit-cycle-verb: Phase 5a/5b/5c gated, Tasks 1–4 shipped (helper complete), Tasks 5–9 not started
+# Handoff — audit-cycle-verb: Phase-4 RE-AUDIT gated clean, Tasks 1–4 shipped (helper complete), Tasks 5–9 not started
 
-**Date:** 2026-08-20
+**Date:** 2026-08-20 (extended 2026-08-21)
 **Branch:** feature/audit-cycle-verb
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 
@@ -16,8 +16,13 @@ test, a wire-scoped revert plus force mutation where it is a `wiring` task, and 
 spec review. Suite: 49 tests. **Tasks 5–9 have not started; no shell verb, no mutation specs, no SKILL.md changes exist
 yet.** The feature is claimed by this session's id — release or take it over on resume.
 
-Six commits on the branch, **none pushed**: `41efe98` (5a/5b) · `b5a4e2e` (Task 1) ·
-`f772feb` (handoff) · `01ec313` (Task 2) · `30be94b` (Task 3) · `45f5704` (Task 4).
+**2026-08-21: the operator ruled the v1.15 design errata must be RE-GATED, not accepted.**
+Phase-4 re-audit ran cycles 17–23 (two independent agy passes each): **7 must-fix, 2 should-fix,
+5 nits, 0 deferrals**, design v1.15 → **v1.21**, and cycle 23 gates `PASS must=0 should=0` on BOTH
+passes with zero nits — covering the edit that closed cycle 22, so nothing in this design stands on
+an unaudited change. Both code obligations it raised are closed (`d7c775c`), suite **59/59**.
+
+Ten commits on the branch; the first eight are pushed, `d7c775c` and `3cd5c84` are not.
 
 **Nine defects were caught across Tasks 1–4, every one of them under a green suite.** Four of
 the five in Task 4 were found by running the binary end-to-end against the design's documented
@@ -89,6 +94,32 @@ shapes — not by the 49-test suite and not by a reviewer.
   wrong while their facts were right** — `exec agy` where the in-process entry is `_cmd_exec`;
   `dirname "$0"` where the `bin/` shim makes `BASH_SOURCE` necessary; `*UNVERIFIED*` where the
   measured value is lowercase so the "fix" matches nothing.
+- **The re-audit justified itself: FOUR of its nine findings were introduced by the edits meant to
+  fix the previous cycle**, and one was a live defect in already-committed code. v1.15 left
+  "connection mutation 2/10" dangling and left "three rows marked *anchors*" after adding two more;
+  v1.17 specified a write-failure fixture using a read-only dir (the guard sits AFTER the write, so
+  `PermissionError` raises first, the guard is never reached, and deleting it would still crash —
+  the mutation SURVIVES while looking caught); v1.20 updated a scenario column to "all three" and
+  left its verification column saying "both removed". Each edit was correct in what it *changed*
+  and wrong in what it *left inconsistent* — which re-reading your own edit does not catch.
+- **A live defect in shipped code, proven before fixing:** `collected_path` was not covered by the
+  pre-dispatch clearing, so on a re-run the previous run's report sat at that exact path and a
+  silently-failed write left `exists()`/`st_size > 0` True on the OLD file — a stale report scored
+  as a fresh measurement. Fixed with `unlink(missing_ok=True)` in both writers.
+- **Two guards had NO discrimination coverage** (`len(findings) == must`, and the collected-write
+  re-read). Both now have negative tests, each mutation-verified to fail **exactly one** test.
+- **An empty failing set is a non-result, not a clean guard.** One mutation anchor matched two
+  lines and the harness refused; the run then printed an empty failing set, which reads as "the
+  guard does not bite". Assert the anchor matches exactly once and treat a refusal as no data.
+- **A filename appearing in a log is not evidence anything touched it.** I mis-diagnosed the
+  missing cycle-23 reports from log hits that were pytest PARAMETRIZATION IDs, and from a
+  `grep -c` that counted my own prompt text. Both hypotheses (destructive suite; `git clean`) were
+  refuted empirically before acting.
+- **Do not run a workspace-write codex dispatch concurrently with a job writing untracked
+  artifacts into the same tree.** Cycle 23's collected reports vanished between gate time and
+  commit; cause unproven, but the two dispatches overlapped. **Verify gating evidence is ON DISK
+  before committing** — a clean `git status` plus absent artifacts looks exactly like
+  nothing-to-commit.
 - **Two fixes composed into new defects**, each caught only by the next cycle: v1.3's mutation-anchor
   correction produced v1.5's unit-vs-`main()` defect, and v1.7's prompt-exists guard broke the HALT
   path (a halt deliberately writes no prompt). Reconcile a cycle's findings against each other
@@ -102,7 +133,7 @@ shapes — not by the 49-test suite and not by a reviewer.
 4. **Then Tasks 6→9 in order**: 6 verb → `_cmd_exec agy` · 7 verb → helper · 8 both mutation specs · 9 SKILL.md + docs token test.
 5. **Tasks 5–7 are where Task 4's fixes get exercised for real** — the verb passes `--cycle N` (which `main()` did not accept until this session) and consumes the `delivered=` shape. Run the verb end-to-end before believing its tests.
 6. **5f** — `h_mad_wire_registry.py verify --base 41efe98 --rootdir /Users/kimhawk/orca/skills --testpath h-mad/tests`, then `challenge --base 41efe98` (warning-only), then the full suite.
-7. **Push** — `git push -u origin feature/audit-cycle-verb` (6 commits unpushed).
+7. **Push** — `git push origin HEAD` (2 commits unpushed: `d7c775c`, `3cd5c84`).
 
 ## Open / Blocked Items
 
@@ -110,7 +141,12 @@ shapes — not by the 49-test suite and not by a reviewer.
 - **h-mad claim** — status: **held by session `eea70bac`** (this one). Not released, because the work is mid-Phase-5 and the next session should take it deliberately rather than inherit an unowned feature. Plain `--claim` will take it once stale.
 - **`phase = "step5"` is still armed** — deliberate. It keeps the TDD gate blocking Claude-authored production `.py`. Do NOT write `phase = null` before 5g completes.
 - **Anti-gaming verify pass not run for ANY of Tasks 1–4** — status: owed. `references/codex-verifier-prompt.md`. The agy spec review (COMPLIANT on re-review) and the revert test are done; the independent module-count/test-discrimination/full-suite pass is not.
-- **Design amended to v1.15 during Phase 5b** — status: informational, needs your ruling. Errata only, no decision changed: the `INVALID` short-circuit ordering, "POSIX shell" → bash, and three anchor tests added to the Test Plan. If you want that re-gated through a Phase-4 re-audit rather than accepted as errata, say so before Task 5.
+- **Design v1.15 errata — RULED AND CLOSED 2026-08-21.** The operator required a full Phase-4
+  re-audit rather than accepting them. Cycles 17–23 ran; design is now **v1.21**, gated
+  `PASS must=0 should=0` on both passes at cycle 23. Both code obligations closed. Nothing owed.
+- **Cycle-23 collected reports briefly went missing** — status: recovered and committed
+  (`3cd5c84`), cause unproven. Re-collected from `/tmp` and re-gated to the identical verdict. The
+  suite is proven NOT destructive (whole-docs-tree snapshot unchanged across a full run).
 - **`PREFLIGHT: FAIL unresolved=codex,agy`** — status: known, not blocking. Zero candidate panes in this worktree; `exec` is pane-independent and both CLIs are on PATH. Only the `send`/pane path is affected.
 - **Carry-forward, untouched this session** — the 249-row skill-candidate reconcile, advisor-gate live-fire (`HMAD_CONTEXT_WINDOW=1000 claude`), wiring-checker sanity vs a broken matcher, `HMAD_CONTEXT_WINDOW` derived-vs-defaulted, and the 4-file task-tool sweep. All in `.omc/notepad.md`.
 
@@ -124,7 +160,7 @@ shapes — not by the 49-test suite and not by a reviewer.
 - `h-mad/tests/test_h_mad_audit_cycle.py` (new, 21 tests)
 - `.h-mad/wires.jsonl`, `docs/.bkit-memory.json` (gitignored state)
 
-**Uncommitted changes:** none. Six commits unpushed (`41efe98` … `45f5704`).
+**Uncommitted changes:** none. Two commits unpushed (`d7c775c`, `3cd5c84`); the branch is pushed through `7c55cd2`.
 
 **To resume:**
 ```bash
