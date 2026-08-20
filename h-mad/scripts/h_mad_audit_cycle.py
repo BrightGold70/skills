@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import subprocess
 import sys
 from collections import namedtuple
 from pathlib import Path
@@ -47,6 +48,83 @@ def _collected_path(
         / audit_dirs[phase]
         / f"{feature}.{phase}.audit.v{cycle}.p{index}.md"
     )
+
+
+def _done_path(report_path: Path) -> Path:
+    return Path(str(report_path) + ".done")
+
+
+def _has_complete_report(report_path: Path) -> bool:
+    return (
+        report_path.exists()
+        and report_path.stat().st_size > 0
+        and _done_path(report_path).exists()
+    )
+
+
+def _copy_collected_report(report_path: Path, collected_path: Path) -> Path:
+    collected_path.parent.mkdir(parents=True, exist_ok=True)
+    collected_path.write_bytes(report_path.read_bytes())
+    if not collected_path.exists() or collected_path.stat().st_size <= 0:
+        raise OperationalError(f"collected report was empty after copy: {collected_path}")
+    return collected_path
+
+
+def _run_report_wait(report_path: Path, grace: float) -> bool:
+    """True iff a non-empty body arrived. rc 1 means no report."""
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_script("h_mad_report_wait.py")),
+                str(report_path),
+                "--timeout",
+                str(grace),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise OperationalError(f"report_wait failed for {report_path}: {exc}") from exc
+
+    if result.returncode == 0:
+        return report_path.exists() and report_path.stat().st_size > 0
+    if result.returncode == 1:
+        return False
+    detail = _one_line(result.stderr or result.stdout)
+    if detail:
+        raise OperationalError(
+            f"report_wait exited {result.returncode} for {report_path}: {detail}"
+        )
+    raise OperationalError(f"report_wait exited {result.returncode} for {report_path}")
+
+
+def collect(
+    spec: PassSpec,
+    *,
+    grace: float,
+    project_root: Path,
+    feature: str,
+    phase: str,
+    cycle: int,
+) -> tuple[str, Path | None]:
+    """Return ('report-file'|'none', collected_path|None) for one audit pass."""
+    collected_path = _collected_path(
+        project_root=project_root,
+        feature=feature,
+        phase=phase,
+        cycle=cycle,
+        index=spec.index,
+    )
+
+    if _has_complete_report(spec.report_path):
+        return "report-file", _copy_collected_report(spec.report_path, collected_path)
+
+    if _run_report_wait(spec.report_path, grace):
+        return "report-file", _copy_collected_report(spec.report_path, collected_path)
+
+    return "none", None
 
 
 def combine(results: list[PassResult]) -> tuple[str, str | None]:
