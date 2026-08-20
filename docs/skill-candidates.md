@@ -442,3 +442,17 @@ patch appeared. Neither flips.
   at `h-mad/tests/mutation-specs/*.json` and are re-runnable by path — recurrence: 1 — candidate:
   no — this shipped as a repo convention this session; it is a note for whoever wonders where the
   specs went, not a candidate.
+
+## 2026-08-20 — audit-cycle-verb phases 3+4
+
+- **value-sweep-the-corrected-value**: after applying an audit fix, `grep` the corrected *value* (not the section) across every live doc in the feature, because the same claim is usually restated in 2–3 places and the fix lands in one. Caught 4 stale copies across this session that **two independent reviewers both missed** — spec FR-3's description contradicting its own AC-3.4, a plan risk row still asserting a disproven `exec` behaviour, a design cross-reference to a plan clause that had been deleted, and an AC counter that went stale twice. Roughly two-thirds of all 79 findings this session were this class — recurrence: 6 this session — candidate: maybe — **read the reason before promoting**: this is not a new skill, it is a step belonging in `h-mad/SKILL.md` §"Audit prompt assembly" between "revise" and "re-audit", and possibly a script taking a value + a doc set. The discipline is already recorded as an auto-memory (`feedback_value_sweep_not_spot_fix`); what is missing is anything mechanical.
+- **doc-version-history-append**: append a dated entry to a phase doc's `## Version History` via an assert-anchored substitution, so a failed anchor is loud rather than a silent no-op. Hand-rolled 27× this session (once per audit cycle across plan/spec/design). Twice the anchor had drifted and the assert is the only reason it was noticed — recurrence: 27 — candidate: maybe — the reusable part is the **assert**, not the append; a three-line helper that refuses when the anchor is absent or matches more than once would remove the whole class. Note the sibling failure this session hit: a multi-edit block that raised mid-way had already written some files and discarded the rest, which is why each edit now runs as its own verify-and-write (see taxonomy mode 17).
+- **hand-run five-call audit cycle**: assemble → `exec agy` → `report-wait` → `--out` fallback → gate, twice per cycle, read both verdicts, union the findings — ran 27 times (54 dispatches) — recurrence: 27 — candidate: **no** — this *is* `audit-cycle-verb`, whose Phases 1–4 gated clean this session (`568418d`, `197ecc2`). Recorded so the recurrence count is visible against the feature rather than looking like an unmet need; flip to `**LANDED**` when Phase 7 archives.
+
+**Reconcile pass (2026-08-20, this session):** both open `yes` rows re-checked against source and
+**both remain genuinely open**. `live-e2e-pane-janitor` — no `pane-janitor` verb exists in
+`hmad-dispatch.sh` (grep: 0 hits; the only git matches are edits to this file, not an
+implementation), and this session used the `exec` path exclusively so no new recurrence. Its scope
+note still holds: `exec-pane`'s slot registry solved the hard half, so re-scope before building.
+`vendored-plugin patch kit` — `docs/patches/` holds **2** directories against its own stated
+threshold of a third vendored patch; untouched this session.
