@@ -1310,5 +1310,40 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   the old figure as a record of what that cycle found at the time. A revision log is append-only;
   rewriting it would erase the evidence that three gates passed over this.
 
-  Status: `FIXED` — pending the re-gate the v1.15 precedent requires (an unaudited edit to a gated
-  doc is an ungated doc).
+  **Re-gated 2026-08-21** with the feature's own verb — plan c12, design c24, impl-plan c10, two
+  passes each, all six delivered via the report file (`delivered=report-file,report-file` ×3). The
+  correction itself gated clean: design p2 returned `must=0 should=0` over all 57 ACs with **AC-9.2
+  `implemented-as-written`**, and not one of the 15 must-fixes across the three cycles mentions the
+  measurement, AC-9.2, or any line this correction touched.
+
+  Status: `FIXED` — corrected and re-gated.
+
+- 🔴 **J37 — 14 of the 15 must-fixes from the J36 re-gate falsify against the shipped code.** The
+  three cycles returned `FAIL must=5/3/7`, and triaging each against the implementation rather than
+  against the prose it was written from:
+
+  | claimed | shipped reality |
+  |---|---|
+  | plan drops the `.done` marker from the collection fast-path → torn-write race | `h_mad_audit_cycle.py:63` checks `_done_path(report_path).exists()` |
+  | AC-4.4's "verified by re-reading" is unimplemented | both `_copy_collected_report:71` and `_write_collected_report:148` re-read and raise `OperationalError` |
+  | Task 2 omits `collected_path.unlink(missing_ok=True)` | present at `:69` **and** `:146` |
+  | `test_collected_write_failure_is_operational_error` missing | exists, `test_h_mad_audit_cycle.py` |
+  | `test_gate_count_mismatch_is_operational_error` missing | exists, same file |
+  | `test_premise_items_formats_{no_citation,supplied_path_line}` missing | both exist |
+  | `test_premise_items_match_gate_count` lacks the real-artifact corpus | globs `docs/0{1,2}-*/features/*.audit.v*.p*.md` at `:18-19` |
+  | no fixture for the delivered-but-no-`GATE:`-token guard | guard `:289`, test `test_combine_raises_when_delivered_pass_has_no_gate_token:635` |
+  | no test for `size_status` worst-of aggregation | `test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_status:1142` |
+  | `test_verb_unremovable_path` can't reach the post-removal guard because `set -e` aborts at `rm -f` | `rm -f … \|\| true` at `:2607` — the `\|\| true` is right there; the test asserts exit 3 **and** `channel not cleared`, which only the guard emits |
+  | Task 5 omits `--passes` default 2 → bash crashes with `[: : integer expression expected` | `--passes` is **required** (`_need "$passes" --passes`); omitting it exits 2 with `missing required argument: --passes`. The prescription would *change* documented behaviour |
+
+  **One survives**: `plan.md` states "five composed call sites" at `:278`, `:389` and `:424`, while
+  `impl-plan.md:902` says "six call sites, six `wiring` tasks, six WIRE-PINs, twelve caller-side
+  [mutations]" and `audit_cycle_connections.mutation.json` carries **12 rows**. Six is right; the
+  plan's success criterion could be met while the shell→helper boundary went unverified.
+
+  **The lesson is the audit's reading surface, not its competence.** These passes read the planning
+  prose and inferred what the code must therefore do. Every falsified finding is *true about the
+  document* and false about the program — the docs really are thinner than the implementation. That
+  is a different defect from the one reported, and applying the 14 prescriptions would have edited
+  correct code toward a stale description. Falsify against the code **before** applying, every time.
+  Status: `MONITORING` — the five-vs-six contradiction is unfixed; the other 14 need no action.
