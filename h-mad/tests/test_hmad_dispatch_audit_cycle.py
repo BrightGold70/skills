@@ -244,7 +244,13 @@ def install_audit_cycle_stubs(tmp_path):
 
 
 def dispatch_args(*, feature="cycle-red", phase="plan", cycle="7", passes="2", root):
-    return [
+    """Build an audit-cycle argv. `passes=None` OMITS the flag entirely.
+
+    That branch is the point: every other caller supplies `--passes`, so without
+    it no test can reach the path where the flag is absent, and this helper's own
+    default silently stands in for the verb's (spec AC-3.1).
+    """
+    args = [
         "audit-cycle",
         "--feature",
         feature,
@@ -252,11 +258,11 @@ def dispatch_args(*, feature="cycle-red", phase="plan", cycle="7", passes="2", r
         phase,
         "--cycle",
         cycle,
-        "--passes",
-        passes,
-        "--project-root",
-        str(root),
     ]
+    if passes is not None:
+        args += ["--passes", passes]
+    args += ["--project-root", str(root)]
+    return args
 
 
 def dispatch_count(capture):
@@ -1245,6 +1251,22 @@ def test_verb_two_distinct_dispatches(tmp_path):
     assert len(set(assemble_outs)) == 2, "assemble --out prompt paths must be distinct per pass"
     assert all("--report-file" not in row["argv"] for row in dispatch_rows), (
         "_cmd_exec agy argv must not carry report paths; assembly embeds them in the prompt"
+    )
+
+
+def test_verb_passes_defaults_to_two_when_flag_is_omitted(tmp_path):
+    """Spec AC-3.1: "Default pass count is 2" — `--passes` is optional, not required."""
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes=None))
+
+    assert r.returncode == 0, r.stderr
+    assert auditcycle_lines(r.stdout) == [
+        "AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 "
+        "delivered=report-file,report-file size_status=verified"
+    ]
+    dispatch_rows = [row for row in read_jsonl(trace) if row["kind"] == "cmd_exec_start"]
+    assert len(dispatch_rows) == 2, (
+        "omitting --passes must run the AC-3.1 default of two passes, not refuse the invocation"
     )
 
 

@@ -1413,7 +1413,40 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   and is testing something else. Here the *fixture* appears to exercise a default and is supplying
   it instead.
 
-  The fix is small — `local passes="2"` and drop the `_need` for it, keeping the `K < 1` rejection
-  untouched — plus a test that omits `--passes` and asserts exactly two dispatches. It is a
-  behaviour change to shipped code, so it is a Phase-5 edit under the TDD gate, not a doc pass.
-  Status: `MONITORING` — surfaced 2026-08-22 while re-gating J37; not fixed, operator call pending.
+  **Fixed 2026-08-22 by operator ruling** (code, not docs — three gated documents already promised
+  the default). `hmad-dispatch.sh:2562` is now `local passes="2"` and its `_need` line is gone.
+  Dropping `_need` costs no coverage: the `case "$passes" in ''|*[!0-9]*)` guard immediately below
+  still rejects `--passes ""` with `must be >= 1`, verified live.
+
+  RED first — `test_verb_passes_defaults_to_two_when_flag_is_omitted` failed with exactly the
+  reported defect (`missing required argument: --passes`, rc=2) before the fix. The test helper
+  `dispatch_args` gained a `passes=None` branch that **omits the flag**, which is the part worth
+  keeping: the absent-flag path was previously unreachable from the suite at all.
+
+  Mutation-checked both directions, and both are caught by that one test while the other three
+  `passes` tests stay green — so it discriminates the value, not merely the presence:
+
+  ```text
+  local passes=""   (revert the default)  -> FAIL  1 failed, 3 passed
+  local passes="1"  (wrong default)       -> FAIL  1 failed, 3 passed
+  local passes="2"  (shipped)             -> PASS  4 passed
+  ```
+  Status: `FIXED`.
+
+- 🟡 **J39 — `plan.md` is systematically narrower than `spec.md`, and it is a class, not a defect.**
+  Plan re-audit cycles 13 and 14 each returned `FAIL` after every finding from the previous cycle
+  was fixed, and cycle 14's six must-fixes are all one shape: the plan's "User-visible behaviour"
+  summary omits a detail the spec mandates — the `reports:` line (AC-4.4/4.4b), the active rejection
+  of `--passes N<1` (AC-3.1), the printed double-count warning (AC-5.4), and the `(no citation)`
+  marker (AC-7.3). Cycle 13's two findings were the same shape and were fixed as plan v1.14.
+
+  **The loop converges on the findings but not on the class.** Each cycle's findings are real about
+  the document and each fix is correct; the next cycle simply reaches the next omission, because a
+  summary document is *by construction* narrower than the spec it summarises. Chasing this one
+  finding at a time re-opens a full re-gate per cycle and has no natural stopping point.
+
+  Routed to **Phase 6b** (5-cycle cap) as a single reconciliation pass over plan-vs-spec Axis C
+  drift, rather than continued here. Note for whoever takes it: decide first whether the plan's
+  behaviour summary is *meant* to restate every AC or to point at the spec — if the latter, the
+  right fix is one sentence delegating to the spec, not four more restatements that will drift again.
+  Status: `MONITORING` — surfaced 2026-08-22 across plan cycles 13 and 14.

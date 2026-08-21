@@ -2559,7 +2559,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
 
 _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
-  local passes=""
+  local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
   local -a prompt report out log asm tok rc pids pass_args
   pass_args=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
@@ -2579,7 +2579,6 @@ _cmd_audit_cycle() {
   _need "$feature" --feature || return $?
   _need "$phase" --phase || return $?
   _need "$cycle" --cycle || return $?
-  _need "$passes" --passes || return $?
   _need "$root" --project-root || return $?
   case "$phase" in plan|design|impl-plan) ;;
     *) echo "hmad-dispatch: audit-cycle: --phase must be plan|design|impl-plan" >&2; return 2 ;;
