@@ -28,5 +28,10 @@ logs/.*.json
 .DS_Store
 Thumbs.db
 
-# H-MAD per-run telemetry/state (runtime artifact, not skill source)
-.h-mad/
+# H-MAD per-run telemetry/state (runtime artifact, not skill source).
+# `.h-mad/*` not `.h-mad/` — git cannot re-include a file whose parent
+# DIRECTORY is excluded, so the negation below would silently do nothing.
+.h-mad/*
+# The wire registry is the durable record of which connections were verified
+# and against which base; 5f cannot return PASS while it is untracked.
+!.h-mad/wires.jsonl

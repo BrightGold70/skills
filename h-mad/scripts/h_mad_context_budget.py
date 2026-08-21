@@ -39,6 +39,12 @@ from pathlib import Path
 
 DEFAULT_WINDOW = 1_000_000
 DEFAULT_CEILING = 45.0
+# The RUN ceiling is a different question from the advisor ceiling and deliberately
+# not derived from it. 45 is a margin under 50 because advisor forwards a second full
+# copy; 80 asks "is this session about to die mid-phase", where the remedy is to halt
+# and hand off while stopping is still cheap. An overflow mid-phase is unrecoverable,
+# and compacting afterwards recovers nothing.
+RUN_CEILING = 80.0
 # advisor forwards one extra full copy; measured 2.00-2.03x on session 97490faf.
 ADVISOR_MULTIPLIER = 2.0
 
@@ -134,8 +140,19 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=int(os.environ.get("HMAD_CONTEXT_WINDOW", DEFAULT_WINDOW)),
     )
-    ap.add_argument("--ceiling", type=float, default=DEFAULT_CEILING)
+    ap.add_argument(
+        "--mode",
+        choices=("advisor", "run"),
+        default="advisor",
+        help="advisor: price an advisor() call (default). run: price the RUN itself.",
+    )
+    # Resolved after parsing so the default can depend on --mode while an explicit
+    # --ceiling still wins in either mode.
+    ap.add_argument("--ceiling", type=float, default=None)
     args = ap.parse_args(argv)
+    ceiling = args.ceiling
+    if ceiling is None:
+        ceiling = RUN_CEILING if args.mode == "run" else DEFAULT_CEILING
 
     if args.window <= 0:
         print("ERROR: --window must be positive", file=sys.stderr)
@@ -155,11 +172,25 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     pct = used * 100.0 / args.window
+    if args.mode == "run":
+        # HALT, not DENY. `hooks/h-mad-advisor-gate.sh` blocks on the glob
+        # `*"CTXBUDGET: DENY"*`, so reusing that word would make a run-ceiling breach
+        # indistinguishable from an advisor refusal to every existing consumer -- and
+        # they prescribe different actions. `projected` is omitted for the same
+        # reason: it is `used * 2` because advisor forwards a copy, and a run cap
+        # forwards nothing, so printing it would invite exactly that conflation.
+        verdict = "OK" if pct <= ceiling else "HALT"
+        print(
+            f"CTXBUDGET: {verdict} mode=run used={used} window={args.window} "
+            f"pct={pct:.1f} ceiling={ceiling:g}"
+        )
+        return 0
+
     projected = int(used * ADVISOR_MULTIPLIER)
-    verdict = "OK" if pct <= args.ceiling else "DENY"
+    verdict = "OK" if pct <= ceiling else "DENY"
     print(
         f"CTXBUDGET: {verdict} used={used} window={args.window} "
-        f"pct={pct:.1f} projected={projected} ceiling={args.ceiling:g}"
+        f"pct={pct:.1f} projected={projected} ceiling={ceiling:g}"
     )
     return 0
 

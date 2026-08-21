@@ -1187,3 +1187,418 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   stderr line plus the preserved file, not a new exit code. The *discipline* half stands unchanged:
   one `--out` per dispatch. `hmad-dispatch.sh` `_out_clobber_ok`, SKILL.md §"Give every dispatch its
   own `--out`", 6 tests in `test_hmad_dispatch_exec.py`.
+
+## Surfaced by the audit-cycle-verb Task 5 `/h-mad` run (2026-08-21)
+
+- 🔴 **J34 — `h_mad_wire_registry.py verify` can never verify ANY wire: it compares bare pin names
+  against full pytest node ids.** `collect()` (line ~370) builds `node_ids` from `pytest
+  --collect-only -q` output, i.e. strings shaped `h-mad/tests/test_x.py::test_name`. `partition()`
+  (line ~350) then tests `if record["pin"] in collected` — and `pin` is the **bare test name**,
+  because that is what the impl-plan's `WIRE-PIN:` line carries and what 5b's auto-register writes
+  into `.h-mad/wires.jsonl`. Exact set membership between the two forms can never hold, so every
+  active pin partitions to `missing` and `verified` is structurally pinned at 0.
+  **Measured on this tree**, with all six rows registered by 5b and four of their pins present and
+  passing:
+
+  ```text
+  WIREREG: UNTRACKED registered=6 verified=0 broken=0 missing=6 …
+  [H-MAD] step5f:wire_pin_missing:Task 5        # its pin exists and PASSES
+  ```
+
+  ```python
+  collected = R.collect(Path("/Users/kimhawk/orca/skills"), [Path("h-mad/tests")])
+  "test_verb_assemble_halt_no_dispatch" in collected                      # -> False
+  [n for n in collected if n.endswith("::test_verb_assemble_halt_no_dispatch")]
+  # -> ['h-mad/tests/test_hmad_dispatch_audit_cycle.py::test_verb_assemble_halt_no_dispatch']
+  ```
+
+  The failure direction is the safe one — it halts rather than passing a broken wire — but the
+  consequence is that **5f has never actually verified a wire on any feature**; it has only ever
+  reported `wire_pin_missing` or been skipped. A green 5f is not currently evidence of anything.
+  Likely fix: match on suffix `::<pin>` (and require exactly one match, so an ambiguous bare name
+  is a distinct verdict rather than a silent first-wins). Do not "fix" it by writing full node ids
+  into the registry at register time — 5b learns the pin from a document that names a bare test,
+  and the file it lives in can move.
+  Status: **FIXED** 2026-08-21. `partition()` now resolves each pin by node-id **segment** suffix
+  (`node_id.endswith("::" + pin)`), returning a 4-tuple `(resolving, missing, ambiguous,
+  unverified_renames)`: exactly one candidate resolves and carries the full id in a new `node_id`
+  key, zero is missing, and **two or more is `ambiguous`** — a new bucket with its own
+  `step5f:wire_pin_ambiguous:<id>` driver and an `ambiguous=` field on the token, because two files
+  may define the same test name and silently taking the first would verify a wire against a test in
+  the wrong file. `run_pins()` now runs `record.get("node_id") or record["pin"]`, closing the same
+  root cause one function downstream — it had been handing bare names to `pytest` as file paths, and
+  had simply never been reached.
+
+  **Why 60 green tests never saw it.** `test_collect_returns_pytest_node_ids` asserted node ids
+  while all four `partition()` tests passed **bare names** as the collected set. Each was
+  self-consistent, they contradicted each other across the seam, and nothing composed
+  `collect()` -> `partition()`. Those four tests encoded the defect as their premise and were
+  rewritten; a seam test over a real throwaway repo now covers the composition.
+
+  **A mutation caught what the tests, the live token and review all missed.** With the fix in and 80
+  tests green, dropping the `::` from the matcher changed nothing observable — `MUTATION: SURVIVED
+  mutations=1 caught=0 survived=1`. The existing near-miss test pins the opposite direction (a pin
+  *shorter* than the test name), where the delimiter is irrelevant. The discriminating shape is a
+  pin that is a tail-substring of a test name: `wire` against `::test_wire` resolves wrongly without
+  the `::`. That test now exists and the mutation is caught.
+
+  Live proof, same command that produced the broken reading above:
+  `WIREREG: UNTRACKED registered=6 verified=5 broken=0 missing=1 ambiguous=0` — Tasks 2-6 verified,
+  Task 7 correctly missing because it is not implemented. First time 5f has verified a wire.
+
+- 🟡 **J35 — `h_mad_wire_registry.py` shells pytest via `sys.executable`, so a bare `python3`
+  invocation cannot collect on a box whose `python3` lacks pytest.** Running the documented command
+  as `python3 h_mad_wire_registry.py verify …` on this machine yields
+  `RegistryError: pytest collection failed with exit code 1 … No module named pytest`
+  (`/opt/homebrew/opt/python@3.14/bin/python3.14`), reported as `WIREREG: UNREADABLE`. Correct —
+  it is a cannot-judge, not a verdict — but the remedy is undiscoverable from the message, which
+  names the missing module rather than the interpreter choice. Invoking the *script* with
+  `/opt/anaconda3/bin/python3.11` fixes it. Status: **FIXED** 2026-08-21 — both remedies shipped.
+  `verify` takes `--python <path>` (default `sys.executable`), threaded into **both** `collect()`
+  and `run_pins()`, and the collection-failure message now names the interpreter it used:
+  `pytest collection failed with /opt/homebrew/opt/python@3.14/bin/python3.14 exit code 1 … No
+  module named pytest`. Verified live both ways from a bare `python3` invocation.
+
+
+## Surfaced by the audit-cycle-verb Phase 7 close-out (2026-08-22)
+
+- 🔴 **J43 — Phase 7's archive step silently retired a test, because an empty `parametrize` SKIPS.**
+  `test_premise_items_match_gate_count_real_artifacts` runs the premise extractor against a corpus
+  of **real** collected audit reports — a Reimplementation-parity requirement added by design v1.19
+  specifically so the check is not run only against synthetic fixtures. Its corpus,
+  `REAL_AUDIT_REPORTS`, globbed the two **live** feature directories.
+
+  Archiving this feature moved all 105 artifacts under `docs/archive/2026-08/`, and the corpus went
+  from 8 files to **0**. pytest's response to an empty parameter set is not a failure:
+
+  ```text
+  SKIPPED [1] got empty parameter set ['report'] -- test_premise_items_match_gate_count_real_artifacts
+  ```
+
+  In a `-q` suite run that is one `s` among 1580 dots. The guard was gone and every gate stayed
+  green.
+
+  **This was not bad luck, it was scheduled.** Phase 7 archives *every* feature, so any corpus
+  globbing only live directories is guaranteed to empty out — the only question was which feature
+  would be the one to do it. Per-pass naming (`.p<i>`) is new with this verb, so this feature's
+  artifacts were the entire corpus, and archiving them took it to exactly zero.
+
+  Fixed two ways, because widening the glob alone would leave the same trap armed for the next
+  structural change: `REAL_AUDIT_REPORTS` now also globs `docs/archive/*/*/*.audit.v*.p*.md`
+  (96 candidates, capped at 8), **and** `test_real_audit_report_corpus_is_not_empty` asserts the
+  corpus is non-empty so a future emptying fails loudly instead of skipping. Mutation-checked:
+  removing the archive glob yields `1 failed, 1 skipped` — the guard fires, and the skip it exists
+  to catch is visible right beside it.
+
+  Sibling of the `pytest -k` selection trap already recorded on this machine: an empty selection
+  exits 0. **Test the empty input for a non-empty body.**
+  Status: `FIXED` — `h-mad/tests/test_h_mad_audit_cycle.py`.
+
+- 🔴 **J42 — `audit-cycle` broke the telemetry cycle counter for every feature it audits, and the
+  breakage reports as `0`.** `h_mad_cycle_counts.py:15` matched `_VERSION_RE = r"\.v(\d+)\.md$"`,
+  while the verb writes one artifact **per pass**: `<feature>.<phase>.audit.v<N>.p<i>.md`. The glob
+  `{feature}.{segment}.audit.v*.md` still matched those files — `v*` happily spans `9.p1` — so
+  nothing errored; the regex then failed on every one of them and the count came back **0**.
+
+  Measured at this feature's own Phase 7: `audit_cycles={'plan': 0, 'design': 0, 'impl_plan': 0}`
+  for a feature carrying **plan v14, design v24, impl-plan v10**. After the fix, the same command
+  reports `{'plan': 14, 'design': 24, 'impl_plan': 10}`.
+
+  **A silent zero is worse than a missing number.** `0` reads as "no audits were run" — a claim
+  about the work — where an error would have read as "the counter is broken". SKILL.md moved these
+  counts to disk-derived precisely because the state fields never incremented and read `0/0/0`
+  forever; this reintroduced the same symptom one layer down, and it would have been recorded into
+  `.h-mad/telemetry.jsonl` as the permanent story of a 48-cycle feature.
+
+  Fixed: `_VERSION_RE = r"\.v(\d+)(?:\.p\d+)?\.md$"`. Callers key results by the captured int,
+  so two passes of one cycle collapse to one cycle with no further change. Both namings coexist,
+  which matters because pre-verb features wrote `.v<N>.md`. Mutation-checked in both directions:
+  reverting the regex fails the three per-pass tests, and making `.p<i>` **required** fails 16,
+  including `test_live_repo_audit_cycles`, which pins real counts for older features.
+
+  **Why no earlier gate caught it.** The 6a-prime diff never touched `h_mad_cycle_counts.py`, so a
+  diff-scoped architectural review could not see it; the file is downstream of the feature, not part
+  of it. It surfaced only when Phase 7 actually ran the reporter against real artifacts — the first
+  moment anything read those filenames for meaning rather than writing them.
+  Status: `FIXED` — `h_mad_cycle_counts.py`, with three regression tests.
+
+## Surfaced by the audit-cycle-verb Phase 6 gap analysis (2026-08-22)
+
+- 🟢 **J41 — the standing "real concurrency is untested by every lane" gap was overstated, and had
+  been carried across three handoffs without once being probed.** The claim named four shapes and
+  asserted the suite was "structurally blind" to all four because "the stub records under an `fcntl`
+  lock". Probed this cycle:
+
+  - **The suite does fork.** `_bindir()` symlinks a real `agy` stub onto an isolated PATH, so the
+    dispatch loop forks real subprocesses and `wait` reaps real pids. The `fcntl` lock governs the
+    stub's *recording*, not the forking. Those two were conflated when the gap was filed.
+  - **Two shapes already have direct tests**: `test_verb_passes_one` (empty `pids` at `--passes 1`)
+    and `test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal`, which forces `HMAD_STUB_AGY_RC=17`
+    and asserts the rc reaches the `--pass` payload verbatim while the cycle still returns PASS.
+  - **The other two are not defects**, per a throwaway probe of the exact construct: a child dead
+    before its reap still yields its status (`rc=[0 0]` — bash retains it until waited), a signalled
+    child yields `128+n` (`rc=[143 143]`), and the shared fd carries only unscored stderr (6/6 lines,
+    none lost).
+
+  The probe also caught a defect **in itself** worth recording: `kill -TERM $$` inside `( … ) &`
+  signals the **parent**, because `$$` is not re-set in a bash subshell — the probe killed its own
+  script and exited 143. `$BASHPID` is the subshell's pid. A probe that appears to prove a violent
+  failure may only be documenting its own bug.
+
+  **The lesson is not about concurrency.** A plausible, specific, well-written gap survived three
+  handoffs as established fact because each session restated it rather than ran it. A carried repro
+  is not evidence.
+  Status: `RESOLVED` — no code change; the analysis records the evidence.
+
+## Surfaced by the audit-cycle-verb Phase 6a-prime dispatch (2026-08-22)
+
+- 🔴 **J40 — an `exec agy` run that read NOTHING returned `ASSESSMENT: READY_TO_MERGE`, and every
+  gate in the chain accepted it.** Measured on the first 6a-prime dispatch for `audit-cycle-verb`
+  (log `/tmp/arch_acv.log`, conversation `179f6b21`). The run made exactly one tool call, a
+  `view_file`, which **errored**; the result event carried `status: "ERROR"`; the response was a
+  confident 1510-byte review asserting "No Critical or Important issues were found" about files it
+  had never opened. `exec` returned rc 0 and `h_mad_extract_verdict.py` returned
+  `ASSESSMENT: READY_TO_MERGE` with exit 0.
+
+  **The path failure is the interesting half.** The dispatch's `--cd` was correct and the stream's
+  `init.cwd` confirms it: `/Users/kimhawk/orca/skills`. But the prompt cited files repo-relatively,
+  and agy resolved those against its own scratch directory instead of cwd:
+
+  ```text
+  view_file AbsolutePath=/Users/kimhawk/.gemini/antigravity-cli/scratch/h-mad/tests/test_h_mad_audit_cycle.py
+    -> TOOL_ERROR ... no such file or directory
+  ```
+
+  So a correct `--cd` is **not** sufficient: cite absolute paths in any prompt that asks agy to read
+  files, or the reads fail and the review proceeds on the inlined text alone.
+
+  **This is NOT a wrapper bug, and fixing it there would reintroduce a defect.**
+  `_agy_ndjson_response` (`hmad-dispatch.sh:1727`) reads `.response` regardless of `.status`
+  *deliberately*, and its comment names the measured case: a single denied tool call yields
+  `status: ERROR` alongside a complete, correct answer, so dropping that response would manufacture
+  a `no_verdict` halt out of a run that answered. That reasoning is sound. The two situations are
+  **indistinguishable at the transport layer** — one errored tool call out of many versus one
+  errored tool call out of one — and only the consumer knows which it needed.
+
+  The gap is therefore in the **6a-prime protocol**, which says to read the `ASSESSMENT:` with
+  `h_mad_extract_verdict.py` and says nothing about the stream. A verdict-shaped line from a run
+  that read nothing is exactly the "silence reads as approval" family the extractor exists to close,
+  one level up: it is not silence, it is a *fluent* answer with no evidence under it.
+
+  Proposed obligation for 6a-prime, stated as a rule the orchestrator can execute: after extracting
+  the `ASSESSMENT:`, read the run's `--log` and require **at least one successful tool call** before
+  recording a `READY_TO_MERGE`. `hmad-dispatch progress <log>` already prints tool events with their
+  `ACTIVE`/`ERROR` state and a `RESULT status=` line, so this costs one call and no new script.
+  A review that inspected nothing must not be able to clear the gate that exists to catch what
+  document audits and code-level gap analysis miss by construction.
+
+  Re-dispatched 2026-08-22 with absolute paths and an explicit instruction to return
+  `ASSESSMENT: NO` if its reads fail.
+  Status: `MONITORING` — the path fix is applied to this feature's prompt; the protocol obligation
+  is unwritten.
+
+## Surfaced by the audit-cycle-verb Task 9 docs write (2026-08-21)
+
+- 🔴 **J36 — the `audit-cycle-verb` spec, design AND impl-plan all state a measurement that the
+  artifacts on disk contradict.** All three say the report-file slot was measured **"empty on 8 of 8
+  impl-plan cycles"** (`…spec.md:238`, `…design.md:327`, `…impl-plan.md:840` — and, found later by
+  the value sweep, `…impl-plan.md:854`, `…plan.md:397`, spelled `8-of-8`), and Task 9's AC-9.2
+  asked for that sentence to be copied into `h-mad/SKILL.md`. Measured instead, from the staged
+  artifacts of the feature's own impl-plan audit:
+
+  ```text
+  17 of 18 pass report files exist, non-empty, with 17 .done markers
+  the ONLY absent one is cycle7_p1
+  ```
+
+  Cycle 7 pass 1 is exactly the case the impl-plan's own architecture constraint 2b describes —
+  "`delivered=out,report-file` — the mixed case". So the plan contradicts itself: constraint 2b
+  records one pass falling back to `--out` while AC-9.2 generalises that single pass into all
+  cycles. The count is wrong twice over: there were **9** impl-plan cycles, not 8, and the
+  measurement was per-pass, not per-cycle.
+
+  **The claim is load-bearing in the safe direction, which is why it survived three gates.** It
+  justifies always arming the `--out` fallback — a conclusion the real 1-in-18 measurement supports
+  just as well, so nothing downstream is wrong; only the stated evidence is. That is precisely the
+  shape an audit does not catch: a true conclusion resting on a false premise reads as correct to a
+  reviewer checking whether the conclusion follows.
+
+  Operator ruling 2026-08-21: SKILL.md carries the **measured** figure (shipped — see §6.6, "across
+  the 18 impl-plan audit passes, 17 delivered via the report file"), and the three planning
+  documents are corrected separately rather than silently amended, per the v1.15 precedent that an
+  unaudited edit to a gated doc is an ungated doc.
+  **Corrected 2026-08-21.** Spec v1.18, plan v1.12, design v1.22, impl-plan v1.9 — each carries a
+  Version History entry naming the correction, so the edit is on the record rather than silent.
+  The premise was re-verified independently before any edit, straight from the staged artifacts:
+
+  ```text
+  cycle{1..6,8,9}_p{1,2} + cycle7_p2 : report present, non-empty, .done written   (17)
+  cycle7_p1                          : no report file, no .done marker             (1)
+  ```
+
+  **This finding under-scoped itself, in the way the value-sweep rule predicts.** It named three
+  documents and three lines; the sweep found **six live sites across four documents** — the two
+  extra in `impl-plan.md` (Task 9's description *and* its AC-9.2 checkbox) and one in `plan.md:397`,
+  a success criterion that no reader of the three cited lines would have reached. The bare string
+  `8 of 8` also misses `8-of-8`, which is how two of those three hid. Grep the **value in every
+  spelling**, not the sentence you remember writing.
+
+  Not edited, deliberately: `…design.md` v1.11 and the `design.audit.v8.p2` / `v12.p2` reports quote
+  the old figure as a record of what that cycle found at the time. A revision log is append-only;
+  rewriting it would erase the evidence that three gates passed over this.
+
+  **Re-gated 2026-08-21** with the feature's own verb — plan c12, design c24, impl-plan c10, two
+  passes each, all six delivered via the report file (`delivered=report-file,report-file` ×3). The
+  correction itself gated clean: design p2 returned `must=0 should=0` over all 57 ACs with **AC-9.2
+  `implemented-as-written`**, and not one of the 15 must-fixes across the three cycles mentions the
+  measurement, AC-9.2, or any line this correction touched.
+
+  Status: `FIXED` — corrected and re-gated.
+
+- 🔴 **J37 — 14 of the 15 must-fixes from the J36 re-gate falsify against the shipped code.** The
+  three cycles returned `FAIL must=5/3/7`, and triaging each against the implementation rather than
+  against the prose it was written from:
+
+  | claimed | shipped reality |
+  |---|---|
+  | plan drops the `.done` marker from the collection fast-path → torn-write race | `h_mad_audit_cycle.py:63` checks `_done_path(report_path).exists()` |
+  | AC-4.4's "verified by re-reading" is unimplemented | both `_copy_collected_report:71` and `_write_collected_report:148` re-read and raise `OperationalError` |
+  | Task 2 omits `collected_path.unlink(missing_ok=True)` | present at `:69` **and** `:146` |
+  | `test_collected_write_failure_is_operational_error` missing | exists, `test_h_mad_audit_cycle.py` |
+  | `test_gate_count_mismatch_is_operational_error` missing | exists, same file |
+  | `test_premise_items_formats_{no_citation,supplied_path_line}` missing | both exist |
+  | `test_premise_items_match_gate_count` lacks the real-artifact corpus | true of *that* test; the requirement is met by its sibling `test_premise_items_match_gate_count_real_artifacts:1555`, parametrized over the 8 reports `REAL_AUDIT_REPORTS:15` globs from `docs/0{1,2}-*/features/*.audit.v*.p*.md` |
+  | no fixture for the delivered-but-no-`GATE:`-token guard | guard `:289`, test `test_combine_raises_when_delivered_pass_has_no_gate_token:635` |
+  | no test for `size_status` worst-of aggregation | `test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_status:1142` |
+  | `test_verb_unremovable_path` can't reach the post-removal guard because `set -e` aborts at `rm -f` | `rm -f … \|\| true` at `:2607` — the `\|\| true` is right there; the test asserts exit 3 **and** `channel not cleared`, which only the guard emits |
+  | Task 5 omits `--passes` default 2 → bash crashes with `[: : integer expression expected` | **this one does not falsify — see J38.** The predicted *symptom* is wrong (`_need "$passes" --passes` exits 2 cleanly, no bash error), but the *concern* is right and the prescription restores documented behaviour rather than changing it: spec AC-3.1 says "Default pass count is 2" |
+
+  **One survives**: `plan.md` states "five composed call sites" at `:278`, `:389` and `:424`, while
+  `impl-plan.md:902` says "six call sites, six `wiring` tasks, six WIRE-PINs, twelve caller-side
+  [mutations]" and `audit_cycle_connections.mutation.json` carries **12 rows**. Six is right; the
+  plan's success criterion could be met while the shell→helper boundary went unverified.
+
+  **Fixed 2026-08-22 (plan v1.13), and the count was the smaller half of it.** `.h-mad/wires.jsonl`
+  enumerates the six pins outright, so nothing here needed inferring:
+
+  ```text
+  hmad-dispatch.sh:audit-cycle  -> h_mad_assemble_audit.py
+  hmad-dispatch.sh:audit-cycle  -> exec agy
+  hmad-dispatch.sh:audit-cycle  -> h_mad_audit_cycle.py     <- the one the plan dropped
+  h_mad_audit_cycle.py:collect  -> h_mad_report_wait.py
+  h_mad_audit_cycle.py:collect  -> h_mad_extract_report.py
+  h_mad_audit_cycle.py:gate     -> h_mad_audit_gate.py
+  ```
+
+  The plan's list enumerated **callee scripts**, and the sixth call site is the only one whose callee
+  is this feature's own new code rather than a pre-existing script — so a by-callee enumeration
+  structurally cannot see it. That same list also **misattributed** three of its five:
+  `h_mad_report_wait.py`, `h_mad_extract_report.py` and `h_mad_audit_gate.py` are called by the
+  helper, not by the verb. Correcting only the number — which is all the finding asked for — would
+  have left the process boundary described backwards, with the shell credited for three calls it
+  does not make. **A count finding can be the visible edge of an attribution defect; fix what makes
+  the count wrong, not the count.**
+
+  Replaced with an explicit caller→callee table, and the success criterion now **derives** the number
+  (`wc -l < .h-mad/wires.jsonl`, cross-checked against `h_mad_wire_registry.py verify`'s `verified=`)
+  instead of restating it. That cure is the house pattern, already applied one bullet above in the
+  same document for the AC count after a literal went stale twice (49→50→52).
+
+  Not touched: `plan.md:5`, `:11`, `:14`, `:49` say the **hand-run** cycle is five calls, and
+  `spec.md:12` says the same. Those are correct and must stay — the sixth call site exists only
+  because the verb introduces its own helper, which the hand-run cycle had no equivalent of. A blind
+  five→six sweep would have corrupted all five.
+
+  **The lesson is the audit's reading surface, not its competence.** These passes read the planning
+  prose and inferred what the code must therefore do. Most of the findings are *true about the
+  document* — the docs really are thinner than the implementation — and false about the program. It
+  is the claimed **consequence** that falsifies, not usually the fact: "missing test", "unenforced
+  guard", "will crash" are each contradicted by shipped code.
+
+  That distinction changes what the prescriptions cost. Thirteen of them are **doc** edits: harmless
+  in themselves, merely unnecessary, but each one re-opens the re-gate obligation this cycle just
+  discharged. Exactly **one** is a code change — arming a `--passes` default — and **it was the one
+  finding here that is real** (J38). Falsify against the code **before** applying, every time; and
+  when a finding names a test, grep the **file-scoped** name, not the bare one — the real-corpus row
+  above reads as a genuine gap right up until the sibling test is found.
+
+  **The correction to this entry is its most useful part.** A finding has three separable parts —
+  facts, concern, prescription — and they fail independently. The `--passes` row arrived with a
+  *fabricated symptom* (a bash error that does not occur), that symptom falsified cleanly against
+  the code, and the falsification was then allowed to discharge the whole finding. It should have
+  discharged only the symptom. Fourteen rows here survive re-examination; the fifteenth was thrown
+  out for being wrong about something it did not need to be right about. **Falsify the claim the
+  finding is actually making, not the story it tells about it.**
+  Status: `FIXED` — five-vs-six corrected in plan v1.13 and re-gated at cycle 13, which raised no
+  finding against it. Of the other 14, thirteen need no action and one is now J38.
+
+- 🔴 **J38 — `--passes` has no default, and spec AC-3.1 says it must.** Spec AC-3.1: "Default pass
+  count is 2." Design `:20` (`[--passes K=2]`) and `:368` (`# default 2, K>=1`) and plan `:33`
+  (`[--passes <K>]  # default 2`) all agree. The shipped verb disagrees:
+  `hmad-dispatch.sh:2562` declares `local passes=""` and the validation block calls
+  `_need "$passes" --passes`, so omitting the flag exits 2 with `missing required argument:
+  --passes` and no cycle runs. Three gated documents describe an optional flag; the code requires it.
+
+  **Why 1560 tests never saw it.** The test helper `dispatch_args` is declared
+  `def dispatch_args(*, feature=…, phase=…, cycle="7", passes="2", root)` and unconditionally emits
+  `--passes` into every argv it builds. All 44 call sites therefore supply the flag. **The fixture's
+  own default is a copy of the AC's default**, so the suite reads as though it covers AC-3.1 while
+  no test ever exercises the path where the flag is absent. A default that only the fixture supplies
+  is indistinguishable, from inside the suite, from one the program supplies.
+
+  Sibling of the strawman-mutation class already recorded on this feature: the check appears to fire
+  and is testing something else. Here the *fixture* appears to exercise a default and is supplying
+  it instead.
+
+  **Fixed 2026-08-22 by operator ruling** (code, not docs — three gated documents already promised
+  the default). `hmad-dispatch.sh:2562` is now `local passes="2"` and its `_need` line is gone.
+  Dropping `_need` costs no coverage: the `case "$passes" in ''|*[!0-9]*)` guard immediately below
+  still rejects `--passes ""` with `must be >= 1`, verified live.
+
+  RED first — `test_verb_passes_defaults_to_two_when_flag_is_omitted` failed with exactly the
+  reported defect (`missing required argument: --passes`, rc=2) before the fix. The test helper
+  `dispatch_args` gained a `passes=None` branch that **omits the flag**, which is the part worth
+  keeping: the absent-flag path was previously unreachable from the suite at all.
+
+  Mutation-checked both directions, and both are caught by that one test while the other three
+  `passes` tests stay green — so it discriminates the value, not merely the presence:
+
+  ```text
+  local passes=""   (revert the default)  -> FAIL  1 failed, 3 passed
+  local passes="1"  (wrong default)       -> FAIL  1 failed, 3 passed
+  local passes="2"  (shipped)             -> PASS  4 passed
+  ```
+  Status: `FIXED`.
+
+- 🟡 **J39 — `plan.md` is systematically narrower than `spec.md`, and it is a class, not a defect.**
+  Plan re-audit cycles 13 and 14 each returned `FAIL` after every finding from the previous cycle
+  was fixed, and cycle 14's six must-fixes are all one shape: the plan's "User-visible behaviour"
+  summary omits a detail the spec mandates — the `reports:` line (AC-4.4/4.4b), the active rejection
+  of `--passes N<1` (AC-3.1), the printed double-count warning (AC-5.4), and the `(no citation)`
+  marker (AC-7.3). Cycle 13's two findings were the same shape and were fixed as plan v1.14.
+
+  **The loop converges on the findings but not on the class.** Each cycle's findings are real about
+  the document and each fix is correct; the next cycle simply reaches the next omission, because a
+  summary document is *by construction* narrower than the spec it summarises. Chasing this one
+  finding at a time re-opens a full re-gate per cycle and has no natural stopping point.
+
+  **Resolved 2026-08-22 by reading what the document already does, and the answer inverts the
+  finding.** `plan.md` has an established house pattern for exactly this: its `## Requirements`
+  section (`:78`) lists the ten FRs **by title only**, restating no ACs, and its Risks table
+  (`:400`) writes "per-pass counts printed alongside (AC-5.3) and the inflation stated (AC-5.4)" —
+  it **cites** AC numbers rather than reproducing their text. The same document derives its AC count
+  (`grep -c '^\s*- AC-'`) and, since v1.13, its call-site count (`wc -l < .h-mad/wires.jsonl`),
+  both after a literal went stale.
+
+  So the plan is *meant* to point at the spec, and cycle 14's prescription — add four more
+  restatements of `reports:`, `--passes N<1`, the double-count warning and `(no citation)` — would
+  have made the document worse: four more literals to drift, in a document whose own history is
+  three separate corrections of exactly that. The drift it found is incidental prose paraphrase in
+  Architecture Considerations, not a missing requirement.
+
+  **And all four are present in the code** — `h_mad_audit_cycle.py:387` (`reports:`), `:389`
+  (double-count note), `:339` (`(no citation)`), and `hmad-dispatch.sh` `--passes` (J38). So this
+  was never an implementation gap; Phase 6a classifies it `design-vs-spec` and it does not reduce
+  the match rate.
+  Status: `RESOLVED` — no document edit made. Where prose paraphrases an AC, cite the AC; the
+  pattern is already the document's own.

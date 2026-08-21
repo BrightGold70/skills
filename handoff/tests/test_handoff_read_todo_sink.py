@@ -6,9 +6,10 @@ other part of READ succeeded. The reconciliation was correct, the action queue
 was never written, and the report distinguished neither -- `**Todos restored:** N`
 prints identically whether N items reached a durable list or nothing at all.
 
-Availability is per-SESSION, not per-install: `TaskCreate` served 465 calls on
-this machine through 2026-08-19 and was absent the next morning with no config
-change. So the ladder's job is not "cope with a machine that lacks the tool" but
+Availability is per-SESSION, not per-install: `TaskCreate` was in daily use on
+this machine through 2026-08-19 (last call 2026-08-19T07:11:39Z) and was absent
+the next morning with no config change. Call counts are point-in-time and are
+deliberately not pinned -- see test_call_count_is_not_load_bearing. So the ladder's job is not "cope with a machine that lacks the tool" but
 "re-probe every resume and use the best sink that exists right now".
 
 Guidance is the whole fix (no user config can add a built-in tool), so the
@@ -45,8 +46,10 @@ def test_step4_states_the_tool_is_not_guaranteed() -> None:
             "an unconditional instruction is the bug, not the tool's absence",
         ),
         (
-            "user config can add a built-in tool",
-            "without this a reader burns the session trying to re-enable the tool",
+            "CLAUDE_CODE_ENABLE_TODO_TOOLS",
+            "the todo tools became OPT-IN in Claude Code 2.1.236; a reader whose "
+            "probe comes back empty must be sent to the opt-in before the ladder, "
+            "or they degrade to a lesser sink while the real tool is one setting away",
         ),
     ]:
         require(literal, why)
@@ -154,7 +157,7 @@ def test_no_unconditional_todo_tool_instruction_remains() -> None:
 # The first fix shipped with the report's reasoning intact: "zero TodoWrite
 # tool_use calls across every transcript" therefore "no todo tool on this
 # machine". Both halves were wrong in a way the conclusion hid -- the name in
-# use was TaskCreate (465 calls), and counting calls measures USE, not
+# use was TaskCreate (hundreds of calls), and counting calls measures USE, not
 # AVAILABILITY. The tool was live through 2026-08-19 and gone the next morning.
 # A reader who believes "this install has no todo tool" stops probing, and rung 1
 # stays dead after it comes back.
@@ -209,3 +212,88 @@ def test_no_claim_that_the_tool_is_permanently_absent() -> None:
         assert " ".join(banned.split()) not in DOC, (
             f"the retracted claim survives in SKILL.md: {banned!r}"
         )
+
+
+def test_toolsearch_probe_is_justified_as_not_deferred_only() -> None:
+    """An empty `select:` result must be readable as genuine absence.
+
+    ToolSearch's own description is about *deferred* tools, which invites the
+    reader to suspect an empty result only means "loaded, not deferred" -- i.e.
+    a false negative. Measured 2026-08-21: `select:Bash,Read,Write` returns full
+    schemas for tools already in the main tool list, so it resolves non-deferred
+    tools too and an empty result is real. Without this in the doc the next
+    reader re-derives the doubt and either re-probes or abandons rung 1.
+    """
+    for literal, why in [
+        ("not deferred-only",
+         "the probe's soundness is the whole basis for skipping rung 1"),
+        ("select:Bash,Read,Write",
+         "the measurement that settles it must be reproducible by the reader"),
+    ]:
+        require(literal, why)
+
+
+def test_call_count_is_not_load_bearing() -> None:
+    """A corpus count is point-in-time; the doc must not rest on one figure.
+
+    An earlier pass recorded 465 TaskCreate calls; a re-count on 2026-08-21 over
+    2,734 transcripts returned 429. Neither is obviously wrong -- they did not
+    count the same thing -- so a bare figure invites a future reader to "correct"
+    it and call the disagreement a defect. The durable facts are the last-seen
+    timestamp and the run of zeroes after it.
+    """
+    for literal, why in [
+        ("2026-08-19T07:11:39Z",
+         "the last-seen timestamp is the fact that dates the disappearance"),
+        ("Do not treat the call count as a fixed figure",
+         "stops a future reader filing the 465/429 disagreement as a defect"),
+    ]:
+        require(literal, why)
+
+
+def test_inline_checklist_is_mandatory_when_rung_1_is_missing() -> None:
+    """The durable sink is invisible; a count alone reads as "todos vanished".
+
+    Reported by the operator 2026-08-21: after a resume restored 6 items to
+    `.omc/notepad.md`, the todos were experienced as missing. Both halves of the
+    report were true and neither showed the user their queue.
+    """
+    for literal, why in [
+        ("print the inline checklist IN ADDITION",
+         "the durable rung is not user-visible, so it cannot be the only sink",
+        ),
+        ("reads to them as \"my todos disappeared\"",
+         "names the observed complaint so a future edit cannot dismiss it as cosmetic",
+        ),
+    ]:
+        require(literal, why)
+
+
+def test_empty_probe_sends_the_reader_to_the_opt_in_first() -> None:
+    """The ladder is the fallback, not the first move.
+
+    An earlier revision of this skill asserted "no user config can add a built-in
+    tool" and told the reader not to try re-enabling anything. That was refuted on
+    2026-08-21: Claude Code 2.1.236 made the todo tools opt-in, all four names are
+    still in the 2.1.238 binary, and `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the
+    settings `env` block restores them -- proven by a control/treatment A/B where
+    the control replied NOTOOL and the treatment emitted a real TaskCreate
+    `tool_use`. A doc that forbids the fix sends every future reader to a lesser
+    sink while rung 1 sits one setting away.
+    """
+    for literal, why in [
+        # Each literal must be UNIQUE to this guidance. A first pass pinned the bare
+        # string "2.1.236", which already appears elsewhere in SKILL.md -- the guard
+        # passed with the opt-in section deleted. Measured as MUTATION: SURVIVED.
+        ("try the opt-in BEFORE the ladder",
+         "the ordering IS the fix; the ladder is the fallback, not the first move"),
+        ('{ "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1" } }',
+         "the reader needs the exact knob in copy-pasteable form"),
+        ("**opt-in** in Claude Code **2.1.236**",
+         "dates the change AND is unique to this section, unlike a bare version string"),
+        ("were gated, not removed",
+         "the distinction is the whole remedy -- removed would mean nothing to do"),
+        ("todoFeatureEnabled",
+         "the panel setting is a different switch; enabling only it leaves tools absent"),
+    ]:
+        require(literal, why)

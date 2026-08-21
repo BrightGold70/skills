@@ -138,6 +138,73 @@ class TestVerdict:
             _run("--transcript", str(t), "--window", "200000").stdout)
 
 
+class TestRunCeiling:
+    """`--mode run` prices the RUN, not an advisor() call.
+
+    Different question, different remedy: the 45 advisor ceiling is a margin under
+    50 because advisor forwards a second full copy, whereas the run ceiling asks
+    "is this session about to die mid-phase", where the remedy is halt-and-hand-off.
+    Sharing a verdict word between them would let a reader apply the wrong remedy.
+    """
+
+    def test_run_mode_defaults_to_80(self, tmp_path):
+        t = _transcript(tmp_path, _turn(read=790_000))
+        tok = _token(_run("--transcript", str(t), "--window", "1000000", "--mode", "run").stdout)
+        assert "ceiling=80" in tok
+        assert tok.startswith("CTXBUDGET: OK ")
+
+    def test_run_mode_halts_above_the_ceiling(self, tmp_path):
+        t = _transcript(tmp_path, _turn(read=810_000))
+        r = _run("--transcript", str(t), "--window", "1000000", "--mode", "run")
+        assert r.returncode == 0, "a verdict is not an operational error"
+        assert _token(r.stdout).startswith("CTXBUDGET: HALT ")
+
+    def test_run_ceiling_is_inclusive_at_80(self, tmp_path):
+        t = _transcript(tmp_path, _turn(read=800_000))
+        assert "OK" in _token(
+            _run("--transcript", str(t), "--window", "1000000", "--mode", "run").stdout)
+
+    def test_run_mode_halt_is_not_the_advisor_deny_word(self, tmp_path):
+        """The anti-conflation pin, and the reason this is a separate verdict word.
+
+        `hooks/h-mad-advisor-gate.sh` blocks on the glob `*"CTXBUDGET: DENY"*`. If a
+        run-ceiling breach also said DENY, the two verdicts would be indistinguishable
+        to every existing consumer -- and they prescribe different actions.
+        """
+        t = _transcript(tmp_path, _turn(read=900_000))
+        tok = _token(_run("--transcript", str(t), "--window", "1000000", "--mode", "run").stdout)
+        assert "DENY" not in tok
+        assert "mode=run" in tok
+
+    def test_run_mode_omits_the_advisor_projection(self, tmp_path):
+        """`projected` is `used * 2` because advisor forwards a second copy. A run
+        cap forwards nothing, so printing it would invite reading the run ceiling as
+        an advisor projection -- the exact conflation this mode exists to prevent."""
+        t = _transcript(tmp_path, _turn(read=810_000))
+        assert "projected=" not in _token(
+            _run("--transcript", str(t), "--window", "1000000", "--mode", "run").stdout)
+
+    def test_advisor_mode_output_is_unchanged(self, tmp_path):
+        """Regression pin on the LIVE hook. Advisor mode is what
+        `h-mad-advisor-gate.sh` parses today; adding run mode must not touch it."""
+        t = _transcript(tmp_path, _turn(read=525_742))
+        tok = _token(_run("--transcript", str(t), "--window", "1000000").stdout)
+        assert tok == (
+            "CTXBUDGET: DENY used=525742 window=1000000 "
+            "pct=52.6 projected=1051484 ceiling=45"
+        )
+
+    def test_run_mode_still_cannot_judge_without_usage(self, tmp_path):
+        """A cannot-judge stays a cannot-judge: it must not read as an OK just
+        because the run ceiling is generous."""
+        t = _transcript(tmp_path, json.dumps({"type": "user"}))
+        r = _run("--transcript", str(t), "--window", "1000000", "--mode", "run")
+        assert r.returncode == 2
+        tok = _token(r.stdout)
+        assert tok.startswith("CTXBUDGET: UNKNOWN")
+        assert "used=" not in tok
+
+
 class TestCannotJudge:
     @pytest.mark.parametrize("reason,args", [
         ("no_transcript", ("--transcript", "/nonexistent/session.jsonl")),

@@ -33,6 +33,43 @@ def test_audit_artifacts_maps_versions_and_skips_gaps(tmp_path: Path) -> None:
     }
 
 
+def test_per_pass_audit_files_are_counted_as_one_cycle(tmp_path: Path) -> None:
+    """`audit-cycle` writes `<feature>.<phase>.audit.v<N>.p<i>.md`, one per pass.
+
+    The counter only understood `.v<N>.md`, so every feature audited with the verb
+    reported `audit_cycles=0` -- a silent zero over real work, which is worse than a
+    missing number because it reads as "no audits were run". Two passes of one cycle
+    must still count as ONE cycle.
+    """
+    root = tmp_path / "docs"
+    p1 = artifact(root, "01-plan/features/f.plan.audit.v1.p1.md")
+    artifact(root, "01-plan/features/f.plan.audit.v1.p2.md")
+    artifact(root, "01-plan/features/f.plan.audit.v2.p1.md")
+    artifact(root, "01-plan/features/f.plan.audit.v2.p2.md")
+
+    got = counts.audit_artifacts(root, "f", "plan")
+    assert sorted(got) == [1, 2], "two passes of one cycle must collapse to one version"
+    assert got[1] in (p1, root / "01-plan/features/f.plan.audit.v1.p2.md")
+    assert counts.audit_cycles(root, "f")["plan"] == 2
+
+
+def test_single_pass_and_per_pass_naming_coexist(tmp_path: Path) -> None:
+    """Older features wrote `.v<N>.md`; both shapes must count in one tree."""
+    root = tmp_path / "docs"
+    artifact(root, "01-plan/features/f.plan.audit.v1.md")
+    artifact(root, "01-plan/features/f.plan.audit.v2.p1.md")
+
+    assert sorted(counts.audit_artifacts(root, "f", "plan")) == [1, 2]
+
+
+def test_per_pass_analysis_files_also_count(tmp_path: Path) -> None:
+    root = tmp_path / "docs"
+    artifact(root, "03-analysis/f.analysis.v1.md")
+    artifact(root, "03-analysis/f.analysis.v2.p1.md")
+
+    assert sorted(counts.analysis_artifacts(root, "f")) == [1, 2]
+
+
 def test_two_contiguous_plan_audits_derive_cycle_two(tmp_path: Path) -> None:
     root = tmp_path / "docs"
     artifact(root, "01-plan/features/f.plan.audit.v1.md")
