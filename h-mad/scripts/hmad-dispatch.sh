@@ -2557,6 +2557,132 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
   return "$rc"
 }
 
+_cmd_audit_cycle() {
+  local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
+  local passes=""
+  local -a prompt report out log asm tok rc pass_args
+  here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
+
+  while [ $# -gt 0 ]; do case "$1" in
+    --feature) feature="$2"; shift 2 ;;
+    --phase) phase="$2"; shift 2 ;;
+    --cycle) cycle="$2"; shift 2 ;;
+    --passes) passes="$2"; shift 2 ;;
+    --project-root) root="$2"; shift 2 ;;
+    --ack-file) ack_file="$2"; shift 2 ;;
+    --report-grace) report_grace="$2"; shift 2 ;;
+    --timeout) timeout="$2"; shift 2 ;;
+    *) _unknown_opt audit-cycle "$1"; return $? ;;
+  esac; done
+
+  _need "$feature" --feature || return $?
+  _need "$phase" --phase || return $?
+  _need "$cycle" --cycle || return $?
+  _need "$passes" --passes || return $?
+  _need "$root" --project-root || return $?
+  case "$phase" in plan|design|impl-plan) ;;
+    *) echo "hmad-dispatch: audit-cycle: --phase must be plan|design|impl-plan" >&2; return 2 ;;
+  esac
+  case "$passes" in ''|*[!0-9]*)
+    echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2 ;;
+  esac
+  [ "$passes" -ge 1 ] || {
+    echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2; }
+
+  local stem i p arc size_status halt_pass d
+  stem="/tmp/audit_${feature}_${phase}_cycle${cycle}"
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    prompt[$i]="${stem}_p${i}.txt"
+    report[$i]="${stem}_p${i}.report.md"
+    out[$i]="${stem}_p${i}.out.txt"
+    log[$i]="${stem}_p${i}.log"
+    asm[$i]="${stem}_p${i}.asm.txt"
+    i=$((i + 1))
+  done
+
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    rm -f "${report[$i]}" "${report[$i]}.done" "${out[$i]}" || true
+    for p in "${report[$i]}" "${report[$i]}.done" "${out[$i]}"; do
+      [ ! -e "$p" ] || { printf 'ERROR: channel not cleared: %s\n' "$p" >&2; exit 3; }
+    done
+    rm -f "${prompt[$i]}" "${asm[$i]}" || true
+    i=$((i + 1))
+  done
+
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    if python3 "$here/h_mad_assemble_audit.py" --feature "$feature" --phase "$phase" \
+         --cycle "$cycle" --project-root "$root" \
+         --report-file "${report[$i]}" --out "${prompt[$i]}" >"${asm[$i]}"
+    then arc=0; else arc=$?; fi
+    tok[$i]="$(sed -n 's/^ASSEMBLE: //p' "${asm[$i]}" | tail -1)"
+    [ "$arc" -eq 0 ] || exit 4
+    [ -n "${tok[$i]}" ] || exit 4
+    case "${tok[$i]}" in
+      PASS*) [ -s "${prompt[$i]}" ] || exit 4 ;;
+    esac
+    i=$((i + 1))
+  done
+
+  size_status="verified"
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    case "${tok[$i]}" in *size_status=unverified*) size_status="unverified" ;; esac
+    i=$((i + 1))
+  done
+
+  halt_pass=""
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    case "${tok[$i]}" in HALT*) halt_pass="$i"; break ;; esac
+    i=$((i + 1))
+  done
+  if [ -n "$halt_pass" ]; then
+    python3 "$here/h_mad_audit_cycle.py" \
+      --feature "$feature" --phase "$phase" --cycle "$cycle" \
+      --project-root "$root" --passes "$passes" \
+      --size-status "$size_status" \
+      --halt-reason "assemble_halt:p${halt_pass}"
+    exit $?
+  fi
+
+  i=2
+  while [ "$i" -le "$passes" ]; do
+    d="$( { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep -c '^[<>]' || true)"
+    if ! { [ "$d" -eq 2 ] \
+           && { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep -Fq "${report[1]}"; }; then
+      python3 "$here/h_mad_audit_cycle.py" \
+        --feature "$feature" --phase "$phase" --cycle "$cycle" \
+        --project-root "$root" --passes "$passes" \
+        --size-status "$size_status" --halt-reason "prompt_divergence"
+      exit $?
+    fi
+    i=$((i + 1))
+  done
+
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    local agent_rc
+    agent_rc=0
+    _cmd_exec agy "${prompt[$i]}" --cd "$root" \
+      --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null || agent_rc=$?
+    rc[$i]="$agent_rc"
+    pass_args+=(--pass "${i}:${report[$i]}:${out[$i]}:${rc[$i]}")
+    i=$((i + 1))
+  done
+
+  local -a helper_args
+  helper_args=(--feature "$feature" --phase "$phase" --cycle "$cycle"
+               --project-root "$root" --passes "$passes"
+               --size-status "$size_status"
+               "${pass_args[@]}"
+               --grace "$report_grace")
+  [ -n "$ack_file" ] && helper_args+=(--ack-file "$ack_file")
+  python3 "$here/h_mad_audit_cycle.py" "${helper_args[@]}"
+}
+
 # Single-quote a string for safe interpolation into a shell command line. The
 # pane's command text is handed to `orca terminal split/create --command` and run
 # by a shell, so every path we splice in has to survive spaces, quotes and glob
@@ -3145,6 +3271,7 @@ main() {
     notify) _cmd_notify "$@" ;;
     progress) _cmd_progress "$@" ;;
     exec-pane) _cmd_exec_pane "$@" ;;
+    audit-cycle) _cmd_audit_cycle "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
     dispatch) _cmd_dispatch "$@" ;;
