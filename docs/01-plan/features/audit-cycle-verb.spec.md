@@ -235,8 +235,10 @@ dropped by being forgotten.
   - AC-9.1: §"Audit prompt assembly" presents `hmad-dispatch audit-cycle` as the way to run a
     cycle, with the existing hand-run step list retained as the debugging/fallback path.
   - AC-9.2: The report-file guidance at §6.6 (`h-mad/SKILL.md:1419`, "preferred under Orca") is
-    amended to record that the slot was measured empty on 8 of 8 impl-plan cycles, and that the
-    verb therefore always arms the `--out` fallback.
+    amended to record the measured delivery rate — across the 18 impl-plan audit passes, 17
+    delivered via the report file and 1 (cycle 7 pass 1) wrote neither the file nor the `.done`
+    marker and was recovered from `--out` — and that the verb therefore always arms the `--out`
+    fallback.
   - AC-9.3: The `AUDITCYCLE:` token is listed in SKILL.md's helper/verb registry alongside the other
     verdict tokens.
   - AC-9.4: A bidirectional docs test asserts the `AUDITCYCLE:` token appears in both the
@@ -335,6 +337,14 @@ dropped by being forgotten.
 - v1.5: AC-6.3 gains `prompt_divergence`, classified as a cannot-judge verdict at exit 0.
 - v1.6: AC-3.3 extended to clear `<out-path>` as well as the report paths, with AC-3.3b recording
   why `--log` is deliberately exempt.
+- v1.18: AC-9.2's measurement corrected (J36). It stated the report-file slot was measured "empty
+  on 8 of 8 impl-plan cycles"; the staged artifacts show the opposite — **17 of the 18 impl-plan
+  audit passes delivered** via the report file (present, non-empty, `.done` written), and only
+  `cycle7_p1` fell back to `--out`. The old count was wrong twice over: there were **9** cycles,
+  not 8, and the measurement is per **pass**, not per cycle. The conclusion it justifies — always
+  arm the `--out` fallback — is unchanged, and the real 1-in-18 rate supports it just as well; only
+  the stated evidence was false, which is why the claim survived three gates. Re-verified from
+  `/tmp/audit_audit-cycle-verb_impl-plan_cycle{1..9}_p{1,2}.report.md` before correcting.
 - v1.17: AC-5.2 restated as an explicit three-way precedence so it no longer contradicts AC-6.1.
 - v1.16: AC-10.4 reworded to "missing either gate section". An audit finding argued a
   `## Should-fix`-only report is a clean pass needing `PASS`; probing the gate disproved that — it

@@ -836,9 +836,10 @@ guards, including the two shell guards named in the ACs below.
 **Description**: Documents the verb where an orchestrator will look for it and pins the token so the
 script and the document cannot drift apart. §"Audit prompt assembly" leads with
 `hmad-dispatch audit-cycle` as the way to run one audit cycle, keeping the hand-run step list below it
-as the debugging path (base invariant: backward compatibility). §6.6 is amended to record that the
-report-file slot was measured **empty on 8 of 8 impl-plan cycles**, which is why the verb always arms
-the `--out` fallback. The helper registry gains an `h_mad_audit_cycle.py` entry carrying the
+as the debugging path (base invariant: backward compatibility). §6.6 is amended to record the **measured**
+report-file delivery rate — **17 of the 18 impl-plan audit passes delivered** via the report file,
+with `cycle7_p1` alone writing neither the file nor its `.done` marker and being recovered from
+`--out` — which is why the verb always arms the `--out` fallback. The helper registry gains an `h_mad_audit_cycle.py` entry carrying the
 `AUDITCYCLE:` token.
 
 **Code structure**:
@@ -851,8 +852,8 @@ def test_docs_token_pinned():
 **Acceptance Criteria**:
 - [ ] AC-9.1: §"Audit prompt assembly" presents `hmad-dispatch audit-cycle` as the way to run a cycle,
       with the hand-run steps retained beneath it.
-- [ ] AC-9.2: §6.6 records the 8-of-8 empty-report-slot measurement and the resulting always-armed
-      `--out` fallback.
+- [ ] AC-9.2: §6.6 records the measured 17-of-18 report-file delivery rate (the one fallback being
+      `cycle7_p1`) and the resulting always-armed `--out` fallback.
 - [ ] AC-9.3: the `AUDITCYCLE:` token is listed in SKILL.md's helper/verb registry alongside the other
       verdict tokens.
 - [ ] AC-9.4: `test_docs_token_pinned` fails if **either** side drops the token — asserted by checking
@@ -1114,3 +1115,11 @@ discrimination coverage, not as a second certification of the same call site.
   "prompt divergence assertion" (the prompts differ by one line **by design**, so the old name
   described the opposite of the check); the clearing AC names the `.done` marker explicitly; and the
   per-pass arrays are declared `local -a` alongside `local here`.
+- v1.9: J36 correction (post-implementation). Task 9's description and AC-9.2 both carried spec
+  AC-9.2's false measurement — the report-file slot "measured **empty on 8 of 8 impl-plan cycles**".
+  The staged artifacts show the opposite: **17 of the 18** impl-plan audit passes delivered via the
+  report file; only `cycle7_p1` fell back to `--out`. Nine cycles, not eight, and the unit is the
+  **pass**. This plan already contradicted itself — architecture constraint 2b records exactly that
+  single mixed-delivery pass. Shipped behaviour is unaffected (the always-armed `--out` fallback is
+  correct either way) and `h-mad/SKILL.md` §6.6 already carries the measured figure, so this edit
+  makes AC-9.2 describe what actually shipped. Paired: spec v1.18, plan v1.12, design v1.22.

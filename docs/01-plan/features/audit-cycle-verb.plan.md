@@ -394,7 +394,7 @@ feature-branch prerequisite (§"Convention Prerequisites") concrete rather than 
   file is an operational error rather than a verdict
 - No collection path can hang for a full `report_wait` timeout after its dispatch has been reaped
 - One live cycle run end-to-end against real `agy`, producing a real verdict on a real audit
-- SKILL.md §6.6 records the 8-of-8 report-file measurement
+- SKILL.md §6.6 records the measured 17-of-18 report-file delivery rate
 - The five candidate rows this closes (recurrences 18, 13, 10, 10, 9) are stamped with this feature
   as their landing location
 
@@ -493,3 +493,8 @@ agy, gate on must-fix and should-fix, revise and re-audit until both are zero.
   direction was backwards: **that script has no such flag**, so the plan was wrong and forwarding it
   would abort the fallback exactly when it is needed. Also drops `--report-timeout`, which the
   design gives no logic to reach.
+- v1.12: J36 correction (post-implementation). The success criterion "SKILL.md §6.6 records the
+  8-of-8 report-file measurement" named a figure the artifacts contradict: **17 of the 18** impl-plan
+  audit passes delivered via the report file, `cycle7_p1` alone fell back to `--out` — nine cycles,
+  not eight, and per pass rather than per cycle. The criterion now names the measured rate, which is
+  what `h-mad/SKILL.md` §6.6 actually shipped. Paired: spec v1.18, design v1.22, impl-plan v1.9.

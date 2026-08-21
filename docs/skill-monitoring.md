@@ -1264,7 +1264,8 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 
 - 🔴 **J36 — the `audit-cycle-verb` spec, design AND impl-plan all state a measurement that the
   artifacts on disk contradict.** All three say the report-file slot was measured **"empty on 8 of 8
-  impl-plan cycles"** (`…spec.md:238`, `…design.md:327`, `…impl-plan.md:840`), and Task 9's AC-9.2
+  impl-plan cycles"** (`…spec.md:238`, `…design.md:327`, `…impl-plan.md:840` — and, found later by
+  the value sweep, `…impl-plan.md:854`, `…plan.md:397`, spelled `8-of-8`), and Task 9's AC-9.2
   asked for that sentence to be copied into `h-mad/SKILL.md`. Measured instead, from the staged
   artifacts of the feature's own impl-plan audit:
 
@@ -1289,4 +1290,25 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   the 18 impl-plan audit passes, 17 delivered via the report file"), and the three planning
   documents are corrected separately rather than silently amended, per the v1.15 precedent that an
   unaudited edit to a gated doc is an ungated doc.
-  Status: `MONITORING` — the spec/design/impl-plan text is still wrong and needs a corrective pass.
+  **Corrected 2026-08-21.** Spec v1.18, plan v1.12, design v1.22, impl-plan v1.9 — each carries a
+  Version History entry naming the correction, so the edit is on the record rather than silent.
+  The premise was re-verified independently before any edit, straight from the staged artifacts:
+
+  ```text
+  cycle{1..6,8,9}_p{1,2} + cycle7_p2 : report present, non-empty, .done written   (17)
+  cycle7_p1                          : no report file, no .done marker             (1)
+  ```
+
+  **This finding under-scoped itself, in the way the value-sweep rule predicts.** It named three
+  documents and three lines; the sweep found **six live sites across four documents** — the two
+  extra in `impl-plan.md` (Task 9's description *and* its AC-9.2 checkbox) and one in `plan.md:397`,
+  a success criterion that no reader of the three cited lines would have reached. The bare string
+  `8 of 8` also misses `8-of-8`, which is how two of those three hid. Grep the **value in every
+  spelling**, not the sentence you remember writing.
+
+  Not edited, deliberately: `…design.md` v1.11 and the `design.audit.v8.p2` / `v12.p2` reports quote
+  the old figure as a record of what that cycle found at the time. A revision log is append-only;
+  rewriting it would erase the evidence that three gates passed over this.
+
+  Status: `FIXED` — pending the re-gate the v1.15 precedent requires (an unaudited edit to a gated
+  doc is an ungated doc).

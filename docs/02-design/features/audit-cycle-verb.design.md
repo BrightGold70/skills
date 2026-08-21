@@ -324,7 +324,7 @@ On PASS the list is empty and the renderer says so on one line rather than print
 | Docs test | `h-mad/tests/test_h_mad_audit_cycle_docs.py` | new | Bidirectional `AUDITCYCLE:` token pin |
 | Gating mutations | `h-mad/tests/specs/audit_cycle_gating.mutation.json` | new | Guard discrimination, incl. the two shell guards |
 | Connection mutations | `h-mad/tests/specs/audit_cycle_connections.mutation.json` | new | One entry per call site, both directions |
-| Skill docs | `h-mad/SKILL.md` | modify | Verb leads §"Audit prompt assembly" and states it runs **one** cycle with the revision loop staying the orchestrator's (AC-9.5); §6.6 amended to record that the report-file slot was measured **empty on 8 of 8 impl-plan cycles** and that the verb therefore always arms the `--out` fallback (AC-9.2); `AUDITCYCLE:` added to the token registry (AC-9.3) |
+| Skill docs | `h-mad/SKILL.md` | modify | Verb leads §"Audit prompt assembly" and states it runs **one** cycle with the revision loop staying the orchestrator's (AC-9.5); §6.6 amended to record the **measured** report-file delivery rate — **17 of the 18 impl-plan audit passes delivered** via the report file, `cycle7_p1` alone fell back to `--out` — and that the verb therefore always arms the `--out` fallback (AC-9.2); `AUDITCYCLE:` added to the token registry (AC-9.3) |
 
 ## Implementation Order
 
@@ -561,6 +561,16 @@ their observed output is cited in the plan's Architecture Considerations: `exec`
 behaviour, the concatenation under-count, and `GATE: INVALID`'s counts.
 
 ## Version History
+- v1.22 (J36 correction, post-implementation). The Components Changed row for `h-mad/SKILL.md`
+  carried spec AC-9.2's false measurement — "the report-file slot was measured **empty on 8 of 8
+  impl-plan cycles**". The staged artifacts show the opposite: **17 of the 18** impl-plan audit
+  passes delivered via the report file; only `cycle7_p1` wrote neither the file nor its `.done`
+  marker, and its report was recovered from `--out`. Nine cycles, not eight, and the unit is the
+  **pass**, not the cycle. Nothing downstream changes — the always-armed `--out` fallback is what a
+  1-in-18 failure rate calls for too — which is exactly why a true conclusion resting on a false
+  premise read as correct to every reviewer checking only that the conclusion followed. The v1.11
+  entry below still quotes the old figure **deliberately**: it records what that audit cycle found
+  at the time and is not rewritten. Spec v1.18, plan v1.12, impl-plan v1.9 carry the same fix.
 - v1.21 (Phase-4 re-audit cycle 22 — **both passes gated clean, must=0 should=0**; one nit, raised
   independently by both). The nit was introduced by v1.20 one cycle earlier: the scenario column
   was updated to name all three channels while the verification column still said "both
