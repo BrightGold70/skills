@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-21 · gotcha · [0.7] · `handoff,docs,handoff:2026-08-20-feature-audit-cycle-verb-phase5-task1` — A handoff written before its own push states the push as PENDING and nobody corrects it after — the doc's last claim is false the moment the finale runs. Re-read the doc's git claims AFTER pushing, not before.
 - 2026-08-21 · gotcha · [0.7] · `h-mad,dispatch,git,handoff:2026-08-20-feature-audit-cycle-verb-phase5-task1` — Never run a workspace-write codex dispatch concurrently with a job writing UNTRACKED artifacts into the same tree. Verify gating evidence is on disk before committing: clean git status + absent artifacts looks like nothing-to-commit.
 - 2026-08-21 · gotcha · [0.9] · `verification,logs,handoff:2026-08-20-feature-audit-cycle-verb-phase5-task1` — A filename in a log is not evidence anything touched it: pytest parametrization IDs embed real paths, and grep -c counts your own prompt text. Refute a destructive-cause hypothesis empirically before acting on it.
 - 2026-08-21 · gotcha · [0.9] · `h-mad,guards,handoff:2026-08-20-feature-audit-cycle-verb-phase5-task1` — A write-then-verify guard is blind if the destination is not cleared: a stale file makes exists()/st_size>0 True on the OLD file, so a silently-failed write scores the stale artifact. unlink(missing_ok=True) first.

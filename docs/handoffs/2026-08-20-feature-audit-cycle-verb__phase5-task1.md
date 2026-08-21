@@ -133,7 +133,7 @@ shapes — not by the 49-test suite and not by a reviewer.
 4. **Then Tasks 6→9 in order**: 6 verb → `_cmd_exec agy` · 7 verb → helper · 8 both mutation specs · 9 SKILL.md + docs token test.
 5. **Tasks 5–7 are where Task 4's fixes get exercised for real** — the verb passes `--cycle N` (which `main()` did not accept until this session) and consumes the `delivered=` shape. Run the verb end-to-end before believing its tests.
 6. **5f** — `h_mad_wire_registry.py verify --base 41efe98 --rootdir /Users/kimhawk/orca/skills --testpath h-mad/tests`, then `challenge --base 41efe98` (warning-only), then the full suite.
-7. **Push** — `git push origin HEAD` (2 commits unpushed: `d7c775c`, `3cd5c84`).
+7. ~~Push~~ — **DONE.** Branch is fully pushed; `origin/feature/audit-cycle-verb` is level with HEAD (`a8907e8`).
 
 ## Open / Blocked Items
 
@@ -160,7 +160,7 @@ shapes — not by the 49-test suite and not by a reviewer.
 - `h-mad/tests/test_h_mad_audit_cycle.py` (new, 21 tests)
 - `.h-mad/wires.jsonl`, `docs/.bkit-memory.json` (gitignored state)
 
-**Uncommitted changes:** none. Two commits unpushed (`d7c775c`, `3cd5c84`); the branch is pushed through `7c55cd2`.
+**Uncommitted changes:** none. **Nothing unpushed** — `origin/feature/audit-cycle-verb` is level with HEAD. Suite 59/59.
 
 **To resume:**
 ```bash
