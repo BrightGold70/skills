@@ -15,6 +15,7 @@
 | Phase | Failure mode | `halt_reason` | Recovery hint |
 |---|---|---|---|
 | 1–2 | User declines | `<phase>:user_declined` | "Edit artifact; re-run `/h-mad "<feature>"`" |
+| **any** | Orchestrator context reached the run ceiling (`CTXBUDGET: HALT mode=run`, 80% window used) | `<phase>:context_ceiling` | "Do NOT try to finish the phase. Overflow mid-phase is unrecoverable and `/compact` afterwards recovers nothing, so the remaining window is spent on stopping cleanly, in this order: (1) commit whatever is complete; (2) **write the handoff** (`/handoff` WRITE) naming branch, in-flight dispatches and the next step — a halt with no handoff has spent the ceiling and bought nothing; (3) `h_mad_state_write.py --feature <feature> --release`, or the resuming session inherits a claim from a session that has stopped. Then `/clear` and resume in a fresh session. Note the reading is a FLOOR — the last recorded usage predates the current turn — so it halts slightly early by design." |
 | 3 | Inline plan generation failed | `step3:plan_gen_failed` | "Inspect error; re-run Phase 3" |
 | 3, 4, 5 | Cmux pane not alive | `<phase>:no_<agent>_pane` | "Launch agent per `references/agent-substrate.md` (cmux `cmux split-window --command …` OR orca `orca terminal create`); confirm `hmad-dispatch alive <agent>`; re-run" |
 | 3, 4 | agy dispatch fail (cmux 400) | `<phase>:agy_dispatch_failed` | "cmux only: Restart agy pane per CLAUDE.md §F-12; re-run (orca: restart the terminal via `orca terminal create` and re-pin)" |

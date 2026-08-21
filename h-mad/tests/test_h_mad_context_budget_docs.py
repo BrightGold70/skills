@@ -232,3 +232,52 @@ def test_helper_script_is_listed():
     text = SKILL_MD.read_text()
     helpers = text.split("## Helper scripts", 1)[1]
     assert "h_mad_context_budget.py" in helpers
+
+
+class TestRunCeilingDocumented:
+    """The 80% run ceiling is only real if SKILL.md obliges someone to read it.
+
+    A ceiling documented as advice is the shape this repo keeps re-learning: the
+    PREFLIGHT token was correct and advisory for a long time, and an advisory signal
+    nobody is obliged to consume is worth about as much as no signal.
+    """
+
+    def test_names_the_run_mode_and_its_ceiling(self):
+        s = SKILL_MD.read_text()
+        assert "--mode run" in s
+        assert "ceiling=80" in s
+
+    def test_distinguishes_the_two_ceilings(self):
+        """45 and 80 answer different questions and prescribe opposite remedies."""
+        s = SKILL_MD.read_text()
+        assert "Run-context ceiling" in s
+        assert "--mode advisor" in s
+
+    def test_states_the_halt_route(self):
+        assert "<phase>:context_ceiling" in SKILL_MD.read_text()
+
+    def test_requires_the_handoff_before_stopping(self):
+        """The halt is worthless without it — that is the whole point of the route."""
+        s = SKILL_MD.read_text()
+        i = s.index("Run-context ceiling")
+        section = s[i:i + 4000]
+        assert "handoff" in section.lower()
+        assert "--release" in section
+
+    def test_says_why_halt_and_not_warn(self):
+        s = SKILL_MD.read_text()
+        i = s.index("Run-context ceiling")
+        section = s[i:i + 4000]
+        assert "unrecoverable" in section
+
+    def test_pins_halt_is_not_deny(self):
+        """Anti-conflation with the live advisor hook, stated where a reader will hit it."""
+        s = SKILL_MD.read_text()
+        i = s.index("Run-context ceiling")
+        section = s[i:i + 4000]
+        assert "DENY" in section and "HALT" in section
+
+    def test_the_halt_route_is_in_failure_recovery(self):
+        fr = (REPO_ROOT / "h-mad" / "references" / "failure-recovery.md").read_text(encoding="utf-8")
+        assert "context_ceiling" in fr
+

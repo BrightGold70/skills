@@ -1130,6 +1130,52 @@ assumed for that reason.
 **Never batch `advisor()` into a heavy turn.** Its input is snapshotted at call time, so the 40
 files you read in the same turn are inside the copy. Call it, then do the reading.
 
+## Run-context ceiling — halt the run at 80%
+
+The ceiling in the section above protects one *call*. This one protects the *run*. They are
+separate sections because they are separate subjects: that one is about the cost of an advisory
+channel, this one is about whether the session survives to finish the feature.
+
+| ceiling | asks | why that number | remedy |
+|---|---|---|---|
+| 45% — `--mode advisor` (default) | can I afford one `advisor()` call | advisor forwards a second full copy (2.0x measured); 45 is the margin under 50 | pick a cheaper advisory channel |
+| 80% — `--mode run` | is this session about to die mid-phase | leaves room for the phase in flight **plus** the handoff that ends it | halt and hand off |
+
+**Why halt rather than warn.** An H-MAD run is long by construction — 7 phases, N audit cycles, a
+live e2e — so the window is a consumable it will exhaust on any large feature. Overflowing
+mid-phase is **unrecoverable**: the run is over, and `/compact` afterwards recovers nothing, because
+what it would have compacted is already gone. A cap is therefore only worth having if it stops the
+run while stopping is still cheap. At 80% there is room to write state, commit, and leave a
+resumable handoff. At 100% there is not, and the whole session's work is what is lost.
+
+Check it **at every phase boundary**, and before any dispatch that will return a large payload:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_context_budget.py --mode run
+# CTXBUDGET: OK   mode=run used=400296 window=1000000 pct=40.0 ceiling=80
+# CTXBUDGET: HALT mode=run used=810000 window=1000000 pct=81.0 ceiling=80
+```
+
+Read the **token**, never `$?` — as with every other gate here it exits 0 on a verdict, and 2 only
+on `UNKNOWN`, which carries no `used=` precisely so a cannot-judge cannot be read as an `OK`.
+
+**On `CTXBUDGET: HALT mode=run`, halt `<phase>:context_ceiling`** and follow the ordinary halt
+protocol, with the one addition that is the entire point of this route: **write the handoff before
+you stop**, so the next session resumes instead of re-deriving. Then release the claim
+(`h_mad_state_write.py --feature <feature> --release`), or the resuming session inherits a lock from
+a session that has stopped. A halt that leaves no handoff has spent the ceiling and bought nothing.
+
+**`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-gate.sh` blocks on the glob
+`*"CTXBUDGET: DENY"*`. Had a run-ceiling breach reused that word, no existing consumer could tell an
+advisor refusal from a dying run — and they prescribe opposite actions (choose a cheaper channel
+versus stop the run entirely). `--mode run` omits the `projected=` field for the same reason: it is
+`used * 2` because advisor forwards a copy, a run cap forwards nothing, and printing it would invite
+reading the run ceiling as an advisor projection.
+
+**The number is a floor**, as in advisor mode: the last recorded usage predates the current turn's
+own growth. That slack runs in the safe direction — it halts slightly early rather than slightly
+late, and slightly late is fatal.
+
 ## Agent-pane context hygiene
 
 The codex and agy agents are **long-lived REPLs reused across every audit cycle, feature, and session**. Their conversation context accumulates: a plan-audit thread bleeds into the next design audit, one feature's TDD bleeds into the next feature's, and stale scrollback pollutes the `hmad-dispatch read` output you later grep for a verdict. Clear the context at the boundaries below so each fresh pass starts clean.
@@ -1188,6 +1234,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
+- Never continue a run past `CTXBUDGET: HALT mode=run` (80% window used) — halt `<phase>:context_ceiling`, **write the handoff**, and release the claim. Overflow mid-phase is unrecoverable and compacting afterwards recovers nothing; see §"Run-context ceiling".
 - Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Enforced by `hooks/h-mad-advisor-gate.sh` in any session where it is wired; documentation everywhere else.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
@@ -1533,7 +1580,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_wire_pin_gate.py` — Phase-5b wire-pin gate: `check()` + CLI printing `WIREPIN: PASS|FAIL|UNSHAPED tasks=N wiring=M unpinned=K mislabeled=J` (or a bare `WIREPIN: UNREADABLE`, counts omitted because nothing was parsed) + `[H-MAD]` marker, exit 0 on a verdict / 2 on `UNSHAPED` or an unreadable plan. Refuses a `wiring`-shaped task whose `WIRE`/`WIRE-PIN` is absent, still a template placeholder, or filler — and, in the other direction, a task carrying a real `WIRE`/`WIRE-PIN` under a non-`wiring` shape, which is how a pinned wiring task is demoted to a PASS by editing one word. Stdlib-only.
 - `h_mad_wire_registry.py` — Phase-5 wire registry: records passing `wiring` pins and re-verifies them at 5f, emitting the documented `[H-MAD]` halt reasons; its challenge command is warning-only and verdict-neutral. Stdlib-only.
 - `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
-- `h_mad_context_budget.py` — orchestrator context budget: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
+- `h_mad_context_budget.py` — orchestrator context budget in two modes. `--mode run` prices the RUN against an 80% ceiling, printing `CTXBUDGET: OK|HALT mode=run used=N window=N pct=P ceiling=80` — no `projected=`, because a run cap forwards nothing (§"Run-context ceiling"). `--mode advisor` is the default and its output is unchanged, because `hooks/h-mad-advisor-gate.sh` parses it live; the verdict words differ (`HALT` vs `DENY`) so no consumer can confuse a dying run with an advisor refusal. Advisor mode: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
 - `h_mad_hook_wiring.py` — hook-wiring check: `check()` + CLI printing `WIRING: PASS|FAIL issues=N`, exit 0 on a verdict / 2 on `WIRING: UNKNOWN reason=no_settings` (no readable settings file, so nothing was examined — it carries no `issues=`). Detail lines `HOOK_NOT_WIRED:`/`HOOK_WIRED_WRONG_MATCHER:`/`HOOK_WIRED_STALE_PATH:`. Deliberately a separate verdict from `INSTALL:` so a settings source this check cannot see can never halt bootstrap (§"Wired, not just installed"). Searches the user scope honouring `CLAUDE_CONFIG_DIR` and every `.claude/settings*.json` up the tree, matches on the hook **basename** inside the command (the live wiring is `bash $HOME/…/hook.sh`, an unexpanded variable in a longer line), and treats match-all matchers before regex so `*` cannot raise. Stdlib-only.
 - `h_mad_doc_shape_check.py` — doc-superset guard for saved phase documents (run at Phase 3/4/7 save, see `references/inline-protocols.md`): `check_document()` + CLI printing one `DOC-SHAPE: PASS|FAIL|SKIP path=… type=…` line per path, exit 0 on a verdict / 2 on an unreadable path (with no partial verdict stream). `SKIP` is the correct verdict for h-mad's brainstorm/spec/impl-plan/audit documents — they sit outside the external validator's detection by design and have no superset contract. FAIL reports dropped required sections *and* plan-plus escalation literals in a plan's prose: the templates are compliant and tested, but the authored body is not the template, and the escalation literals are ordinary words an author has no reason to suspect. The section tables and literals are h-mad's own copy so the check runs standalone (§"Standalone / no plugin dependency"); `tests/test_h_mad_doc_shape_check.py::TestMirrorFidelity` diffs the tables, the literals, and the verdicts against the live external validator when installed and fails on drift, which is what keeps the mirror honest (§"Single-source verdicts"). Stdlib-only.
 
