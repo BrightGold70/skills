@@ -2560,7 +2560,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
 _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
   local passes=""
-  local -a prompt report out log asm tok rc pass_args
+  local -a prompt report out log asm tok rc pids pass_args
+  pass_args=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
@@ -2664,11 +2665,17 @@ _cmd_audit_cycle() {
 
   i=1
   while [ "$i" -le "$passes" ]; do
-    local agent_rc
-    agent_rc=0
-    _cmd_exec agy "${prompt[$i]}" --cd "$root" \
-      --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null || agent_rc=$?
-    rc[$i]="$agent_rc"
+    (
+      _cmd_exec agy "${prompt[$i]}" --cd "$root" \
+        --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null
+    ) &
+    pids[$i]=$!
+    i=$((i + 1))
+  done
+
+  i=1
+  while [ "$i" -le "$passes" ]; do
+    if wait "${pids[$i]}"; then rc[$i]=0; else rc[$i]=$?; fi
     pass_args+=(--pass "${i}:${report[$i]}:${out[$i]}:${rc[$i]}")
     i=$((i + 1))
   done
@@ -2677,7 +2684,7 @@ _cmd_audit_cycle() {
   helper_args=(--feature "$feature" --phase "$phase" --cycle "$cycle"
                --project-root "$root" --passes "$passes"
                --size-status "$size_status"
-               "${pass_args[@]}"
+               ${pass_args[@]+"${pass_args[@]}"}
                --grace "$report_grace")
   [ -n "$ack_file" ] && helper_args+=(--ack-file "$ack_file")
   python3 "$here/h_mad_audit_cycle.py" "${helper_args[@]}"

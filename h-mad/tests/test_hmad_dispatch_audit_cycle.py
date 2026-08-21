@@ -207,18 +207,23 @@ def traced_bindir(tmp_path, trace):
             import re
             import sys
             from pathlib import Path
+            import fcntl
 
             trace = Path({str(trace)!r})
 
             def record(kind, argv, **extra):
-                row = {{"kind": kind, "argv": argv}}
-                row.update(extra)
-                trace.write_text(
-                    trace.read_text(encoding="utf-8") + json.dumps(row) + "\\n"
-                    if trace.exists()
-                    else json.dumps(row) + "\\n",
-                    encoding="utf-8",
-                )
+                lock = Path(str(trace) + ".lock")
+                counter = Path(str(trace) + ".seq")
+                lock.parent.mkdir(parents=True, exist_ok=True)
+                with lock.open("a+", encoding="utf-8") as lock_f:
+                    fcntl.flock(lock_f, fcntl.LOCK_EX)
+                    seq = int(counter.read_text(encoding="utf-8") or "0") + 1 if counter.exists() else 1
+                    counter.write_text(str(seq), encoding="utf-8")
+                    row = {{"kind": kind, "argv": argv, "seq": seq}}
+                    row.update(extra)
+                    with trace.open("a", encoding="utf-8") as trace_f:
+                        trace_f.write(json.dumps(row) + "\\n")
+                    fcntl.flock(lock_f, fcntl.LOCK_UN)
 
             argv = sys.argv[1:]
             target = Path(argv[0]).name if argv else ""
@@ -307,18 +312,33 @@ def traced_bindir(tmp_path, trace):
             import json
             import os
             import sys
+            import time
             from pathlib import Path
+            import fcntl
 
             trace = Path({str(trace)!r})
 
             def record(kind, argv, **extra):
-                row = {{"kind": kind, "argv": argv}}
-                row.update(extra)
-                trace.write_text(
-                    trace.read_text(encoding="utf-8") + json.dumps(row) + "\\n"
-                    if trace.exists()
-                    else json.dumps(row) + "\\n",
-                    encoding="utf-8",
+                lock = Path(str(trace) + ".lock")
+                counter = Path(str(trace) + ".seq")
+                lock.parent.mkdir(parents=True, exist_ok=True)
+                with lock.open("a+", encoding="utf-8") as lock_f:
+                    fcntl.flock(lock_f, fcntl.LOCK_EX)
+                    seq = int(counter.read_text(encoding="utf-8") or "0") + 1 if counter.exists() else 1
+                    counter.write_text(str(seq), encoding="utf-8")
+                    row = {{"kind": kind, "argv": argv, "seq": seq}}
+                    row.update(extra)
+                    with trace.open("a", encoding="utf-8") as trace_f:
+                        trace_f.write(json.dumps(row) + "\\n")
+                    fcntl.flock(lock_f, fcntl.LOCK_UN)
+
+            def count_starts():
+                if not trace.exists():
+                    return 0
+                return sum(
+                    1
+                    for line in trace.read_text(encoding="utf-8").splitlines()
+                    if json.loads(line).get("kind") == "dispatch_start"
                 )
 
             stdout_path = ""
@@ -327,7 +347,13 @@ def traced_bindir(tmp_path, trace):
             except OSError:
                 pass
             prompt = sys.argv[-1] if sys.argv[1:] else ""
+            record("dispatch_start", sys.argv[1:], log=stdout_path, prompt=prompt)
             record("dispatch", sys.argv[1:], log=stdout_path, prompt=prompt)
+            expected_starts = int(os.environ.get("HMAD_STUB_AGY_SYNC_STARTS", "0") or "0")
+            if expected_starts:
+                deadline = time.monotonic() + 1.0
+                while time.monotonic() < deadline and count_starts() < expected_starts:
+                    time.sleep(0.01)
             response = os.environ.get(
                 "HMAD_STUB_AGY_RESP",
                 "# Audit\\n\\n## Must-fix\\nNone\\n\\n## Should-fix\\nNone\\n",
@@ -346,7 +372,9 @@ def traced_bindir(tmp_path, trace):
                     }}
                 )
             )
-            sys.exit(int(os.environ.get("HMAD_STUB_AGY_RC", "0")))
+            rc = int(os.environ.get("HMAD_STUB_AGY_RC", "0"))
+            record("dispatch_exit", sys.argv[1:], log=stdout_path, prompt=prompt, rc=rc)
+            sys.exit(rc)
             """
         ),
         encoding="utf-8",
@@ -354,6 +382,180 @@ def traced_bindir(tmp_path, trace):
     for script in (b / "python3", b / "agy"):
         script.chmod(script.stat().st_mode | stat.S_IXUSR)
     return b
+
+
+def _arg_after(argv, flag):
+    return argv[argv.index(flag) + 1]
+
+
+def _pass_index_from_path(path):
+    match = re.search(r"_p(\d+)\.", str(path))
+    assert match, f"expected pass-indexed path, got {path}"
+    return int(match.group(1))
+
+
+def _dispatch_artifacts_by_pass(dispatch_rows):
+    artifacts = {}
+    for row in dispatch_rows:
+        prompt_path = None
+        if "--out" in row["argv"]:
+            out = _arg_after(row["argv"], "--out")
+            prompt_path = row["argv"][1]
+        else:
+            prompt_path = row["argv"][-1]
+        prompt_text = row.get("prompt")
+        if prompt_text is None:
+            prompt_text = Path(prompt_path).read_text(encoding="utf-8")
+        elif "Report path: " not in prompt_text:
+            prompt_text = Path(prompt_text).read_text(encoding="utf-8")
+        prompt_report = re.search(r"Report path: (.+)", prompt_text).group(1)
+        report_pass = _pass_index_from_path(prompt_report)
+        out = _arg_after(row["argv"], "--out") if "--out" in row["argv"] else ""
+        log = _arg_after(row["argv"], "--log") if "--log" in row["argv"] else row.get("log", "")
+        if out:
+            out_pass = _pass_index_from_path(out)
+            assert out_pass == report_pass, "dispatch --out path must match its prompt report pass index"
+        if log:
+            log_pass = _pass_index_from_path(log)
+            assert log_pass == report_pass, "dispatch --log path must match its prompt report pass index"
+        assert report_pass not in artifacts, f"duplicate dispatch for pass {report_pass}"
+        artifacts[report_pass] = {"out": out, "log": log, "report": prompt_report}
+    return artifacts
+
+
+def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
+    trace = tmp_path / "trace.jsonl"
+    bindir = traced_bindir(tmp_path, trace)
+    lib = tmp_path / "hmad-dispatch-lib.sh"
+    text = WRAPPER.read_text(encoding="utf-8")
+    assert text.rstrip().endswith('main "$@"')
+    lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
+    harness = tmp_path / "audit-cycle-function-harness.sh"
+    harness.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            set -euo pipefail
+            lib="$1"
+            trace="$2"
+            shift 2
+            source "$lib"
+
+            _cmd_exec() {
+              /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_start "$@" <<'PY'
+            import json, fcntl, sys, time
+            from pathlib import Path
+            trace = Path(sys.argv[1])
+            kind = sys.argv[2]
+            argv = sys.argv[3:]
+            def record(kind, argv, **extra):
+                lock = Path(str(trace) + ".lock")
+                counter = Path(str(trace) + ".seq")
+                lock.parent.mkdir(parents=True, exist_ok=True)
+                with lock.open("a+", encoding="utf-8") as lock_f:
+                    fcntl.flock(lock_f, fcntl.LOCK_EX)
+                    seq = int(counter.read_text(encoding="utf-8") or "0") + 1 if counter.exists() else 1
+                    counter.write_text(str(seq), encoding="utf-8")
+                    row = {"kind": kind, "argv": argv, "seq": seq}
+                    row.update(extra)
+                    with trace.open("a", encoding="utf-8") as trace_f:
+                        trace_f.write(json.dumps(row) + "\\n")
+                    fcntl.flock(lock_f, fcntl.LOCK_UN)
+            record(kind, argv)
+            PY
+              local expected="${HMAD_CMD_EXEC_SYNC_STARTS:-0}"
+              if [ "$expected" -gt 0 ]; then
+                /opt/anaconda3/bin/python3.11 - "$trace" "$expected" <<'PY'
+            import json, sys, time
+            from pathlib import Path
+            trace = Path(sys.argv[1])
+            expected = int(sys.argv[2])
+            deadline = time.monotonic() + 1.0
+            def starts():
+                if not trace.exists():
+                    return 0
+                return sum(
+                    1
+                    for line in trace.read_text(encoding="utf-8").splitlines()
+                    if json.loads(line).get("kind") == "cmd_exec_start"
+                )
+            while time.monotonic() < deadline and starts() < expected:
+                time.sleep(0.01)
+            PY
+              fi
+              /opt/anaconda3/bin/python3.11 - "$trace" cmd_exec_exit "${HMAD_STUB_AGY_RC:-0}" "$@" <<'PY'
+            import json, fcntl, sys
+            from pathlib import Path
+            trace = Path(sys.argv[1])
+            kind = sys.argv[2]
+            rc = int(sys.argv[3])
+            argv = sys.argv[4:]
+            def value(flag):
+                return argv[argv.index(flag) + 1] if flag in argv else ""
+            def record(kind, argv, **extra):
+                lock = Path(str(trace) + ".lock")
+                counter = Path(str(trace) + ".seq")
+                lock.parent.mkdir(parents=True, exist_ok=True)
+                with lock.open("a+", encoding="utf-8") as lock_f:
+                    fcntl.flock(lock_f, fcntl.LOCK_EX)
+                    seq = int(counter.read_text(encoding="utf-8") or "0") + 1 if counter.exists() else 1
+                    counter.write_text(str(seq), encoding="utf-8")
+                    row = {"kind": kind, "argv": argv, "seq": seq}
+                    row.update(extra)
+                    with trace.open("a", encoding="utf-8") as trace_f:
+                        trace_f.write(json.dumps(row) + "\\n")
+                    fcntl.flock(lock_f, fcntl.LOCK_UN)
+            out = value("--out")
+            log = value("--log")
+            if out:
+                Path(out).write_text("# Audit\\n\\n## Must-fix\\nNone\\n\\n## Should-fix\\nNone\\n", encoding="utf-8")
+            if log:
+                Path(log).write_text('{"event":"result"}\\n', encoding="utf-8")
+            record(kind, argv, rc=rc)
+            PY
+              return "${HMAD_STUB_AGY_RC:-0}"
+            }
+
+            _cmd_audit_cycle "$@"
+            """
+        ),
+        encoding="utf-8",
+    )
+    harness.chmod(harness.stat().st_mode | stat.S_IXUSR)
+
+    full_env = dict(os.environ)
+    for key in [k for k in full_env if k.startswith("HMAD_ORCA_")]:
+        full_env.pop(key, None)
+    for key in (
+        "HMAD_SUBSTRATE",
+        "CMUX",
+        "CMUX_PANE",
+        "ORCA_SESSION",
+        "ORCA_TERMINAL_ID",
+        "ORCA_PANE_KEY",
+    ):
+        full_env.pop(key, None)
+    full_env.update(
+        {
+            "PATH": f"{bindir}:/usr/bin:/bin",
+            "HMAD_STUB_HOSTILE": "all",
+            "HMAD_STUB_AGY_RESP": "# Audit\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n",
+            "HMAD_AUDIT_CYCLE_SCRIPT_DIR": str(WRAPPER.parent),
+            "HMAD_ORCA_PIN_FILE": str(tmp_path / "absent-pins.env"),
+        }
+    )
+    if env:
+        full_env.update({k: str(v) for k, v in env.items()})
+    function_args = list(args)
+    if function_args and function_args[0] == "audit-cycle":
+        function_args = function_args[1:]
+    result = subprocess.run(
+        ["bash", str(harness), str(lib), str(trace), *function_args],
+        capture_output=True,
+        text=True,
+        env=full_env,
+    )
+    return result, trace
 
 
 def run_with_bindir(args, bindir, *, env=None, capture=None, via_bin=False):
@@ -691,22 +893,122 @@ def test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_
     cycle_rows = [row for row in rows if row["kind"] == "cycle"]
     assert [row["pass_index"] for row in assemble_rows] == ["1", "2"]
     assert len(dispatch_rows) == 2, "two-pass verified cycle must dispatch both passes"
-    assert rows.index(assemble_rows[0]) < rows.index(dispatch_rows[0])
-    assert rows.index(assemble_rows[1]) < rows.index(dispatch_rows[0])
+    first_dispatch_index = min(rows.index(row) for row in dispatch_rows)
+    assert rows.index(assemble_rows[0]) < first_dispatch_index
+    assert rows.index(assemble_rows[1]) < first_dispatch_index
 
     p1_out, p2_out = [Path(row["out"]) for row in assemble_rows]
     p1_report, p2_report = [Path(row["report"]) for row in assemble_rows]
     p1_log, p2_log = expected_logs
-    p1_prompt = re.search(r"Report path: (.+)", dispatch_rows[0]["prompt"]).group(1)
-    p2_prompt = re.search(r"Report path: (.+)", dispatch_rows[1]["prompt"]).group(1)
+    dispatch_artifacts = _dispatch_artifacts_by_pass(dispatch_rows)
 
     assert p1_out != p2_out and "_p1" in str(p1_out) and "_p2" in str(p2_out)
     assert p1_report != p2_report and "_p1" in str(p1_report) and "_p2" in str(p2_report)
     assert p1_log.exists() and p1_log.stat().st_size > 0
     assert p2_log.exists() and p2_log.stat().st_size > 0
     assert p1_log != p2_log and "_p1" in str(p1_log) and "_p2" in str(p2_log)
-    assert p1_prompt != p2_prompt and "_p1" in p1_prompt and "_p2" in p2_prompt
+    assert set(dispatch_artifacts) == {1, 2}
+    assert len({item["report"] for item in dispatch_artifacts.values()}) == 2
 
     assert cycle_rows[0]["size_status"] == "unverified"
     assert re.search(r"(?:^| )size_status=unverified(?: |$)", auditcycle_lines(r.stdout)[0])
     assert "size_status=UNVERIFIED" not in auditcycle_lines(r.stdout)[0]
+
+
+def test_verb_two_distinct_dispatches(tmp_path):
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes="2"))
+
+    assert r.returncode == 0, r.stderr
+    assert auditcycle_lines(r.stdout) == [
+        "AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 delivered=report-file,report-file size_status=verified"
+    ]
+
+    rows = read_jsonl(trace)
+    dispatch_rows = [row for row in rows if row["kind"] == "cmd_exec_start"]
+    assemble_rows = [row for row in rows if row["kind"] == "assemble"]
+    assert len(dispatch_rows) == 2, "two-pass verified cycle must invoke _cmd_exec exactly twice"
+    assert all(row["argv"][:1] == ["agy"] for row in dispatch_rows), "audit-cycle must dispatch through _cmd_exec agy"
+
+    dispatch_artifacts = _dispatch_artifacts_by_pass(dispatch_rows)
+    outs = [item["out"] for item in dispatch_artifacts.values()]
+    logs = [item["log"] for item in dispatch_artifacts.values()]
+    assert len(set(outs)) == 2, "_cmd_exec --out paths must be pairwise distinct per pass"
+    assert len(set(logs)) == 2, "_cmd_exec --log paths must be pairwise distinct per pass"
+    assert set(dispatch_artifacts) == {1, 2}, "_cmd_exec artifact paths must identify exactly passes 1 and 2"
+
+    reports = [row["report"] for row in assemble_rows]
+    assemble_outs = [row["out"] for row in assemble_rows]
+    assert len(set(reports)) == 2, "assemble --report-file paths must be distinct per pass"
+    assert len(set(assemble_outs)) == 2, "assemble --out prompt paths must be distinct per pass"
+    assert all("--report-file" not in row["argv"] for row in dispatch_rows), (
+        "_cmd_exec agy argv must not carry report paths; assembly embeds them in the prompt"
+    )
+
+
+def test_verb_launches_all_passes_before_any_exec_exits(tmp_path):
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(
+        tmp_path,
+        dispatch_args(root=root, passes="2"),
+        env={"HMAD_CMD_EXEC_SYNC_STARTS": "2"},
+    )
+
+    assert r.returncode == 0, r.stderr
+    rows = read_jsonl(trace)
+    starts = [row for row in rows if row["kind"] == "cmd_exec_start"]
+    exits = [row for row in rows if row["kind"] == "cmd_exec_exit"]
+    assert len(starts) == 2, "concurrency check requires two _cmd_exec start events"
+    assert len(exits) == 2, "concurrency check requires two _cmd_exec exit events"
+    assert max(row["seq"] for row in starts) < min(row["seq"] for row in exits), (
+        "audit-cycle must launch every _cmd_exec agy pass before any dispatch is reaped/exits"
+    )
+
+
+def test_verb_reaps_every_exec_before_invoking_cycle_helper(tmp_path):
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes="2"))
+
+    assert r.returncode == 0, r.stderr
+    rows = read_jsonl(trace)
+    exits = [row for row in rows if row["kind"] == "cmd_exec_exit"]
+    cycle_rows = [row for row in rows if row["kind"] == "cycle"]
+    assert len(exits) == 2, "reap-before-helper check requires both _cmd_exec exits"
+    assert len(cycle_rows) == 1, "audit-cycle must invoke the helper once after dispatch"
+    assert max(row["seq"] for row in exits) < cycle_rows[0]["seq"], (
+        "audit-cycle must reap every _cmd_exec dispatch before invoking h_mad_audit_cycle.py"
+    )
+
+
+def test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal(tmp_path):
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(
+        tmp_path,
+        dispatch_args(root=root, passes="1"),
+        env={"HMAD_STUB_AGY_RC": "17"},
+    )
+
+    assert r.returncode == 0, "non-zero _cmd_exec rc must not by itself fail audit-cycle"
+    assert auditcycle_lines(r.stdout) == [
+        "AUDITCYCLE: PASS must=0 should=0 passes=1 p1=0/0 delivered=report-file size_status=verified"
+    ]
+    rows = read_jsonl(trace)
+    cycle_rows = [row for row in rows if row["kind"] == "cycle"]
+    assert len(cycle_rows) == 1, "non-zero _cmd_exec rc must still reach the helper verdict path"
+    assert cycle_rows[0]["pass_specs"] == [
+        "1:/tmp/audit_cycle-red_plan_cycle7_p1.report.md:/tmp/audit_cycle-red_plan_cycle7_p1.out.txt:17"
+    ], "non-zero _cmd_exec rc must be forwarded unchanged in the --pass payload"
+
+
+def test_verb_uses_in_process_cmd_exec_entrypoint(tmp_path):
+    root = project_with_docs(tmp_path)
+    r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes="1"))
+
+    assert r.returncode == 0, r.stderr
+    rows = read_jsonl(trace)
+    dispatch_rows = [row for row in rows if row["kind"] == "cmd_exec_start"]
+    assert len(dispatch_rows) == 1, (
+        "audit-cycle must call the in-process _cmd_exec entrypoint; an external hmad-dispatch exec "
+        "re-invocation would bypass this function stub"
+    )
+    assert dispatch_rows[0]["argv"][0] == "agy", "audit-cycle must reach the agy backend through _cmd_exec agy"
