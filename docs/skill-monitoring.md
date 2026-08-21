@@ -1260,6 +1260,36 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   module named pytest`. Verified live both ways from a bare `python3` invocation.
 
 
+## Surfaced by the audit-cycle-verb Phase 7 close-out (2026-08-22)
+
+- 🔴 **J42 — `audit-cycle` broke the telemetry cycle counter for every feature it audits, and the
+  breakage reports as `0`.** `h_mad_cycle_counts.py:15` matched `_VERSION_RE = r"\.v(\d+)\.md$"`,
+  while the verb writes one artifact **per pass**: `<feature>.<phase>.audit.v<N>.p<i>.md`. The glob
+  `{feature}.{segment}.audit.v*.md` still matched those files — `v*` happily spans `9.p1` — so
+  nothing errored; the regex then failed on every one of them and the count came back **0**.
+
+  Measured at this feature's own Phase 7: `audit_cycles={'plan': 0, 'design': 0, 'impl_plan': 0}`
+  for a feature carrying **plan v14, design v24, impl-plan v10**. After the fix, the same command
+  reports `{'plan': 14, 'design': 24, 'impl_plan': 10}`.
+
+  **A silent zero is worse than a missing number.** `0` reads as "no audits were run" — a claim
+  about the work — where an error would have read as "the counter is broken". SKILL.md moved these
+  counts to disk-derived precisely because the state fields never incremented and read `0/0/0`
+  forever; this reintroduced the same symptom one layer down, and it would have been recorded into
+  `.h-mad/telemetry.jsonl` as the permanent story of a 48-cycle feature.
+
+  Fixed: `_VERSION_RE = r"\.v(\d+)(?:\.p\d+)?\.md$"`. Callers key results by the captured int,
+  so two passes of one cycle collapse to one cycle with no further change. Both namings coexist,
+  which matters because pre-verb features wrote `.v<N>.md`. Mutation-checked in both directions:
+  reverting the regex fails the three per-pass tests, and making `.p<i>` **required** fails 16,
+  including `test_live_repo_audit_cycles`, which pins real counts for older features.
+
+  **Why no earlier gate caught it.** The 6a-prime diff never touched `h_mad_cycle_counts.py`, so a
+  diff-scoped architectural review could not see it; the file is downstream of the feature, not part
+  of it. It surfaced only when Phase 7 actually ran the reporter against real artifacts — the first
+  moment anything read those filenames for meaning rather than writing them.
+  Status: `FIXED` — `h_mad_cycle_counts.py`, with three regression tests.
+
 ## Surfaced by the audit-cycle-verb Phase 6 gap analysis (2026-08-22)
 
 - 🟢 **J41 — the standing "real concurrency is untested by every lane" gap was overstated, and had

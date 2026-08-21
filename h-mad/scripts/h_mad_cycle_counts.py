@@ -12,7 +12,12 @@ PHASE_SEGMENTS: dict[str, str] = {
     "impl_plan": "impl-plan",
 }
 
-_VERSION_RE = re.compile(r"\.v(\d+)\.md$")
+# The optional `.p<i>` is the per-pass artifact `audit-cycle` writes -- one file per
+# pass of a single cycle. Both passes carry the SAME v-number, and callers key the
+# result by that int, so two passes of one cycle collapse to one cycle for free.
+# Without this the counter matched nothing and reported 0 for a feature with 24
+# real audit cycles, which reads as "no audits were run" rather than as a bug.
+_VERSION_RE = re.compile(r"\.v(\d+)(?:\.p\d+)?\.md$")
 
 
 def _archive_roots(docs_root: Path, feature: str) -> list[Path]:
