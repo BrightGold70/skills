@@ -46,8 +46,10 @@ def test_step4_states_the_tool_is_not_guaranteed() -> None:
             "an unconditional instruction is the bug, not the tool's absence",
         ),
         (
-            "user config can add a built-in tool",
-            "without this a reader burns the session trying to re-enable the tool",
+            "CLAUDE_CODE_ENABLE_TODO_TOOLS",
+            "the todo tools became OPT-IN in Claude Code 2.1.236; a reader whose "
+            "probe comes back empty must be sent to the opt-in before the ladder, "
+            "or they degrade to a lesser sink while the real tool is one setting away",
         ),
     ]:
         require(literal, why)
@@ -263,5 +265,35 @@ def test_inline_checklist_is_mandatory_when_rung_1_is_missing() -> None:
         ("reads to them as \"my todos disappeared\"",
          "names the observed complaint so a future edit cannot dismiss it as cosmetic",
         ),
+    ]:
+        require(literal, why)
+
+
+def test_empty_probe_sends_the_reader_to_the_opt_in_first() -> None:
+    """The ladder is the fallback, not the first move.
+
+    An earlier revision of this skill asserted "no user config can add a built-in
+    tool" and told the reader not to try re-enabling anything. That was refuted on
+    2026-08-21: Claude Code 2.1.236 made the todo tools opt-in, all four names are
+    still in the 2.1.238 binary, and `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the
+    settings `env` block restores them -- proven by a control/treatment A/B where
+    the control replied NOTOOL and the treatment emitted a real TaskCreate
+    `tool_use`. A doc that forbids the fix sends every future reader to a lesser
+    sink while rung 1 sits one setting away.
+    """
+    for literal, why in [
+        # Each literal must be UNIQUE to this guidance. A first pass pinned the bare
+        # string "2.1.236", which already appears elsewhere in SKILL.md -- the guard
+        # passed with the opt-in section deleted. Measured as MUTATION: SURVIVED.
+        ("try the opt-in BEFORE the ladder",
+         "the ordering IS the fix; the ladder is the fallback, not the first move"),
+        ('{ "env": { "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1" } }',
+         "the reader needs the exact knob in copy-pasteable form"),
+        ("**opt-in** in Claude Code **2.1.236**",
+         "dates the change AND is unique to this section, unlike a bare version string"),
+        ("were gated, not removed",
+         "the distinction is the whole remedy -- removed would mean nothing to do"),
+        ("todoFeatureEnabled",
+         "the panel setting is a different switch; enabling only it leaves tools absent"),
     ]:
         require(literal, why)
