@@ -1191,6 +1191,32 @@ def test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_
     assert "size_status=UNVERIFIED" not in auditcycle_lines(r.stdout)[0]
 
 
+def test_verb_size_status_field_is_not_forgeable_by_feature_name(tmp_path):
+    feature = "size_status=unverified"
+    root = project_with_docs(tmp_path, feature=feature)
+    trace = tmp_path / "trace.jsonl"
+    bindir = traced_bindir(tmp_path, trace)
+    capture = tmp_path / "agy.calls"
+
+    r = run_with_bindir(
+        dispatch_args(root=root, feature=feature, passes="2"),
+        bindir,
+        env={
+            "HMAD_ASSEMBLE_SIZE_STATUS_P1": "verified",
+            "HMAD_ASSEMBLE_SIZE_STATUS_P2": "verified",
+        },
+        capture=capture,
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert auditcycle_lines(r.stdout) == [
+        "AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 delivered=report-file,report-file size_status=verified"
+    ]
+
+    cycle_rows = [row for row in read_jsonl(trace) if row["kind"] == "cycle"]
+    assert cycle_rows[0]["size_status"] == "verified"
+
+
 def test_verb_two_distinct_dispatches(tmp_path):
     root = project_with_docs(tmp_path)
     r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes="2"))

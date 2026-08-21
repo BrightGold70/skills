@@ -2630,7 +2630,10 @@ _cmd_audit_cycle() {
   size_status="verified"
   i=1
   while [ "$i" -le "$passes" ]; do
-    case "${tok[$i]}" in *size_status=unverified*) size_status="unverified" ;; esac
+    # ASSEMBLE tokens are space-separated fields after the prompt path. Match the
+    # leading field boundary too, otherwise a feature name embedded in the prompt
+    # path, such as size_status=unverified, can forge the status.
+    case "${tok[$i]}" in *" size_status=unverified"*) size_status="unverified" ;; esac
     i=$((i + 1))
   done
 
