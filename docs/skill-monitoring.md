@@ -1219,8 +1219,32 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   is a distinct verdict rather than a silent first-wins). Do not "fix" it by writing full node ids
   into the registry at register time — 5b learns the pin from a document that names a bare test,
   and the file it lives in can move.
-  Status: `MONITORING`. Found while running 5f for `audit-cycle-verb`; not fixed in that run
-  because it is a separate defect in a different script and the feature's TDD gate was armed.
+  Status: **FIXED** 2026-08-21. `partition()` now resolves each pin by node-id **segment** suffix
+  (`node_id.endswith("::" + pin)`), returning a 4-tuple `(resolving, missing, ambiguous,
+  unverified_renames)`: exactly one candidate resolves and carries the full id in a new `node_id`
+  key, zero is missing, and **two or more is `ambiguous`** — a new bucket with its own
+  `step5f:wire_pin_ambiguous:<id>` driver and an `ambiguous=` field on the token, because two files
+  may define the same test name and silently taking the first would verify a wire against a test in
+  the wrong file. `run_pins()` now runs `record.get("node_id") or record["pin"]`, closing the same
+  root cause one function downstream — it had been handing bare names to `pytest` as file paths, and
+  had simply never been reached.
+
+  **Why 60 green tests never saw it.** `test_collect_returns_pytest_node_ids` asserted node ids
+  while all four `partition()` tests passed **bare names** as the collected set. Each was
+  self-consistent, they contradicted each other across the seam, and nothing composed
+  `collect()` -> `partition()`. Those four tests encoded the defect as their premise and were
+  rewritten; a seam test over a real throwaway repo now covers the composition.
+
+  **A mutation caught what the tests, the live token and review all missed.** With the fix in and 80
+  tests green, dropping the `::` from the matcher changed nothing observable — `MUTATION: SURVIVED
+  mutations=1 caught=0 survived=1`. The existing near-miss test pins the opposite direction (a pin
+  *shorter* than the test name), where the delimiter is irrelevant. The discriminating shape is a
+  pin that is a tail-substring of a test name: `wire` against `::test_wire` resolves wrongly without
+  the `::`. That test now exists and the mutation is caught.
+
+  Live proof, same command that produced the broken reading above:
+  `WIREREG: UNTRACKED registered=6 verified=5 broken=0 missing=1 ambiguous=0` — Tasks 2-6 verified,
+  Task 7 correctly missing because it is not implemented. First time 5f has verified a wire.
 
 - 🟡 **J35 — `h_mad_wire_registry.py` shells pytest via `sys.executable`, so a bare `python3`
   invocation cannot collect on a box whose `python3` lacks pytest.** Running the documented command
@@ -1229,5 +1253,8 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   (`/opt/homebrew/opt/python@3.14/bin/python3.14`), reported as `WIREREG: UNREADABLE`. Correct —
   it is a cannot-judge, not a verdict — but the remedy is undiscoverable from the message, which
   names the missing module rather than the interpreter choice. Invoking the *script* with
-  `/opt/anaconda3/bin/python3.11` fixes it. Worth either an explicit `--python` flag or naming the
-  interpreter in the error. Status: `MONITORING`.
+  `/opt/anaconda3/bin/python3.11` fixes it. Status: **FIXED** 2026-08-21 — both remedies shipped.
+  `verify` takes `--python <path>` (default `sys.executable`), threaded into **both** `collect()`
+  and `run_pins()`, and the collection-failure message now names the interpreter it used:
+  `pytest collection failed with /opt/homebrew/opt/python@3.14/bin/python3.14 exit code 1 … No
+  module named pytest`. Verified live both ways from a bare `python3` invocation.

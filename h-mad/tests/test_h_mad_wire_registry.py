@@ -232,9 +232,14 @@ def test_wire_registry_guard_mutation_is_caught_by_harness(tmp_path: Path) -> No
 
 def test_partition_separates_resolving_and_missing_active_records() -> None:
     records = [_entry(pin="test_present"), _entry(id="wire-2", pin="test_absent")]
-    resolving, missing, unverified = registry.partition(records, {"test_present"})
+    resolving, missing, ambiguous, unverified = registry.partition(
+        records, {"tests/test_wire.py::test_present"}
+    )
     assert [record["id"] for record in resolving] == ["wire-1"]
+    assert resolving[0]["pin"] == "test_present"
+    assert resolving[0]["node_id"] == "tests/test_wire.py::test_present"
     assert [record["id"] for record in missing] == ["wire-2"]
+    assert ambiguous == []
     assert unverified == []
 
 
@@ -242,7 +247,7 @@ def test_partition_does_not_report_removed_pin_as_missing() -> None:
     tombstone = _entry(
         status="removed", removal_provenance="pinned-a-defect", removed_by_feature="fix"
     )
-    assert registry.partition([tombstone], set()) == ([], [], [])
+    assert registry.partition([tombstone], set()) == ([], [], [], [])
 
 
 def test_partition_resolves_present_rename_and_unverifies_absent_rename() -> None:
@@ -254,16 +259,76 @@ def test_partition_resolves_present_rename_and_unverifies_absent_rename() -> Non
         id="old-absent", status="removed", removal_provenance="renamed",
         removed_by_feature="rename", successor_pin="test_gone",
     )
-    resolving, missing, unverified = registry.partition([present, absent], {"test_new"})
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [present, absent], {"tests/test_wire.py::test_new"}
+    )
     assert [(record["id"], record["pin"]) for record in resolving] == [("old-present", "test_new")]
+    assert resolving[0]["node_id"] == "tests/test_wire.py::test_new"
     assert missing == []
+    assert ambiguous == []
     assert [record["id"] for record in unverified] == ["old-absent"]
 
 
 def test_partition_is_pure_without_subprocess_or_git(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(registry.subprocess, "run", lambda *args, **kwargs: pytest.fail("subprocess"))
     records = [_entry(pin="test_present")]
-    assert registry.partition(records, {"test_present"})[0] == records
+    resolving = registry.partition(records, {"tests/test_wire.py::test_present"})[0]
+    assert [record["id"] for record in resolving] == ["wire-1"]
+
+
+def test_partition_reports_ambiguous_active_pin_without_resolving_or_missing() -> None:
+    record = _entry(pin="test_same_name")
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [record],
+        {
+            "tests/test_alpha.py::test_same_name",
+            "tests/test_beta.py::test_same_name",
+        },
+    )
+    assert resolving == []
+    assert missing == []
+    assert [item["id"] for item in ambiguous] == ["wire-1"]
+    assert unverified == []
+
+
+def test_partition_renamed_tombstone_reports_ambiguous_successor_pin() -> None:
+    record = _entry(
+        id="old-ambiguous", status="removed", removal_provenance="renamed",
+        removed_by_feature="rename", successor_pin="test_new_name",
+    )
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [record],
+        {
+            "tests/test_alpha.py::test_new_name",
+            "tests/test_beta.py::test_new_name",
+        },
+    )
+    assert resolving == []
+    assert missing == []
+    assert [item["id"] for item in ambiguous] == ["old-ambiguous"]
+    assert unverified == []
+
+
+def test_partition_does_not_resolve_pin_that_is_suffix_of_longer_test_name() -> None:
+    record = _entry(pin="test_foo")
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [record], {"tests/test_wire.py::test_foo_bar"}
+    )
+    assert resolving == []
+    assert [item["id"] for item in missing] == ["wire-1"]
+    assert ambiguous == []
+    assert unverified == []
+
+
+def test_partition_requires_the_node_id_segment_delimiter() -> None:
+    record = _entry(pin="wire")
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [record], {"h-mad/tests/test_wire.py::test_wire"}
+    )
+    assert resolving == []
+    assert [item["id"] for item in missing] == ["wire-1"]
+    assert ambiguous == []
+    assert unverified == []
 
 
 def test_collect_returns_pytest_node_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -345,6 +410,26 @@ def test_collect_emits_repo_relative_ids_from_a_real_throwaway_repo(tmp_path: Pa
     assert "tests/test_wire.py::test_registered_wire" not in collected
 
 
+def test_collect_then_partition_resolves_bare_registered_pin_in_real_throwaway_repo(
+    tmp_path: Path,
+) -> None:
+    repo = _git_repo(tmp_path)
+    test_path = repo / "h-mad" / "tests" / "test_wire.py"
+    test_path.parent.mkdir(parents=True)
+    test_path.write_text("def test_registered_wire():\n    assert True\n", encoding="utf-8")
+
+    collected = registry.collect(repo, [Path("h-mad/tests")])
+    resolving, missing, ambiguous, unverified = registry.partition(
+        [_entry(pin="test_registered_wire")], collected
+    )
+
+    assert [record["id"] for record in resolving] == ["wire-1"]
+    assert resolving[0]["node_id"] == "h-mad/tests/test_wire.py::test_registered_wire"
+    assert missing == []
+    assert ambiguous == []
+    assert unverified == []
+
+
 def test_run_pins_resolves_a_repo_relative_pin_in_a_real_throwaway_repo(tmp_path: Path) -> None:
     repo = _git_repo(tmp_path)
     test_path = repo / "h-mad" / "tests" / "test_wire.py"
@@ -354,6 +439,35 @@ def test_run_pins_resolves_a_repo_relative_pin_in_a_real_throwaway_repo(tmp_path
 
     verified, broken = registry.run_pins([record], repo)
 
+    assert [item["id"] for item in verified] == ["wire-1"]
+    assert broken == []
+
+
+def test_run_pins_invokes_pytest_with_resolved_node_id_not_bare_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    class Result:
+        stdout = "PASSED tests/test_wire.py::test_registered_wire\n"
+        returncode = 0
+
+    def fake_run(command: list[str], *args: object, **kwargs: object) -> Result:
+        seen.append(command)
+        return Result()
+
+    monkeypatch.setattr(registry.subprocess, "run", fake_run)
+    record = _entry(
+        pin="test_registered_wire",
+        node_id="tests/test_wire.py::test_registered_wire",
+    )
+
+    verified, broken = registry.run_pins([record], tmp_path)
+
+    assert seen == [[
+        sys.executable, "-m", "pytest", "-q", "-rA", "-vv",
+        "tests/test_wire.py::test_registered_wire",
+    ]]
     assert [item["id"] for item in verified] == ["wire-1"]
     assert broken == []
 
@@ -376,6 +490,32 @@ def test_verify_marks_an_existing_registered_pin_verified_end_to_end(tmp_path: P
     assert result["verdict"] == "PASS"
     assert result["verified"] == 1
     assert result["missing"] == 0
+
+
+def test_verify_reports_ambiguous_pin_in_token_driver_and_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    record = _entry(id="ambiguous", pin="test_same_name")
+    _valid_registry(path, record)
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    monkeypatch.setattr(
+        registry,
+        "collect",
+        lambda *args: {
+            "tests/test_alpha.py::test_same_name",
+            "tests/test_beta.py::test_same_name",
+        },
+    )
+    monkeypatch.setattr(registry, "run_pins", lambda *args: ([], []))
+
+    result = registry.verify(path, "HEAD", tmp_path, tmp_path, [Path("tests")])
+
+    assert result["verdict"] == "FAIL"
+    assert result["ambiguous"] == 1
+    assert "ambiguous=1" in result["token"]
+    assert "step5f:wire_pin_ambiguous:ambiguous" in capsys.readouterr().out
 
 
 def test_run_pins_empty_does_not_spawn_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -501,6 +641,108 @@ def test_verify_uses_custom_registry_path_for_base_lookup(
     registry.verify(path, base, repo, repo, [Path("tests")])
 
     assert seen == ["custom/wires.jsonl"]
+
+
+def test_verify_threads_selected_python_to_collect_and_run_pins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path, _entry(pin="test_registered_wire"))
+    monkeypatch.setattr(registry, "trackedness", lambda *args: (True, None))
+    monkeypatch.setattr(registry, "load_base", lambda *args: [])
+    calls: list[tuple[str, Path, tuple[Path, ...], str]] = []
+
+    def fake_collect(rootdir: Path, testpaths: tuple[Path, ...], python: str = sys.executable) -> set[str]:
+        calls.append(("collect", rootdir, tuple(testpaths), python))
+        return {"tests/test_wire.py::test_registered_wire"}
+
+    def fake_run_pins(records: list[dict], rootdir: Path, python: str = sys.executable) -> tuple[list[dict], list[dict]]:
+        calls.append(("run_pins", rootdir, tuple(), python))
+        return records, []
+
+    monkeypatch.setattr(registry, "collect", fake_collect)
+    monkeypatch.setattr(registry, "run_pins", fake_run_pins)
+
+    result = registry.verify(
+        path, "HEAD", tmp_path, tmp_path, [Path("tests")], python="/opt/project/python"
+    )
+
+    assert result["verdict"] == "PASS"
+    assert calls == [
+        ("collect", tmp_path, (Path("tests"),), "/opt/project/python"),
+        ("run_pins", tmp_path, tuple(), "/opt/project/python"),
+    ]
+
+
+def test_collect_and_run_pins_use_selected_python_and_collect_error_names_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[list[str]] = []
+
+    class CollectFailure:
+        stdout = ""
+        stderr = "ModuleNotFoundError: No module named pytest\n"
+        returncode = 1
+
+    class RunSuccess:
+        stdout = "PASSED tests/test_wire.py::test_registered_wire\n"
+        stderr = ""
+        returncode = 0
+
+    def collect_fails(command: list[str], *args: object, **kwargs: object) -> CollectFailure:
+        seen.append(command)
+        return CollectFailure()
+
+    monkeypatch.setattr(registry.subprocess, "run", collect_fails)
+    with pytest.raises(registry.RegistryError) as excinfo:
+        registry.collect(tmp_path, [Path("tests")], python="/opt/project/python")
+    assert seen[0][:3] == ["/opt/project/python", "-m", "pytest"]
+    assert "/opt/project/python" in str(excinfo.value)
+
+    def run_succeeds(command: list[str], *args: object, **kwargs: object) -> RunSuccess:
+        seen.append(command)
+        return RunSuccess()
+
+    monkeypatch.setattr(registry.subprocess, "run", run_succeeds)
+    verified, broken = registry.run_pins(
+        [_entry(pin="test_registered_wire", node_id="tests/test_wire.py::test_registered_wire")],
+        tmp_path,
+        python="/opt/project/python",
+    )
+    assert seen[1][:3] == ["/opt/project/python", "-m", "pytest"]
+    assert [record["id"] for record in verified] == ["wire-1"]
+    assert broken == []
+
+
+def test_main_verify_accepts_python_option_and_threads_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "wires.jsonl"
+    _valid_registry(path)
+    seen: list[str] = []
+
+    def fake_verify(*args: object, **kwargs: object) -> dict:
+        seen.append(str(kwargs["python"]))
+        return {
+            "verdict": "PASS",
+            "registered": 0,
+            "verified": 0,
+            "broken": 0,
+            "missing": 0,
+            "ambiguous": 0,
+            "unverified_renames": 0,
+            "undeclared_removals": 0,
+            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 ambiguous=0 unverified_renames=0 undeclared_removals=0",
+            "remedy": None,
+        }
+
+    monkeypatch.setattr(registry, "verify", fake_verify)
+
+    assert registry.main([
+        "verify", "--registry", str(path), "--base", "HEAD", "--rootdir", str(tmp_path),
+        "--repo", str(tmp_path), "--python", "/opt/project/python",
+    ]) == 0
+    assert seen == ["/opt/project/python"]
 
 
 def test_changed_files_uses_name_status_and_keeps_renames(tmp_path: Path) -> None:

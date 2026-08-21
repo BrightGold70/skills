@@ -340,38 +340,54 @@ def compare(base_records: list[dict], head_records: list[dict]) -> list[dict]:
 
 def partition(
     records: list[dict], collected: set[str]
-) -> tuple[list[dict], list[dict], list[dict]]:
-    """-> (resolving, missing, unverified_renames). Pure; no subprocess, no git."""
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    """-> (resolving, missing, ambiguous, unverified_renames). Pure; no subprocess, no git."""
     resolving: list[dict] = []
     missing: list[dict] = []
+    ambiguous: list[dict] = []
     unverified_renames: list[dict] = []
+
+    def resolve(pin: str) -> list[str]:
+        if "::" in pin and pin in collected:
+            return [pin]
+        return [node_id for node_id in collected if node_id.endswith("::" + pin)]
+
     for record in records:
         if record.get("status", "active") == "active":
-            if record["pin"] in collected:
-                resolving.append(record)
-            else:
+            matches = resolve(record["pin"])
+            if len(matches) == 1:
+                resolved = dict(record)
+                resolved["node_id"] = matches[0]
+                resolving.append(resolved)
+            elif not matches:
                 missing.append(record)
+            else:
+                ambiguous.append(record)
             continue
         if record.get("removal_provenance") != "renamed":
             continue
         successor = record["successor_pin"]
-        if successor in collected:
+        matches = resolve(successor)
+        if len(matches) == 1:
             resolved = dict(record)
             resolved["pin"] = successor
+            resolved["node_id"] = matches[0]
             resolving.append(resolved)
-        else:
+        elif not matches:
             unverified_renames.append(record)
-    return resolving, missing, unverified_renames
+        else:
+            ambiguous.append(record)
+    return resolving, missing, ambiguous, unverified_renames
 
 
 DEFAULT_TESTPATHS = (Path("h-mad/tests"),)
 
 
-def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path]) -> set[str]:
+def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path], python: str = sys.executable) -> set[str]:
     """Collect repo-relative pytest node ids from the requested test paths."""
     result = subprocess.run(
         [
-            sys.executable, "-m", "pytest", *[str(path) for path in testpaths],
+            python, "-m", "pytest", *[str(path) for path in testpaths],
             "--collect-only", "-q",
         ],
         cwd=repo,
@@ -385,7 +401,7 @@ def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path]) -> set[str]:
         stdout_tail = "\n".join(stdout_lines[-20:]).strip() or "<empty>"
         stderr_tail = "\n".join(stderr_lines[-20:]).strip() or "<empty>"
         raise RegistryError(
-            f"pytest collection failed with exit code {result.returncode}; "
+            f"pytest collection failed with {python} exit code {result.returncode}; "
             f"stdout (last 20 lines): {stdout_tail}; "
             f"stderr (last 20 lines): {stderr_tail}"
         )
@@ -397,13 +413,13 @@ def collect(repo: Path, testpaths: tuple[Path, ...] | list[Path]) -> set[str]:
     return node_ids
 
 
-def run_pins(resolving: list[dict], repo: Path) -> tuple[list[dict], list[dict]]:
+def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) -> tuple[list[dict], list[dict]]:
     """Run resolving pytest pins and return (verified, broken)."""
     if not resolving:
         return [], []
-    pins = [record["pin"] for record in resolving]
+    pins = [record.get("node_id") or record["pin"] for record in resolving]
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-rA", "-vv", *pins],
+        [python, "-m", "pytest", "-q", "-rA", "-vv", *pins],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -421,7 +437,7 @@ def run_pins(resolving: list[dict], repo: Path) -> tuple[list[dict], list[dict]]
     verified: list[dict] = []
     broken: list[dict] = []
     for record in resolving:
-        pin = record["pin"]
+        pin = record.get("node_id") or record["pin"]
         if outcomes.get(pin) == "PASSED":
             verified.append(record)
         else:
@@ -465,20 +481,21 @@ def verify(
     rootdir: Path,
     repo: Path,
     testpaths: tuple[Path, ...] | list[Path] = DEFAULT_TESTPATHS,
+    python: str = sys.executable,
 ) -> dict:
     if not registry.exists():
         return {
             "verdict": "PASS", "registered": 0, "verified": 0, "broken": 0,
-            "missing": 0, "unverified_renames": 0, "undeclared_removals": 0,
-            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 unverified_renames=0 undeclared_removals=0",
+            "missing": 0, "ambiguous": 0, "unverified_renames": 0, "undeclared_removals": 0,
+            "token": "WIREREG: PASS registered=0 verified=0 broken=0 missing=0 ambiguous=0 unverified_renames=0 undeclared_removals=0",
             "remedy": None,
         }
     tracked, remedy = trackedness(registry, repo)
     head = load(registry)
     base_records = load_base(base, _registry_base_path(registry, repo), repo)
-    collected = collect(rootdir, testpaths)
-    resolving, missing, unverified_renames = partition(head, collected)
-    verified, broken = run_pins(resolving, rootdir)
+    collected = collect(rootdir, testpaths, python)
+    resolving, missing, ambiguous, unverified_renames = partition(head, collected)
+    verified, broken = run_pins(resolving, rootdir, python)
     undeclared = [record for record in compare(base_records, head) if record.get("status", "active") == "active"]
 
     drivers: list[str] = []
@@ -488,6 +505,9 @@ def verify(
     if missing:
         for record in missing:
             drivers.append(f"step5f:wire_pin_missing:{record['id']}")
+    if ambiguous:
+        for record in ambiguous:
+            drivers.append(f"step5f:wire_pin_ambiguous:{record['id']}")
     if undeclared:
         for record in undeclared:
             drivers.append(f"step5f:undeclared_removal:{record['id']}")
@@ -502,14 +522,16 @@ def verify(
     token = (
         f"WIREREG: {verdict} registered={len(head)} verified={len(verified)} "
         f"broken={len(broken)} missing={len(missing)} "
+        f"ambiguous={len(ambiguous)} "
         f"unverified_renames={len(unverified_renames)} undeclared_removals={len(undeclared)}"
     )
     return {
         "verdict": verdict, "registered": len(head), "verified": len(verified),
-        "broken": len(broken), "missing": len(missing),
+        "broken": len(broken), "missing": len(missing), "ambiguous": len(ambiguous),
         "unverified_renames": len(unverified_renames), "undeclared_removals": len(undeclared),
         "token": token, "remedy": remedy,
         "verified_records": verified, "broken_records": broken, "missing_records": missing,
+        "ambiguous_records": ambiguous,
         "unverified_rename_records": unverified_renames, "undeclared_removal_records": undeclared,
     }
 
@@ -531,6 +553,7 @@ def main(argv: list[str] | None = None) -> int:
         "--testpath", type=Path, action="append", dest="testpaths",
         help="test path passed to pytest; repeatable (default: h-mad/tests)",
     )
+    verify_parser.add_argument("--python", default=sys.executable)
     register_parser = subparsers.add_parser("register")
     register_parser.add_argument("--registry", type=Path, default=Path(DEFAULT_REGISTRY))
     register_parser.add_argument("--id", required=True)
@@ -579,6 +602,7 @@ def main(argv: list[str] | None = None) -> int:
         result = verify(
             args.registry, args.base, args.rootdir, args.repo,
             args.testpaths if args.testpaths is not None else DEFAULT_TESTPATHS,
+            python=args.python,
         )
     except (OSError, RegistryError) as exc:
         print(f"[H-MAD] wire_registry UNREADABLE: {exc}")
