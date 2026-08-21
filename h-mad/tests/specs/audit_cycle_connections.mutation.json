@@ -54,22 +54,22 @@
     {
       "name": "helper-extract-drop",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    if report_text:\n        return \"out\", _write_collected_report(report_text, collected_path)\n\n    return \"none\", None",
-      "replace": "    if False and report_text:\n        return \"out\", _write_collected_report(report_text, collected_path)\n\n    return \"none\", None",
+      "find": "    report_text = _run_extract_report(\n        spec.out_path, feature=feature, phase=phase, cycle=cycle\n    )",
+      "replace": "    report_text = \"\"",
       "failure_test": "test_collect_falls_back_to_out"
     },
     {
       "name": "helper-extract-force",
       "file": "scripts/h_mad_audit_cycle.py",
       "find": "    if _run_report_wait(spec.report_path, grace):\n        return \"report-file\", _copy_collected_report(spec.report_path, collected_path)\n\n    report_text = _run_extract_report(\n        spec.out_path, feature=feature, phase=phase, cycle=cycle\n    )",
-      "replace": "    if False and _run_report_wait(spec.report_path, grace):\n        return \"report-file\", _copy_collected_report(spec.report_path, collected_path)\n\n    report_text = _run_extract_report(\n        spec.out_path, feature=feature, phase=phase, cycle=cycle\n    )",
+      "replace": "    if _run_report_wait(spec.report_path, grace):\n        pass\n\n    report_text = _run_extract_report(\n        spec.out_path, feature=feature, phase=phase, cycle=cycle\n    )",
       "failure_test": "test_collect_delayed_report"
     },
     {
       "name": "helper-gate-drop-p2",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "            results: list[PassResult] = []\n            for spec in pass_specs:\n                delivered, collected_path = collect(",
-      "replace": "            results: list[PassResult] = []\n            for spec in pass_specs[:1]:\n                delivered, collected_path = collect(",
+      "find": "                    verdict, must, should, findings = gate(\n                        collected_path,\n                        ack_file=args.ack_file,\n                    )",
+      "replace": "                    if spec.index == 2:\n                        verdict, must, should, findings = \"PASS\", 0, 0, []\n                    else:\n                        verdict, must, should, findings = gate(\n                            collected_path,\n                            ack_file=args.ack_file,\n                        )",
       "failure_test": "test_fail_in_either_pass_fails_cycle"
     },
     {
@@ -89,8 +89,8 @@
     {
       "name": "verb-helper-force",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    exit $?\n  fi\n\n  i=2\n  while [ \"$i\" -le \"$passes\" ]; do",
-      "replace": "    :\n  fi\n\n  i=2\n  while [ \"$i\" -le \"$passes\" ]; do",
+      "find": "  if [ -n \"$halt_pass\" ]; then\n    python3 \"$here/h_mad_audit_cycle.py\" \\\n      --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n      --project-root \"$root\" --passes \"$passes\" \\\n      --size-status \"$size_status\" \\\n      --halt-reason \"assemble_halt:p${halt_pass}\"\n    exit $?\n  fi\n\n  i=2\n  while [ \"$i\" -le \"$passes\" ]; do",
+      "replace": "  i=2\n  while [ \"$i\" -le \"$passes\" ]; do",
       "failure_test": "test_verb_assemble_halt_no_dispatch"
     }
   ]
