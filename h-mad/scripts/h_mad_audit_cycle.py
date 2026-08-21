@@ -261,6 +261,22 @@ def gate(collected: Path, *, ack_file: Path | None) -> tuple[str | None, int, in
     except OSError as exc:
         raise OperationalError(f"audit_gate failed for {collected}: {exc}") from exc
 
+    # Axis B, audit-gate signal discipline: the exit code answers "did the script run
+    # at all" and the token answers "what did it decide" — read BOTH, as every other
+    # composed call here does. Without this, a crashing gate that still emitted a
+    # well-formed GATE line would be scored as a verdict.
+    #
+    # 2 is allowed on purpose and must stay allowed: `h_mad_audit_gate.py` prints
+    # `GATE: INVALID` and returns 2 deliberately, so that "no report" can never read
+    # as "no findings". Narrowing this to `!= 0` converts that correct UNVERIFIED into
+    # an operational error — `test_gate_invalid_exits_two_and_is_still_a_verdict` pins it.
+    if result.returncode not in (0, 2):
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        raise OperationalError(
+            f"audit_gate exited {result.returncode} for {collected}"
+            + (f": {detail[-1]}" if detail else "")
+        )
+
     verdict, must, should = _gate_token(result.stdout, collected)
     if verdict == "INVALID":
         return "INVALID", 0, 0, []

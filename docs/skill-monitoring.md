@@ -1260,6 +1260,53 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   module named pytest`. Verified live both ways from a bare `python3` invocation.
 
 
+## Surfaced by the audit-cycle-verb Phase 6a-prime dispatch (2026-08-22)
+
+- 🔴 **J40 — an `exec agy` run that read NOTHING returned `ASSESSMENT: READY_TO_MERGE`, and every
+  gate in the chain accepted it.** Measured on the first 6a-prime dispatch for `audit-cycle-verb`
+  (log `/tmp/arch_acv.log`, conversation `179f6b21`). The run made exactly one tool call, a
+  `view_file`, which **errored**; the result event carried `status: "ERROR"`; the response was a
+  confident 1510-byte review asserting "No Critical or Important issues were found" about files it
+  had never opened. `exec` returned rc 0 and `h_mad_extract_verdict.py` returned
+  `ASSESSMENT: READY_TO_MERGE` with exit 0.
+
+  **The path failure is the interesting half.** The dispatch's `--cd` was correct and the stream's
+  `init.cwd` confirms it: `/Users/kimhawk/orca/skills`. But the prompt cited files repo-relatively,
+  and agy resolved those against its own scratch directory instead of cwd:
+
+  ```text
+  view_file AbsolutePath=/Users/kimhawk/.gemini/antigravity-cli/scratch/h-mad/tests/test_h_mad_audit_cycle.py
+    -> TOOL_ERROR ... no such file or directory
+  ```
+
+  So a correct `--cd` is **not** sufficient: cite absolute paths in any prompt that asks agy to read
+  files, or the reads fail and the review proceeds on the inlined text alone.
+
+  **This is NOT a wrapper bug, and fixing it there would reintroduce a defect.**
+  `_agy_ndjson_response` (`hmad-dispatch.sh:1727`) reads `.response` regardless of `.status`
+  *deliberately*, and its comment names the measured case: a single denied tool call yields
+  `status: ERROR` alongside a complete, correct answer, so dropping that response would manufacture
+  a `no_verdict` halt out of a run that answered. That reasoning is sound. The two situations are
+  **indistinguishable at the transport layer** — one errored tool call out of many versus one
+  errored tool call out of one — and only the consumer knows which it needed.
+
+  The gap is therefore in the **6a-prime protocol**, which says to read the `ASSESSMENT:` with
+  `h_mad_extract_verdict.py` and says nothing about the stream. A verdict-shaped line from a run
+  that read nothing is exactly the "silence reads as approval" family the extractor exists to close,
+  one level up: it is not silence, it is a *fluent* answer with no evidence under it.
+
+  Proposed obligation for 6a-prime, stated as a rule the orchestrator can execute: after extracting
+  the `ASSESSMENT:`, read the run's `--log` and require **at least one successful tool call** before
+  recording a `READY_TO_MERGE`. `hmad-dispatch progress <log>` already prints tool events with their
+  `ACTIVE`/`ERROR` state and a `RESULT status=` line, so this costs one call and no new script.
+  A review that inspected nothing must not be able to clear the gate that exists to catch what
+  document audits and code-level gap analysis miss by construction.
+
+  Re-dispatched 2026-08-22 with absolute paths and an explicit instruction to return
+  `ASSESSMENT: NO` if its reads fail.
+  Status: `MONITORING` — the path fix is applied to this feature's prompt; the protocol obligation
+  is unwritten.
+
 ## Surfaced by the audit-cycle-verb Task 9 docs write (2026-08-21)
 
 - 🔴 **J36 — the `audit-cycle-verb` spec, design AND impl-plan all state a measurement that the

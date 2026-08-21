@@ -1285,6 +1285,64 @@ def test_gate_invalid_discards_counts(
     assert gate(report, ack_file=None) == ("INVALID", 0, 0, [])
 
 
+def test_gate_nonzero_exit_is_operational_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A crashing audit_gate that still prints a GATE line must not be scored.
+
+    Axis B, audit-gate signal discipline: the exit code answers "did the script run
+    at all" and the token answers "what did it decide", and BOTH are read for every
+    composed call. gate() read only the token, so a non-zero exit carrying a
+    well-formed GATE line was accepted as a verdict.
+    """
+    ac = audit_cycle()
+    body = "## Must-fix\nNone\n\n## Should-fix\nNone\n"
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md"
+    collected.parent.mkdir(parents=True)
+    collected.write_text(body, encoding="utf-8")
+
+    script_dir = tmp_path / "gate-stubs"
+    script_dir.mkdir(exist_ok=True)
+    (script_dir / "h_mad_audit_gate.py").write_text(
+        "import sys\nprint('GATE: PASS must=0 should=0')\nsys.exit(4)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", str(script_dir))
+
+    with pytest.raises(ac.OperationalError, match="audit_gate exited 4"):
+        ac.gate(collected, ack_file=None)
+
+
+def test_gate_invalid_exits_two_and_is_still_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """rc=2 is a VERDICT here, not a crash — narrowing the guard to `!= 0` breaks it.
+
+    `h_mad_audit_gate.py` prints `GATE: INVALID` and returns 2 deliberately, so that
+    "no report" can never read as "no findings". That is the one non-zero exit which
+    legitimately carries a token, and gate() must keep routing it to the INVALID
+    branch (which combine() maps to UNVERIFIED no_gate_sections). This test exists so
+    that tightening the exit-code guard turns red instead of silently converting a
+    correct UNVERIFIED into an operational error.
+    """
+    ac = audit_cycle()
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md"
+    collected.parent.mkdir(parents=True)
+    collected.write_text("# Audit\n\nprose only, no gate sections\n", encoding="utf-8")
+
+    script_dir = tmp_path / "gate-stubs"
+    script_dir.mkdir(exist_ok=True)
+    (script_dir / "h_mad_audit_gate.py").write_text(
+        "import sys\nprint('GATE: INVALID must=0 should=0')\nsys.exit(2)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", str(script_dir))
+
+    assert ac.gate(collected, ack_file=None) == ("INVALID", 0, 0, [])
+
+
 def test_gate_count_mismatch_is_operational_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
