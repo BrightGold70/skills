@@ -1330,7 +1330,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   | `test_collected_write_failure_is_operational_error` missing | exists, `test_h_mad_audit_cycle.py` |
   | `test_gate_count_mismatch_is_operational_error` missing | exists, same file |
   | `test_premise_items_formats_{no_citation,supplied_path_line}` missing | both exist |
-  | `test_premise_items_match_gate_count` lacks the real-artifact corpus | globs `docs/0{1,2}-*/features/*.audit.v*.p*.md` at `:18-19` |
+  | `test_premise_items_match_gate_count` lacks the real-artifact corpus | true of *that* test; the requirement is met by its sibling `test_premise_items_match_gate_count_real_artifacts:1555`, parametrized over the 8 reports `REAL_AUDIT_REPORTS:15` globs from `docs/0{1,2}-*/features/*.audit.v*.p*.md` |
   | no fixture for the delivered-but-no-`GATE:`-token guard | guard `:289`, test `test_combine_raises_when_delivered_pass_has_no_gate_token:635` |
   | no test for `size_status` worst-of aggregation | `test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_status:1142` |
   | `test_verb_unremovable_path` can't reach the post-removal guard because `set -e` aborts at `rm -f` | `rm -f … \|\| true` at `:2607` — the `\|\| true` is right there; the test asserts exit 3 **and** `channel not cleared`, which only the guard emits |
@@ -1342,8 +1342,16 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   plan's success criterion could be met while the shell→helper boundary went unverified.
 
   **The lesson is the audit's reading surface, not its competence.** These passes read the planning
-  prose and inferred what the code must therefore do. Every falsified finding is *true about the
-  document* and false about the program — the docs really are thinner than the implementation. That
-  is a different defect from the one reported, and applying the 14 prescriptions would have edited
-  correct code toward a stale description. Falsify against the code **before** applying, every time.
+  prose and inferred what the code must therefore do. Most of the findings are *true about the
+  document* — the docs really are thinner than the implementation — and false about the program. It
+  is the claimed **consequence** that falsifies, not usually the fact: "missing test", "unenforced
+  guard", "will crash" are each contradicted by shipped code.
+
+  That distinction changes what the prescriptions cost. Thirteen of them are **doc** edits: harmless
+  in themselves, merely unnecessary, but each one re-opens the re-gate obligation this cycle just
+  discharged. Exactly **one** is a code change — arming a `--passes` default — and that one is
+  actively wrong, because `--passes` is required by design and defaulting it would silently accept
+  an invocation the verb currently rejects. Falsify against the code **before** applying, every
+  time; and when a finding names a test, grep the **file-scoped** name, not the bare one — the
+  real-corpus row above reads as a genuine gap right up until the sibling test is found.
   Status: `MONITORING` — the five-vs-six contradiction is unfixed; the other 14 need no action.
