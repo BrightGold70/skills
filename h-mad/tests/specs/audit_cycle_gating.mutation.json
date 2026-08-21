@@ -1,0 +1,55 @@
+{
+  "root": "/Users/kimhawk/orca/skills/h-mad",
+  "command": [
+    "/opt/anaconda3/bin/python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_audit_cycle.py",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "shell-channel-clear-assertion-drop",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do\n      [ ! -e \"$p\" ] || { printf 'ERROR: channel not cleared: %s\\n' \"$p\" >&2; exit 3; }\n    done",
+      "replace": "    rm -f \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\" || true\n    for p in \"${report[$i]}\" \"${report[$i]}.done\" \"${out[$i]}\"; do\n      :\n    done",
+      "failure_test": "test_verb_unremovable_path"
+    },
+    {
+      "name": "shell-prompt-divergence-assertion-drop",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if ! { [ \"$d\" -eq 2 ] \\\n           && { diff \"${prompt[1]}\" \"${prompt[$i]}\" || true; } | grep -Fq \"${report[1]}\"; }; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",
+      "replace": "    if false; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",
+      "failure_test": "test_verb_prompt_divergence"
+    },
+    {
+      "name": "combine-missing-gate-token-guard-drop",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for result in results:\n        if result.delivered != \"none\" and result.verdict is None:\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )",
+      "replace": "    for result in results:\n        if False and result.delivered != \"none\" and result.verdict is None:\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )",
+      "failure_test": "test_combine_raises_when_delivered_pass_has_no_gate_token"
+    },
+    {
+      "name": "combine-none-report-guard-drop",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for result in results:\n        if result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":",
+      "replace": "    for result in results:\n        if False and result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":",
+      "failure_test": "test_combine_distinguishes_missing_report_from_invalid_gate_sections"
+    },
+    {
+      "name": "combine-invalid-gate-sections-guard-drop",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.verdict == \"INVALID\":\n            return \"UNVERIFIED\", f\"no_gate_sections:p{result.index}\"\n\n    for result in results:",
+      "replace": "        if False and result.verdict == \"INVALID\":\n            return \"UNVERIFIED\", f\"no_gate_sections:p{result.index}\"\n\n    for result in results:",
+      "failure_test": "test_combine_distinguishes_missing_report_from_invalid_gate_sections"
+    },
+    {
+      "name": "combine-fail-verdict-guard-drop",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for result in results:\n        if result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n\n    return \"PASS\", None",
+      "replace": "    for result in results:\n        if False and result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n\n    return \"PASS\", None",
+      "failure_test": "test_combine_fails_when_any_pass_has_findings"
+    }
+  ]
+}

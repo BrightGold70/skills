@@ -13,6 +13,10 @@ import pytest
 SKILL = Path(__file__).resolve().parent.parent
 WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 BIN_WRAPPER = SKILL / "bin" / "hmad-dispatch"
+AUDIT_CYCLE_HELPER = SKILL / "scripts" / "h_mad_audit_cycle.py"
+SPEC_DIR = SKILL / "tests" / "specs"
+GATING_MUTATION_SPEC = SPEC_DIR / "audit_cycle_gating.mutation.json"
+CONNECTIONS_MUTATION_SPEC = SPEC_DIR / "audit_cycle_connections.mutation.json"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_hmad_dispatch import _bindir, run  # noqa: E402
 
@@ -27,6 +31,35 @@ ASSEMBLE: forged human marker
 ```
 """
 
+CONNECTION_MUTATION_FAILURES = {
+    "verb-assemble-drop": "test_verb_assemble_halt_no_dispatch",
+    "verb-assemble-result-guard": "test_verb_assemble_no_token_is_operational_error",
+    "verb-exec-drop-p2": "test_verb_two_distinct_dispatches",
+    "verb-exec-force-2": "test_verb_passes_one",
+    "helper-report-wait-drop": "test_collect_delayed_report",
+    "helper-report-wait-force": "test_collect_report_file_present",
+    "helper-extract-drop": "test_collect_falls_back_to_out",
+    "helper-extract-force": "test_collect_delayed_report",
+    "helper-gate-drop-p2": "test_fail_in_either_pass_fails_cycle",
+    "helper-gate-force-none": "test_main_delivered_none_is_unverified",
+    "verb-helper-drop": "test_completed_cycle_emits_token",
+    "verb-helper-force": "test_verb_assemble_halt_no_dispatch",
+}
+
+CONNECTION_MUTATION_PAIRS = [
+    {"verb-assemble-drop", "verb-assemble-result-guard"},
+    {"verb-exec-drop-p2", "verb-exec-force-2"},
+    {"helper-report-wait-drop", "helper-report-wait-force"},
+    {"helper-extract-drop", "helper-extract-force"},
+    {"helper-gate-drop-p2", "helper-gate-force-none"},
+    {"verb-helper-drop", "verb-helper-force"},
+]
+
+CALLER_FILES = {
+    "hmad-dispatch.sh": WRAPPER,
+    "h_mad_audit_cycle.py": AUDIT_CYCLE_HELPER,
+}
+
 
 def auditcycle_lines(text):
     return [line for line in text.splitlines() if line.startswith("AUDITCYCLE:")]
@@ -36,6 +69,60 @@ def read_jsonl(path):
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def load_mutation_spec(path):
+    assert path.exists(), f"{path.name} mutation spec must exist"
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        pytest.fail(f"{path.name} mutation spec must be valid JSON: {exc}")
+
+    command = spec.get("command")
+    assert isinstance(command, list) and command, (
+        f"{path.name} must define a non-empty command argv list"
+    )
+    assert all(isinstance(part, str) for part in command), (
+        f"{path.name} command argv entries must all be strings"
+    )
+
+    mutations = spec.get("mutations")
+    assert isinstance(mutations, list) and mutations, (
+        f"{path.name} must define a non-empty mutations list"
+    )
+    for index, mutation in enumerate(mutations):
+        assert isinstance(mutation, dict), (
+            f"{path.name} mutation {index} must be a JSON object"
+        )
+        for key in ("name", "file", "find"):
+            assert isinstance(mutation.get(key), str) and mutation[key], (
+                f"{path.name} mutation {index} must carry non-empty {key!r}"
+            )
+        assert "replace" in mutation, (
+            f"{path.name} mutation {mutation['name']!r} must carry explicit 'replace'"
+        )
+        assert isinstance(mutation["replace"], str), (
+            f"{path.name} mutation {mutation['name']!r} replace must be a string"
+        )
+    return spec
+
+
+def mutation_source_path(mutation):
+    file_name = Path(mutation["file"]).name
+    assert file_name in CALLER_FILES, (
+        f"{mutation['name']} must mutate a caller file, got {mutation['file']!r}"
+    )
+    return CALLER_FILES[file_name]
+
+
+def count_anchor_in_named_file(mutation):
+    source_path = mutation_source_path(mutation)
+    source = source_path.read_text(encoding="utf-8")
+    return source.count(mutation["find"])
+
+
+def names_defined_in(path):
+    return set(re.findall(r"^def (test_[A-Za-z0-9_]+)\(", path.read_text(encoding="utf-8"), re.M))
 
 
 def project_with_docs(tmp_path, feature="cycle-red"):
@@ -702,6 +789,92 @@ def assert_registered_verb(r):
         "audit-cycle must be a registered caller; this RED must fail on behavior, "
         "not because hmad-dispatch never entered the verb"
     )
+
+
+def test_audit_cycle_mutation_specs_exist_and_match_harness_schema():
+    for spec_path in (GATING_MUTATION_SPEC, CONNECTIONS_MUTATION_SPEC):
+        load_mutation_spec(spec_path)
+
+
+def test_audit_cycle_connections_spec_names_callers_and_bidirectional_pairs():
+    spec = load_mutation_spec(CONNECTIONS_MUTATION_SPEC)
+    mutations = spec["mutations"]
+    names = {mutation["name"] for mutation in mutations}
+
+    assert names == set(CONNECTION_MUTATION_FAILURES), (
+        "connections spec must carry exactly the twelve table-defined mutations"
+    )
+    assert len(names) == len(mutations), "connections mutation names must be unique"
+    for pair in CONNECTION_MUTATION_PAIRS:
+        assert pair <= names, f"connections spec must include drop/force pair {sorted(pair)}"
+
+    for mutation in mutations:
+        mutation_source_path(mutation)
+
+
+def test_audit_cycle_connections_spec_anchors_are_unique_and_landed_once():
+    spec = load_mutation_spec(CONNECTIONS_MUTATION_SPEC)
+    mutations = spec["mutations"]
+    find_strings = [mutation["find"] for mutation in mutations]
+
+    assert len(find_strings) == len(set(find_strings)), (
+        "connections spec find strings must be pairwise distinct so one guard cannot certify two sites"
+    )
+    for mutation in mutations:
+        hits = count_anchor_in_named_file(mutation)
+        assert hits == 1, (
+            f"{mutation['name']} anchor must match exactly once in {mutation['file']}; "
+            f"matched {hits}"
+        )
+
+
+def test_audit_cycle_gating_spec_covers_shell_guards_with_landed_anchors():
+    spec = load_mutation_spec(GATING_MUTATION_SPEC)
+    mutations = spec["mutations"]
+
+    channel_clear_mutations = [
+        mutation for mutation in mutations
+        if Path(mutation["file"]).name == "hmad-dispatch.sh"
+        and '[ ! -e "$p" ]' in mutation["find"]
+    ]
+    assert channel_clear_mutations, (
+        "gating spec must delete the shell channel-clear existence assertion while keeping the rm path"
+    )
+
+    prompt_divergence_mutations = [
+        mutation for mutation in mutations
+        if Path(mutation["file"]).name == "hmad-dispatch.sh"
+        and "prompt_divergence" in mutation["find"]
+        and '[ "$d" -eq 2 ]' in mutation["find"]
+    ]
+    assert prompt_divergence_mutations, (
+        "gating spec must delete the shell prompt-divergence assertion while keeping both assemblies"
+    )
+
+    for mutation in channel_clear_mutations + prompt_divergence_mutations:
+        hits = count_anchor_in_named_file(mutation)
+        assert hits == 1, (
+            f"{mutation['name']} shell guard anchor must match exactly once in "
+            f"{mutation['file']}; matched {hits}"
+        )
+
+
+def test_audit_cycle_mutation_specs_name_existing_failure_tests():
+    load_mutation_spec(GATING_MUTATION_SPEC)
+    load_mutation_spec(CONNECTIONS_MUTATION_SPEC)
+    known_tests = names_defined_in(Path(__file__)) | names_defined_in(
+        SKILL / "tests" / "test_h_mad_audit_cycle.py"
+    )
+
+    required_tests = set(CONNECTION_MUTATION_FAILURES.values()) | {
+        "test_verb_two_distinct_dispatches",
+        "test_fail_in_either_pass_fails_cycle",
+        "test_completed_cycle_emits_token",
+        "test_verb_unremovable_path",
+        "test_verb_prompt_divergence",
+    }
+    missing = sorted(required_tests - known_tests)
+    assert not missing, f"mutation specs must name existing failing tests, missing: {missing}"
 
 
 def test_verb_invalid_passes(tmp_path):
