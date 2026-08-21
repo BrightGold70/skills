@@ -1260,6 +1260,34 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   module named pytest`. Verified live both ways from a bare `python3` invocation.
 
 
+## Surfaced by the audit-cycle-verb Phase 6 gap analysis (2026-08-22)
+
+- 🟢 **J41 — the standing "real concurrency is untested by every lane" gap was overstated, and had
+  been carried across three handoffs without once being probed.** The claim named four shapes and
+  asserted the suite was "structurally blind" to all four because "the stub records under an `fcntl`
+  lock". Probed this cycle:
+
+  - **The suite does fork.** `_bindir()` symlinks a real `agy` stub onto an isolated PATH, so the
+    dispatch loop forks real subprocesses and `wait` reaps real pids. The `fcntl` lock governs the
+    stub's *recording*, not the forking. Those two were conflated when the gap was filed.
+  - **Two shapes already have direct tests**: `test_verb_passes_one` (empty `pids` at `--passes 1`)
+    and `test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal`, which forces `HMAD_STUB_AGY_RC=17`
+    and asserts the rc reaches the `--pass` payload verbatim while the cycle still returns PASS.
+  - **The other two are not defects**, per a throwaway probe of the exact construct: a child dead
+    before its reap still yields its status (`rc=[0 0]` — bash retains it until waited), a signalled
+    child yields `128+n` (`rc=[143 143]`), and the shared fd carries only unscored stderr (6/6 lines,
+    none lost).
+
+  The probe also caught a defect **in itself** worth recording: `kill -TERM $$` inside `( … ) &`
+  signals the **parent**, because `$$` is not re-set in a bash subshell — the probe killed its own
+  script and exited 143. `$BASHPID` is the subshell's pid. A probe that appears to prove a violent
+  failure may only be documenting its own bug.
+
+  **The lesson is not about concurrency.** A plausible, specific, well-written gap survived three
+  handoffs as established fact because each session restated it rather than ran it. A carried repro
+  is not evidence.
+  Status: `RESOLVED` — no code change; the analysis records the evidence.
+
 ## Surfaced by the audit-cycle-verb Phase 6a-prime dispatch (2026-08-22)
 
 - 🔴 **J40 — an `exec agy` run that read NOTHING returned `ASSESSMENT: READY_TO_MERGE`, and every
@@ -1492,8 +1520,23 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   summary document is *by construction* narrower than the spec it summarises. Chasing this one
   finding at a time re-opens a full re-gate per cycle and has no natural stopping point.
 
-  Routed to **Phase 6b** (5-cycle cap) as a single reconciliation pass over plan-vs-spec Axis C
-  drift, rather than continued here. Note for whoever takes it: decide first whether the plan's
-  behaviour summary is *meant* to restate every AC or to point at the spec — if the latter, the
-  right fix is one sentence delegating to the spec, not four more restatements that will drift again.
-  Status: `MONITORING` — surfaced 2026-08-22 across plan cycles 13 and 14.
+  **Resolved 2026-08-22 by reading what the document already does, and the answer inverts the
+  finding.** `plan.md` has an established house pattern for exactly this: its `## Requirements`
+  section (`:78`) lists the ten FRs **by title only**, restating no ACs, and its Risks table
+  (`:400`) writes "per-pass counts printed alongside (AC-5.3) and the inflation stated (AC-5.4)" —
+  it **cites** AC numbers rather than reproducing their text. The same document derives its AC count
+  (`grep -c '^\s*- AC-'`) and, since v1.13, its call-site count (`wc -l < .h-mad/wires.jsonl`),
+  both after a literal went stale.
+
+  So the plan is *meant* to point at the spec, and cycle 14's prescription — add four more
+  restatements of `reports:`, `--passes N<1`, the double-count warning and `(no citation)` — would
+  have made the document worse: four more literals to drift, in a document whose own history is
+  three separate corrections of exactly that. The drift it found is incidental prose paraphrase in
+  Architecture Considerations, not a missing requirement.
+
+  **And all four are present in the code** — `h_mad_audit_cycle.py:387` (`reports:`), `:389`
+  (double-count note), `:339` (`(no citation)`), and `hmad-dispatch.sh` `--passes` (J38). So this
+  was never an implementation gap; Phase 6a classifies it `design-vs-spec` and it does not reduce
+  the match rate.
+  Status: `RESOLVED` — no document edit made. Where prose paraphrases an AC, cite the AC; the
+  pattern is already the document's own.
