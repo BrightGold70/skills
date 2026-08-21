@@ -2688,6 +2688,8 @@ _cmd_audit_cycle() {
                --grace "$report_grace")
   [ -n "$ack_file" ] && helper_args+=(--ack-file "$ack_file")
   python3 "$here/h_mad_audit_cycle.py" "${helper_args[@]}"
+  # Propagate the helper rc either way; explicit exit prevents main() fall-through.
+  exit $?
 }
 
 # Single-quote a string for safe interpolation into a shell command line. The
