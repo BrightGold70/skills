@@ -1262,6 +1262,38 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 
 ## Surfaced by the audit-cycle-verb Phase 7 close-out (2026-08-22)
 
+- 🔴 **J43 — Phase 7's archive step silently retired a test, because an empty `parametrize` SKIPS.**
+  `test_premise_items_match_gate_count_real_artifacts` runs the premise extractor against a corpus
+  of **real** collected audit reports — a Reimplementation-parity requirement added by design v1.19
+  specifically so the check is not run only against synthetic fixtures. Its corpus,
+  `REAL_AUDIT_REPORTS`, globbed the two **live** feature directories.
+
+  Archiving this feature moved all 105 artifacts under `docs/archive/2026-08/`, and the corpus went
+  from 8 files to **0**. pytest's response to an empty parameter set is not a failure:
+
+  ```text
+  SKIPPED [1] got empty parameter set ['report'] -- test_premise_items_match_gate_count_real_artifacts
+  ```
+
+  In a `-q` suite run that is one `s` among 1580 dots. The guard was gone and every gate stayed
+  green.
+
+  **This was not bad luck, it was scheduled.** Phase 7 archives *every* feature, so any corpus
+  globbing only live directories is guaranteed to empty out — the only question was which feature
+  would be the one to do it. Per-pass naming (`.p<i>`) is new with this verb, so this feature's
+  artifacts were the entire corpus, and archiving them took it to exactly zero.
+
+  Fixed two ways, because widening the glob alone would leave the same trap armed for the next
+  structural change: `REAL_AUDIT_REPORTS` now also globs `docs/archive/*/*/*.audit.v*.p*.md`
+  (96 candidates, capped at 8), **and** `test_real_audit_report_corpus_is_not_empty` asserts the
+  corpus is non-empty so a future emptying fails loudly instead of skipping. Mutation-checked:
+  removing the archive glob yields `1 failed, 1 skipped` — the guard fires, and the skip it exists
+  to catch is visible right beside it.
+
+  Sibling of the `pytest -k` selection trap already recorded on this machine: an empty selection
+  exits 0. **Test the empty input for a non-empty body.**
+  Status: `FIXED` — `h-mad/tests/test_h_mad_audit_cycle.py`.
+
 - 🔴 **J42 — `audit-cycle` broke the telemetry cycle counter for every feature it audits, and the
   breakage reports as `0`.** `h_mad_cycle_counts.py:15` matched `_VERSION_RE = r"\.v(\d+)\.md$"`,
   while the verb writes one artifact **per pass**: `<feature>.<phase>.audit.v<N>.p<i>.md`. The glob

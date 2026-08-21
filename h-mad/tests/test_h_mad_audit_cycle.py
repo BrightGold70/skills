@@ -17,6 +17,10 @@ REAL_AUDIT_REPORTS = tuple(
         [
             *REPO_ROOT.glob("docs/01-plan/features/*.audit.v*.p*.md"),
             *REPO_ROOT.glob("docs/02-design/features/*.audit.v*.p*.md"),
+            # Phase 7 moves every feature's artifacts under docs/archive/<YYYY-MM>/,
+            # so a live-only corpus is guaranteed to empty out at close-out -- and an
+            # empty parametrize SKIPS rather than fails. Reach the archive too.
+            *REPO_ROOT.glob("docs/archive/*/*/*.audit.v*.p*.md"),
         ]
     )[:8]
 )
@@ -1608,6 +1612,24 @@ def test_premise_items_match_gate_count(
         report,
         ack_file=ack_file,
         expected=expected_gate_payloads(body, acknowledged),
+    )
+
+
+def test_real_audit_report_corpus_is_not_empty() -> None:
+    """An empty parametrize SKIPS, and a skip reads as green in a -q suite run.
+
+    `REAL_AUDIT_REPORTS` feeds the Reimplementation-parity check below against real
+    collected reports. It used to glob only the LIVE feature directories -- but every
+    feature is archived at Phase 7, so that corpus was guaranteed to empty out, and it
+    did: archiving this feature took it from 8 files to 0 and turned the parity test
+    into `SKIPPED [1] got empty parameter set` without a single failure anywhere.
+
+    This asserts the corpus exists, so the next archive fails loudly instead of
+    silently retiring the guard.
+    """
+    assert REAL_AUDIT_REPORTS, (
+        "real-artifact corpus is empty -- the parity test below is silently skipping; "
+        "check the globs still reach the archive"
     )
 
 
