@@ -1334,12 +1334,43 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   | no fixture for the delivered-but-no-`GATE:`-token guard | guard `:289`, test `test_combine_raises_when_delivered_pass_has_no_gate_token:635` |
   | no test for `size_status` worst-of aggregation | `test_verb_two_pass_dispatch_uses_distinct_per_pass_artifacts_and_worst_size_status:1142` |
   | `test_verb_unremovable_path` can't reach the post-removal guard because `set -e` aborts at `rm -f` | `rm -f … \|\| true` at `:2607` — the `\|\| true` is right there; the test asserts exit 3 **and** `channel not cleared`, which only the guard emits |
-  | Task 5 omits `--passes` default 2 → bash crashes with `[: : integer expression expected` | `--passes` is **required** (`_need "$passes" --passes`); omitting it exits 2 with `missing required argument: --passes`. The prescription would *change* documented behaviour |
+  | Task 5 omits `--passes` default 2 → bash crashes with `[: : integer expression expected` | **this one does not falsify — see J38.** The predicted *symptom* is wrong (`_need "$passes" --passes` exits 2 cleanly, no bash error), but the *concern* is right and the prescription restores documented behaviour rather than changing it: spec AC-3.1 says "Default pass count is 2" |
 
   **One survives**: `plan.md` states "five composed call sites" at `:278`, `:389` and `:424`, while
   `impl-plan.md:902` says "six call sites, six `wiring` tasks, six WIRE-PINs, twelve caller-side
   [mutations]" and `audit_cycle_connections.mutation.json` carries **12 rows**. Six is right; the
   plan's success criterion could be met while the shell→helper boundary went unverified.
+
+  **Fixed 2026-08-22 (plan v1.13), and the count was the smaller half of it.** `.h-mad/wires.jsonl`
+  enumerates the six pins outright, so nothing here needed inferring:
+
+  ```text
+  hmad-dispatch.sh:audit-cycle  -> h_mad_assemble_audit.py
+  hmad-dispatch.sh:audit-cycle  -> exec agy
+  hmad-dispatch.sh:audit-cycle  -> h_mad_audit_cycle.py     <- the one the plan dropped
+  h_mad_audit_cycle.py:collect  -> h_mad_report_wait.py
+  h_mad_audit_cycle.py:collect  -> h_mad_extract_report.py
+  h_mad_audit_cycle.py:gate     -> h_mad_audit_gate.py
+  ```
+
+  The plan's list enumerated **callee scripts**, and the sixth call site is the only one whose callee
+  is this feature's own new code rather than a pre-existing script — so a by-callee enumeration
+  structurally cannot see it. That same list also **misattributed** three of its five:
+  `h_mad_report_wait.py`, `h_mad_extract_report.py` and `h_mad_audit_gate.py` are called by the
+  helper, not by the verb. Correcting only the number — which is all the finding asked for — would
+  have left the process boundary described backwards, with the shell credited for three calls it
+  does not make. **A count finding can be the visible edge of an attribution defect; fix what makes
+  the count wrong, not the count.**
+
+  Replaced with an explicit caller→callee table, and the success criterion now **derives** the number
+  (`wc -l < .h-mad/wires.jsonl`, cross-checked against `h_mad_wire_registry.py verify`'s `verified=`)
+  instead of restating it. That cure is the house pattern, already applied one bullet above in the
+  same document for the AC count after a literal went stale twice (49→50→52).
+
+  Not touched: `plan.md:5`, `:11`, `:14`, `:49` say the **hand-run** cycle is five calls, and
+  `spec.md:12` says the same. Those are correct and must stay — the sixth call site exists only
+  because the verb introduces its own helper, which the hand-run cycle had no equivalent of. A blind
+  five→six sweep would have corrupted all five.
 
   **The lesson is the audit's reading surface, not its competence.** These passes read the planning
   prose and inferred what the code must therefore do. Most of the findings are *true about the
@@ -1349,9 +1380,40 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
 
   That distinction changes what the prescriptions cost. Thirteen of them are **doc** edits: harmless
   in themselves, merely unnecessary, but each one re-opens the re-gate obligation this cycle just
-  discharged. Exactly **one** is a code change — arming a `--passes` default — and that one is
-  actively wrong, because `--passes` is required by design and defaulting it would silently accept
-  an invocation the verb currently rejects. Falsify against the code **before** applying, every
-  time; and when a finding names a test, grep the **file-scoped** name, not the bare one — the
-  real-corpus row above reads as a genuine gap right up until the sibling test is found.
-  Status: `MONITORING` — the five-vs-six contradiction is unfixed; the other 14 need no action.
+  discharged. Exactly **one** is a code change — arming a `--passes` default — and **it was the one
+  finding here that is real** (J38). Falsify against the code **before** applying, every time; and
+  when a finding names a test, grep the **file-scoped** name, not the bare one — the real-corpus row
+  above reads as a genuine gap right up until the sibling test is found.
+
+  **The correction to this entry is its most useful part.** A finding has three separable parts —
+  facts, concern, prescription — and they fail independently. The `--passes` row arrived with a
+  *fabricated symptom* (a bash error that does not occur), that symptom falsified cleanly against
+  the code, and the falsification was then allowed to discharge the whole finding. It should have
+  discharged only the symptom. Fourteen rows here survive re-examination; the fifteenth was thrown
+  out for being wrong about something it did not need to be right about. **Falsify the claim the
+  finding is actually making, not the story it tells about it.**
+  Status: `FIXED` — five-vs-six corrected in plan v1.13 and re-gated at cycle 13, which raised no
+  finding against it. Of the other 14, thirteen need no action and one is now J38.
+
+- 🔴 **J38 — `--passes` has no default, and spec AC-3.1 says it must.** Spec AC-3.1: "Default pass
+  count is 2." Design `:20` (`[--passes K=2]`) and `:368` (`# default 2, K>=1`) and plan `:33`
+  (`[--passes <K>]  # default 2`) all agree. The shipped verb disagrees:
+  `hmad-dispatch.sh:2562` declares `local passes=""` and the validation block calls
+  `_need "$passes" --passes`, so omitting the flag exits 2 with `missing required argument:
+  --passes` and no cycle runs. Three gated documents describe an optional flag; the code requires it.
+
+  **Why 1560 tests never saw it.** The test helper `dispatch_args` is declared
+  `def dispatch_args(*, feature=…, phase=…, cycle="7", passes="2", root)` and unconditionally emits
+  `--passes` into every argv it builds. All 44 call sites therefore supply the flag. **The fixture's
+  own default is a copy of the AC's default**, so the suite reads as though it covers AC-3.1 while
+  no test ever exercises the path where the flag is absent. A default that only the fixture supplies
+  is indistinguishable, from inside the suite, from one the program supplies.
+
+  Sibling of the strawman-mutation class already recorded on this feature: the check appears to fire
+  and is testing something else. Here the *fixture* appears to exercise a default and is supplying
+  it instead.
+
+  The fix is small — `local passes="2"` and drop the `_need` for it, keeping the `K < 1` rejection
+  untouched — plus a test that omits `--passes` and asserts exactly two dispatches. It is a
+  behaviour change to shipped code, so it is a Phase-5 edit under the TDD gate, not a doc pass.
+  Status: `MONITORING` — surfaced 2026-08-22 while re-gating J37; not fixed, operator call pending.

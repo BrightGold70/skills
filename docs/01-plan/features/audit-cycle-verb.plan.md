@@ -36,6 +36,26 @@ hmad-dispatch audit-cycle --feature <name> --phase plan|design|impl-plan --cycle
                           [--timeout <sec>]         # per-pass exec watchdog
 ```
 
+The helper it invokes has its own contract, and this plan states it rather than leaving it to the
+implementation — the shell→helper boundary is the one call site whose callee is new code, so there
+is no existing `--help` to fall back on:
+
+```
+h_mad_audit_cycle.py --feature <name> --phase plan|design|impl-plan --cycle <N>
+                     --project-root <path> --passes <K>
+                     --pass <i>:<report>:<out>:<rc>   # repeatable, one per dispatched pass
+                     --size-status verified|unverified # worst over passes; the verb always sends it
+                     [--halt-reason <reason>]          # no-pass mode: emit UNVERIFIED, collect nothing
+                     [--grace <sec>]                   # the verb forwards --report-grace here
+                     [--ack-file <path>]
+```
+
+`--pass` is the whole per-pass channel in one colon-delimited value — index, report path, `--out`
+path and the dispatch's rc — so a pass that is dispatched and a pass that is not are distinguishable
+by presence rather than by a sentinel. In no-pass mode the verb sends `--halt-reason` and **no**
+`--pass` at all; every other context argument is still forwarded, because a verdict line has to
+carry the same identity whether or not anything ran.
+
 `--feature`, `--phase`, `--cycle` and `--project-root` are forwarded to
 `h_mad_assemble_audit.py`; `h_mad_extract_report.py` receives `--feature`, `--phase`, `--cycle`
 and `--after-marker` only — **it has no `--project-root` flag** (verified against `--help`), so
@@ -243,11 +263,14 @@ So the verb does neither. **Reap first, then decide from the file, with a short 
 than the full wait:**
 
 1. `wait` each backgrounded dispatch and record its rc.
-2. For each pass, test the report path directly. Non-empty → `delivered=report-file`, no wait at
-   all. This is the normal case and costs nothing.
-3. Empty or absent → `report_wait` with a **grace** timeout (`--report-grace`, default 5s), not the
-   600s figure. Once the process has exited, the only file that can still land is one already being
-   flushed; a longer wait cannot change the outcome.
+2. For each pass, test the report path directly. Non-empty **and** `<report-path>.done` present →
+   `delivered=report-file`, no wait at all. This is the normal case and costs nothing. The `.done`
+   marker is not decoration: without it a report caught mid-flush is non-empty and truncated, and
+   size alone cannot tell the two apart (spec AC-4.1).
+3. Anything else — absent, empty, or **non-empty with no `.done`** — → `report_wait` with a
+   **grace** timeout (`--report-grace`, default 5s), not the 600s figure. Once the process has
+   exited, the only file that can still land is one already being flushed; a longer wait cannot
+   change the outcome.
 4. Still nothing → `h_mad_extract_report.py` on that pass's `--out` (`delivered=out`), then
    `delivered=none` if that is empty too.
 
@@ -275,11 +298,26 @@ reporting a guard as enforced. The verb therefore asserts the post-state of ever
 and its history across re-runs is useful for exactly the crash diagnosis this guard is about.
 
 **This feature's deliverable is almost entirely connections, so connection enforcement governs its
-tests.** The verb writes very little logic of its own; what it ships is five call sites —
-`h_mad_assemble_audit.py`, `exec agy`, `h_mad_report_wait.py`, `h_mad_extract_report.py` and
-`h_mad_audit_gate.py`. A test that exercises any of those scripts directly is not evidence the verb
+tests.** The verb writes very little logic of its own; what it ships is **six** call sites, and they
+do not all belong to the same process — the boundary this plan draws between shell and Python runs
+straight through them:
+
+| caller | callee |
+|---|---|
+| `hmad-dispatch.sh:audit-cycle` | `h_mad_assemble_audit.py` |
+| `hmad-dispatch.sh:audit-cycle` | `exec agy` |
+| `hmad-dispatch.sh:audit-cycle` | `h_mad_audit_cycle.py` |
+| `h_mad_audit_cycle.py:collect` | `h_mad_report_wait.py` |
+| `h_mad_audit_cycle.py:collect` | `h_mad_extract_report.py` |
+| `h_mad_audit_cycle.py:gate` | `h_mad_audit_gate.py` |
+
+The shell→helper row is the one an enumeration **by callee script** drops, because it is the only
+call site whose callee is this feature's own new code rather than a pre-existing script. It is also
+the load-bearing one: the three collection and gating connections beneath it are unreachable if it
+breaks, so a criterion that omits it can be met in full while the boundary carrying the other three
+goes unverified. A test that exercises any of these callees directly is not evidence the **caller**
 reaches it, and presence of a call site in the diff reads as correct whether or not it fires. Each
-of the five therefore ships a test that **fails when that connection alone is removed and the callee
+of the six therefore ships a test that **fails when that connection alone is removed and the callee
 is left intact**, mutated in both directions where a direction exists:
 
 **Every mutation below is applied to the CALLER, leaving the callee intact** — that is what the
@@ -386,8 +424,12 @@ feature-branch prerequisite (§"Convention Prerequisites") concrete rather than 
 - `AUDITCYCLE:` verdict emitted with exit 0 on PASS, FAIL and UNVERIFIED alike; non-zero reserved
   for operational error
 - Every mutation in the gating mutation spec is caught
-- Every connection mutation is caught — each of the five composed call sites has a test that fails
-  when that connection alone is removed with its callee intact
+- Every connection mutation is caught — each composed call site has a test that fails when that
+  connection alone is removed with its callee intact. As with the AC count above, the number is
+  **derived, never restated here**: `wc -l < .h-mad/wires.jsonl` (one WIRE-PIN per call site),
+  cross-checked by `h_mad_wire_registry.py verify` reporting `verified=` that same number. The
+  literal "five" this bullet used to carry was wrong for the same reason a stale count is always
+  wrong, plus one of its own: it counted callee *scripts* and so dropped the shell→helper wire
 - `--ack-file` reaches every per-pass gate, asserted by a test in which the sidecar clears a finding
   the gate would otherwise count
 - Every pre-dispatch file removal is asserted to have landed by re-reading the path, and a surviving
@@ -498,3 +540,25 @@ agy, gate on must-fix and should-fix, revise and re-audit until both are zero.
   audit passes delivered via the report file, `cycle7_p1` alone fell back to `--out` — nine cycles,
   not eight, and per pass rather than per cycle. The criterion now names the measured rate, which is
   what `h-mad/SKILL.md` §6.6 actually shipped. Paired: spec v1.18, design v1.22, impl-plan v1.9.
+- v1.13: J37 correction. The Implementation Strategy said "what it ships is five call sites" and the
+  Success Criteria said "each of the five composed call sites", while `impl-plan.md:902`, the twelve
+  rows of `audit_cycle_connections.mutation.json` and the six WIRE-PINs in `.h-mad/wires.jsonl` all
+  say **six**. Six is right, and the miscount had a cause worth naming: the list enumerated callee
+  *scripts*, and the sixth call site — `hmad-dispatch.sh:audit-cycle` → `h_mad_audit_cycle.py` — is
+  the only one whose callee is this feature's own new code, so a by-callee enumeration cannot see
+  it. The same list also **misattributed** three of its five: `h_mad_report_wait.py`,
+  `h_mad_extract_report.py` and `h_mad_audit_gate.py` are called by the helper, not by the verb, so
+  correcting the count alone would have left the process boundary described backwards. Replaced with
+  an explicit caller→callee table, and the criterion's count is now derived from the wire registry
+  rather than restated — the cure this document already applies to the AC count one bullet above.
+  Found by the plan re-audit at cycle 12 (the only one of that cycle's 15 must-fixes that survived
+  falsification against the shipped code); filed as J37 in `docs/skill-monitoring.md`.
+- v1.14: Two gaps closed from the plan re-audit at cycle 13, both agreed real against the spec and
+  the shipped code. (1) The reap-and-decide step list still described the pre-`.done` fast path —
+  "Non-empty → `delivered=report-file`" — which spec AC-4.1 superseded when it added the marker
+  requirement. Both passes raised it independently, and the shipped helper already follows the spec
+  (`h_mad_audit_cycle.py:63`), so the plan was the stale half of the pair. Steps 2 and 3 now match
+  AC-4.1's two branches. (2) The plan gave the shell verb's full CLI signature and never the
+  helper's, leaving the process boundary this document calls load-bearing without a stated contract;
+  the helper's signature is now written out beside the verb's, taken from its argparse rather than
+  inferred. Cycle 13 raised no finding against the v1.13 call-site correction.
