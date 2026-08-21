@@ -1187,3 +1187,47 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   stderr line plus the preserved file, not a new exit code. The *discipline* half stands unchanged:
   one `--out` per dispatch. `hmad-dispatch.sh` `_out_clobber_ok`, SKILL.md §"Give every dispatch its
   own `--out`", 6 tests in `test_hmad_dispatch_exec.py`.
+
+## Surfaced by the audit-cycle-verb Task 5 `/h-mad` run (2026-08-21)
+
+- 🔴 **J34 — `h_mad_wire_registry.py verify` can never verify ANY wire: it compares bare pin names
+  against full pytest node ids.** `collect()` (line ~370) builds `node_ids` from `pytest
+  --collect-only -q` output, i.e. strings shaped `h-mad/tests/test_x.py::test_name`. `partition()`
+  (line ~350) then tests `if record["pin"] in collected` — and `pin` is the **bare test name**,
+  because that is what the impl-plan's `WIRE-PIN:` line carries and what 5b's auto-register writes
+  into `.h-mad/wires.jsonl`. Exact set membership between the two forms can never hold, so every
+  active pin partitions to `missing` and `verified` is structurally pinned at 0.
+  **Measured on this tree**, with all six rows registered by 5b and four of their pins present and
+  passing:
+
+  ```text
+  WIREREG: UNTRACKED registered=6 verified=0 broken=0 missing=6 …
+  [H-MAD] step5f:wire_pin_missing:Task 5        # its pin exists and PASSES
+  ```
+
+  ```python
+  collected = R.collect(Path("/Users/kimhawk/orca/skills"), [Path("h-mad/tests")])
+  "test_verb_assemble_halt_no_dispatch" in collected                      # -> False
+  [n for n in collected if n.endswith("::test_verb_assemble_halt_no_dispatch")]
+  # -> ['h-mad/tests/test_hmad_dispatch_audit_cycle.py::test_verb_assemble_halt_no_dispatch']
+  ```
+
+  The failure direction is the safe one — it halts rather than passing a broken wire — but the
+  consequence is that **5f has never actually verified a wire on any feature**; it has only ever
+  reported `wire_pin_missing` or been skipped. A green 5f is not currently evidence of anything.
+  Likely fix: match on suffix `::<pin>` (and require exactly one match, so an ambiguous bare name
+  is a distinct verdict rather than a silent first-wins). Do not "fix" it by writing full node ids
+  into the registry at register time — 5b learns the pin from a document that names a bare test,
+  and the file it lives in can move.
+  Status: `MONITORING`. Found while running 5f for `audit-cycle-verb`; not fixed in that run
+  because it is a separate defect in a different script and the feature's TDD gate was armed.
+
+- 🟡 **J35 — `h_mad_wire_registry.py` shells pytest via `sys.executable`, so a bare `python3`
+  invocation cannot collect on a box whose `python3` lacks pytest.** Running the documented command
+  as `python3 h_mad_wire_registry.py verify …` on this machine yields
+  `RegistryError: pytest collection failed with exit code 1 … No module named pytest`
+  (`/opt/homebrew/opt/python@3.14/bin/python3.14`), reported as `WIREREG: UNREADABLE`. Correct —
+  it is a cannot-judge, not a verdict — but the remedy is undiscoverable from the message, which
+  names the missing module rather than the interpreter choice. Invoking the *script* with
+  `/opt/anaconda3/bin/python3.11` fixes it. Worth either an explicit `--python` flag or naming the
+  interpreter in the error. Status: `MONITORING`.
