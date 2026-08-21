@@ -1330,7 +1330,18 @@ makes the step executable at Phase-5 time; `record` is a close-out call and cann
 serve a Phase-5-start instruction. This is the explicit environment check (cmux vs orca) — do it
 before any `send`/`read`. See `references/agent-substrate.md`.
 
-For each audit (Phase 3, 4, 5b), **assemble with the script** — it performs steps 1
+For each audit (Phase 3, 4, 5b), run one complete cycle with the verb:
+
+```bash
+hmad-dispatch audit-cycle --feature <feature> --phase plan|design|impl-plan \
+  --cycle <N> --passes <K> --project-root <PROJECT_ROOT>
+```
+
+`audit-cycle` runs exactly one cycle: assemble, dispatch, collect, gate, and print one
+`AUDITCYCLE:` verdict. It is not the revision loop; re-auditing until
+`must=0 should=0` remains the orchestrator's job.
+
+For each audit pass, the verb **assembles with the script** — it performs steps 1
 through 7.2 below deterministically and refuses to emit a prompt that fails the preflight:
 
 ```bash
@@ -1416,7 +1427,7 @@ assembling by hand because the script is unavailable:
    4. **Trim the rubric** as a last resort, remembering `invariants.base.md` is inlined into every audit prompt, so a rule added there is paid for by all of them.
 6. For impl-plan audits only: replace `<INLINE_PAIRED_DESIGN>` with audited design.md.
 6.5. Replace `<AUDIT_SENTINEL>` with `AUDIT-<feature>-<phase>-v<N>` — the per-cycle stem step 9 extracts on. It must be unique per cycle; reusing a previous cycle's stem reopens the stale-scrollback trap it exists to close.
-6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. See `references/orchestration-mode.md` §"Report-file transport".
+6.6. **Report-file transport (preferred under Orca).** If `hmad-dispatch env` reports `substrate: orca`, replace `<REPORT_FILE_PATH>` with an absolute staged path `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` (and `rm -f "$RP" "$RP.done"` first); the agent will write its report there and mark `$RP.done`. Otherwise (cmux / unpinned) leave `<REPORT_FILE_PATH>` empty and rely on the sentinel scrape. Measured on `audit-cycle-verb`: across the 18 impl-plan audit passes, 17 delivered via the report file (file present, non-empty, `.done` written); 1 did not — cycle 7 pass 1 wrote neither the report file nor the marker, and its report was recovered from `--out`. The verb therefore always arms the `--out` fallback. See `references/orchestration-mode.md` §"Report-file transport".
 7. Stage: `cat > /tmp/audit_<feature>_<phase>_cycle<N>.txt`.
 7.2. **Residual-placeholder preflight — mandatory, before any `send`.** Substitution is a
    literal string replace over the whole file, so it is silent in both failure directions: a
@@ -1504,6 +1515,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
 - `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
+- `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report or no gateable sections.
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
 - `h_mad_install_check.py` — verifies the skill's **own** install shape (the two symlinks §"First-run auto-bootstrap" depends on): `check()` + CLI printing `INSTALL: PASS|FAIL issues=N|UNREADABLE` followed by `SKILL_NOT_SYMLINK:`/`SKILL_NOT_INSTALLED:`/`SKILL_DANGLING:`/`SKILL_NOT_A_CHECKOUT:`/`HOOK_NOT_INSTALLED:`/`HOOK_DANGLING:`/`SPLIT_INSTALL:` detail lines, exit 0 on a verdict / 2 only when no path was given. Read the token, never `$?`. Reads paths and repairs nothing — relinking `~/.claude` is an operator action.
 - `h_mad_resume_decision.py` — smart-resume decision

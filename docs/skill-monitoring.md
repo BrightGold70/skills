@@ -1258,3 +1258,35 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   and `run_pins()`, and the collection-failure message now names the interpreter it used:
   `pytest collection failed with /opt/homebrew/opt/python@3.14/bin/python3.14 exit code 1 … No
   module named pytest`. Verified live both ways from a bare `python3` invocation.
+
+
+## Surfaced by the audit-cycle-verb Task 9 docs write (2026-08-21)
+
+- 🔴 **J36 — the `audit-cycle-verb` spec, design AND impl-plan all state a measurement that the
+  artifacts on disk contradict.** All three say the report-file slot was measured **"empty on 8 of 8
+  impl-plan cycles"** (`…spec.md:238`, `…design.md:327`, `…impl-plan.md:840`), and Task 9's AC-9.2
+  asked for that sentence to be copied into `h-mad/SKILL.md`. Measured instead, from the staged
+  artifacts of the feature's own impl-plan audit:
+
+  ```text
+  17 of 18 pass report files exist, non-empty, with 17 .done markers
+  the ONLY absent one is cycle7_p1
+  ```
+
+  Cycle 7 pass 1 is exactly the case the impl-plan's own architecture constraint 2b describes —
+  "`delivered=out,report-file` — the mixed case". So the plan contradicts itself: constraint 2b
+  records one pass falling back to `--out` while AC-9.2 generalises that single pass into all
+  cycles. The count is wrong twice over: there were **9** impl-plan cycles, not 8, and the
+  measurement was per-pass, not per-cycle.
+
+  **The claim is load-bearing in the safe direction, which is why it survived three gates.** It
+  justifies always arming the `--out` fallback — a conclusion the real 1-in-18 measurement supports
+  just as well, so nothing downstream is wrong; only the stated evidence is. That is precisely the
+  shape an audit does not catch: a true conclusion resting on a false premise reads as correct to a
+  reviewer checking whether the conclusion follows.
+
+  Operator ruling 2026-08-21: SKILL.md carries the **measured** figure (shipped — see §6.6, "across
+  the 18 impl-plan audit passes, 17 delivered via the report file"), and the three planning
+  documents are corrected separately rather than silently amended, per the v1.15 precedent that an
+  unaudited edit to a gated doc is an ungated doc.
+  Status: `MONITORING` — the spec/design/impl-plan text is still wrong and needs a corrective pass.
