@@ -2,8 +2,30 @@
 
 Live registry of known bugs and improvement points in the `h-mad` / `handoff` skills, surfaced during real `/h-mad` runs. **Not auto-fixed** — each entry is under monitoring until deliberately actioned. Action a batch as its own `/h-mad` feature when priority warrants.
 
-**Status:** 🔴 bug (correctness) · 🟡 process/robustness · 🟢 improvement/opt
-**Lifecycle:** `MONITORING` (tracked, unfixed) · `PLANNED` (scheduled) · `FIXED` (link commit) · `WONTFIX` (with reason)
+**Severity:** 🔴 bug (correctness) · 🟡 process/robustness · 🟢 improvement/opt
+
+**Lifecycle** — every `J` entry ends with exactly one machine-readable status line, written as
+the word `Status:` followed by one of these in backticks:
+
+| word | meaning |
+|---|---|
+| `MONITORING` | tracked, still unfixed — the only word that means open work |
+| `PLANNED` | scheduled, not yet started |
+| `FIXED` | remedied in code; link the commit |
+| `WONTFIX` | deliberately not built, with the reason — kept so it is not re-proposed |
+| `RESOLVED` | closed without a fix here: upstream, or by another entry's feature |
+| `DISPROVEN` | the filed behaviour does not occur. **Note J9**: a disproven *cause* is not a disproven *symptom*, and the entry must say which was refuted |
+| `SUPERSEDED` | absorbed by a later entry that reproduced it and named the mechanism |
+
+**Count `MONITORING`, not the absence of a word.** Before 2026-08-22 only 9 of 40 entries carried a
+`Status:` line, so any census over this file measured the convention rather than the backlog — and
+one did: a regex sweep reported J18 as open when its own body said "Fixed", because the note that
+follows it contains the word MONITORING. `grep -c` also exits 1 on no match, which reads as a clean
+zero if the exit code is ignored. All 40 are now classified.
+
+**Numbering gaps (J31–J33) are deliberate and must stay:** J-ids are referenced from
+commit messages, handoffs and `[[J2]]`-style cross-links, and renumbering would silently repoint
+every one of them at a real, wrong entry.
 
 Origin run: `orca-git-native-checkpoints-and-merge-gate` (shipped main `2b95476`, 2026-07-22).
 **All F1–F13 resolved on `feature/186-skill-monitoring-fixes` (2026-07-22)** — h-mad suite 355/0 with session pins present. Fixes below; each entry's Status flipped to FIXED.
@@ -199,6 +221,7 @@ is not re-filed.
   **Dogfooded live:** `hmad-dispatch launch codex` pinned `term_2ff2ec1f...`, which `terminal list`
   confirms and `hmad-dispatch alive codex` reports live. H5's "launch owns the spawn" claim holds
   for the first time. [[J16]]
+  Status: `FIXED` 2026-07-23 — see the FIXED note in this entry.
 - 🟡 **J2 — the session pin file is cwd-relative.** `${HMAD_ORCA_PIN_FILE:-.h-mad/orca-pins.env}`
   resolves against the *current directory*, so driving a `/h-mad` run in repo A from a coordinator
   session sitting in repo B reads B's pin file. Observed: `hmad-dispatch read agy` from the wrong
@@ -227,6 +250,7 @@ is not re-filed.
 
   Verified live from three cwds: repo root, a subdirectory (no stray second file), and the sibling
   `HemaSuite` checkout — which now reads *its own* pins and says so. [[J18]]
+  Status: `FIXED` 2026-07-23 — `_pin_file` resolves in three branches; see this entry.
 - 🟡 **J3 — a tail read of a TUI is not evidence of pane state.** `hmad-dispatch read agy
   --lines 12..40` showed a boot screen (`You are currently not signed in`, spinner) unchanged
   across two minutes and three polls; I was one step from declaring the CLI wedged and relaunching
@@ -263,6 +287,7 @@ is not re-filed.
   One test initially passed for the wrong reason: a whole-file search for the readiness string
   matched the unrelated J13 size guidance added to `SKILL.md` earlier the same day. Scoped to the
   context-hygiene block. [[F5]] [[J13]]
+  Status: `FIXED` 2026-07-23.
 - 🟡 **J4 — F8 re-opened.** The actionable remedy message shipped and works, but the gap it
   describes is unchanged: `python3` on this machine (homebrew 3.14) has no `jsonschema`, so every
   `h_mad_state_write.py` / `h_mad_state_validate.py` / `h_mad_state_staleness.py` call in a run
@@ -313,6 +338,7 @@ is not re-filed.
   `h_mad_state_write.py --create/--set` and `h_mad_state_staleness.py` all run and agree with
   jsonschema's verdicts on the live store. Reading a command's output without confirming which
   binary produced it is §"Mutation verification" applied to my own evidence. [[F8]]
+  Status: `FIXED` 2026-07-23 — by the first option, not the cheap one.
 - 🟢 **J5 — `--claim` cannot create.** SKILL's `start_fresh` route prints
   `h_mad_state_write.py … --feature <f> --claim "<session-id>"`, but on a feature that does not
   exist yet that exits 2 with `ERROR: no such feature`. Every first-time claim — i.e. every
@@ -334,6 +360,7 @@ is not re-filed.
   `claim` both had their `no such feature` guard covered, but deleting `release`'s left **653 tests
   passing**. A release against a misspelled name would silently no-op, leaving an operator believing
   they let go of a feature they still hold. Covered now; the mutation fails a test.
+  Status: `FIXED` 2026-07-23 — by correcting the snippet, deliberately not by making `--claim` imply create.
 - ⬜ **J6 — DISPROVEN: `clear <agent>` does not exit the Antigravity pane.** Initially filed from
   an observation that `hmad-dispatch clear agy` was followed within 15s by `status: exited` on
   that handle. The operator then reported having closed that tab manually. Verified with a
@@ -342,6 +369,7 @@ is not re-filed.
   processed and the frame redrawn). **`clear` behaves as documented.** Recorded so the
   correlation is not re-filed as causation by a future run. Method note: the throwaway-probe
   pattern (`docs/skill-candidates.md`, recurrence 2) is what settled it.
+  Status: `DISPROVEN` — the filed behaviour does not occur; kept so it is not re-filed.
 
 - 🔴 **J7 — F13 is only half closed: the pin FILE leaks where the env vars no longer do.** F13 added
   every `HMAD_ORCA_*` env var to the strip-list in `test_hmad_dispatch.py::run()`. The session pin
@@ -361,6 +389,7 @@ is not re-filed.
   and testing stop being mutually exclusive. Workaround used this session: keep the pin file absent
   and pass `HMAD_ORCA_CODEX_TERMINAL` / `HMAD_ORCA_AGY_TERMINAL` as env vars, which the resolver
   prefers anyway. [[F13]] [[J2]]
+  Status: `FIXED` — **re-verified live 2026-08-22**, which is the only reason this row can be closed: the entry recorded no fix. J7's repro was `18 failed / 459 passed` with `.h-mad/orca-pins.env` present. Re-run with a pin file deliberately created: the 31 tests it named all pass, and the **full suite is 1601 passed / 0 failed**. The pin file came back byte-identical, so the isolation the fix direction asked for is real and not merely arranged around an absent file.
 
 - 🟡 **J8 — `elapsed_min` is nonsense in every recorded row.** Surfaced while verifying the
   cycle-telemetry-fidelity feature against the real `.h-mad/telemetry.jsonl`: all three rows carry
@@ -387,6 +416,7 @@ is not re-filed.
   broken" for as long as it did. Optionally also have `cmd_record` render an implausible elapsed as
   `?m`, but that treats the symptom. Existing rows stay wrong; they are append-only history.
   **Scheduled: Wave 4** (`docs/01-plan/h-mad-remediation-sequence.md` §Wave 4, "Defects → scripts").
+  Status: `FIXED` — shipped in Wave 4a (`ab3657e`); see the status-row audit note below this section.
 - 🟡 **J10 — `DONE_WITH_CONCERNS` with no concerns stated.** Observed twice during Wave 2
   (`preflight-signal-discipline` Tasks 1 and 2). `references/codex-implementer-prompt.md` defines the
   verdict as "work is complete but you have doubts", and the report format asks for
@@ -407,6 +437,7 @@ is not re-filed.
   concerns section as an operational error rather than a verdict, so silence cannot masquerade as
   nuance. **Scheduled: Wave 4** (`docs/01-plan/h-mad-remediation-sequence.md` §Wave 4,
   "Defects → scripts"). [[J9]]
+  Status: `FIXED` — shipped in Wave 4a (`ab3657e`); see the status-row audit note below this section.
 
 - 🟢 **J9 — `test_alive_cmux_true` is environment-dependent.** Failed once during a Phase-5f full
   run, then passed on two consecutive full runs of the identical suite with no change in between.
@@ -452,6 +483,7 @@ incremented (both drift warnings dead). Being fixed by the `cycle-telemetry-fide
 see `docs/01-plan/h-mad-remediation-sequence.md` Wave 1.
 
 ---
+  Status: `DISPROVEN` 2026-07-23 — the attributed cause was refuted. **The observation stands**: one full run did fail once, cause unknown. A disproven diagnosis is not a disproven symptom.
 
 ## Surfaced by the preflight-read-enforcement `/h-mad` run (2026-07-23, Wave 3 dogfood)
 
@@ -507,6 +539,7 @@ had never been executed. All unfixed.
   (`orca`, with both agent handles). Both instruction sites in SKILL.md corrected; a doc test
   asserts the impossible call is gone **and** that the executable one replaced it, since deleting
   the sentence alone would pass a naive "is it gone" check while losing the capability.
+  Status: `FIXED` 2026-07-23 — took the first branch, not the cheap one.
 - 🟡 **J12 — `ASSEMBLE: PASS` is returned for a prompt predicted to fail.** Assembling this
   feature's design audit printed
   `ASSEMBLE: PASS /tmp/…_design_cycle1.txt 54766B (53.5 KB)` followed by a separate warning line:
@@ -547,6 +580,7 @@ had never been executed. All unfixed.
   Wave-3 `send` receipt there is no irreversible step to guard -- proceeding is correct in both
   states. Putting the signal inside the line the contract already mandates is the honest ceiling
   here, and strictly better than a sibling line nothing must parse. [[J13]]
+  Status: `FIXED` 2026-07-23 — shipped a required machine-readable field on the verdict line; neither option in the original fix direction survived contact.
 - 🟢 **J13 — "split by FR group" does not shrink an oversize design audit.** `SKILL.md` step 5.5
   prescribes, for a prompt past the reviewer cliff: "split the audit by FR group and run Axis C over
   each group in turn." Measured on this feature's design audit: total 50.9 KB, of which design
@@ -604,6 +638,7 @@ Antigravity CLI 1.1.5 / Gemini 3.1 Pro. The original measurements may have been 
 build, or the cliff may be a property of TUI paste rather than of agent-side file reads — the two
 delivery modes were not distinguished when the number was recorded. Worth re-measuring deliberately
 before anyone trims a design to satisfy it.
+  Status: `FIXED` 2026-07-23 — and the premise was wrong too, which changed the fix.
 
 ## Surfaced by the first live Phase-5 worktree fanout (2026-07-23, same Wave 3 run)
 
@@ -633,6 +668,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
   to work in both, `worktree-create` should return a task-id too. Related: the protocol says
   "merge `<module-branch>`" without saying how to derive it — Orca names the branch
   `BrightGold70/<name>`, not `<name>`. [[J1]]
+  Status: `FIXED` — shipped in Wave 4a (`ab3657e`); see the status-row audit note below this section.
 - 🔴 **J15 — a fanout worker is never told to commit, so the merge gate can merge nothing and call
   it clean.** The winner-merge gate runs `git merge --no-ff <module-branch>` and treats "zero exit
   AND `git ls-files --unmerged` empty" as a clean merge worth auto-recording. But nothing instructs
@@ -648,6 +684,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
   as its final action before writing the report, or the orchestrator commits after reading a
   `DONE`), and make the gate refuse a merge whose diff against the base is empty — "nothing to
   merge" must be a halt, never a clean verdict. [[J12]]
+  Status: `FIXED` — shipped in Wave 4a (`ab3657e`); its guards fired live during the J17 work the same day.
 
 ## Surfaced by the fanout-integrity-and-defects `/h-mad` run (2026-07-23, Wave 4)
 
@@ -707,6 +744,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
     (verified), but whether a **human-adopted** pane registers there is unestablished.
 
 **Also observed (evidence, not new IDs):**
+  Status: `RESOLVED` — reported upstream and closed there as completed 2026-07-23; the capability already existed in `worktree ps`.
 - **Handle rotation happened twice in one run**, and the Wave-3 receipt caught both:
   `PREFLIGHT: FAIL stale=agy`, then later `PREFLIGHT: FAIL stale=codex,agy`. Under the pre-Wave-3
   protocol each was an advisory line nothing was obliged to read, and each dispatch would have gone
@@ -818,6 +856,7 @@ protocol has two gaps that only running it could expose. Both unfixed.
 ---
 
 _Append new findings below as later runs surface them. Flip Status + link the commit when actioned._
+  Status: `FIXED` `b0662cc` (feature/195) — and the filing understated it; a second, worse defect was found while fixing the first.
 
 ## Pre-existing: silent flag-drop (closed 2026-07-23)
 
@@ -1013,17 +1052,20 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   in a delivery before acking. The guard's own first implementation used jq's `//`, which treats
   `false` as null-ish and so never fired on exactly the value it hunted — caught by its own test,
   and the reason it now uses `has()`.
+  Status: `FIXED` — `injected=false` guard plus `_await_cache_put`.
 
 - 🔴 **J20 — a lifecycle-REJECTED report is not a completion.** Orca validates `worker_done` and
   can reject one (`missing_dispatch_id`, `sender_not_assignee`) while **still delivering it**, with
   `_orcaLifecycleRejection` in the payload. Matching on `taskId` alone therefore accepts a report
   the runtime itself refused — a false completion, which is the worst possible failure for a gate
   whose entire job is to decide whether work finished. Now parked separately, never as valid.
+  Status: `FIXED` — a lifecycle-rejected report is now parked separately, never as valid.
 
 - 🟡 **J21 — the rejection is the explanation, so do not discard it.** Once J20 stopped treating a
   rejected report as success, the naive fix (drop it) made `await` time out with no reason given,
   and whoever awaited first would have acked the only explanation off the queue permanently.
   `await` now surfaces the rejection and stops, rather than waiting out the clock. [[J20]]
+  Status: `FIXED` — `await` surfaces the rejection and stops rather than waiting out the clock.
 
 - 🟢 **J22 — deciding NOT to build a guard, recorded so it is not re-proposed.** A pane-readiness
   pre-flight before `dispatch` looks obviously right and is wrong on three counts, all measured:
@@ -1034,6 +1076,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   restart-surviving pane, and hand-started panes are absent from `worktree ps`'s `agents[]`. It
   would false-refuse healthy panes. Kept as a row because the absence of a guard is invisible, and
   the next reader will otherwise propose it again.
+  Status: `WONTFIX` — a deliberate decision NOT to build the guard, measured on three counts. Kept as a row precisely because the absence of a guard is invisible and would otherwise be re-proposed.
 
 - 🔴 **J23 — `exec` laundered its own prompt into a verdict.** `codex exec … -` echoes the piped
   prompt into its transcript, so a recovery that greps the whole log reads the prompt's own output
@@ -1048,6 +1091,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   elsewhere in the repo. Found by replaying the real incident log against the fix — a different
   test from the unit tests, and the one that exposed a residual no-boundary hole that had passed
   RED. [[J26]]
+  Status: `FIXED` — `exec` appends the same boundary `send` does and recovers only from after its last occurrence.
 
 - 🔴 **J24 — tidy fixtures made a defect class unreachable.** `prefix="${current%$rest}"` left
   `$rest` **unquoted**, so bash glob-matched it instead of stripping a literal suffix. Production
@@ -1059,6 +1103,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   not under-tested; it was **unreachable**. The general shape: a fixture corpus is itself a
   coverage boundary, and one made entirely of tidy ASCII silently excludes whole defect classes.
   Closed on the fixture side by J25's feature (`HMAD_STUB_HOSTILE`). [[J25]]
+  Status: `RESOLVED` — closed on the fixture side by J25's `HMAD_STUB_HOSTILE` feature. [[J25]]
 
 - 🔴 **J25 — the architectural review was optional by OMISSION.** `h_mad_phase7_preconditions.py`
   branched on `WITH_FIXES`/`NO` and `SKIPPED_NO_PANE` with **no `else`**, so a record that never
@@ -1070,6 +1115,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   is now total, a skip blocks, a deliberate operator override closes with a warning, and 6a-prime
   is satisfied headlessly and records its own verdict. Proven on the identical record with the
   field removed — the old gate returned `READY`, the new one blocks. [[J24]] [[J26]] [[J27]]
+  Status: `FIXED` — `gate-blindness-hardening` (`379b881`).
 
 - 🟡 **J26 — `h_mad_extract_verdict.py` prints its marker to stdout.** `h_mad_extract_verdict.py:232`
   emits `[H-MAD] <feature> phase<N> <key>_<value>` with a plain `print()`, on the line directly
@@ -1113,6 +1159,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   Mutations: `ALL_CAUGHT mutations=3 caught=3 survived=0 refused=0` (marker back on stdout; both
   doc guards). Dogfooded end-to-end — bare capture → `h_mad_state_write.py` → read-back, the exact
   path that returned `None` on gate-blindness-hardening.
+  Status: `FIXED` 2026-08-07 — the marker goes to stderr; stdout carries only `KEY: value`.
 
 - 🟡 **J27 — a doc test's scope depended on prose length.** The §6a-prime doc tests sliced a magic
   `s[idx : idx + 1600]` window. The section had already grown to **1707** characters, so its last
@@ -1124,6 +1171,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   boundary via a `section_6a_prime()` helper, and by replacing the blanket ban with a positive
   assertion of the warning — a string ban forbids naming an anti-pattern in order to warn about it.
   Mutation-verified including a mutation that reverts the boundary slicing. [[J25]]
+  Status: `FIXED` `733a5f8` — slices at the real bullet boundary rather than a magic line count.
 
 - 🔴 **J30 — `exec agy` drops its output contract on ~260 KB prompts, and writes the report
   somewhere you did not ask for.** This is **[[J28]] reproduced, with the missing variable named**:
@@ -1164,6 +1212,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   and the fix direction is therefore a size ceiling on audit dispatch, not another transport.
   **Unverified:** the exact threshold between the ~88 KB known-good assembled audit and the ~260 KB
   known-bad, and whether the drop is agy-side or a `--print` truncation. [[J23]]
+  Status: `MONITORING` — **the one genuinely open defect in this registry.** `exec agy` at ~260 KB honours neither transport and writes a real report at a path of its own choosing, so the artifact is unfindable rather than absent. No current guidance covers that size.
 
 > **Registry-hygiene note, 2026-08-06.** J19–J23 were fixed between 2026-08-03 and 2026-08-05 and
 > referenced by ID in code comments and test docstrings the whole time, but never filed here — so
@@ -1195,6 +1244,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   artefacts cannot be attributed to either run. **Under monitoring.** If it recurs, capture the
   transcript before re-running anything, since re-running is what destroyed the evidence the first
   time. Do not "fix" this without a reproduction.
+  Status: `SUPERSEDED` by [[J30]], which reproduced it 5/5 once prompt size was controlled for and named the missing variable. Not unresolved — absorbed. J28 remains the first sighting.
 
 - 🟢 **J29 — `--out` is last-writer-wins across concurrent dispatches, silently; `--log` is not.**
   Verified deliberately while testing J28: two `exec agy` dispatches run concurrently against the
@@ -1218,6 +1268,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   stderr line plus the preserved file, not a new exit code. The *discipline* half stands unchanged:
   one `--out` per dispatch. `hmad-dispatch.sh` `_out_clobber_ok`, SKILL.md §"Give every dispatch its
   own `--out`", 6 tests in `test_hmad_dispatch_exec.py`.
+  Status: `FIXED` (`GUARDED` 2026-08-09) — `exec` fingerprints `--out` and refuses to overwrite it when the content changed in between, keyed on **change** rather than non-emptiness so h-mad's own documented `no_verdict` re-dispatch still works.
 
 ## Surfaced by the audit-cycle-verb Task 5 `/h-mad` run (2026-08-21)
 
@@ -1276,6 +1327,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   Live proof, same command that produced the broken reading above:
   `WIREREG: UNTRACKED registered=6 verified=5 broken=0 missing=1 ambiguous=0` — Tasks 2-6 verified,
   Task 7 correctly missing because it is not implemented. First time 5f has verified a wire.
+  Status: `FIXED` 2026-08-21 — `partition()` resolves each pin by node-id segment suffix.
 
 - 🟡 **J35 — `h_mad_wire_registry.py` shells pytest via `sys.executable`, so a bare `python3`
   invocation cannot collect on a box whose `python3` lacks pytest.** Running the documented command
@@ -1289,6 +1341,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   and `run_pins()`, and the collection-failure message now names the interpreter it used:
   `pytest collection failed with /opt/homebrew/opt/python@3.14/bin/python3.14 exit code 1 … No
   module named pytest`. Verified live both ways from a bare `python3` invocation.
+  Status: `FIXED` 2026-08-21 — both remedies shipped.
 
 
 ## Surfaced by the audit-cycle-verb Phase 7 close-out (2026-08-22)
