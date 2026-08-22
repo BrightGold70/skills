@@ -1212,7 +1212,36 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   and the fix direction is therefore a size ceiling on audit dispatch, not another transport.
   **Unverified:** the exact threshold between the ~88 KB known-good assembled audit and the ~260 KB
   known-bad, and whether the drop is agy-side or a `--print` truncation. [[J23]]
-  Status: `MONITORING` — **the one genuinely open defect in this registry.** `exec agy` at ~260 KB honours neither transport and writes a real report at a path of its own choosing, so the artifact is unfindable rather than absent. No current guidance covers that size.
+
+  **Re-probed 2026-08-22, and the size half did not survive it.** Eight `exec agy` dispatches at
+  **266,342 B** (260.1 KB — matched to the known-bad size), against agy **1.1.18** under
+  `--output-format stream-json`: **8 of 8 honoured BOTH transports**, writing the report to the exact
+  `--report-file` absolute path *and* emitting the sentinel pair in the last message, with **no
+  off-contract stray in any workspace**. A 87,095 B control passed identically. Five were trivial
+  (write one file, echo it back); **three were work-shaped** — a 260 KB requirements document with
+  five contradictions planted from one end to the other — and each of those three found **all five**.
+  So the whole prompt arrives and is read: the drop is **neither** agy-side **nor** a `--print`
+  truncation, which answers the Unverified question above by dissolving it. The 2026-08-11 5-of-5 was
+  measured on an older agy build under the **text-mode** transport, which is the variable that moved.
+  **The exact threshold was deliberately not bisected** — there is no known-bad size left to bisect
+  toward, and spending dispatches on one would price a number nothing consumes.
+
+  **What did NOT dissolve is the half the entry itself calls the real defect** — "the failure is not
+  that the work was skipped, it is that the artifact is unfindable". Off-contract writes still happen:
+  a second artifact, `~/.gemini/antigravity-cli/scratch/audit_report.md`, a real plan audit naming
+  `EngineResult`/`grounding_totals`, was written **2026-08-22 14:57** — eleven days after the first,
+  and not by any dispatch in this session (attribution unresolved; a live HemaSuite session was
+  running). Two artifacts, two different names, neither matching an `audit.vN` glob, one of them a
+  dotfile. That is what is now closed in code rather than in prose: `h_mad_offcontract_scan.py`
+  searches the workspace **and** agy's scratch root, dotfiles included, assuming no stem, floored by
+  mtime — `OFFCONTRACT: FOUND` lists candidates newest-and-most-report-shaped first, and `NONE` vs
+  `UNREADABLE` are separate tokens so "I could not search" can never print what "I searched and found
+  nothing" prints. It deliberately does **not** feed the gate: a report recovered from an off-contract
+  path has had no schema enforcement applied to it, so transcription stays manual and every premise
+  gets falsified against the source. `failure-recovery.md`'s audit no-report row now sends you to the
+  scan **before** any re-dispatch, which is the step whose absence made a cycle re-dispatch over
+  completed work.
+  Status: `FIXED` — the unfindability is closed by `h_mad_offcontract_scan.py` + the recovery row; the size premise is **refuted at agy 1.1.18** (8/8 clean at the known-bad size), so re-probe before re-filing it against a future build rather than treating the 2026-08-11 measurement as standing.
 
 > **Registry-hygiene note, 2026-08-06.** J19–J23 were fixed between 2026-08-03 and 2026-08-05 and
 > referenced by ID in code comments and test docstrings the whole time, but never filed here — so

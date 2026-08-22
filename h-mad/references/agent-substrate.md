@@ -133,8 +133,18 @@ caused at least one design audit to be trimmed for no reason.
 receives its prompt on **stdin** (`codex exec -`), which is mechanically uncapped;
 agy receives it as a `--print` **arg**, bounded only by `ARG_MAX` (~1 MB on macOS,
 `getconf ARG_MAX` = 1,048,576). A **>90 KB** exec prompt was confirmed answered
-(2026-07-30); the pane path is separately confirmed to 92,055 B (above), so at the
-sizes audits actually reach neither transport is the limit. The binding limit on the exec path is
+(2026-07-30), and **266,342 B (260.1 KB) was confirmed answered 8 times out of 8 on
+2026-08-22** (agy 1.1.18, `--output-format stream-json`) — five trivial and three
+work-shaped, every one honouring *both* the `--report-file` slot and the sentinel
+pair, with no off-contract stray in any workspace. The three work-shaped runs each
+recovered all five contradictions planted from one end of the 260 KB document to the
+other, so the whole prompt arrives and is read: neither an agy-side drop nor a
+`--print` truncation. That closes J30's open question (`docs/skill-monitoring.md`)
+and refutes its size
+premise at this agy version — the 2026-08-11 5-of-5 drop was measured on an older
+build under the text-mode transport. The pane path is separately confirmed to
+92,055 B (above), so at the sizes audits actually reach neither transport is the
+limit. The binding limit on the exec path is
 therefore the receiving model's own context/answer budget, not the transport — so
 do not trim an audit for size when you will dispatch it via `exec` (now the default
 for one-shot 5d/5e). `h_mad_assemble_audit.py`'s size warning is pane-conservative;

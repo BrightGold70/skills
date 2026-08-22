@@ -765,11 +765,13 @@ prompt is delivered on stdin, so it is mechanically uncapped — the 8192-byte
 keystroke inline cap and the pane-path size frontier both do not apply. agy runs
 `--print --dangerously-skip-permissions` (headless must auto-approve or a tool
 request blocks); its prompt is an arg, bounded only by `ARG_MAX` (~1 MB). Audit
-prompts run 16–90 KB (a large design audit assembles to ~88 KB), and a >90 KB exec
-prompt was confirmed answered — so on the `exec` path prompt size is not a transport
-limit, only the receiving model's context budget. Do not trim an audit for size
-when dispatching via `exec`. (The pane path is separately confirmed answered to
-92,055 B — see `references/agent-substrate.md` §"Prompt size".)
+prompts run 16–90 KB (a large design audit assembles to ~88 KB), and **266,342 B
+(260.1 KB) was confirmed answered 8 of 8 on 2026-08-22** (agy 1.1.18), every run
+honouring both the report-file slot and the sentinel pair — so on the `exec` path
+prompt size is not a transport limit at three times the largest audit, only the
+receiving model's context budget. Do not trim an audit for size when dispatching via
+`exec`. (The pane path is separately confirmed answered to 92,055 B — see
+`references/agent-substrate.md` §"Prompt size".)
 
 ## Phase 5 parallel fanout (Orca only)
 
@@ -1451,7 +1453,7 @@ assembling by hand because the script is unavailable:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 5.5. For plan and design audits: replace `<INLINE_PAIRED_SPEC>` with full text of `docs/01-plan/features/<feature>.spec.md` — the Axis C source of truth. Without it the reviewer has no AC list to reconcile against and Axis C degrades to prose review, which is the failure it exists to prevent: the paired plan carries only incidental AC references, not the enumeration. For impl-plan audits leave the slot empty; that audit contracts against the design.
 
-   **Prompt size.** Axis C makes an already-large prompt larger: measured on a real feature, design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB (72 KB without the spec). Whether that is a problem depends on the transport. On the **`exec` path** it is not — codex stdin is uncapped and agy's arg runs to `ARG_MAX` (~1 MB), and a >90 KB exec prompt was confirmed answered, so dispatch the whole thing. On the **pane path** the confirmed-answered frontier is ~92 KB via file indirection (a 92,055 B prompt was answered by a live agy pane on 2026-07-30, falsifying the earlier ~61 KB ceiling); the old "49 KB normal / 53 KB silent" figure was a delivery-mode artifact (a paste, not file indirection) and never reproduced (see `references/agent-substrate.md`). A real audit assembles to at most ~88 KB, so it sits inside the confirmed pane frontier — but if a pane prompt ever does run past ~92 KB, two things follow. First, **do not solve it by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC; switching that dispatch to `exec` removes the limit outright. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
+   **Prompt size.** Axis C makes an already-large prompt larger: measured on a real feature, design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB (72 KB without the spec). Whether that is a problem depends on the transport. On the **`exec` path** it is not — codex stdin is uncapped and agy's arg runs to `ARG_MAX` (~1 MB), and 266,342 B was confirmed answered 8 of 8 on 2026-08-22 (agy 1.1.18, both transports honoured every time), so dispatch the whole thing. On the **pane path** the confirmed-answered frontier is ~92 KB via file indirection (a 92,055 B prompt was answered by a live agy pane on 2026-07-30, falsifying the earlier ~61 KB ceiling); the old "49 KB normal / 53 KB silent" figure was a delivery-mode artifact (a paste, not file indirection) and never reproduced (see `references/agent-substrate.md`). A real audit assembles to at most ~88 KB, so it sits inside the confirmed pane frontier — but if a pane prompt ever does run past ~92 KB, two things follow. First, **do not solve it by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC; switching that dispatch to `exec` removes the limit outright. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
 
    **Before treating a silent reply as a size failure, read the whole buffer.** `hmad-dispatch read <agent> --from-start`, not a tail — the TUI reflows a reply across redraw frames, and a tail-grep for a sentinel reports SILENT for prompts that answered (measured; see `references/agent-substrate.md`). Most "size failures" are this.
 
