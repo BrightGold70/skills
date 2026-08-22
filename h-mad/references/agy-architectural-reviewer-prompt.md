@@ -21,6 +21,15 @@ You are agy performing a final architectural review of the Phase 5 implementatio
 **Base** (Phase 5c baseline commit): <INLINE_BASE_SHA>
 **Head** (Phase 5g closure commit): <INLINE_HEAD_SHA>
 
+**Cite every file you open by ABSOLUTE path.** A correct `--cd` is not sufficient — measured
+2026-08-22: the stream's `init.cwd` was the repo root while repo-relative citations resolved against
+`~/.gemini/antigravity-cli/scratch/…`, every read failed, and the review was written from the inlined
+text alone while reporting no issues found.
+
+**If your file reads fail, say so and return `ASSESSMENT: NO`.** A review that inspected nothing is not
+a review, and the orchestrator now checks: `h_mad_review_evidence.py` reads the dispatch transcript and
+halts `step6a-prime:review_read_nothing` when no tool call succeeded, whatever the verdict line says.
+
 Run via your `view_file` tool to inspect specific files. The orchestrator has already attached the per-file diff in `<INLINE_DIFF_FILES>`.
 
 ## What to Check

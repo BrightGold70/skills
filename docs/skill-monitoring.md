@@ -1392,10 +1392,34 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   A review that inspected nothing must not be able to clear the gate that exists to catch what
   document audits and code-level gap analysis miss by construction.
 
-  Re-dispatched 2026-08-22 with absolute paths and an explicit instruction to return
-  `ASSESSMENT: NO` if its reads fail.
-  Status: `MONITORING` — the path fix is applied to this feature's prompt; the protocol obligation
-  is unwritten.
+  **Fixed 2026-08-22 — the obligation is now mechanical.** `h_mad_review_evidence.py` reads the
+  dispatch transcript and prints `EVIDENCE: PASS|NONE tools=N ok=K failed=J [status=…]`, exit 0 on a
+  verdict and 2 on `UNREADABLE` (no `--log`, or empty), which carries **no counts** so a cannot-judge
+  cannot read as a zero. 6a-prime must read it before recording an `ASSESSMENT:`; `NONE` halts
+  `step6a-prime:review_read_nothing`.
+
+  Validated against the two real transcripts from the incident itself:
+
+  ```text
+  arch_acv.log   (the blind review)  EVIDENCE: NONE tools=1  ok=0  failed=1 status=ERROR
+  arch_acv3.log  (the real one)      EVIDENCE: PASS tools=26 ok=26 failed=0 status=SUCCESS
+  ```
+
+  Three properties are load-bearing and each is pinned by a test *and* a mutation:
+
+  - **It gates on successes, not attempts.** Mutating `ok >= 1` to `tools >= 1` makes the real blind
+    log report `EVIDENCE: PASS tools=1 ok=0` — the defect restored exactly.
+  - **It knows no tool names.** The first probe of this very defect hardcoded
+    `view_file|grep_search` from an earlier dispatch and returned a false zero when agy switched to
+    `run_command`. Any tool reaching `DONE` counts.
+  - **It does not gate on `result.status`.** `hmad-dispatch` ignores that field deliberately, and
+    its comment names the sound reason; gating on it here would re-create the false `no_verdict`
+    halt that reasoning exists to prevent. Status is reported for triage and never decides.
+
+  The prompt-side cause is documented too, in SKILL.md and in the reviewer template: **a correct
+  `--cd` is not sufficient** — cite files by absolute path, and instruct the reviewer to return
+  `ASSESSMENT: NO` when its reads fail, so a blind review declares itself.
+  Status: `FIXED` — `h_mad_review_evidence.py` + 16 tests, wired into SKILL.md and failure-recovery.
 
 ## Surfaced by the audit-cycle-verb Task 9 docs write (2026-08-21)
 
