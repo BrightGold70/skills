@@ -478,4 +478,29 @@ threshold of a third vendored patch; untouched this session.
 
 - **re-gate-after-edit guard**: refuse to call a document "gated" when its content hash differs from the version the last clean audit read — i.e. detect that a gated doc was edited afterwards and require a fresh cycle — recurrence: 2 (the v1.15 errata, then the cycle-22 nit fix) — candidate: maybe — this re-audit produced 9 findings on a design that had gated clean twice, and **4 of them were introduced by the edits fixing the previous cycle**, so the failure is not rare judgement but a structural property of editing after the gate. Probably a check inside `h_mad_audit_gate.py` or the forthcoming `audit-cycle` verb (record the gated content hash beside the verdict) rather than a standalone skill. Note the honest counter-argument: nits never block, so a strict version of this would force a cycle for a one-word fix — which is exactly what I chose to do here, at the cost of one extra cycle.
 
-- **mutation-mechanism verifier**: for each row of a connections/gating mutation spec, apply the mutation ALONE, run ONLY its named test, and require a one-line statement of WHY it failed — then diff that reason against the mechanism the spec's table claims. Ran this by hand ~16 times on 2026-08-21 — recurrence: 16 — candidate: yes — this is the only check that catches a mutation which fails the right test for the wrong reason. `MUTATION: ALL_CAUGHT survived=0 refused=0` and per-row isolation are BOTH structurally blind to it: 4 of 12 connection mutations in `audit-cycle-verb` passed every existing check while testing the wrong thing (one left the call executing and only discarded its result; one short-circuited a wait, becoming a second *drop* at a site that then had no force; one skipped `collect()` along with `gate()`). Found by an agy spec review, not by re-running the harness. The mechanical parts are the apply/run-one-test/restore loop and the anchor-uniqueness precheck (an anchor matching twice is `REFUSED`, which measures nothing and reads like progress); the judgement it must NOT automate is deciding whether the stated reason matches the table.
+- **mutation-mechanism verifier**: for each row of a connections/gating mutation spec, apply the mutation ALONE, run ONLY its named test, and require a one-line statement of WHY it failed — then diff that reason against the mechanism the spec's table claims. Ran this by hand ~16 times on 2026-08-21 — recurrence: 16 — candidate: yes — this is the only check that catches a mutation which fails the right test for the wrong reason. `MUTATION: ALL_CAUGHT survived=0 refused=0` and per-row isolation are BOTH structurally blind to it: 4 of 12 connection mutations in `audit-cycle-verb` passed every existing check while testing the wrong thing (one left the call executing and only discarded its result; one short-circuited a wait, becoming a second *drop* at a site that then had no force; one skipped `collect()` along with `gate()`). Found by an agy spec review, not by re-running the harness. The mechanical parts are the apply/run-one-test/restore loop and the anchor-uniqueness precheck (an anchor matching twice is `REFUSED`, which measures nothing and reads like progress); the judgement it must NOT automate is deciding whether the stated reason matches the table. **Reconciled 2026-08-22: still unimplemented, recurrence now ~33.** Seventeen more hand-run mutations this session (J38 ×2, J40 ×4, the context cap ×6, J42 ×2, J43 ×1, J18 ×2), every one checked for WHICH test caught it rather than merely that something did. That check paid twice: the J40 guard and the ctx-cap guard each had two mutations caught by two DIFFERENT tests (mutual discrimination), proving neither test was redundant — and the `--passes` guard's two mutations likewise. A harness reporting `ALL_CAUGHT` cannot distinguish that from one test catching everything.
+
+## 2026-08-22 — audit-cycle-verb-shipped-j-sweep
+
+- **registry status census / lint**: count and classify the rows of a standing registry
+  (`docs/skill-monitoring.md`, `docs/skill-candidates.md`) — how many carry a machine-readable
+  status, which are open, which vocabulary words are used vs documented, and whether any prose
+  accidentally matches the row regex — recurrence: 5 this session — candidate: yes — I hand-wrote
+  five throwaway Python censuses over one file and **two of them returned confident false
+  readings**: a splitter absorbed a trailing note and reported J18 open when its body said "Fixed",
+  and `grep -c` exiting 1 on no match printed nothing and read as a clean zero. Then my own fix
+  introduced two more: a `` `WORD` `` placeholder that matched the status regex, and a bolded
+  `**J31–J33**` that manufactured a phantom J-id (`40 of 41`). Every one of those was caught only by
+  re-running the census against its own output. The mechanical parts are the entry splitter (bounded
+  on the row shape, never on prose), the used-vs-documented vocabulary diff, and the self-pollution
+  check; the judgement it must NOT automate is deciding a row's actual status, which needs the
+  source read.
+
+- **purely-additive bulk-edit assertion**: before committing a scripted edit that splices N lines
+  into a long document, assert the diff is insertion-only — `git diff --numstat` shows `N 0`, every
+  added line matches the expected shape, and the document's identifier set is byte-identical before
+  and after — recurrence: 3 this session — candidate: maybe — used on the 31-entry status sweep and
+  twice on `docs/skill-monitoring.md` edits. It is three commands rather than a skill, but it is the
+  check that distinguishes a clean splice from a slice replacement that quietly ate a section, which
+  is a failure this repo has shipped before. Promote only if a fourth bulk edit wants it; otherwise
+  it belongs as a line in the handoff/h-mad editing guidance rather than its own skill.
