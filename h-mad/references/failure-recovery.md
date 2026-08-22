@@ -19,6 +19,7 @@
 | 3 | Inline plan generation failed | `step3:plan_gen_failed` | "Inspect error; re-run Phase 3" |
 | 3, 4, 5 | Cmux pane not alive | `<phase>:no_<agent>_pane` | "Launch agent per `references/agent-substrate.md` (cmux `cmux split-window --command …` OR orca `orca terminal create`); confirm `hmad-dispatch alive <agent>`; re-run" |
 | 3, 4 | agy dispatch fail (cmux 400) | `<phase>:agy_dispatch_failed` | "cmux only: Restart agy pane per CLAUDE.md §F-12; re-run (orca: restart the terminal via `orca terminal create` and re-pin)" |
+| 6a-prime | The review returned a verdict without reading anything (`EVIDENCE: NONE`) | `step6a-prime:review_read_nothing` | "The `ASSESSMENT:` is well-formed and worthless — the reviewer judged with no successful tool call. Do NOT record it. Check the prompt cites files by ABSOLUTE path: a correct `--cd` is not enough, agy resolves repo-relative citations against its own scratch directory and every read fails silently. Fix the paths, add an instruction to return `ASSESSMENT: NO` if reads fail, and re-dispatch — audits are idempotent. `EVIDENCE: UNREADABLE` is different: nothing was measured, usually because `--log` was not passed. Pass `--log` and re-dispatch." |
 | 4 | Inline design generation failed | `step4:design_gen_failed` | "Inspect error; re-run Phase 4" |
 | 4 | Back-propagation loop ≥ 3 times | `step4:back_prop_max` | "Manual review; revise both plan and design; re-run" |
 | 5a | Impl-plan generation failed | `step5a:impl_plan_gen_failed` | "Inspect error; re-run Phase 5a" |
