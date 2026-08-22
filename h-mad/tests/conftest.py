@@ -41,6 +41,9 @@ def _protect_live_pin_file():
     before = target.read_bytes() if target.is_file() else None
     yield
     after = target.read_bytes() if target.is_file() else None
+    # J18 pin-file guard mutation anchor. Distinct from the wire-registry anchor
+    # below because `if after == before:` appears once per guard, and the mutation
+    # harness refuses any anchor it cannot match exactly once.
     if after == before:
         return
     # Restore first, complain second: a developer's live agent handles matter
