@@ -3,10 +3,10 @@
 
 `exec agy` is dispatched with a `--report-file` slot and a per-cycle sentinel pair,
 and it can honour NEITHER while still doing the work: it writes a real report, at a
-path of its own choosing. Two are on disk in this account:
+path of its own choosing. Two were observed, eleven days apart:
 
-  ~/.gemini/antigravity-cli/scratch/.design.audit.v14.md   (2026-08-11, J30)
-  ~/.gemini/antigravity-cli/scratch/audit_report.md        (2026-08-22)
+  .design.audit.v14.md   (2026-08-11, J30) — a workspace dotfile
+  audit_report.md        (2026-08-22)      — in agy's own scratch directory
 
 The first is a workspace **dotfile**, invisible to the `*audit.v14*` glob the
 orchestrator searches -- which is exactly how one cycle concluded "no file was

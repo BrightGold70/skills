@@ -1273,7 +1273,7 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   artefacts cannot be attributed to either run. **Under monitoring.** If it recurs, capture the
   transcript before re-running anything, since re-running is what destroyed the evidence the first
   time. Do not "fix" this without a reproduction.
-  Status: `SUPERSEDED` by [[J30]], which reproduced it 5/5 once prompt size was controlled for and named the missing variable. Not unresolved — absorbed. J28 remains the first sighting.
+  Status: `SUPERSEDED` by [[J30]], which reproduced it 5/5 once prompt size was controlled for and named the missing variable. Not unresolved — absorbed. J28 remains the first sighting. **That size mechanism was itself refuted on re-probing** — 8 of 8 clean at the same 266,342 B against agy 1.1.18 on 2026-08-22 — so do not read this line as a standing explanation; see J30's close for what survived (the off-contract write) and what did not (the size gate).
 
 - 🟢 **J29 — `--out` is last-writer-wins across concurrent dispatches, silently; `--log` is not.**
   Verified deliberately while testing J28: two `exec agy` dispatches run concurrently against the
