@@ -878,6 +878,37 @@ _Append new findings below as later runs surface them. Flip Status + link the co
   and mutation testing deletes branches.** The safety property most likely to be disabled by a
   mutation is the one keeping the tests off your real machine. [[J2]]
 
+  **Re-verified 2026-08-22, and the re-verification found the gap the original fix left.** The
+  guard exists and behaves correctly — but it had **no test of its own**. Its younger sibling
+  `_protect_live_wire_registry`, written later and modelled directly on it, carries *both* a fixture
+  test and a harness mutation in `test_h_mad_wire_registry.py`; the original carried neither, and
+  nothing in the suite so much as referenced `_protect_live_pin_file`.
+
+  That asymmetry is the finding. **A session-scoped autouse fixture that nothing tests is one
+  deletion away from being gone, and its absence is silent by construction** — the suite is green
+  whether the guard is there or not, which is the very property that made J18 invisible the first
+  time. "Verified by deliberately re-introducing the leak" was a manual one-off in 2026-07; nothing
+  carried it forward.
+
+  Closed with `h-mad/tests/test_h_mad_pin_file_guard.py`, four tests giving the guard what its
+  sibling already had:
+
+  - it fires on a modified live file **and restores the real handles** (reporting a leak without
+    repairing it is half a guard);
+  - it **deletes** a pin file the suite invented when none existed before — the inverted repair, and
+    the live case on this machine, where `.h-mad/orca-pins.env` is currently absent, so a guard
+    handling only the overwrite branch would leave a fabricated file behind on exactly the machines
+    with no agents pinned;
+  - it stays **silent on a clean run**, without which the two above are satisfied by a fixture that
+    always fails;
+  - and a harness mutation (`if True: return` at a new pin-file-specific anchor) proves it bites.
+    The anchor comment is load-bearing: `if after == before:` occurs once per guard, and the harness
+    refuses any anchor it cannot match exactly once.
+
+  Independently checked by deleting the fixture outright — all four tests fail. Live state verified
+  byte-identical throughout, per this entry's own rule.
+  Status: `FIXED` — guard shipped 2026-07, its coverage 2026-08-22.
+
 
 > **Status-row audit 2026-07-23.** J8, J10, J14 and J15 shipped in Wave 4a (`ab3657e`) but their rows still read `SCHEDULED`/`MONITORING` — verified against the code before flipping (J15's guards fired live during the J17 work the same day). This registry's own lifecycle line says *"Flip Status + link the commit when actioned"*; a stale row is a coverage hole, because the next reader treats a solved problem as open work and an open one as solved.
 
