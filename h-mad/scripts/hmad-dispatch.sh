@@ -2438,8 +2438,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     # file. Headless needs --dangerously-skip-permissions or a tool request blocks
     # until the print timeout; agy is already launched that way in panes. cwd is agy's
     # workspace root, so cd there. Prompt is an arg, bounded only by ARG_MAX (~1MB);
-    # audit prompts run 16-90KB and a >90KB exec prompt was confirmed answered, so the
-    # arg is never the limit. --timeout maps to BOTH agy's native --print-timeout and the watchdog.
+    # audit prompts run 16-90KB, and 266,342 B was confirmed answered 8 of 8 on
+    # 2026-08-22 (agy 1.1.18) with both the report-file slot and the sentinel pair
+    # honoured every time, so the arg is never the limit at the sizes audits reach. --timeout maps to BOTH agy's native --print-timeout and the watchdog.
     # `--print` consumes the NEXT token as the prompt, so it MUST come last with the
     # prompt adjacent — every other flag goes before it. (A `--print` not adjacent to
     # the prompt silently ate the following flag as its prompt and dropped the real

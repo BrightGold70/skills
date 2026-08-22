@@ -239,7 +239,12 @@ def main(argv: list[str] | None = None) -> int:
     # `hmad-dispatch exec` (codex stdin / agy `--print` arg) has NO such frontier:
     # codex's prompt is delivered on stdin (mechanically uncapped) and agy's is an
     # arg bounded only by ARG_MAX (~1 MB); a >90 KB exec prompt was confirmed
-    # answered 2026-07-30. So on the exec path these warnings are advisory only.
+    # answered 2026-07-30, and 266,342 B (260.1 KB) was confirmed answered 8 of 8 on
+    # 2026-08-22 (agy 1.1.18) with both the report-file slot and the sentinel pair
+    # honoured every time -- three times the largest audit this assembler emits.
+    # That measurement also refutes J30's size premise at this agy version; its
+    # 5-of-5 drop was on an older build under the text-mode transport.
+    # So on the exec path these warnings are advisory only.
     # The assembler cannot know which transport the caller will use, so it warns on
     # the conservative (pane) basis; ignore it when you will dispatch via `exec`.
     CONFIRMED_OK = 92_055  # largest PANE prompt observed answered (2026-07-30)

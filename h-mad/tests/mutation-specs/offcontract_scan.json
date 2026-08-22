@@ -1,0 +1,55 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_offcontract_scan.py", "-q"],
+ "mutations": [
+  {"name": "skip-dotfiles",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            if path.suffix.lower() not in SUFFIXES:",
+   "replace": "            if path.name.startswith(\".\") or path.suffix.lower() not in SUFFIXES:"},
+
+  {"name": "assume-the-audit-vN-stem",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            if path.suffix.lower() not in SUFFIXES:\n                continue",
+   "replace": "            if path.suffix.lower() not in SUFFIXES or \"audit.v\" not in path.name:\n                continue"},
+
+  {"name": "cannot-look-prints-found-nothing",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "        print(\"OFFCONTRACT: UNREADABLE reason=no_workspace\")",
+   "replace": "        print(\"OFFCONTRACT: NONE reason=no_workspace\")"},
+
+  {"name": "report-the-contract-path-as-a-find",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            if resolved in seen or resolved == exp:",
+   "replace": "            if resolved in seen:"},
+
+  {"name": "newest-first-instead-of-report-shaped-first",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "    out.sort(key=lambda c: (-c[\"score\"], -c[\"mtime\"]))",
+   "replace": "    out.sort(key=lambda c: -c[\"mtime\"])"},
+
+  {"name": "no-mtime-floor-so-a-stale-cycle-is-recovered",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            if stat.st_mtime < since or stat.st_size == 0:",
+   "replace": "            if stat.st_size == 0:"},
+
+  {"name": "empty-file-counts-as-a-report",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            if stat.st_mtime < since or stat.st_size == 0:",
+   "replace": "            if stat.st_mtime < since:"},
+
+  {"name": "walk-into-git-internals",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]",
+   "replace": "            pass"},
+
+  {"name": "drop-the-not-validated-warning",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "    print(\"  ! Not validated. Transcribe into the gate's schema by hand and falsify \"\n          \"every premise against the source before acting on it.\")",
+   "replace": "    print(\"  ! see the report\")"},
+
+  {"name": "scratch-root-not-overridable",
+   "file": "scripts/h_mad_offcontract_scan.py",
+   "find": "    os.environ.get(\"HMAD_AGY_SCRATCH\", \"~/.gemini/antigravity-cli/scratch\")",
+   "replace": "    \"~/.gemini/antigravity-cli/scratch\""}
+ ]
+}
