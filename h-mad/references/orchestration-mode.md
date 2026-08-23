@@ -186,6 +186,26 @@ and instructs it to, as its final action:
 The marker — not mere file existence — is the done signal, so a half-written
 report is never read.
 
+The agent writes `$RP` **directly**. Do not have it stage through `$RP.tmp` and
+`mv`: the marker ordering above already carries the whole completeness guarantee
+staging was meant to provide, so staging only adds two tool calls to the delivery
+path — and it is not reliably permitted. agy refused one on 2026-08-24 (`…
+<path>.report.md.tmp is not a valid artifact path; artifacts must be in
+~/.gemini/antigravity-cli/brain/<conversation-id>`) and allowed one the same day on
+a comparable path, so treat it as nondeterministic rather than broken. Either way it
+is redundant; the advice was removed from the audit template on 2026-08-24.
+
+**`result.status` is not part of this contract — never gate on it.** The delivered
+file plus its `.done` marker is the whole signal. ANY failed or refused tool call
+makes the run report `status: ERROR` beside a complete, correct report, and the
+cause is usually incidental. Three measured instances, three unrelated causes: a
+refused `.tmp` write (`grounding-evidence-coverage` impl-plan cycle 22 pass B, whose
+report carried two independently-verified real findings); a `find_by_name` timeout
+plus a `view_file` on a path that did not exist (2026-08-24, 31 tool calls, 29 ok);
+and a `write_to_file` rejected for a missing `CodeContent` argument that the agent
+then retried successfully (2026-08-24). `h_mad_review_evidence.py` follows the same
+rule for 6a-prime — it reports `result.status` without gating on it.
+
 **Flow (coordinator).** Instead of `send` → `wait` → `read` → `extract_report`:
 
 ```bash

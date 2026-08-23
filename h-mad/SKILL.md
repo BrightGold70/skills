@@ -1530,6 +1530,8 @@ assembling by hand because the script is unavailable:
    ```
    This has no sentinel-extraction step (the file is already the report), no `wait`, and no dedent/`•`-normalize (the file is clean markdown, not a TUI render). On timeout, the agent did not honour the contract — fall back to the scrape path below.
 
+   **Never gate an audit on the dispatch's `result.status`.** The report file and its `.done` marker are the delivery contract; `status` is not. ANY failed or refused tool call yields `status: ERROR` beside a complete, correct answer, and the cause is usually incidental to the audit — measured three times with three unrelated causes: a refused `.tmp` write (`grounding-evidence-coverage` impl-plan cycle 22 pass B, on a report carrying two independently-verified real findings), a `find_by_name` timeout plus a `view_file` on a nonexistent path (2026-08-24, 31 tool calls / 29 ok, schema-correct report), and a `write_to_file` rejected for a missing argument that the agent immediately retried successfully (2026-08-24). This is the same rule `h_mad_review_evidence.py` follows for 6a-prime (step 6a-prime above): report `result.status`, never gate on it. Read the file and the marker.
+
    **Scrape fallback (cmux / unpinned, or when `report-wait` times out) — never hand a raw scrape to the gate.** The scrape holds live scrollback, so the previous cycle's report is usually still above the prompt; extracting on the first `## Summary` scores the wrong cycle:
    ```bash
    hmad-dispatch read agy --lines 200 > /tmp/scrape_<feature>_<phase>_cycle<N>.txt
