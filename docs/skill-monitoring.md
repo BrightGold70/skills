@@ -1739,3 +1739,62 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   the match rate.
   Status: `RESOLVED` — no document edit made. Where prose paraphrases an AC, cite the AC; the
   pattern is already the document's own.
+
+## Surfaced by the advisor-gate / run-cap live-fire (2026-08-24)
+
+- 🔴 **J44 — the `advisor` PreToolUse hook does not fire on a real `advisor()` call.** The gate wired
+  2026-08-19 (`h-mad/hooks/h-mad-advisor-gate.sh`, matcher `advisor`) has, on this evidence, never
+  engaged in practice. It fails **open** and silently: an ungated `advisor()` costs a second full copy
+  of the transcript, which is the exact overflow the hook exists to prevent, and nothing at the call
+  site says the hook was skipped.
+
+  **Measured twice, with a self-tested detector.** The hook was temporarily instrumented to append a
+  line to a scratch file on entry; a real `advisor()` call was then made from this session.
+
+  | run | marker position | detector self-test | real `advisor()` call | marker after |
+  |---|---|---|---|---|
+  | 1 | after the `tool_name` filter | writes when driven directly | made | **absent** |
+  | 2 | **line 1**, before every branch incl. the override | writes when driven directly | made | **absent** |
+
+  Run 2 is the one that settles it: the marker preceded the `HMAD_ADVISOR_OVERRIDE` early-exit, so
+  "disarmed by an env var" and "never entered" are no longer the same observation — and the file was
+  still empty. Absence is a real zero here, not a broken probe: the identical hook, instrumented, wrote
+  the marker every time it was driven by hand (this is the [[J42]] / mode-15 discipline — assert the
+  detector before believing its zero).
+
+  **Everything else in the chain is individually verified, which is what isolates the defect to
+  routing.** Registration present in `~/.claude/settings.json` at session start with matcher literally
+  `advisor`; `$HOME` expansion and command dispatch proven by the sibling `Bash` and `Write|Edit`
+  hooks, which use the identical `bash $HOME/…` form and fire on every call; the command path resolves
+  through the skills symlink to the repo file; `HMAD_ADVISOR_OVERRIDE` unset. And the gate's own logic
+  is correct on **every** branch when driven directly — DENY at a shrunk window against the real
+  transcript, allow at the true window (the control, without which "it denied" proves nothing),
+  override honoured, non-`advisor` tool ignored, and all three cannot-judge paths (checker absent,
+  checker silent, checker exiting 2) allowing rather than blocking blind.
+
+  **Leading hypothesis, untested:** `advisor` does not traverse `PreToolUse` at all — a harness-special
+  tool rather than an ordinary one. Consistent with the transcript, where `Bash`/`Write`/`Edit` calls
+  carry hook feedback on every invocation and the `advisor` calls carry none.
+
+  **Next probe** (one fresh session; it subsumes the `HMAD_CONTEXT_WINDOW=1000` relaunch test that was
+  carried for three handoffs): register a temporary `*`-matcher `PreToolUse` hook that logs `tool_name`
+  to a file, relaunch, make one `advisor()` call. A logged line under some other name means the matcher
+  string is wrong and the fix is one word; no line at all means `advisor` bypasses hooks entirely and
+  the gate needs a different attachment point. Do **not** re-probe by making more `advisor()` calls
+  from an already-instrumented session — two are enough and each bills a doubled turn.
+  Status: `MONITORING` — routing refuted twice with a self-tested detector; the gate's decision logic
+  is fully verified and correct, so this is an attachment-point defect, not a logic defect. The prose
+  rule in SKILL.md §"Orchestrator context hygiene" and `h_mad_context_budget.py` remain the live
+  protection, and both are verified.
+
+- 🟢 **J45 — `--mode run`'s HALT cannot trip the advisor hook's DENY glob; proven mechanically.** The
+  two ceilings were given different verdict words on purpose (`DENY` at 45% for `--mode advisor`,
+  `HALT` at 80% for `--mode run`) so a dying run cannot be matched by the advisor hook's
+  `*"CTXBUDGET: DENY"*` case. Verified rather than asserted: a checker emitting a real
+  `CTXBUDGET: HALT mode=run …` line, driven through the advisor hook, exits **0** (falls through to
+  allow). Across windows 100k/300k/550k/1M no `--mode advisor` output ever contains `HALT` and no
+  `--mode run` output ever contains `DENY`, and at 550k the two disagree as designed (advisor `DENY`,
+  run `OK`) — which is the case that proves they are separate questions and not one threshold with two
+  names.
+  Status: `FIXED` — property confirmed live; no code change needed. Recorded so the word choice is not
+  "simplified" later by someone who reads the two tokens as duplicates.
