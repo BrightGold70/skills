@@ -1798,3 +1798,74 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   names.
   Status: `FIXED` — property confirmed live; no code change needed. Recorded so the word choice is not
   "simplified" later by someone who reads the two tokens as duplicates.
+
+- 🔴 **J46 — the output contract at the TAIL of an audit prompt is dropped, and the audit becomes
+  unscoreable.** On `grounding-evidence-coverage` impl-plan cycle 21 BOTH passes ignored the entire
+  output-framing block — no sentinels, no `## Summary`/`## Must-fix`/`## Should-fix`/`## Nit` schema,
+  no report file, no `.done` — and each invented its own verdict line (`GATE: PASS must=0 …` /
+  `GATE: FAIL must=1`), so `h_mad_audit_gate.py` returned `GATE: INVALID` on both. Both had done real
+  work (100 s / 11,230 thinking; 193 s / 15,786 thinking / 34 tool calls) and pass B's content held a
+  genuine must-fix. It was simply unscoreable.
+  **This is PLACEMENT, not size, and a LARGER prompt succeeding is what proves it** — do not re-file
+  it as a size effect ([[J30]]'s size premise was refuted 8/8 separately). Re-measured 2026-08-24
+  through the real assembler: tail-only at **223.6 KB** wrote no report file and no `.done` and
+  emitted the literal `<AUDIT_SENTINEL>` placeholder instead of this pass's substituted value, so
+  `h_mad_extract_report.py` exited 2 — a *sharper* mechanism than cycle 21's wholesale drop, same
+  outcome. Head-duplicated at **234.3 KB** it wrote the report file, wrote `.done`, used the real
+  sentinel and the exact schema; `extract_report` exited 0.
+  The head copy is SLICED from the assembled text after slot fill, never hand-written — a
+  hand-written copy would hardcode a report path and schema that drift from the template's — and an
+  anchor-miss is a preflight HALT, not an exception, so a custom `--template` is rejected as a
+  verdict rather than a crash.
+  Status: `FIXED` — `97cb07f` (`h_mad_assemble_audit.py::prepend_output_contract`), 4/4 mutants
+  killed, full suite 1639 passed.
+
+- 🔴 **J47 — the audit gate's empty-section sentinel was punctuation-intolerant and false-FAILed.**
+  `_count_section_findings` compared `p.lower() == "none"`. A reviewer writing `None.` — with the
+  trailing period agy writes — missed the sentinel, fell through the fail-safe branch ("non-`None`
+  content with no countable bullet → count 1") and **manufactured one phantom finding per section**.
+  Observed live: `grounding-evidence-coverage` impl-plan cycle 23 pass B wrote `Must-fix: None.` /
+  `Should-fix: None.` and scored `GATE: FAIL must=1 should=1` with nothing behind it. This is the
+  mirror of [[J40]] — that one was a false PASS, this one a false FAIL — and both make the gate's
+  output a claim about the *scorer*, not the work.
+  The fail-safe *direction* is right and is untouched; only the sentinel comparison is normalised,
+  in one helper used at BOTH call sites (the `all(...)` check and the bullet filter — the second
+  matters only in a mixed section, a real finding beside a `- None.` bullet). The comparison stays a
+  full-string match after trimming, never a prefix match, so a finding that merely begins with the
+  word None still counts.
+  Status: `FIXED` — `7df6ab6`, 4/4 mutants killed.
+
+- 🟡 **J48 — `result.status` must never gate an audit, and the `.tmp`+`mv` staging advice that first
+  exposed it is gone.** The audit template told the reviewer to stage its report through
+  `<path>.tmp` and `mv` it into place "for a hard atomicity guarantee". The `.done` marker ordering
+  in the very next clause already IS that guarantee, so staging only added two tool calls to the
+  delivery path. Removed.
+  **The premise correction matters more than the removal.** The handover brief attributed a specific
+  cycle-22 `status: ERROR` to agy's artifact sandbox refusing the `.tmp` write. A direct probe of
+  that premise on 2026-08-24 did **not** reproduce it — the `.tmp` `write_to_file` and the `mv` both
+  reached `DONE`. So the refusal is nondeterministic, not a property of the surface, and the advice
+  is removed for redundancy and cost, not for a mechanism this repo can demonstrate on demand.
+  What IS confirmed, three times with three unrelated causes, is the consequence: **any** failed or
+  refused tool call makes a run report `status: ERROR` beside a complete, correct report. (1) the
+  refused `.tmp` write from the brief, on a report carrying two independently-verified real findings;
+  (2) a `find_by_name` timeout plus a `view_file` on a nonexistent path — 31 tool calls, 29 ok,
+  schema-correct report; (3) a `write_to_file` rejected for a missing `CodeContent` argument that the
+  agent immediately retried successfully. `h_mad_review_evidence.py` has followed this rule for
+  6a-prime since it was written; the audit path now says so too.
+  Status: `FIXED` — `81d956b` (template + SKILL.md step 9 + references/orchestration-mode.md), pinned
+  by a test so the advice cannot creep back.
+
+- 🟢 **J49 — an audit pass that made no tool calls audited the PROMPT, not the codebase, and nothing
+  surfaces that.** Across the 8 passes of cycles 21–24, *every* substantive finding came from a pass
+  with either high thinking tokens or ~34 tool calls. Cycle 21 pass A ran **0** tool calls and
+  returned "CLEAN PASS" on a plan pass B proved defective. Cycle 24 returned a double-clean with
+  thinking collapsed to 6.2 k / 4.4 k (vs 11–23 k in all six earlier passes) and exactly 2 tool calls
+  each — the `write_to_file` and the `.done` marker, i.e. no reads at all. A hollow pass is
+  indistinguishable from a real clean pass at the gate line; today it is only visible by opening the
+  NDJSON. `h_mad_review_evidence.py` already computes `tools=N ok=K failed=J` for 6a-prime and knows
+  no tool names, so the counts exist — they are simply not surfaced beside an audit verdict.
+  Note this is a *scoring caveat*, not a defect in any script: a pass with 2 tool calls honoured the
+  contract exactly as asked.
+  Status: `MONITORING` — surfacing thinking-tokens + tool-call count beside the gate verdict is the
+  obvious remedy; deliberately not built in this pass, which was scoped to the three contract
+  defects.
