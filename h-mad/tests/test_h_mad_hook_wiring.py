@@ -30,12 +30,21 @@ sys.path.insert(0, str(SCRIPT.parent))
 import h_mad_hook_wiring as hw  # noqa: E402
 
 TDD = "h-mad-tdd-gate.sh"
-ADV = "h-mad-advisor-gate.sh"
+ADV = "h-mad-advisor-warn.sh"
 
 
-def _settings(tmp_path, entries, name="settings.json"):
+def _settings(tmp_path, entries, name="settings.json", event="PreToolUse"):
     p = tmp_path / name
-    p.write_text(json.dumps({"hooks": {"PreToolUse": entries}}))
+    p.write_text(json.dumps({"hooks": {event: entries}}))
+    return p
+
+
+def _settings_by_event(tmp_path, by_event, name="settings.json"):
+    """The two h-mad hooks live under DIFFERENT events: the TDD gate blocks on
+    PreToolUse, the advisor advisory injects on PostToolUse (it cannot block —
+    `advisor` is a server-side tool no tool-scoped event fires for, J44)."""
+    p = tmp_path / name
+    p.write_text(json.dumps({"hooks": by_event}))
     return p
 
 
@@ -51,12 +60,12 @@ def _hooks_dir(tmp_path):
     return d
 
 
-def _wired(tmp_path, tdd_matcher="Write|Edit", adv_matcher="advisor"):
+def _wired(tmp_path, tdd_matcher="Write|Edit", adv_matcher="*"):
     d = _hooks_dir(tmp_path)
-    return _settings(tmp_path, [
-        _entry(tdd_matcher, f"bash {d / TDD}"),
-        _entry(adv_matcher, f"bash {d / ADV}"),
-    ])
+    return _settings_by_event(tmp_path, {
+        "PreToolUse": [_entry(tdd_matcher, f"bash {d / TDD}")],
+        "PostToolUse": [_entry(adv_matcher, f"bash {d / ADV}")],
+    })
 
 
 class TestTheHealthyShape:
@@ -74,19 +83,19 @@ class TestTheHealthyShape:
         is present and working."""
         monkeypatch.setenv("HOME", str(tmp_path))
         _hooks_dir(tmp_path)
-        s = _settings(tmp_path, [
-            _entry("Write|Edit", f"bash $HOME/hooks/{TDD}"),
-            _entry("advisor", f"bash ~/hooks/{ADV}"),
-        ])
+        s = _settings_by_event(tmp_path, {
+            "PreToolUse": [_entry("Write|Edit", f"bash $HOME/hooks/{TDD}")],
+            "PostToolUse": [_entry("*", f"bash ~/hooks/{ADV}")],
+        })
         issues, _ = hw.check(sources=[s])
         assert issues == []
 
     def test_hook_inside_a_longer_command_still_counts(self, tmp_path):
         d = _hooks_dir(tmp_path)
-        s = _settings(tmp_path, [
-            _entry("Write|Edit", f"cd /tmp && bash {d / TDD} --quiet || true"),
-            _entry("advisor", f"bash {d / ADV}"),
-        ])
+        s = _settings_by_event(tmp_path, {
+            "PreToolUse": [_entry("Write|Edit", f"cd /tmp && bash {d / TDD} --quiet || true")],
+            "PostToolUse": [_entry("*", f"bash {d / ADV}")],
+        })
         issues, _ = hw.check(sources=[s])
         assert issues == []
 
@@ -95,7 +104,8 @@ class TestTheHealthyShape:
         healthy install; scoring either file alone reports a false NOT_WIRED."""
         d = _hooks_dir(tmp_path)
         a = _settings(tmp_path, [_entry("Write|Edit", f"bash {d / TDD}")], "a.json")
-        b = _settings(tmp_path, [_entry("advisor", f"bash {d / ADV}")], "b.json")
+        b = _settings(tmp_path, [_entry("*", f"bash {d / ADV}")], "b.json",
+                      event="PostToolUse")
         issues, _ = hw.check(sources=[a, b])
         assert issues == []
 
@@ -133,15 +143,44 @@ class TestWhatItCatches:
         issues, _ = hw.check(sources=[s])
         assert any(i.startswith(f"HOOK_WIRED_STALE_PATH:{ADV}") for i in issues)
 
+    def test_the_advisory_wired_under_pretooluse_is_not_wired(self, tmp_path):
+        """J44's exact shape, at the wiring layer. `advisor` is a server-side tool
+        that no tool-scoped event fires for, so the old PreToolUse registration ran
+        zero times while looking installed. An event-blind check would call this
+        healthy — which is precisely how the defect survived for days."""
+        d = _hooks_dir(tmp_path)
+        s = _settings_by_event(tmp_path, {
+            "PreToolUse": [_entry("Write|Edit", f"bash {d / TDD}"),
+                           _entry("*", f"bash {d / ADV}")],
+        })
+
+        issues, _ = hw.check(sources=[s])
+
+        assert issues == [f"HOOK_NOT_WIRED:{ADV}"]
+
+    def test_a_narrow_postooluse_matcher_leaves_tools_uncovered(self, tmp_path):
+        """The advisory must fire on every tool: context grows through all of them,
+        and a `Write`-only matcher reports the budget on a fraction of the turns."""
+        d = _hooks_dir(tmp_path)
+        s = _settings_by_event(tmp_path, {
+            "PreToolUse": [_entry("Write|Edit", f"bash {d / TDD}")],
+            "PostToolUse": [_entry("Write", f"bash {d / ADV}")],
+        })
+
+        issues, _ = hw.check(sources=[s])
+
+        assert any(i.startswith(f"HOOK_WIRED_WRONG_MATCHER:{ADV}") for i in issues)
+        assert "Bash" in "".join(issues)
+
     def test_wired_twice_with_one_good_matcher_is_covered(self, tmp_path):
         """The harness runs every matching entry, so one correct entry is enough.
         Reporting the other as a defect would train the operator to ignore this."""
         d = _hooks_dir(tmp_path)
-        s = _settings(tmp_path, [
-            _entry("Write|Edit", f"bash {d / TDD}"),
-            _entry("Bash", f"bash {d / ADV}"),
-            _entry("advisor", f"bash {d / ADV}"),
-        ])
+        s = _settings_by_event(tmp_path, {
+            "PreToolUse": [_entry("Write|Edit", f"bash {d / TDD}")],
+            "PostToolUse": [_entry("Bash", f"bash {d / ADV}"),
+                            _entry("*", f"bash {d / ADV}")],
+        })
         issues, _ = hw.check(sources=[s])
         assert issues == []
 
@@ -196,8 +235,8 @@ class TestSourceResolution:
         (repo / "sub").mkdir(parents=True)
         (repo / ".claude").mkdir()
         (repo / ".claude" / "settings.json").write_text(json.dumps({"hooks": {
-            "PreToolUse": [_entry("Write|Edit", f"bash {d / TDD}"),
-                           _entry("advisor", f"bash {d / ADV}")]}}))
+            "PreToolUse": [_entry("Write|Edit", f"bash {d / TDD}")],
+            "PostToolUse": [_entry("*", f"bash {d / ADV}")]}}))
         issues, read = hw.check(project_root=repo / "sub")
         assert read and issues == []
 

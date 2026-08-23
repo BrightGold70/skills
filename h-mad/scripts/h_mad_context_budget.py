@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pct = used * 100.0 / args.window
     if args.mode == "run":
-        # HALT, not DENY. `hooks/h-mad-advisor-gate.sh` blocks on the glob
+        # HALT, not DENY. `hooks/h-mad-advisor-warn.sh` speaks on the glob
         # `*"CTXBUDGET: DENY"*`, so reusing that word would make a run-ceiling breach
         # indistinguishable from an advisor refusal to every existing consumer -- and
         # they prescribe different actions. `projected` is omitted for the same

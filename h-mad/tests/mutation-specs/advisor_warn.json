@@ -1,0 +1,84 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_advisor_warn.py",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "unknown-warns",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "  *) exit 0 ;;\nesac",
+   "replace": "  *) ;;\nesac"
+  },
+  {
+   "name": "halt-read-as-deny",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "  *\"CTXBUDGET: DENY\"*) ;;",
+   "replace": "  *\"CTXBUDGET: \"*) ;;"
+  },
+  {
+   "name": "ignore-the-handed-transcript",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "[ \"$TRANSCRIPT\" != \"-\" ] && [ -f \"$TRANSCRIPT\" ] && ARGS+=(--transcript \"$TRANSCRIPT\")",
+   "replace": "true"
+  },
+  {
+   "name": "warning-teaches-no-substitute",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "Prefer: hmad-dispatch exec agy <promptfile> (reviews in its own context, ~2k returns), \\\n",
+   "replace": ""
+  },
+  {
+   "name": "ceiling-not-configurable",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "CEILING=\"${HMAD_CONTEXT_CEILING:-45}\"",
+   "replace": "CEILING=\"45\""
+  },
+  {
+   "name": "throttle-never-expires",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "    *) [ \"$((NOW - THEN))\" -lt \"$EVERY\" ] && exit 0 ;;",
+   "replace": "    *) exit 0 ;;"
+  },
+  {
+   "name": "corrupt-stamp-silences",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "    *[!0-9]*|\"\") ;;                              # unreadable -> emit",
+   "replace": "    *[!0-9]*|\"\") exit 0 ;;"
+  },
+  {
+   "name": "hostile-session-id-builds-a-path",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "  \"\"|*/*|*..*) STAMP=\"\" ;;                       # refuse to build a path from it",
+   "replace": "  \"\") STAMP=\"\" ;;"
+  },
+  {
+   "name": "stamp-shared-across-sessions",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "h-mad-advisor-warn.${SESSION}.stamp",
+   "replace": "h-mad-advisor-warn.stamp"
+  },
+  {
+   "name": "wrong-hook-event-name",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "\"hookEventName\": \"PostToolUse\",",
+   "replace": "\"hookEventName\": \"PreToolUse\","
+  },
+  {
+   "name": "window-not-configurable",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "WINDOW=\"${HMAD_CONTEXT_WINDOW:-1000000}\"",
+   "replace": "WINDOW=\"1000000\""
+  },
+  {
+   "name": "stamp-not-written-after-emitting",
+   "file": "hooks/h-mad-advisor-warn.sh",
+   "find": "[ -n \"$STAMP\" ] && { date +%s > \"$STAMP\" 2>/dev/null || true; }",
+   "replace": "true"
+  }
+ ]
+}

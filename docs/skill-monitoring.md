@@ -1782,10 +1782,50 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   string is wrong and the fix is one word; no line at all means `advisor` bypasses hooks entirely and
   the gate needs a different attachment point. Do **not** re-probe by making more `advisor()` calls
   from an already-instrumented session — two are enough and each bills a doubled turn.
-  Status: `MONITORING` — routing refuted twice with a self-tested detector; the gate's decision logic
-  is fully verified and correct, so this is an attachment-point defect, not a logic defect. The prose
-  rule in SKILL.md §"Orchestrator context hygiene" and `h_mad_context_budget.py` remain the live
-  protection, and both are verified.
+  **ROOT CAUSE FOUND 2026-08-24, and the leading hypothesis was right: `advisor` does not traverse
+  `PreToolUse` at all — no matcher string can attach to it.** It is a **`server_tool_use`**, executed
+  server-side, so it never enters the harness's local tool-dispatch path where tool-scoped hooks run.
+  The next-probe above (a `*`-matcher logger + relaunch + one `advisor()` call) is **subsumed, not
+  skipped**: it was designed to distinguish "wrong matcher string" from "bypasses hooks entirely", and
+  two cheaper measurements answer it decisively without another billed advisor turn.
+
+  | evidence | what it shows |
+  |---|---|
+  | 2.1.241 binary: `"Advisor model for the server-side advisor tool."` and `"Enable the server-side advisor tool …"` | the harness itself calls it server-side |
+  | binary emits `server_tool_use` / `advisor_tool_result` blocks beside `mcp_tool_use` and `tool_use` | it is a distinct block kind with its own render path |
+  | binary hook-event table: the only tool-scoped events are `PermissionRequest`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure` | all four are local-dispatch events |
+  | **live transcript**, 3 real `advisor()` calls: recorded as `server_tool_use` name=`advisor`; the 101 hooked calls are `tool_use` | in-situ proof, not strings-archaeology |
+
+  **Fixed as an ADVISORY, because enforcement is structurally impossible.** `PreToolUse` could have
+  denied the call; nothing can. `hooks/h-mad-advisor-warn.sh` rides **`PostToolUse`** — the event whose
+  firing rate tracks the risk, since tool results are what grow a transcript — and injects the budget
+  verdict as `additionalContext`, reaching the model in the orientation window where it decides. The
+  dead `{"matcher": "advisor"}` PreToolUse registration is **removed from `~/.claude/settings.json`**;
+  that registration WAS the harm, because a hook that cannot fire reads as protection. `h-mad-advisor-gate.sh`
+  is deleted rather than left on disk for an install to re-wire. `h_mad_hook_wiring.py` now knows the two
+  h-mad hooks live under different events and reports `HOOK_NOT_WIRED` for an advisory registered under
+  `PreToolUse` — J44's exact shape, now caught by the checker.
+  No override env var: an advisory has nothing to escape, and shipping an escape hatch tells the reader
+  it blocks. Throttled to one emission per 60 s — not for cost (~60 ms) but because a warning reprinted
+  on every tool call is the context bloat it exists to prevent.
+
+  **Two mutants proved EQUIVALENT and were dropped from the spec rather than left as false coverage:**
+  `set -euo pipefail` (every rc-producing command in the advisory is guarded, so nothing propagates —
+  it was the CENTRAL defect for the gate, where exit 2 meant block, and is inert here) and the
+  missing-checker guard (without it `python3 <missing>` fails, the verdict is empty, and the hook exits
+  silently anyway). The remaining 12 mutants are all caught. The mutation harness also caught a
+  **weak test of mine**: `hostile-session-id-builds-a-path` survived because my first version created
+  the wrong parent directory, so the unguarded write failed for a reason unrelated to the guard.
+
+  **Verification status, stated rather than implied.** Driven end-to-end through the live
+  `~/.claude/skills/h-mad` symlink with this session's real transcript: silent at `CTXBUDGET: OK`
+  (30.4%), and with the window shrunk to 400k it emitted the documented `hookSpecificOutput` JSON at
+  76.2% and stayed silent on the immediate second call. What is NOT verified here is the harness
+  actually invoking it, because hooks are snapshotted at session start — that is one tool call in the
+  next session (`HMAD_CONTEXT_WINDOW=1000 claude`, then any tool), and note it no longer costs an
+  `advisor()` call, which is what made the old probe expensive.
+  Status: `FIXED` — `hooks/h-mad-advisor-warn.sh` + wiring swap; suite 1651 passed, 12/12 mutants
+  caught. Live harness invocation owed next session.
 
 - 🟢 **J45 — `--mode run`'s HALT cannot trip the advisor hook's DENY glob; proven mechanically.** The
   two ceilings were given different verdict words on purpose (`DENY` at 45% for `--mode advisor`,

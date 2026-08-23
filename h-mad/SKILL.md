@@ -1088,41 +1088,49 @@ or you are paying for a review of a problem it cannot see. That is also the boun
 (the RED/GREEN loop) and 6b (iterate) are where agy is the wrong tool**, because there the
 trajectory is the whole of the evidence.
 
-### Making it mechanical — the advisor gate hook
+### Making it mechanical — the advisor budget advisory
 
 A rule that only lives in prose is one the orchestrator talks itself out of, and it is most
-tempting to do so at exactly the point where being wrong ends the run. `hooks/h-mad-advisor-gate.sh`
-turns the ceiling into a refusal. Wire it in `~/.claude/settings.json`:
+tempting to do so at exactly the point where being wrong ends the run. `hooks/h-mad-advisor-warn.sh`
+puts the ceiling in front of the model while it is deciding. Wire it under **`PostToolUse`**:
 
 ```json
-{ "matcher": "advisor", "hooks": [{ "type": "command",
-  "command": "bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-gate.sh" }] }
+{ "matcher": "*", "hooks": [{ "type": "command",
+  "command": "bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-warn.sh" }] }
 ```
 
-It rides the `~/.claude/skills/h-mad` symlink on purpose. A second hook symlink would add a
-`SPLIT_INSTALL` failure mode for no gain, and the skills link is already verified by
-`h_mad_install_check.py`.
+**It is an advisory, not a gate, and that is structural — do not "fix" it back into a gate.**
+`advisor` is a `server_tool_use` executed server-side; it never enters local tool dispatch, so **no
+tool-scoped hook event fires for it** — not `PreToolUse`, not `PermissionRequest`, not
+`PostToolUse`. Its predecessor was registered `{"matcher": "advisor"}` on `PreToolUse` and, on two
+instrumented probes with the marker at line 1, never ran once while looking installed (J44). No
+matcher string fixes that. Confirmed twice: the 2.1.241 binary calls it "the server-side advisor
+tool", and a live transcript records three real `advisor()` calls as `server_tool_use` beside 101
+ordinary `tool_use` blocks. What *is* attachable is the turn before the call — `PostToolUse` fires
+at the rate risk accrues, and the verdict arrives as `additionalContext` during the orientation
+window. `h_mad_hook_wiring.py` reports `HOOK_NOT_WIRED` for an advisory under `PreToolUse`.
 
-**Hooks are snapshotted at session start, so wiring it takes effect in the NEXT session, not this
-one.** That also means you cannot verify from the session that wired it. The live-fire test, first
-thing next session, is one call with the window shrunk so the ceiling is certain to trip:
+It rides the `~/.claude/skills/h-mad` symlink on purpose (a second hook symlink would add a
+`SPLIT_INSTALL` failure mode for no gain). **Hooks are snapshotted at session start, so wiring it takes effect in the NEXT session, not this
+one** — you cannot verify from the session that wired it. Live-fire test, first thing next session,
+with the window shrunk so the ceiling is certain to trip:
 
 ```bash
-HMAD_CONTEXT_WINDOW=1000 claude    # then make one advisor() call — it MUST be denied
+HMAD_CONTEXT_WINDOW=1000 claude    # then run ANY tool — the budget line MUST appear
 ```
 
-If it sails through, the matcher never fired, and **that is the finding** — a gate that stands
-down silently is indistinguishable from a gate that approves.
+If no line appears the hook never fired, and **that is the finding**: an advisory that stands down
+silently is indistinguishable from one reporting all-clear, which is how J44 survived for days.
+Note the check no longer needs an `advisor()` call — any tool call exercises the same path.
 
-The gate blocks `advisor` and nothing else, and it **fails open** on every cannot-judge: no
-transcript, no usage record yet, no budget script, an unparseable payload, or any verdict that is
-not `DENY`. That is deliberate in the same direction as the ceiling itself — a fresh session is
-too young to measure and is also the cheapest moment to call, so a cannot-judge that blocked would
-deny exactly the call the ladder recommends. (This is why the hook is `set -uo pipefail` and not
-`set -euo`: the budget script exits 2 on `UNKNOWN`, and under `set -e` that rc propagates out of
-the hook, where 2 means *block*.) The deny names the substitutes and the escape hatch,
-`HMAD_ADVISOR_OVERRIDE=1`, because a refusal that teaches no way out gets deleted from
-`settings.json` — and then the rule is gone entirely rather than ignored once.
+The advisory **stays silent** on every cannot-judge: no transcript, no usage record yet, no budget
+script, an unparseable payload, or any verdict that is not `DENY`. A warning fired when it cannot
+measure trains the reader to ignore the one that matters. (Hence `set -uo pipefail`, not `set -euo`:
+the budget script exits 2 on `UNKNOWN`.) It matches `CTXBUDGET: DENY` and nothing else, so
+`--mode run`'s `HALT` cannot read as an over-budget advisor call. There is **no override env var** —
+an advisory has nothing to escape, and an escape hatch would tell the reader it blocks. It throttles
+to one emission per `HMAD_ADVISOR_WARN_INTERVAL` seconds (default 60): not for cost, which is
+~60 ms, but because a warning reprinted on every tool call is the context bloat it exists to prevent.
 
 Two limits worth stating: it protects only sessions where it is wired (elsewhere the rule is
 documentation), and `HMAD_CONTEXT_WINDOW` defaults to 1M — a smaller-window model needs it
@@ -1167,7 +1175,7 @@ you stop**, so the next session resumes instead of re-deriving. Then release the
 (`h_mad_state_write.py --feature <feature> --release`), or the resuming session inherits a lock from
 a session that has stopped. A halt that leaves no handoff has spent the ceiling and bought nothing.
 
-**`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-gate.sh` blocks on the glob
+**`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-warn.sh` speaks on the glob
 `*"CTXBUDGET: DENY"*`. Had a run-ceiling breach reused that word, no existing consumer could tell an
 advisor refusal from a dying run — and they prescribe opposite actions (choose a cheaper channel
 versus stop the run entirely). `--mode run` omits the `projected=` field for the same reason: it is
@@ -1237,7 +1245,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
 - Never continue a run past `CTXBUDGET: HALT mode=run` (80% window used) — halt `<phase>:context_ceiling`, **write the handoff**, and release the claim. Overflow mid-phase is unrecoverable and compacting afterwards recovers nothing; see §"Run-context ceiling".
-- Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Enforced by `hooks/h-mad-advisor-gate.sh` in any session where it is wired; documentation everywhere else.
+- Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Surfaced by `hooks/h-mad-advisor-warn.sh` in any session where it is wired — an ADVISORY, not enforcement: `advisor` is a server-side tool no tool-scoped hook event fires for, so nothing can refuse the call (J44). Documentation everywhere else.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 
 ## Editing this skill while a run is in flight
@@ -1585,7 +1593,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_wire_registry.py` — Phase-5 wire registry: records passing `wiring` pins and re-verifies them at 5f, emitting the documented `[H-MAD]` halt reasons; its challenge command is warning-only and verdict-neutral. Stdlib-only.
 - `h_mad_issue_fix_gate.py` — file-issue-then-fix-under-TDD linkage gate: printing `ISSUEFIX: PASS|FAIL issue=N …`, exit 0 on verdict / 2 on operational error. Checks that issue N is tied to a test file that names it AND to a `Closes|Fixes|Resolves #N` trailer. `--suggest` prints the `gh` commands for the operator; the gate never invokes `gh` (§"No new external dependency").
 - `h_mad_review_evidence.py` — 6a-prime evidence gate: `scan()` + CLI printing `EVIDENCE: PASS|NONE tools=N ok=K failed=J [status=…]`, exit 0 on a verdict / 2 on `EVIDENCE: UNREADABLE reason=no_log|empty_log`, which carries **no counts** so a cannot-judge cannot read as a zero. Answers only "did the review read anything" — never whether its findings are right. Counts any tool reaching `DONE`, knows no tool names, and reports `result.status` without gating on it. Stdlib-only.
-- `h_mad_context_budget.py` — orchestrator context budget in two modes. `--mode run` prices the RUN against an 80% ceiling, printing `CTXBUDGET: OK|HALT mode=run used=N window=N pct=P ceiling=80` — no `projected=`, because a run cap forwards nothing (§"Run-context ceiling"). `--mode advisor` is the default and its output is unchanged, because `hooks/h-mad-advisor-gate.sh` parses it live; the verdict words differ (`HALT` vs `DENY`) so no consumer can confuse a dying run with an advisor refusal. Advisor mode: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
+- `h_mad_context_budget.py` — orchestrator context budget in two modes. `--mode run` prices the RUN against an 80% ceiling, printing `CTXBUDGET: OK|HALT mode=run used=N window=N pct=P ceiling=80` — no `projected=`, because a run cap forwards nothing (§"Run-context ceiling"). `--mode advisor` is the default and its output is unchanged, because `hooks/h-mad-advisor-warn.sh` parses it live; the verdict words differ (`HALT` vs `DENY`) so no consumer can confuse a dying run with an over-budget advisor call. Advisor mode: `last_context_tokens()` + CLI printing `CTXBUDGET: OK|DENY used=N window=N pct=P projected=N ceiling=C`, exit 0 on a verdict / 2 on `CTXBUDGET: UNKNOWN reason=…` (no transcript, no usage record yet, bad window) — which carries **no `used=`** so a cannot-judge can never be read as an `OK`. Prices an `advisor()` call before you make it (§"Orchestrator context hygiene"). Reads the newest **non-sidechain** assistant turn's `input + cache_creation + cache_read`: summing across turns inflates by ~the turn count because `cache_read` is the whole prompt replayed, and a subagent's usage line reports a fraction of the parent's context — both mis-reads fail toward a false `OK`. The number lags the current turn, so it is a floor. Stdlib-only.
 - `h_mad_hook_wiring.py` — hook-wiring check: `check()` + CLI printing `WIRING: PASS|FAIL issues=N`, exit 0 on a verdict / 2 on `WIRING: UNKNOWN reason=no_settings` (no readable settings file, so nothing was examined — it carries no `issues=`). Detail lines `HOOK_NOT_WIRED:`/`HOOK_WIRED_WRONG_MATCHER:`/`HOOK_WIRED_STALE_PATH:`. Deliberately a separate verdict from `INSTALL:` so a settings source this check cannot see can never halt bootstrap (§"Wired, not just installed"). Searches the user scope honouring `CLAUDE_CONFIG_DIR` and every `.claude/settings*.json` up the tree, matches on the hook **basename** inside the command (the live wiring is `bash $HOME/…/hook.sh`, an unexpanded variable in a longer line), and treats match-all matchers before regex so `*` cannot raise. Stdlib-only.
 - `h_mad_doc_shape_check.py` — doc-superset guard for saved phase documents (run at Phase 3/4/7 save, see `references/inline-protocols.md`): `check_document()` + CLI printing one `DOC-SHAPE: PASS|FAIL|SKIP path=… type=…` line per path, exit 0 on a verdict / 2 on an unreadable path (with no partial verdict stream). `SKIP` is the correct verdict for h-mad's brainstorm/spec/impl-plan/audit documents — they sit outside the external validator's detection by design and have no superset contract. FAIL reports dropped required sections *and* plan-plus escalation literals in a plan's prose: the templates are compliant and tested, but the authored body is not the template, and the escalation literals are ordinary words an author has no reason to suspect. The section tables and literals are h-mad's own copy so the check runs standalone (§"Standalone / no plugin dependency"); `tests/test_h_mad_doc_shape_check.py::TestMirrorFidelity` diffs the tables, the literals, and the verdicts against the live external validator when installed and fails on drift, which is what keeps the mirror honest (§"Single-source verdicts"). Stdlib-only.
 

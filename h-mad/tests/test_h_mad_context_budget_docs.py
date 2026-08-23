@@ -56,8 +56,12 @@ def _section() -> str:
         kept.append(line)
     section = "\n".join(kept)
     # A runaway extract is not evidence about anything; fail here rather than
-    # asserting against the rest of the document.
-    assert len(section.splitlines()) < 140, "section boundary ran away"
+    # asserting against the rest of the document. The number only has to sit far
+    # below a real runaway — a broken boundary runs to end-of-file, thousands of
+    # lines — so it is a detector, not a prose budget. Re-anchored 140 -> 160 on
+    # 2026-08-24 when J44's root cause joined the section (the previous author was
+    # squeezing under it at 139).
+    assert len(section.splitlines()) < 160, "section boundary ran away"
     return " ".join(section.split())
 
 
@@ -185,8 +189,19 @@ class TestChannelRouting:
 class TestMechanicalEnforcement:
     def test_names_the_hook_and_the_settings_wiring(self):
         s = _section()
-        assert "h-mad-advisor-gate.sh" in s
-        assert '"matcher": "advisor"' in s
+        assert "h-mad-advisor-warn.sh" in s
+        assert "PostToolUse" in s
+        assert '"matcher": "*"' in s
+
+    def test_says_why_it_cannot_be_a_gate(self):
+        """J44: `advisor` is a server-side tool that no tool-scoped hook event
+        fires for. Without the reason travelling with the section, the next reader
+        sees an advisory where a gate would do and re-proposes the matcher that
+        provably never runs."""
+        s = _section()
+        assert "server_tool_use" in s
+        assert "J44" in s
+        assert "advisory, not a gate" in s
 
     def test_says_wiring_takes_effect_next_session(self):
         """Hooks are snapshotted at session start. Without this, the session that
@@ -199,17 +214,19 @@ class TestMechanicalEnforcement:
         assert "HMAD_CONTEXT_WINDOW=1000" in s
         assert "stands down silently" in s
 
-    def test_states_the_fail_open_direction_and_why(self):
-        """A gate that blocked on a cannot-judge would deny the early cheap call
-        the ladder recommends -- worse than no gate."""
+    def test_states_the_silent_direction_and_why(self):
+        """A warning fired on a cannot-judge trains the reader to ignore it, and
+        then the one that matters lands on deaf ears."""
         s = _section()
-        assert "fails open" in s
+        assert "stays silent" in s
         assert "set -euo" in s
 
-    def test_names_the_override_and_why_it_exists(self):
+    def test_states_that_there_is_no_override(self):
+        """The gate needed one because it could refuse. An advisory that ships an
+        escape hatch is telling the reader it blocks."""
         s = _section()
-        assert "HMAD_ADVISOR_OVERRIDE=1" in s
-        assert "deleted from" in s
+        assert "**no override env var**" in s
+        assert "nothing to escape" in s
 
     def test_states_the_two_limits(self):
         s = _section()
@@ -225,7 +242,7 @@ def test_never_list_carries_the_rule():
     assert "advisor()" in never
     assert "45%" in never
     assert "CTXBUDGET:" in never
-    assert "h-mad-advisor-gate.sh" in never
+    assert "h-mad-advisor-warn.sh" in never
 
 
 def test_helper_script_is_listed():

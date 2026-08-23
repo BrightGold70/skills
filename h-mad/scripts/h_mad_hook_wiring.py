@@ -3,10 +3,11 @@
 
 `h_mad_install_check.py` proves the two symlinks resolve. It cannot prove any
 settings file references them, and an unwired hook is invisible in exactly the way
-a passing one is: nothing errors, nothing warns, and every write or `advisor()` call
-sails through as if approved. SKILL.md has named this hole since the TDD gate
-shipped ("an absent hook link still leaves the gate armed whenever settings.json
-points at the skills path instead"); the advisor gate made it two hooks.
+a passing one is: nothing errors, nothing warns, and every write proceeds as if
+approved while the context budget goes unreported. SKILL.md has named this hole
+since the TDD gate shipped ("an absent hook link still leaves the gate armed
+whenever settings.json points at the skills path instead"); the advisor advisory
+made it two hooks, and the two now live under DIFFERENT hook events.
 
 The check is deliberately a SEPARATE verdict token from `INSTALL:`. A wiring result
 depends on enumerating settings sources this script cannot be certain it has seen
@@ -18,7 +19,7 @@ rather than inside it.
 Three ways a naive version reports the wrong thing:
 
   1. matching on the literal path. The live wiring is
-     `bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-gate.sh` -- an unexpanded
+     `bash $HOME/.claude/skills/h-mad/hooks/h-mad-advisor-warn.sh` -- an unexpanded
      env var, inside a longer command. Compare on the basename and expand before
      touching the filesystem.
   2. treating "referenced" as "wired". An entry can name the hook under a matcher
@@ -39,10 +40,26 @@ import sys
 from pathlib import Path
 
 #: hook basename -> tool names its matcher must be able to fire on.
+#:
+#: `h-mad-advisor-warn.sh` lists a spread of ordinary tools rather than the one it
+#: cares about, because the tool it cares about cannot be listed: `advisor` is a
+#: `server_tool_use` executed server-side and never reaches ANY tool-scoped hook
+#: event (J44 — a PreToolUse matcher `advisor` was proven twice never to fire).
+#: The advisory instead rides PostToolUse on every tool, so what must be verified
+#: is that its matcher is wide, and a spread of names a narrow matcher would miss
+#: is how the existing machinery expresses that.
 REQUIRED_HOOKS: dict[str, tuple[str, ...]] = {
     "h-mad-tdd-gate.sh": ("Write", "Edit"),
-    "h-mad-advisor-gate.sh": ("advisor",),
+    "h-mad-advisor-warn.sh": ("Bash", "Read", "Write", "Edit", "Glob", "Grep"),
 }
+
+#: hook basename -> the hook event it must be registered under. Absent means
+#: `PreToolUse`, which is where every h-mad hook lived until the advisory moved.
+HOOK_EVENTS: dict[str, str] = {
+    "h-mad-advisor-warn.sh": "PostToolUse",
+}
+
+DEFAULT_EVENT = "PreToolUse"
 
 MATCH_ALL = ("*", "", "**")
 
@@ -110,7 +127,11 @@ def check(project_root: Path | None = None,
     """Returns (issues, read_anything). Empty issues + read_anything means wired."""
     paths = sources if sources is not None else settings_sources(project_root)
 
-    entries: list[tuple[str, str]] = []   # (matcher, command)
+    # (matcher, command) per hook EVENT. Collecting only PreToolUse would report a
+    # correctly wired PostToolUse advisory as NOT_WIRED — the same false zero this
+    # script exists to avoid, one event over.
+    wanted_events = {HOOK_EVENTS.get(b, DEFAULT_EVENT) for b in REQUIRED_HOOKS}
+    entries: dict[str, list[tuple[str, str]]] = {e: [] for e in wanted_events}
     read_anything = False
     for path in paths:
         try:
@@ -120,24 +141,29 @@ def check(project_root: Path | None = None,
         read_anything = True
         if not isinstance(data, dict):
             continue
-        pre = (data.get("hooks") or {}).get("PreToolUse") or []
-        if not isinstance(pre, list):
+        hooks = data.get("hooks") or {}
+        if not isinstance(hooks, dict):
             continue
-        for entry in pre:
-            if not isinstance(entry, dict):
+        for event in wanted_events:
+            registered = hooks.get(event) or []
+            if not isinstance(registered, list):
                 continue
-            matcher = entry.get("matcher")
-            matcher = matcher if isinstance(matcher, str) else ""
-            for hook in entry.get("hooks") or []:
-                if isinstance(hook, dict) and isinstance(hook.get("command"), str):
-                    entries.append((matcher, hook["command"]))
+            for entry in registered:
+                if not isinstance(entry, dict):
+                    continue
+                matcher = entry.get("matcher")
+                matcher = matcher if isinstance(matcher, str) else ""
+                for hook in entry.get("hooks") or []:
+                    if isinstance(hook, dict) and isinstance(hook.get("command"), str):
+                        entries[event].append((matcher, hook["command"]))
 
     if not read_anything:
         return [], False
 
     issues: list[str] = []
     for basename, tools in REQUIRED_HOOKS.items():
-        hits = [(m, c) for m, c in entries if basename in c]
+        event = HOOK_EVENTS.get(basename, DEFAULT_EVENT)
+        hits = [(m, c) for m, c in entries[event] if basename in c]
         if not hits:
             issues.append(f"HOOK_NOT_WIRED:{basename}")
             continue
