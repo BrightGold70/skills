@@ -298,3 +298,84 @@ def test_production_module_uses_only_stdlib_imports() -> None:
             imported_roots.add(node.module.partition(".")[0])
 
     assert imported_roots <= stdlib
+
+
+# --- D-2: the `None` sentinel must tolerate trailing punctuation ---------------
+#
+# agy writes `None.` — with a trailing period — and `p.lower() == "none"` misses
+# it. The section then falls through to the fail-safe branch ("non-`None` content
+# with no countable bullet -> count 1") and MANUFACTURES one phantom finding per
+# section. Observed live on `grounding-evidence-coverage` impl-plan cycle 23 pass
+# B: `Must-fix: None.` / `Should-fix: None.` scored `GATE: FAIL must=1 should=1`
+# with nothing behind it. The fail-safe DIRECTION stays (a false FAIL beats a
+# false PASS); only the sentinel comparison is normalised.
+
+
+@pytest.mark.parametrize(
+    "sentinel",
+    ["None.", "None", "- None.", "* None.", "• None.", "None .", "  None.  ", "NONE."],
+)
+def test_classify_punctuated_none_sentinel_is_clean(sentinel: str) -> None:
+    text = f"## Must-fix\n{sentinel}\n## Should-fix\n{sentinel}\n"
+
+    assert classify(text) == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+
+
+def test_classify_none_prefixed_prose_is_still_a_finding() -> None:
+    # The normalisation must strip punctuation, not match a prefix: a real finding
+    # that merely STARTS with the word None must still count.
+    text = "## Must-fix\nNone of the ACs pin the emitter — AC-3.2 is unbuildable.\n## Should-fix\nNone.\n"
+
+    result = classify(text)
+
+    assert result["must_count"] == 1
+    assert result["should_count"] == 0
+    assert result["verdict"] == "FAIL"
+
+
+def test_classify_fail_safe_prose_finding_survives_the_fix() -> None:
+    # The fail-safe branch itself must NOT be loosened: off-template prose with no
+    # bullet still counts 1 rather than being silently missed (F14).
+    text = "## Must-fix\nThe plan pins the wrong file.\n## Should-fix\nNone.\n"
+
+    result = classify(text)
+
+    assert result["must_count"] == 1
+    assert result["should_count"] == 0
+
+
+def test_cli_dot_none_report_passes_end_to_end(tmp_path: Path) -> None:
+    # D-2 end-to-end, the live artifact: a report whose empty sections read
+    # `None.` must score PASS, not a phantom `FAIL must=1 should=1`.
+    audit_file = tmp_path / "feat.impl-plan.audit.v23.md"
+    audit_file.write_text(
+        "## Summary\nx\n\n## Must-fix\nNone.\n\n## Should-fix\nNone.\n\n## Nit\nNone.\n",
+        encoding="utf-8",
+    )
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0
+    assert "GATE: PASS must=0 should=0" in result.stdout
+
+
+@pytest.mark.parametrize("sentinel", ["**None**", "_None_", "`None`", "- **None**"])
+def test_classify_emphasised_none_sentinel_is_clean(sentinel: str) -> None:
+    # Same defect class as `None.`: markdown emphasis around the sentinel must
+    # not manufacture a finding either.
+    text = f"## Must-fix\n{sentinel}\n## Should-fix\n{sentinel}\n"
+
+    assert classify(text) == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+
+
+def test_classify_punctuated_none_bullet_beside_a_real_bullet_is_not_counted() -> None:
+    # Pins the SECOND `_is_none_sentinel` call site (the bullet filter). When every
+    # payload is a sentinel the function returns 0 before reaching that filter, so
+    # only a MIXED section exercises it: a real finding plus a `- None.` bullet
+    # must count 1, not 2.
+    text = "## Must-fix\n- real issue — why\n- None.\n## Should-fix\nNone.\n"
+
+    result = classify(text)
+
+    assert result["must_count"] == 1
+    assert result["should_count"] == 0

@@ -31,6 +31,26 @@ def _bullet_remainder(stripped: str) -> str | None:
     return None
 
 
+# Formatting a reviewer may wrap the empty-section sentinel in. agy writes
+# `None.` with a trailing period; markdown emphasis (`**None**`, `_None_`,
+# `` `None` ``) is the same class. Every one of these is the single word None
+# dressed up, and a bare `==` comparison misses all of them -- the section then
+# falls through the fail-safe branch below and MANUFACTURES a phantom finding
+# (D-2, observed live: `Must-fix: None.` scored `GATE: FAIL must=1`).
+_SENTINEL_TRIM = " \t.*_`"
+
+
+def _is_none_sentinel(payload: str) -> bool:
+    """True iff `payload` is the empty-section sentinel `None`, however dressed.
+
+    Trims surrounding whitespace, trailing punctuation and markdown emphasis
+    before comparing. It is a full-string comparison after trimming, never a
+    prefix match, so a real finding that merely BEGINS with the word None
+    ("None of the ACs pin the emitter — …") still counts as a finding.
+    """
+    return payload.strip(_SENTINEL_TRIM).lower() == "none"
+
+
 def _payload(line: str) -> str:
     """The finding text of a content line: its bullet remainder, or the line itself.
 
@@ -47,7 +67,8 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     """Findings in one blocking section's non-blank content lines.
 
     A section is CLEAN (0) iff every line's payload is the `None` sentinel — this
-    covers an empty section, `None`, and a stray `- None`. Otherwise it has
+    covers an empty section, `None`, a stray `- None`, and punctuated/emphasised
+    forms like `None.` or `**None**` (see `_is_none_sentinel`). Otherwise it has
     findings. When the section carries `-`/`*`/`•` bullets we count them (so a
     wrapped multi-line bullet counts once, not once per line). When it carries
     non-`None` content but NO bullet — a prose, numbered, or blockquote finding a
@@ -55,12 +76,12 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     fails the gate (fail-safe) instead of being silently missed (F14).
     """
     payloads = [_payload(line) for line in content]
-    if all(p.lower() == "none" for p in payloads):
+    if all(_is_none_sentinel(p) for p in payloads):
         return 0
     bullets = [
         p for line, p in zip(content, payloads)
         if _bullet_remainder(line.strip()) is not None
-        and p and p.lower() != "none" and p not in acknowledged
+        and p and not _is_none_sentinel(p) and p not in acknowledged
     ]
     if bullets:
         return len(bullets)
