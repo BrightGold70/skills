@@ -1528,7 +1528,23 @@ def test_verb_no_self_invocation(tmp_path):
     r, trace = run_with_cmd_exec_stub(tmp_path, dispatch_args(root=root, passes="2"))
 
     assert r.returncode == 0, r.stderr
-    traced_commands = [" ".join(row["argv"]) for row in read_jsonl(trace)]
+    rows = read_jsonl(trace)
+
+    # The negative assertion below is `all(...)`, which is VACUOUSLY TRUE over an
+    # empty trace -- so "the verb dispatched nothing at all" would score identically
+    # to "the verb dispatched correctly and never recursed". Pin what WAS dispatched
+    # first, or the property is unfalsifiable exactly when the verb is most broken.
+    # This is the same shape as `test_verb_fail_dispatch_count`'s count assertion.
+    assert len([row for row in rows if row["kind"] == "cmd_exec_start"]) == 2, (
+        "passes=2 must produce exactly 2 exec dispatches; without this the "
+        "no-self-invocation assertion below passes on an empty trace"
+    )
+
+    traced_commands = [" ".join(row["argv"]) for row in rows]
+    # Hyphenated on purpose: the helper is `h_mad_audit_cycle.py` (underscores), so
+    # the verb's own legitimate python3 helper call cannot match this. A helper
+    # renamed to a hyphenated form would false-positive here, which is the trade
+    # this narrow match accepts.
     assert all("audit-cycle" not in command for command in traced_commands), (
         "audit-cycle command trace must not contain a nested audit-cycle self-invocation"
     )

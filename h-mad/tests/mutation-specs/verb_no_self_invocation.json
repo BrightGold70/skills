@@ -1,0 +1,24 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "_why_only_two": [
+  "Each mutant here was checked by hand to fail the assertion it TARGETS, not merely to",
+  "fail the test. Three earlier candidates -- looping to 0, looping to 1, and looping to",
+  "`$passes-1` -- were all reported caught, but every one of them died on",
+  "`pids[$i]: unbound variable` and tripped `assert r.returncode == 0` instead. A mutant",
+  "caught by a return code proves the verb crashes when broken; it proves nothing about",
+  "the property under test. ALL_CAUGHT is not evidence on its own -- read the failure."
+ ],
+ "command": ["python3.11", "-m", "pytest",
+             "tests/test_hmad_dispatch_audit_cycle.py::test_verb_no_self_invocation", "-q"],
+ "mutations": [
+  {"name": "self-invocation-on-the-exec-argv",
+   "file": "scripts/hmad-dispatch.sh",
+   "find": "      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
+   "replace": "      _cmd_exec agy audit-cycle \"${prompt[$i]}\" --cd \"$root\" \\"},
+
+  {"name": "thin-the-trace-while-rc-stays-0-vacuous-all",
+   "file": "scripts/hmad-dispatch.sh",
+   "find": "      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
+   "replace": "      [ \"$i\" -eq 1 ] && _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\"}
+ ]
+}
