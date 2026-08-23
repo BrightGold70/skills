@@ -121,6 +121,72 @@ def preflight(text: str, inlined: dict[str, str]) -> list[str]:
     return problems
 
 
+# --- step 6.7: output contract at the head -----------------------------------
+
+# The output-framing block is the LAST section of the template, and at audit-prompt
+# sizes a reviewer drops it: on `grounding-evidence-coverage` impl-plan cycle 21 BOTH
+# passes ignored the entire block — no sentinels, no `## Summary`/`## Must-fix`/
+# `## Should-fix`/`## Nit` schema, no report file, no `.done` — and each invented its
+# own verdict line, so `h_mad_audit_gate.py` scored `GATE: INVALID` on two passes that
+# had done real work (one of them holding a genuine must-fix).
+#
+# This is PLACEMENT, not size. With the contract at the tail it was lost 2 of 2 at
+# 206.4 KB; duplicated at the head it was honoured 4 of 4 at LARGER sizes (219.8,
+# 224.5, 229.4 KB). Larger prompts succeeding is what rules size out — and J30's size
+# premise was separately refuted 8/8.
+#
+# The head copy is SLICED from the assembled text, never hand-written: a hand-written
+# copy would hardcode a report path and schema that drift from the template's.
+CONTRACT_ANCHOR = "Output framing (mandatory"
+
+CONTRACT_BANNER = (
+    "!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!\n"
+    "This is the OUTPUT CONTRACT. It is repeated verbatim at the end of this prompt.\n"
+    "Your reply is machine-scored: a report that omits the sentinels or the exact\n"
+    "`## Summary` / `## Must-fix` / `## Should-fix` / `## Nit` headings is scored\n"
+    "INVALID and discarded no matter what it says. Do NOT invent your own verdict\n"
+    "line. Re-read this block before you write a single word of your report.\n\n"
+)
+
+CONTRACT_SEPARATOR = (
+    "\n\n====== END OUTPUT CONTRACT — the audit prompt begins below ======\n\n"
+)
+
+
+def prepend_output_contract(text: str, *, sentinel: str,
+                            report_file: str) -> tuple[str, list[str]]:
+    """Duplicate the tail output-contract block at the head of the prompt.
+
+    Returns `(text, problems)` in preflight's shape. A non-empty `problems` is a
+    HALT verdict, not a crash: a template that cannot carry a head contract is a
+    prompt that must not be dispatched, and signal discipline reserves a non-zero
+    exit for unusable inputs. `text` comes back unchanged in that case, so the
+    caller's preflight still reports everything else wrong with it.
+
+    The checks are deliberately NOT `assert`: asserts vanish under `python -O`,
+    which would silently ship a prompt with no head contract and reintroduce the
+    exact defect this function exists to close.
+    """
+    i = text.find(CONTRACT_ANCHOR)
+    if i == -1:
+        return text, [
+            f"output_contract: anchor {CONTRACT_ANCHOR!r} not found — this template "
+            "cannot carry a head contract, and the tail copy alone is dropped at "
+            "audit sizes"
+        ]
+    contract = text[i:]
+    # The slice must carry the per-pass values, or the head copy would instruct the
+    # reviewer with a sentinel/path that is not this pass's.
+    problems = [
+        f"output_contract: {label} {value!r} missing from the contract slice"
+        for label, value in (("sentinel", sentinel), ("report path", report_file))
+        if value and value not in contract
+    ]
+    if problems:
+        return text, problems
+    return CONTRACT_BANNER + contract + CONTRACT_SEPARATOR + text, []
+
+
 # --- assembly ----------------------------------------------------------------
 
 def _read(path: Path, *, required: bool) -> str:
@@ -167,7 +233,14 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
     for slot, value in slots.items():
         text = text.replace(slot, value)
 
-    return text, preflight(text, {"base": base_md, "project": project_md})
+    # After slot fill, so the head copy arrives pre-filled and preflight's
+    # unfilled-slot check stays honest. The framing block sits after both
+    # invariants slots in the template, so the duplicate cannot trip preflight's
+    # rubric-duplication needles.
+    text, contract_problems = prepend_output_contract(
+        text, sentinel=sentinel, report_file=report_file)
+
+    return text, contract_problems + preflight(text, {"base": base_md, "project": project_md})
 
 
 def main(argv: list[str] | None = None) -> int:

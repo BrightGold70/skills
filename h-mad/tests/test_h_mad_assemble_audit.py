@@ -7,6 +7,7 @@ a duplication grep hardcoding a project-authored heading. None raised an error.
 These tests pin the mechanical replacement.
 """
 
+import pytest
 import subprocess
 import sys
 from pathlib import Path
@@ -16,7 +17,12 @@ SKILL_DIR = REPO_ROOT / "h-mad"
 SCRIPT = SKILL_DIR / "scripts" / "h_mad_assemble_audit.py"
 
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
-from h_mad_assemble_audit import assemble, preflight  # noqa: E402
+from h_mad_assemble_audit import (  # noqa: E402
+    CONTRACT_SEPARATOR,
+    assemble,
+    preflight,
+    prepend_output_contract,
+)
 
 SPEC = "# Spec: demo\n\n## Functional Requirements\n- FR-1 do the thing (AC-1.1)\n"
 PLAN = "# Plan: demo\n\nStrategy for FR-1.\n"
@@ -49,11 +55,12 @@ def _run(*args: str) -> subprocess.CompletedProcess:
                           capture_output=True, text=True)
 
 
-def _assemble(root: Path, phase: str):
+def _assemble(root: Path, phase: str, *, sentinel: str = "AUDIT-demo-x-v1",
+              report_file: str = "/tmp/demo.report.md"):
     return assemble(
         feature="demo", phase=phase, project_root=root,
         docs_dir=root / "docs/01-plan/features",
-        sentinel="AUDIT-demo-x-v1", report_file="/tmp/demo.report.md",
+        sentinel=sentinel, report_file=report_file,
         template=SKILL_DIR / "audit-prompt.template.md",
     )
 
@@ -77,7 +84,11 @@ class TestAssembledPromptIsClean:
         text, _ = _assemble(_project(tmp_path), "plan")
         assert "ORCHESTRATOR-NOTE" not in text
         assert "Audit Prompt Template" not in text
-        assert text.lstrip().startswith("You are the agy audit reviewer")
+        # The prompt opens with the duplicated output contract (D-1), then the
+        # body starts IMMEDIATELY after the separator — nothing may sneak in
+        # between, which is what the old `startswith` pin was protecting.
+        assert text.lstrip().startswith("!!! READ THIS BLOCK FIRST")
+        assert CONTRACT_SEPARATOR + "You are the agy audit reviewer" in text
 
     def test_phase_scoping_of_paired_documents(self, tmp_path):
         root = _project(tmp_path)
@@ -136,7 +147,10 @@ class TestSignalDiscipline:
                  "--project-root", str(root), "--out", str(out))
         assert r.returncode == 0, r.stderr
         assert r.stdout.startswith("ASSEMBLE: PASS")
-        assert out.is_file() and out.read_text().startswith("You are the agy audit reviewer")
+        written = out.read_text()
+        assert out.is_file()
+        assert written.startswith("!!! READ THIS BLOCK FIRST")
+        assert CONTRACT_SEPARATOR + "You are the agy audit reviewer" in written
 
     def test_halt_is_a_verdict_not_a_process_failure(self, tmp_path):
         """Uses a template carrying a slot the assembler has no input for, so the
@@ -217,7 +231,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # Filler counts are calibrated to land in the bands, NOT arbitrary. Adding
     # rules to invariants.base.md moves every prompt, because that file is inlined
     # verbatim into all of them -- recalibrate the fixture rather than widen the
-    # band, because the band is the assertion. (3047/3347 after §"Guard narrowing"
+    # band, because the band is the assertion. (2850/3150 after D-1 head-duplicated
+    # the output contract on 2026-08-24, adding ~2,050 B to EVERY prompt: at the
+    # previous 3047 the fixture measured 94,522 B, past the frontier, so the filler
+    # drops ~197 lines at ~23 B/line. Measured after: 2850 -> 89,991 B, mid-band;
+    # 3150 -> 96,891 B, past the frontier. Was 3047/3347 after §"Guard narrowing"
     # added 2,037 B on 2026-08-09: at the previous 3136 the fixture measured
     # 93,005 B, past the frontier, so the filler drops ~89 lines at ~23 B/line.
     # Was 3136/3436 after §"Wrapper–runtime reconciliation" added 1,583 B on
@@ -225,11 +243,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # the frontier. Was 3200/3500 after the 2026-07-30 re-anchor to the 92,055 B
     # confirmed-answered frontier, and 2000/2200 before that against the old
     # 61,493 B ceiling.)
-    approaching, mid = size_of(3047)
+    approaching, mid = size_of(2850)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(3347)
+    past, big = size_of(3150)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
@@ -302,3 +320,115 @@ def test_oversize_verdict_token_is_not_a_pass_substring_variant(tmp_path):
              "--project-root", str(root), "--out", str(out))
     token = r.stdout.splitlines()[0].split()[1]
     assert token in ("PASS", "HALT"), f"verdict token drifted to {token!r}"
+
+
+# --- D-1: the output contract is duplicated at the head -----------------------
+#
+# With the framing block only at the tail, both cycle-21 passes on
+# `grounding-evidence-coverage` dropped it and the audit was unscoreable. The head
+# copy is SLICED from the assembled text, never hand-written, so it can never carry
+# a stale sentinel or report path.
+
+
+class TestOutputContractAtTheHead:
+    def test_prompt_opens_with_the_banner_then_the_contract_then_the_body(self, tmp_path):
+        text, problems = _assemble(_project(tmp_path), "plan")
+
+        assert problems == []
+        assert text.startswith("!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!")
+        head, sep, body = text.partition(CONTRACT_SEPARATOR)
+        assert sep, "separator missing"
+        assert "Output framing (mandatory" in head
+        assert body.startswith("You are the agy audit reviewer")
+
+    def test_head_copy_carries_this_pass_values_not_placeholders(self, tmp_path):
+        text, _ = _assemble(_project(tmp_path), "plan",
+                            sentinel="AUDIT-demo-plan-v7",
+                            report_file="/tmp/demo.report.md")
+        head = text.partition(CONTRACT_SEPARATOR)[0]
+
+        # A hand-written head copy would hardcode a stale path/sentinel; the slice
+        # cannot, because it is lifted after slot fill.
+        assert "AUDIT-demo-plan-v7" in head
+        assert "/tmp/demo.report.md" in head
+        assert "<AUDIT_SENTINEL>" not in text and "<REPORT_FILE_PATH>" not in text
+
+    def test_the_contract_appears_twice_the_rubrics_still_once(self, tmp_path):
+        text, problems = _assemble(_project(tmp_path), "design")
+
+        assert problems == [], problems
+        assert text.count("Output framing (mandatory") == 2
+        # The framing block sits after both invariants slots, so duplicating it
+        # must not trip preflight's rubric-duplication needles.
+        assert text.count("# H-MAD Base Invariants") == 1
+        assert text.count("# Demo Project Axis B Invariants") == 1
+
+    def test_missing_anchor_is_a_halt_verdict_not_a_crash(self):
+        text, problems = prepend_output_contract(
+            "a template with no framing block\n", sentinel="S", report_file="")
+
+        assert text == "a template with no framing block\n", "text must be untouched"
+        assert len(problems) == 1
+        assert problems[0].startswith("output_contract: anchor")
+
+    def test_contract_slice_missing_this_pass_values_halts(self):
+        # The anchor is present but the per-pass values are not inside the slice —
+        # the head copy would instruct the reviewer with the wrong sentinel/path.
+        body = "preamble with AUDIT-x and /tmp/r.md\nOutput framing (mandatory) …\n"
+
+        _, problems = prepend_output_contract(
+            body, sentinel="AUDIT-x", report_file="/tmp/r.md")
+
+        assert len(problems) == 2
+        assert all(p.startswith("output_contract:") for p in problems)
+
+    def test_empty_report_file_is_not_required_in_the_slice(self, tmp_path):
+        # Sentinel-scrape mode leaves the report-file slot empty; an empty value
+        # must not be searched for (every string contains "").
+        text, problems = _assemble(_project(tmp_path), "plan", report_file="")
+
+        assert problems == []
+        assert text.startswith("!!! READ THIS BLOCK FIRST")
+
+    def test_head_copy_is_a_verbatim_slice_of_the_tail(self, tmp_path):
+        text, _ = _assemble(_project(tmp_path), "impl-plan")
+        head = text.partition(CONTRACT_SEPARATOR)[0]
+        banner_end = "Re-read this block before you write a single word of your report.\n\n"
+        contract = head.split(banner_end, 1)[1]
+
+        assert text.endswith(contract), "head copy has drifted from the tail copy"
+
+
+# --- D-3: no `.tmp` staging advice, and `result.status` never gates ------------
+
+
+class TestReportFileDeliveryAdvice:
+    TEMPLATE = SKILL_DIR / "audit-prompt.template.md"
+
+    def test_template_does_not_tell_the_agent_to_stage_via_tmp_and_mv(self):
+        # The `.done` marker ordering IS the completeness guarantee, so staging
+        # only adds two tool calls to the delivery path — and agy refused one
+        # outright on 2026-08-24 ("… .report.md.tmp is not a valid artifact path")
+        # while allowing another the same day, so it is not even reliable.
+        text = self.TEMPLATE.read_text(encoding="utf-8")
+
+        assert "for a hard atomicity guarantee" not in text
+        assert "`<path>.tmp` and `mv` it into place" not in text
+        assert "do not stage it via `<path>.tmp` and `mv`" in text
+
+    def test_template_still_orders_the_report_before_the_marker(self):
+        # Dropping the staging advice must not weaken the ordering it sat beside:
+        # the marker is the done signal, so the file must be complete first.
+        text = self.TEMPLATE.read_text(encoding="utf-8")
+
+        assert "the file must be complete before the marker exists" in text
+        assert "**final two actions**" in text
+
+    @pytest.mark.parametrize("doc", ["SKILL.md", "references/orchestration-mode.md"])
+    def test_docs_forbid_gating_an_audit_on_result_status(self, doc: str):
+        # Measured three times with three unrelated causes: any failed or refused
+        # tool call yields `status: ERROR` beside a complete, correct report.
+        text = (SKILL_DIR / doc).read_text(encoding="utf-8")
+
+        assert "never gate on it" in text.lower() or "never gate an audit on" in text.lower()
+        assert "`result.status`" in text
