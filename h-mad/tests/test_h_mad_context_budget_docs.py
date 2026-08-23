@@ -203,11 +203,16 @@ class TestMechanicalEnforcement:
         assert "J44" in s
         assert "advisory, not a gate" in s
 
-    def test_says_wiring_takes_effect_next_session(self):
-        """Hooks are snapshotted at session start. Without this, the session that
-        wires it looks broken and the hook gets removed as non-functional."""
+    def test_does_not_assert_wiring_needs_a_relaunch(self):
+        """The old text said hooks are snapshotted at session start, so wiring takes
+        effect NEXT session. Measured false on 2.1.241: a registration added
+        mid-session was invoked ~13 minutes later in the same session. The section
+        must tell the reader to VERIFY rather than to assume either way — an
+        unverifiable claim here is what let J44's dead hook look installed."""
         s = _section()
-        assert "NEXT session" in s
+        assert "measured false" in s
+        assert "Verify it fires" in s
+        assert "do not assume either way" in s
 
     def test_gives_a_live_fire_test_and_names_silent_stand_down_as_the_finding(self):
         s = _section()

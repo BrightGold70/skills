@@ -1,9 +1,11 @@
 """An installed hook that nothing references is indistinguishable from a passing one.
 
 `h_mad_install_check.py` proves the symlinks resolve. Nothing proved any settings
-file points at them, and that gap is silent in the worst direction: writes and
-`advisor()` calls sail through exactly as they would if the gate had approved them.
-SKILL.md has named the hole since the TDD gate shipped; the advisor gate made it two.
+file points at them, and that gap is silent in the worst direction: writes sail
+through exactly as they would if the TDD gate had approved them, and the context
+budget goes unreported. SKILL.md has named the hole since the TDD gate shipped; the
+advisor advisory made it two — and the two live under DIFFERENT hook events, which
+is its own way to be silently unwired (J44).
 
 The tests are written against the ways this check reports the WRONG thing, because a
 wiring checker that cries wolf gets deleted and a lenient one restores the original

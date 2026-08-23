@@ -1817,15 +1817,22 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   **weak test of mine**: `hostile-session-id-builds-a-path` survived because my first version created
   the wrong parent directory, so the unguarded write failed for a reason unrelated to the guard.
 
-  **Verification status, stated rather than implied.** Driven end-to-end through the live
-  `~/.claude/skills/h-mad` symlink with this session's real transcript: silent at `CTXBUDGET: OK`
-  (30.4%), and with the window shrunk to 400k it emitted the documented `hookSpecificOutput` JSON at
-  76.2% and stayed silent on the immediate second call. What is NOT verified here is the harness
-  actually invoking it, because hooks are snapshotted at session start — that is one tool call in the
-  next session (`HMAD_CONTEXT_WINDOW=1000 claude`, then any tool), and note it no longer costs an
-  `advisor()` call, which is what made the old probe expensive.
+  **VERIFIED LIVE, INCLUDING HARNESS INVOCATION — and that closed a second, unrelated wrong belief.**
+  First driven by hand through the `~/.claude/skills/h-mad` symlink: silent at `CTXBUDGET: OK`
+  (30.4%), emitting the documented `hookSpecificOutput` JSON at 76.2% with the window shrunk to 400k,
+  silent again on the immediate second call. I recorded the harness half as *owed to the next
+  session*, on the standing rule that hooks are snapshotted at session start — **and then the harness
+  fired it in THIS session, ~13 minutes after the registration was written**, injecting
+  `[H-MAD] Context budget: 63.4% …` as `additionalContext` on an ordinary `Bash` call. Not a
+  look-alike: the throttle stamp it left is keyed by this session's real id
+  (`h-mad-advisor-warn.c426d098-….stamp`, written 22 s earlier) and the percentage tracked the live
+  transcript, which also confirms PostToolUse payloads carry both `session_id` and `transcript_path`.
+  **So "hooks are snapshotted at session start" is false on 2.1.241 for at least PostToolUse
+  registration.** SKILL.md now tells the reader to VERIFY rather than to assume either direction —
+  an unverifiable claim about hook arming is precisely what let J44's dead hook look installed for
+  days. Nothing is owed.
   Status: `FIXED` — `hooks/h-mad-advisor-warn.sh` + wiring swap; suite 1651 passed, 12/12 mutants
-  caught. Live harness invocation owed next session.
+  caught, live harness invocation observed in-session.
 
 - 🟢 **J45 — `--mode run`'s HALT cannot trip the advisor hook's DENY glob; proven mechanically.** The
   two ceilings were given different verdict words on purpose (`DENY` at 45% for `--mode advisor`,

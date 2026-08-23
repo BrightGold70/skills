@@ -1111,9 +1111,12 @@ at the rate risk accrues, and the verdict arrives as `additionalContext` during 
 window. `h_mad_hook_wiring.py` reports `HOOK_NOT_WIRED` for an advisory under `PreToolUse`.
 
 It rides the `~/.claude/skills/h-mad` symlink on purpose (a second hook symlink would add a
-`SPLIT_INSTALL` failure mode for no gain). **Hooks are snapshotted at session start, so wiring it takes effect in the NEXT session, not this
-one** — you cannot verify from the session that wired it. Live-fire test, first thing next session,
-with the window shrunk so the ceiling is certain to trip:
+`SPLIT_INSTALL` failure mode for no gain). **Verify it fires; do not assume either way.** The long-standing guidance here was that hooks are
+snapshotted at session start and wiring takes effect in the NEXT session. That was **measured false
+on 2.1.241**: this registration was added mid-session and the harness invoked it ~13 minutes later
+in the *same* session, with a real payload — the throttle stamp carried the live `session_id` and
+the budget read the live transcript. Assume nothing; run the check now, and if it stays quiet,
+relaunch and run it again:
 
 ```bash
 HMAD_CONTEXT_WINDOW=1000 claude    # then run ANY tool — the budget line MUST appear

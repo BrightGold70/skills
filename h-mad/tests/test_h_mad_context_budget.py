@@ -167,7 +167,7 @@ class TestRunCeiling:
     def test_run_mode_halt_is_not_the_advisor_deny_word(self, tmp_path):
         """The anti-conflation pin, and the reason this is a separate verdict word.
 
-        `hooks/h-mad-advisor-gate.sh` blocks on the glob `*"CTXBUDGET: DENY"*`. If a
+        `hooks/h-mad-advisor-warn.sh` speaks on the glob `*"CTXBUDGET: DENY"*`. If a
         run-ceiling breach also said DENY, the two verdicts would be indistinguishable
         to every existing consumer -- and they prescribe different actions.
         """
@@ -186,7 +186,7 @@ class TestRunCeiling:
 
     def test_advisor_mode_output_is_unchanged(self, tmp_path):
         """Regression pin on the LIVE hook. Advisor mode is what
-        `h-mad-advisor-gate.sh` parses today; adding run mode must not touch it."""
+        `h-mad-advisor-warn.sh` parses today; adding run mode must not touch it."""
         t = _transcript(tmp_path, _turn(read=525_742))
         tok = _token(_run("--transcript", str(t), "--window", "1000000").stdout)
         assert tok == (
