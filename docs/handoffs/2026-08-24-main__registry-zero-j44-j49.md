@@ -9,9 +9,8 @@
 Worked an inbound handover brief (three h-mad audit-dispatch defects found while running impl-plan
 audit cycles 21–24 on HemaSuite's `grounding-evidence-coverage`), then closed the two remaining
 registry entries on request. **Filed J46–J49 and closed all four**, plus the pre-existing J44 —
-`docs/skill-monitoring.md` now reports **0 `MONITORING`**. Suite 1668/0. Five commits landed
-(`7df6ab6`, `81d956b`, `97cb07f` already pushed by a sibling; `c89c2c9`, `a311385`, `291a84a`,
-`86998d5` are local-only). The through-line: **three of the session's carried or standing premises
+`docs/skill-monitoring.md` now reports **0 `MONITORING`**. Suite 1668/0. Seven commits landed and **all are pushed** — `origin/main` is at `d974a59`. (An earlier
+draft of this doc said four were local-only; that was written before the push.) The through-line: **three of the session's carried or standing premises
 were wrong, and each was only caught by re-probing rather than by reading.**
 
 ## Key Learnings
@@ -76,9 +75,7 @@ were wrong, and each was only caught by re-probing rather than by reading.**
 
 ## Next Steps
 
-1. **Decide whether to push.** 4 local commits on `main`, all mine, with a sibling session's
-   `fcecdbb` already on `origin/main` beneath them — so a push now publishes only my work:
-   `git -C /Users/kimhawk/orca/skills push origin HEAD`.
+1. **Nothing owed on push — done.** `main` == `origin/main` == `d974a59`, tree clean.
 2. **Live-fire the advisory in a fresh session** — it already fired in-session, so this is
    confirmation rather than the owed verification: `HMAD_CONTEXT_WINDOW=1000 claude`, then **any**
    tool call; the `[H-MAD] Context budget:` line must appear. It no longer needs an `advisor()` call.
@@ -87,8 +84,9 @@ were wrong, and each was only caught by re-probing rather than by reading.**
    `hmad-dispatch audit-cycle --feature <f> --phase impl-plan --cycle <N> --passes 2 --project-root <root>`.
    The wire is unit-pinned (`tests/test_hmad_dispatch_audit_cycle.py`) and mutation-covered, but has
    not run against a live dispatch.
-4. **[suggested]** Decide the fate of the unverified HemaSuite Nit in Open Items below — it is one
-   sentence of an audit pass I ran for a different purpose, and it is not mine to act on.
+4. ~~Decide the fate of the unverified HemaSuite Nit.~~ **DONE — refuted, see Open Items.**
+   Verifying it cost three greps; routing it would have cost a brief, a claim check, a worktree
+   stamp and a delivery, to transfer something false.
 
 ## Open / Blocked Items
 
