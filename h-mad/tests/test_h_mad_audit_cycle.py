@@ -39,6 +39,7 @@ def pass_result(
     must: int = 0,
     should: int = 0,
     findings: list[dict] | None = None,
+    effort: dict | None = None,
 ):
     ac = audit_cycle()
     return ac.PassResult(
@@ -49,6 +50,7 @@ def pass_result(
         must=must,
         should=should,
         findings=[] if findings is None else findings,
+        effort=effort,
     )
 
 
@@ -1646,3 +1648,199 @@ def test_premise_items_match_gate_count_real_artifacts(
         ack_file=None,
         expected=expected_gate_payloads(report.read_text(encoding="utf-8"), set()),
     )
+
+
+# --- J49: a hollow audit pass must be visible at the verdict ------------------
+#
+# Across the 8 audit passes of cycles 21-24, every substantive finding came from a
+# pass with high thinking tokens or ~34 tool calls. Cycle 21 pass A ran 0 tool calls
+# and returned "CLEAN PASS" on a plan another pass proved defective; cycle 24
+# double-cleaned with thinking collapsed to 6.2k/4.4k and exactly 2 tool calls each
+# -- the report write and the `.done` marker, i.e. no reads at all. At the
+# AUDITCYCLE line that is indistinguishable from a real clean pass, and the counts
+# were only visible by opening the NDJSON by hand.
+#
+# The effort block reports. It must never decide: `combine()` does not see it, and a
+# pass that made 2 tool calls honoured the delivery contract exactly as asked.
+
+
+def _agy_log(path: Path, *, tools_ok: int, tools_err: int = 0, thinking: int = 0) -> Path:
+    lines = [json.dumps({
+        "event": "step_update",
+        "step_update": {"step_type": "agent_response", "state": "DONE",
+                        "usage": {"thinking_tokens": thinking}},
+    })]
+    for state, count in (("DONE", tools_ok), ("ERROR", tools_err)):
+        for _ in range(count):
+            lines.append(json.dumps({
+                "event": "step_update",
+                "step_update": {"step_type": "tool", "tool_name": "view_file",
+                                "state": state},
+            }))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _effort_lines(text: str) -> list[str]:
+    body = text.split("Effort:", 1)
+    return [] if len(body) == 1 else [
+        line.strip() for line in body[1].splitlines()
+        if line.strip().startswith("- ")
+    ]
+
+
+class TestEffortIsSurfaced:
+    def test_pass_spec_accepts_an_optional_log_field(self) -> None:
+        """Five fields, not four -- every existing caller passing four must keep
+        working, or upgrading the combiner silently breaks the verb."""
+        ac = audit_cycle()
+
+        four = ac._parse_pass_spec("1:/r.md:/r.out:0")
+        five = ac._parse_pass_spec("1:/r.md:/r.out:0:/r.ndjson")
+
+        assert four.log_path is None
+        assert five.log_path == Path("/r.ndjson")
+        assert four.index == five.index == 1 and four.rc == five.rc == 0
+
+    def test_a_log_path_may_contain_colons(self) -> None:
+        """The log field is last precisely so a path with a colon lands whole."""
+        spec = audit_cycle()._parse_pass_spec("1:/r.md:/r.out:0:/a:b/run.ndjson")
+
+        assert spec.log_path == Path("/a:b/run.ndjson")
+
+    def test_effort_block_reports_tools_and_thinking(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        log = _agy_log(tmp_path / "p1.ndjson", tools_ok=34, thinking=15786)
+
+        argv = ["--feature", "f", "--phase", "plan", "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"]
+        rc = ac.main(argv)
+        out = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Effort:" in out
+        line = _effort_lines(out)[0]
+        assert "p1" in line and "tools=34" in line and "thinking=15786" in line
+
+    def test_a_pass_at_or_below_the_delivery_floor_is_marked(self, tmp_path, capsys) -> None:
+        """The report-file contract itself costs two successful calls: write the
+        report, touch the marker. At or below that floor the pass cannot have read
+        anything, which is the J49 signature. Derived from the CONTRACT, not from
+        tool names -- the evidence scanner knows no tool names on purpose."""
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        log = _agy_log(tmp_path / "p1.ndjson", tools_ok=2, thinking=4429)
+
+        argv = ["--feature", "f", "--phase", "plan", "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"]
+        ac.main(argv)
+        out = capsys.readouterr().out
+
+        assert "low-evidence" in _effort_lines(out)[0]
+
+    def test_a_pass_above_the_floor_is_not_marked(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        log = _agy_log(tmp_path / "p1.ndjson", tools_ok=3, thinking=100)
+
+        argv = ["--feature", "f", "--phase", "plan", "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"]
+        ac.main(argv)
+
+        assert "low-evidence" not in _effort_lines(capsys.readouterr().out)[0]
+
+    def test_an_unreadable_log_says_so_and_reports_no_counts(self, tmp_path, capsys) -> None:
+        """A zero here would be a measurement of nothing presented as evidence --
+        `tools=0` is exactly what a hollow pass looks like, so a log that could not
+        be read must never render as one."""
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+
+        argv = ["--feature", "f", "--phase", "plan", "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{tmp_path / 'gone.ndjson'}"]
+        rc = ac.main(argv)
+        out = capsys.readouterr().out
+
+        assert rc == 0, "an unreadable log is not an operational failure of the cycle"
+        line = _effort_lines(out)[0]
+        assert "unreadable" in line
+        assert "tools=" not in line and "thinking=" not in line
+        assert "low-evidence" not in line
+
+    def test_an_empty_log_is_unreadable_not_a_row_of_zeros(self, tmp_path, capsys) -> None:
+        """A present-but-empty log is the sharpest form of the trap: the file
+        EXISTS, so an existence check passes, and `tools=0 thinking=0` is exactly
+        what a genuinely hollow pass looks like. Assert existence and CONTENT as
+        two columns — a dispatch that never wrote its log must not be rendered as
+        one that read nothing."""
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        empty = tmp_path / "p1.ndjson"
+        empty.write_text("   \n\n", encoding="utf-8")
+
+        ac.main(["--feature", "f", "--phase", "plan", "--cycle", "1",
+                 "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                 "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{empty}"])
+        line = _effort_lines(capsys.readouterr().out)[0]
+
+        assert "unreadable" in line
+        assert "tools=" not in line and "thinking=" not in line
+        assert "low-evidence" not in line
+
+    def test_no_effort_block_when_no_pass_carries_a_log(self, tmp_path, capsys) -> None:
+        """Four-field callers must render exactly as before -- an empty Effort block
+        would read as 'measured, found nothing'."""
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+
+        argv = ["--feature", "f", "--phase", "plan", "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0"]
+        ac.main(argv)
+
+        assert "Effort:" not in capsys.readouterr().out
+
+    def test_effort_never_changes_the_verdict(self, tmp_path, capsys) -> None:
+        """J49 is a scoring caveat, not a defect. The same clean report must produce
+        the same AUDITCYCLE line whether the pass was hollow or exhaustive."""
+        ac = audit_cycle()
+        body = "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n"
+        verdicts = []
+        for name, tools, think in (("hollow", 0, 0), ("deep", 34, 20_000)):
+            report = tmp_path / f"{name}.report.md"
+            write_done_report(report, body)
+            log = _agy_log(tmp_path / f"{name}.ndjson", tools_ok=tools, thinking=think)
+            ac.main(["--feature", "f", "--phase", "plan", "--cycle", "1",
+                     "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                     "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"])
+            verdicts.append(auditcycle_lines(capsys.readouterr().out)[0])
+
+        assert verdicts[0] == verdicts[1], "effort leaked into the machine verdict"
+
+    def test_the_contract_line_is_unchanged_by_effort(self, tmp_path, capsys) -> None:
+        """The AUDITCYCLE line is a machine contract. Effort belongs in the human
+        block beside it, not inside a token consumers parse positionally."""
+        ac = audit_cycle()
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        log = _agy_log(tmp_path / "p1.ndjson", tools_ok=0, thinking=0)
+
+        ac.main(["--feature", "f", "--phase", "plan", "--cycle", "1",
+                 "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                 "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"])
+        line = auditcycle_lines(capsys.readouterr().out)[0]
+
+        assert "tools=" not in line
+        assert "thinking=" not in line
+        assert "low-evidence" not in line

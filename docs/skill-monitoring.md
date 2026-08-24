@@ -1913,6 +1913,33 @@ are the findings from `exec-path-hardening`'s live e2e and from `gate-blindness-
   no tool names, so the counts exist — they are simply not surfaced beside an audit verdict.
   Note this is a *scoring caveat*, not a defect in any script: a pass with 2 tool calls honoured the
   contract exactly as asked.
-  Status: `MONITORING` — surfacing thinking-tokens + tool-call count beside the gate verdict is the
-  obvious remedy; deliberately not built in this pass, which was scoped to the three contract
-  defects.
+  **FIXED 2026-08-24.** `h_mad_review_evidence.scan()` now also sums `usage.thinking_tokens` over
+  completed `agent_response` steps (`EVIDENCE: … thinking=T`), `hmad-dispatch audit-cycle` threads
+  each pass's NDJSON log to the combiner as an optional 5th `--pass` field
+  (`i:<report>:<out>:<rc>[:<log>]`), and `h_mad_audit_cycle.py` renders an **`Effort:`** block beside
+  the verdict with per-pass `tools=/ok=/failed=/thinking=`.
+
+  **The `low-evidence` marker is derived from the CONTRACT, not from tool names.** The report-file
+  delivery contract itself costs two successful calls — write the report, create the `.done` marker —
+  so `ok <= 2` means the pass cannot have successfully read anything. Classifying calls as
+  reads-vs-writes would have re-created [[J40]]'s first-probe defect, where a hardcoded
+  `view_file|grep_search` reported a false zero the moment agy switched to `run_command`;
+  `scan()` knows no tool names on purpose and still does not.
+
+  **It reports; it never decides, and the tests pin that both ways.** `combine()` cannot see the
+  block, the `AUDITCYCLE:` line is byte-identical whether a pass was hollow or exhaustive, and the
+  same clean report yields the same verdict either way. This is the same discipline as `result.status`
+  ([[J48]]): a caveat that can move a verdict is a gate wearing a caveat's name. The caution is
+  earned rather than theoretical — **a pass in this very repo scored 5,356 thinking / 2 tool calls,
+  the exact hollow signature, and still returned a real finding** (the D-1 post-fix dispatch). Treat
+  `low-evidence` on a clean pass as a reason to re-dispatch that pass, never as a verdict.
+
+  A log that was named but could not be read renders `unreadable`, never zeros — `tools=0` is
+  precisely what a genuinely hollow pass looks like, so zeros from an unread file would manufacture
+  the finding. The mutation harness caught the sharp form of that: an **empty but existing** log
+  survived until a discriminating test was written (assert existence and content as two columns).
+
+  Verified end-to-end on two REAL agy logs from this session's dispatches — one hollow
+  (2 tools / 5,356 thinking, flagged) and one deep (31 tools / 8,339 thinking, unflagged) — both
+  gating `PASS`, with one identical `AUDITCYCLE:` line above them.
+  Status: `FIXED` — suite 1668 passed, 12/12 mutants caught (`tests/mutation-specs/audit_effort.json`).

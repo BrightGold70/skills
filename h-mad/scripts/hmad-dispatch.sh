@@ -2679,7 +2679,11 @@ _cmd_audit_cycle() {
   i=1
   while [ "$i" -le "$passes" ]; do
     if wait "${pids[$i]}"; then rc[$i]=0; else rc[$i]=$?; fi
-    pass_args+=(--pass "${i}:${report[$i]}:${out[$i]}:${rc[$i]}")
+    # 5th field: the pass's NDJSON log, so the combiner can report reasoning
+    # effort beside the verdict (J49 — a hollow pass that read nothing is
+    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional
+    # in the combiner; reported, never gated.
+    pass_args+=(--pass "${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}")
     i=$((i + 1))
   done
 

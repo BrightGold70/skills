@@ -1320,8 +1320,14 @@ def test_verb_nonzero_exec_rc_is_forwarded_but_not_fatal(tmp_path):
     cycle_rows = [row for row in rows if row["kind"] == "cycle"]
     assert len(cycle_rows) == 1, "non-zero _cmd_exec rc must still reach the helper verdict path"
     assert cycle_rows[0]["pass_specs"] == [
-        "1:/tmp/audit_cycle-red_plan_cycle7_p1.report.md:/tmp/audit_cycle-red_plan_cycle7_p1.out.txt:17"
+        "1:/tmp/audit_cycle-red_plan_cycle7_p1.report.md:"
+        "/tmp/audit_cycle-red_plan_cycle7_p1.out.txt:17:"
+        "/tmp/audit_cycle-red_plan_cycle7_p1.log"
     ], "non-zero _cmd_exec rc must be forwarded unchanged in the --pass payload"
+    # The rc stays in field 4 with the log appended after it (J49). If the log were
+    # inserted anywhere earlier, `_parse_pass_spec` would read a path as the rc and
+    # every dispatch would become an argparse error instead of a verdict.
+    assert cycle_rows[0]["pass_specs"][0].split(":")[3] == "17"
 
 
 def test_verb_uses_in_process_cmd_exec_entrypoint(tmp_path):

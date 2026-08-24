@@ -39,8 +39,19 @@ from pathlib import Path
 
 
 def scan(log_text: str) -> dict:
-    """Count tool events by outcome. Any tool name counts; none is special."""
-    tools = ok = failed = 0
+    """Count tool events by outcome, and sum reasoning effort. Any tool name counts.
+
+    `thinking` is reported for the same reason `status` is: triage, never a verdict.
+    Across the 8 audit passes of cycles 21-24 every substantive finding came from a
+    pass with high thinking or ~34 tool calls, while a pass with 0 tool calls
+    returned "CLEAN PASS" on a document another pass proved defective (J49). At the
+    verdict line a hollow pass and a real clean pass look identical.
+
+    It must not become a threshold. A pass that made 2 tool calls honoured the
+    report-file delivery contract exactly as asked, and one such pass in this repo
+    (5,356 thinking / 2 tools) still returned a real finding.
+    """
+    tools = ok = failed = thinking = 0
     status: str | None = None
     for line in log_text.splitlines():
         line = line.strip()
@@ -60,9 +71,27 @@ def scan(log_text: str) -> dict:
             status = str(result["status"])
 
         step = event.get("step_update")
-        if not isinstance(step, dict) or step.get("step_type") != "tool":
+        if not isinstance(step, dict):
             continue
         state = str(step.get("state") or "")
+
+        # Reasoning effort rides `agent_response` steps, not tool steps. DONE only,
+        # for the same reason tools count outcomes: ACTIVE is the start of the same
+        # step and counting both doubles every response's usage.
+        if step.get("step_type") == "agent_response":
+            if state == "DONE":
+                usage = step.get("usage")
+                if isinstance(usage, dict):
+                    # `thinking_tokens: null` occurs in real logs, and `None + int`
+                    # raises -- which would abort the scan and lose the tool counts
+                    # too, turning a reported hollow pass into a cannot-judge.
+                    value = usage.get("thinking_tokens")
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        thinking += int(value)
+            continue
+
+        if step.get("step_type") != "tool":
+            continue
         # ACTIVE is the start of a call, DONE/ERROR its outcome. Count outcomes only,
         # or every call is counted twice and a wedged call counts as an attempt.
         if state == "DONE":
@@ -71,7 +100,8 @@ def scan(log_text: str) -> dict:
         elif state == "ERROR":
             tools += 1
             failed += 1
-    return {"tools": tools, "ok": ok, "failed": failed, "status": status}
+    return {"tools": tools, "ok": ok, "failed": failed,
+            "thinking": thinking, "status": status}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -97,7 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     verdict = "PASS" if counts["ok"] >= 1 else "NONE"
     line = (
         f"EVIDENCE: {verdict} tools={counts['tools']} "
-        f"ok={counts['ok']} failed={counts['failed']}"
+        f"ok={counts['ok']} failed={counts['failed']} "
+        f"thinking={counts['thinking']}"
     )
     if counts["status"]:
         line += f" status={counts['status']}"

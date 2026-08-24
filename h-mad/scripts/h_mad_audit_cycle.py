@@ -11,11 +11,29 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
+from h_mad_review_evidence import scan
 
-PassSpec = namedtuple("PassSpec", "index report_path out_path rc")
+
+# `log_path` defaults to None so a four-field caller — every existing one — keeps
+# constructing a valid spec. Effort reporting is additive by design.
+PassSpec = namedtuple("PassSpec", "index report_path out_path rc log_path",
+                      defaults=(None,))
 PassResult = namedtuple(
-    "PassResult", "index delivered collected_path verdict must should findings"
+    "PassResult",
+    "index delivered collected_path verdict must should findings effort",
 )
+
+# The report-file delivery contract itself costs two successful tool calls: write
+# the report, then create the `.done` marker. At or below that floor a pass cannot
+# have successfully read anything, which is the J49 signature -- cycle 24
+# double-cleaned with exactly these two calls and no reads, and cycle 21 pass A
+# made zero calls and still returned "CLEAN PASS" on a defective plan.
+#
+# Derived from the CONTRACT, never from tool names. `h_mad_review_evidence.scan`
+# knows no tool names on purpose: the first probe of that defect hardcoded
+# `view_file|grep_search` and reported a false zero when agy switched to
+# `run_command`. Classifying calls as reads-vs-writes here would re-create it.
+DELIVERY_FLOOR = 2
 GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$")
 
 
@@ -181,6 +199,47 @@ def collect(
         return "out", _write_collected_report(report_text, collected_path)
 
     return "none", None
+
+
+def measure_effort(log_path: Path | None) -> dict | None:
+    """Reasoning effort for one pass, or None when there is nothing to report.
+
+    Returns `{"readable": False}` for a log that was named but could not be read.
+    That is deliberately NOT a zero: `tools=0` is precisely what a hollow pass
+    looks like, so rendering an unread log as zeros would manufacture the very
+    finding this exists to surface (the mode-15 lesson -- assert existence and
+    content as two separate columns).
+    """
+    if log_path is None:
+        return None
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {"readable": False}
+    if not text.strip():
+        return {"readable": False}
+    counts = scan(text)
+    counts["readable"] = True
+    return counts
+
+
+def _effort_items(results: list[PassResult]) -> list[str]:
+    """One human line per pass that carried a log. Never a verdict."""
+    items: list[str] = []
+    for result in results:
+        effort = result.effort
+        if effort is None:
+            continue
+        if not effort.get("readable"):
+            items.append(f"p{result.index} unreadable (log named but not readable)")
+            continue
+        line = (f"p{result.index} tools={effort['tools']} ok={effort['ok']} "
+                f"failed={effort['failed']} thinking={effort['thinking']}")
+        if effort["ok"] <= DELIVERY_FLOOR:
+            line += (f" low-evidence (<= the {DELIVERY_FLOOR} calls the report-file "
+                     "contract itself costs, so possibly no reads)")
+        items.append(line)
+    return items
 
 
 def _gate_token(stdout: str, collected: Path) -> tuple[str, int, int]:
@@ -376,6 +435,14 @@ def render(
         fields.append(f"size_status={size_status}")
 
     lines = [" ".join(fields)]
+    # Beside the verdict, never inside it. The AUDITCYCLE line is a machine
+    # contract parsed positionally by consumers; effort is a scoring caveat for a
+    # human, and a caveat that can move a verdict is a gate wearing a caveat's
+    # name. `combine()` never sees it.
+    effort = _effort_items(results)
+    if effort:
+        lines.append("Effort:")
+        lines.extend(f"- {item}" for item in effort)
     items = premise_items(results)
     if items:
         lines.append("Premise checklist:")
@@ -393,10 +460,19 @@ def render(
 
 
 def _parse_pass_spec(value: str) -> PassSpec:
-    parts = value.split(":", 3)
-    if len(parts) != 4:
-        raise argparse.ArgumentTypeError("--pass must be i:<report>:<out>:<rc>")
-    index, report_path, out_path, rc = parts
+    """Parse `i:<report>:<out>:<rc>[:<log>]`.
+
+    The log is OPTIONAL and LAST. Optional because every existing four-field caller
+    must keep working — a required fifth field would break the verb the moment this
+    script was upgraded. Last because `split(":", 4)` leaves everything after the
+    fourth colon in the final piece, so a log path containing a colon arrives whole
+    while `rc` stays a clean integer.
+    """
+    parts = value.split(":", 4)
+    if len(parts) not in (4, 5):
+        raise argparse.ArgumentTypeError("--pass must be i:<report>:<out>:<rc>[:<log>]")
+    index, report_path, out_path, rc = parts[:4]
+    log = parts[4] if len(parts) == 5 else ""
     try:
         parsed_index = int(index)
         parsed_rc = int(rc)
@@ -407,6 +483,7 @@ def _parse_pass_spec(value: str) -> PassSpec:
         report_path=Path(report_path),
         out_path=Path(out_path),
         rc=parsed_rc,
+        log_path=Path(log) if log else None,
     )
 
 
@@ -470,6 +547,7 @@ def main(argv: list[str] | None = None) -> int:
                         must=must,
                         should=should,
                         findings=findings,
+                        effort=measure_effort(spec.log_path),
                     )
                 )
             verdict, reason = combine(results)

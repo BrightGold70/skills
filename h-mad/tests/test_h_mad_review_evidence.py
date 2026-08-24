@@ -33,6 +33,17 @@ def _tool(name, state, **info):
     })
 
 
+def _response(thinking, state="DONE", **usage):
+    """An `agent_response` step. agy reports per-response `usage.thinking_tokens`
+    here; it is the only place effort is visible without opening the report."""
+    u = {"input_tokens": 100, "output_tokens": 50, "thinking_tokens": thinking}
+    u.update(usage)
+    return json.dumps({
+        "event": "step_update",
+        "step_update": {"step_type": "agent_response", "state": state, "usage": u},
+    })
+
+
 def _log(tmp_path, *lines, name="run.log"):
     p = tmp_path / name
     p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
@@ -183,3 +194,81 @@ class TestDocumented:
         s = self._skill()
         i = s.index("h_mad_review_evidence.py")
         assert "run_command" in s[i:i + 3000]
+
+
+# --- J49: effort must be visible without opening the NDJSON ------------------
+#
+# Across the 8 audit passes of cycles 21-24, every substantive finding came from a
+# pass with high thinking tokens or ~34 tool calls. Cycle 21 pass A ran 0 tool
+# calls and returned "CLEAN PASS" on a plan another pass proved defective; cycle 24
+# double-cleaned with thinking collapsed to 6.2k/4.4k and exactly 2 tool calls each
+# -- the `write_to_file` and the `.done` marker, i.e. no reads. At the verdict line
+# that is indistinguishable from a real clean pass.
+#
+# This reports effort. It must NEVER decide: a pass that made 2 tool calls honoured
+# the delivery contract exactly as asked, and one such pass in this very repo
+# (5,356 thinking / 2 tools) still returned a real finding.
+
+
+class TestEffortIsReported:
+    def test_thinking_tokens_are_summed_across_responses(self, tmp_path):
+        log = _log(tmp_path, _response(4000), _response(2248),
+                   _tool("view_file", "DONE"))
+
+        tok = _token(_run(str(log)).stdout)
+
+        assert "thinking=6248" in tok
+
+    def test_thinking_is_zero_not_absent_when_no_response_carries_it(self, tmp_path):
+        """An absent number and a zero are different facts, and `thinking=` missing
+        from the line would make a hollow pass look like an older log format."""
+        log = _log(tmp_path, _tool("view_file", "DONE"))
+
+        assert "thinking=0" in _token(_run(str(log)).stdout)
+
+    def test_only_completed_responses_count(self, tmp_path):
+        """An ACTIVE step is the start of a response, not its outcome. Counting both
+        double-counts every response's usage -- the same defect the tool counter
+        already avoids by ignoring ACTIVE."""
+        log = _log(tmp_path, _response(500, state="ACTIVE"), _response(500),
+                   _tool("view_file", "DONE"))
+
+        assert "thinking=500" in _token(_run(str(log)).stdout)
+
+    def test_a_missing_usage_block_does_not_crash(self, tmp_path):
+        line = json.dumps({"event": "step_update",
+                           "step_update": {"step_type": "agent_response", "state": "DONE"}})
+        log = _log(tmp_path, line, _tool("view_file", "DONE"))
+
+        r = _run(str(log))
+
+        assert r.returncode == 0
+        assert "thinking=0" in _token(r.stdout)
+
+    def test_a_null_thinking_value_reads_as_zero(self, tmp_path):
+        """`thinking_tokens: null` appears in real logs and `None + int` raises."""
+        log = _log(tmp_path, _response(None), _tool("view_file", "DONE"))
+
+        r = _run(str(log))
+
+        assert r.returncode == 0
+        assert "thinking=0" in _token(r.stdout)
+
+    def test_unreadable_still_carries_no_counts(self, tmp_path):
+        """The cannot-judge rule extends to the new field: `thinking=0` on a log
+        that was never read would be a measurement of nothing presented as zero."""
+        r = _run(str(tmp_path / "gone.log"))
+
+        tok = _token(r.stdout)
+        assert "thinking=" not in tok
+        assert "tools=" not in tok
+
+    def test_effort_never_changes_the_verdict(self, tmp_path):
+        """J49 is a scoring caveat, not a defect. Zero thinking with a successful
+        read is still PASS; heavy thinking with no successful call is still NONE."""
+        no_think = _log(tmp_path, _response(0), _tool("view_file", "DONE"), name="a.log")
+        all_think = _log(tmp_path, _response(90_000), _tool("view_file", "ERROR"),
+                         name="b.log")
+
+        assert _token(_run(str(no_think)).stdout).startswith("EVIDENCE: PASS ")
+        assert _token(_run(str(all_think)).stdout).startswith("EVIDENCE: NONE ")
