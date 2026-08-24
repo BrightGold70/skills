@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -3267,6 +3267,46 @@ _cmd_notify() {
   return 0
 }
 
+# `run` — the portable time-bounded command runner. macOS ships NO `timeout` and
+# no `gtimeout` (coreutils is not a system component), so an agent that reaches
+# for a `timeout <s> <cmd>` gets 127 and — measured — falls back to running the same
+# command UNBOUNDED. That fallback is the hazard the verb exists to remove: an
+# unbounded probe does not fail at the deadline, it hangs the phase, and a hang
+# is indistinguishable from slow work in every log h-mad reads.
+#
+# The watchdog is `_exec_run`, which `exec` has used since it shipped: absolute
+# deadline off bash's SECONDS, TERM -> 2s grace -> KILL, signalled to the whole
+# process group (`set -m`, since macOS has no `setsid`) so grandchildren die too.
+# This verb only makes that existing machinery callable from a prompt or a
+# dispatched agent, which is what was missing — the watchdog was private.
+#
+# Exit code is the child's, or 124 at the deadline (the GNU `timeout` convention,
+# so a caller that already branches on 124 needs no change). stdin/stdout/stderr
+# are inherited, so `hmad-dispatch run --timeout 30 -- foo < in > out` works.
+_cmd_run() {  # --timeout <s> -- <cmd...>
+  local secs=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --timeout) secs="${2:-}"; shift 2 ;;
+      --) shift; break ;;
+      *) _unknown_opt run "$1"; return 2 ;;
+    esac
+  done
+  case "$secs" in
+    ''|*[!0-9]*) echo "hmad-dispatch: run: --timeout <seconds> is required and must be a positive integer; nothing ran." >&2; return 2 ;;
+  esac
+  [ "$secs" -gt 0 ] || { echo "hmad-dispatch: run: --timeout must be > 0; nothing ran." >&2; return 2; }
+  [ $# -gt 0 ] || { echo "hmad-dispatch: run: no command after '--'; nothing ran." >&2; return 2; }
+  local rc=0
+  _exec_run "$secs" "$@" || rc=$?
+  # Name the timeout on stderr. GNU `timeout` is silent here, but h-mad's callers
+  # read logs, and a bare 124 in a transcript loses which command owned it.
+  if [ "$rc" -eq 124 ]; then
+    echo "hmad-dispatch: run_timeout after ${secs}s — $*" >&2
+  fi
+  return "$rc"
+}
+
 main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
@@ -3288,6 +3328,7 @@ main() {
     progress) _cmd_progress "$@" ;;
     exec-pane) _cmd_exec_pane "$@" ;;
     audit-cycle) _cmd_audit_cycle "$@" ;;
+    run)    _cmd_run "$@" ;;
     run-ensure) _require_orca run-ensure && _run_ensure ;;
     task-create) _cmd_task_create "$@" ;;
     dispatch) _cmd_dispatch "$@" ;;

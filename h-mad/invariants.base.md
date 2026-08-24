@@ -40,6 +40,17 @@
   already uses it; `pytest`).
   Introducing a new third-party package or new CLI is a violation.
 
+## Portable time bounds
+- A time-bounded command MUST NOT be written as `timeout <s> <cmd>` or `gtimeout <s> <cmd>`.
+  **macOS ships neither**, so on the skill's own platform the call fails at 127 — and a CLI that
+  must be installed separately is a new external CLI dependency besides (§"No new external
+  dependency"). Use `hmad-dispatch run --timeout <s> -- <cmd...>`, which exits 124 at the deadline.
+- The failure mode is worse than the 127. Measured: the reflex after `timeout: command not found`
+  is to re-run the same command **unbounded** and call it "checking directly". That does not fail
+  at the deadline, it hangs the phase, and in every log h-mad reads a hang and slow work are the
+  same bytes. A plan, a design, or a prompt that leaves an agent no reachable time-bounder is a
+  violation; the correct behaviour when none exists is to **halt**, not to drop the bound.
+
 ## Doc-template superset compliance
 - Generated phase documents whose type is validated by an external doc-structure validator
   (e.g. bkit PDCA: `plan` → `docs/01-plan/...`, `design` → `docs/02-design/...`,

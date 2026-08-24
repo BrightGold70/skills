@@ -32,6 +32,12 @@ If you have questions about:
 
 Ask via your response (status: NEEDS_CONTEXT). The orchestrator will provide context and re-dispatch.
 
+When you need to time-bound a shell command, use `hmad-dispatch run --timeout <s> -- <cmd...>`
+(exit 124 at the deadline). **Do not use `timeout` or `gtimeout`** — neither exists on macOS,
+so the call fails at 127. If that happens, do NOT re-run the command without a bound: an
+unbounded probe hangs instead of failing, and a hang is indistinguishable from slow work in
+the log the orchestrator reads. Report the blocker instead.
+
 ## Your Job
 
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.
