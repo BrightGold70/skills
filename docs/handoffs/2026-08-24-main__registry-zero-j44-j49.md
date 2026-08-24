@@ -102,8 +102,19 @@ were wrong, and each was only caught by re-probing rather than by reading.**
   tracks `cmd_regenerate_section` as an open protocol gap, so this is at most a pointer.
   `repo: /Users/kimhawk/orca/HemaSuite/hematology-paper-writer · branch: feature/201-grounding-evidence-coverage · worktree: none` ·
   report: `<scratchpad>/head_dup.report.md` · log: `<scratchpad>/head_dup.ndjson`.
-  Not handed over: no claim of mine to release there, and a HANDOVER for one unverified Nit is
-  disproportionate. Operator call.
+  **RESOLVED 2026-08-24 — REFUTED, nothing to route.** The operator asked how to solve it; the
+  answer was to verify rather than route, and the check was three greps. Inside
+  `cmd_regenerate_section` (`cli/_commands.py:3455-3628`) `project_dir` is bound exactly twice and
+  **both are Paths by construction**: `:3494` `project_dir = sections_dir.parent` (`.parent` of a
+  Path is a Path) and `:3574` `project_dir = Path(sections_dir).parent`. `sections_dir` is itself
+  `Path(args.project_dir) / "sections"` at `:3462`, so the raw argparse **str is wrapped at the
+  boundary and never survives**. Task 14's planned line lands inside that same function and
+  inherits a Path either way, so the `TypeError` cannot occur. The pass confused `args.project_dir`
+  (a str, never used bare in a `/` expression) with the local `project_dir`.
+  **The general lesson, which is the part worth keeping:** an item parked as "unverified, operator
+  call" was cheaper to *falsify* than to route. Verification cost 3 greps; a HANDOVER would have
+  cost a brief, a claim check, a worktree stamp and a delivery — to transfer something false. When
+  an unrouted item is small and checkable, checking it IS the routing decision.
 - **Monitoring registry: 0 open.** `grep -c "Status: \`MONITORING\`" docs/skill-monitoring.md` → `0`.
   Count the word; never the absence of one.
 - **`~/.claude/settings.json` was edited** (dead `advisor` PreToolUse matcher removed, `PostToolUse`
