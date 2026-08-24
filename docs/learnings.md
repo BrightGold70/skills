@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-08-24 · pattern · [0.7] · `handoff,triage,handover,handoff:2026-08-24-registry-zero-j44-j49` — When a parked item is small and checkable, CHECKING it is the routing decision. Falsifying one unverified finding cost 3 greps; handing it over would have cost a brief, claim check, worktree stamp and delivery — to transfer something false.
 - 2026-08-24 · pattern · [0.7] · `h-mad,audit,j49,handoff:2026-08-24-registry-zero-j44-j49` — Derive a 'did it do real work' marker from the delivery CONTRACT, not from tool names: the report-file path costs 2 successful calls, so ok<=2 means nothing was read. Naming tools re-creates the false zero when the agent switches tool.
 - 2026-08-24 · pattern · [0.7] · `mutation-testing,h-mad,handoff:2026-08-24-registry-zero-j44-j49` — Drop mutants proven EQUIVALENT rather than keeping them: a spec that retains them reports coverage it does not have. `set -euo` was the central defect in a blocking gate and inert in the advisory that replaced it.
 - 2026-08-24 · solution · [0.9] · `hooks,claude-code,advisor,j44,handoff:2026-08-24-registry-zero-j44-j49` — Claude Code's `advisor` is a server_tool_use run server-side, so it never reaches local tool dispatch and NO tool-scoped hook event can attach. No matcher string fixes it; put advisory logic on PostToolUse.
