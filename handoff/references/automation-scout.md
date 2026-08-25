@@ -16,14 +16,26 @@ scout is the only thing that ever writes the file, so a status nobody reconciles
 whole backlog has to be re-derived by hand. Measured 2026-08-03: five rows stood at `candidate: yes`
 and **four described work that had already shipped**, two of them for over a week.
 
-List what is still open — the check is bounded to those rows, so it stays cheap:
+List what is still open. **Ask the census, not a line grep** — it is the reader with tests, and a
+row's terminal marker is written on the *continuation* line beneath it (`  — **LANDED 2026-08-25**
+…`), so any single-line pattern sees the `candidate: yes` and never the `LANDED` that closed it:
 
 ```bash
-# anchored on the row shape (`- **name**: …`), or prose that merely quotes the phrase
-# "candidate: yes" matches too and you re-check the file's own header every session.
-# `\**` tolerates a bolded verdict: bold is this file's convention for the TERMINAL
-# states, so a `candidate: **yes**` slip would otherwise be invisible to this very
-# check — which happened the first time the step was run.
+python3 handoff/scripts/skill_candidates_census.py docs/skill-candidates.md   # OPEN(yes+maybe)=N
+```
+
+Measured 2026-08-26: the old line-scoped grep below returned **7 rows, all 7 already terminal** —
+a 100% false-positive rate against a file the census correctly read as zero open `yes`. It is kept
+only as a fallback for a store the census cannot parse, and its output must be re-checked against
+the line *after* each hit before you believe it:
+
+```bash
+# FALLBACK ONLY — see above. Anchored on the row shape (`- **name**: …`), because prose
+# that merely quotes the phrase "candidate: yes" matches too. `\**` tolerates a bolded
+# verdict: bold is this file's convention for the TERMINAL states, so a `candidate: **yes**`
+# slip would otherwise be invisible to this very check — which happened the first time the
+# step was run. Neither trick helps with the continuation-line problem, which is why the
+# census is the primary.
 grep -nE '^- \*\*.*candidate: \**yes' docs/skill-candidates.md | grep -vE 'LANDED|SUPERSEDED|DECLINED'
 ```
 

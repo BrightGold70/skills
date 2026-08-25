@@ -667,3 +667,33 @@ threshold of a third vendored patch; untouched this session.
   — **LANDED 2026-08-26 (`e0dd87b`)** — `h_mad_mutation_harness.py --check-anchors <spec>…`. Applies nothing and runs no tests, so it costs file reads instead of a suite per spec. The one-match rule is extracted into `anchor_status()` and shared with `run_spec`, so the cheap check and the expensive one cannot disagree — a precheck carrying its own `count(...) != 1` would be a second copy of the exact rule this harness enforces. First sweep over the 14 committed specs: **7 of 177 anchors had drifted**, and every one of those guards was unverified while its spec still printed a verdict-shaped line; two of the seven were broken by a refactor made minutes earlier in the same session. It then caught a drift caused by my own edit three hours later, before the run could report REFUSED. The subsumption question is answered NO — see the identifier-sweep row.
 - **build mutation-spec anchors FROM the file, never by hand-escaping them**: three separate spec edits this session produced anchors that matched 0 times purely from backslash levels in a heredoc, one of which (`\\bJ\\d+\\b`) produced a mutant that could never match and therefore reported as a survivor — a *broken* mutant is indistinguishable from a real coverage gap — recurrence: 3 — candidate: maybe — it is a technique, not a tool: read the target file, locate the literal line, and use that string as the anchor. Possibly a line in `invariants.base.md` §"Mutation verification" beside the shared-anchor recipe rather than anything executable.
 - **probe a tool with its simplest invocation before declaring it broken**: two failed `exec agy` dispatches were read as "agy is down" and recorded as such in a commit body and a candidate row; a one-line ping refuted it immediately — recurrence: 1 — candidate: maybe — one occurrence, but it cost five features shipping without review. The durable half is already in the taxonomy as mode 30; a rule would live in `invariants.base.md` §"Assumption verification" beside the controlled-pair line, which is the same discipline pointed at a tool rather than a cause.
+
+## 2026-08-26 — loop-drain-five-tools (scout)
+
+- **reconcile open rows with the census, never a line grep**: the scout's own reconcile step used
+  `grep -nE '^- \*\*.*candidate: \**yes' | grep -v LANDED`, but a row's terminal marker is written on
+  the CONTINUATION line beneath it, so the pattern sees `candidate: yes` and never the `LANDED` that
+  closed it — recurrence: 2 in one session (the scout step itself, and a throwaway open-row scan I
+  wrote minutes earlier that made the identical mistake) — candidate: **LANDED 2026-08-26** —
+  `handoff/references/automation-scout.md` now calls `skill_candidates_census.py` as the primary and
+  keeps the grep as a re-checked fallback. Measured: the grep returned **7 rows, all 7 already
+  terminal** — a 100% false-positive rate against a file the census read correctly as zero open
+  `yes`. The general form is worth remembering beyond this file: *a multi-line record cannot be
+  classified by a single-line pattern*, and the failure is silent because the pattern still matches
+  something real.
+- **dogfood a new tool inside a live cycle before closing its row**: five tools shipped this session
+  (`--check-anchors`, `h_mad_identifier_sweep.py`, `--gated`/`--verify-stamp`, the task-slicer bound,
+  `h_mad_ab_dispatch.py`); every one is unit-tested, mutation-covered and hand-run against this repo,
+  and **none has been through a real `/h-mad` phase gate** — recurrence: 5 this session — candidate:
+  maybe — this is the existing `dogfood-a-bundled-prompt-live` row's shape rather than a new tool, so
+  treat it as a recurrence bump on that row. The specific gap worth naming: `--verify-stamp` is
+  documented in `SKILL.md` §Phase-6 step 11 and invoked by nothing, which is a wiring decision left
+  open deliberately (the default gate output is byte-identical without `--gated`).
+- **pin a doc-lint against the real file, not only a fixture**: a `TRIAGE` regex written from the
+  tight form (marker immediately followed by the bucket) matched 2 of 22 rows and reported the other 20 as
+  unqualified, because the bucket usually sits after the date and the closing bold; a fixture built
+  from that same tight form is green on the bug — recurrence: 2 (this session's DECLINED split, and
+  the earlier coverage line that hardcoded `J` in its own denominator) — candidate: maybe — the
+  mechanical part is one extra test per doc-lint that runs against the committed document; the
+  judgement it must not automate is deciding what the correct count IS. Close to
+  `corpus-sweep-before-regex-tighten`, which is the same instinct one step earlier. **Self-pollution note:** the first draft of this very row quoted a bolded terminal marker as an example and the census promptly classified the row as terminal — a row that names a vocabulary word in bold IS that word to every reader of this file. Quote it unbolded.
