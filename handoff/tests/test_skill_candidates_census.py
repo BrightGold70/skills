@@ -341,3 +341,56 @@ def test_an_empty_registry_is_still_a_registry(tmp_path: Path) -> None:
     out = run(path)
     assert "J-entries=    0" in out, out
     assert "TOTAL candidates=" not in out, out
+
+
+# --- DECLINED carries its triage bucket -----------------------------------
+#
+# `DECLINED` means two different things in this file: "idea rejected" and
+# "useful, but no tool will be built". The header documents that, and a reader
+# who skims the marker without the note misreads 15 rows. Measured 2026-08-26:
+# 20 of 23 markers already carried a `(triage: ...)` qualifier, so the fix is to
+# finish the convention and count it — NOT to invent a fourth vocabulary word,
+# which would cost a rewrite of every existing row and lose their history.
+
+
+def test_declined_split_is_counted(tmp_path) -> None:
+    doc = tmp_path / "c.md"
+    doc.write_text(
+        "- **a**: x — candidate: **DECLINED** (triage: useful, not codable) — r\n"
+        "- **b**: x — candidate: **DECLINED** (triage: not useful) — r\n"
+        "- **c**: x — candidate: **DECLINED** (triage: useful, not codable) — r\n",
+        encoding="utf-8",
+    )
+
+    out = run(doc)
+
+    assert "DECLINED=3" in out, out
+    assert "useful-not-codable=2" in out, out
+    assert "not-useful=1" in out, out
+
+
+def test_an_unqualified_declined_is_reported_not_absorbed(tmp_path) -> None:
+    """The whole point: an unqualified marker is exactly the one a reader
+    misreads, so it must be visible rather than folded into either bucket."""
+    doc = tmp_path / "c.md"
+    doc.write_text(
+        "- **a**: x — candidate: **DECLINED** (triage: not useful) — r\n"
+        "- **b**: x — candidate: **DECLINED** — no bucket named\n",
+        encoding="utf-8",
+    )
+
+    out = run(doc)
+
+    assert "unqualified=1" in out, out
+    assert "not-useful=1" in out, out
+
+
+def test_the_live_backlog_has_no_unqualified_declined() -> None:
+    """Regression pin on the real file, not a fixture.
+
+    Finishing the convention is only worth anything if it stays finished; a new
+    bare `DECLINED` re-creates the ambiguity this row was filed against.
+    """
+    out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-candidates.md")
+
+    assert "unqualified=0" in out, out

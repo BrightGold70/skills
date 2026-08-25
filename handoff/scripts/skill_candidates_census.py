@@ -29,6 +29,18 @@ def _label(p):
 
 ROW  = re.compile(r'^- \*\*(.+?)\*\*')
 TERM = re.compile(r'\*\*(LANDED|SUPERSEDED|DECLINED)\b')
+# `DECLINED` carries two meanings on purpose -- "idea rejected" and "useful, but
+# no tool will be built" -- and the header documents that. A reader who skims
+# the marker without the note misreads the second bucket as the first, so the
+# bucket is named in the row and counted here rather than left to prose. An
+# UNQUALIFIED marker is reported as its own number: it is exactly the row that
+# gets misread, and folding it into either bucket would hide it.
+# `[^(\n]{0,40}` because the bucket usually sits AFTER the date and the closing
+# bold: `**DECLINED 2026-08-25 (triage: useful, not codable)**`. A tighter
+# pattern matched only the two rows where it directly follows the marker and
+# reported the other 20 as unqualified -- caught by running it over the real
+# file, which a fixture built from the tight form would never have shown.
+TRIAGE = re.compile(r'DECLINED[^(\n]{0,40}\(triage:\s*([^)]*)\)')
 CAND = re.compile(r'candidate:\s*\**([A-Za-z-]+)')
 # A bump/back-ref announces itself right after the bold name. `(still open; ...)`
 # is NOT here on purpose -- that is the canonical row of live-e2e-pane-janitor.
@@ -140,7 +152,7 @@ for f in paths:
                   f"deliberate gaps): {', '.join(dangling)}")
         continue
 
-    c=collections.Counter(); bumps=[]
+    c=collections.Counter(); bumps=[]; declined=collections.Counter()
     for ln,body in rows(f):
         m0=ROW.match(body[0])
         name=m0.group(1)
@@ -149,13 +161,27 @@ for f in paths:
         if BUMP.search(tail):
             bumps.append(f"{tag}:{ln} {name}"); continue
         t=TERM.search(blob)
-        if t: c[t.group(1)]+=1; continue
+        if t:
+            c[t.group(1)]+=1
+            if t.group(1)=="DECLINED":
+                bucket=TRIAGE.search(blob)
+                if not bucket: declined["unqualified"]+=1
+                elif "not codable" in bucket.group(1): declined["useful-not-codable"]+=1
+                else: declined["not-useful"]+=1
+            continue
         m=CAND.search(blob)
         c[m.group(1).lower() if m else "<none>"]+=1
     n=sum(c.values()); op=sum(v for k,v in c.items() if k in OPEN)
     print(f"{tag:8s} candidates={n:4d} OPEN(yes+maybe)={op:4d}  "
           + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1]))
           + f"   [+{len(bumps)} bump rows excluded]")
+    if c.get("DECLINED"):
+        # Printed unconditionally when there are any, `unqualified` included, so
+        # a bare marker cannot hide behind a bucket it was never sorted into.
+        print(f"  ~ DECLINED split: "
+              f"useful-not-codable={declined['useful-not-codable']}  "
+              f"not-useful={declined['not-useful']}  "
+              f"unqualified={declined['unqualified']}")
     grand.update(c); bumps_all+=bumps
     # Same coverage question for a candidate store: `- **` lines the reader did
     # not turn into a row are lines it did not understand.

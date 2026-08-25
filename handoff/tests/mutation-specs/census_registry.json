@@ -110,6 +110,38 @@
    "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
    "replace": "    return \"Skill Monitoring\" in text.split(\"\\n\")[0]",
    "test": "handoff/tests/test_skill_candidates_census.py::test_routing_survives_a_blank_first_line"
+  },
+  {
+   "name": "the-declined-split-is-not-reported",
+   "_mechanism": "DECLINED means both 'idea rejected' and 'useful, no tool will be built'. Without the split the counter reports 22 of one thing, which is the ambiguity the row was filed against.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "    if c.get(\"DECLINED\"):",
+   "replace": "    if False:",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
+  },
+  {
+   "name": "an-unqualified-declined-is-absorbed-into-a-bucket",
+   "_mechanism": "A bare marker is exactly the row a reader misreads. Counting it as not-useful hides it inside a bucket it was never sorted into, and the count still looks complete.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "                if not bucket: declined[\"unqualified\"]+=1",
+   "replace": "                if not bucket: declined[\"not-useful\"]+=1",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_an_unqualified_declined_is_reported_not_absorbed"
+  },
+  {
+   "name": "every-declined-is-called-not-useful",
+   "_mechanism": "Collapsing the two buckets back into one re-creates the overload while still printing a split, which is worse than not printing one: it looks measured.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "                elif \"not codable\" in bucket.group(1): declined[\"useful-not-codable\"]+=1",
+   "replace": "                elif False: declined[\"useful-not-codable\"]+=1",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
+  },
+  {
+   "name": "the-triage-regex-forgets-the-date",
+   "_mechanism": "The bucket usually sits after the date and the closing bold (`**DECLINED 2026-08-25 (triage: ...)**`). A tighter pattern matched only 2 of 22 and called the other 20 unqualified -- caught by running it over the real file, never by a fixture built from the tight form.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "TRIAGE = re.compile(r'DECLINED[^(\\n]{0,40}\\(triage:\\s*([^)]*)\\)')",
+   "replace": "TRIAGE = re.compile(r'DECLINED\\**\\s*\\(triage:\\s*([^)]*)\\)')",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_the_live_backlog_has_no_unqualified_declined"
   }
  ]
 }
