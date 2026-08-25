@@ -1580,6 +1580,19 @@ assembling by hand because the script is unavailable:
     The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
     - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+    When you revise, bump the doc's `## Version History` with the helper, never with a hand-rolled
+    anchored substitution:
+    ```bash
+    python3 ~/.claude/skills/h-mad/scripts/h_mad_version_history.py <doc> \
+      --version v1.<N> --text "Audit v<N> fixes from <audit-file> — <summary>."
+    ```
+    Read the `VERSION-HISTORY:` token, not `$?` alone. This step runs once per cycle per doc, so it
+    is the most-repeated edit in the loop and the one that fails most quietly: a `.replace()` whose
+    anchor has drifted writes nothing and reports success, and appending at the end of a
+    newest-first section puts the entry in the wrong place with no observable error. The helper
+    refuses both, plus a re-run of the same version and the table-shaped sections it must not
+    reformat. A `REFUSED` is a real stop — fix the doc or the arguments; never fall back to editing
+    the section by hand, which is the failure this replaces.
     The gate emits a `[H-MAD] <feature> gate <verdict>` marker line. Nits never block. If the `GATE:` token is absent from stdout (unexpected), treat it as an operational error and halt `step<N>:gate_token_missing` with a `[H-MAD]` marker — never silently treat a missing token as PASS.
 
 ## Putting `hmad-dispatch` on PATH
@@ -1609,6 +1622,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_phase7_preconditions.py` — Phase 7 gate: `check()` + CLI printing `PHASE7: READY|BLOCKED`, exit 0 on verdict / 2 on operational error. Enforces 6-before-7 by reading state and the gap analysis.
 - `h_mad_state_staleness.py` — compares state against git and reports disagreement (`STALENESS: CLEAN|SUSPECT`); catches a record that is well-formed and no longer true.
 - `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
+- `h_mad_version_history.py` — the phase-doc `## Version History` bump: `bump()` / `plan_insertion()` + CLI printing `VERSION-HISTORY: OK|DRY-RUN path=<p> version=<v> line=<n> placement=<append|prepend>`, exit 0 on a completed write / 2 on refusal. Refusals print `VERSION-HISTORY: REFUSED path=<p> reason=<r>` carrying **no `line=`**, and an unreadable path prints a bare `VERSION-HISTORY: UNREADABLE` — a cannot-write must never read as a write that landed. Reasons: `anchor_missing`, `anchor_ambiguous`, `table_shape`, `unknown_shape`, `mixed_order`, `duplicate_version`, `bad_version`, `empty_text`, `multiline_text`, `splice_not_additive`, `unreadable`. **Use this instead of a hand-rolled anchored substitution** — the value is the assert, not the append: a `.replace()` whose anchor has drifted writes nothing and reports success, so a skipped bump and a completed bump are indistinguishable from the caller's side. Placement is derived from the section, never assumed: measured over 713 real sections, 191 of the 246 multi-entry ones are ascending, 29 descending and 26 unsorted, so a blind append-at-end is wrong for 22% of them and silently so. Tables (140 of 713) are refused rather than reformatted, the unsorted case is refused rather than guessed, and every write self-checks that its own splice was insertion-only. Stdlib-only.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary. Also copies `substrate` from the feature's state record onto the run row (written at Phase-5 start — see §"Phase 5 (Implementation) sub-steps"); the row carries an explicit `null` when it was never recorded, so an unrecorded run is distinguishable from a pre-field one.
 - `h_mad_mutation_harness.py` — Phase-5e mutation harness: `run_spec()` + CLI printing `MUTATION: ALL_CAUGHT|SURVIVED|REFUSED|BASELINE_NOT_GREEN|RESTORE_FAILED|UNREADABLE mutations=N caught=K survived=J refused=R` + `[H-MAD]` marker, exit 0 on a verdict (`ALL_CAUGHT`/`SURVIVED`) / 2 on anything that measured nothing. Takes a JSON spec naming the suite command and each mutation as an exact `find`/`replace`. Refuses any anchor not matching exactly once — the "`.replace()` that matches nothing reports the guard as enforced" failure in `invariants.base.md` §"Mutation verification" — restores the tree on every path including SIGINT/SIGTERM, verifies the restore by re-reading, and re-runs the suite afterwards to prove it. Stdlib-only.

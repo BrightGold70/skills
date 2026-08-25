@@ -1,0 +1,90 @@
+{
+ "_why": "Each mutation is a way a hand-rolled anchored substitution already fails. The first two are the original silent no-op the helper was filed against: an anchor assert that stops refusing writes into the wrong place or not at all. The rest strip one refusal each. The accept case is NOT tested here -- a guard that refuses everything kills every mutant -- it is pinned by TestAccepts in the suite, which these mutants must leave passing.",
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_version_history.py", "-q"],
+ "mutations": [
+  {"name": "missing-anchor-becomes-a-silent-noop",
+   "_mechanism": "The original defect: a drifted anchor writes nothing and reports success. Must be caught by test_a_missing_section_refuses, NOT merely by a crash.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    if not hits:\n        raise Refusal(\"anchor_missing\")",
+   "replace": "    if not hits:\n        return len(lines)"},
+
+  {"name": "two-anchors-take-the-first",
+   "_mechanism": "What `.replace()` does natively: silently picks match 1. Caught by test_two_headers_refuse_rather_than_taking_the_first.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    if len(hits) > 1:\n        raise Refusal(\"anchor_ambiguous\", f\"matches={len(hits)}\")",
+   "replace": "    if False:\n        raise Refusal(\"anchor_ambiguous\", f\"matches={len(hits)}\")"},
+
+  {"name": "loosen-the-anchor-to-ignore-indentation",
+   "_mechanism": "A stripped-line anchor finds the 7 fenced template examples in references/inline-protocols.md and refuses a doc that is not ambiguous. This is the exact mismatch that a stripped corpus measurement hid.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "ANCHOR = re.compile(r\"^##[ \\t]*Version History[ \\t]*$\", re.IGNORECASE)",
+   "replace": "ANCHOR = re.compile(r\"^[ \\t]*##[ \\t]*Version History[ \\t]*$\", re.IGNORECASE)"},
+
+  {"name": "reformat-tables-instead-of-refusing",
+   "_mechanism": "Mangles a 140-section shape into a bullet list. Caught by test_a_table_section_refuses_rather_than_being_reformatted.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    if TABLE_ROW.match(first):\n        raise Refusal(\"table_shape\")",
+   "replace": "    if TABLE_ROW.match(first):\n        return \"bullet\""},
+
+  {"name": "guess-placement-on-an-unsorted-section",
+   "_mechanism": "The 22%-wrong case. Appending blind to a 1.0/1.2/1.1 section is wrong in a way no assertion on the write itself sees.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    raise Refusal(\"mixed_order\")",
+   "replace": "    return \"ascending\""},
+
+  {"name": "descending-sections-get-appended-at-the-end",
+   "_mechanism": "Placement derived but then ignored -- the entry lands at the bottom of a newest-first log. Must be caught by test_descending_section_gets_the_entry_at_the_top, not by any refusal test.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    elif order == \"descending\":\n        insert_at = indices[0]\n        placement = \"prepend\"",
+   "replace": "    elif False:\n        insert_at = indices[0]\n        placement = \"prepend\""},
+
+  {"name": "allow-the-same-version-twice",
+   "_mechanism": "27 bumps per session means re-runs happen; the anchor still matches on the second run, so a substitution appends a duplicate.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "        raise Refusal(\"duplicate_version\", f\"version={version}\")",
+   "replace": "        pass"},
+
+  {"name": "compare-versions-as-strings",
+   "_mechanism": "v1.10 < v1.9 lexically, so a correctly ascending section reads as unsorted and is refused. Caught by test_ten_sorts_after_nine_not_before -- a false-POSITIVE guard, the direction mutation testing usually misses.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "            out.append((int(m.group(1)), int(m.group(2))))",
+   "replace": "            out.append((m.group(1), m.group(2)))"},
+
+  {"name": "accept-a-multiline-entry-body",
+   "_mechanism": "A newline in --text smuggles a second list item past every other check.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    if \"\\n\" in entry_text:\n        raise Refusal(\"multiline_text\")",
+   "replace": "    if False:\n        raise Refusal(\"multiline_text\")"},
+
+  {"name": "stop-at-headers-but-not-at-rules",
+   "_mechanism": "20 of 713 sections end at `---`. Without the rule terminator the append lands below it, in the next section's prose.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    while end < len(lines) and not HEADER.match(lines[end]) and not RULE.match(lines[end]):",
+   "replace": "    while end < len(lines) and not HEADER.match(lines[end]):"},
+
+  {"name": "refusal-line-carries-a-line-number",
+   "_mechanism": "Makes a cannot-write readable as a write that landed -- the cannot-judge-carries-no-count invariant.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "            print(f\"{TOKEN}: REFUSED path={path} reason={exc.reason}{detail}\")",
+   "replace": "            print(f\"{TOKEN}: REFUSED path={path} reason={exc.reason}{detail} line=0\")"},
+
+  {"name": "refusal-exits-zero",
+   "_mechanism": "An `&&`-chained audit loop would proceed past a doc that never got bumped.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "            print(f\"{TOKEN}: REFUSED path={path} reason={exc.reason}{detail}\")\n        return 2",
+   "replace": "            print(f\"{TOKEN}: REFUSED path={path} reason={exc.reason}{detail}\")\n        return 0"},
+
+  {"name": "dry-run-writes-anyway",
+   "_mechanism": "A preflight that mutates the tree it is previewing.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    if not dry_run:\n        path.write_text(\"\\n\".join(new_lines))",
+   "replace": "    path.write_text(\"\\n\".join(new_lines))"},
+
+  {"name": "splice-self-check-never-fires",
+   "_mechanism": "The insertion-only assert is the last line of defence against a slice that ate a neighbour. Expected to be caught by the untouched-document test rather than by a dedicated one.",
+   "file": "scripts/h_mad_version_history.py",
+   "find": "    new_lines = lines[:insert_at] + [new_line] + lines[insert_at:]",
+   "replace": "    new_lines = lines[:insert_at] + [new_line] + lines[insert_at + 1:]"}
+ ]
+}
