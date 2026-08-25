@@ -134,6 +134,28 @@ def candidates(orca: str, baseline: dict) -> list[dict]:
     ]
 
 
+def classify(candidates_: list[dict], workers: dict[str, dict]) -> tuple[list, list]:
+    """(identified, unidentified). A worker row is POSITIVE identification.
+
+    Absence from the baseline is subtraction, and subtraction alone cannot tell
+    the probe's panes from the operator's. An operator who opens a pane in this
+    worktree after the snapshot — to tail a log while the probe runs — produces a
+    delta this tool would otherwise close, and neither the `--max` cap nor the
+    self-handle sees it: the cap only bounds how many, and the self-handle
+    protects the one shell this is running in, not the operator's other tabs.
+
+    `worker-list` already answers the question positively for anything
+    `worker-start` created. A candidate with a worker row IS the probe's. A
+    candidate without one is unknown, and unknown is not garbage — it is closed
+    only when the operator says so with `--include-unidentified`, and it is
+    always named either way.
+    """
+    identified, unidentified = [], []
+    for pane in candidates_:
+        (identified if pane["handle"] in workers else unidentified).append(pane)
+    return identified, unidentified
+
+
 def settle_and_close(
     orca: str, pane: dict, workers: dict[str, dict], *, apply: bool
 ) -> dict:
@@ -182,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--baseline", required=True, type=Path)
         p.add_argument("--max", type=int, default=DEFAULT_MAX,
                        help=f"refuse to touch more than this many panes (default {DEFAULT_MAX})")
+        p.add_argument("--include-unidentified", action="store_true",
+                       help="also target panes with no worker row tying them to the probe")
         if name == "clean":
             p.add_argument("--apply", action="store_true",
                            help="actually settle and close; without it this is a dry run")
@@ -223,8 +247,10 @@ def main(argv: list[str] | None = None) -> int:
 
         apply = bool(getattr(args, "apply", False))
         workers = worker_rows(args.orca)
+        identified, unidentified = classify(found, workers)
+        targets = identified + (unidentified if args.include_unidentified else [])
         outcomes = [settle_and_close(args.orca, pane, workers, apply=apply)
-                    for pane in found]
+                    for pane in targets]
 
         settled = sum(1 for o in outcomes if o["settled"])
         closed = sum(1 for o in outcomes if o["closed"])
@@ -235,13 +261,21 @@ def main(argv: list[str] | None = None) -> int:
         # happened, which is the same cannot-judge-looks-like-done failure the
         # gate tokens elsewhere are shaped to avoid.
         settle_key, close_key = ("settled", "closed") if apply else ("would_settle", "would_close")
-        print(f"{TOKEN}: {verdict} candidates={len(found)} {settle_key}={settled} "
+        print(f"{TOKEN}: {verdict} candidates={len(found)} identified={len(identified)} "
+              f"unidentified={len(unidentified)} {settle_key}={settled} "
               f"{close_key}={closed} skipped={len(skipped)}")
         for o in outcomes:
             mark = ("closed" if apply else "would close") if o["closed"] else "SKIPPED"
             note = f" — {o['skipped']}" if o["skipped"] else ""
             settle_note = " (settled first)" if o["settled"] else ""
             print(f"  {mark}: {o['handle']} {o['title']!r}{settle_note}{note}")
+        if unidentified and not args.include_unidentified:
+            print(f"  UNIDENTIFIED ({len(unidentified)}) — in the worktree and absent from the "
+                  f"baseline, but with no worker row, so nothing ties them to the probe. "
+                  f"An operator pane opened after the snapshot looks exactly like this. "
+                  f"Left alone; pass --include-unidentified to close them:")
+            for pane in unidentified:
+                print(f"    left: {pane['handle']} {pane.get('title', '')!r}")
         if not apply:
             print("  dry run — nothing was settled or closed. Re-run `clean --apply`.")
         print(f"[H-MAD] pane-janitor {verdict.lower()} {closed}")

@@ -118,6 +118,38 @@
    "find": "        settle_key, close_key = (\"settled\", \"closed\") if apply else (\"would_settle\", \"would_close\")",
    "replace": "        settle_key, close_key = (\"settled\", \"closed\")",
    "test": "tests/test_h_mad_pane_janitor.py::TestDryRunIsTheDefault::test_a_dry_run_never_reports_work_as_done"
+  },
+  {
+   "name": "close-unidentified-panes-by-default",
+   "_mechanism": "The review's headline finding: subtraction alone cannot tell the probe's panes from the operator's, so an operator pane opened after the snapshot is closed. Neither --max nor the self-handle sees it.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        targets = identified + (unidentified if args.include_unidentified else [])",
+   "replace": "        targets = identified + unidentified",
+   "test": "tests/test_h_mad_pane_janitor.py::TestPositiveIdentification::test_a_pane_with_no_worker_row_is_left_alone_by_default"
+  },
+  {
+   "name": "treat-every-candidate-as-identified",
+   "_mechanism": "Positive identification collapses back to subtraction while the counts still look reassuring.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        (identified if pane[\"handle\"] in workers else unidentified).append(pane)",
+   "replace": "        identified.append(pane)",
+   "test": "tests/test_h_mad_pane_janitor.py::TestPositiveIdentification::test_the_operators_pane_survives_beside_a_real_probe_pane"
+  },
+  {
+   "name": "leave-unidentified-panes-unnamed",
+   "_mechanism": "Silence is what made --max 10 insufficient: it bounded the damage at nine panes without ever saying which. A pane left alone and not reported is a pane nobody knows to look at.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        if unidentified and not args.include_unidentified:",
+   "replace": "        if False:",
+   "test": "tests/test_h_mad_pane_janitor.py::TestPositiveIdentification::test_an_unidentified_pane_is_always_named_never_silent"
+  },
+  {
+   "name": "refuse-to-close-even-with-the-explicit-flag",
+   "_mechanism": "The accept direction. A pane made by `terminal create` has no worker row, and that path was live-verified, so the escape hatch must actually work.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        targets = identified + (unidentified if args.include_unidentified else [])",
+   "replace": "        targets = identified",
+   "test": "tests/test_h_mad_pane_janitor.py::TestPositiveIdentification::test_include_unidentified_closes_them_deliberately"
   }
  ]
 }

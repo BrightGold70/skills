@@ -47,7 +47,10 @@ def fail(code):
     print(json.dumps({"ok": False, "error": {"code": code}}))
     raise SystemExit(0)
 
-if state.get("deny"):
+# Scoped per command on purpose. A global knob trips on the FIRST orca call --
+# `terminal show` inside self_handle -- so a test claiming to exercise a
+# `worker-list` payload failure never reaches worker-list at all.
+if state.get("deny") == " ".join(args[:2]):
     fail("run_required")
 if args[:2] == ["terminal", "list"]:
     emit({"terminals": state["terminals"]})
@@ -190,7 +193,11 @@ class TestCandidateSelection:
 
 class TestDryRunIsTheDefault:
     def test_plan_closes_nothing(self, env, tmp_path: Path) -> None:
-        env.set(terminals=[pane(SELF), pane("term_new")])
+        # The pane needs a worker row, or positive identification keeps it out
+        # of the target set and the dry-run branch is never reached -- the test
+        # would then pass for the wrong reason. Caught by a mutation that had
+        # been killed before the identification change and survived after it.
+        env.set(terminals=[pane(SELF), pane("term_new")], workers=[{"agentTerminalHandle": "term_new", "taskId": "t", "dispatchStatus": "completed"}])
         proc = env.run("plan", "--baseline", str(baseline_file(tmp_path, [SELF])))
 
         assert "JANITOR: PLANNED" in proc.stdout
@@ -198,7 +205,7 @@ class TestDryRunIsTheDefault:
         assert "dry run" in proc.stdout
 
     def test_clean_without_apply_closes_nothing(self, env, tmp_path: Path) -> None:
-        env.set(terminals=[pane(SELF), pane("term_new")])
+        env.set(terminals=[pane(SELF), pane("term_new")], workers=[{"agentTerminalHandle": "term_new", "taskId": "t", "dispatchStatus": "completed"}])
         proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])))
 
         assert "JANITOR: PLANNED" in proc.stdout
@@ -225,7 +232,9 @@ class TestDryRunIsTheDefault:
         assert "would close:" in proc.stdout
 
     def test_clean_with_apply_closes(self, env, tmp_path: Path) -> None:
-        env.set(terminals=[pane(SELF), pane("term_new")])
+        env.set(terminals=[pane(SELF), pane("term_new")],
+                workers=[{"agentTerminalHandle": "term_new", "taskId": "t",
+                          "dispatchStatus": "completed"}])
         proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
 
         assert "JANITOR: CLEANED candidates=1" in proc.stdout
@@ -243,7 +252,9 @@ class TestTheCloseIsAlwaysExplicit:
         is not a cosmetic slip, it is the destructive bug this tool exists to
         avoid, and it must be impossible rather than merely unlikely.
         """
-        env.set(terminals=[pane(SELF), pane("term_a"), pane("term_b")])
+        env.set(terminals=[pane(SELF), pane("term_a"), pane("term_b")],
+                workers=[{"agentTerminalHandle": h, "taskId": "t",
+                          "dispatchStatus": "completed"} for h in ("term_a", "term_b")])
         env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
 
         closes = [c for c in env.calls() if c.startswith("terminal close")]
@@ -302,7 +313,8 @@ class TestDispatchSettling:
         self, env, tmp_path: Path
     ) -> None:
         env.set(terminals=[pane(SELF), pane("term_plain")], workers=[])
-        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])),
+                       "--apply", "--include-unidentified")
 
         assert "settled=0 closed=1" in proc.stdout
         assert not any("task-update" in c for c in env.calls())
@@ -361,7 +373,7 @@ class TestRefusals:
         real response on a real install — treating a not-ok payload as an empty
         result would read "no workers" and close panes without settling them.
         """
-        env.set(terminals=[pane(SELF), pane("term_new")], deny=True)
+        env.set(terminals=[pane(SELF), pane("term_new")], deny="terminal show")
         proc = env.run("plan", "--baseline", str(baseline_file(tmp_path, [SELF])))
 
         assert proc.returncode == 2
@@ -394,3 +406,84 @@ class TestDocsPin:
         assert reasons, "no refusal reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)
         assert not undocumented, f"undocumented refusal reasons: {undocumented}"
+
+
+class TestPositiveIdentification:
+    """Subtraction alone cannot tell the probe's panes from the operator's.
+
+    Surfaced by an adversarial review of the shipped tool: an operator who opens
+    a pane in this worktree AFTER the snapshot — to tail a log while the probe
+    runs — produces a delta indistinguishable from a probe pane. Neither guard
+    that existed saw it: `--max` only bounds how many get closed, and the
+    self-handle protects the one shell the janitor runs in, not the operator's
+    other tabs.
+    """
+
+    def test_a_pane_with_no_worker_row_is_left_alone_by_default(
+        self, env, tmp_path: Path
+    ) -> None:
+        env.set(terminals=[pane(SELF), pane("term_operator", title="tail -f")], workers=[])
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
+
+        assert "unidentified=1" in proc.stdout
+        assert "closed=0" in proc.stdout
+        assert not any("terminal close" in c for c in env.calls())
+
+    def test_an_unidentified_pane_is_always_named_never_silent(
+        self, env, tmp_path: Path
+    ) -> None:
+        """Silence is what made `--max 10` insufficient: it bounded the damage
+        at nine panes without ever saying which."""
+        env.set(terminals=[pane(SELF), pane("term_operator", title="tail -f")], workers=[])
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
+
+        assert "UNIDENTIFIED (1)" in proc.stdout
+        assert "term_operator" in proc.stdout
+        assert "--include-unidentified" in proc.stdout
+
+    def test_the_operators_pane_survives_beside_a_real_probe_pane(
+        self, env, tmp_path: Path
+    ) -> None:
+        """The scenario in full: both appear in the delta, only one is the probe's."""
+        env.set(
+            terminals=[pane(SELF), pane("term_probe"), pane("term_operator", title="tail -f")],
+            workers=[{"agentTerminalHandle": "term_probe", "taskId": "t",
+                      "dispatchStatus": "completed"}],
+        )
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
+
+        assert "identified=1 unidentified=1" in proc.stdout
+        closes = [c for c in env.calls() if c.startswith("terminal close")]
+        assert closes == ["terminal close --terminal term_probe --json"], closes
+
+    def test_include_unidentified_closes_them_deliberately(
+        self, env, tmp_path: Path
+    ) -> None:
+        """The live-verified path: a pane made by `terminal create` has no worker
+        row, so the escape hatch has to exist — behind an explicit flag."""
+        env.set(terminals=[pane(SELF), pane("term_plain")], workers=[])
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])),
+                       "--apply", "--include-unidentified")
+
+        assert "closed=1" in proc.stdout
+        assert any("terminal close --terminal term_plain" in c for c in env.calls())
+
+
+class TestTheDenyKnobIsScoped:
+    """A global failure knob trips on the first call and proves nothing later."""
+
+    def test_a_worker_list_payload_failure_refuses(self, env, tmp_path: Path) -> None:
+        """This is what `test_an_orca_that_answers_not_ok_refuses` CLAIMED to test.
+
+        `worker-list` answers `run_required` when no Run is bound. Treating a
+        not-ok payload as an empty result would read "no workers", mark every
+        candidate unidentified, and — before this — close them unsettled.
+        """
+        env.set(terminals=[pane(SELF), pane("term_new")],
+                deny="orchestration worker-list")
+        proc = env.run("clean", "--baseline", str(baseline_file(tmp_path, [SELF])), "--apply")
+
+        assert proc.returncode == 2
+        assert "reason=orca_error" in proc.stdout
+        assert "worker-list" in proc.stdout
+        assert not any("terminal close" in c for c in env.calls())
