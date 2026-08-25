@@ -42,10 +42,20 @@
 
 ## Portable time bounds
 - A time-bounded command MUST NOT be written as `timeout <s> <cmd>` or `gtimeout <s> <cmd>`.
-  **macOS ships neither**, so on the skill's own platform the call fails at 127 — and a CLI that
-  must be installed separately is a new external CLI dependency besides (§"No new external
-  dependency"). Use `hmad-dispatch run --timeout <s> -- <cmd...>`, which exits 124 at the deadline.
-- The failure mode is worse than the 127. Measured: the reflex after `timeout: command not found`
+  **Neither is a macOS system component**, so the form is unportable in both directions.
+  A stock box ships neither and the call fails at 127; a box carrying `brew install coreutils`
+  runs it fine and the bound silently rests on a CLI h-mad cannot assume is there.
+  **What your box has is not an input to this rule.** h-mad already owns a time-bounder that
+  reachable wherever `hmad-dispatch` is, so the form is forbidden unconditionally — not because
+  of what happens downstream. (Reachable, not universal: where the wrapper itself cannot be
+  called the rule below still applies — halt, do not drop the bound.) Do not reason from a local probe to an exemption. For anything committed
+  or dispatched the form is additionally a new external CLI dependency (§"No new external
+  dependency"); a downstream 127 is how that eventually surfaces, never the reason.
+  Do not settle the question by probing: a local `command -v timeout` that succeeds is not
+  licence, it proves only that this box has coreutils, and it means the 127 that would have
+  exposed the improvisation never fires. Use `hmad-dispatch run --timeout <s> -- <cmd...>`,
+  which exits 124 at the deadline.
+- Where a 127 does fire, its aftermath is worse than the 127 itself. Measured: the reflex after `timeout: command not found`
   is to re-run the same command **unbounded** and call it "checking directly". That does not fail
   at the deadline, it hangs the phase, and in every log h-mad reads a hang and slow work are the
   same bytes. A plan, a design, or a prompt that leaves an agent no reachable time-bounder is a

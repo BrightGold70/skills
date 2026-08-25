@@ -3267,12 +3267,18 @@ _cmd_notify() {
   return 0
 }
 
-# `run` — the portable time-bounded command runner. macOS ships NO `timeout` and
-# no `gtimeout` (coreutils is not a system component), so an agent that reaches
-# for a `timeout <s> <cmd>` gets 127 and — measured — falls back to running the same
-# command UNBOUNDED. That fallback is the hazard the verb exists to remove: an
-# unbounded probe does not fail at the deadline, it hangs the phase, and a hang
-# is indistinguishable from slow work in every log h-mad reads.
+# `run` — the portable time-bounded command runner. NEITHER `timeout` NOR
+# `gtimeout` is a macOS system component, so a `timeout <s> <cmd>` depends on a
+# separately-installed CLI the moment it is written — forbidden on its own terms,
+# not because of what happens downstream.
+#
+# Without coreutils an agent gets 127 and — measured — falls back to running the
+# same command UNBOUNDED. THAT UNBOUNDED FALLBACK is the hazard the verb exists to
+# remove: an unbounded probe does not fail at the deadline, it hangs the phase, and
+# a hang is indistinguishable from slow work in every log h-mad reads.
+#
+# With coreutils (this box, since 2026-08-25) the improvisation silently succeeds
+# instead, so the loud 127 that used to expose it never fires at all.
 #
 # The watchdog is `_exec_run`, which `exec` has used since it shipped: absolute
 # deadline off bash's SECONDS, TERM -> 2s grace -> KILL, signalled to the whole

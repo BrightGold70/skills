@@ -33,10 +33,16 @@ If you have questions about:
 Ask via your response (status: NEEDS_CONTEXT). The orchestrator will provide context and re-dispatch.
 
 When you need to time-bound a shell command, use `hmad-dispatch run --timeout <s> -- <cmd...>`
-(exit 124 at the deadline). **Do not use `timeout` or `gtimeout`** — neither exists on macOS,
-so the call fails at 127. If that happens, do NOT re-run the command without a bound: an
-unbounded probe hangs instead of failing, and a hang is indistinguishable from slow work in
-the log the orchestrator reads. Report the blocker instead.
+(exit 124 at the deadline). **Do not use `timeout` or `gtimeout`** — neither is a macOS system
+component, so on a stock box the call fails at 127. If that happens, do NOT re-run the command
+without a bound: an unbounded probe hangs instead of failing, and a hang is indistinguishable
+from slow work in the log the orchestrator reads. Report the blocker instead. If instead the
+call *works* — some boxes carry `brew install coreutils` — that is not licence either. What
+your box happens to have is not an input to this rule: a bounded verb is already
+available wherever `hmad-dispatch` is, so use it — and where it is not, halt rather than
+dropping the bound. This holds for a one-off local command too; do not reason from a
+successful `command -v` to an exemption. For anything you commit or hand on, the form is a
+forbidden external CLI dependency besides.
 
 ## Your Job
 
