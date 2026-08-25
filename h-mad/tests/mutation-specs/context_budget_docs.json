@@ -57,22 +57,22 @@
    "replace": "It finds a transcript"
   },
   {
-   "name": "drop-next-session-caveat",
+   "name": "drop-measured-false-correction",
    "file": "SKILL.md",
-   "find": "takes effect in the NEXT session, not this\none",
-   "replace": "takes effect immediately, in this\nsession"
+   "find": "That was **measured false\non 2.1.241**",
+   "replace": "That is **confirmed\non 2.1.241**"
   },
   {
    "name": "drop-live-fire-test",
    "file": "SKILL.md",
-   "find": "HMAD_CONTEXT_WINDOW=1000 claude    # then make one advisor() call \u2014 it MUST be denied",
+   "find": "HMAD_CONTEXT_WINDOW=1000 claude    # then run ANY tool \u2014 the budget line MUST appear",
    "replace": "claude"
   },
   {
-   "name": "drop-fail-open-rationale",
+   "name": "drop-silent-on-cannot-judge",
    "file": "SKILL.md",
-   "find": "and it **fails open** on every cannot-judge",
-   "replace": "and it blocks on every cannot-judge"
+   "find": "The advisory **stays silent** on every cannot-judge",
+   "replace": "The advisory warns on every cannot-judge"
   },
   {
    "name": "drop-wiring-limit",

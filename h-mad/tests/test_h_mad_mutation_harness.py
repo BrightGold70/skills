@@ -37,6 +37,7 @@ CHECK = (
 
 def _project(tmp_path: Path, mutations: list[dict], check: str = CHECK) -> Path:
     """A tiny project plus a spec, written to `tmp_path`."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "guard.py").write_text(GUARD, encoding="utf-8")
     spec = {
         "root": str(tmp_path),
@@ -650,3 +651,179 @@ def test_every_run_purges_bytecode_before_launching(tmp_path: Path) -> None:
     _run([sys.executable, "-c", "pass"], tmp_path)
 
     assert not stale.exists(), "_run launched without purging cached bytecode"
+
+
+# --- anchor precheck: sweep every spec without applying anything -----------
+#
+# Measured 2026-08-26: 5 of 177 anchors across 14 committed specs no longer
+# matched, so those mutations REFUSE and the guards they aim at are unverified
+# — and nothing reported that until someone ran each spec, which costs a full
+# suite per spec. The precheck is the cheap version: read-only, no test run.
+
+
+def _drifted_anchor() -> dict:
+    return {"name": "anchor that no longer matches", "file": "guard.py",
+            "find": "THRESHOLD = 500", "replace": "THRESHOLD = 900"}
+
+
+def test_precheck_says_ok_when_every_anchor_still_matches_once(tmp_path: Path) -> None:
+    from h_mad_mutation_harness import precheck_spec
+
+    result = precheck_spec(_project(tmp_path, [_kills_the_guard(), _untested_line()]))
+
+    assert result["verdict"] == "ANCHORS_OK", result
+    assert result["ok"] == 2
+    assert result["drifted"] == []
+
+
+def test_precheck_flags_a_drifted_anchor_with_its_hit_count(tmp_path: Path) -> None:
+    from h_mad_mutation_harness import precheck_spec
+
+    result = precheck_spec(_project(tmp_path, [_kills_the_guard(), _drifted_anchor()]))
+
+    assert result["verdict"] == "ANCHORS_DRIFTED", result
+    assert result["ok"] == 1
+    assert [d["name"] for d in result["drifted"]] == ["anchor that no longer matches"]
+    assert result["drifted"][0]["hits"] == 0
+    assert result["drifted"][0]["hints"], "a drifted anchor must carry its recovery hint"
+
+
+def test_precheck_flags_an_anchor_that_matches_more_than_once(tmp_path: Path) -> None:
+    """Ambiguous is a defect too: the run would have to choose for the author."""
+    from h_mad_mutation_harness import precheck_spec
+
+    (tmp_path / "dup.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
+    spec_path = _project(tmp_path, [{"name": "ambiguous", "file": "dup.py",
+                                     "find": "x = 1", "replace": "x = 2"}])
+
+    result = precheck_spec(spec_path)
+
+    assert result["verdict"] == "ANCHORS_DRIFTED", result
+    assert result["drifted"][0]["hits"] == 2
+
+
+def test_precheck_applies_nothing_and_runs_nothing(tmp_path: Path) -> None:
+    """The whole point of the cheap check: read-only, and no command launched.
+
+    A precheck that quietly ran the suite would cost exactly what it exists to
+    avoid, and one that applied a mutation could leave a tree behind — the
+    failure the harness's own restore machinery exists to prevent.
+    """
+    from h_mad_mutation_harness import precheck_spec
+
+    sentinel = tmp_path / "command-ran"
+    spec_path = _project(
+        tmp_path,
+        [_kills_the_guard(), _drifted_anchor()],
+        check=f"open({str(sentinel)!r}, 'w').close()",
+    )
+    before = (tmp_path / "guard.py").read_bytes()
+
+    precheck_spec(spec_path)
+
+    assert (tmp_path / "guard.py").read_bytes() == before, "precheck mutated the tree"
+    assert not sentinel.exists(), "precheck launched the spec's command"
+
+
+def test_precheck_and_the_run_refuse_the_same_anchors(tmp_path: Path) -> None:
+    """Anti-drift: both verdicts come from one rule, not two copies of it.
+
+    A precheck with its own `count(...) != 1` would be a second implementation
+    of the exact rule this harness exists to enforce, and the first edit to
+    either side would make the cheap check disagree with the expensive one —
+    the cheap one being the one people would trust.
+    """
+    from h_mad_mutation_harness import precheck_spec
+
+    spec_path = _project(tmp_path, [_kills_the_guard(), _drifted_anchor()])
+
+    pre = {d["name"] for d in precheck_spec(spec_path)["drifted"]}
+    run = {entry.split(":", 1)[0] for entry in run_spec(spec_path)["refused"]}
+
+    assert pre == run, f"precheck {pre} disagrees with the run {run}"
+
+
+def test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok(
+    tmp_path: Path,
+) -> None:
+    from h_mad_mutation_harness import precheck_spec
+
+    result = precheck_spec(_project(tmp_path, [
+        {"name": "gone", "file": "deleted.py", "find": "anything", "replace": "x"},
+    ]))
+
+    assert result["verdict"] == "ANCHORS_DRIFTED", result
+    assert result["ok"] == 0
+    assert result["unreadable"], "a missing target file must not pass silently"
+
+
+def test_check_anchors_cli_sweeps_several_specs_and_exits_2_on_drift(
+    tmp_path: Path,
+) -> None:
+    clean = _project(tmp_path / "a", [_kills_the_guard()])
+    dirty = _project(tmp_path / "b", [_drifted_anchor()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(dirty)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ANCHORS_DRIFTED" in proc.stdout, proc.stdout
+    assert "anchor that no longer matches" in proc.stdout, proc.stdout
+    assert "[H-MAD]" in proc.stdout, proc.stdout
+
+
+def test_check_anchors_cli_exits_0_when_every_spec_is_clean(tmp_path: Path) -> None:
+    a = _project(tmp_path / "a", [_kills_the_guard()])
+    b = _project(tmp_path / "b", [_untested_line()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(a), str(b)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout, proc.stdout
+
+
+def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> None:
+    """One unreadable spec must not hide the drift in the specs after it."""
+    missing = tmp_path / "nope.json"
+    dirty = _project(tmp_path / "b", [_drifted_anchor()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(missing), str(dirty)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "anchor that no longer matches" in proc.stdout, proc.stdout
+
+
+def test_a_mutation_run_still_takes_exactly_one_spec(tmp_path: Path) -> None:
+    """`--check-anchors` widened the positional; the run must not widen with it."""
+    a = _project(tmp_path / "a", [_kills_the_guard()])
+    b = _project(tmp_path / "b", [_kills_the_guard()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), str(a), str(b)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode != 0
+    assert "exactly one spec" in (proc.stdout + proc.stderr)
+
+
+def test_skill_documents_the_anchor_sweep() -> None:
+    """A tool nobody is told to run is a tool nobody runs.
+
+    The precheck's whole value is that it is cheap enough to run after every
+    edit; that only happens if Phase 5e says so, and says what the token means.
+    """
+    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    assert "--check-anchors" in skill, "Phase 5e never tells anyone to sweep anchors"
+    assert "ANCHORS_DRIFTED" in skill, "the drifted token is undocumented"
+    assert "a refusal measures NOTHING" in skill, (
+        "the sweep is only actionable if the doc says why a REFUSED run is not a pass"
+    )

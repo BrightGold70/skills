@@ -57,10 +57,10 @@
   },
   {
    "name": "drop-the-near-miss-hint",
-   "_mechanism": "L270: the REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved.",
+   "_mechanism": "The REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved. Anchored in `anchor_status`, which both the precheck and the run read.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                    result[\"hints\"][mutation[\"name\"]] = [\n                        f\"near miss {h}\" for h in _near_misses(source, mutation[\"find\"])\n                    ] or [\"no near miss found — the anchor may be gone entirely\"]",
-   "replace": "                    result[\"hints\"][mutation[\"name\"]] = []",
+   "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found — the anchor may be gone entirely\"\n        ]",
+   "replace": "        return hits, []",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_drifted_anchor_gets_a_near_miss_with_a_line_number"
   },
   {
@@ -83,8 +83,8 @@
    "name": "ambiguous-anchor-gets-no-line-numbers",
    "_mechanism": "The author is told the anchor matched N times but not where, which is the same manual re-grep in the other direction.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                        + \", \".join(str(n) for n in _match_lines(source, mutation[\"find\"]))",
-   "replace": "                        + \"\"",
+   "find": "        + \", \".join(str(n) for n in _match_lines(source, find))",
+   "replace": "        + \"\"",
    "test": "tests/test_h_mad_mutation_harness.py::test_an_ambiguous_anchor_is_told_where_its_matches_are"
   },
   {
@@ -166,6 +166,46 @@
    "find": "                if not ran_and_passed(counts):",
    "replace": "                if False:",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
+  },
+  {
+   "name": "precheck-calls-a-drifted-anchor-ok",
+   "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
+   "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_flags_a_drifted_anchor_with_its_hit_count"
+  },
+  {
+   "name": "precheck-passes-an-unreadable-target",
+   "_mechanism": "A spec pointing at a file that no longer exists is the same unverified guard by another route; counting only `drifted` lets it read as clean.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        if not result[\"drifted\"] and not result[\"unreadable\"]",
+   "replace": "        if not result[\"drifted\"]",
+   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok"
+  },
+  {
+   "name": "precheck-runs-the-spec-command",
+   "_mechanism": "The precheck is only worth running because it costs file reads instead of a suite per spec; launching the command gives back the cost it exists to avoid.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    cache: dict[Path, str] = {}\n    for mutation in spec[\"mutations\"]:",
+   "replace": "    cache: dict[Path, str] = {}\n    _run(spec[\"command\"], root)\n    for mutation in spec[\"mutations\"]:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_applies_nothing_and_runs_nothing"
+  },
+  {
+   "name": "a-bad-spec-aborts-the-sweep",
+   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        except SpecError as exc:",
+   "replace": "        except ZeroDivisionError as exc:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
+  },
+  {
+   "name": "a-run-quietly-accepts-several-specs",
+   "_mechanism": "`--check-anchors` widened the positional to N; if the run widens with it, a single command applies and restores mutations across several trees at once.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if len(args.spec) != 1:",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutation_run_still_takes_exactly_one_spec"
   }
  ]
 }

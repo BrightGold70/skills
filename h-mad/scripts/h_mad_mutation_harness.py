@@ -263,6 +263,87 @@ def _match_lines(source: str, find: str, limit: int = 5) -> list[int]:
     ][:limit]
 
 
+def anchor_status(source: str, find: str) -> tuple[int, list[str]]:
+    """How often `find` occurs in `source`, plus recovery hints when that is not 1.
+
+    Extracted so the anchor precheck and the live run cannot drift apart. A
+    precheck carrying its own `count(...) != 1` would be a second copy of the
+    exact rule this harness exists to enforce, and the first edit to either side
+    would make the cheap check disagree with the expensive one — the cheap one
+    being the one people would trust, because it is the one they run.
+    """
+    hits = source.count(find)
+    if hits == 1:
+        return hits, []
+    if hits == 0:
+        return hits, [f"near miss {h}" for h in _near_misses(source, find)] or [
+            "no near miss found — the anchor may be gone entirely"
+        ]
+    return hits, [
+        "first line of the anchor occurs at "
+        + ", ".join(str(n) for n in _match_lines(source, find))
+        + " — narrow the anchor until it is unique"
+    ]
+
+
+def precheck_spec(spec_path: Path) -> dict:
+    """Anchor-only sweep: does every mutation still match exactly once?
+
+    Applies nothing and runs no command, so it costs a few file reads instead of
+    a suite per spec. That is the whole point: a drifted anchor REFUSES, and a
+    refusal measures NOTHING — the guard it aims at is unverified while the run
+    still exits with a verdict-shaped line. Nothing surfaced that until someone
+    paid for a full run of the spec.
+
+    Raises SpecError only when the spec itself is unusable; every other outcome
+    is reported per mutation.
+    """
+    spec_path = Path(spec_path)
+    spec = _load_spec(spec_path)
+    root = Path(spec.get("root") or spec_path.parent).resolve()
+
+    result = {
+        "spec": str(spec_path),
+        "mutations": len(spec["mutations"]),
+        "ok": 0,
+        "drifted": [],
+        "unreadable": [],
+    }
+
+    # One read per file, not per mutation: specs routinely aim a dozen mutations
+    # at the same target.
+    cache: dict[Path, str] = {}
+    for mutation in spec["mutations"]:
+        target = (root / mutation["file"]).resolve()
+        if target not in cache:
+            try:
+                cache[target] = target.read_text(encoding="utf-8")
+            except OSError as exc:
+                result["unreadable"].append(
+                    f"{mutation['name']}: cannot read {mutation['file']} ({exc})"
+                )
+                continue
+        hits, hints = anchor_status(cache[target], mutation["find"])
+        if hits == 1:
+            result["ok"] += 1
+        else:
+            result["drifted"].append({
+                "name": mutation["name"],
+                "file": mutation["file"],
+                "hits": hits,
+                "hints": hints,
+            })
+
+    # An unreadable target is a drift too — the spec points somewhere that is no
+    # longer there, which is the same unverified guard by another route.
+    result["verdict"] = (
+        "ANCHORS_OK"
+        if not result["drifted"] and not result["unreadable"]
+        else "ANCHORS_DRIFTED"
+    )
+    return result
+
+
 def run_spec(spec_path: Path) -> dict:
     """Apply each mutation in turn, run the command, always restore.
 
@@ -343,7 +424,7 @@ def run_spec(spec_path: Path) -> dict:
             if target_command and mutation.get("test"):
                 scoring_command = list(target_command) + [mutation["test"]]
 
-            hits = source.count(mutation["find"])
+            hits, hint_lines = anchor_status(source, mutation["find"])
             if hits != 1:
                 # The assert-landed guard, and the reason this script exists. An
                 # anchor matching 0 times mutates nothing and the suite stays
@@ -357,16 +438,7 @@ def run_spec(spec_path: Path) -> dict:
                 # The verdict is correct and load-bearing either way; what was
                 # missing is the recovery, which was a manual re-grep for
                 # whatever the author's own edits turned the line into.
-                if hits == 0:
-                    result["hints"][mutation["name"]] = [
-                        f"near miss {h}" for h in _near_misses(source, mutation["find"])
-                    ] or ["no near miss found — the anchor may be gone entirely"]
-                else:
-                    result["hints"][mutation["name"]] = [
-                        "first line of the anchor occurs at "
-                        + ", ".join(str(n) for n in _match_lines(source, mutation["find"]))
-                        + " — narrow the anchor until it is unique"
-                    ]
+                result["hints"][mutation["name"]] = hint_lines
                 continue
 
             # L559: a mutant applied over a red pin scores a kill that means
@@ -476,10 +548,73 @@ def run_spec(spec_path: Path) -> dict:
     return result
 
 
+def _check_anchors(spec_paths: list[Path]) -> int:
+    """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
+    specs = ok = drifted = unreadable = mutations = 0
+    for spec_path in spec_paths:
+        specs += 1
+        try:
+            result = precheck_spec(spec_path)
+        except SpecError as exc:
+            # One unusable spec must not abort the sweep: the specs after it are
+            # exactly the ones whose drift would then go unreported.
+            unreadable += 1
+            print(f"ANCHORS: {spec_path.name} UNREADABLE — {exc}")
+            continue
+
+        mutations += result["mutations"]
+        ok += result["ok"]
+        drifted += len(result["drifted"])
+        unreadable += len(result["unreadable"])
+
+        head = "ok" if result["verdict"] == "ANCHORS_OK" else "DRIFTED"
+        print(f"ANCHORS: {spec_path.name} {head} ok={result['ok']}/{result['mutations']}")
+        for entry in result["drifted"]:
+            print(
+                f"  drifted: {entry['name']} :: {entry['file']} :: "
+                f"hits={entry['hits']}, expected exactly 1"
+            )
+            for hint in entry["hints"]:
+                print(f"    hint: {hint}")
+        for entry in result["unreadable"]:
+            print(f"  unreadable: {entry}")
+
+    verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
+    print(
+        f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
+        f"ok={ok} drifted={drifted} unreadable={unreadable}"
+    )
+    if verdict == "ANCHORS_DRIFTED":
+        print(
+            "  a drifted anchor mutates nothing, so its run REFUSES and the guard "
+            "it aims at is unverified — re-anchor before trusting any verdict from "
+            "that spec (halt `step5e:mutation_unverified:<module>`)."
+        )
+    print(f"[H-MAD] anchors {verdict}")
+    return 0 if verdict == "ANCHORS_OK" else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
-    parser.add_argument("spec", type=Path, help="JSON mutation spec")
+    parser.add_argument(
+        "spec", type=Path, nargs="+",
+        help="JSON mutation spec (exactly one to run; several with --check-anchors)",
+    )
+    parser.add_argument(
+        "--check-anchors", action="store_true",
+        help="check every mutation's anchor still matches exactly once; "
+             "applies nothing and runs no tests",
+    )
     args = parser.parse_args(argv)
+
+    if args.check_anchors:
+        return _check_anchors(args.spec)
+    if len(args.spec) != 1:
+        # The run applies mutations and restores them; widening it to N specs
+        # silently would multiply that blast radius for a flag that was only
+        # ever meant to widen the read-only sweep.
+        parser.error("a mutation run takes exactly one spec; use --check-anchors to sweep several")
+    args.spec = args.spec[0]
 
     label = args.spec.name.split(".")[0] or "unknown"
 
