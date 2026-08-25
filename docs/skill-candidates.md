@@ -552,3 +552,10 @@ threshold of a third vendored patch; untouched this session.
   is a green you can quote and cannot defend. Mechanically cheap — a `PreToolUse` hook comparing the
   edit path against the paths of any live background `pytest`. Promote on a second occurrence, or
   fold into the existing verification-hygiene rules if a home already exists.
+
+## 2026-08-25 — timeout-premise-and-audit-cycle-dispatch
+
+- **controlled A/B dispatch harness**: build two prompts differing in exactly ONE variable, dispatch both through `hmad-dispatch exec`, then diff an observable that is not the exit code — used twice this session (context-budget advisory with `HMAD_CONTEXT_WINDOW`; time-bound rule present vs absent) and it is what turned "the rule is present" into "the rule is causally effective". Both times the control was what made the result mean anything. — recurrence: 2 — candidate: yes
+- **mutation re-baseline guard**: assert the suite is GREEN before applying each mutant and re-assert after reverting, so a "KILLED" can never be credited to a mutant that changed nothing — recurrence: 4 (four mutation rounds this session, one of which produced a worthless kill on a red baseline) — candidate: maybe (may belong inside `h_mad_mutation_harness.py` rather than as a new skill; see the **mutation-mechanism verifier** row above)
+- **dispatch-log improvisation scanner**: scan a dispatch's tool-call command fields for a forbidden command form (e.g. a bare `timeout <n>`) and report it beside the verdict — recurrence: 2 (written ad hoc for the task-#4 A/B, then again to sweep every log this session) — candidate: **DECLINED** — evaluated in depth on 2026-08-25 and rejected for h-mad: codex's `--log` is a plain-text transcript (its arg build carries no `--json`) that also contains the prompt, so the scan false-positives on quoted text and any fail-loud parse guard fires on every codex dispatch; base rate was 30 real dispatched commands with zero improvisations. Shipped one documentation line instead (`2f50bff`). Recorded here so it is not re-proposed without that counter-evidence.
+
