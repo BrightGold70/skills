@@ -74,12 +74,55 @@ class Halt(Exception):
         self.detail = detail
 
 
+_HEADING_RE = re.compile(r"^\s*(#{1,6})\s+")
+
+
+def _heading_level(line: str) -> int | None:
+    """Markdown heading depth, or None when the line is not a heading."""
+    match = _HEADING_RE.match(line)
+    return len(match.group(1)) if match else None
+
+
+def _body_end(lines: list[str], start: int, next_task: int) -> int:
+    """Where the task at `start` ends: the next task, or an equal/higher heading.
+
+    Bounding on the next TASK header alone made the LAST task run to EOF, so
+    everything after it — `## Version History`, `## Verification (all tasks)`,
+    `## Task dependency graph` — was pasted into that task's TDD prompt.
+    Measured over the corpus 2026-08-26: 19 of 20 impl-plans, 727 lines, up to
+    119 of changelog in a single prompt, and cross-task verification steps
+    attributed to one task.
+
+    A DEEPER heading is still the task's own sub-heading and must be kept; only
+    equal-or-higher ends the body. Fences are tracked because impl-plans are
+    full of shell blocks whose comments start at column 0, and `# do the thing`
+    inside one would otherwise truncate the task at its own example. An
+    unterminated fence therefore runs to `next_task`: a malformed plan that
+    carries too much is recoverable, one silently cut in half is not.
+    """
+    level = _heading_level(lines[start]) or 2
+    fenced = False
+    for index in range(start + 1, next_task):
+        line = lines[index]
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        found = _heading_level(line)
+        if found is not None and found <= level:
+            return index
+    return next_task
+
+
 def task_body(text: str, task_id: str) -> str:
-    """The impl-plan lines for `task_id`, bounded on the same header regex.
+    """The impl-plan lines for `task_id`, bounded on headings and the task regex.
 
     Bounded on the shared `_TASK_RE` rather than on a blank line or a fixed
     heading level, so a task whose body contains its own sub-headings is not
-    truncated at the first one.
+    truncated at the first one — and additionally on the first equal-or-higher
+    heading, so a trailing section after the last task is not swallowed into it
+    (see `_body_end`).
     """
     lines = text.splitlines()
     starts = [i for i, ln in enumerate(lines) if _TASK_RE.match(ln)]
@@ -91,7 +134,8 @@ def task_body(text: str, task_id: str) -> str:
         found = (mod.upper() if mod else f"Task {num.strip()}").lower()
         if found != wanted:
             continue
-        end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+        next_task = starts[position + 1] if position + 1 < len(starts) else len(lines)
+        end = _body_end(lines, index, next_task)
         return "\n".join(lines[index:end]).rstrip()
     raise Halt("task_not_found", f"task={task_id}")
 

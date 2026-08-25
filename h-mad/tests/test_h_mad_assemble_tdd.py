@@ -434,3 +434,116 @@ class TestSurfacedByReview:
         guard = 'if [ "$rc" -ne 0 ]; then'
         assert guard in block
         assert block.index(guard) < block.index("h_mad_extract_verdict.py")
+
+
+# --- trailing sections after the last task --------------------------------
+#
+# Measured over the corpus 2026-08-26: 19 of 20 impl-plans carry a section
+# after their last task — `## Version History` most often, but also
+# `## Verification (all tasks)` and `## Task dependency graph`. The slicer
+# bounded the last task on the next TASK header only, so all 727 of those lines
+# were pasted into the last task's TDD prompt: up to 119 lines of changelog in
+# one plan, and cross-task verification steps attributed to a single task.
+
+PLAN_WITH_TRAILER = """# Feature impl-plan
+
+## Task 1: first
+
+Body of task one.
+
+## Task 2: last-one
+
+- **Task shape**: new-behaviour
+
+### A sub-heading of the last task
+
+Detail that belongs to Task 2.
+
+```bash
+# this is a shell comment, not a heading
+## neither is this
+echo hi
+```
+
+## Version History
+
+- v1.1 — audit fixes.
+
+## Verification (all tasks)
+
+Run the suite.
+"""
+
+
+class TestTrailingSections:
+    def test_the_last_task_stops_at_a_trailing_section(self) -> None:
+        body = task_body(PLAN_WITH_TRAILER, "Task 2")
+        assert "Detail that belongs to Task 2." in body
+        assert "Version History" not in body
+        assert "v1.1 — audit fixes." not in body
+
+    def test_cross_task_verification_is_not_attributed_to_the_last_task(self) -> None:
+        """`## Verification (all tasks)` is about every task; pasting it into one
+        task's prompt tells the agent to do the whole feature's verification."""
+        body = task_body(PLAN_WITH_TRAILER, "Task 2")
+        assert "Verification (all tasks)" not in body
+        assert "Run the suite." not in body
+
+    def test_a_deeper_sub_heading_still_belongs_to_the_task(self) -> None:
+        """The property the old bound protected, which the new one must keep."""
+        body = task_body(PLAN_WITH_TRAILER, "Task 2")
+        assert "A sub-heading of the last task" in body
+
+    def test_a_hash_comment_inside_a_fence_is_not_a_heading(self) -> None:
+        """Impl-plans are full of bash blocks whose comments start at column 0.
+
+        Treating one as the section boundary truncates the task at its own
+        example — the same reason `section_bounds` in h_mad_version_history.py
+        tracks fences.
+        """
+        body = task_body(PLAN_WITH_TRAILER, "Task 2")
+        assert "echo hi" in body, body
+        assert "this is a shell comment" in body
+
+    def test_a_task_still_stops_at_the_next_task(self) -> None:
+        body = task_body(PLAN_WITH_TRAILER, "Task 1")
+        assert "Body of task one." in body
+        assert "last-one" not in body
+
+    def test_a_higher_level_heading_ends_a_deeper_task(self) -> None:
+        """A `### Task N` is ended by a `##`, which is higher, not merely equal."""
+        plan = "# P\n\n### Task 1: deep\n\nTask detail.\n\n## Appendix\n\nNot task detail.\n"
+        body = task_body(plan, "Task 1")
+        assert "Task detail." in body
+        assert "Appendix" not in body
+
+    def test_an_unterminated_fence_does_not_truncate_the_task(self) -> None:
+        """Fail toward keeping the body: an unclosed fence is a malformed plan,
+        and swallowing too much is recoverable where silently cutting a task's
+        instructions in half is not."""
+        plan = "# P\n\n## Task 1: x\n\n```bash\necho hi\n\n## Version History\n\n- v1.0\n"
+        body = task_body(plan, "Task 1")
+        assert "Version History" in body
+
+
+def test_a_deeper_next_task_still_ends_the_previous_one() -> None:
+    """The next-task bound and the heading bound cover different plans.
+
+    Once `_body_end` stops at any equal-or-higher heading, the next-task bound
+    looks redundant — every `## Task N` ends the `## Task N-1` before it. It
+    stops being redundant the moment a plan MIXES levels: a `### Task 2` under a
+    `## Task 1` is deeper, so the heading bound reads it as Task 1's own
+    sub-heading and Task 1's prompt carries Task 2's instructions.
+
+    Found by mutation: replacing the next-task bound with EOF survived every
+    test, because every fixture used one heading level throughout.
+    """
+    plan = (
+        "# P\n\n"
+        "## Task 1: first\n\nBody of task one.\n\n"
+        "### Task 2: second-but-deeper\n\nBody of task two.\n"
+    )
+    body = task_body(plan, "Task 1")
+    assert "Body of task one." in body
+    assert "second-but-deeper" not in body, body
+    assert "Body of task two." not in body

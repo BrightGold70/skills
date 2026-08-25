@@ -81,11 +81,11 @@
   },
   {
    "name": "let-the-task-body-run-past-the-next-task",
-   "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope.",
+   "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope. Since `_body_end` landed, this bound only bites on a plan that MIXES heading levels (a `### Task 2` under a `## Task 1` is deeper, so the heading bound reads it as Task 1's own sub-heading) — which is why the killer test is the mixed-level one and not the same-level slicing test that used to name it.",
    "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        end = starts[position + 1] if position + 1 < len(starts) else len(lines)",
-   "replace": "        end = len(lines)",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTaskSlicing::test_a_task_body_stops_at_the_next_task"
+   "find": "        next_task = starts[position + 1] if position + 1 < len(starts) else len(lines)",
+   "replace": "        next_task = len(lines)",
+   "test": "tests/test_h_mad_assemble_tdd.py::test_a_deeper_next_task_still_ends_the_previous_one"
   },
   {
    "name": "accept-a-wiring-task-with-no-pin",
@@ -150,6 +150,38 @@
    "find": "        'if [ \"$rc\" -ne 0 ]; then echo \"dispatch failed rc=$rc\" >&2; exit \"$rc\"; fi',",
    "replace": "        \"\",",
    "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_the_block_halts_when_the_dispatch_fails"
+  },
+  {
+   "name": "the-last-task-swallows-the-trailing-section",
+   "_mechanism": "Bounding on the next TASK header alone runs the last task to EOF. Measured over the corpus 2026-08-26: 19 of 20 impl-plans, 746 lines, up to 257 of changelog and cross-task verification pasted into one task's TDD prompt.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        end = _body_end(lines, index, next_task)",
+   "replace": "        end = next_task",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_the_last_task_stops_at_a_trailing_section"
+  },
+  {
+   "name": "a-deeper-sub-heading-ends-the-task",
+   "_mechanism": "`<=` becoming `<` is wrong in the other direction: an equal-level heading no longer ends the body. `<` alone would keep the old bug for `## Version History` after a `## Task`.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        if found is not None and found <= level:",
+   "replace": "        if found is not None:",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
+  },
+  {
+   "name": "a-fence-comment-truncates-the-task",
+   "_mechanism": "Impl-plans are full of shell blocks whose comments start at column 0, so `# do the thing` inside one would cut the task off at its own example — the same reason section_bounds in h_mad_version_history.py tracks fences.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        if line.lstrip().startswith(\"```\"):\n            fenced = not fenced\n            continue\n        if fenced:\n            continue",
+   "replace": "        if line.lstrip().startswith(\"```\"):\n            continue",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_hash_comment_inside_a_fence_is_not_a_heading"
+  },
+  {
+   "name": "a-task-header-level-is-guessed-instead-of-read",
+   "_mechanism": "A hardcoded level 3 bounds a `## Task` as if it were `###`, so the task's own `### Sub-heading` reads as equal-level and ends the body. The discriminating test is the SUB-HEADING one: `test_a_higher_level_heading_ends_a_deeper_task` passes under this mutant (`##` is <= 3 either way) and named it a survivor, which is a weak-test result, not a missing guard.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "    level = _heading_level(lines[start]) or 2",
+   "replace": "    level = 3",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
   }
  ],
  "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."
