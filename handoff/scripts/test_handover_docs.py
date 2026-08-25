@@ -461,9 +461,15 @@ def test_takeover_runs_before_the_todos_are_restored() -> None:
     # yours. Restoring todos first and claiming later is indistinguishable from
     # never claiming if the session stops in between.
     text = _norm(SKILL)
-    assert text.index("### Step 3.5: Take over handed-over work") < text.index(
-        "### Step 4: Restore the TodoList"
-    ), "takeover must precede the TodoList restore"
+    # Named separately so a rename reports itself as a missing heading rather
+    # than as a bare `ValueError: substring not found` from .index().
+    takeover = "### Step 3.5: Take over handed-over work"
+    restore = "### Step 4: Restore the todo list"
+    assert takeover in text, f"heading missing or renamed: {takeover!r}"
+    assert restore in text, f"heading missing or renamed: {restore!r}"
+    assert text.index(takeover) < text.index(restore), (
+        "takeover must precede the todo-list restore"
+    )
 
 
 def test_handover_writes_the_marker_that_takeover_reads() -> None:
@@ -601,13 +607,22 @@ def test_orca_is_only_ever_reached_through_the_wrapper() -> None:
     the instructions simply contradicted it. `hmad-dispatch worktree-list` now
     carries that payload. Lines that tell the reader NOT to run something are
     exempt: they are the rule being stated, not broken.
+
+    Third exemption: prose that names the *raw* `orca` form in order to contrast
+    it with the wrapper (\"a raw `orca worktree ps --json` needs `.result…`\").
+    The word `raw` is what marks it as the un-wrapped form being pointed at, so
+    the exemption keys on that and not on the command itself.
     """
     import re
 
     offenders = []
     for lineno, line in enumerate(SKILL.read_text(encoding="utf-8").splitlines(), 1):
         for match in re.finditer(r"`orca ([a-z][a-z-]*)", line):
-            if line.lstrip().startswith("- Don't") or "never call" in line:
+            if (
+                line.lstrip().startswith("- Don't")
+                or "never call" in line
+                or "raw `orca" in line.lower()
+            ):
                 continue
             offenders.append(f"line {lineno}: orca {match.group(1)}")
     assert not offenders, (
