@@ -35,9 +35,11 @@ Spec format (JSON):
     {
       "root": "/abs/path/to/repo",          # optional; defaults to the spec's dir
       "command": ["pytest", "-q"],          # argv list, run with cwd=root, no shell
+      "target_command": ["pytest", "-q"],   # optional; prefix for per-mutation runs
       "mutations": [
         {"name": "drop the allowlist", "file": "src/gate.py",
-         "find": "<exact text>", "replace": ""}
+         "find": "<exact text>", "replace": "",
+         "test": "tests/test_gate.py::test_allowlist"}   # optional
       ]
     }
 
@@ -45,12 +47,34 @@ Spec format (JSON):
 would make the harness's own behaviour depend on quoting, and this tool's whole
 value is that it does exactly and verifiably what it says.
 
+`test` names the ONE test a mutation is aimed at, and changes the question the
+run asks. Without it, scoring is "did the suite go red?" — which `ALL_CAUGHT`
+answers, and which is not what 5e needs to know: a mutant can die on a crash, a
+timeout, or an assertion about something else entirely, and each is
+indistinguishable from the guard biting. Measured cases: a mutant that tripped
+`assert r.returncode == 0` on an unbound-variable crash without reaching the
+property, and one caught by a 60-second `TimeoutExpired` because an orphaned
+process held a pipe open. Both scored as clean kills.
+
+With `test`, a kill means THAT test failed. If it passes while the suite goes
+red, the mutation is a SURVIVOR and the detail line names what actually bit —
+"caught by the wrong assertion" is a finding, not a pass. The named test is also
+required green before the mutation is applied, because a kill credited against
+a pin that was already failing measures nothing and the whole-suite baseline
+cannot see one red pin.
+
+What stays with the author: whether the mechanism that fired is the mechanism
+the spec claims. The harness reports; it never judges that. `_mechanism` on a
+mutation is a free-text note for exactly that comparison.
+
 Stdlib only: h-mad scripts are invoked with a bare `python3`.
 """
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
+import re
 import signal
 import subprocess
 import sys
@@ -83,6 +107,20 @@ def _load_spec(spec_path: Path) -> dict:
             raise SpecError(f"mutation {index} is missing {', '.join(missing)}")
         if "replace" not in mutation:
             raise SpecError(f"mutation {index} ({mutation['name']}) has no `replace`")
+        if mutation.get("test") is not None and not isinstance(mutation["test"], str):
+            raise SpecError(f"mutation {index} ({mutation['name']}) has a non-string `test`")
+
+    target = spec.get("target_command")
+    if target is not None and (
+        not isinstance(target, list) or not target
+        or not all(isinstance(part, str) for part in target)
+    ):
+        raise SpecError("`target_command`, when present, must be a non-empty argv list of strings")
+    if target is None and any(m.get("test") for m in mutations):
+        # Naming a test and giving the harness no way to run one is the kind of
+        # half-wired spec that would otherwise silently fall back to whole-suite
+        # scoring and report a per-test verdict it never computed.
+        raise SpecError("a mutation names a `test` but the spec has no `target_command`")
     return spec
 
 
@@ -101,16 +139,66 @@ def _restore_file(path: Path, text: str) -> bool:
         return False
 
 
-def _suite_is_green(command: list[str], root: Path) -> bool:
-    """True when the command exits 0. Anything else — including a crash — is red."""
+def _run(command: list[str], root: Path) -> tuple[bool, str]:
+    """(green, output). Anything but exit 0 — including a crash — is red."""
     try:
-        return subprocess.run(
-            command, cwd=str(root), capture_output=True, text=True
-        ).returncode == 0
-    except OSError:
+        proc = subprocess.run(command, cwd=str(root), capture_output=True, text=True)
+    except OSError as exc:
         # The command could not be launched at all. That is red, not green: the
         # safe reading of "I could not measure" is never "the guard is fine".
-        return False
+        return False, f"could not launch: {exc}"
+    return proc.returncode == 0, (proc.stdout or "") + (proc.stderr or "")
+
+
+def _suite_is_green(command: list[str], root: Path) -> bool:
+    """True when the command exits 0. Anything else — including a crash — is red."""
+    return _run(command, root)[0]
+
+
+FAILED_LINE = re.compile(r"^FAILED\s+(\S+)", re.MULTILINE)
+
+
+def _failing_tests(output: str) -> list[str]:
+    """Test ids a pytest run reported as FAILED, newest-format best-effort.
+
+    Attribution is reporting, never a verdict: the harness knows no test runner
+    and must not start requiring one. Output it cannot parse yields an empty
+    list and the caller says so, rather than guessing.
+    """
+    return FAILED_LINE.findall(output)
+
+
+def _near_misses(source: str, find: str, limit: int = 3) -> list[str]:
+    """Lines closest to the anchor's FIRST line, for an anchor that matched 0 times.
+
+    An anchor drifts far more often because the author's own edits moved the
+    line than because the line is gone, and the recovery — re-grepping by hand
+    for whatever it became — is the whole cost of the REFUSED verdict. `find`
+    is frequently multi-line, so the first line is what gets compared; matching
+    the whole block against single lines finds nothing useful.
+    """
+    needle = find.split("\n", 1)[0].strip()
+    if not needle:
+        return []
+    lines = source.split("\n")
+    # Scored per LINE, not per distinct string: an identical line occurring
+    # twice is exactly the case an author needs both locations for, and
+    # `list.index()` would report the first one twice instead.
+    scored = [
+        (difflib.SequenceMatcher(None, needle, ln.strip()).ratio(), i)
+        for i, ln in enumerate(lines)
+        if ln.strip()
+    ]
+    best = sorted((s for s in scored if s[0] >= 0.6), key=lambda s: (-s[0], s[1]))[:limit]
+    return [f"line {i + 1}: {lines[i].strip()[:100]}" for _, i in best]
+
+
+def _match_lines(source: str, find: str, limit: int = 5) -> list[int]:
+    """1-based line numbers where the anchor's first line occurs."""
+    needle = find.split("\n", 1)[0]
+    return [
+        i + 1 for i, ln in enumerate(source.split("\n")) if needle in ln
+    ][:limit]
 
 
 def run_spec(spec_path: Path) -> dict:
@@ -125,6 +213,8 @@ def run_spec(spec_path: Path) -> dict:
     command = spec["command"]
     mutations = spec["mutations"]
 
+    target_command = spec.get("target_command")
+
     result = {
         "verdict": "ALL_CAUGHT",
         "mutations": len(mutations),
@@ -133,6 +223,12 @@ def run_spec(spec_path: Path) -> dict:
         "refused": [],
         "restore_verified": True,
         "baseline_green_after": None,
+        # Reporting only. `mechanism` answers "which test bit, and was it the
+        # one this mutation is about?"; `hints` answers "where did my anchor
+        # go?". Neither changes a verdict — the judgement of whether the stated
+        # reason matches the mechanism stays with the author.
+        "mechanism": {},
+        "hints": {},
     }
 
     # Mutations are scored by "did the suite go red?", which means nothing if it
@@ -176,6 +272,15 @@ def run_spec(spec_path: Path) -> dict:
                 result["refused"].append(f"{mutation['name']}: cannot read {mutation['file']} ({exc})")
                 continue
 
+            # A mutation may name the single test it is aimed at. Scoring then
+            # asks "did THAT test bite?" rather than "did anything go red?",
+            # which are different questions: `ALL_CAUGHT` is satisfied by a
+            # mutant caught by an unrelated assertion, a crash, or a timeout,
+            # and none of those prove the property under test was exercised.
+            scoring_command = None
+            if target_command and mutation.get("test"):
+                scoring_command = list(target_command) + [mutation["test"]]
+
             hits = source.count(mutation["find"])
             if hits != 1:
                 # The assert-landed guard, and the reason this script exists. An
@@ -187,7 +292,33 @@ def run_spec(spec_path: Path) -> dict:
                     f"{mutation['name']}: anchor matched {hits} times in "
                     f"{mutation['file']}, expected exactly 1"
                 )
+                # The verdict is correct and load-bearing either way; what was
+                # missing is the recovery, which was a manual re-grep for
+                # whatever the author's own edits turned the line into.
+                if hits == 0:
+                    result["hints"][mutation["name"]] = [
+                        f"near miss {h}" for h in _near_misses(source, mutation["find"])
+                    ] or ["no near miss found — the anchor may be gone entirely"]
+                else:
+                    result["hints"][mutation["name"]] = [
+                        "first line of the anchor occurs at "
+                        + ", ".join(str(n) for n in _match_lines(source, mutation["find"]))
+                        + " — narrow the anchor until it is unique"
+                    ]
                 continue
+
+            # L559: a mutant applied over a red pin scores a kill that means
+            # nothing. The whole-suite baseline above cannot see a single pin
+            # that is already failing, and a targeted run is cheap enough to
+            # check every time.
+            if scoring_command is not None and mutation.get("test"):
+                pin_green, _ = _run(scoring_command, root)
+                if not pin_green:
+                    result["refused"].append(
+                        f"{mutation['name']}: named test {mutation['test']} was already "
+                        f"failing before the mutation, so a kill would measure nothing"
+                    )
+                    continue
 
             originals.setdefault(target, source)
             mutated = source.replace(mutation["find"], mutation["replace"])
@@ -202,10 +333,42 @@ def run_spec(spec_path: Path) -> dict:
                 target.write_text(source, encoding="utf-8")
                 continue
 
-            if _suite_is_green(command, root):
-                result["survived"].append(mutation["name"])
+            if scoring_command is not None:
+                pin_green, _ = _run(scoring_command, root)
+                if not pin_green:
+                    result["caught"] += 1
+                    result["mechanism"][mutation["name"]] = (
+                        f"killed by its named test {mutation['test']}"
+                    )
+                else:
+                    # The named test shrugged. Ask the whole suite what did
+                    # notice, because "something else bit" and "nothing bit"
+                    # are different findings and only one of them is a hole.
+                    suite_green, suite_output = _run(command, root)
+                    result["survived"].append(mutation["name"])
+                    others = [t for t in _failing_tests(suite_output) if mutation["test"] not in t]
+                    if suite_green:
+                        result["mechanism"][mutation["name"]] = (
+                            f"named test {mutation['test']} passed and so did the "
+                            f"whole suite — nothing bites"
+                        )
+                    else:
+                        result["mechanism"][mutation["name"]] = (
+                            f"named test {mutation['test']} PASSED but the suite went "
+                            f"red elsewhere ({', '.join(others[:3]) or 'unparsed'}) — the "
+                            f"mutant is caught by the wrong assertion"
+                        )
             else:
-                result["caught"] += 1
+                suite_green, suite_output = _run(command, root)
+                if suite_green:
+                    result["survived"].append(mutation["name"])
+                else:
+                    result["caught"] += 1
+                    killers = _failing_tests(suite_output)
+                    result["mechanism"][mutation["name"]] = (
+                        "killed by " + ", ".join(killers[:3]) if killers
+                        else "killed, but the runner's output named no test (unparsed)"
+                    )
 
             target.write_text(source, encoding="utf-8")
     finally:
@@ -266,10 +429,26 @@ def main(argv: list[str] | None = None) -> int:
             f"caught={result['caught']} survived={len(result['survived'])} "
             f"refused={len(result['refused'])}"
         )
+    mechanism = result.get("mechanism") or {}
+    hints = result.get("hints") or {}
     for name in result["survived"]:
         print(f"  survived: {name}")
+        if name in mechanism:
+            print(f"    mechanism: {mechanism[name]}")
     for entry in result["refused"]:
         print(f"  refused: {entry}")
+        name = entry.split(":", 1)[0]
+        for hint in hints.get(name, []):
+            print(f"    hint: {hint}")
+    # Caught mutations carry their killer too. `ALL_CAUGHT` is satisfied by a
+    # mutant that died on a crash, a timeout, or an unrelated assertion, and
+    # none of those prove the property under test was exercised — so the one
+    # judgement the harness must NOT make is printed for the author to make.
+    if result["caught"] and mechanism:
+        killed = [n for n in mechanism if n not in result["survived"]]
+        for name in killed:
+            print(f"  caught: {name}")
+            print(f"    mechanism: {mechanism[name]}")
 
     if verdict == "BASELINE_NOT_GREEN":
         print(

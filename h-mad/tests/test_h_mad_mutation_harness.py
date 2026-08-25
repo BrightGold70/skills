@@ -254,3 +254,255 @@ def test_harness_is_stdlib_only() -> None:
     source = HARNESS.read_text(encoding="utf-8")
     for banned in ("import yaml", "import requests", "from pydantic", "import jsonschema"):
         assert banned not in source, f"{banned} would break the bare-python3 callers"
+
+
+# --- per-mutation targets, mechanism attribution, anchor hints -------------
+#
+# `ALL_CAUGHT` answers "did something go red?", which is not the question 5e
+# asks. A mutant can die on a crash, a timeout, or an assertion about something
+# else entirely, and each of those is byte-identical to the guard biting. These
+# pin the discrimination: when a mutation names the test it is aimed at, only
+# that test counts as a kill, and whatever actually bit is reported by name.
+
+REAL_GUARD = "def over(n):\n    return n > 5\n\n\ndef unrelated():\n    return 'stable'\n"
+
+REAL_TESTS = '''
+from guard import over, unrelated
+
+
+def test_the_property_under_test():
+    assert over(6) and not over(5)
+
+
+def test_something_else_entirely():
+    assert unrelated() == 'stable'
+'''
+
+
+def _pytest_project(tmp_path: Path, mutations: list[dict], *, targeted: bool = True) -> Path:
+    """A real pytest project, so failures carry parseable node ids."""
+    (tmp_path / "guard.py").write_text(REAL_GUARD, encoding="utf-8")
+    (tmp_path / "test_guard.py").write_text(REAL_TESTS, encoding="utf-8")
+    spec = {
+        "root": str(tmp_path),
+        "command": [sys.executable, "-m", "pytest", "-q", "test_guard.py"],
+        "mutations": mutations,
+    }
+    if targeted:
+        spec["target_command"] = [sys.executable, "-m", "pytest", "-q"]
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    return spec_path
+
+
+PIN = "test_guard.py::test_the_property_under_test"
+OTHER = "test_guard.py::test_something_else_entirely"
+
+
+def test_a_mutant_killed_by_its_named_test_is_caught(tmp_path: Path) -> None:
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5", "test": PIN},
+    ])
+    result = run_spec(spec)
+    assert result["verdict"] == "ALL_CAUGHT"
+    assert result["caught"] == 1
+    assert "named test" in result["mechanism"]["loosen the bound"]
+
+
+def test_a_mutant_caught_by_the_wrong_test_is_a_survivor(tmp_path: Path) -> None:
+    """The finding `ALL_CAUGHT` structurally cannot express.
+
+    This mutation breaks `unrelated()`, so the suite goes red and an exit-code
+    harness scores a kill. But the test it claims to pin never notices, which
+    means the property is unenforced — the same shape as the real `pids[$i]:
+    unbound variable` and 60-second-timeout kills that passed `ALL_CAUGHT`.
+    """
+    spec = _pytest_project(tmp_path, [
+        {"name": "break something else", "file": "guard.py",
+         "find": "return 'stable'", "replace": "return 'moved'", "test": PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "SURVIVED"
+    assert result["survived"] == ["break something else"]
+    mechanism = result["mechanism"]["break something else"]
+    assert "PASSED but the suite went red elsewhere" in mechanism
+    assert OTHER in mechanism
+
+
+def test_a_mutant_nothing_notices_says_so(tmp_path: Path) -> None:
+    spec = _pytest_project(tmp_path, [
+        {"name": "edit a docstring", "file": "guard.py",
+         "find": "def unrelated():", "replace": "def unrelated():  # noted", "test": PIN},
+    ])
+    result = run_spec(spec)
+    assert result["verdict"] == "SURVIVED"
+    assert "nothing bites" in result["mechanism"]["edit a docstring"]
+
+
+def test_an_untargeted_mutation_still_names_its_killer(tmp_path: Path) -> None:
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5"},
+    ], targeted=False)
+    result = run_spec(spec)
+    assert result["verdict"] == "ALL_CAUGHT"
+    assert PIN in result["mechanism"]["loosen the bound"]
+
+
+def test_a_named_test_already_red_is_refused_not_scored(tmp_path: Path) -> None:
+    """L559: a kill credited against a pin that was failing anyway measures nothing.
+
+    The whole-suite baseline cannot see this — the suite here is green; it is
+    the single named pin that is red, because it names a test that does not
+    exist, which pytest reports as an error rather than a pass.
+    """
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5",
+         "test": "test_guard.py::test_that_does_not_exist"},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED"
+    assert result["caught"] == 0
+    assert "already failing before the mutation" in result["refused"][0]
+
+
+def test_a_test_field_without_a_target_command_is_a_spec_error(tmp_path: Path) -> None:
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5", "test": PIN},
+    ], targeted=False)
+    proc = _run_cli(spec)
+    assert proc.returncode == 2
+    assert "MUTATION: UNREADABLE" in proc.stdout
+    assert "no `target_command`" in proc.stderr
+
+
+def test_a_non_string_test_field_is_a_spec_error(tmp_path: Path) -> None:
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5", "test": 3},
+    ])
+    proc = _run_cli(spec)
+    assert proc.returncode == 2
+    assert "non-string `test`" in proc.stderr
+
+
+# --- anchor hints ---------------------------------------------------------
+
+
+def test_a_drifted_anchor_gets_a_near_miss_with_a_line_number(tmp_path: Path) -> None:
+    """The REFUSED verdict was already right; the recovery was a manual re-grep."""
+    spec = _project(tmp_path, [
+        {"name": "drifted", "file": "guard.py",
+         "find": "THRESHOLD = 7", "replace": "THRESHOLD = 9"},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED"
+    hints = result["hints"]["drifted"]
+    assert any("line 1:" in h and "THRESHOLD = 5" in h for h in hints), hints
+
+
+def test_an_anchor_with_no_near_miss_says_so_rather_than_guessing(tmp_path: Path) -> None:
+    spec = _project(tmp_path, [
+        {"name": "gone", "file": "guard.py",
+         "find": "completely unrelated content here", "replace": ""},
+    ])
+    result = run_spec(spec)
+    assert "no near miss found" in result["hints"]["gone"][0]
+
+
+def test_an_ambiguous_anchor_is_told_where_its_matches_are(tmp_path: Path) -> None:
+    (tmp_path / "guard.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        "mutations": [{"name": "twice", "file": "guard.py", "find": "x = 1", "replace": "x = 2"}],
+    }), encoding="utf-8")
+    result = run_spec(spec_path)
+
+    assert result["verdict"] == "REFUSED"
+    assert "1, 2" in result["hints"]["twice"][0]
+
+
+def test_the_cli_prints_hints_under_the_refusal(tmp_path: Path) -> None:
+    spec = _project(tmp_path, [
+        {"name": "drifted", "file": "guard.py",
+         "find": "THRESHOLD = 7", "replace": "THRESHOLD = 9"},
+    ])
+    proc = _run_cli(spec)
+    assert "  refused: drifted:" in proc.stdout
+    assert "    hint: near miss line 1:" in proc.stdout
+
+
+def test_the_summary_line_is_unchanged_by_the_new_detail(tmp_path: Path) -> None:
+    """Existing callers parse this line; the additions are detail lines only."""
+    spec = _project(tmp_path, [_kills_the_guard()])
+    proc = _run_cli(spec)
+    assert "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0" in proc.stdout
+
+
+def test_a_multiline_anchor_still_gets_a_near_miss(tmp_path: Path) -> None:
+    """`find` is usually a block; comparing the whole block to single lines finds nothing.
+
+    Only the anchor's FIRST line is comparable to a source line, so a hint
+    implementation that matches the whole block degrades to "no near miss" on
+    every real multi-line mutation while still looking implemented.
+    """
+    (tmp_path / "guard.py").write_text(
+        "def check(n):\n    return n > 5\n", encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        "mutations": [{
+            "name": "block drifted", "file": "guard.py",
+            "find": "def check(n):\n    return n > 7\n    # trailing", "replace": ""}],
+    }), encoding="utf-8")
+    result = run_spec(spec_path)
+
+    assert result["verdict"] == "REFUSED"
+    hints = result["hints"]["block drifted"]
+    assert any("def check(n):" in h for h in hints), hints
+
+
+def test_identical_lines_are_reported_at_both_locations(tmp_path: Path) -> None:
+    """Two matching lines are exactly the case an author needs both numbers for."""
+    (tmp_path / "guard.py").write_text(
+        "value = compute(a)\nfiller = 0\nvalue = compute(a)\n", encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [sys.executable, "-c", "import sys; sys.exit(0)"],
+        "mutations": [{"name": "drifted", "file": "guard.py",
+                       "find": "value = compute(b)", "replace": ""}],
+    }), encoding="utf-8")
+    result = run_spec(spec_path)
+
+    hints = result["hints"]["drifted"]
+    assert any("line 1:" in h for h in hints), hints
+    assert any("line 3:" in h for h in hints), hints
+
+
+def test_a_command_that_cannot_launch_is_red_not_green(tmp_path: Path) -> None:
+    """"I could not measure" must never resolve to "the guard is fine".
+
+    A launch failure that read as green would clear the baseline check and then
+    score every mutation as a survivor, reporting a full set of holes that were
+    never actually tested.
+    """
+    (tmp_path / "guard.py").write_text(GUARD, encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [str(tmp_path / "no-such-binary")],
+        "mutations": [_kills_the_guard()],
+    }), encoding="utf-8")
+    result = run_spec(spec_path)
+
+    assert result["verdict"] == "BASELINE_NOT_GREEN"
