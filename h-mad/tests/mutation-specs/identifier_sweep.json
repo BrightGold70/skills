@@ -1,0 +1,146 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_identifier_sweep.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "a-leftover-loses-its-line-number",
+   "_mechanism": "A hit without a line number is the manual re-grep the sweep exists to replace.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                    \"line\": lineno,",
+   "replace": "                    \"line\": 0,",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_a_remaining_reference_is_a_leftover_with_its_location"
+  },
+  {
+   "name": "the-allowlist-is-ignored",
+   "_mechanism": "Every deliberate explanation becomes a leftover, so the report is noise and the reader stops reading it.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                    if rel in allowed_paths:",
+   "replace": "                    if False:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_an_allowlisted_file_is_reported_but_not_a_leftover"
+  },
+  {
+   "name": "an-allowed-hit-is-dropped-silently",
+   "_mechanism": "The allowlist becomes a place real leftovers can hide, because nothing prints what it swallowed.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                        result[\"allowed\"].append(hit)",
+   "replace": "                        pass",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_every_hit_allowlisted_is_clean"
+  },
+  {
+   "name": "history-is-treated-as-a-leftover",
+   "_mechanism": "Handoffs and archives are records of sessions that already happened; flagging them buries the hits a reader can act on. Measured 5 of 26 on the first live run.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                    elif _is_history(rel) and not include_history:",
+   "replace": "                    elif False:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_append_only_history_is_counted_not_listed_as_a_leftover"
+  },
+  {
+   "name": "history-is-dropped-instead-of-counted",
+   "_mechanism": "A silent skip and an empty tree print the same thing — the failure mode every suppression in this repo is written to avoid.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                        result[\"history\"].append(hit)",
+   "replace": "                        pass",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_history_hits_are_still_counted_so_the_suppression_is_visible"
+  },
+  {
+   "name": "include-history-does-nothing",
+   "_mechanism": "The escape hatch is advertised and inert, so a reader who needs the historical hits cannot get them.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    result = sweep(args.root, args.identifier, args.allow, args.include_history)",
+   "replace": "    result = sweep(args.root, args.identifier, args.allow, False)",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_cli_include_history_actually_reaches_the_sweep"
+  },
+  {
+   "name": "machine-logs-are-searched",
+   "_mechanism": "`.bkit`/`.omc` are append-only tool state; on the first live run they were 14 of 26 hits and outnumbered everything actionable.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "             \".bkit\", \".omc\"}",
+   "replace": "             }",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_machine_log_directories_are_not_searched_at_all"
+  },
+  {
+   "name": "the-excerpt-is-truncated-from-the-left",
+   "_mechanism": "On a long line the printed excerpt does not contain the identifier being swept for — the one thing an excerpt owes its reader. Measured on a 900-character JSON log line.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    at = stripped.find(needle)",
+   "replace": "    at = -1",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_the_excerpt_contains_the_identifier_on_a_very_long_line"
+  },
+  {
+   "name": "stem-hits-are-folded-into-leftovers",
+   "_mechanism": "Prose naming the concept after a renamed file floods the verdict, which is the sweep's main source of noise.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                    result[\"related\"].append(hit)",
+   "replace": "                    result[\"leftover\"].append(hit)",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_a_stem_hit_alone_does_not_make_the_verdict_dirty"
+  },
+  {
+   "name": "an-empty-stem-matches-every-line",
+   "_mechanism": "`\"\" in line` is always true, so an extensionless identifier turns every non-matching line in the tree into a `related:` hit. Replaces an earlier mutation (`_stem_of` returning the identifier itself) that was an EQUIVALENT MUTANT: with stem == identifier the `elif` branch is unreachable, so the behaviour was byte-identical and its survival measured nothing.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "                elif stems[identifier] and stems[identifier] in line:",
+   "replace": "                elif stems[identifier] is not None and stems[identifier] in line:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_an_identifier_with_no_extension_has_no_stem_pass"
+  },
+  {
+   "name": "a-binary-file-aborts-the-sweep",
+   "_mechanism": "One undecodable blob would discard every real finding in the same run.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "        except (OSError, UnicodeDecodeError):",
+   "replace": "        except ZeroDivisionError:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_an_unreadable_file_is_skipped_rather_than_crashing_the_sweep"
+  },
+  {
+   "name": "mutation-anchors-lose-their-surface",
+   "_mechanism": "The surface the row calls the one most often missed stops being visible in the report.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    if \"mutation-specs\" in parts:",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_each_surface_is_named_so_the_reader_knows_what_they_are_looking_at"
+  },
+  {
+   "name": "an-empty-identifier-is-accepted",
+   "_mechanism": "An empty needle matches every line of every file: a sweep that reports everything is as useful as one that reports nothing, and looks far more thorough.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    if empty:",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_cli_refuses_an_empty_identifier"
+  },
+  {
+   "name": "an-unreadable-root-reads-as-clean",
+   "_mechanism": "Nothing was searched, so CLEAN would be a cannot-judge wearing a verdict — the exact confusion every other h-mad gate is written to prevent.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    if not args.root.is_dir():",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_cli_reports_an_unreadable_root_as_a_cannot_judge"
+  },
+  {
+   "name": "the-cli-exits-0-on-leftovers",
+   "_mechanism": "A caller reading `$?` cannot distinguish a clean sweep from a dirty one — and the token exists precisely because `$?` is the wrong surface.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "    return 0 if verdict == \"CLEAN\" else 2",
+   "replace": "    return 0",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_cli_prints_the_token_and_exits_2_on_a_leftover"
+  },
+  {
+   "name": "the-judgement-disclaimer-is-dropped",
+   "_mechanism": "Without it `LEFTOVERS` reads as a verdict that the hits are wrong, and a reader trained by that deletes correct prose.",
+   "file": "scripts/h_mad_identifier_sweep.py",
+   "find": "            \"explanation or a stale reference is YOUR call — pass the deliberate \"",
+   "replace": "            \"stale reference — pass the deliberate \"",
+   "test": "tests/test_h_mad_identifier_sweep.py::test_cli_says_the_judgement_is_not_its_own"
+  }
+ ]
+}
