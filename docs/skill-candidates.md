@@ -8,6 +8,16 @@ rows are flipped.
 `SUPERSEDED` (a different fix removed the need) · `DECLINED` (deliberately not doing it, with the
 reason) · `done` (legacy spelling of LANDED).
 
+**Triage of 2026-08-25 — `DECLINED` here also means "not codable".** Every open row was sorted into
+useful/codable, useful/NOT-codable, or not-useful, and the two non-actionable buckets were closed with
+`DECLINED`, each note naming its bucket and its reason. Read those carefully: for a useful/not-codable
+row `DECLINED` means **no tool will be built**, NOT that the idea was rejected — the discipline stands
+and the note says where it would live if promoted (usually `invariants.base.md` or a SKILL.md section,
+the way seven rows landed earlier the same day). A not-useful row is genuinely closed. Duplicate rows
+of one idea were `SUPERSEDED` into the fuller one rather than declined twice. This convention exists
+because the alternative was a new vocabulary word, and every counter over this file keys on the three
+terminal markers already documented above.
+
 **What counts as open:** `yes` + `maybe`. A `no` is a verdict the scout already gave, not an
 undecided row — it needs no further judgement, only a reason if it is ever promoted to `DECLINED`.
 A terminal marker (`**LANDED**` / `**SUPERSEDED**` / `**DECLINED**`) wins over any `candidate:`
@@ -107,6 +117,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 - **agy/codex poll-until-idle dispatch**: assemble prompt -> hmad-dispatch send -> background poll on idle marker ("? for shortcuts" present, "esc to cancel" absent) + schema token -> parse verdict — recurrence: 12+ (every audit/TDD/arch-review this session) — candidate: **LANDED** 2026-07-24 — `hmad-dispatch ask` (send + wait-idle + full-buffer read; extraction stays a separate `h_mad_extract_verdict.py` call). Live-dogfooded against agy
 - **H-MAD phase-doc + agy-audit-gate loop**: write phase doc -> assemble audit prompt (template+doc+invariants) -> dispatch agy -> gate -> fix -> re-audit — recurrence: 9 (3 features x 3 phases) — candidate: maybe (already the /h-mad skill; a helper to stage+dispatch+gate in one call would cut ~40 tool calls)
+  — **SUPERSEDED 2026-08-25 (triage: duplicate row)** — the same wrapper-around-the-audit-loop idea as `audit-loop-runner` below, filed a session earlier and with a lower recurrence. Both self-diagnose as "already the /h-mad skill"; keeping two rows for one idea inflated the backlog by one.
 
 ## 2026-07-21 — orca-arc-complete-hemasuite-wiring
 
@@ -124,6 +135,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 ## 2026-07-22 — orca-skills-hardening
 
 - **audit→fix→subagent-review→merge loop**: repeated 6× this session (F/G/188/189 + 2), each catching a real bug — recurrence: 6 — candidate: maybe (this IS the /h-mad + review discipline; already a skill)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — this is the `/h-mad` + review discipline itself, already a skill. There is no artifact to build; the row records that the loop pays.
 - **live-e2e verb sweep against real orca**: exercise every hmad-dispatch verb + skill mechanism vs the live runtime, matrix report — recurrence: 2 — candidate: maybe
 
 ## 2026-07-22 — orca-agent-resolution-hardening
@@ -176,8 +188,10 @@ before concluding a row is inert — one row sat inert for a day while naming it
 ## 2026-07-24 — skill-candidate-upgrades
 
 - **promote-candidate-to-rule-or-verb**: reconcile skill-candidates by mapping each open row to a concrete insertion point (Axis-B rule / SKILL playbook / new verb), then TDD+mutation+dogfood like any fix — ran across 4 candidates this session — recurrence: 2 — candidate: maybe (this IS the upgrade workflow; a checklist, not a script)
+  — **SUPERSEDED 2026-08-25 (triage: duplicate row)** — duplicate of the later `promote-candidate-to-rule-or-verb` row, which carries the fuller reasoning.
 - **verify-backlog-row-premise-vs-code**: before flipping a candidate/registry row, confirm its claim against git log -S / grep — 3 rows described already-shipped work this session, and (prior session) 4 monitoring rows were stale — recurrence: 3 — candidate: **LANDED** (2026-07-24) — folded into close-a-filed-defect step 1 (SKILL.md §Working a `skill-monitoring` item)
 - **fix-the-fixture-not-just-the-assertion**: when a mutation survives after tightening an assertion, suspect the test DATA — aligned word lengths let a naive cut hit a boundary — recurrence: 1 — candidate: maybe
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a rule about where to look when a mutation survives. Its home is `invariants.base.md` §"Test discrimination", beside the stub-must-model-the-destructive-step line landed this session.
 - **compose-verb-from-existing-verbs**: build a convenience verb (ask = send+wait+read) by calling the existing command functions so their guards carry, routing sub-command chatter to stderr so stdout stays the payload — recurrence: 1 — candidate: no (one instance; the pattern is just single-source reuse)
 
 ## 2026-07-28 — orca-pin-identity-line — no candidates
@@ -192,17 +206,21 @@ before concluding a row is inert — one row sat inert for a day while naming it
 ## 2026-07-29 — skill-upgrades-verifier-parked-paths
 
 - **promote-candidate-to-rule-or-verb**: map an open candidate to a concrete insertion point (new `references/*.md` template + SKILL.md wiring, or a handoff-SKILL doc rule), TDD the doc-test → mutation-verify the guards → run BOTH coupled suites → reconcile the candidate row → commit. Ran twice more this session (h-mad 5e verifier + handoff parked-path). — recurrence: 4 (cumulative) — candidate: maybe (this IS the upgrade workflow, already documented 2026-07-24; a checklist not a script)
+  — **DECLINED 2026-08-25 (triage: not useful)** — this IS the upgrade workflow, executed end to end this session across eleven rows. It is what you do with this file, not an entry in it.
+  — **DECLINED 2026-08-25 (triage: not useful)** — this IS the upgrade workflow, executed end to end this session across eleven rows. It is what you do with this file, not an entry in it.
 - **pin-hmad-test-interpreter**: h-mad doc-tests need `/opt/anaconda3/bin/python3` (pytest 8.3.5); bare `python3` can resolve to homebrew 3.14 without pytest, and `set -e` + a mutation loop then applies edits without ever running the tests. — recurrence: 1 — candidate: no (captured as a `docs/learnings.md` gotcha; not a skill)
 
 ## 2026-07-29 — verifier-dogfood-and-handover
 
 - **dogfood-a-bundled-prompt-live**: after bundling a new agent-prompt template, exercise it via `hmad-dispatch exec` before trusting it — stage the `<INLINE_*>` slots against real code, run once TRUE (expect DONE) and once with a seeded FALSE property (expect BLOCKED), extract the verdict, and grep the agent's own quoted numbers. Caught that the verifier's full-suite step was impractical (codex re-runs a PTY-dots suite → timeout) → template fix. — recurrence: 3 (exec-transport-smoke; verifier template; 2026-08-03 the agy skill-reviewer — where dogfooding found TWO defects in the freshly-bundled prompt: a slot bracketed in prose across all five reference prompts, and an unbounded probe that wrote a junk entry into the project's permanent learnings file) — candidate: maybe (the discipline is real and keeps paying; overlaps the verifier template's own crosscheck)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a discipline — exercise a new agent-prompt template through a real dispatch before trusting it. Nothing to automate; the value is doing it, and it was done twice this session.
 - **scoped-dispatch-to-isolate-a-step**: when one step of a multi-step dispatch is environmentally impractical (a 4.5-min full suite codex re-runs), re-dispatch a SCOPED prompt with that step dropped to prove the rest cleanly, then fix the step's ownership in the template — recurrence: 1 — candidate: no (a one-off debugging move, not a reusable skill)
 
 
 ## 2026-07-30 — dispatch-prompt-size-frontier-92kb
 
 - **live-probe-a-claimed-limit**: when a doc asserts a size/perf ceiling ("unverified beyond N"), falsify it with a real dispatch (stage a >N prompt + sentinel, send via the actual transport, read `--from-start`, grep) before trusting or re-baking the number — reproduced the reflow-false-silence trap and raised the pane frontier 61→92 KB — recurrence: 1 — candidate: maybe (overlaps the tracer-bullet / mutation-test disciplines already documented)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — the tracer-bullet rule applied to a documented ceiling. Already covered by the tracer-bullet and assumption-verification invariants.
 - **reframe-limit-by-transport**: when one "limit" conflates independent mechanisms (transport cap vs agent-response cap), split the claim per mechanism rather than bumping a single fixed number — recurrence: 1 — candidate: no (one instance; a writing principle, not a workflow)
 
 ## 2026-07-30 — exec-missing-report-recovery-shipped
@@ -221,6 +239,7 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 - **test-the-shipped-function-not-a-copy**: verify a bash helper by `awk`-extracting the function from the real file into a test harness and sourcing it, instead of hand-pasting it into the test — a hand-copy silently drifts from what ships and can pass while the real code is broken — recurrence: 2 (this session: the first pass hand-copied `_run_with_timeout`, the second extracted it) — candidate: **LANDED** (2026-08-03) — `invariants.base.md` §Single-source contract already forbids it ("independent re-implementations that can silently diverge are a violation"). Also structurally moot: no test hand-copies or `awk`-extracts a bash function today; all of them drive the real script via subprocess.
 - **attribute-dirty-files-by-mtime-before-committing-all**: on "commit and push all", `stat -f %m` every uncommitted path and compare against `date +%s` before staging — separates this session's work from a concurrent session's in-flight edits, and catches a test run having mutated live state — recurrence: 1 — candidate: maybe (one occurrence, but it changed the outcome here: it kept a concurrent agent's mid-write plan docs from being committed torn)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — an mtime is a hint, not an owner. Deciding which concurrent session owns an uncommitted file is judgement, and a script that guessed would be worse than the pause it replaces.
 - **check-ignore-before-force-add**: when `git add` refuses a tracked file, read the `.gitignore` rule and `git ls-files` it before reaching for `-f` — tracked-but-later-ignored files are meant to be `git rm --cached`, not force-committed — recurrence: 1 — candidate: no (this is ordinary git discipline, not a workflow worth scripting)
 
 ## 2026-08-02 — wiring-task-shape-gate
@@ -228,28 +247,33 @@ before concluding a row is inert — one row sat inert for a day while naming it
 - **two-direction mutation harness**: snapshot source in memory, apply a literal mutation, assert it LANDED, run suite, restore + verify byte-identical; permissive and always-fires directions both required — recurrence: 3 (doc literals, gate code, header parser) — candidate: **LANDED** — `h-mad/scripts/h_mad_mutation_harness.py` (both directions are expressible as ordinary find/replace mutations; the harness proves each one landed)
 - **doc-literal pin test**: assert distinctive contiguous whitespace-normalised literals scoped per-file, so a doc change cannot silently drop its guidance — recurrence: 3 — candidate: **LANDED** — the practice across 5 doc-test files (`_norm`-normalised literal assertions), with the rule in `invariants.base.md` §Test discrimination. Caveat learned 2026-08-03: scope the literal per *rule*, not per *site* — a one-site assertion stayed green while the same guidance was missing from three others.
 - **dogfood a new gate over the shipped corpus before committing**: running the wire-pin gate over ~50 real impl-plans found a parser defect 35 unit tests missed — recurrence: 2 — candidate: maybe
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a step in the build of any gate, not a gate of its own. Done for the wire-pin gate and for `h_mad_version_history.py` this session (564 real docs).
 
 ## 2026-08-02 — wire-pin-mislabel-merged
 
 - **hand-craft an adversarial input before merging a guard**: write a single plan/fixture carrying the evasion the PR closes, the evasion it does NOT close, and one malformed-but-plausible variant, then run the shipped script on it — the green suite proved the closed case; the crafted file is what surfaced the full-demotion residual and the trailing-prose misread — recurrence: 1 — candidate: maybe (one occurrence, but it produced both of this session's review findings)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — the input has to be crafted against the specific guard; that is the whole value and it cannot be generated. Recorded as a step, not a script.
 - **reconcile a handoff's PR claims via `gh` before acting on them**: `gh pr view <N> --json state` plus a `git log` scan for a squash title ending in `(#N)` — the resumed doc's top Next Step was "merge PR #18" and #18 had already merged hours earlier — recurrence: 1 — candidate: no (belongs in the handoff skill's READ reconciliation, not a new skill) — **LANDED** (2026-08-03) — handoff `SKILL.md` Step 3 "PR state" bullet (`gh pr view` + squash-title fallback). The `no` verdict was correct and still named an upgrade nobody routed; see the header note.
 
 ## 2026-08-02 — wire-retro-verify-task5-parked
 
 - **wire-scoped revert probe**: a throwaway script that severs ONE call site by exact-string replace, refuses unless the replacement landed exactly once (`hits != 1` → abort), keeps a `.py.wirebak` sidecar, and offers `cut`/`force`/`restore` verbs — used 3× this session across two wires and two directions, then deleted per skill discipline; reconstructing it each time is the friction — recurrence: 3 — candidate: **SUPERSEDED** (2026-08-03) — `h_mad_mutation_harness.py` is exactly this tool: exact-string replace, `hits != 1` → REFUSED, restore-and-verify on every path including SIGINT. Use it for wire-scoped reverts instead of rebuilding the probe.
 - **retro-declaration check before trusting a gate verdict**: compare the plan/spec's edit time against the implementation's GREEN commit — a document edited after the phase it gates certifies nothing about that phase — recurrence: 1 — candidate: maybe (one occurrence, but it inverted the meaning of a PASS)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — comparing a doc's edit time against the GREEN commit it gates is two git commands, but reading whether the edit MATTERED to that phase is judgement. Overlaps `re-gate-after-edit guard`, which is the codable half and stays open.
 - **agent-availability preflight recovery chain**: `env` → read the `PREFLIGHT:` token not `$?` → `pin-agents` (not `launch`, J1) → re-assert `env` — recurrence: 2 — candidate: maybe (already prose in SKILL.md §Phase 5; a script would just enforce the ordering)
   — **SUPERSEDED 2026-08-25: already documented, verified rather than assumed.** The chain the row describes is in `SKILL.md` at three places (the `PREFLIGHT: PASS` requirement, the `preflight_expired` recovery, and the re-assert-after-any-re-pin rule) plus the Phase-5d bullet, which also spells out WHY `alive codex && alive agy` is forbidden. Nothing to add; this row's reading of its own status was correct, unlike the two beside it.
 
 ## 2026-08-03 — wire-pin-gate-hardened
 
 - **corpus-sweep-before-regex-tighten**: Before narrowing a plan-parser regex, diff old-vs-new parse across the whole shipped-plan corpus to prove exactly which lines change — recurrence: 2 (this + prior parser work) — candidate: maybe (covered by mutation-test discipline + a learning; promote only if it recurs standalone)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a habit before narrowing any parser, exercised three times this session. Covered by the mutation-verification invariant; no separate artifact.
 - **review→reproduce-live→RED→fix→mutate**: The escalation path that turned Task #17 from a 1-line strip into a fail-closed rewrite — recurrence: this is the h-mad Phase-5 TDD discipline already — candidate: no (already a skill/discipline)
 
 ## 2026-08-03 — agy-reviews-mutation-harness
 
 - **agy-skill-review**: Dispatch `hmad-dispatch exec agy <prompt-file> --cd --out --log --timeout`, read the report yourself, verify EVERY finding against the file before acting, then fix + TDD + mutation-test. Ran twice this session (handoff, h-mad) with an almost identical prompt scaffold — role, target, read-in-full vs read-on-demand, depth-over-breadth cap, required Must/Should/Nice + Verdict sections — recurrence: 2 — candidate: **LANDED** (2026-08-03) — `h-mad/references/agy-skill-reviewer-prompt.md` + SKILL.md §Reviewing a skill with agy. Superseded by the recurrence-3 row below; kept for provenance.
 - **integration-branch-before-batch-merge**: Before merging N open PRs, build a throwaway branch, merge all N, resolve, run the full suite, delete it — `merge-tree` clean does not mean the union is green — recurrence: 1 (but caught a real conflict + an untested union) — candidate: maybe (promote if a second multi-PR batch recurs)
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a procedure for a situation that has arisen once. `merge-tree` clean not meaning the union is green is worth knowing; a script would be premature.
 - **cross-repo-contract-change**: When a skill script's exit code/token/flags change, update the consuming repo's tests in the same breath and run both suites — recurrence: 1 this session, but the coupling is permanent — candidate: no (already covered by the `skills symlink couples repos` memory)
 
 ## 2026-08-03 — takeover-and-hemasuite-handover
@@ -377,11 +401,13 @@ before concluding a row is inert — one row sat inert for a day while naming it
   it is parked provenance rather than a new skill; what is missing is only the mechanical wrapper.
   Worth promoting only if a future session finds the retyping is where cycles actually go wrong,
   rather than merely being tedious.
+  — **DECLINED 2026-08-25 (triage: not useful)** — its own text declines it — the retyping is tedious rather than error-prone, and the loop it wraps is the documented `/h-mad` Phase-3/4 protocol. Promote only if a session shows cycles going wrong AT the retyping.
 
 ## 2026-08-07 — rpl-shipped-j26-orca-13005
 
 - **hand-rolled report-wait**: I wrote `for i in $(seq 1 N); do [ -f "$RP.done" ] && break; sleep 15; done` around **~18** `exec` dispatches this session (every 5d/5e task, every audit cycle, both 6a-prime runs) — recurrence: 18 — candidate: no — **`hmad-dispatch report-wait <path> --timeout <s>` already does exactly this** and returns the report on stdout. Proved live: marker written at t=3s, `report-wait` returned the content at t=4s. This is the file's own "a different tool can already do the job" trap, turned on the orchestrator instead of a row. The upgrade is a **usage** rule, not a skill: SKILL.md documents `report-wait` only on the pane/audit path (§"Audit prompt assembly" step 9), so the `exec` sections never tell you it is transport-agnostic — which is why hand-rolling felt necessary. Worth one sentence in §"Exit-code dispatch for 5d/5e".
 - **archreview-record-and-readback**: the 6a-prime close-out — extract `ASSESSMENT:`, capture it line-scoped, write to `orchestrator_state.archreview`, then read it back and compare — is four commands that must run in order, and the read-back is the only thing that catches a dropped write (`--strict-only` cannot: `archreview` is not in `required`) — recurrence: 2 (this feature + `gate-blindness-hardening`) — candidate: maybe — SKILL.md §6a-prime already prescribes all four steps precisely; the risk is skipping the read-back, not not knowing it. Revisit if a third feature gets it wrong.
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — SKILL.md §6a-prime already prescribes all four steps precisely. The risk is skipping the read-back, which a script cannot fix — it would be one more thing to skip.
 - **carried-bug-doc refile protocol**: before filing a bug doc written N sessions ago — read the current version (`/Applications/Orca.app/Contents/Info.plist` → `CFBundleShortVersionString`, since `_meta.appVersion` is gone on 1.4.175), re-run the repro, run any control the doc admits it skipped, sanitize, then re-sweep the body **as published** — recurrence: 2 (both docs this session) — candidate: no — it is a checklist, now captured in [[project_orca_upstream_bug_docs]] and the skill's own §"Filing to a public tracker". A skill would add ceremony over a five-command sequence.
 
 ## 2026-08-09 — h-mad-symlink-install-repair
@@ -393,16 +419,19 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 - **arming-surface verification**: after changing a `settings.json` hook registration, the check that actually proves it is a real tool call through the harness plus `python3 -m json.tool` — the target skill's own suite invokes the hook directly and never reads `settings.json`, so it stays green either way — recurrence: 1 — candidate: no — this is two commands, and the durable half is already a learning. A skill would wrap nothing.
 - **commit-message-via-file**: `git commit -F <scratchpad-file>` instead of the `-m "$(cat heredoc)"` idiom, forced by the bkit ENH-310 guard — recurrence: 2 this session (blocked twice) — candidate: maybe — it will recur on **every** multi-line commit on this machine, which is a real recurrence curve, but the fix is a one-line substitution already captured as a learning. Promote only if the substitution itself starts getting forgotten.
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a one-line substitution (`git commit -F <file>`), already a learning and used for every commit this session. Automating it would hide the guard that forces it.
 
 ## 2026-08-09 — guard-patches-and-h-mad-install-gate
 
 - **vendored-plugin patch kit**: patch a plugin in a version-pinned cache -> save the diff, a README with a *tested* `patch -p1` recovery, and a red-green verify script in the repo, then file upstream — recurrence: 2 this session (bkit ENH-310, security-guidance) — candidate: **yes** — the two directories are near-identical in shape and the second took a fraction of the time because the first had settled the structure. The reusable part is the checklist and the verify-script skeleton (absolute expectations, patch-symbol probe, exit 1 on missing), not the diffs. Worth promoting if a third vendored patch appears.
+  — **DECLINED 2026-08-25 (triage: not useful)** — its own condition was "worth promoting if a third vendored patch appears", and none has since. The reusable part — a verify-script skeleton — is thin next to the two diffs it would serve.
 - **differential guard narrowing**: before shipping a change that makes a guard accept something it used to reject, run a corpus through old and new and account for every softened verdict — recurrence: 1 — candidate: no — now an Axis B invariant (`invariants.base.md` §"Guard narrowing"), which is a stronger home than a skill: it is inlined into every audit prompt and auto-classifies violations as Must-fix.
 - **stale-clone push guard**: before pushing to a long-lived repo, `git fetch` and check divergence; if behind, build the change in a throwaway worktree off `origin/main` rather than rebasing a dirty tree — recurrence: 1 — candidate: maybe — it saved a 1519-commit rebase over uncommitted work and caught a commit message that had gone stale, but one sighting is thin. Revisit if another stale clone turns up.
 
 ## 2026-08-09 — j29-out-clobber-guard
 
 - **mutation-pin the design decision, not just the behaviour**: after implementing a guard, apply the *obvious alternative reading* as a mutant and confirm a test kills it — recurrence: 2 (2026-08-09 guard-narrowing corpus; this session's `[ -s "$out" ]`-vs-change-keyed mutant) — candidate: **maybe** — the two instances share a shape: the naive reading passes every behavioural test and only the one test encoding the *rejected* alternative distinguishes them. Not yet a skill because both sightings are the same author on the same day; revisit if a third appears in a different area.
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — a rule about WHICH mutation to write — apply the rejected alternative reading — and choosing that reading is the judgement. Belongs beside the shared-anchor recipe in `invariants.base.md` §"Mutation verification".
 
 ## 2026-08-19 — headless-dispatch-visibility
 
@@ -544,8 +573,10 @@ threshold of a third vendored patch; untouched this session.
 ## 2026-08-24 — j30-closed-advisor-gate-never-fires
 
 - **hook-routing prover**: prove a PreToolUse hook actually fires before trusting it — instrument the hook to append a marker on entry at **line 1** (above every early-return, or "never entered" and "exited at the override" are the same observation), **self-test the detector** by driving the hook by hand, make one real call, read the marker, revert immediately. — recurrence: 1 (closed J44, which had been carried unverified across three handoffs) — candidate: maybe — the technique generalises to any hook whose default verdict is *allow*, because there a hook that never runs and a hook that correctly permits are byte-identical. Too few occurrences to promote yet, but the shape is worth keeping: the mid-session instrumentation is only possible because a hook FILE is re-read at every invocation. **Corrected 2026-08-24:** this row originally added "even though its registration is snapshotted at session start" — that half is FALSE on 2.1.241. A `PostToolUse` registration added to `settings.json` mid-session fired ~13 min later in the SAME session (throttle stamp keyed by the live session id, budget read from the live transcript). So registration is re-read too, and the prover can verify a hook it just wired without a relaunch — which is strictly better for this row, not worse.
+  — **DECLINED 2026-08-25 (triage: not useful)** — filed against J44, which is CLOSED: `advisor` is a `server_tool_use` and no tool-scoped hook can attach. The transcript-counting technique is recorded in the taxonomy. One occurrence, and the occurrence is resolved.
 
 - **clean-measurement worktree**: when the checkout is shared with a live sibling session, measure your own change in a throwaway worktree — `git worktree add --detach /tmp/check HEAD`, copy in only your files, run the suite there, `git worktree remove --force`. — recurrence: 2 (used twice this session: once to prove 10 failures were another session's mid-edit state, once to get a trustworthy full-suite number for my own change) — candidate: maybe — three lines of shell, so the automation win is small; the *rule* is the valuable part and it has already landed in the auto-memory taxonomy as mode 23. Revisit if Orca multi-agent-on-one-worktree keeps producing this.
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — three lines of shell, already in the taxonomy as mode 23 and used twice this session. The rule is the artifact.
 
 ## 2026-08-24 — registry-zero-j44-j49
 
@@ -600,3 +631,4 @@ threshold of a third vendored patch; untouched this session.
 
 - **task-slicer heading awareness** *(new, from an adversarial review of `h_mad_assemble_tdd.py`)*: the impl-plan task slicer bounds a task on the NEXT task header only, so (a) the last task swallows every trailing section — `## Dependencies`, `## Glossary` — and ships it to the agent as task scope, and (b) a `## Task N` line inside a fenced code block truncates the slice early. Both are the same missing awareness: heading LEVEL and fence state. The version-history helper already learned the fence half the same day (`section_bounds` tracks ``` blocks) so the technique is in the repo — recurrence: 1 — candidate: yes — deferred deliberately rather than half-fixed: the fix wants the same treatment as `section_bounds` plus a stop at any equal-or-higher heading, and both need corpus measurement first (how many real impl-plans have trailing sections after their last task, and how many carry a fenced task header). The review's other four findings on that file were fixed the same day.
 - **non-J finding rows carry no machine-readable status**: `docs/skill-monitoring.md` holds 46 `J` entries governed by its own `Status:` lifecycle AND 33 further bullet rows with other prefixes (F 18, G 6, H 5, A 2, V 1, P 1) that carry no status line at all. They are per-review finding rows rather than the standing registry, so counting them as open work would be wrong — but nothing says whether any of them is still live. The census now REPORTS them (`parsed=46 row-shaped=79`) instead of filtering them out of its own denominator — recurrence: 1 — candidate: maybe — the question is editorial, not mechanical: decide whether these rows are historical (fold them under their review's heading and say so) or trackable (give them the `Status:` contract). Do not answer it by widening the parser, which would silently reclassify 33 rows as open.
+  — **DECLINED 2026-08-25 (triage: useful, not codable)** — explicitly editorial: decide whether the 33 F/G/H/A/V/P rows are historical or trackable. The census now REPORTS them, which is the mechanical half; answering it by widening the parser would silently reclassify 33 rows as open.
