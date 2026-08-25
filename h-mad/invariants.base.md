@@ -98,6 +98,15 @@
   execution inside `-m`, a leading-dash path) both exited 0 while doing nothing, and a dispatch
   reported `Sent 7293 bytes` into a dead pane. Where a command reports on its own behaviour, the
   check must read the *thing it was supposed to change*, from a separate call.
+- **When several mutations target the SAME line, vary one field and keep the anchor shared.** A
+  guard whose failure has separable parts — exit code, stream routing, message content — needs one
+  mutation per part, each replacing the same anchor. That shape is what proves a content assertion
+  load-bearing: the mutants that keep exit and stream and strip only the text are exactly the ones a
+  returncode-only test survives. Two discriminators worth writing into the spec: a
+  first-vs-last-occurrence mutant survives whenever the sought item is last in BOTH regions, so the
+  discriminating fixture must put the decoys between the markers and leave the tail empty; and
+  `survived` has four distinct causes — missing guard, equivalent mutant, weak test, and a mutant
+  that never ran — which the verdict token collapses into one word. Diagnose which before acting.
 
 ## Test discrimination
 - A test or guard MUST be **observed failing against the unfixed code** before it is trusted.
@@ -118,6 +127,22 @@
   every pin write in the suite onto the developer's live session file and replaced two real agent
   handles, while the run reported 642 passed. Before mutating anything that decides *where* state is
   written, snapshot the real target and restore it, or run in a sandboxed working directory.
+- **A stub must model the step the real system CONSUMES.** The rules above are about asserting the
+  right thing; this one is about the fixture telling the truth. A stub that replays state the real
+  system consumes once makes a test pass before the fix exists: an orca stub replayed an acked
+  delivery forever, so a sibling-cache test re-matched from the queue, pinned nothing, and passed
+  against unmodified code. Cardinality is part of the model — a fake that writes a path once where
+  production writes it twice let a verb never dispatch with 57 tests green. Before trusting a stub,
+  ask which of its effects are destructive in production and make the stub destroy them too.
+
+## Verifying a review finding
+- **A review finding has three separable parts — facts, concern, prescription — and they fail
+  INDEPENDENTLY.** Before applying a prescription, diff it against the RED tests and the spec's
+  acceptance criteria. A finding that matches the design doc but breaks tests means the DESIGN
+  drifted, not the implementation. Measured: one pass's prescription broke a guard (1 failed, 53
+  passed) while its concern was entirely real, and another review's prescription was backwards.
+- Test a prescription by applying it as a mutation and reverting it. When two passes dissent, ask
+  what the codebase ALREADY does — twice the house pattern beat both readings.
 
 ## Guard narrowing
 - When a change **deliberately makes a guard accept something it used to reject**, the relaxation
@@ -182,6 +207,14 @@
   destructive verb run unguarded.
 - The evidence belongs in the document, not only in the author's terminal. A cited output is
   checkable by a reviewer; "I verified this" is not.
+- **Attributing a failure to a cause requires the controlled PAIR, not just the repro.** Run the
+  case with the blamed step and the case without it, and require the observable to differ. A repro
+  that reproduces confirms the symptom, never the cause. Measured four times: pane readiness was
+  blamed for an `injected:false` that a missing `--inject` flag fully explained, and that causality
+  shipped in a doc and a PR body; a title-only reading concluded "no agents running" and the
+  operator corrected it; and two carried repros were each falsified by a control that removed the
+  step they blamed. Re-run the MEASUREMENT as well as the claim — a brief's conclusion can be right
+  while its method is wrong.
 
 ## Wrapper–runtime reconciliation
 - A wrapper verb over an **external runtime's CLI** MUST be exercised **live against that runtime**

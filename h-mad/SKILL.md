@@ -773,6 +773,15 @@ receiving model's context budget. Do not trim an audit for size when dispatching
 `exec`. (The pane path is separately confirmed answered to 92,055 B — see
 `references/agent-substrate.md` §"Prompt size".)
 
+**After GREEN, run the built binary against the design's documented output shapes** — every verdict
+line, every field-presence rule — rather than only running the suite. There is no fixed command,
+only a fixed question: *does the running binary emit what the design says it emits?* On one task
+this found **four of five defects that neither the 49-test suite nor an independent reviewer saw**:
+a hardcoded `cycle=1` behind an undeclared `--cycle`, a float/int mismatch that crashed every real
+wait behind ten stubbed tests, a checklist printed on a cannot-judge verdict, and a verdict line
+that did not match its own AC. Stubs are what make this necessary — a suite can be green about a
+binary that never runs.
+
 ## Phase 5 parallel fanout (Orca only)
 
 The serial Phase 5 path above remains the default and fallback. First partition the
@@ -1269,6 +1278,14 @@ Two second-order consequences, both observed:
   uncommitted skill edits in the tree. Commit first — this is `## Mutation verification` applied
   to your own work, and a lost implementation is indistinguishable from one never written.
 
+**Assert a scripted bulk edit was insertion-only before committing it.** When a script splices N
+lines into a long document, check that `git diff --numstat` reports `N 0`, that every added line
+matches the expected shape, and that the document's identifier set is byte-identical before and
+after. Three commands, and they are what distinguishes a clean splice from a slice assignment that
+quietly ate a section — a failure this repo has shipped before. The same check catches an append
+that landed in the wrong place: a deletion count of zero says nothing about WHERE the insertion
+went, so pair it with a grep for the value at its intended anchor.
+
 ## Confirming a suspected defect before fixing it
 
 When you suspect a hole in a resolver, guard, or parser, **confirm it empirically before designing
@@ -1594,6 +1611,16 @@ assembling by hand because the script is unavailable:
     reformat. A `REFUSED` is a real stop — fix the doc or the arguments; never fall back to editing
     the section by hand, which is the failure this replaces.
     The gate emits a `[H-MAD] <feature> gate <verdict>` marker line. Nits never block. If the `GATE:` token is absent from stdout (unexpected), treat it as an operational error and halt `step<N>:gate_token_missing` with a `[H-MAD]` marker — never silently treat a missing token as PASS.
+
+**Between revising and re-auditing, sweep the corrected VALUE.** After applying an audit fix,
+`grep` the corrected value — not the section, the value — across every live doc in the feature. The
+same claim is usually restated in two or three places and the fix lands in one. Roughly two-thirds
+of one session's 79 findings were this single class, and four stale copies survived **two
+independent reviewers**: a spec FR's description contradicting its own AC, a plan risk row still
+asserting a disproven `exec` behaviour, a design cross-reference to a deleted plan clause, and an AC
+counter that went stale twice. A sweep has five surfaces — prose, code blocks, comments, ACs, and
+the PAIRED design — and numeral forms count. Closing a class in only one document of a pair
+RELOCATES it rather than fixing it.
 
 ## Putting `hmad-dispatch` on PATH
 

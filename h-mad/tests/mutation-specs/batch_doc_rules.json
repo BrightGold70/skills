@@ -1,0 +1,123 @@
+{
+ "_why": "Seven candidate rows landed as documented RULES rather than code, and a rule that no test pins is a rule that quietly disappears. Each mutation deletes or softens one rule and must be caught by that rule's own scoped pin. The last mutation runs the other way: it DUPLICATES a pinned phrase into a second section, which must break the uniqueness pin rather than the presence pin -- a doc test in this repo once passed with its documented guidance deleted, because both of its component words already appeared in nearby prose.",
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_batch_doc_rules.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "delete-the-controlled-pair-rule",
+   "_mechanism": "L269: without it, a repro that reproduces is read as proof of cause. Blamed the wrong cause 4 times.",
+   "file": "invariants.base.md",
+   "find": "the controlled PAIR, not just the repro",
+   "replace": "the repro",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Assumption verification:the controlled PAIR]"
+  },
+  {
+   "name": "delete-the-remeasure-rule",
+   "_mechanism": "L269's second half: a brief's conclusion can be right while its method is wrong.",
+   "file": "invariants.base.md",
+   "find": "Re-run the MEASUREMENT as well as the claim",
+   "replace": "Re-run the claim",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Assumption verification:Re-run the MEASUREMENT as we]"
+  },
+  {
+   "name": "delete-the-consumes-rule",
+   "_mechanism": "L270: a stub replaying state production consumes makes a test pass before the fix exists.",
+   "file": "invariants.base.md",
+   "find": "must model the step the real system CONSUMES",
+   "replace": "must be realistic",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Test discrimination:must model the step the real]"
+  },
+  {
+   "name": "delete-the-cardinality-clause",
+   "_mechanism": "L270: a fake writing a path once where production writes it twice let a verb never dispatch with 57 tests green.",
+   "file": "invariants.base.md",
+   "find": "Cardinality is part of the model",
+   "replace": "Realism matters",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Test discrimination:Cardinality is part of the m]"
+  },
+  {
+   "name": "delete-the-shared-anchor-recipe",
+   "_mechanism": "L279: without it a spec retypes the anchor per mutation and never varies exactly one field.",
+   "file": "invariants.base.md",
+   "find": "vary one field and keep the anchor shared",
+   "replace": "write several mutations",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Mutation verification:vary one field and keep the ]"
+  },
+  {
+   "name": "collapse-the-four-causes-of-survived",
+   "_mechanism": "L279: the verdict token collapses missing guard / equivalent mutant / weak test / never-ran into one word.",
+   "file": "invariants.base.md",
+   "find": "four distinct causes",
+   "replace": "several causes",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Mutation verification:four distinct causes]"
+  },
+  {
+   "name": "delete-the-three-parts-of-a-finding",
+   "_mechanism": "L211: facts, concern and prescription fail INDEPENDENTLY; a prescription can break a guard whose concern is real.",
+   "file": "invariants.base.md",
+   "find": "facts, concern, prescription",
+   "replace": "several parts",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Verifying a review finding:facts, concern, prescription]"
+  },
+  {
+   "name": "delete-the-prescription-mutation-test",
+   "_mechanism": "L211: how a prescription gets tested rather than trusted.",
+   "file": "invariants.base.md",
+   "find": "applying it as a mutation and reverting",
+   "replace": "reading it carefully",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[invariants.base:Verifying a review finding:applying it as a mutation an]"
+  },
+  {
+   "name": "delete-the-value-sweep-step",
+   "_mechanism": "L463: two-thirds of one session's 79 findings were this class, and 4 stale copies survived two reviewers.",
+   "file": "SKILL.md",
+   "find": "sweep the corrected VALUE",
+   "replace": "re-read the section",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Audit prompt assembly:sweep the corrected VALUE]"
+  },
+  {
+   "name": "soften-relocates-to-duplicates",
+   "_mechanism": "L463: closing a class in one document of a PAIR relocates it; 'duplicates' loses that the original is now the stale one.",
+   "file": "SKILL.md",
+   "find": "RELOCATES it",
+   "replace": "duplicates it",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Audit prompt assembly:RELOCATES it]"
+  },
+  {
+   "name": "delete-the-design-shape-question",
+   "_mechanism": "L481: found 4 of 5 defects that neither a 49-test suite nor an independent reviewer saw.",
+   "file": "SKILL.md",
+   "find": "does the running binary emit what the design says",
+   "replace": "is the implementation correct",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Phase 5 (Implementation) sub-steps:does the running binary emit]"
+  },
+  {
+   "name": "delete-the-insertion-only-assertion",
+   "_mechanism": "L523: distinguishes a clean splice from a slice assignment that quietly ate a section.",
+   "file": "SKILL.md",
+   "find": "insertion-only before committing",
+   "replace": "careful before committing",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Editing this skill while a run is in flight:insertion-only before commit]"
+  },
+  {
+   "name": "duplicate-a-pinned-phrase-into-another-section",
+   "_mechanism": "The false-POSITIVE direction. If a phrase also occurs elsewhere, deleting the real rule leaves the presence assertion satisfied by unrelated prose -- exactly how a doc test in this repo passed with its guidance removed. The uniqueness pin is what must bite here, not the presence pin.",
+   "file": "invariants.base.md",
+   "find": "## Guard narrowing",
+   "replace": "## Guard narrowing\n- Note: the controlled PAIR, not just the repro.",
+   "test": "tests/test_h_mad_batch_doc_rules.py::TestTheseTestsCanFail::test_each_phrase_is_unique_to_its_section[invariants.base:Assumption verification:the controlled PAIR]"
+  }
+ ]
+}
