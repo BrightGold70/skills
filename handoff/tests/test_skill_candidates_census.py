@@ -134,3 +134,154 @@ def test_mixed_store_totals(tmp_path: Path) -> None:
     assert c["OPEN"] == 2, f"open is a(yes) + b(maybe) only: {c}"
     assert c["no"] == 1 and c["SUPERSEDED"] == 1, c
     assert c.get("verdict", c.get("verdict-less", 0)) == 0
+
+
+# --- the J registry (`docs/skill-monitoring.md`) ---------------------------
+#
+# The failure these pin is worse than a miscount. This script read a 1946-line
+# registry carrying 46 entries as `candidates=3 OPEN=0` -- not an error, not an
+# empty result, but a CLEAN backlog, which is the one answer nothing prompts you
+# to re-check. `rows()` ends a row on any line starting with `|`, and that file
+# is full of pipe tables.
+
+MONITORING_HEADER = """# Skill Monitoring — bugs & improvement points (standing)
+
+**Lifecycle** — every `J` entry ends with exactly one machine-readable status line.
+
+| word | meaning |
+|---|---|
+| `MONITORING` | tracked, still unfixed — the only word that means open work |
+| `PLANNED` | scheduled, not yet started |
+| `FIXED` | remedied in code |
+
+## Entries
+"""
+
+
+def monitoring(tmp_path: Path, body: str) -> Path:
+    target = tmp_path / "skill-monitoring.md"
+    target.write_text(MONITORING_HEADER + body, encoding="utf-8")
+    return target
+
+
+def test_a_pipe_table_registry_is_no_longer_read_as_three_candidates(tmp_path: Path) -> None:
+    """The regression. A summary pipe table must not eat the entries below it."""
+    path = monitoring(tmp_path, """
+| J | sev | status |
+|---|---|---|
+| J1 | 🔴 | **FIXED** |
+
+- 🔴 **J1 — a real entry.** Body. Status: `FIXED`
+- 🟡 **J2 — another.** Body. Status: `MONITORING`
+""")
+    out = run(path)
+    assert "J-entries=    2" in out, out
+    assert "OPEN(MONITORING+PLANNED)=   1" in out, out
+    assert "candidates=" not in out.split("COVERAGE")[0], "must not be read as a candidate store"
+
+
+def test_monitoring_is_the_word_that_means_open(tmp_path: Path) -> None:
+    path = monitoring(tmp_path, """
+- 🔴 **J1 — fixed one.** Status: `FIXED`
+- 🟡 **J2 — open one.** Status: `MONITORING`
+- 🟢 **J3 — scheduled.** Status: `PLANNED`
+""")
+    out = run(path)
+    assert "OPEN(MONITORING+PLANNED)=   2" in out, out
+
+
+def test_the_status_is_read_not_inferred_from_severity(tmp_path: Path) -> None:
+    """The leading emoji is SEVERITY. A red entry can be fixed."""
+    path = monitoring(tmp_path, "- 🔴 **J1 — red but done.** Status: `FIXED`\n")
+    out = run(path)
+    assert "FIXED=1" in out
+    assert "OPEN(MONITORING+PLANNED)=   0" in out
+
+
+def test_prose_containing_a_status_word_does_not_decide_an_entry(tmp_path: Path) -> None:
+    """A census once reported J18 open because a note after it said MONITORING.
+
+    Two backticked statuses in one entry is a quotation, not a verdict, so the
+    reader refuses to pick rather than taking the first.
+    """
+    path = monitoring(tmp_path, """
+- 🔴 **J1 — done, with a note.** Status: `FIXED`
+
+  Note: see the `MONITORING` lifecycle word, quoted here as Status: `MONITORING`.
+""")
+    out = run(path)
+    assert "OPEN(MONITORING+PLANNED)=   0" in out, out
+    assert "no single machine-readable status" in out, out
+
+
+def test_an_undocumented_status_word_is_flagged(tmp_path: Path) -> None:
+    """Used-vs-documented is diffed against the file's OWN vocabulary table."""
+    path = monitoring(tmp_path, "- 🔴 **J1 — invented word.** Status: `MOSTLYFIXED`\n")
+    out = run(path)
+    assert "used but NOT documented" in out
+    assert "MOSTLYFIXED" in out
+
+
+# --- the coverage line: what the count did NOT read ------------------------
+
+
+def test_coverage_flags_an_entry_shape_the_reader_missed(tmp_path: Path) -> None:
+    """The generalisable guard. The bug was never "pipe tables are unsupported",
+    it was "an unsupported shape reads as an empty backlog"."""
+    path = monitoring(tmp_path, """
+- 🔴 **J1 — parsed normally.** Status: `FIXED`
+- 🟡 **J2 : written with a colon instead of a dash.** Status: `FIXED`
+""")
+    out = run(path)
+    assert "ROW-SHAPED LINES NOT PARSED" in out, out
+
+
+def test_coverage_does_not_cry_wolf_on_the_deliberate_numbering_gaps(
+    tmp_path: Path
+) -> None:
+    """This file's own header discusses the deliberate J31-J33 gaps.
+
+    Measuring coverage against J-ids mentioned ANYWHERE reported three phantom
+    misses on the real file — the self-pollution failure in reverse. A guard
+    that fires on the header is worse than no guard.
+    """
+    path = monitoring(tmp_path, """
+Numbering gaps (J31–J33) are deliberate and must stay; J32 is referenced from commits.
+
+- 🔴 **J1 — the only entry.** Status: `FIXED`
+""")
+    out = run(path)
+    assert "ROW-SHAPED LINES NOT PARSED" not in out, out
+    assert "deliberate gaps): J31, J32, J33" in out, out
+
+
+def test_a_monitoring_only_run_prints_no_candidates_total(tmp_path: Path) -> None:
+    """`TOTAL candidates=0` for a J registry is the same false-clean shape."""
+    path = monitoring(tmp_path, "- 🔴 **J1 — one.** Status: `FIXED`\n")
+    out = run(path)
+    assert "TOTAL candidates=" not in out, out
+
+
+def test_a_candidate_store_still_reports_its_coverage(tmp_path: Path) -> None:
+    path = tmp_path / "skill-candidates.md"
+    path.write_text("- **a**: x — candidate: yes\n", encoding="utf-8")
+    out = run(path)
+    assert "COVERAGE" in out
+    assert "skill-candidates.md: parsed=1 row-shaped=1" in out, out
+
+
+def test_routing_needs_both_the_title_and_a_j_row(tmp_path: Path) -> None:
+    """A candidates file that merely mentions a J-id must not route to the J reader."""
+    path = tmp_path / "skill-candidates.md"
+    # The discriminating case is not a J-id MENTION -- that never matched the J
+    # row shape anyway, so an earlier version of this test passed with the title
+    # check deleted. It is a candidates store QUOTING a J entry verbatim, which
+    # this backlog does. Without the title check that file routes to the J
+    # reader and every real candidate row disappears.
+    path.write_text(
+        "- **a**: relates to J1 — candidate: yes\n"
+        "- 🔴 **J1 — quoted verbatim from the monitoring registry.** Status: `FIXED`\n",
+        encoding="utf-8")
+    out = run(path)
+    assert "J-entries=" not in out, out
+    assert "OPEN(yes+maybe)=   1" in out, out
