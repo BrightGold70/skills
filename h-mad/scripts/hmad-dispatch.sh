@@ -2590,7 +2590,7 @@ _cmd_audit_cycle() {
   [ "$passes" -ge 1 ] || {
     echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2; }
 
-  local stem i p arc size_status halt_pass d
+  local stem i p arc size_status halt_pass div foreign
   stem="/tmp/audit_${feature}_${phase}_cycle${cycle}"
   i=1
   while [ "$i" -le "$passes" ]; do
@@ -2652,11 +2652,29 @@ _cmd_audit_cycle() {
     exit $?
   fi
 
+  # Two prompts for the same cycle must differ ONLY in the per-pass report path.
+  #
+  # Counting the differing lines cannot express that, and the count this used to
+  # hardcode -- 2 -- is unreachable against the real assembler. `h_mad_assemble_audit.py`
+  # duplicates the output contract at the HEAD of the prompt (prepend_output_contract),
+  # so `<REPORT_FILE_PATH>` resolves TWICE and an honest diff is FOUR lines. The 2 came
+  # from the test stub, which writes `Report path: <p>` once; production and the double
+  # were never compared. Consequence, measured on the first live run: every dispatch at
+  # the default `--passes 2` halted `prompt_divergence` before reaching an agent, so the
+  # verb could not audit anything. `--passes 1` skips this loop and always worked, which
+  # is why nothing else caught it.
+  #
+  # Assert the PROPERTY, not a count: at least one differing line, and every differing
+  # line names one of the two report paths. That is invariant to how many times the
+  # assembler chooses to repeat the contract.
   i=2
   while [ "$i" -le "$passes" ]; do
-    d="$( { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep -c '^[<>]' || true)"
-    if ! { [ "$d" -eq 2 ] \
-           && { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep -Fq "${report[1]}"; }; then
+    div="$( { diff "${prompt[1]}" "${prompt[$i]}" || true; } | grep '^[<>]' || true)"
+    # grep -c exits 1 on no match while still printing 0, hence the `|| true`.
+    foreign="$(printf '%s\n' "$div" \
+                 | grep -v -e "${report[1]}" -e "${report[$i]}" \
+                 | grep -c '^[<>]' || true)"
+    if [ -z "$div" ] || [ "$foreign" -ne 0 ]; then
       python3 "$here/h_mad_audit_cycle.py" \
         --feature "$feature" --phase "$phase" --cycle "$cycle" \
         --project-root "$root" --passes "$passes" \

@@ -19,7 +19,7 @@
     {
       "name": "shell-prompt-divergence-assertion-drop",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "    if ! { [ \"$d\" -eq 2 ] \\\n           && { diff \"${prompt[1]}\" \"${prompt[$i]}\" || true; } | grep -Fq \"${report[1]}\"; }; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",
+      "find": "    if [ -z \"$div\" ] || [ \"$foreign\" -ne 0 ]; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",
       "replace": "    if false; then\n      python3 \"$here/h_mad_audit_cycle.py\" \\\n        --feature \"$feature\" --phase \"$phase\" --cycle \"$cycle\" \\\n        --project-root \"$root\" --passes \"$passes\" \\\n        --size-status \"$size_status\" --halt-reason \"prompt_divergence\"",
       "failure_test": "test_verb_prompt_divergence"
     },

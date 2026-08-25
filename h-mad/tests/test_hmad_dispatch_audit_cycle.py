@@ -189,8 +189,17 @@ def install_audit_cycle_stubs(tmp_path):
             extra = ""
             if os.environ.get(f"HMAD_ASSEMBLE_DIVERGE_P{{pass_index}}"):
                 extra = "Unexpected prompt-only divergence\\n"
+            # TWO occurrences, matching production. h_mad_assemble_audit.py
+            # duplicates the tail output contract at the HEAD of the prompt
+            # (prepend_output_contract), so <REPORT_FILE_PATH> resolves twice and
+            # a real two-pass diff is FOUR lines, not two. This stub used to emit
+            # the path once; the shell divergence guard was calibrated against
+            # that single copy and hardcoded `-eq 2`, which no real prompt can
+            # satisfy -- so `audit-cycle` halted prompt_divergence before every
+            # dispatch at the default --passes 2, with all of these tests green.
             out.write_text(
                 "Audit prompt\\n"
+                "Head contract report path: " + str(report) + "\\n"
                 "Feature: " + args[args.index("--feature") + 1] + "\\n"
                 "Report path: " + str(report) + "\\n"
                 + extra +
@@ -342,8 +351,13 @@ def traced_bindir(tmp_path, trace):
                 extra = ""
                 if os.environ.get(f"HMAD_ASSEMBLE_DIVERGE_P{{pass_index}}"):
                     extra = "Unexpected prompt-only divergence\\n"
+                # Two occurrences, matching production -- see the note on the
+                # other stub assembler above. This is the copy the _cmd_exec
+                # trace harness uses, and it is the one the dispatch tests run
+                # through, so aligning only the other one changes nothing.
                 out.write_text(
                     "Audit prompt\\n"
+                    "Head contract report path: " + str(report) + "\\n"
                     "Feature: " + args[args.index("--feature") + 1] + "\\n"
                     "Report path: " + str(report) + "\\n"
                     + extra +
@@ -851,7 +865,7 @@ def test_audit_cycle_gating_spec_covers_shell_guards_with_landed_anchors():
         mutation for mutation in mutations
         if Path(mutation["file"]).name == "hmad-dispatch.sh"
         and "prompt_divergence" in mutation["find"]
-        and '[ "$d" -eq 2 ]' in mutation["find"]
+        and '[ "$foreign" -ne 0 ]' in mutation["find"]
     ]
     assert prompt_divergence_mutations, (
         "gating spec must delete the shell prompt-divergence assertion while keeping both assemblies"
