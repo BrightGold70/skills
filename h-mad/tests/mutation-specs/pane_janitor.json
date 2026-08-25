@@ -1,0 +1,123 @@
+{
+ "_why": "This tool closes the operator's terminals, so every mutation here restores a way it could close the WRONG one -- most of all the caller's own pane, which is the failure the candidate row records and which no title check can prevent. The rest defend the settle-before-close order (closing an unsettled dispatch wedges its terminal permanently) and the refusals that stop it acting on a baseline it should not trust. Every mutation is born pinned to the one test it is aimed at.",
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_pane_janitor.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "caller-pane-is-not-excluded",
+   "_mechanism": "THE recorded failure: closing the operator's own agent session. Panes are indistinguishable by title, so nothing else stands in the way.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    me = self_handle(orca)\n    known.add(me)",
+   "replace": "    me = self_handle(orca)\n    known.add(\"\")",
+   "test": "tests/test_h_mad_pane_janitor.py::TestCandidateSelection::test_the_callers_own_pane_is_never_a_candidate"
+  },
+  {
+   "name": "trust-the-baselines-self-instead-of-the-live-one",
+   "_mechanism": "The janitor may run from a different pane than took the snapshot; only the pane it is running in NOW is safe from itself.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    known.add(baseline.get(\"self\", \"\"))",
+   "replace": "    known = set(baseline[\"handles\"]) | {baseline.get(\"self\", \"\")}",
+   "test": "tests/test_h_mad_pane_janitor.py::TestCandidateSelection::test_the_caller_is_excluded_even_when_it_moved_panes"
+  },
+  {
+   "name": "drop-the-worktree-scope",
+   "_mechanism": "A concurrent agent session in a sibling worktree was live while this was written; scoping is what keeps it out.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        if pane.get(\"worktreePath\") == worktree and pane[\"handle\"] not in known",
+   "replace": "        if pane[\"handle\"] not in known",
+   "test": "tests/test_h_mad_pane_janitor.py::TestCandidateSelection::test_panes_in_another_worktree_are_never_candidates"
+  },
+  {
+   "name": "close-without-an-explicit-handle",
+   "_mechanism": "`orca terminal close` takes --terminal OPTIONALLY and a bare close kills the CALLER's pane. Verified live.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        orca_json(orca, [\"terminal\", \"close\", \"--terminal\", handle])",
+   "replace": "        orca_json(orca, [\"terminal\", \"close\"])",
+   "test": "tests/test_h_mad_pane_janitor.py::TestTheCloseIsAlwaysExplicit::test_no_close_is_ever_emitted_without_a_handle"
+  },
+  {
+   "name": "dry-run-closes-anyway",
+   "_mechanism": "A dry run that mutates is worse than no dry run: it is the one mode an operator trusts.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    if apply:\n        # `--terminal` is optional to the CLI and an omitted handle closes the",
+   "replace": "    if True:\n        # `--terminal` is optional to the CLI and an omitted handle closes the",
+   "test": "tests/test_h_mad_pane_janitor.py::TestDryRunIsTheDefault::test_plan_closes_nothing"
+  },
+  {
+   "name": "close-before-settling",
+   "_mechanism": "Closing an unsettled dispatch wedges its terminal permanently -- worker-abandon and worker-stop both answer dispatch_not_found.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    if row and str(row.get(\"dispatchStatus\", \"\")).lower() not in SETTLED:",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_pane_janitor.py::TestDispatchSettling::test_an_unsettled_dispatch_is_settled_before_its_pane_closes"
+  },
+  {
+   "name": "close-anyway-when-the-settle-failed",
+   "_mechanism": "Leaves a permanently wedged terminal that is also invisible. A wedged terminal you can still see beats one you cannot.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "                outcome[\"skipped\"] = f\"settle failed ({exc.reason}); pane left open\"\n                return outcome",
+   "replace": "                outcome[\"skipped\"] = f\"settle failed ({exc.reason}); pane left open\"",
+   "test": "tests/test_h_mad_pane_janitor.py::TestDispatchSettling::test_a_failed_settle_leaves_the_pane_open"
+  },
+  {
+   "name": "re-settle-an-already-settled-dispatch",
+   "_mechanism": "Mutating a completed dispatch is an unnecessary write against a Run the probe already finished with.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "SETTLED = {\"completed\", \"failed\", \"cancelled\", \"canceled\"}",
+   "replace": "SETTLED = set()",
+   "test": "tests/test_h_mad_pane_janitor.py::TestDispatchSettling::test_an_already_settled_dispatch_is_not_re_settled"
+  },
+  {
+   "name": "proceed-without-identifying-self",
+   "_mechanism": "Without a self handle there is nothing stopping the janitor from closing the session running it, so it must refuse rather than continue.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    if not handle:\n        raise Refusal(\"cannot_identify_self\")",
+   "replace": "    if not handle:\n        return \"\"",
+   "test": "tests/test_h_mad_pane_janitor.py::TestRefusals::test_it_refuses_when_it_cannot_identify_itself"
+  },
+  {
+   "name": "act-on-an-oversized-candidate-set",
+   "_mechanism": "A baseline taken against the wrong worktree turns every pane into a candidate; the cap is what stops that becoming a mass close.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        if len(found) > args.max:",
+   "replace": "        if False:",
+   "test": "tests/test_h_mad_pane_janitor.py::TestRefusals::test_too_many_candidates_refuses_rather_than_acting"
+  },
+  {
+   "name": "accept-a-baseline-with-no-handles-key",
+   "_mechanism": "A malformed baseline has no keep-list at all, so every pane reads as new.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        if not isinstance(baseline.get(\"handles\"), list) or not baseline.get(\"worktree\"):",
+   "replace": "        if False:",
+   "test": "tests/test_h_mad_pane_janitor.py::TestRefusals::test_a_malformed_baseline_refuses"
+  },
+  {
+   "name": "a-failed-orca-call-reads-as-success",
+   "_mechanism": "'I could not ask' must never resolve to 'there is nothing there'.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "    if not payload.get(\"ok\"):",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_pane_janitor.py::TestRefusals::test_an_orca_that_answers_not_ok_refuses"
+  },
+  {
+   "name": "a-dry-run-reports-its-plan-as-done",
+   "_mechanism": "`PLANNED ... closed=1` reads as a pane that was closed. Same shape as a cannot-judge carrying a count: the verdict word says one thing, the fields say another, and the fields are what gets skimmed. Found by reading the tool's own live output.",
+   "file": "scripts/h_mad_pane_janitor.py",
+   "find": "        settle_key, close_key = (\"settled\", \"closed\") if apply else (\"would_settle\", \"would_close\")",
+   "replace": "        settle_key, close_key = (\"settled\", \"closed\")",
+   "test": "tests/test_h_mad_pane_janitor.py::TestDryRunIsTheDefault::test_a_dry_run_never_reports_work_as_done"
+  }
+ ]
+}
