@@ -139,8 +139,36 @@ def _restore_file(path: Path, text: str) -> bool:
         return False
 
 
+def _purge_bytecode(root: Path) -> None:
+    """Drop cached bytecode under `root` so the next run reads the source.
+
+    CPython invalidates a `.pyc` on (source mtime, source size). A mutation is
+    frequently byte-size-IDENTICAL — swapping one identifier for another of the
+    same length, `not x` for `x is None`, a threshold digit — and the harness
+    applies it milliseconds after the previous run, inside the same
+    filesystem-mtime second. Both invalidation inputs then match and the stale
+    bytecode is reused, so the mutant never executes and the run reports
+    `survived`: byte-identical to a real coverage gap, and the file on disk is
+    genuinely mutated, so the existing did-it-land check passes.
+
+    Measured 2026-08-25 on a same-size mutation to `h_mad_assemble_tdd.py`:
+    4 false survivors in 6 trials. Restores are corrupted the same way — the
+    next mutation's run can execute the PREVIOUS mutant — so this runs on both
+    sides of every scoring run rather than only before it.
+    """
+    for cached in root.rglob("__pycache__"):
+        if not cached.is_dir():
+            continue
+        for entry in cached.glob("*.pyc"):
+            try:
+                entry.unlink()
+            except OSError:
+                pass
+
+
 def _run(command: list[str], root: Path) -> tuple[bool, str]:
     """(green, output). Anything but exit 0 — including a crash — is red."""
+    _purge_bytecode(root)
     try:
         proc = subprocess.run(command, cwd=str(root), capture_output=True, text=True)
     except OSError as exc:

@@ -506,3 +506,56 @@ def test_a_command_that_cannot_launch_is_red_not_green(tmp_path: Path) -> None:
     result = run_spec(spec_path)
 
     assert result["verdict"] == "BASELINE_NOT_GREEN"
+
+
+def test_a_same_size_mutation_is_not_masked_by_stale_bytecode(tmp_path: Path) -> None:
+    """CPython invalidates a `.pyc` on (source mtime, source size).
+
+    A mutation is frequently byte-size-IDENTICAL and lands inside the same
+    filesystem-mtime second as the previous run, so both invalidation inputs
+    match and the stale bytecode is reused. The mutant never executes, the file
+    on disk is genuinely mutated so the did-it-land check passes, and the run
+    reports `survived` — byte-identical to a real coverage gap.
+
+    Measured before the fix: 4 false survivors in 6 trials on a 68-byte-for-
+    68-byte swap. This drives the same shape through an importable module.
+    """
+    (tmp_path / "guard.py").write_text("LIMIT = 5\n", encoding="utf-8")
+    (tmp_path / "test_guard.py").write_text(
+        "import guard\n\n\ndef test_limit():\n    assert guard.LIMIT == 5\n",
+        encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [sys.executable, "-m", "pytest", "-q", "test_guard.py"],
+        "target_command": [sys.executable, "-m", "pytest", "-q"],
+        # Same length on both sides: "LIMIT = 5" -> "LIMIT = 9".
+        "mutations": [{"name": "same size", "file": "guard.py",
+                       "find": "LIMIT = 5", "replace": "LIMIT = 9",
+                       "test": "test_guard.py::test_limit"}],
+    }), encoding="utf-8")
+
+    # Warm the bytecode cache first, which is what the precheck run does.
+    subprocess.run([sys.executable, "-m", "pytest", "-q", "test_guard.py"],
+                   cwd=str(tmp_path), capture_output=True)
+    result = run_spec(spec_path)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["caught"] == 1
+
+
+def test_purging_bytecode_leaves_the_sources_alone(tmp_path: Path) -> None:
+    """It removes cached `.pyc`, never a source file — the tree must survive."""
+    from h_mad_mutation_harness import _purge_bytecode
+
+    (tmp_path / "keep.py").write_text("x = 1\n", encoding="utf-8")
+    cache = tmp_path / "pkg" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "keep.cpython-311.pyc").write_bytes(b"stale")
+    (cache / "notes.txt").write_text("not bytecode", encoding="utf-8")
+
+    _purge_bytecode(tmp_path)
+
+    assert (tmp_path / "keep.py").exists()
+    assert not (cache / "keep.cpython-311.pyc").exists()
+    assert (cache / "notes.txt").exists()

@@ -118,6 +118,22 @@
    "find": "        for i, ln in enumerate(lines)\n        if ln.strip()",
    "replace": "        for i, ln in enumerate(lines)\n        if ln.strip() and lines.index(ln) == i",
    "test": "tests/test_h_mad_mutation_harness.py::test_identical_lines_are_reported_at_both_locations"
+  },
+  {
+   "name": "stale-bytecode-masks-a-same-size-mutation",
+   "_mechanism": "CPython invalidates a .pyc on (source mtime, size). A same-size mutation inside the same mtime second reuses the stale bytecode, so the mutant never executes while the file on disk is genuinely mutated -- a false `survived` indistinguishable from a coverage gap. Measured 4/6 before the fix.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    _purge_bytecode(root)\n    try:\n        proc = subprocess.run(",
+   "replace": "    try:\n        proc = subprocess.run(",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_same_size_mutation_is_not_masked_by_stale_bytecode"
+  },
+  {
+   "name": "purge-deletes-more-than-bytecode",
+   "_mechanism": "A purge that removed whole __pycache__ trees, or reached outside them, would be destroying the tree it is measuring.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        for entry in cached.glob(\"*.pyc\"):",
+   "replace": "        for entry in cached.glob(\"*\"):",
+   "test": "tests/test_h_mad_mutation_harness.py::test_purging_bytecode_leaves_the_sources_alone"
   }
  ]
 }
