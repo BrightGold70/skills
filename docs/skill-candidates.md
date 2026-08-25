@@ -459,6 +459,7 @@ patch appeared. Neither flips.
 
 - **value-sweep-the-corrected-value**: after applying an audit fix, `grep` the corrected *value* (not the section) across every live doc in the feature, because the same claim is usually restated in 2–3 places and the fix lands in one. Caught 4 stale copies across this session that **two independent reviewers both missed** — spec FR-3's description contradicting its own AC-3.4, a plan risk row still asserting a disproven `exec` behaviour, a design cross-reference to a plan clause that had been deleted, and an AC counter that went stale twice. Roughly two-thirds of all 79 findings this session were this class — recurrence: 6 this session — candidate: maybe — **read the reason before promoting**: this is not a new skill, it is a step belonging in `h-mad/SKILL.md` §"Audit prompt assembly" between "revise" and "re-audit", and possibly a script taking a value + a doc set. The discipline is already recorded as an auto-memory (`feedback_value_sweep_not_spot_fix`); what is missing is anything mechanical.
 - **doc-version-history-append**: append a dated entry to a phase doc's `## Version History` via an assert-anchored substitution, so a failed anchor is loud rather than a silent no-op. Hand-rolled 27× this session (once per audit cycle across plan/spec/design). Twice the anchor had drifted and the assert is the only reason it was noticed — recurrence: 27 — candidate: maybe — the reusable part is the **assert**, not the append; a three-line helper that refuses when the anchor is absent or matches more than once would remove the whole class. Note the sibling failure this session hit: a multi-edit block that raised mid-way had already written some files and discarded the rest, which is why each edit now runs as its own verify-and-write (see taxonomy mode 17).
+  — **LANDED 2026-08-25** as `h-mad/scripts/h_mad_version_history.py` (`VERSION-HISTORY: OK|DRY-RUN|REFUSED|UNREADABLE`, exit 0 on a write / 2 on refusal), with `tests/test_h_mad_version_history.py` (39 tests) and `tests/mutation-specs/version_history.json` (14 mutations, ALL_CAUGHT). **The row under-specified it and the corpus said so.** A sweep of 713 real `## Version History` sections across 2132 files found the three-line helper would have been wrong on its central job: of the 246 sections carrying two or more entries, 191 are ascending, **29 are descending and 26 are unsorted**, so append-at-end is wrong for 22% of them and silently so — the same failure mode the row was filed against, relocated from the anchor to the placement. Placement is therefore derived from the section; unsorted sections and the 140 table-shaped sections are refused rather than guessed or reformatted, a duplicate version is refused (27 bumps per session means re-runs happen), and every write self-checks that its own splice was insertion-only. Two premises of the build were also refuted by measurement rather than by review: the corpus scan that reported one file with 7 headers had matched on **stripped** lines while the script anchors on `^##`, so under the real anchor **no file in the corpus has more than one match** and the test asserting otherwise was wrong; and the `---`-terminator mutation survived as **corpus-equivalent** (14 rule-terminated sections, 0 where dropping the terminator moves the insertion point) until the fixture was given the bullet-after-rule case the corpus does not contain. Live-probed `--dry-run` over 564 real phase docs — 143 OK, 401 `anchor_missing` (audit reports have no such section), 11 `mixed_order`, 9 `table_shape`, zero crashes — and one live write on a real 138-line impl-plan produced `138a139`, a pure insertion, with the re-run refused as `duplicate_version`.
 - **hand-run five-call audit cycle**: assemble → `exec agy` → `report-wait` → `--out` fallback → gate, twice per cycle, read both verdicts, union the findings — ran 27 times (54 dispatches) — recurrence: 27 — candidate: **no** — this *is* `audit-cycle-verb`, whose Phases 1–4 gated clean this session (`568418d`, `197ecc2`). Recorded so the recurrence count is visible against the feature rather than looking like an unmet need; flip to `**LANDED**` when Phase 7 archives.
 
 **Reconcile pass (2026-08-20, this session):** both open `yes` rows re-checked against source and
@@ -496,6 +497,23 @@ threshold of a third vendored patch; untouched this session.
   on the row shape, never on prose), the used-vs-documented vocabulary diff, and the self-pollution
   check; the judgement it must NOT automate is deciding a row's actual status, which needs the
   source read.
+  — **Reconciled 2026-08-25: HALF LANDED, and the shipped half returns a confident false clean on
+  the other registry.** `handoff/scripts/skill_candidates_census.py` shipped the entry splitter and
+  the bump-row exclusion, and this file's header now points at it. Two of the three mechanical parts
+  are still absent: there is no used-vs-documented **vocabulary diff** and no **self-pollution
+  check**. The larger gap is that the script is structurally blind to `docs/skill-monitoring.md`,
+  the first registry this row names — `rows()` ends the current row on any line starting with `|`,
+  and skill-monitoring is written as pipe tables (`| J1 | 🔴 | **FIXED** | …`), so every row is
+  discarded the moment it begins. Measured 2026-08-25:
+  `skill_candidates_census.py docs/skill-monitoring.md` prints `candidates=3 OPEN(yes+maybe)=0
+  <none>=3` against a 1945-line file carrying 159 J-id occurrences, where a one-line grep over the
+  table rows finds 31 status-bearing rows (25 FIXED, 2 RESOLVED, 2 DISPROVEN, 1 WONTFIX,
+  1 MONITORING). That is the same "confident false reading" failure this row was filed to end, now
+  shipped inside the tool meant to end it, and it is the more dangerous direction: the tool reports
+  a *clean* registry, so nothing prompts a second look. Any "registry N open" claim derived from
+  this script against skill-monitoring must be re-derived before it is trusted. Stays
+  `candidate: yes` — the row is not done until the pipe-table shape parses and the two missing
+  checks exist.
 
 - **purely-additive bulk-edit assertion**: before committing a scripted edit that splices N lines
   into a long document, assert the diff is insertion-only — `git diff --numstat` shows `N 0`, every
