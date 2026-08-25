@@ -1,0 +1,98 @@
+{
+ "root": "/Users/kimhawk/orca/skills/h-mad",
+ "command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_audit_gate.py",
+  "-q"
+ ],
+ "target_command": [
+  "python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "a-missing-stamp-reads-as-current",
+   "_mechanism": "Nothing was recorded, so nothing was compared — reporting that as CURRENT is the same lie as an empty scrape reading as `no findings`, which is the defect `GATE: INVALID` already exists to prevent one function up.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        return {\"verdict\": \"UNSTAMPED\", \"changed\": [], \"checked\": 0}",
+   "replace": "        return {\"verdict\": \"CURRENT\", \"changed\": [], \"checked\": 0}",
+   "test": "tests/test_h_mad_audit_gate.py::test_verifying_without_a_stamp_is_a_cannot_judge"
+  },
+  {
+   "name": "edited-content-still-verifies",
+   "_mechanism": "The entire guard: a PASS goes on standing over content it never saw, which is how 4 of 9 findings on a twice-clean design came from the edits that fixed the previous cycle.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        if current != recorded:",
+   "replace": "        if False:",
+   "test": "tests/test_h_mad_audit_gate.py::test_content_edited_after_the_pass_is_stale_and_names_the_file"
+  },
+  {
+   "name": "a-deleted-gated-file-is-not-a-change",
+   "_mechanism": "The verdict was about content that is no longer on disk. Treating an unreadable target as unchanged makes deletion the one edit the stamp cannot see.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "            changed.append(f\"{rel} (unreadable)\")",
+   "replace": "            pass",
+   "test": "tests/test_h_mad_audit_gate.py::test_a_deleted_gated_file_is_stale_not_current"
+  },
+  {
+   "name": "stale-does-not-name-what-moved",
+   "_mechanism": "`STALE` without the file list is a manual diff of every gated document — the recovery cost this stamp exists to remove.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        for rel in result[\"changed\"]:",
+   "replace": "        for rel in []:",
+   "test": "tests/test_h_mad_audit_gate.py::test_content_edited_after_the_pass_is_stale_and_names_the_file"
+  },
+  {
+   "name": "a-failing-gate-writes-a-stamp",
+   "_mechanism": "A stamp asserts `this content passed`. Recording one on FAIL lets a later readback answer CURRENT over a verdict that blocked.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "    if args.gated and verdict == \"PASS\":",
+   "replace": "    if args.gated:",
+   "test": "tests/test_h_mad_audit_gate.py::test_a_failing_gate_records_nothing"
+  },
+  {
+   "name": "an-unreadable-gated-file-is-stamped-around",
+   "_mechanism": "A stamp covering two of three files records a verdict over content the gate never saw, and the readback then compares that fiction to reality and says CURRENT.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "                print(\"GATE: UNSTAMPABLE must=0 should=0\")",
+   "replace": "                continue",
+   "test": "tests/test_h_mad_audit_gate.py::test_an_unreadable_gated_file_refuses_rather_than_stamping_a_hole"
+  },
+  {
+   "name": "only-the-first-gated-file-is-recorded",
+   "_mechanism": "A cycle gates the design AND the impl-plan; stamping one of them is a half-guard that reads exactly like a whole one.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        for path in args.gated:",
+   "replace": "        for path in args.gated[:1]:",
+   "test": "tests/test_h_mad_audit_gate.py::test_several_gated_files_are_all_recorded"
+  },
+  {
+   "name": "the-verdict-line-changes-without-the-flag",
+   "_mechanism": "Every existing caller parses this line. The stamp is opt-in; rewriting the default output would break `h_mad_do_preconditions.py` and every doc that quotes it.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "    stamped = \"\"",
+   "replace": "    stamped = \" gated=0\"",
+   "test": "tests/test_h_mad_audit_gate.py::test_the_verdict_line_is_unchanged_without_the_flag"
+  },
+  {
+   "name": "verify-stamp-exits-0-when-stale",
+   "_mechanism": "A caller reading `$?` cannot tell a live verdict from a dead one — and `$?` is exactly the surface the token discipline exists to replace.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        return 0 if verdict == \"CURRENT\" else 2",
+   "replace": "        return 0",
+   "test": "tests/test_h_mad_audit_gate.py::test_content_edited_after_the_pass_is_stale_and_names_the_file"
+  },
+  {
+   "name": "the-stamp-lands-somewhere-nobody-reads",
+   "_mechanism": "The readback then always answers UNSTAMPED, which is honest but useless: the guard degrades to a permanent cannot-judge that a reader learns to ignore. (An earlier version of this mutation replaced the call with `_unused = (`, which broke collection rather than the property — the harness REFUSED it, correctly, instead of crediting a kill.)",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        stamp_path(args.audit_file).write_text(",
+   "replace": "        stamp_path(args.audit_file).with_name(\"nobody-reads-this.json\").write_text(",
+   "test": "tests/test_h_mad_audit_gate.py::test_a_pass_records_what_it_gated"
+  }
+ ]
+}

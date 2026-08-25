@@ -379,3 +379,145 @@ def test_classify_punctuated_none_bullet_beside_a_real_bullet_is_not_counted() -
 
     assert result["must_count"] == 1
     assert result["should_count"] == 0
+
+
+# --- the stamp: a PASS is about content, and content moves ------------------
+#
+# Measured: a design audited clean twice still produced 9 findings on the next
+# cycle, and 4 of them came from the edits that fixed the PREVIOUS cycle. The
+# gate reads the audit file, never the document the audit judged, so a PASS
+# survives every later edit to the thing it passed. The stamp records what was
+# gated; the readback answers "is that verdict still about this content?".
+
+CLEAN_AUDIT = "## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n"
+DIRTY_AUDIT = "## Must-fix\n\n- a real finding\n\n## Should-fix\n\nNone\n"
+
+
+def _stamped(tmp_path: Path, audit_text: str = CLEAN_AUDIT):
+    audit = tmp_path / "feat.design.audit.v1.md"
+    audit.write_text(audit_text, encoding="utf-8")
+    design = tmp_path / "feat.design.md"
+    design.write_text("the design as audited\n", encoding="utf-8")
+    return audit, design
+
+
+def _verify(audit: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(MODULE_PATH), str(audit), "--verify-stamp"],
+        check=False, capture_output=True, text=True,
+    )
+
+
+def test_a_pass_records_what_it_gated(tmp_path: Path) -> None:
+    audit, design = _stamped(tmp_path)
+
+    proc = run_gate(audit, "--gated", str(design))
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "GATE: PASS" in proc.stdout, proc.stdout
+    assert "gated=1" in proc.stdout, "the verdict line must say how much it gated"
+    assert (tmp_path / "feat.design.audit.v1.md.gated.json").exists()
+
+
+def test_the_verdict_line_is_unchanged_without_the_flag(tmp_path: Path) -> None:
+    """Every existing caller reads this line; the stamp is opt-in, not a rewrite."""
+    audit, _ = _stamped(tmp_path)
+
+    proc = run_gate(audit)
+
+    assert proc.stdout.splitlines()[0] == "GATE: PASS must=0 should=0", proc.stdout
+    assert not (tmp_path / "feat.design.audit.v1.md.gated.json").exists()
+
+
+def test_unchanged_content_verifies_as_current(tmp_path: Path) -> None:
+    audit, design = _stamped(tmp_path)
+    run_gate(audit, "--gated", str(design))
+
+    proc = _verify(audit)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "GATESTAMP: CURRENT" in proc.stdout, proc.stdout
+
+
+def test_content_edited_after_the_pass_is_stale_and_names_the_file(
+    tmp_path: Path,
+) -> None:
+    """The whole point: the verdict is no longer about what is on disk."""
+    audit, design = _stamped(tmp_path)
+    run_gate(audit, "--gated", str(design))
+
+    design.write_text("the design, edited to fix the last cycle\n", encoding="utf-8")
+    proc = _verify(audit)
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "GATESTAMP: STALE" in proc.stdout, proc.stdout
+    assert "feat.design.md" in proc.stdout, "a stale verdict must name what moved"
+
+
+def test_a_deleted_gated_file_is_stale_not_current(tmp_path: Path) -> None:
+    audit, design = _stamped(tmp_path)
+    run_gate(audit, "--gated", str(design))
+    design.unlink()
+
+    proc = _verify(audit)
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "GATESTAMP: STALE" in proc.stdout, proc.stdout
+
+
+def test_verifying_without_a_stamp_is_a_cannot_judge(tmp_path: Path) -> None:
+    """Never CURRENT: nothing was recorded, so nothing was compared. A missing
+    stamp reading as `current` is the same class of lie as `no report` reading
+    as `no findings`, which is why `INVALID` exists two functions up."""
+    audit, _ = _stamped(tmp_path)
+
+    proc = _verify(audit)
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "GATESTAMP: UNSTAMPED" in proc.stdout, proc.stdout
+    assert "CURRENT" not in proc.stdout
+
+
+def test_a_failing_gate_records_nothing(tmp_path: Path) -> None:
+    """A stamp means "this content was passed". Writing one on FAIL would let a
+    later readback report CURRENT over a verdict that blocked."""
+    audit, design = _stamped(tmp_path, DIRTY_AUDIT)
+
+    proc = run_gate(audit, "--gated", str(design))
+
+    assert "GATE: FAIL" in proc.stdout, proc.stdout
+    assert not (tmp_path / "feat.design.audit.v1.md.gated.json").exists()
+
+
+def test_several_gated_files_are_all_recorded(tmp_path: Path) -> None:
+    """A cycle gates the design AND the impl-plan; stamping one is a half-guard."""
+    audit, design = _stamped(tmp_path)
+    plan = tmp_path / "feat.impl-plan.md"
+    plan.write_text("tasks\n", encoding="utf-8")
+
+    run_gate(audit, "--gated", str(design), "--gated", str(plan))
+    plan.write_text("tasks, edited\n", encoding="utf-8")
+    proc = _verify(audit)
+
+    assert "GATESTAMP: STALE" in proc.stdout, proc.stdout
+    assert "feat.impl-plan.md" in proc.stdout, proc.stdout
+
+
+def test_an_unreadable_gated_file_refuses_rather_than_stamping_a_hole(
+    tmp_path: Path,
+) -> None:
+    """Stamping a file it could not read would record a verdict over content it
+    never saw — and the readback would then compare that fiction to reality."""
+    audit, _ = _stamped(tmp_path)
+
+    proc = run_gate(audit, "--gated", str(tmp_path / "nope.md"))
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "GATE: UNSTAMPABLE" in proc.stdout, proc.stdout
+    assert not (tmp_path / "feat.design.audit.v1.md.gated.json").exists()
+
+
+def test_the_skill_documents_the_stamp() -> None:
+    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    assert "--verify-stamp" in skill, "a readback nobody is told to run is never run"
+    assert "GATESTAMP:" in skill, "the token is undocumented"

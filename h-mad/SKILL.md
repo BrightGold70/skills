@@ -1599,6 +1599,12 @@ assembling by hand because the script is unavailable:
     The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
     - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+
+    **Pass `--gated <doc>` for every document the audit judged, and read the stamp back before relying on the PASS.** The gate reads the *audit file* and never the document the audit was about, so a PASS survives every later edit to the thing it passed — including the edits that fix the previous cycle. Measured: a design that gated clean twice produced 9 findings on the next cycle, and 4 of them were created by the fixes for the cycle before. `--gated` is repeatable and a cycle that gates a design **and** an impl-plan must name both; a stamp is written only on PASS (a stamp over a FAIL would let the readback report `CURRENT` for a verdict that blocked), and a gated file that cannot be read yields `GATE: UNSTAMPABLE` and writes nothing rather than recording a verdict over content the gate never saw. Then:
+    ```bash
+    python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py <audit-file> --verify-stamp
+    ```
+    Read the `GATESTAMP:` token — deliberately **not** `GATE:`, so a consumer globbing the verdict line cannot conflate the two. `CURRENT` → the PASS is still about what is on disk. `STALE` → it is not; the changed files are named, and the edits since are themselves ungated — halt `audit_gate:verdict_stale` and re-audit. `UNSTAMPED` (exit 2) is a **cannot-judge**, never `CURRENT`: nothing was recorded, so nothing was compared, and it is the same class of lie as an empty scrape reading as "no findings".
     When you revise, bump the doc's `## Version History` with the helper, never with a hand-rolled
     anchored substitution:
     ```bash

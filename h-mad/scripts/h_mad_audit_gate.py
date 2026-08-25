@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from pathlib import Path
+
+# Suffix of the sidecar a passing gate writes beside the audit file. Kept next to
+# the audit rather than in orchestrator state because the pairing IS the claim:
+# this verdict was about this content, and the two must travel together.
+STAMP_SUFFIX = ".gated.json"
 
 
 BLOCKING_SECTIONS = {
@@ -162,13 +169,90 @@ def _read_ack_file(path: Path) -> set[str]:
     return acknowledged
 
 
+def _digest(path: Path) -> str:
+    """Content hash of one gated file. Raises OSError if it cannot be read."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def stamp_path(audit_file: Path) -> Path:
+    return audit_file.with_name(audit_file.name + STAMP_SUFFIX)
+
+
+def verify_stamp(audit_file: Path) -> dict:
+    """Is the recorded verdict still about the content on disk?
+
+    The gate reads the audit file and never the document the audit judged, so a
+    PASS outlives every later edit to the thing it passed. Measured: a design
+    audited clean twice produced 9 findings on the next cycle, 4 of them created
+    by the edits that fixed the previous cycle.
+
+    `UNSTAMPED` is a cannot-judge, never `CURRENT`: nothing was recorded, so
+    nothing was compared, and reporting that as current is the same lie as an
+    empty scrape reading as "no findings".
+    """
+    path = stamp_path(audit_file)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"verdict": "UNSTAMPED", "changed": [], "checked": 0}
+
+    files = record.get("files") or {}
+    changed = []
+    for rel, recorded in sorted(files.items()):
+        target = audit_file.parent / rel
+        try:
+            current = _digest(target)
+        except OSError:
+            # Deleted or unreadable. The verdict was about content that is no
+            # longer there, which is a change, not a cannot-judge.
+            changed.append(f"{rel} (unreadable)")
+            continue
+        if current != recorded:
+            changed.append(rel)
+
+    return {
+        "verdict": "STALE" if changed else "CURRENT",
+        "changed": changed,
+        "checked": len(files),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the audit gate CLI."""
     parser = argparse.ArgumentParser(description="H-MAD audit gate")
     parser.add_argument("audit_file", type=Path)
     parser.add_argument("--ack-file", type=Path)
     parser.add_argument("--must-only", action="store_true")
+    parser.add_argument(
+        "--gated", action="append", default=[], type=Path, metavar="PATH",
+        help="a document this audit judged; recorded beside the verdict on PASS. "
+             "Repeatable — a cycle that gates a design and an impl-plan must name both",
+    )
+    parser.add_argument(
+        "--verify-stamp", action="store_true",
+        help="re-hash what a previous PASS recorded and report CURRENT / STALE / UNSTAMPED",
+    )
     args = parser.parse_args(argv)
+
+    if args.verify_stamp:
+        result = verify_stamp(args.audit_file)
+        verdict = result["verdict"]
+        print(f"GATESTAMP: {verdict} checked={result['checked']} changed={len(result['changed'])}")
+        for rel in result["changed"]:
+            print(f"  changed: {rel}")
+        if verdict == "STALE":
+            print(
+                "  the PASS was about content that has since moved — the edits that "
+                "fixed the last cycle are themselves ungated. Re-audit before "
+                "relying on it (halt `audit_gate:verdict_stale`)."
+            )
+        elif verdict == "UNSTAMPED":
+            print(
+                "  nothing was recorded, so nothing was compared — a cannot-judge, "
+                "not a clean readback. Re-run the gate with --gated."
+            )
+        print(f"[H-MAD] {args.audit_file.name.split('.')[0] or 'unknown'} gatestamp {verdict}")
+        return 0 if verdict == "CURRENT" else 2
 
     try:
         text = args.audit_file.read_text(encoding="utf-8")
@@ -196,7 +280,35 @@ def main(argv: list[str] | None = None) -> int:
 
     result = classify(text, acknowledged)
     verdict = "FAIL" if result["must_count"] or (result["should_count"] and not args.must_only) else "PASS"
-    print(f"GATE: {verdict} must={result['must_count']} should={result['should_count']}")
+
+    stamped = ""
+    if args.gated and verdict == "PASS":
+        # Hash everything BEFORE writing anything: a stamp covering three files
+        # of which one was unreadable would record a verdict over content the
+        # gate never saw, and the readback would then compare that fiction to
+        # reality and report CURRENT.
+        files = {}
+        for path in args.gated:
+            try:
+                files[str(path.name)] = _digest(path)
+            except OSError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                print("GATE: UNSTAMPABLE must=0 should=0")
+                print(
+                    "  a gated file could not be read, so nothing was recorded — "
+                    "an operational error, not a verdict about the audit."
+                )
+                print(f"[H-MAD] {feature} gate UNSTAMPABLE")
+                return 2
+        stamp_path(args.audit_file).write_text(
+            json.dumps({"verdict": verdict, "files": files}, indent=1) + "\n",
+            encoding="utf-8",
+        )
+        stamped = f" gated={len(files)}"
+
+    # The first line is what every existing caller reads, so the stamp count is
+    # appended rather than woven in, and is absent entirely without --gated.
+    print(f"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped}")
     print(f"[H-MAD] {feature} gate {verdict}")
     return 0
 
