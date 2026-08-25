@@ -57,9 +57,9 @@
   },
   {
    "name": "drop-the-coverage-flag",
-   "_mechanism": "The generalisable guard. Without it an unsupported row shape reads as an empty backlog, which is exactly how this bug survived.",
+   "_mechanism": "The generalisable guard. Without it an unsupported row shape reads as an empty backlog, which is exactly how this bug survived. Re-anchored 2026-08-26 after the flag gained its `{why}` explanation; the drift was caught by `--check-anchors` before the run could report REFUSED.",
    "file": "handoff/scripts/skill_candidates_census.py",
-   "find": "    flag = \"\" if parsed >= present else f\"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED\"",
+   "find": "    flag = \"\" if parsed >= present else (\n        f\"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}\")",
    "replace": "    flag = \"\"",
    "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_flags_an_entry_shape_the_reader_missed"
   },
@@ -142,6 +142,22 @@
    "find": "TRIAGE = re.compile(r'DECLINED[^(\\n]{0,40}\\(triage:\\s*([^)]*)\\)')",
    "replace": "TRIAGE = re.compile(r'DECLINED\\**\\s*\\(triage:\\s*([^)]*)\\)')",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_live_backlog_has_no_unqualified_declined"
+  },
+  {
+   "name": "the-coverage-gap-is-unexplained",
+   "_mechanism": "An unexplained `33 ROW-SHAPED LINES NOT PARSED` reads as a defect in the reader and invites widening it -- which would reclassify 33 closed historical rows as open work in one commit. Naming the gap is the guard.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "           if \"monitoring\" in tag else \"\")",
+   "replace": "           if False else \"\")",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_the_coverage_gap_names_what_it_is"
+  },
+  {
+   "name": "the-non-j-rows-are-absorbed-as-entries",
+   "_mechanism": "Widening the strict reader to any id-shaped bullet pulls the 33 F/G/H/A/V/P rows into the J registry, where they carry no `Status:` and therefore read as open. All 33 were read on 2026-08-26 and none is live.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
+   "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_the_non_j_rows_are_reported_but_never_parsed_as_entries"
   }
  ]
 }

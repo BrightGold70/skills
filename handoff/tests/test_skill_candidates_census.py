@@ -394,3 +394,38 @@ def test_the_live_backlog_has_no_unqualified_declined() -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-candidates.md")
 
     assert "unqualified=0" in out, out
+
+
+# --- the non-J historical log stays out of the open count -----------------
+#
+# docs/skill-monitoring.md carries 46 `J` entries under a `Status:` lifecycle
+# and 33 older F/G/H/A/V/P rows that predate it. Read in full on 2026-08-26:
+# none is live open work — F1-F13 have their own FIXED table, F14-F18/G/H/A
+# record resolution inline, G5/H5/V1 are notes rather than work, P1 was
+# declined. The standing temptation is to "fix" the coverage gap by widening
+# the parser, which would reclassify all 33 as open in one commit.
+
+
+def test_the_non_j_rows_are_reported_but_never_parsed_as_entries() -> None:
+    out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
+
+    assert "J-entries=   46" in out or "J-entries=46" in out, out
+    assert "parsed=46 row-shaped=79" in out, out
+
+
+def test_widening_the_parser_would_be_visible_here() -> None:
+    """A regression pin with teeth: if a later change makes the reader absorb
+    the 33, `parsed` moves off 46 and this fails. The count is the guard — the
+    coverage line alone would still print, just with different numbers."""
+    out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
+
+    open_line = [l for l in out.splitlines() if "J-entries" in l][0]
+    assert "OPEN(MONITORING+PLANNED)=   0" in open_line, open_line
+
+
+def test_the_coverage_gap_names_what_it_is(tmp_path) -> None:
+    """An unexplained `33 ROW-SHAPED LINES NOT PARSED` reads as a defect and
+    invites exactly the parser-widening the file forbids. It must say why."""
+    out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
+
+    assert "historical" in out.lower(), out

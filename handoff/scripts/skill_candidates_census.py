@@ -203,7 +203,15 @@ if n or bumps_all:
 # three candidates. A count is only trustworthy next to what it did NOT read.
 print("\nCOVERAGE -- entries parsed vs row-shaped lines present:")
 for tag, parsed, present, no_status in coverage:
-    flag = "" if parsed >= present else f"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED"
+    # Named, not merely counted. An unexplained "NOT PARSED" reads as a defect
+    # in the reader and invites widening it -- which would reclassify 33 closed
+    # historical rows as open work in one commit. All 33 were read on
+    # 2026-08-26 and none is live; see skill-monitoring.md's own header.
+    why = (" (historical F/G/H/A/V/P findings log, pre-dates the `Status:` "
+           "lifecycle -- NOT open work; promote to a J entry to track one)"
+           if "monitoring" in tag else "")
+    flag = "" if parsed >= present else (
+        f"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}")
     print(f"  {tag}: parsed={parsed} row-shaped={present}{flag}")
     if no_status:
         print(f"    ! entries with no single machine-readable status: {', '.join(no_status)}")

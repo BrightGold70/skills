@@ -4,6 +4,21 @@ Live registry of known bugs and improvement points in the `h-mad` / `handoff` sk
 
 **Severity:** 🔴 bug (correctness) · 🟡 process/robustness · 🟢 improvement/opt
 
+**The `F`/`G`/`H`/`A`/`V`/`P` rows are a HISTORICAL findings log, not the standing registry**
+(decided 2026-08-26, after reading all 33). They predate the `Status:` lifecycle and deliberately do
+not carry it. Three things a reader needs, because each has already misled one:
+
+- **The emoji is SEVERITY at the time of filing, never lifecycle.** `F11`–`F13` are 🔴 *and* FIXED —
+  they appear once in the resolution table below and again as bullets with their original detail.
+  Reading 🔴 as "open" makes eleven closed rows look live.
+- **`F1`–`F13` have their own `Status` column** in the table below, which states "All F1–F13
+  resolved". `F14`–`F18`, `G`, `H`, `A` record resolution inline instead; `G5`, `H5` and `V1` are a
+  mechanism note, a root-cause explanation and a verification record rather than work; `P1` was
+  explicitly declined as pre-existing. **Re-read on 2026-08-26: none of the 33 is live open work.**
+- **To make something trackable, promote it to a `J` entry** — that is what the standing registry is
+  for. Do **not** answer this by widening the census parser: it would silently reclassify all 33
+  closed rows as open, which is the opposite of what reading them shows.
+
 **Lifecycle** — every `J` entry ends with exactly one machine-readable status line, written as
 the word `Status:` followed by one of these in backticks:
 
