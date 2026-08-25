@@ -53,7 +53,7 @@ def rows(p):
 # machine-readable status line". So the status is READ, never inferred -- the
 # leading emoji is SEVERITY, and the body prose is where a census once found
 # "MONITORING" inside a note and reported a fixed entry as open.
-JROW = re.compile(r'^-\s*\S*\s*\*\*(J\d+[a-z]?)\s*[\u2014\u2013-]')
+JROW = re.compile(r'^-\s*\S*\s*\*\*(J\d+[a-z]?)(?:\*\*)?\s*[\u2014\u2013-]')
 JSTATUS = re.compile(r'Status:\s*`([A-Z]+)`')
 # The vocabulary table in the file's own header, so used-vs-documented is a diff
 # against the source rather than against a copy that drifts.
@@ -84,10 +84,13 @@ def is_monitoring(text):
     whole text would only ever try position 0 without `re.MULTILINE`, which is
     how the first version of this routing silently never fired.
     """
-    lines = text.split("\n")
-    if not lines or "Skill Monitoring" not in lines[0]:
-        return False
-    return any(JROW.match(ln.strip()) for ln in lines)
+    # The title is searched over the opening lines, not pinned to line 0: a
+    # blank first line or YAML frontmatter would otherwise route the registry to
+    # the CANDIDATE reader, straight back into the `TOTAL candidates=0` failure
+    # this routing exists to prevent. And the J-row requirement is gone: an
+    # empty registry is still a registry, and "no entries yet" must not be the
+    # thing that misroutes it.
+    return any("Skill Monitoring" in ln for ln in text.split("\n")[:5])
 
 
 paths = sys.argv[1:]
@@ -118,8 +121,15 @@ for f in paths:
         # header discusses the deliberate J31-J33 numbering gaps, so that metric
         # reports three phantom misses -- the self-pollution failure in reverse,
         # and a guard that cries wolf on the header is worse than none.
+        # ANY id-shaped entry bullet, not just `J`. Hardcoding the prefix here
+        # filters the rows the reader missed out of its own denominator, so
+        # coverage reports clean while dropping them -- the guard rigged to
+        # cover the gap it exists to expose. This file also carries F/G/H/A/V/P
+        # entries (33 of them, measured 2026-08-25); they are per-review finding
+        # rows rather than the standing registry, and they carry no `Status:`
+        # line, so they are not counted as open work -- but they ARE reported.
         loose=sum(1 for ln in text.split("\n")
-                  if ln.strip().startswith("- ") and re.search(r'\*\*J\d+', ln))
+                  if ln.strip().startswith("- ") and re.search(r'\*\*[A-Z]+\d+', ln))
         seen={j for j, _ in entries}
         referenced={m for m in re.findall(r'\bJ\d+\b', text)}
         dangling=sorted(referenced - seen, key=lambda x: int(x[1:]))

@@ -61,7 +61,10 @@ DEFAULT_MODEL = "gpt-5.5"
 # Only a real slot is bracketed; prose refers to a slot by bare name. A raw
 # `<INLINE_…>` reaching the agent reads as an unfilled template and is silently
 # discounted (SKILL.md §"Audit prompt assembly").
-RESIDUAL = re.compile(r"<INLINE_[A-Z_]+>|<REPORT_FILE_PATH>")
+# Deliberately loose: a slot with a typo (`<INLINE_MODULE-NAME>`, `<INLINE_feature>`)
+# evaded an `[A-Z_]+` pattern entirely and reached the agent as a broken
+# prompt with no refusal. Anything bracketed and INLINE-ish is a residual.
+RESIDUAL = re.compile(r"<INLINE[^>]*>|<REPORT_FILE_PATH>")
 
 
 class Halt(Exception):
@@ -228,16 +231,20 @@ def command_block(
     step = "5d" if phase == "red" else "5e"
     q = shlex.quote
     return "\n".join([
-        f"hmad-dispatch exec codex {q(str(prompt))} --model {model} \\",
+        f"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\",
         f"  --cd {q(str(project_root))} \\",
-        f"  --out {q(str(out))} --log {q(str(log))} --timeout {timeout} &",
+        f"  --out {q(str(out))} --log {q(str(log))} --timeout {q(str(timeout))} &",
         "dispatch_pid=$!",
         f"hmad-dispatch progress {q(str(log))} --pid $dispatch_pid",
         "wait $dispatch_pid; rc=$?",
+        # Without this the block runs `extract_verdict` on a missing --out file
+        # and then pytest anyway, turning a dispatch that never ran into a
+        # verdict-shaped nothing.
+        'if [ "$rc" -ne 0 ]; then echo "dispatch failed rc=$rc" >&2; exit "$rc"; fi',
         f"python3 {q(str(SKILL_DIR / 'scripts' / 'h_mad_extract_verdict.py'))} \\",
         f"  {q(str(out))} --key {key} --feature {q(feature)} --phase {step}",
         "# The verdict says what the agent claims. Re-run the tests yourself:",
-        f"{python} -m pytest {test_path} -v",
+        f"{q(python)} -m pytest {q(test_path)} -v",
     ])
 
 

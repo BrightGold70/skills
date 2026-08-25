@@ -354,10 +354,32 @@ def test_an_untargeted_mutation_still_names_its_killer(tmp_path: Path) -> None:
 def test_a_named_test_already_red_is_refused_not_scored(tmp_path: Path) -> None:
     """L559: a kill credited against a pin that was failing anyway measures nothing.
 
-    The whole-suite baseline cannot see this — the suite here is green; it is
-    the single named pin that is red, because it names a test that does not
-    exist, which pytest reports as an error rather than a pass.
+    The pin here is a test that RUNS and asserts a falsehood. An earlier version
+    named a test that does not exist, which pytest reports as a collection
+    error — so it exercised the "did not run" branch while claiming to test the
+    "already failing" one, and passed on a runner crash rather than a red test.
     """
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5",
+         "test": "test_extra.py::test_already_red"},
+    ])
+    # In its OWN file, outside the suite `command` runs. That is the whole
+    # point: the suite is green, and the single named pin is red — the case the
+    # whole-suite baseline structurally cannot see.
+    (tmp_path / "test_extra.py").write_text(
+        "def test_already_red():\n    assert False\n", encoding="utf-8")
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED"
+    assert result["caught"] == 0
+    assert "was already failing" in result["refused"][0]
+
+
+def test_a_named_test_that_does_not_exist_is_refused_as_did_not_run(
+    tmp_path: Path
+) -> None:
+    """A missing nodeid is a broken spec, not a red test. Different fix."""
     spec = _pytest_project(tmp_path, [
         {"name": "loosen the bound", "file": "guard.py",
          "find": "return n > 5", "replace": "return n >= 5",
@@ -366,8 +388,54 @@ def test_a_named_test_already_red_is_refused_not_scored(tmp_path: Path) -> None:
     result = run_spec(spec)
 
     assert result["verdict"] == "REFUSED"
+    assert "did not run" in result["refused"][0]
+
+
+def test_a_skipped_named_test_is_refused_not_treated_as_green(
+    tmp_path: Path
+) -> None:
+    """`@pytest.mark.skip` exits 0, so an exit-code pre-check calls it GREEN.
+
+    The mutant then survives and reads as a missing guard, when the truth is
+    the test was turned off. Measured 2026-08-25: a skipped test exits 0.
+    """
+    spec = _pytest_project(tmp_path, [
+        {"name": "loosen the bound", "file": "guard.py",
+         "find": "return n > 5", "replace": "return n >= 5",
+         "test": "test_guard.py::test_the_property_under_test"},
+    ])
+    (tmp_path / "test_guard.py").write_text(
+        "import pytest\nfrom guard import over\n\n\n"
+        "@pytest.mark.skip(reason='turned off')\n"
+        "def test_the_property_under_test():\n    assert over(6) and not over(5)\n",
+        encoding="utf-8")
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED"
+    assert "was skipped" in result["refused"][0]
+
+
+def test_a_mutant_that_breaks_collection_is_refused_not_credited_as_a_kill(
+    tmp_path: Path
+) -> None:
+    """A syntax error exits 2 before the assertion ever runs.
+
+    Measured 2026-08-25: pytest exits 2 on a collection error, and the harness
+    credited that as `killed by its named test`. It proves the code breaks when
+    broken and nothing about the property — the same wrong-mechanism family the
+    named-test scoring exists to catch, arriving through the runner instead of
+    through another assertion.
+    """
+    spec = _pytest_project(tmp_path, [
+        {"name": "syntax error", "file": "guard.py",
+         "find": "def over(n):", "replace": "def over(n:",
+         "test": "test_guard.py::test_the_property_under_test"},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED", result
     assert result["caught"] == 0
-    assert "already failing before the mutation" in result["refused"][0]
+    assert "broke collection" in result["refused"][0]
 
 
 def test_a_test_field_without_a_target_command_is_a_spec_error(tmp_path: Path) -> None:
@@ -559,3 +627,26 @@ def test_purging_bytecode_leaves_the_sources_alone(tmp_path: Path) -> None:
     assert (tmp_path / "keep.py").exists()
     assert not (cache / "keep.cpython-311.pyc").exists()
     assert (cache / "notes.txt").exists()
+
+
+def test_every_run_purges_bytecode_before_launching(tmp_path: Path) -> None:
+    """`_run` must call the purge, asserted directly rather than via a race.
+
+    The end-to-end version of this — drive a same-size mutation through a nested
+    `run_spec` and expect ALL_CAUGHT — depends on whether two writes land in the
+    same filesystem-mtime second, so it can pass by luck. Worse, the mutation
+    that removes the purge also removes it from the NESTED harness the test
+    drives, so the test's own mechanism moves under it. This pins the property
+    itself: a stale `.pyc` present before the run is gone by the time the
+    command launches.
+    """
+    from h_mad_mutation_harness import _run
+
+    cache = tmp_path / "__pycache__"
+    cache.mkdir()
+    stale = cache / "anything.cpython-311.pyc"
+    stale.write_bytes(b"stale")
+
+    _run([sys.executable, "-c", "pass"], tmp_path)
+
+    assert not stale.exists(), "_run launched without purging cached bytecode"

@@ -27,8 +27,8 @@
    "name": "routing-ignores-the-title",
    "_mechanism": "A candidates row merely MENTIONING a J-id would route to the J reader and report zero entries.",
    "file": "handoff/scripts/skill_candidates_census.py",
-   "find": "    if not lines or \"Skill Monitoring\" not in lines[0]:\n        return False",
-   "replace": "    if False:\n        return False",
+   "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
+   "replace": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:0] or [\"Skill Monitoring\"])",
    "test": "handoff/tests/test_skill_candidates_census.py::test_routing_needs_both_the_title_and_a_j_row"
   },
   {
@@ -65,10 +65,10 @@
   },
   {
    "name": "measure-coverage-against-ids-mentioned-anywhere",
-   "_mechanism": "The FALSE-POSITIVE direction. The file's own header discusses the deliberate J31-J33 gaps, so this metric reports three phantom misses and the guard cries wolf on the header.",
+   "_mechanism": "The FALSE-POSITIVE direction. Counting ids mentioned ANYWHERE puts the header's own discussion of the deliberate J31-J33 gaps into the denominator, so the guard cries wolf on the header. Coverage must be measured against a looser ROW shape, never against id mentions.",
    "file": "handoff/scripts/skill_candidates_census.py",
-   "find": "        loose=sum(1 for ln in text.split(\"\\n\")\n                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
-   "replace": "        loose=len(set(re.findall(r'\\bJ\\d+\\b', text)))",
+   "find": "        loose=sum(1 for ln in text.split(\"\\n\")\n                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))\n",
+   "replace": "        loose=len(set(re.findall(r'\\b[A-Z]+\\d+\\b', text)))\n",
    "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_does_not_cry_wolf_on_the_deliberate_numbering_gaps"
   },
   {
@@ -86,6 +86,30 @@
    "find": "        c=collections.Counter(s or \"<none>\" for _, s in entries)",
    "replace": "        c=collections.Counter(\"MONITORING\" for _, s in entries)",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_status_is_read_not_inferred_from_severity"
+  },
+  {
+   "name": "reject-a-bold-closed-id",
+   "_mechanism": "Seven real entries use `**G1** —`; a regex demanding the dash immediately after the id silently drops them.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)(?:\\*\\*)?\\s*[\\u2014\\u2013-]')",
+   "replace": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)\\s*[\\u2014\\u2013-]')",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_a_bold_closed_id_is_still_an_entry"
+  },
+  {
+   "name": "hardcode-j-in-the-coverage-denominator",
+   "_mechanism": "THE guard rigging its own baseline: filtering the missed prefixes out of the denominator reports clean while dropping 33 real rows.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
+   "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_counts_entries_of_any_prefix_not_just_j"
+  },
+  {
+   "name": "pin-the-title-to-line-zero",
+   "_mechanism": "A blank first line or frontmatter routes the registry to the candidate reader and reproduces `TOTAL candidates=0` -- the exact failure this routing prevents.",
+   "file": "handoff/scripts/skill_candidates_census.py",
+   "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
+   "replace": "    return \"Skill Monitoring\" in text.split(\"\\n\")[0]",
+   "test": "handoff/tests/test_skill_candidates_census.py::test_routing_survives_a_blank_first_line"
   }
  ]
 }

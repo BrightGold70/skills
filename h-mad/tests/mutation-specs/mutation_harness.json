@@ -25,18 +25,18 @@
   },
   {
    "name": "a-wrong-catcher-counts-as-a-kill",
-   "_mechanism": "The named test passing is scored as caught anyway. Suite-red is treated as proof the property was exercised.",
+   "_mechanism": "The named test PASSING is scored as caught anyway, so suite-red is treated as proof the property was exercised. Re-anchored on the `elif` after the collection-error branch was added: anchoring on the branch condition made this a DUPLICATE of `credit-a-collection-error-as-a-kill` and it survived its own pinned test.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                pin_green, _ = _run(scoring_command, root)\n                if not pin_green:\n                    result[\"caught\"] += 1",
-   "replace": "                pin_green, _ = _run(scoring_command, root)\n                if True:\n                    result[\"caught\"] += 1",
+   "find": "                elif not pin_green:\n                    result[\"caught\"] += 1",
+   "replace": "                elif True:\n                    result[\"caught\"] += 1",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
   },
   {
    "name": "drop-the-red-pin-precheck",
    "_mechanism": "L559: without it, a kill credited against a pin that was already failing measures nothing, and the whole-suite baseline cannot see a single red pin.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            if scoring_command is not None and mutation.get(\"test\"):\n                pin_green, _ = _run(scoring_command, root)\n                if not pin_green:",
-   "replace": "            if scoring_command is not None and mutation.get(\"test\"):\n                pin_green, _ = _run(scoring_command, root)\n                if False:",
+   "find": "            if scoring_command is not None and mutation.get(\"test\"):\n                _, pin_output = _run(scoring_command, root)",
+   "replace": "            if False:\n                _, pin_output = _run(scoring_command, root)",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
   },
   {
@@ -121,11 +121,11 @@
   },
   {
    "name": "stale-bytecode-masks-a-same-size-mutation",
-   "_mechanism": "CPython invalidates a .pyc on (source mtime, size). A same-size mutation inside the same mtime second reuses the stale bytecode, so the mutant never executes while the file on disk is genuinely mutated -- a false `survived` indistinguishable from a coverage gap. Measured 4/6 before the fix.",
+   "_mechanism": "CPython invalidates a .pyc on (source mtime, size). A same-size mutation inside the same mtime second reuses the stale bytecode, so the mutant never executes while the file on disk is genuinely mutated -- a false `survived` indistinguishable from a coverage gap. Measured 4/6 before the fix. Pinned by a DIRECT assertion that `_run` purges, not by an end-to-end nested run: that version depends on two writes landing in the same mtime second, and the mutation also removes the purge from the nested harness the test drives, so the test's own mechanism moves under it.",
    "file": "scripts/h_mad_mutation_harness.py",
    "find": "    _purge_bytecode(root)\n    try:\n        proc = subprocess.run(",
    "replace": "    try:\n        proc = subprocess.run(",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_same_size_mutation_is_not_masked_by_stale_bytecode"
+   "test": "tests/test_h_mad_mutation_harness.py::test_every_run_purges_bytecode_before_launching"
   },
   {
    "name": "purge-deletes-more-than-bytecode",
@@ -134,6 +134,38 @@
    "find": "        for entry in cached.glob(\"*.pyc\"):",
    "replace": "        for entry in cached.glob(\"*\"):",
    "test": "tests/test_h_mad_mutation_harness.py::test_purging_bytecode_leaves_the_sources_alone"
+  },
+  {
+   "name": "credit-a-collection-error-as-a-kill",
+   "_mechanism": "Measured: a syntax error exits 2 BEFORE the named test's assertion runs, and this was credited as `killed by its named test`. It proves the code breaks when broken and nothing about the property -- the wrong-mechanism family the named-test scoring exists to catch, arriving through the runner instead of another assertion.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "                if not pin_green and not ran_and_failed(counts):",
+   "replace": "                if False:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_that_breaks_collection_is_refused_not_credited_as_a_kill"
+  },
+  {
+   "name": "a-skipped-pin-reads-as-green",
+   "_mechanism": "Measured: `@pytest.mark.skip` exits 0, so an exit-code pre-check declares a DISABLED test green. The mutant then survives and reads as a missing guard when the test was simply turned off.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    return (counts.get(\"passed\", 0) > 0\n            and not counts.get(\"failed\") and not counts.get(\"error\")\n            and not counts.get(\"skipped\"))",
+   "replace": "    return not counts.get(\"failed\") and not counts.get(\"error\")",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_skipped_named_test_is_refused_not_treated_as_green"
+  },
+  {
+   "name": "a-missing-pin-reads-as-green",
+   "_mechanism": "A nodeid that matches nothing runs nothing, and `no tests ran` must not clear the pre-check -- otherwise a typo in a spec silently disables its scoring.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    return (counts.get(\"passed\", 0) > 0",
+   "replace": "    return (counts.get(\"passed\", 0) >= 0",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_that_does_not_exist_is_refused_as_did_not_run"
+  },
+  {
+   "name": "a-genuinely-red-pin-is-scored-anyway",
+   "_mechanism": "L559's original case, now discriminated from `did not run`: a kill credited against a pin that was already failing measures nothing.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "                if not ran_and_passed(counts):",
+   "replace": "                if False:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
   }
  ]
 }

@@ -386,3 +386,51 @@ class TestDocsPin:
         assert reasons, "no halt reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)
         assert not undocumented, f"undocumented halt reasons: {undocumented}"
+
+
+class TestSurfacedByReview:
+    """Findings from an adversarial review of the shipped assembler."""
+
+    def test_a_typod_slot_is_still_a_residual(self, plan: Path, tmp_path: Path) -> None:
+        """`<INLINE_MODULE-NAME>` evaded an `[A-Z_]+` pattern completely.
+
+        A raw slot reaching the agent reads as an unfilled template and is
+        silently discounted, so the one thing the preflight must not do is miss
+        a slot because it was misspelled.
+        """
+        bad = tmp_path / "typo-template.md"
+        bad.write_text("<INLINE_TASK_FROM_IMPL_PLAN>\n<INLINE_MODULE-NAME>\n", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, template=bad)
+        assert exc.value.reason == "residual_slots"
+        assert "INLINE_MODULE-NAME" in exc.value.detail
+
+    def test_a_lowercase_slot_is_still_a_residual(self, plan: Path, tmp_path: Path) -> None:
+        bad = tmp_path / "lower-template.md"
+        bad.write_text("<INLINE_TASK_FROM_IMPL_PLAN>\n<INLINE_feature>\n", encoding="utf-8")
+        with pytest.raises(Halt) as exc:
+            call(plan, tmp_path, template=bad)
+        assert exc.value.reason == "residual_slots"
+
+    def test_a_path_with_spaces_is_quoted_in_the_block(self, tmp_path: Path) -> None:
+        """Raw interpolation splits a spaced path into two shell arguments."""
+        block = command_block(
+            feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            python="/opt/my python/bin/python3", test_path="tests/a b.py",
+            project_root=tmp_path,
+        )
+        assert "'/opt/my python/bin/python3'" in block
+        assert "'tests/a b.py'" in block
+
+    def test_the_block_halts_when_the_dispatch_fails(self, tmp_path: Path) -> None:
+        """Otherwise it reads a missing --out file and runs pytest anyway,
+        turning a dispatch that never ran into a verdict-shaped nothing."""
+        block = command_block(
+            feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            python=PYTHON, test_path="tests/t.py", project_root=tmp_path,
+        )
+        guard = 'if [ "$rc" -ne 0 ]; then'
+        assert guard in block
+        assert block.index(guard) < block.index("h_mad_extract_verdict.py")

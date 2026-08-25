@@ -285,3 +285,59 @@ def test_routing_needs_both_the_title_and_a_j_row(tmp_path: Path) -> None:
     out = run(path)
     assert "J-entries=" not in out, out
     assert "OPEN(yes+maybe)=   1" in out, out
+
+
+# --- surfaced by an adversarial review of the shipped fix -------------------
+
+
+def test_a_bold_closed_id_is_still_an_entry(tmp_path: Path) -> None:
+    """`- 🔴 **J1** — title` is as real as `- 🔴 **J1 — title`.
+
+    Seven entries in the real file use the bold-closed shape.
+    """
+    path = monitoring(tmp_path, "- 🔴 **J1** — closed bold. Status: `MONITORING`\n")
+    out = run(path)
+    assert "J-entries=    1" in out, out
+    assert "OPEN(MONITORING+PLANNED)=   1" in out, out
+
+
+def test_coverage_counts_entries_of_any_prefix_not_just_j(tmp_path: Path) -> None:
+    """Hardcoding `J` in the denominator rigs the guard to hide its own gap.
+
+    The real file carries 33 F/G/H/A/V/P finding rows beside its 46 J entries.
+    They are not the standing registry and carry no `Status:` line, so they are
+    not open work — but a coverage line that filters them out of its own
+    denominator reports clean while dropping them, which is the guard covering
+    up exactly what it exists to expose.
+    """
+    path = monitoring(tmp_path, """
+- 🔴 **J1 — a real entry.** Status: `FIXED`
+- 🔴 **F1 — a finding row from some review.** No status line.
+- 🟡 **G2** — another shape entirely.
+""")
+    out = run(path)
+    assert "parsed=1 row-shaped=3" in out, out
+    assert "2 ROW-SHAPED LINES NOT PARSED" in out, out
+
+
+def test_routing_survives_a_blank_first_line(tmp_path: Path) -> None:
+    """Pinning the title to line 0 sends the registry to the CANDIDATE reader.
+
+    It then hits the pipe table and reports `TOTAL candidates=0` — precisely the
+    catastrophic false-clean this routing was written to prevent, reintroduced
+    by a leading blank line or YAML frontmatter.
+    """
+    path = tmp_path / "skill-monitoring.md"
+    path.write_text("\n---\ntitle: registry\n---\n" + MONITORING_HEADER
+                    + "- 🔴 **J1 — one.** Status: `MONITORING`\n", encoding="utf-8")
+    out = run(path)
+    assert "J-entries=    1" in out, out
+    assert "TOTAL candidates=" not in out, out
+
+
+def test_an_empty_registry_is_still_a_registry(tmp_path: Path) -> None:
+    """"No entries yet" must not be the thing that misroutes the file."""
+    path = monitoring(tmp_path, "\nNo entries have been filed yet.\n")
+    out = run(path)
+    assert "J-entries=    0" in out, out
+    assert "TOTAL candidates=" not in out, out

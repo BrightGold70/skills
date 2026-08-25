@@ -35,7 +35,7 @@
    "name": "drop-the-model-pin",
    "_mechanism": "Mistake 1. The config default cannot execute tools and fails as a well-formed STATUS: BLOCKED, so nothing downstream looks wrong.",
    "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        f\"hmad-dispatch exec codex {q(str(prompt))} --model {model} \\\\\",",
+   "find": "        f\"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\\\\",",
    "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))} \\\\\",",
    "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_1_the_model_is_pinned_because_the_default_cannot_execute_tools"
   },
@@ -65,10 +65,10 @@
   },
   {
    "name": "drop-the-scope-warning",
-   "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project.",
+   "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project. NOTE: the first version of this mutation was a SYNTAX ERROR, so pytest died at collection and the run was credited as `killed by its named test` -- a FAKE KILL, caught only once scoring started requiring the named test to actually fail.",
    "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        \"That path is the scope. Do not widen it — an unscoped run collects the \"",
-   "replace": "        \"\" or (",
+   "find": "        \"That path is the scope. Do not widen it — an unscoped run collects the \"\n        \"sibling project and dies on pre-existing errors.\"",
+   "replace": "        \"\"",
    "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_5_the_scoped_test_path_is_stated_and_bounded"
   },
   {
@@ -115,8 +115,8 @@
    "name": "preflight-matches-bare-prose-slot-names",
    "_mechanism": "Prose names a slot bare; only a real slot is bracketed. Matching bare names refuses every assembly against the shipped template.",
    "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "RESIDUAL = re.compile(r\"<INLINE_[A-Z_]+>|<REPORT_FILE_PATH>\")",
-   "replace": "RESIDUAL = re.compile(r\"INLINE_[A-Z_*]+|<REPORT_FILE_PATH>\")",
+   "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
+   "replace": "RESIDUAL = re.compile(r\"INLINE[^>]*|<REPORT_FILE_PATH>\")",
    "test": "tests/test_h_mad_assemble_tdd.py::TestPreflight::test_bare_prose_mentions_of_a_slot_are_not_residuals"
   },
   {
@@ -126,6 +126,30 @@
    "find": "        \"green\": \"**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests \"",
    "replace": "        \"green\": \"**THIS DISPATCH IS PHASE 5d (RED).** Make the failing tests \"",
    "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_the_phase_is_stamped_because_the_template_carries_both"
+  },
+  {
+   "name": "narrow-the-residual-preflight",
+   "_mechanism": "A slot with a typo or lowercase evades an `[A-Z_]+` pattern and reaches the agent as a broken prompt with no refusal at all.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
+   "replace": "RESIDUAL = re.compile(r\"<INLINE_[A-Z_]+>|<REPORT_FILE_PATH>\")",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_typod_slot_is_still_a_residual"
+  },
+  {
+   "name": "unquote-the-interpolated-paths",
+   "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        f\"{q(python)} -m pytest {q(test_path)} -v\",",
+   "replace": "        f\"{python} -m pytest {test_path} -v\",",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
+  },
+  {
+   "name": "proceed-after-a-failed-dispatch",
+   "_mechanism": "The block would read a missing --out file and run pytest anyway, turning a dispatch that never ran into a verdict-shaped nothing.",
+   "file": "scripts/h_mad_assemble_tdd.py",
+   "find": "        'if [ \"$rc\" -ne 0 ]; then echo \"dispatch failed rc=$rc\" >&2; exit \"$rc\"; fi',",
+   "replace": "        \"\",",
+   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_the_block_halts_when_the_dispatch_fails"
   }
  ],
  "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."

@@ -78,14 +78,20 @@ class TestAccepts:
         assert after[0] == "- v3.4: Adds the thing."
 
     def test_the_rest_of_the_document_is_untouched(self, tmp_path: Path) -> None:
-        doc = stage(tmp_path, "vh-ascending.md")
-        before = doc.read_text().split("\n")
-        bump(doc, "v1.3", "Audit v3 fixes.")
-        after = doc.read_text().split("\n")
+        """Compared on raw BYTES, not on a split string.
 
-        assert len(after) == len(before) + 1
-        inserted = next(i for i, ln in enumerate(after) if ln.startswith("- v1.3:"))
-        assert after[:inserted] + after[inserted + 1:] == before
+        An earlier version read both sides with `read_text().split()`, which
+        normalises line endings on both sides — a tautology that could not see
+        the whole-file CRLF rewrite it was supposed to prevent.
+        """
+        doc = stage(tmp_path, "vh-ascending.md")
+        before = doc.read_bytes()
+        bump(doc, "v1.3", "Audit v3 fixes.")
+        after = doc.read_bytes()
+
+        inserted = b"- v1.3: Audit v3 fixes.\n"
+        assert len(after) == len(before) + len(inserted)
+        assert after.replace(inserted, b"", 1) == before
 
     def test_an_empty_section_accepts_the_first_entry(self, tmp_path: Path) -> None:
         doc = tmp_path / "empty.md"
@@ -334,3 +340,80 @@ class TestDocsPin:
         assert reasons, "no refusal reasons found in the script"
         undocumented = sorted(r for r in reasons if r not in skill)
         assert not undocumented, f"undocumented refusal reasons: {undocumented}"
+
+
+class TestEntryBoundaries:
+    """An entry is its bullet PLUS whatever hangs beneath it.
+
+    All four cases here were found by an adversarial review of the shipped
+    script and then confirmed against the real corpus: 43 sections wrap their
+    last entry in continuation prose, 4 carry an indented version sub-bullet,
+    and 4 contain a fenced block.
+    """
+
+    def test_an_indented_sub_bullet_is_not_an_entry(self, tmp_path: Path) -> None:
+        """The live failure: a correctly ascending section was REFUSED.
+
+        `docs/01-plan/features/regression-provenance-ledger.impl-plan.md` has
+        `  - v1.4 made ...` nested under its v1.1 entry. Counted as a top-level
+        version it makes 1.0/1.1/1.4/1.2 read as unsorted, and a real impl-plan
+        could not be bumped at all.
+        """
+        doc = tmp_path / "nested.md"
+        doc.write_text(
+            "## Version History\n"
+            "- v1.0: First.\n"
+            "- v1.1: Second, which discusses earlier work:\n"
+            "  - v1.4 made `--feature` required but left Task 7 alone.\n"
+            "- v1.2: Third.\n")
+        result = bump(doc, "v1.3", "Fourth.")
+        assert result["placement"] == "append"
+        assert doc.read_text().rstrip().endswith("- v1.3: Fourth.")
+
+    def test_continuation_prose_keeps_its_entry(self, tmp_path: Path) -> None:
+        """Appending after the last BULLET splices between it and its own text."""
+        doc = tmp_path / "wrapped.md"
+        doc.write_text(
+            "## Version History\n"
+            "- v1.0: First.\n"
+            "- v1.1: Second, wrapped across lines\n"
+            "  and this continuation belongs to v1.1.\n")
+        bump(doc, "v1.2", "Third.")
+        lines = doc.read_text().split("\n")
+
+        assert lines.index("  and this continuation belongs to v1.1.") < \
+               lines.index("- v1.2: Third.")
+
+    def test_a_heading_inside_a_fenced_block_is_not_the_section_end(
+        self, tmp_path: Path
+    ) -> None:
+        doc = tmp_path / "fenced.md"
+        doc.write_text(
+            "## Version History\n"
+            "- v1.0: First.\n"
+            "\n"
+            "```markdown\n"
+            "# a heading inside a fence\n"
+            "```\n"
+            "\n"
+            "- v1.1: Second.\n")
+        bump(doc, "v1.2", "Third.")
+        lines = doc.read_text().split("\n")
+
+        assert lines.index("- v1.2: Third.") > lines.index("- v1.1: Second.")
+        assert lines.count("# a heading inside a fence") == 1
+
+    def test_crlf_line_endings_survive_the_write(self, tmp_path: Path) -> None:
+        """`read_text()`+`write_text()` rewrites EVERY line ending silently.
+
+        No file in this corpus uses CRLF, so this is the guard arriving before
+        the failure rather than after it — and the point is structural: an
+        assertion handed already-normalised text cannot see the change.
+        """
+        doc = tmp_path / "crlf.md"
+        doc.write_bytes(b"## Version History\r\n- v1.0: First.\r\n")
+        bump(doc, "v1.1", "Second.")
+        raw = doc.read_bytes()
+
+        assert raw == b"## Version History\r\n- v1.0: First.\r\n- v1.1: Second.\r\n", raw
+        assert b"\n" not in raw.replace(b"\r\n", b"")

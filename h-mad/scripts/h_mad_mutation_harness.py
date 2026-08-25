@@ -184,6 +184,40 @@ def _suite_is_green(command: list[str], root: Path) -> bool:
 
 
 FAILED_LINE = re.compile(r"^FAILED\s+(\S+)", re.MULTILINE)
+OUTCOME = re.compile(r"(\d+)\s+(passed|failed|skipped|error|errors|xfailed|xpassed)")
+
+
+def outcome(output: str) -> dict:
+    """Counts from a pytest summary. Empty when nothing parseable was printed.
+
+    Scoring on the exit code alone produces two false verdicts, both measured
+    2026-08-25:
+
+      * A mutation that breaks collection -- a syntax error, a bad import --
+        makes pytest exit 2 before the named test's assertion ever runs, and the
+        harness credited that as `killed by its named test`. It proves the code
+        breaks when broken, and nothing about the property.
+      * `@pytest.mark.skip` exits 0, so the pre-check declared a DISABLED test
+        green. The mutant then survives and reads as a missing guard rather than
+        as a test that was turned off.
+
+    So the summary is read: a kill requires the test to have RUN and failed, and
+    green requires it to have RUN and passed.
+    """
+    counts = {}
+    for number, word in OUTCOME.findall(output):
+        counts[word.rstrip("s") if word.startswith("error") else word] = int(number)
+    return counts
+
+
+def ran_and_failed(counts: dict) -> bool:
+    return counts.get("failed", 0) > 0
+
+
+def ran_and_passed(counts: dict) -> bool:
+    return (counts.get("passed", 0) > 0
+            and not counts.get("failed") and not counts.get("error")
+            and not counts.get("skipped"))
 
 
 def _failing_tests(output: str) -> list[str]:
@@ -340,11 +374,16 @@ def run_spec(spec_path: Path) -> dict:
             # that is already failing, and a targeted run is cheap enough to
             # check every time.
             if scoring_command is not None and mutation.get("test"):
-                pin_green, _ = _run(scoring_command, root)
-                if not pin_green:
+                _, pin_output = _run(scoring_command, root)
+                counts = outcome(pin_output)
+                if not ran_and_passed(counts):
+                    why = ("was skipped" if counts.get("skipped")
+                           else "did not run" if not counts
+                           else "was already failing")
                     result["refused"].append(
-                        f"{mutation['name']}: named test {mutation['test']} was already "
-                        f"failing before the mutation, so a kill would measure nothing"
+                        f"{mutation['name']}: named test {mutation['test']} {why} "
+                        f"before the mutation ({counts or 'no summary'}), so a kill "
+                        f"would measure nothing"
                     )
                     continue
 
@@ -362,8 +401,19 @@ def run_spec(spec_path: Path) -> dict:
                 continue
 
             if scoring_command is not None:
-                pin_green, _ = _run(scoring_command, root)
-                if not pin_green:
+                pin_green, pin_output = _run(scoring_command, root)
+                counts = outcome(pin_output)
+                if not pin_green and not ran_and_failed(counts):
+                    # Red, but the named test never reached its assertion: the
+                    # mutant broke collection. That proves the code breaks when
+                    # broken and nothing about the property, so it measured
+                    # NOTHING -- a refusal, not a kill.
+                    result["refused"].append(
+                        f"{mutation['name']}: the run went red without {mutation['test']} "
+                        f"failing ({counts or 'no summary'}) — the mutation broke collection "
+                        f"rather than the property"
+                    )
+                elif not pin_green:
                     result["caught"] += 1
                     result["mechanism"][mutation["name"]] = (
                         f"killed by its named test {mutation['test']}"

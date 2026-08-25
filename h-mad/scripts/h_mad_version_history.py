@@ -47,8 +47,13 @@ TOKEN = "VERSION-HISTORY"
 ANCHOR = re.compile(r"^##[ \t]*Version History[ \t]*$", re.IGNORECASE)
 HEADER = re.compile(r"^#{1,6} ")
 RULE = re.compile(r"^[ \t]*---+[ \t]*$")
-BULLET_VERSION = re.compile(r"^[ \t]*[-*][ \t]+\**v(\d+)\.(\d+)")
-BULLET_ANY = re.compile(r"^[ \t]*[-*][ \t]+")
+# Anchored at column 0 on purpose: an INDENTED bullet is a sub-bullet of the
+# entry above it, not an entry. Four exist in this corpus, and one of them
+# (`  - v1.4 made ...` under a v1.1 entry) made a correctly ascending section
+# read as unsorted, so a real impl-plan was REFUSED. Measured 2026-08-25:
+# zero top-level entries are indented, so nothing legitimate is lost.
+BULLET_VERSION = re.compile(r"^[-*][ \t]+\**v(\d+)\.(\d+)")
+BULLET_ANY = re.compile(r"^[-*][ \t]+")
 TABLE_ROW = re.compile(r"^[ \t]*\|")
 VERSION_ARG = re.compile(r"^v(\d+)\.(\d+)$")
 
@@ -79,9 +84,20 @@ def find_anchor(lines: list[str]) -> int:
 
 
 def section_bounds(lines: list[str], anchor: int) -> tuple[int, int]:
-    """Half-open body range after `anchor`, stopping at header, `---`, or EOF."""
+    """Half-open body range after `anchor`, stopping at header, `---`, or EOF.
+
+    Fenced blocks are tracked because a ``` block inside the section can contain
+    a `# heading` line, and treating that as the section boundary truncates the
+    section and splices the new entry into the middle of the code block.
+    """
     end = anchor + 1
-    while end < len(lines) and not HEADER.match(lines[end]) and not RULE.match(lines[end]):
+    fenced = False
+    while end < len(lines):
+        line = lines[end]
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and (HEADER.match(line) or RULE.match(line)):
+            break
         end += 1
     return anchor + 1, end
 
@@ -166,7 +182,13 @@ def plan_insertion(text: str, version: str, entry_text: str) -> tuple[list[str],
         insert_at = indices[0]
         placement = "prepend"
     else:
+        # An entry is its bullet PLUS any indented continuation beneath it, and
+        # 43 sections in this corpus wrap their last entry that way. Inserting
+        # at `indices[-1] + 1` splices the new bullet between an entry and its
+        # own continuation, divorcing the text from its owner.
         insert_at = indices[-1] + 1
+        while insert_at < end and lines[insert_at].strip() and not BULLET_ANY.match(lines[insert_at]):
+            insert_at += 1
         placement = "append"
 
     new_lines = lines[:insert_at] + [new_line] + lines[insert_at:]
@@ -189,16 +211,32 @@ def assert_insertion_only(old: list[str], new: list[str], index: int) -> None:
 
 def bump(path: Path, version: str, entry_text: str, dry_run: bool = False) -> dict:
     try:
-        text = path.read_text()
+        raw = path.read_bytes()
     except OSError:
         raise Refusal("unreadable") from None
+
+    # Read and write at the BYTE level, preserving the file's own line endings.
+    # `read_text()` normalises CRLF to LF and `write_text()` emits the platform
+    # default, so a CRLF document would be rewritten end to end while every
+    # assertion above still reported an insertion of one line -- they all
+    # operate on the already-normalised list. The self-check cannot see a change
+    # it has been handed in normalised form, so it is done on bytes.
+    newline = "\r\n" if b"\r\n" in raw else "\n"
+    text = raw.decode("utf-8").replace("\r\n", "\n")
 
     old_lines = text.split("\n")
     new_lines, index, placement = plan_insertion(text, version, entry_text)
     assert_insertion_only(old_lines, new_lines, index)
 
+    new_raw = newline.join(new_lines).encode("utf-8")
+    inserted = (new_lines[index] + newline).encode("utf-8")
+    cut = len(newline.join(new_lines[:index]).encode("utf-8"))
+    cut += len(newline.encode("utf-8")) if index else 0
+    if new_raw[:cut] + new_raw[cut + len(inserted):] != raw:
+        raise Refusal("splice_not_additive", "byte-level check: the file changed elsewhere")
+
     if not dry_run:
-        path.write_text("\n".join(new_lines))
+        path.write_bytes(new_raw)
 
     return {"line": index + 1, "placement": placement, "version": version}
 
