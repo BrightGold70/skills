@@ -923,7 +923,9 @@ def _mutation_spec_at(
     return spec_path
 
 
-def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(tmp_path: Path) -> None:
+def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(
+    tmp_path: Path, monkeypatch
+) -> None:
     """AC-3.1 WIRE-PIN: `run_spec` must refuse on drifted siblings before mutation."""
     spec_dir = tmp_path / "project" / "specs"
     root = tmp_path / "project"
@@ -942,12 +944,28 @@ def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(tmp_path: P
     )
     targets = {path: path.read_bytes() for path in [root / "guard.py"]}
 
+    def fail_if_suite_runs(_command: list[str], _root: Path) -> bool:
+        raise AssertionError("sibling precheck must refuse before suite execution")
+
+    original_write_text = Path.write_text
+
+    def fail_if_mutation_writes(path: Path, *args, **kwargs):
+        raise AssertionError(f"sibling precheck must refuse before mutation writes: {path}")
+
+    monkeypatch.setattr(h_mad_mutation_harness, "_suite_is_green", fail_if_suite_runs)
+    monkeypatch.setattr(Path, "write_text", fail_if_mutation_writes)
+
     result = run_spec(clean)
 
     assert result["verdict"] == "PRECHECK_FAILED", (
         "run_spec must call the sibling precheck before the baseline command "
         f"and refuse a clean spec beside a drifted sibling: {result}"
     )
+    # These shape and byte checks document intent, but are not sufficient alone:
+    # PRECHECK_FAILED constructs a fresh dict without mutation counters, and the
+    # harness restores bytes on every exit path. The monkeypatches above are the
+    # ordering proof because a late precheck would execute the suite or write a
+    # mutation and raise before this assertion.
     assert "caught" not in result and "survived" not in result and "mutations" not in result, (
         "sibling precheck refusal must happen before executing any mutation: "
         f"{result}"
@@ -957,6 +975,7 @@ def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(tmp_path: P
     assert {path: path.read_bytes() for path in targets} == targets, (
         "run_spec must apply zero mutations when a sibling precheck refuses"
     )
+    assert Path.write_text is not original_write_text
 
 
 def test_all_clean_sibling_directory_still_runs_to_ordinary_verdict(tmp_path: Path) -> None:
