@@ -421,6 +421,47 @@ findings are right — and this is that caveat measured. The practical rule: rea
 a **triage hint weighted on thinking**, never as a verdict in either direction, and never treat a
 high-evidence pass as more trustworthy than a high-thinking one.
 
+### F16 — `--gated` reports STALE forever for any document outside the audit file's directory
+
+Found at the Phase-4 close by using the tool exactly as SKILL.md documents it. **`[OURS]`, live, and
+the documented multi-document case is the broken one.**
+
+The stamp records gated files by **basename only**:
+
+```json
+{"verdict": "PASS", "files": {"…design.md": "466d88a4…", "…spec.md": "8b17f839…"}}
+```
+
+and `verify_stamp()` resolves each as `audit_file.parent / rel`. The audit file lives in
+`docs/02-design/features/`, so the design resolves; the spec lives in `docs/01-plan/features/` and is
+looked up at `docs/02-design/features/…spec.md`, which does not exist. The read fails, and the code
+deliberately files that as a change rather than a cannot-judge — *"Deleted or unreadable. The verdict
+was about content that is no longer there, which is a change, not a cannot-judge."* So a
+path-resolution failure is reported as staleness.
+
+Proven with a control rather than inferred:
+
+| `--gated` argument(s) | `GATESTAMP:` |
+|---|---|
+| design only (same directory as the audit file) | `CURRENT checked=1 changed=0` |
+| design + spec (spec one directory away) | `STALE checked=2 changed=1 … (unreadable)` |
+
+**Why it matters beyond this run.** SKILL.md instructs: *"a cycle that gates a design **and** an
+impl-plan must name both"* — and those live in `docs/02-design/features/` and
+`docs/01-plan/features/` respectively. Following the documented instruction therefore produces a
+permanent `STALE`, whose own remedy text says to halt `audit_gate:verdict_stale` and re-audit; the
+re-audit produces `STALE` again. The operator either loops or learns to disregard `GATESTAMP:`, and
+disregarding it is exactly the outcome the stamp exists to prevent.
+
+The failure is also silent in the direction that matters least and loudest in the direction that
+matters most: it never reports a stale verdict as current, so nothing unsafe ships. It just makes
+the check unusable for its documented case.
+
+Not fixed here — out of this feature's scope. Filed for `docs/skill-monitoring.md` at Phase 7. The
+likely fix is to record a path relative to the repository root, or to store the resolved absolute
+path, rather than the basename. This feature's Phase-4 stamp is therefore scoped to the design
+document alone, and the spec is knowingly ungated.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -456,3 +497,6 @@ would have argued for better wording rather than for wiring.
 - v1.9: F15 added — the Phase-4 design audit falsified F11's reading that `low-evidence` predicts
   hollowness. Both passes that found all four defects were flagged low-evidence; the 16-read
   verifying dispatch got the completeness judgement wrong.
+- v1.10: F16 added — `--gated` resolves stamped files against the audit file's own directory, so a
+  cross-directory document reports STALE permanently; SKILL.md's documented design+impl-plan case
+  spans two directories and is therefore the broken one. Proven with a control.
