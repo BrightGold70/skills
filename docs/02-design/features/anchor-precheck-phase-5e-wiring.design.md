@@ -77,9 +77,14 @@ It returns a **census**, not a bare list, because it must report what it decline
 as what it swept:
 
 ```python
-{"swept":   [Path, ...],                                   # classified `spec`
- "skipped": [{"path": str, "reason": "not-a-spec" | "unclassifiable"}, ...]}
+{"spec_paths": [Path, ...],                                # classified `spec`
+ "skipped":    [{"path": str, "reason": "not-a-spec" | "unclassifiable"}, ...]}
 ```
+
+Two names, two types, never interchanged: **`spec_paths` is always a list of paths; `swept` is
+always an integer count**, derived as `len(spec_paths)` when the census is folded into a result.
+A single name carrying both a list and a count is the defect this design has now made twice — first
+as `specs`, then as `swept` — so the rule is stated rather than left to care.
 
 **This census shape is defined here once and referenced everywhere below.** An earlier draft
 described it in three places with three different shapes — a flat `list[Path]` signature, a
@@ -98,16 +103,18 @@ malformed or unrecognised `.json` sibling is named when the run fails and silent
 succeeds, which is precisely the invisible-narrowing this feature exists to prevent, reintroduced on
 the success path. AC-6.4 says such files are *always* named; "always" includes `ALL_CAUGHT`.
 
-So every `run_spec()` result carries `precheck` in the census shape defined above — `swept` as an
-integer count, `skipped` as the list — and `main()` prints the skipped/unclassifiable detail lines
-for **every** verdict. Only the refusal path adds the
+So every `run_spec()` result carries `precheck` — `swept`, the integer `len(census["spec_paths"])`,
+plus `skipped` carried through unchanged — and `main()` prints the skipped/unclassifiable detail
+lines for **every** verdict. The census's own `spec_paths` list is not carried into the result: the
+result needs the count, and keeping the list there is what tempted the two names to collide. Only the refusal path adds the
 `drifted`/`unreadable` slots below.
 
 If any sibling drifted or failed to load, return immediately:
 
 ```python
 {"verdict": "PRECHECK_FAILED",
- "precheck":   {"swept": <int>, "skipped": [{"path": ..., "reason": ...}]},   # on EVERY shape
+ "precheck":   {"swept": <int>,          # == len(census["spec_paths"])
+                "skipped": [{"path": ..., "reason": ...}]},                  # on EVERY shape
  "drifted":    [{"spec": name, "root": str(resolved_root),
                  "mutations": [{"name": ..., "hits": n, "hints": [...]}]}],
  "unreadable": [{"spec": name, "root": str(resolved_root), "error": str(SpecError)}]}
@@ -267,7 +274,7 @@ means a list in one place and a count in another.
 |---|---|
 | `_resolve_root(spec: dict, spec_path: Path) -> Path` | new, module-private |
 | `classify_spec_file(path: Path) -> tuple[str, str \| None]` | new, module-level so tests reach it without duplicating it |
-| `_sibling_specs(spec_path: Path) -> dict` | new, module-private; returns the census `{swept: [Path], skipped: [{path, reason}]}` |
+| `_sibling_specs(spec_path: Path) -> dict` | new, module-private; returns the census `{spec_paths: [Path], skipped: [{path, reason}]}` |
 | `run_spec(spec_path)` | signature unchanged; may return the new verdict |
 | CLI | no new flags. New stdout verdict `MUTATION: PRECHECK_FAILED specs=<N> drifted=<K>`, exit 2 |
 
@@ -417,3 +424,4 @@ later counts changed.
 - v1.2: Design audit v2 (must=2, should=1): added the unreadable slot the AC-6.3 fix required, renamed the verdict to PRECHECK_FAILED so an unreadable-only refusal is not reported as drift, and pinned the AC-5.5 restore discipline.
 - v1.3: Design audit v3 (must=2, should=1): the skipped/unclassifiable census now survives a clean precheck so AC-6.4 holds on the success path, the AC-2.2 expectation is asserted in full, and the suite assertion filters through classify_spec_file before calling precheck_spec.
 - v1.4: Design audit v4 (must=3): the census bolted on in v1.3 was described in five places with three incompatible shapes. The census is now defined once and referenced everywhere; the top-level specs key is gone, so one name never means a list in one place and a count in another.
+- v1.5: Design audit v5 (must=1): the v1.4 fix moved the list-versus-count ambiguity from specs to swept rather than removing it. The census now names the list spec_paths and the count swept, and the rule is stated because the design has now made this mistake twice.
