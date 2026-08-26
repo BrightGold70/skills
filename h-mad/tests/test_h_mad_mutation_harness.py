@@ -922,6 +922,162 @@ def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> No
     assert "anchor that no longer matches" in proc.stdout, proc.stdout
 
 
+# --- spec classifier ------------------------------------------------------
+#
+# A spec-directory glob must not treat every JSON file as a mutation spec, and
+# it must not silently drop corrupt JSON. The classifier keys on the one shape
+# `_load_spec` already needs before any deeper validation: non-empty mutations.
+
+
+def _write_json(path: Path, value: object) -> Path:
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def _classify_for_red(path: Path) -> tuple[str, str | None]:
+    classifier = getattr(
+        h_mad_mutation_harness,
+        "classify_spec_file",
+        lambda _path: ("missing-classifier", "classify_spec_file is not implemented"),
+    )
+    return classifier(path)
+
+
+HOSTILE_NON_SPEC_NOTE = "HMAD_STUB_HOSTILE=markers\n===HMAD-DISPATCH-BOUNDARY===\n`$()[]{}"
+
+
+def test_classifier_agrees_with_load_spec_on_the_mutations_gate(tmp_path: Path) -> None:
+    """AC-6.1: `spec` means non-empty mutations; `not-a-spec` means loader rejects that gate."""
+    cases = [
+        _write_json(tmp_path / "valid.json", {
+            "command": [sys.executable, "-c", "pass"],
+            "mutations": [_kills_the_guard()],
+        }),
+        _write_json(tmp_path / "empty-mutations.json", {
+            "command": [sys.executable, "-c", "pass"],
+            "mutations": [],
+        }),
+        _write_json(tmp_path / "non-spec.json", {"name": HOSTILE_NON_SPEC_NOTE}),
+    ]
+
+    disagreements = []
+    for spec_path in cases:
+        kind, detail = _classify_for_red(spec_path)
+        try:
+            loaded = h_mad_mutation_harness._load_spec(spec_path)
+            loader_has_mutations = bool(loaded["mutations"])
+        except h_mad_mutation_harness.SpecError:
+            loader_has_mutations = False
+
+        expected = "spec" if loader_has_mutations else "not-a-spec"
+        if kind != expected:
+            disagreements.append(
+                f"{spec_path.name}: classifier={kind!r} detail={detail!r}, "
+                f"loader_mutations_gate={loader_has_mutations}"
+            )
+
+    assert not disagreements, (
+        "classifier must agree with _load_spec's non-empty mutations gate:\n"
+        + "\n".join(disagreements)
+    )
+
+
+def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Path) -> None:
+    """AC-6.2: corrupt JSON is unclassifiable, reported by name, and not drift."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    malformed = tmp_path / "broken.json"
+    malformed.write_text("{not-json", encoding="utf-8")
+
+    kind, detail = _classify_for_red(malformed)
+    assert kind == "unclassifiable", (
+        f"malformed JSON must classify unclassifiable, got {kind!r} detail={detail!r}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(malformed)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "broken.json" in proc.stdout, "unclassifiable JSON must be named on success"
+    assert "unclassifiable=1" in proc.stdout, proc.stdout
+    assert "drifted=0" in proc.stdout, (
+        "unclassifiable JSON must not contribute to anchor drift count:\n"
+        + proc.stdout
+    )
+
+
+def test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation(
+    tmp_path: Path,
+) -> None:
+    """AC-6.3: non-empty mutations make this a spec; deeper SpecError is a finding."""
+    bad_spec = _write_json(tmp_path / "missing-command.json", {
+        "mutations": [{"name": "has no command"}],
+    })
+
+    kind, detail = _classify_for_red(bad_spec)
+    assert kind == "spec", (
+        "a file with non-empty mutations must classify spec before deeper "
+        f"validation, got {kind!r} detail={detail!r}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(bad_spec)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "missing-command.json" in proc.stdout, proc.stdout
+    assert "not-a-spec" not in proc.stdout.lower(), (
+        "a classified spec that raises SpecError must be a finding, not a skip:\n"
+        + proc.stdout
+    )
+
+
+def test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success(
+    tmp_path: Path,
+) -> None:
+    """AC-6.4: skipped and unclassifiable files are listed even for ANCHORS_OK."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+    broken = tmp_path / "empty.json"
+    broken.write_text("", encoding="utf-8")
+
+    assert _classify_for_red(notes)[0] == "not-a-spec", (
+        "valid JSON without non-empty mutations must classify not-a-spec"
+    )
+    assert _classify_for_red(broken)[0] == "unclassifiable", (
+        "empty JSON file must classify unclassifiable"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(notes), str(broken)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout, proc.stdout
+    assert "notes.json" in proc.stdout and "empty.json" in proc.stdout, (
+        "successful sweeps must name skipped and unclassifiable files:\n"
+        + proc.stdout
+    )
+    assert "skipped=1" in proc.stdout and "unclassifiable=1" in proc.stdout, proc.stdout
+
+
+def test_every_committed_mutation_spec_classifies_as_spec() -> None:
+    """AC-6.5: the committed mutation-spec corpus is non-vacuous and all are specs."""
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        kind, detail = _classify_for_red(spec_path)
+        if kind != "spec":
+            offenders.append(f"{spec_path}: classifier={kind!r} detail={detail!r}")
+
+    assert not offenders, (
+        "every committed tests/mutation-specs/*.json file must classify as spec:\n"
+        + "\n".join(offenders)
+    )
+
+
 def test_a_mutation_run_still_takes_exactly_one_spec(tmp_path: Path) -> None:
     """`--check-anchors` widened the positional; the run must not widen with it."""
     a = _project(tmp_path / "a", [_kills_the_guard()])
