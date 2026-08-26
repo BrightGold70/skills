@@ -66,13 +66,11 @@ bar. Suite 2206/0, anchors 231/231, every mutation killed by its named test.
    `docs/skill-candidates.md`. Four were re-checked today with findings recorded; two
    (`build mutation-spec anchors FROM the file`, `probe a tool with its simplest invocation`) were
    not touched this session.
-5. **Compact the auto-memory index — it is over its read limit and being truncated.**
-   `~/.claude/projects/-Users-kimhawk-orca-skills/memory/MEMORY.md` is **25,319 bytes** against a
-   24.4 KB limit, so part of it is silently not loaded each session. **31 of 108 index lines exceed
-   the ~200-char guideline and account for 14,176 bytes**; trimming those to ~200 each lands the
-   file near the 17 KB target without dropping a single entry. Not done here: each hook has to be
-   read against its topic file first, because some carry detail that exists nowhere else, and that
-   is a judgement pass rather than a mechanical truncation.
+5. **DONE — the auto-memory index was compacted** (`24,957 B → 17,051 B`, all 108 entries and all
+   145 links kept). Nine hooks carried facts absent from their topic file; those were relocated
+   before any trimming. Two link-list lines were left alone because trimming them would have
+   dropped entries — and the first verification pass caught exactly that failure anyway: two
+   replacements silently swallowed a co-located link, restored before finishing.
 6. `[suggested]` **`h_mad_ab_dispatch.py` has never run against a real agent dispatch** — only
    against stub runners and a shell stand-in. Its `--run` argv templating works, but the
    `hmad-dispatch exec` shape the row describes is unproven end to end.
@@ -87,11 +85,10 @@ bar. Suite 2206/0, anchors 231/231, every mutation killed by its named test.
   at 1–2). Not a backlog to drain — the file's own
   re-scout trigger says leave them. `live-e2e verb sweep` additionally has a measured ceiling:
   only 4 of the wrapper's 46 verbs are read-only and safely sweepable unattended.
-- **The auto-memory index is past its read limit** — status: flagged, not fixed. 25,319 B vs a
-  24.4 KB cap, so every session already loads a truncated index and some memories never surface.
-  This is user-global state (`~/.claude/projects/-Users-kimhawk-orca-skills/memory/`), not in this
-  repo, so it is not a git item. See Next Step 5 for the shape of the fix and why it was not done
-  inside a handoff.
+- **The auto-memory index was past its read limit** — status: **RESOLVED after the handoff was
+  first written.** 24,957 B → 17,051 B, all 108 entries and 145 links intact, no broken targets,
+  headings preserved. Nine hooks held detail that existed nowhere else and were relocated into
+  their topic files first. User-global state, so nothing here is a git item.
 - **`--verify-stamp` has no caller** — status: documented in `h-mad/SKILL.md` §Phase-6 step 11,
   invoked by nothing. It is opt-in by construction (default gate output is byte-identical without
   `--gated`), so this is a wiring decision, not a defect.
