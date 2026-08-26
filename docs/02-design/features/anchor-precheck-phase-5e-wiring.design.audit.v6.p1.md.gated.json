@@ -1,6 +1,7 @@
 {
  "verdict": "PASS",
  "files": {
-  "anchor-precheck-phase-5e-wiring.design.md": "466d88a4ebe7ac93108cdb4770497dcbfc75114ca8c2980225e73bb890cf43e6"
+  "anchor-precheck-phase-5e-wiring.design.md": "466d88a4ebe7ac93108cdb4770497dcbfc75114ca8c2980225e73bb890cf43e6",
+  "../../01-plan/features/anchor-precheck-phase-5e-wiring.spec.md": "8b17f839e2025c7d3b4119b7835e85ea30ed5b9f1ab9023c75e547067f0678c1"
  }
 }

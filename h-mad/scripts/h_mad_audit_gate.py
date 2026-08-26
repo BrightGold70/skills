@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -290,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         files = {}
         for path in args.gated:
             try:
-                files[str(path.name)] = _digest(path)
+                files[os.path.relpath(path, args.audit_file.parent)] = _digest(path)
             except OSError as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 print("GATE: UNSTAMPABLE must=0 should=0")

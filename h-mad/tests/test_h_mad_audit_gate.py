@@ -1,4 +1,5 @@
 import ast
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ MODULE_PATH = SCRIPT_DIR / "h_mad_audit_gate.py"
 
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from h_mad_audit_gate import classify  # noqa: E402
+from h_mad_audit_gate import classify, stamp_path  # noqa: E402
 
 
 def run_gate(audit_file: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -408,6 +409,21 @@ def _verify(audit: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _cross_directory_stamp_layout(tmp_path: Path):
+    audit_dir = tmp_path / "docs" / "02-design" / "features"
+    plan_dir = tmp_path / "docs" / "01-plan" / "features"
+    audit_dir.mkdir(parents=True)
+    plan_dir.mkdir(parents=True)
+
+    audit = audit_dir / "feat.impl-plan.audit.v1.md"
+    audit.write_text(CLEAN_AUDIT, encoding="utf-8")
+    design = audit_dir / "feat.design.md"
+    design.write_text("the design as audited\n", encoding="utf-8")
+    plan = plan_dir / "feat.spec.md"
+    plan.write_text("the plan as audited\n", encoding="utf-8")
+    return audit, design, plan
+
+
 def test_a_pass_records_what_it_gated(tmp_path: Path) -> None:
     audit, design = _stamped(tmp_path)
 
@@ -501,6 +517,50 @@ def test_several_gated_files_are_all_recorded(tmp_path: Path) -> None:
 
     assert "GATESTAMP: STALE" in proc.stdout, proc.stdout
     assert "feat.impl-plan.md" in proc.stdout, proc.stdout
+
+
+def test_cross_directory_gated_file_verifies_current_when_unchanged(
+    tmp_path: Path,
+) -> None:
+    audit, _, plan = _cross_directory_stamp_layout(tmp_path)
+
+    stamped = run_gate(audit, "--gated", str(plan))
+    proc = _verify(audit)
+
+    assert stamped.returncode == 0, stamped.stdout + stamped.stderr
+    assert "GATESTAMP: CURRENT checked=1 changed=0" in proc.stdout, proc.stdout
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_cross_directory_gated_file_modified_after_stamp_is_stale_not_decoy_current(
+    tmp_path: Path,
+) -> None:
+    audit, _, plan = _cross_directory_stamp_layout(tmp_path)
+    (audit.parent / plan.name).write_text("the plan as audited\n", encoding="utf-8")
+
+    stamped = run_gate(audit, "--gated", str(plan))
+    plan.write_text("the plan after implementation edits\n", encoding="utf-8")
+    proc = _verify(audit)
+
+    assert stamped.returncode == 0, stamped.stdout + stamped.stderr
+    assert "GATESTAMP: STALE checked=1 changed=1" in proc.stdout, proc.stdout
+    assert "feat.spec.md" in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+
+
+def test_mixed_cross_directory_stamp_keeps_same_directory_basename_compatible(
+    tmp_path: Path,
+) -> None:
+    audit, design, plan = _cross_directory_stamp_layout(tmp_path)
+
+    stamped = run_gate(audit, "--gated", str(design), "--gated", str(plan))
+    stamp = json.loads(stamp_path(audit).read_text(encoding="utf-8"))
+    proc = _verify(audit)
+
+    assert stamped.returncode == 0, stamped.stdout + stamped.stderr
+    assert "feat.design.md" in stamp["files"]
+    assert "GATESTAMP: CURRENT checked=2 changed=0" in proc.stdout, proc.stdout
+    assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
 def test_an_unreadable_gated_file_refuses_rather_than_stamping_a_hole(

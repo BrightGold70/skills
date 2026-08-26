@@ -16,7 +16,7 @@
  "mutations": [
   {
    "name": "a-missing-stamp-reads-as-current",
-   "_mechanism": "Nothing was recorded, so nothing was compared — reporting that as CURRENT is the same lie as an empty scrape reading as `no findings`, which is the defect `GATE: INVALID` already exists to prevent one function up.",
+   "_mechanism": "Nothing was recorded, so nothing was compared \u2014 reporting that as CURRENT is the same lie as an empty scrape reading as `no findings`, which is the defect `GATE: INVALID` already exists to prevent one function up.",
    "file": "scripts/h_mad_audit_gate.py",
    "find": "        return {\"verdict\": \"UNSTAMPED\", \"changed\": [], \"checked\": 0}",
    "replace": "        return {\"verdict\": \"CURRENT\", \"changed\": [], \"checked\": 0}",
@@ -40,7 +40,7 @@
   },
   {
    "name": "stale-does-not-name-what-moved",
-   "_mechanism": "`STALE` without the file list is a manual diff of every gated document — the recovery cost this stamp exists to remove.",
+   "_mechanism": "`STALE` without the file list is a manual diff of every gated document \u2014 the recovery cost this stamp exists to remove.",
    "file": "scripts/h_mad_audit_gate.py",
    "find": "        for rel in result[\"changed\"]:",
    "replace": "        for rel in []:",
@@ -80,7 +80,7 @@
   },
   {
    "name": "verify-stamp-exits-0-when-stale",
-   "_mechanism": "A caller reading `$?` cannot tell a live verdict from a dead one — and `$?` is exactly the surface the token discipline exists to replace.",
+   "_mechanism": "A caller reading `$?` cannot tell a live verdict from a dead one \u2014 and `$?` is exactly the surface the token discipline exists to replace.",
    "file": "scripts/h_mad_audit_gate.py",
    "find": "        return 0 if verdict == \"CURRENT\" else 2",
    "replace": "        return 0",
@@ -88,11 +88,19 @@
   },
   {
    "name": "the-stamp-lands-somewhere-nobody-reads",
-   "_mechanism": "The readback then always answers UNSTAMPED, which is honest but useless: the guard degrades to a permanent cannot-judge that a reader learns to ignore. (An earlier version of this mutation replaced the call with `_unused = (`, which broke collection rather than the property — the harness REFUSED it, correctly, instead of crediting a kill.)",
+   "_mechanism": "The readback then always answers UNSTAMPED, which is honest but useless: the guard degrades to a permanent cannot-judge that a reader learns to ignore. (An earlier version of this mutation replaced the call with `_unused = (`, which broke collection rather than the property \u2014 the harness REFUSED it, correctly, instead of crediting a kill.)",
    "file": "scripts/h_mad_audit_gate.py",
    "find": "        stamp_path(args.audit_file).write_text(",
    "replace": "        stamp_path(args.audit_file).with_name(\"nobody-reads-this.json\").write_text(",
    "test": "tests/test_h_mad_audit_gate.py::test_a_pass_records_what_it_gated"
+  },
+  {
+   "name": "stamp-records-a-basename-so-cross-directory-gating-breaks",
+   "_mechanism": "reverts the F16 fix: recording path.name loses the directory, so a gated doc outside the audit file's dir resolves to the wrong path (unreadable -> STALE) or, worse, to a same-named decoy inside it (-> false CURRENT).",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "                files[os.path.relpath(path, args.audit_file.parent)] = _digest(path)",
+   "replace": "                files[str(path.name)] = _digest(path)",
+   "test": "tests/test_h_mad_audit_gate.py::test_cross_directory_gated_file_modified_after_stamp_is_stale_not_decoy_current"
   }
  ]
 }

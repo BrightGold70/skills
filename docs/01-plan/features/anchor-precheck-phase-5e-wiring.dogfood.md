@@ -453,9 +453,24 @@ permanent `STALE`, whose own remedy text says to halt `audit_gate:verdict_stale`
 re-audit produces `STALE` again. The operator either loops or learns to disregard `GATESTAMP:`, and
 disregarding it is exactly the outcome the stamp exists to prevent.
 
-The failure is also silent in the direction that matters least and loudest in the direction that
-matters most: it never reports a stale verdict as current, so nothing unsafe ships. It just makes
-the check unusable for its documented case.
+**Severity, corrected during the fix.** This entry originally claimed the defect "never reports a
+stale verdict as current, so nothing unsafe ships". That is false, and the RED phase proved it. A
+basename lookup does not merely fail to find the file — it finds **whatever file of that name sits
+in the audit file's own directory**. Codex's discrimination test builds exactly that decoy and
+observes `GATESTAMP: CURRENT` for a gated document that had genuinely been modified:
+
+> expected `GATESTAMP: STALE checked=1 changed=1`; actual was `CURRENT`, because basename lookup
+> hit the same-dir decoy.
+
+So the failure mode is not only "unusable", it is "can vouch for content it never read". In this
+repository's current layout a collision is unlikely — `docs/01-plan/features/` and
+`docs/02-design/features/` do not today hold same-named documents — so the `(unreadable)` path is
+what actually fires here, and the safe-direction claim happens to hold *for this layout*. It is not
+guaranteed by the code, and a layout change would silently convert a fail-safe into a false clean.
+
+The correction matters more than the original finding: "unusable but safe" and "can report stale as
+current" warrant different urgency, and the first reading was mine, asserted without testing the
+collision case.
 
 Not fixed here — out of this feature's scope. Filed for `docs/skill-monitoring.md` at Phase 7. The
 likely fix is to record a path relative to the repository root, or to store the resolved absolute

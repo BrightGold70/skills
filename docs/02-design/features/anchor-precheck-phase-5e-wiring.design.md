@@ -360,9 +360,11 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` and the same for
 `handoff/tests/`, both from the repository root. Then
 `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json` expecting
-`ANCHORS_OK specs=16 mutations=213 ok=213 drifted=0 unreadable=0` — asserted in full, exactly as
-AC-2.2 words it, because a truncated expectation cannot distinguish a clean sweep from one whose
-later counts changed.
+`ANCHORS_OK specs=<N> mutations=<M> ok=<M> drifted=0 unreadable=0`, with `<N>`/`<M>` read from the
+tree and the three invocations required to agree exactly — asserted in full rather than truncated,
+because a partial expectation cannot distinguish a clean sweep from one whose later counts changed.
+The counts are not literals: they moved from 213 to 214 while this feature was being built, and an
+AC that must be edited whenever someone adds a mutation is an AC that gets edited without thought.
 
 ## Invariant Compliance
 

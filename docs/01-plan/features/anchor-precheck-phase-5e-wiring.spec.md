@@ -58,9 +58,15 @@ happens to run the affected spec.
 - **Acceptance Criteria**:
   - AC-2.1: No committed spec under any `tests/mutation-specs/` directory contains an absolute
     `root`. A test asserts this over the whole repository, so a future spec cannot reintroduce one.
-  - AC-2.2: `--check-anchors` over all 16 h-mad specs returns `ANCHORS_OK specs=16 mutations=213
-    ok=213 drifted=0 unreadable=0` when run from the repository root, from `/tmp`, and from a
-    directory outside the repository.
+  - AC-2.2: `--check-anchors` over all 16 h-mad specs returns
+    `ANCHORS_OK specs=<N> mutations=<M> ok=<M> drifted=0 unreadable=0` when run from the repository
+    root, from `/tmp`, and from a directory outside the repository — the three invocations must
+    agree with each other **exactly**, including every count, which is the property under test.
+    `<N>` and `<M>` are read from the tree at test time rather than hardcoded: they were 16 and 213
+    when this AC was written and are 16 and 214 as of the F16 fix, so a literal would fail the next
+    time anyone adds a mutation and would be corrected by editing the AC rather than by fixing
+    anything. What must never be softened is `drifted=0 unreadable=0` and the cross-invocation
+    agreement.
   - AC-2.3: The same sweep returns the same verdict when the repository is checked out at a
     different absolute path (simulated by copying or `git worktree add` to a temporary location),
     proving the machine-pinning is gone.
