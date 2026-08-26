@@ -1,6 +1,6 @@
 {
  "_why": "The assembler exists to make five recorded hand-assembly mistakes unrepeatable, so each of those has a mutation restoring it. The rest defend the two things that are judgement rather than default -- the stated counts and the wiring pin -- and the task slicer, where truncating or over-running a task body ships the wrong scope with no visible error. Every mutation is born pinned to the one test it is aimed at.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

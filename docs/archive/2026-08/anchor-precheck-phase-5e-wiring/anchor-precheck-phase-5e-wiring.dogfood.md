@@ -477,6 +477,66 @@ likely fix is to record a path relative to the repository root, or to store the 
 path, rather than the basename. This feature's Phase-4 stamp is therefore scoped to the design
 document alone, and the spec is knowingly ungated.
 
+### F17 — the state schema has no field for the 5c baseline sha the protocol depends on
+
+Minor, and the guard that surfaced it behaved correctly, which is the point worth recording.
+
+`h_mad_state_write.py` was asked to record `baseline_sha=b5c8f41` at 5c. It refused:
+
+```
+ERROR: record for '…' would not validate (classified historical); refusing to write.
+If a new field is genuinely needed, declare it in h_mad_state_schema.json rather than
+writing it ad hoc.
+```
+
+The store was left byte-identical. That is exactly the documented behaviour — *"an invented key
+cannot reach disk, which is what turns 'never invent a key' from a rule the orchestrator has to
+remember into one it cannot break"* — and it caught the orchestrator (me) inventing a key on the
+first try. The schema's 17 fields have no slot for it.
+
+The gap is real but small: SKILL.md's Phase-6a-prime says *"Inputs: Phase 5 diff (BASE = 5c sha;
+HEAD = 5g sha)"* and 5f takes `--base <5c sha>`, so the protocol depends on a value the state record
+cannot hold. Nothing is lost, because the value is derivable — `git merge-base main <feature-branch>`
+returned the exact commit — so the practical answer is to derive it rather than store it, and the
+schema arguably should not grow a field for something git already knows.
+
+What it does mean is that the "pin it in state" instinct is not always available, and the writer
+will refuse rather than let the orchestrator improvise a key. Filed as a monitoring row: either add
+the field, or state in SKILL.md that the 5c base is derived from `git merge-base` rather than
+recorded.
+
+### F18 — `h_mad_assemble_tdd.py` builds `--out`/`--log` from the module path verbatim, so the paths contain `/`
+
+Found on the first live 5e use, staging Task 1 GREEN. `ASSEMBLE-TDD: PASS`, and the command block it
+printed carried:
+
+```
+--out /tmp/exec_anchor-precheck-phase-5e-wiring_h-mad/scripts/h_mad_mutation_harness.py_green.out
+--log /tmp/exec_anchor-precheck-phase-5e-wiring_h-mad/scripts/h_mad_mutation_harness.py_green.log
+```
+
+The template is `/tmp/exec_<feature>_<module>_<phase>.out` and `<module>` is substituted as given —
+`h-mad/scripts/h_mad_mutation_harness.py` — so the separators survive into the path. That names
+`/tmp/exec_anchor-precheck-phase-5e-wiring_h-mad/scripts/`, a directory that does not exist, and the
+dispatch cannot open either channel.
+
+This is not an edge case for this skill: **every** h-mad production module lives under
+`h-mad/scripts/`, so every command block the assembler prints for its own repo carries it. It is
+survivable because the assembler prints commands rather than running them — the operator substitutes
+a flat path, which is what happened here (`/tmp/exec_apw_task1_green.{out,log}`) — but the failure it
+produces if pasted verbatim is misleading in the expensive direction. `exec` with an unwritable
+`--out` returns the documented empty-primary-channel shape (rc 3, recover from `--log` and the tree),
+and `--log` is unwritable for the same reason, so **both** recovery channels are gone at once. The
+signature is then indistinguishable from a dispatch that never ran, and SKILL.md's own remedy for
+that is to check the tree and re-dispatch — onto a tree the agent may already have written.
+
+Fix direction: slugify `<module>` when composing the path (`/` → `_`, drop the extension), or key the
+filename on the task id, which is already in scope at that point and is what the prompt file itself
+uses. Either is a one-line change in the path composition; the assembler's judgement steps are
+unaffected.
+
+Not in scope for this feature — filed as a monitoring row.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -515,3 +575,6 @@ would have argued for better wording rather than for wiring.
 - v1.10: F16 added — `--gated` resolves stamped files against the audit file's own directory, so a
   cross-directory document reports STALE permanently; SKILL.md's documented design+impl-plan case
   spans two directories and is therefore the broken one. Proven with a control.
+- v1.11: F17 added — the state schema has no field for the 5c baseline sha; the writer correctly
+  refused the invented key and the value is derivable from `git merge-base`.
+- v1.12: F18 added - h_mad_assemble_tdd.py composes --out/--log from the module path verbatim, so both channels are unwritable for any module in a subdirectory; found on the first live 5e use.

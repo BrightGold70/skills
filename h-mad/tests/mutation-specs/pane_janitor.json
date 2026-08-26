@@ -1,6 +1,6 @@
 {
  "_why": "This tool closes the operator's terminals, so every mutation here restores a way it could close the WRONG one -- most of all the caller's own pane, which is the failure the candidate row records and which no title check can prevent. The rest defend the settle-before-close order (closing an unsettled dispatch wedges its terminal permanently) and the refusals that stop it acting on a baseline it should not trust. Every mutation is born pinned to the one test it is aimed at.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

@@ -1,5 +1,5 @@
 {
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "_why_only_two": [
   "Each mutant here was checked by hand to fail the assertion it TARGETS, not merely to",
   "fail the test. Three earlier candidates -- looping to 0, looping to 1, and looping to",

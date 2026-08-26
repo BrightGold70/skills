@@ -1,5 +1,5 @@
 {
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_audit_cycle.py", "tests/test_h_mad_review_evidence.py", "-q"],
  "mutations": [
   {"name": "thinking-counts-active-steps-too", "file": "scripts/h_mad_review_evidence.py",

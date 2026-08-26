@@ -1,6 +1,6 @@
 {
  "_why": "Each mutation is a way a hand-rolled anchored substitution already fails. The first two are the original silent no-op the helper was filed against: an anchor assert that stops refusing writes into the wrong place or not at all. The rest strip one refusal each. The accept case is NOT tested here -- a guard that refuses everything kills every mutant -- it is pinned by TestAccepts in the suite, which these mutants must leave passing. Each mutation names the ONE test it is aimed at, so a kill by an unrelated assertion, a crash or a timeout is reported as a survivor with the actual catcher named rather than counted as ALL_CAUGHT.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

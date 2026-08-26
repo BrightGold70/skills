@@ -15,9 +15,13 @@ Verdicts, printed as a canonical token:
     MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0     exit 0
     MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0     exit 0
     MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1     exit 2
+    MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
+    ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 exit 0
+    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=1 exit 2
+    ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=1 exit 2
 
 `survived` and `refused` both sit on the summary line because they answer
 different questions and neither may hide the other: a survivor is a guard that
@@ -85,6 +89,28 @@ class SpecError(Exception):
     """The spec could not be read or does not describe a runnable mutation set."""
 
 
+def classify_spec_file(path: Path) -> tuple[str, str | None]:
+    """('spec'|'not-a-spec'|'unclassifiable', detail).
+
+    Directory sweeps see JSON files that are not mutation specs. The classifier
+    keys only on the gate `_load_spec` itself needs before mutation validation:
+    a non-empty `mutations` list.
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        return "unclassifiable", f"cannot read JSON: {exc}"
+    except json.JSONDecodeError as exc:
+        return "unclassifiable", f"not valid JSON: {exc}"
+
+    if not isinstance(data, dict):
+        return "not-a-spec", "JSON object has no non-empty `mutations` list"
+    mutations = data.get("mutations")
+    if isinstance(mutations, list) and mutations:
+        return "spec", None
+    return "not-a-spec", "JSON object has no non-empty `mutations` list"
+
+
 def _load_spec(spec_path: Path) -> dict:
     try:
         spec = json.loads(spec_path.read_text(encoding="utf-8"))
@@ -122,6 +148,22 @@ def _load_spec(spec_path: Path) -> dict:
         # scoring and report a per-test verdict it never computed.
         raise SpecError("a mutation names a `test` but the spec has no `target_command`")
     return spec
+
+
+def _resolve_root(spec: dict, spec_path: Path) -> Path:
+    """The directory a spec's `file` paths are relative to.
+
+    Absolute -> itself. Relative -> resolved against the SPEC's directory, not
+    the caller's cwd. Absent -> the spec's directory.
+    """
+    root_value = spec.get("root")
+    if not root_value:
+        return spec_path.parent.resolve()
+
+    root = Path(root_value)
+    if root.is_absolute():
+        return root.resolve()
+    return (spec_path.parent / root).resolve()
 
 
 def _restore_file(path: Path, text: str) -> bool:
@@ -300,7 +342,7 @@ def precheck_spec(spec_path: Path) -> dict:
     """
     spec_path = Path(spec_path)
     spec = _load_spec(spec_path)
-    root = Path(spec.get("root") or spec_path.parent).resolve()
+    root = _resolve_root(spec, spec_path)
 
     result = {
         "spec": str(spec_path),
@@ -344,6 +386,29 @@ def precheck_spec(spec_path: Path) -> dict:
     return result
 
 
+def _sibling_specs(spec_path: Path) -> dict:
+    """Specs beside `spec_path`, excluding `spec_path` itself.
+
+    Directory sweeps may see JSON files that are not mutation specs. Reuse the
+    same classifier as --check-anchors so "not a spec" is a skip, while a file
+    that declares itself a spec is handed to _load_spec/precheck_spec and can
+    refuse the run if deeper validation fails.
+    """
+    spec_path = Path(spec_path).resolve()
+    spec_paths = []
+    skipped = []
+    for sibling in sorted(spec_path.parent.glob("*.json")):
+        sibling = sibling.resolve()
+        if sibling == spec_path:
+            continue
+        kind, detail = classify_spec_file(sibling)
+        if kind == "spec":
+            spec_paths.append(sibling)
+        else:
+            skipped.append({"path": str(sibling), "reason": detail or kind})
+    return {"spec_paths": spec_paths, "skipped": skipped}
+
+
 def run_spec(spec_path: Path) -> dict:
     """Apply each mutation in turn, run the command, always restore.
 
@@ -352,11 +417,13 @@ def run_spec(spec_path: Path) -> dict:
     """
     spec_path = Path(spec_path)
     spec = _load_spec(spec_path)
-    root = Path(spec.get("root") or spec_path.parent).resolve()
+    root = _resolve_root(spec, spec_path)
     command = spec["command"]
     mutations = spec["mutations"]
 
     target_command = spec.get("target_command")
+    siblings = _sibling_specs(spec_path)
+    precheck = {"swept": len(siblings["spec_paths"]), "skipped": siblings["skipped"]}
 
     result = {
         "verdict": "ALL_CAUGHT",
@@ -372,7 +439,52 @@ def run_spec(spec_path: Path) -> dict:
         # reason matches the mechanism stays with the author.
         "mechanism": {},
         "hints": {},
+        "precheck": precheck,
+        "drifted": [],
+        "unreadable": [],
     }
+
+    drifted_specs = []
+    unreadable_specs = []
+    for sibling_path in siblings["spec_paths"]:
+        try:
+            sibling = _load_spec(sibling_path)
+            sibling_root = _resolve_root(sibling, sibling_path)
+            sibling_precheck = precheck_spec(sibling_path)
+        except SpecError as exc:
+            unreadable_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_path.parent.resolve()),
+                "error": str(exc),
+            })
+            continue
+
+        if sibling_precheck["drifted"]:
+            drifted_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_root),
+                "mutations": [
+                    {
+                        "name": entry["name"],
+                        "hits": entry["hits"],
+                        "hints": entry["hints"],
+                    }
+                    for entry in sibling_precheck["drifted"]
+                ],
+            })
+        if sibling_precheck["unreadable"]:
+            unreadable_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_root),
+                "error": "; ".join(sibling_precheck["unreadable"]),
+            })
+    if drifted_specs or unreadable_specs:
+        return {
+            "verdict": "PRECHECK_FAILED",
+            "precheck": precheck,
+            "drifted": drifted_specs,
+            "unreadable": unreadable_specs,
+        }
 
     # Mutations are scored by "did the suite go red?", which means nothing if it
     # was already red. Checking first turns a whole misleading report into one
@@ -432,7 +544,7 @@ def run_spec(spec_path: Path) -> dict:
                 # more than once means the harness would have to choose for the
                 # author, mutating more than the guard under test.
                 result["refused"].append(
-                    f"{mutation['name']}: anchor matched {hits} times in "
+                    f"{mutation['name']}: spec you ran drifted: anchor matched {hits} times in "
                     f"{mutation['file']}, expected exactly 1"
                 )
                 # The verdict is correct and load-bearing either way; what was
@@ -550,18 +662,29 @@ def run_spec(spec_path: Path) -> dict:
 
 def _check_anchors(spec_paths: list[Path]) -> int:
     """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
-    specs = ok = drifted = unreadable = mutations = 0
+    specs = ok = drifted = unreadable = mutations = skipped = unclassifiable = 0
     for spec_path in spec_paths:
-        specs += 1
+        kind, detail = classify_spec_file(spec_path)
+        if kind == "not-a-spec":
+            skipped += 1
+            print(f"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}")
+            continue
+        if kind == "unclassifiable":
+            unclassifiable += 1
+            print(f"ANCHORS: {spec_path.name} UNCLASSIFIABLE — {detail}")
+            continue
+
         try:
             result = precheck_spec(spec_path)
         except SpecError as exc:
             # One unusable spec must not abort the sweep: the specs after it are
             # exactly the ones whose drift would then go unreported.
+            specs += 1
             unreadable += 1
             print(f"ANCHORS: {spec_path.name} UNREADABLE — {exc}")
             continue
 
+        specs += 1
         mutations += result["mutations"]
         ok += result["ok"]
         drifted += len(result["drifted"])
@@ -579,6 +702,15 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         for entry in result["unreadable"]:
             print(f"  unreadable: {entry}")
 
+    if specs == 0:
+        verdict = "ANCHORS_NOTHING_SWEPT"
+        print(
+            f"ANCHORS: {verdict} specs=0 skipped={skipped} "
+            f"unclassifiable={unclassifiable}"
+        )
+        print(f"[H-MAD] anchors {verdict}")
+        return 2
+
     verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
     print(
         f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
@@ -592,6 +724,11 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         )
     print(f"[H-MAD] anchors {verdict}")
     return 0 if verdict == "ANCHORS_OK" else 2
+
+
+def _print_skipped_precheck_entries(result: dict) -> None:
+    for entry in result.get("precheck", {}).get("skipped", []):
+        print(f"  skipped: {entry['path']}: {entry['reason']}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -636,29 +773,47 @@ def main(argv: list[str] | None = None) -> int:
     verdict = result["verdict"]
     if verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
         print(f"MUTATION: {verdict}")
+    elif verdict == "PRECHECK_FAILED":
+        print(
+            f"MUTATION: {verdict} specs={result['precheck']['swept']} "
+            f"drifted={len(result['drifted'])} "
+            f"unreadable={len(result['unreadable'])}"
+        )
     else:
         print(
             f"MUTATION: {verdict} mutations={result['mutations']} "
             f"caught={result['caught']} survived={len(result['survived'])} "
             f"refused={len(result['refused'])}"
         )
+    _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
     hints = result.get("hints") or {}
-    for name in result["survived"]:
+    for name in result.get("survived", []):
         print(f"  survived: {name}")
         if name in mechanism:
             print(f"    mechanism: {mechanism[name]}")
-    for entry in result["refused"]:
+    for entry in result.get("refused", []):
         print(f"  refused: {entry}")
         name = entry.split(":", 1)[0]
         for hint in hints.get(name, []):
             print(f"    hint: {hint}")
+    for entry in result.get("drifted", []):
+        print(f"  drifted: {entry['spec']} root {entry['root']}")
+        for mutation in entry["mutations"]:
+            print(
+                f"    mutation: {mutation['name']} "
+                f"hits={mutation['hits']}, expected exactly 1"
+            )
+            for hint in mutation["hints"]:
+                print(f"      hint: {hint}")
+    for entry in result.get("unreadable", []):
+        print(f"  unreadable: {entry['spec']} root {entry['root']}: {entry['error']}")
     # Caught mutations carry their killer too. `ALL_CAUGHT` is satisfied by a
     # mutant that died on a crash, a timeout, or an unrelated assertion, and
     # none of those prove the property under test was exercised — so the one
     # judgement the harness must NOT make is printed for the author to make.
-    if result["caught"] and mechanism:
-        killed = [n for n in mechanism if n not in result["survived"]]
+    if result.get("caught") and mechanism:
+        killed = [n for n in mechanism if n not in result.get("survived", [])]
         for name in killed:
             print(f"  caught: {name}")
             print(f"    mechanism: {mechanism[name]}")
@@ -688,6 +843,12 @@ def main(argv: list[str] | None = None) -> int:
             "that matches zero times leaves the guard intact and the suite green, "
             "which is exactly what an enforced guard looks like. Fix the anchor and "
             "re-run (halt `step5e:mutation_unverified:<module>`)."
+        )
+    elif verdict == "PRECHECK_FAILED":
+        print(
+            "  a sibling precheck failed before mutation, so nothing was measured. "
+            "Fix the sibling spec and re-run "
+            "(halt `step5e:mutation_unverified:<module>`)."
         )
 
     print(f"[H-MAD] {label} mutation {verdict}")

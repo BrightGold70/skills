@@ -16,6 +16,7 @@ baseline must stop the run instead of scoring every mutation against noise.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +25,13 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 HARNESS = SCRIPTS / "h_mad_mutation_harness.py"
 
 sys.path.insert(0, str(SCRIPTS))
-from h_mad_mutation_harness import _restore_file, run_spec  # noqa: E402
+import h_mad_mutation_harness  # noqa: E402
+from h_mad_mutation_harness import (  # noqa: E402
+    _restore_file,
+    classify_spec_file,
+    precheck_spec,
+    run_spec,
+)
 
 
 GUARD = "THRESHOLD = 5\n# a comment that no test observes\n"
@@ -65,6 +72,52 @@ def _run_cli(spec_path: Path) -> subprocess.CompletedProcess:
         [sys.executable, str(HARNESS), str(spec_path)],
         capture_output=True, text=True,
     )
+
+
+def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[str]]:
+    specs_dir = project_root / "tests" / "mutation-specs"
+    spec_paths = []
+    skipped = []
+    for candidate in sorted(specs_dir.glob("*.json")):
+        kind, detail = classify_spec_file(candidate)
+        if kind == "spec":
+            spec_paths.append(candidate)
+        else:
+            skipped.append(f"{candidate}: classifier={kind!r} detail={detail!r}")
+    assert spec_paths, f"found no committed mutation specs in {specs_dir}"
+    return spec_paths, skipped
+
+
+def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
+    failures = []
+    for spec_path in spec_paths:
+        try:
+            spec = h_mad_mutation_harness._load_spec(spec_path)
+            root = h_mad_mutation_harness._resolve_root(spec, spec_path)
+            result = precheck_spec(spec_path)
+        except h_mad_mutation_harness.SpecError as exc:
+            failures.append(f"{spec_path.name}: spec failed to load ({exc})")
+            continue
+
+        for entry in result["drifted"]:
+            failures.append(
+                f"{spec_path.name} root {root}: {entry['name']}: "
+                f"anchor matched {entry['hits']} times in {entry['file']}, "
+                "expected exactly 1"
+            )
+        for entry in result["unreadable"]:
+            failures.append(f"{spec_path.name} root {root}: {entry}")
+    return failures
+
+
+def _committed_spec_drift_assertion_message(
+    failures: list[str], skipped: list[str]
+) -> str:
+    lines = ["committed mutation specs have drifted anchors:", *failures]
+    if skipped:
+        lines.append("skipped committed mutation spec files:")
+        lines.extend(f"skipped committed mutation spec: {entry}" for entry in skipped)
+    return "\n".join(lines)
 
 
 # --- the verdicts ---------------------------------------------------------
@@ -255,6 +308,80 @@ def test_harness_is_stdlib_only() -> None:
     source = HARNESS.read_text(encoding="utf-8")
     for banned in ("import yaml", "import requests", "from pydantic", "import jsonschema"):
         assert banned not in source, f"{banned} would break the bare-python3 callers"
+
+
+def test_committed_mutation_specs_are_not_drifted() -> None:
+    """Sweeps this project's own tests/mutation-specs/."""
+    project_root = Path(__file__).resolve().parents[1]
+    spec_paths, skipped = _own_committed_mutation_specs(project_root)
+
+    failures = _committed_spec_drift_messages(spec_paths, skipped)
+
+    assert not failures, _committed_spec_drift_assertion_message(failures, skipped)
+
+
+def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
+    """A deliberately drifted committed anchor must fail, then restore byte-identical."""
+    spec_path = Path(__file__).resolve().parent / "mutation-specs" / "mutation_harness.json"
+    original = spec_path.read_bytes()
+    try:
+        spec = json.loads(original.decode("utf-8"))
+        spec["mutations"][0]["find"] += "\nINTENTIONAL-ANCHOR-DRIFT"
+        spec_path.write_text(
+            json.dumps(spec, indent=1, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+        failures = _committed_spec_drift_messages([spec_path], [])
+
+        assert any(spec_path.name in failure for failure in failures), failures
+    finally:
+        spec_path.write_bytes(original)
+        assert spec_path.read_bytes() == original
+
+
+def test_non_spec_json_does_not_fail_committed_spec_drift_check(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="../..", mutations=[_kills_the_guard()]
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([clean], skipped)
+
+    assert failures == []
+
+
+def test_committed_spec_drift_message_names_skipped_files(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    drifted = _mutation_spec_at(
+        spec_dir / "drifted.json",
+        root="../..",
+        mutations=[{
+            "name": "drifted anchor",
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }],
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([drifted], skipped)
+    message = _committed_spec_drift_assertion_message(failures, skipped)
+
+    assert failures, "the drifted spec must gate the assertion"
+    assert "drifted.json" in message
+    assert "note.json" in message
 
 
 # --- per-mutation targets, mechanism attribution, anchor hints -------------
@@ -516,6 +643,23 @@ def test_the_summary_line_is_unchanged_by_the_new_detail(tmp_path: Path) -> None
     assert "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0" in proc.stdout
 
 
+def test_cli_names_skipped_and_unclassifiable_siblings_on_success(tmp_path: Path) -> None:
+    spec = _project(tmp_path, [_kills_the_guard()])
+    not_a_spec = tmp_path / "metadata.json"
+    unclassifiable = tmp_path / "broken.json"
+    not_a_spec.write_text(json.dumps({"notes": "not a mutation spec"}), encoding="utf-8")
+    unclassifiable.write_text("{", encoding="utf-8")
+
+    proc = _run_cli(spec)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout
+    assert f"  skipped: {not_a_spec.resolve()}:" in proc.stdout, proc.stdout
+    assert "JSON object has no non-empty `mutations` list" in proc.stdout, proc.stdout
+    assert f"  skipped: {unclassifiable.resolve()}:" in proc.stdout, proc.stdout
+    assert "not valid JSON" in proc.stdout, proc.stdout
+
+
 def test_a_multiline_anchor_still_gets_a_near_miss(tmp_path: Path) -> None:
     """`find` is usually a block; comparing the whole block to single lines finds nothing.
 
@@ -757,6 +901,486 @@ def test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok(
     assert result["unreadable"], "a missing target file must not pass silently"
 
 
+# --- sibling precheck wiring ---------------------------------------------
+
+
+SIBLING_HOSTILE_NAME = "sibling drift: HMAD_STUB_HOSTILE=markers ===HMAD-DISPATCH-BOUNDARY=== `$()[]{}"
+
+
+def _mutation_spec_at(
+    spec_path: Path,
+    *,
+    root: str | Path,
+    mutations: list[dict],
+    check: str = CHECK,
+) -> Path:
+    spec_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_path.write_text(json.dumps({
+        "root": str(root),
+        "command": [sys.executable, "-c", check],
+        "mutations": mutations,
+    }), encoding="utf-8")
+    return spec_path
+
+
+def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """AC-3.1 WIRE-PIN: `run_spec` must refuse on drifted siblings before mutation."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+    targets = {path: path.read_bytes() for path in [root / "guard.py"]}
+
+    def fail_if_suite_runs(_command: list[str], _root: Path) -> bool:
+        raise AssertionError("sibling precheck must refuse before suite execution")
+
+    original_write_text = Path.write_text
+
+    def fail_if_mutation_writes(path: Path, *args, **kwargs):
+        raise AssertionError(f"sibling precheck must refuse before mutation writes: {path}")
+
+    monkeypatch.setattr(h_mad_mutation_harness, "_suite_is_green", fail_if_suite_runs)
+    monkeypatch.setattr(Path, "write_text", fail_if_mutation_writes)
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "PRECHECK_FAILED", (
+        "run_spec must call the sibling precheck before the baseline command "
+        f"and refuse a clean spec beside a drifted sibling: {result}"
+    )
+    # These shape and byte checks document intent, but are not sufficient alone:
+    # PRECHECK_FAILED constructs a fresh dict without mutation counters, and the
+    # harness restores bytes on every exit path. The monkeypatches above are the
+    # ordering proof because a late precheck would execute the suite or write a
+    # mutation and raise before this assertion.
+    assert "caught" not in result and "survived" not in result and "mutations" not in result, (
+        "sibling precheck refusal must happen before executing any mutation: "
+        f"{result}"
+    )
+    # Byte identity alone only proves the harness restored the tree on exit; a
+    # run that mutates first and refuses later would still pass this check.
+    assert {path: path.read_bytes() for path in targets} == targets, (
+        "run_spec must apply zero mutations when a sibling precheck refuses"
+    )
+    assert Path.write_text is not original_write_text
+
+
+def test_all_clean_sibling_directory_still_runs_to_ordinary_verdict(tmp_path: Path) -> None:
+    """AC-3.2 guard: clean siblings must not turn an ordinary run into a refusal."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "also-clean.json", root="..", mutations=[_untested_line()]
+    )
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", (
+        "all-clean sibling directories must fall through to run_spec's ordinary verdict"
+    )
+
+
+def test_sibling_precheck_refusal_names_spec_mutation_and_resolved_root(tmp_path: Path) -> None:
+    """AC-3.3: sibling drift refusals must say which spec, mutation, and root."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted-sibling.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    result = run_spec(clean)
+    drifted = result["drifted"]
+    mutation = drifted[0]["mutations"][0]
+
+    assert drifted[0]["spec"] == "drifted-sibling.json", (
+        f"sibling precheck refusal must name the drifted spec filename: {result}"
+    )
+    assert mutation["name"] == SIBLING_HOSTILE_NAME, (
+        f"sibling precheck refusal must name each drifted mutation: {result}"
+    )
+    assert drifted[0]["root"] == str(root.resolve()), (
+        f"sibling precheck refusal must name the resolved root for that spec: {result}"
+    )
+
+
+def test_self_drift_and_sibling_drift_have_distinct_refusal_text(tmp_path: Path) -> None:
+    """AC-3.4: the refusal must distinguish the ran spec from a sibling spec."""
+    self_dir = tmp_path / "self"
+    self_spec = _project(self_dir, [_drifted_anchor()])
+    sibling_dir = tmp_path / "siblings" / "specs"
+    sibling_root = tmp_path / "siblings"
+    sibling_root.mkdir(parents=True)
+    (sibling_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        sibling_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        sibling_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    self_result = run_spec(self_spec)
+    sibling_result = run_spec(clean)
+    self_refusal = "\n".join(self_result.get("refused", []))
+
+    assert "spec you ran drifted" in self_refusal, (
+        f"self drift must be identified as the spec you ran: {self_result}"
+    )
+    assert sibling_result["verdict"] == "PRECHECK_FAILED", (
+        f"sibling drift must be identified as a sibling, not self drift: {sibling_result}"
+    )
+    assert sibling_result["drifted"][0]["spec"] == "drifted.json", (
+        f"sibling drift must name the sibling spec: {sibling_result}"
+    )
+    assert sibling_result.get("refused") is None, (
+        "self drift and sibling drift must not collapse to the same result shape"
+    )
+
+
+def test_drifted_spec_in_a_different_directory_does_not_affect_run(tmp_path: Path) -> None:
+    """AC-3.5 guard: sibling precheck scope is same directory only."""
+    clean = _project(tmp_path / "clean-dir", [_kills_the_guard()])
+    _project(tmp_path / "other-dir", [_drifted_anchor()])
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", (
+        "a drifted spec in another directory must not affect run_spec's verdict"
+    )
+
+
+def test_all_caught_result_carries_sibling_precheck_census(tmp_path: Path) -> None:
+    """AC-6.4-wire: every result shape, including ALL_CAUGHT, carries census."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "also-clean.json", root="..", mutations=[_untested_line()]
+    )
+    _write_json(spec_dir / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result.get("precheck") == {"swept": 1, "skipped": [
+        {
+            "path": str((spec_dir / "notes.json").resolve()),
+            "reason": "JSON object has no non-empty `mutations` list",
+        }
+    ]}, (
+        "run_spec must attach the sibling precheck census to ALL_CAUGHT results"
+    )
+
+
+# --- precheck-failed verdict ---------------------------------------------
+
+
+def test_precheck_failed_summary_line_has_sweep_counts_and_no_mutation_counts(
+    tmp_path: Path,
+) -> None:
+    """AC-4.1: PRECHECK_FAILED prints sweep counts, not mutation counts."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    proc = _run_cli(clean)
+    summary = next(
+        line for line in proc.stdout.splitlines() if line.startswith("MUTATION:")
+    )
+
+    assert summary == "MUTATION: PRECHECK_FAILED specs=1 drifted=1 unreadable=0", (
+        "PRECHECK_FAILED summary must carry only sibling precheck sweep counts: "
+        + proc.stdout
+    )
+    assert "mutations=" not in summary, summary
+    assert "caught=" not in summary, summary
+    assert "survived=" not in summary, summary
+    assert "refused=" not in summary, summary
+
+
+def test_precheck_failed_exits_two(tmp_path: Path) -> None:
+    """AC-4.2: PRECHECK_FAILED is a cannot-judge and exits 2."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[_drifted_anchor()]
+    )
+
+    proc = _run_cli(clean)
+
+    assert "MUTATION: PRECHECK_FAILED" in proc.stdout, (
+        "the precheck refusal must be named PRECHECK_FAILED before its exit "
+        f"code can be trusted: {proc.stdout}"
+    )
+    assert proc.returncode == 2, (
+        f"PRECHECK_FAILED must exit 2, got {proc.returncode}: {proc.stdout}"
+    )
+
+
+def test_refused_consumers_do_not_match_precheck_failed() -> None:
+    """AC-4.3 guard: real repo grep for REFUSED consumers must not match the new word."""
+    repo = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        ["git", "grep", "-n", "MUTATION: REFUSED", "--", "."],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0 and proc.stdout.strip(), (
+        "repository grep found zero MUTATION: REFUSED consumers; the guard "
+        "would be vacuous"
+    )
+    offenders = [
+        line for line in proc.stdout.splitlines()
+        if "MUTATION: PRECHECK_FAILED" in line
+    ]
+    assert not offenders, (
+        "existing consumers keyed on MUTATION: REFUSED must not also match "
+        "MUTATION: PRECHECK_FAILED:\n" + "\n".join(offenders)
+    )
+
+
+def test_precheck_failed_emits_hmad_marker(tmp_path: Path) -> None:
+    """AC-4.4: the new verdict has the same machine-readable marker surface."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[_drifted_anchor()]
+    )
+
+    proc = _run_cli(clean)
+
+    assert "[H-MAD] clean mutation PRECHECK_FAILED" in proc.stdout, (
+        "PRECHECK_FAILED must emit an [H-MAD] marker line naming the new "
+        f"verdict: {proc.stdout}"
+    )
+
+
+def test_committed_mutation_harness_anchor_sweep_is_ok() -> None:
+    """AC-4.5 guard: committed mutation specs, including mutation_harness.json, are anchored."""
+    specs = _committed_mutation_specs()
+    assert any(spec.name == "mutation_harness.json" for spec in specs), (
+        "mutation_harness.json must be part of the committed anchor sweep"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", *map(str, specs)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS: ANCHORS_OK" in proc.stdout, proc.stdout
+
+
+def test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift(
+    tmp_path: Path,
+) -> None:
+    """AC-4.6: a sibling SpecError is unreadable, not drifted."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    broken = spec_dir / "broken-sibling.json"
+    broken.write_text(json.dumps({
+        "mutations": [{"name": SIBLING_HOSTILE_NAME}],
+    }), encoding="utf-8")
+
+    proc = _run_cli(clean)
+
+    assert "MUTATION: PRECHECK_FAILED specs=1 drifted=0 unreadable=1" in proc.stdout, (
+        "a run refused solely by a SpecError sibling must print drifted=0 "
+        f"and unreadable=1: {proc.stdout}"
+    )
+    assert "broken-sibling.json" in proc.stdout, proc.stdout
+    assert "spec needs a non-empty `command` argv list of strings" in proc.stdout, (
+        "the unreadable sibling must be named with the loader's own SpecError text: "
+        + proc.stdout
+    )
+    assert proc.returncode == 2, proc.stdout
+
+
+# --- root resolution ------------------------------------------------------
+#
+# Specs can live next to their mutation fixtures, and `root` exists to make the
+# target paths independent of where the harness itself is launched from.
+
+
+def _root_resolution_spec(spec_dir: Path, root: str | None) -> Path:
+    project = spec_dir.parent
+    project.mkdir(parents=True, exist_ok=True)
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (project / "guard.py").write_text(GUARD, encoding="utf-8")
+    spec = {
+        "command": [sys.executable, "-c", CHECK],
+        "mutations": [_kills_the_guard()],
+    }
+    if root is not None:
+        spec["root"] = root
+    spec_path = spec_dir / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    return spec_path
+
+
+def _from_cwd(cwd: Path, spec_path: Path, guard: Path) -> tuple[str, str, bool]:
+    from h_mad_mutation_harness import precheck_spec
+
+    previous = Path.cwd()
+    try:
+        os.chdir(cwd)
+        try:
+            pre = precheck_spec(spec_path)
+            run = run_spec(spec_path)
+        except OSError as exc:
+            return f"OSError: {exc}", f"OSError: {exc}", guard.read_text(
+                encoding="utf-8"
+            ) == GUARD
+    finally:
+        os.chdir(previous)
+    return pre["verdict"], run["verdict"], guard.read_text(encoding="utf-8") == GUARD
+
+
+def test_relative_root_is_resolved_against_the_spec_dir_from_any_cwd(tmp_path: Path) -> None:
+    spec_path = _root_resolution_spec(tmp_path / "project" / "specs", "..")
+    guard = spec_path.parent.parent / "guard.py"
+    repo_root = Path(__file__).resolve().parents[2]
+    observed = {
+        "spec dir": _from_cwd(spec_path.parent, spec_path, guard),
+        "/tmp": _from_cwd(Path("/tmp"), spec_path, guard),
+        "repo root": _from_cwd(repo_root, spec_path, guard),
+    }
+
+    assert len(set(observed.values())) == 1, (
+        "relative root must be spec-relative, not caller-cwd-relative: "
+        f"{observed}"
+    )
+    assert observed["spec dir"] == ("ANCHORS_OK", "ALL_CAUGHT", True)
+
+
+def test_absolute_root_is_used_exactly_from_any_cwd(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    spec_path = _root_resolution_spec(project / "specs", str(project))
+    guard = project / "guard.py"
+    observed = [
+        _from_cwd(spec_path.parent, spec_path, guard),
+        _from_cwd(Path("/tmp"), spec_path, guard),
+        _from_cwd(Path(__file__).resolve().parents[2], spec_path, guard),
+    ]
+
+    assert observed == [("ANCHORS_OK", "ALL_CAUGHT", True)] * 3
+
+
+def test_absent_root_defaults_to_the_spec_file_directory(tmp_path: Path) -> None:
+    spec_dir = tmp_path / "specs-as-project"
+    spec_dir.mkdir()
+    (spec_dir / "guard.py").write_text(GUARD, encoding="utf-8")
+    spec = {
+        "command": [sys.executable, "-c", CHECK],
+        "mutations": [_kills_the_guard()],
+    }
+    spec_path = spec_dir / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    assert _from_cwd(Path("/tmp"), spec_path, spec_dir / "guard.py") == (
+        "ANCHORS_OK", "ALL_CAUGHT", True
+    )
+    assert (spec_dir / "guard.py").read_text(encoding="utf-8") == GUARD
+
+
+def test_precheck_and_run_share_the_root_resolver(monkeypatch, tmp_path: Path) -> None:
+    source = HARNESS.read_text(encoding="utf-8")
+
+    assert "def _resolve_root(spec: dict, spec_path: Path) -> Path:" in source, (
+        "root resolution must live in the shared _resolve_root helper"
+    )
+
+    calls = []
+    shared_root = tmp_path / "shared-root"
+
+    def record_resolved_root(spec: dict, spec_path: Path) -> Path:
+        root = shared_root.resolve()
+        calls.append((spec_path, root))
+        return root
+
+    monkeypatch.setattr(h_mad_mutation_harness, "_resolve_root", record_resolved_root)
+    spec_path = _project(shared_root, [_kills_the_guard()])
+
+    h_mad_mutation_harness.precheck_spec(spec_path)
+    assert len(calls) == 1, "precheck_spec must resolve the root exactly once, via the helper"
+    h_mad_mutation_harness.run_spec(spec_path)
+    assert len(calls) == 2, "run_spec must resolve the root through the same helper"
+
+    assert calls == [(spec_path, shared_root.resolve())] * 2, (
+        "precheck_spec and run_spec must resolve the same spec through the same "
+        f"root helper: {calls}"
+    )
+    assert "Path(spec.get(\"root\") or spec_path.parent).resolve()" not in source, (
+        "the previous cwd-relative root-resolution expression must be removed"
+    )
+
+
 def test_check_anchors_cli_sweeps_several_specs_and_exits_2_on_drift(
     tmp_path: Path,
 ) -> None:
@@ -787,18 +1411,282 @@ def test_check_anchors_cli_exits_0_when_every_spec_is_clean(tmp_path: Path) -> N
     assert "ANCHORS_OK" in proc.stdout, proc.stdout
 
 
-def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> None:
-    """One unreadable spec must not hide the drift in the specs after it."""
+def test_check_anchors_cli_clean_sweep_keeps_the_five_field_ok_summary(
+    tmp_path: Path,
+) -> None:
+    a = _project(tmp_path / "a", [_kills_the_guard()])
+    b = _project(tmp_path / "b", [_untested_line()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(a), str(b)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines() if line.startswith("ANCHORS: ANCHORS_OK")
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert summary == (
+        "ANCHORS: ANCHORS_OK specs=2 mutations=2 ok=2 drifted=0 unreadable=0"
+    )
+
+
+def test_check_anchors_cli_nothing_swept_from_nonexistent_path(
+    tmp_path: Path,
+) -> None:
     missing = tmp_path / "nope.json"
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(missing)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("ANCHORS: ANCHORS_NOTHING_SWEPT")
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert summary == "ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=0 unclassifiable=1"
+    assert "ok=" not in summary
+    assert "drifted=" not in summary
+    assert "unreadable=" not in summary
+
+
+def test_check_anchors_cli_nothing_swept_from_only_non_spec_json(
+    tmp_path: Path,
+) -> None:
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(notes)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("ANCHORS: ANCHORS_NOTHING_SWEPT")
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert summary == "ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=0"
+    assert "ok=" not in summary
+    assert "drifted=" not in summary
+    assert "unreadable=" not in summary
+
+
+def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> None:
+    """One bad spec must not hide later drift on either bad-file path.
+
+    The missing file is unclassifiable and skipped before precheck. The
+    no-command spec classifies as a spec, then reaches precheck's SpecError
+    branch.
+    """
+    missing = tmp_path / "nope.json"
+    unreadable_spec = tmp_path / "missing-command.json"
+    unreadable_spec.write_text(json.dumps({
+        "mutations": [{"name": "has no command"}],
+    }), encoding="utf-8")
     dirty = _project(tmp_path / "b", [_drifted_anchor()])
 
     proc = subprocess.run(
-        [sys.executable, str(HARNESS), "--check-anchors", str(missing), str(dirty)],
+        [
+            sys.executable,
+            str(HARNESS),
+            "--check-anchors",
+            str(missing),
+            str(unreadable_spec),
+            str(dirty),
+        ],
         capture_output=True, text=True,
     )
 
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "anchor that no longer matches" in proc.stdout, proc.stdout
+
+
+# --- spec classifier ------------------------------------------------------
+#
+# A spec-directory glob must not treat every JSON file as a mutation spec, and
+# it must not silently drop corrupt JSON. The classifier keys on the one shape
+# `_load_spec` already needs before any deeper validation: non-empty mutations.
+
+
+def _write_json(path: Path, value: object) -> Path:
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def _classify_for_red(path: Path) -> tuple[str, str | None]:
+    classifier = getattr(
+        h_mad_mutation_harness,
+        "classify_spec_file",
+        lambda _path: ("missing-classifier", "classify_spec_file is not implemented"),
+    )
+    return classifier(path)
+
+
+def _load_spec_mutations_gate_passes(spec_path: Path, tmp_path: Path) -> bool:
+    data = json.loads(spec_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return False
+    probe = dict(data)
+    probe["command"] = [sys.executable, "-c", "pass"]
+    probe_path = tmp_path / f"{spec_path.stem}.mutations-gate.json"
+    probe_path.write_text(json.dumps(probe), encoding="utf-8")
+
+    try:
+        h_mad_mutation_harness._load_spec(probe_path)
+    except h_mad_mutation_harness.SpecError as exc:
+        return "spec needs a non-empty `mutations` list" not in str(exc)
+    return True
+
+
+HOSTILE_NON_SPEC_NOTE = "HMAD_STUB_HOSTILE=markers\n===HMAD-DISPATCH-BOUNDARY===\n`$()[]{}"
+
+
+def test_classifier_agrees_with_load_spec_on_the_mutations_gate(tmp_path: Path) -> None:
+    """AC-6.1: `spec` means non-empty mutations; `not-a-spec` means loader rejects that gate."""
+    cases = [
+        _write_json(tmp_path / "valid.json", {
+            "command": [sys.executable, "-c", "pass"],
+            "mutations": [_kills_the_guard()],
+        }),
+        _write_json(tmp_path / "empty-mutations.json", {
+            "command": [sys.executable, "-c", "pass"],
+            "mutations": [],
+        }),
+        _write_json(tmp_path / "non-spec.json", {"name": HOSTILE_NON_SPEC_NOTE}),
+        _write_json(tmp_path / "mutations-without-command.json", {
+            "mutations": [_kills_the_guard()],
+        }),
+    ]
+
+    disagreements = []
+    for spec_path in cases:
+        kind, detail = _classify_for_red(spec_path)
+        loader_has_mutations = _load_spec_mutations_gate_passes(spec_path, tmp_path)
+
+        expected = "spec" if loader_has_mutations else "not-a-spec"
+        if kind != expected:
+            disagreements.append(
+                f"{spec_path.name}: classifier={kind!r} detail={detail!r}, "
+                f"loader_mutations_gate={loader_has_mutations}"
+            )
+
+    assert not disagreements, (
+        "classifier must agree with _load_spec's non-empty mutations gate:\n"
+        + "\n".join(disagreements)
+    )
+    no_command = tmp_path / "mutations-without-command.json"
+    kind, detail = _classify_for_red(no_command)
+    assert kind == "spec", (
+        "AC-6.3 shape must classify as a spec because it has non-empty mutations: "
+        f"{kind!r} detail={detail!r}"
+    )
+    assert _load_spec_mutations_gate_passes(no_command, tmp_path)
+    try:
+        h_mad_mutation_harness._load_spec(no_command)
+    except h_mad_mutation_harness.SpecError as exc:
+        assert "command" in str(exc)
+    else:
+        raise AssertionError("full loader must still reject a spec with no command")
+
+
+def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Path) -> None:
+    """AC-6.2: corrupt JSON is unclassifiable, reported by name, and not drift."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    malformed = tmp_path / "broken.json"
+    malformed.write_text("{not-json", encoding="utf-8")
+
+    kind, detail = _classify_for_red(malformed)
+    assert kind == "unclassifiable", (
+        f"malformed JSON must classify unclassifiable, got {kind!r} detail={detail!r}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(malformed)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "broken.json" in proc.stdout, "unclassifiable JSON must be named on success"
+    assert "ANCHORS: broken.json UNCLASSIFIABLE" in proc.stdout, proc.stdout
+    assert "drifted=0" in proc.stdout, (
+        "unclassifiable JSON must not contribute to anchor drift count:\n"
+        + proc.stdout
+    )
+
+
+def test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation(
+    tmp_path: Path,
+) -> None:
+    """AC-6.3: non-empty mutations make this a spec; deeper SpecError is a finding."""
+    bad_spec = _write_json(tmp_path / "missing-command.json", {
+        "mutations": [{"name": "has no command"}],
+    })
+
+    kind, detail = _classify_for_red(bad_spec)
+    assert kind == "spec", (
+        "a file with non-empty mutations must classify spec before deeper "
+        f"validation, got {kind!r} detail={detail!r}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(bad_spec)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "missing-command.json" in proc.stdout, proc.stdout
+    assert "ANCHORS: missing-command.json UNREADABLE" in proc.stdout, proc.stdout
+    assert "not-a-spec" not in proc.stdout.lower(), (
+        "a classified spec that raises SpecError must be a finding, not a skip:\n"
+        + proc.stdout
+    )
+
+
+def test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success(
+    tmp_path: Path,
+) -> None:
+    """AC-6.4: skipped and unclassifiable files are listed even for ANCHORS_OK."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+    broken = tmp_path / "empty.json"
+    broken.write_text("", encoding="utf-8")
+
+    assert _classify_for_red(notes)[0] == "not-a-spec", (
+        "valid JSON without non-empty mutations must classify not-a-spec"
+    )
+    assert _classify_for_red(broken)[0] == "unclassifiable", (
+        "empty JSON file must classify unclassifiable"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(notes), str(broken)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS_OK" in proc.stdout, proc.stdout
+    assert "notes.json" in proc.stdout and "empty.json" in proc.stdout, (
+        "successful sweeps must name skipped and unclassifiable files:\n"
+        + proc.stdout
+    )
+    assert "ANCHORS: notes.json SKIPPED not-a-spec" in proc.stdout, proc.stdout
+    assert "ANCHORS: empty.json UNCLASSIFIABLE" in proc.stdout, proc.stdout
+
+
+def test_every_committed_mutation_spec_classifies_as_spec() -> None:
+    """AC-6.5: the committed mutation-spec corpus is non-vacuous and all are specs."""
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        kind, detail = _classify_for_red(spec_path)
+        if kind != "spec":
+            offenders.append(f"{spec_path}: classifier={kind!r} detail={detail!r}")
+
+    assert not offenders, (
+        "every committed tests/mutation-specs/*.json file must classify as spec:\n"
+        + "\n".join(offenders)
+    )
 
 
 def test_a_mutation_run_still_takes_exactly_one_spec(tmp_path: Path) -> None:
@@ -824,6 +1712,209 @@ def test_skill_documents_the_anchor_sweep() -> None:
     skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
     assert "--check-anchors" in skill, "Phase 5e never tells anyone to sweep anchors"
     assert "ANCHORS_DRIFTED" in skill, "the drifted token is undocumented"
+    assert "ANCHORS_NOTHING_SWEPT" in skill, "the nothing-swept token is undocumented"
     assert "a refusal measures NOTHING" in skill, (
         "the sweep is only actionable if the doc says why a REFUSED run is not a pass"
+    )
+
+
+def _live_skill_dir() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _phase_5e_text(skill: str) -> str:
+    start = skill.index("### Codex authors Phase 5")
+    end = skill.index("Phase 5 implementation is **Codex's job**", start)
+    return skill[start:end]
+
+
+def test_skill_documents_the_precheck_is_automatic() -> None:
+    """AC-7.1/7.3/7.4: Phase-5e documents the run-time sibling precheck."""
+    skill_path = _live_skill_dir() / "SKILL.md"
+    skill = skill_path.read_text(encoding="utf-8")
+    phase_5e = _phase_5e_text(skill)
+    stale_operator_instruction = "Sweep every spec's anchors after any edit"
+
+    problems = []
+    if "MUTATION: PRECHECK_FAILED" not in skill:
+        problems.append("new verdict word MUTATION: PRECHECK_FAILED is absent from SKILL.md")
+    if not (
+        "mutation run" in phase_5e
+        and "performs the sibling sweep" in phase_5e
+        and "refuses on sibling drift" in phase_5e
+    ):
+        problems.append(
+            "Phase-5e must claim the mutation run performs the sibling sweep "
+            "itself and refuses on sibling drift"
+        )
+    if stale_operator_instruction in phase_5e:
+        problems.append(
+            "Phase-5e still instructs the operator to sweep beforehand: "
+            f"{stale_operator_instruction!r}"
+        )
+    if not (
+        "relative spec `root`" in skill
+        and "spec-relative" in skill
+        and "cwd-relative" in skill
+    ):
+        problems.append("SKILL.md must document that a relative spec `root` is spec-relative")
+
+    assert not problems, "documentation precheck/root contract drift:\n" + "\n".join(problems)
+
+
+def test_recovery_table_carries_the_new_verdict() -> None:
+    """AC-7.2/7.5: registry and recovery docs name PRECHECK_FAILED's route."""
+    skill_dir = _live_skill_dir()
+    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    harness = (skill_dir / "scripts" / "h_mad_mutation_harness.py").read_text(
+        encoding="utf-8"
+    )
+    recovery = (skill_dir / "references" / "failure-recovery.md").read_text(
+        encoding="utf-8"
+    )
+    recovery_rows = [
+        line for line in recovery.splitlines()
+        if line.startswith("| 5e |") and "MUTATION: PRECHECK_FAILED" in line
+    ]
+    nothing_swept_rows = [
+        line for line in recovery.splitlines()
+        if line.startswith("| 5e |") and "ANCHORS_NOTHING_SWEPT" in line
+    ]
+
+    problems = []
+    if not (
+        "MUTATION: PRECHECK_FAILED" in skill
+        and "specs=" in skill
+        and "drifted=" in skill
+        and "unreadable=" in skill
+        and "exit 2" in skill
+    ):
+        problems.append(
+            "SKILL.md registry entry must document MUTATION: PRECHECK_FAILED "
+            "with specs/drifted/unreadable counts and exit 2"
+        )
+    if not (
+        "MUTATION: PRECHECK_FAILED" in harness
+        and "specs=" in harness
+        and "drifted=" in harness
+        and "unreadable=" in harness
+        and "exit 2" in harness
+    ):
+        problems.append(
+            "h_mad_mutation_harness.py registry must document "
+            "MUTATION: PRECHECK_FAILED with counts and exit 2"
+        )
+    if not recovery_rows:
+        problems.append(
+            "failure-recovery.md must add a 5e row for MUTATION: PRECHECK_FAILED"
+        )
+    else:
+        row = recovery_rows[0]
+        if "step5e:mutation_precheck_failed:<module>" not in row:
+            problems.append(
+                "MUTATION: PRECHECK_FAILED recovery row must name its halt reason"
+            )
+        if not (
+            "sibling" in row
+            and "drift" in row
+            and "re-anchor" in row
+            and "re-run" in row
+        ):
+            problems.append(
+                "MUTATION: PRECHECK_FAILED recovery row must name sibling drift "
+                "and the re-anchor/re-run remedy"
+            )
+    if not (
+        "ANCHORS_NOTHING_SWEPT" in skill
+        and "skipped=" in skill
+        and "unclassifiable=" in skill
+        and "exit 2" in skill
+    ):
+        problems.append(
+            "SKILL.md registry entry must document ANCHORS_NOTHING_SWEPT "
+            "with skipped/unclassifiable counts and exit 2"
+        )
+    if not (
+        "ANCHORS_NOTHING_SWEPT" in harness
+        and "skipped=" in harness
+        and "unclassifiable=" in harness
+        and "exit 2" in harness
+    ):
+        problems.append(
+            "h_mad_mutation_harness.py registry must document "
+            "ANCHORS_NOTHING_SWEPT with skipped/unclassifiable counts and exit 2"
+        )
+    if not nothing_swept_rows:
+        problems.append(
+            "failure-recovery.md must add a 5e row for ANCHORS_NOTHING_SWEPT"
+        )
+    else:
+        row = nothing_swept_rows[0]
+        if "step5e:anchor_sweep_nothing_swept:<module>" not in row:
+            problems.append(
+                "ANCHORS_NOTHING_SWEPT recovery row must name its halt reason"
+            )
+        if not (
+            "path" in row
+            and "non-spec" in row
+            and "Fix" in row
+            and "re-run" in row
+        ):
+            problems.append(
+                "ANCHORS_NOTHING_SWEPT recovery row must name path/non-spec "
+                "causes and the fix/re-run remedy"
+            )
+
+    assert not problems, "PRECHECK_FAILED registry/recovery contract drift:\n" + "\n".join(problems)
+
+
+# --- committed mutation specs are portable -------------------------------
+
+
+def _committed_mutation_specs() -> list[Path]:
+    repo = Path(__file__).resolve().parents[2]
+    specs = sorted(repo.rglob("tests/mutation-specs/*.json"))
+    # This is a non-vacuity guard, not a count pin: a broken layout/walk must
+    # not certify "no offenders" by iterating over nothing.
+    assert specs, "found no committed mutation specs under tests/mutation-specs/*.json"
+    return specs
+
+
+def _spec_skill_dir(spec_path: Path) -> Path:
+    parts = spec_path.parts
+    assert "tests" in parts, f"mutation spec path has no 'tests' component: {spec_path}"
+    tests_index = len(parts) - 1 - parts[::-1].index("tests")
+    return Path(*parts[:tests_index]).resolve()
+
+
+def test_no_committed_spec_has_an_absolute_root() -> None:
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        root = spec.get("root")
+        if root and Path(root).is_absolute():
+            offenders.append(f"{spec_path}: root={root!r}")
+
+    assert not offenders, (
+        "committed mutation specs must not have absolute roots; "
+        "use a spec-relative root so a bare clone or copied checkout resolves "
+        "the same targets:\n" + "\n".join(offenders)
+    )
+
+
+def test_every_committed_spec_resolves_within_its_own_skill() -> None:
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        resolved = h_mad_mutation_harness._resolve_root(spec, spec_path)
+        skill_dir = _spec_skill_dir(spec_path)
+        if resolved != skill_dir and skill_dir not in resolved.parents:
+            offenders.append(
+                f"{spec_path}: root resolves to {resolved}, outside skill {skill_dir}"
+            )
+
+    assert not offenders, (
+        "committed mutation specs must resolve within their own skill directory; "
+        "a spec root above the skill can mutate files outside the portable skill "
+        "checkout:\n" + "\n".join(offenders)
     )

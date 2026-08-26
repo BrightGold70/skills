@@ -70,6 +70,9 @@ RULES = [
      "the fixed question, since there is no fixed command"),
     (SKILL, "Editing this skill while a run is in flight", "insertion-only before committing",
      "distinguishes a clean splice from a slice that ate a section"),
+    (SKILL, "Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)", "OFFCONTRACT: NONE|FOUND|UNREADABLE",
+     "the scanner that closes J30 was tested and mutation-pinned but absent from the docs, so "
+     "no orchestrator following SKILL.md could ever reach it"),
 ]
 
 
