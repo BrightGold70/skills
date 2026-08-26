@@ -111,7 +111,7 @@ classifying files itself rather than reusing the CLI's collapsed verdict.
 | Portable roots across all 17 committed specs; handoff's also re-prefixed for self-containment | data | FR-2 |
 | Guard against an absolute `root` reappearing in a committed spec | test | FR-2 |
 | Sibling sweep executed before the first mutation is applied | behaviour | FR-3 |
-| `MUTATION: PRECHECK_DRIFTED` verdict, counts, exit code, and `[H-MAD]` marker | CLI contract | FR-4 |
+| `MUTATION: PRECHECK_FAILED` verdict, counts, exit code, and `[H-MAD]` marker | CLI contract | FR-4 |
 | Refusal message naming spec, mutation, resolved root, and own-vs-sibling | CLI output | FR-3 |
 | Suite assertion over the repository's own committed specs | test | FR-5 |
 | Non-zero spec-count assertion in that test | test | FR-5 |
@@ -177,3 +177,4 @@ output that this plan deliberately leaves unspecified.
 - v1.0: Initial plan draft, derived from the approved spec.
 - v1.1: Audit v1 nits from plan.audit.v1.p2 — corrected the drift measurement to 7-of-177 (the tree now carries 213 across 16 specs) and named the [H-MAD] marker in the FR-4 deliverable.
 - v1.2: F13 from manual probing: the re-rooting guard is now expressed over anchor text rather than over which keys may change, and the architecture section records that handoff's spec roots above its own skill and needs its prefixes and command changed for self-containment.
+- v1.3: Carried the PRECHECK_FAILED rename from the design audit v2 back-propagation.

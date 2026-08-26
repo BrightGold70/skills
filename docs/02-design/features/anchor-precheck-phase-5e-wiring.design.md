@@ -41,7 +41,7 @@ message-formatting rule that could regress silently.
                  any drift?            spec / not-a-spec /  calls precheck_spec
                     │  yes             unclassifiable       asserts count > 0
                     ▼
-              PRECHECK_DRIFTED  ← new verdict, no mutation counts, exit 2
+              PRECHECK_FAILED  ← new verdict, no mutation counts, exit 2
                     │  no
                     ▼
               2. existing baseline → per-mutation apply/restore
@@ -79,16 +79,35 @@ Runs before the baseline command, before any mutation is applied. For each sibli
 spec, call `precheck_spec()`; collect drift. If any sibling drifted, return immediately:
 
 ```python
-{"verdict": "PRECHECK_DRIFTED",
+{"verdict": "PRECHECK_FAILED",
  "specs": <siblings swept>,
- "drifted": [{"spec": name, "root": str(resolved_root),
-              "mutations": [{"name": ..., "hits": n, "hints": [...]}]}],
- "skipped": [{"path": name, "reason": "not-a-spec" | "unclassifiable"}]}
+ "drifted":    [{"spec": name, "root": str(resolved_root),
+                 "mutations": [{"name": ..., "hits": n, "hints": [...]}]}],
+ "unreadable": [{"spec": name, "root": str(resolved_root), "error": str(SpecError)}],
+ "skipped":    [{"path": name, "reason": "not-a-spec" | "unclassifiable"}]}
 ```
 
-The dict deliberately carries **no** `mutations`/`caught`/`survived`/`refused` keys. Their absence is
-the enforcement of AC-4.1: a formatter cannot print a count that is not there, so the no-counts rule
-cannot regress into printing zeros.
+Three slots, because a sibling can fail in three distinguishable ways and collapsing any two loses
+the operator's next action:
+
+| slot | what it holds | refuses the run? |
+|---|---|---|
+| `drifted` | a spec whose anchor no longer matches exactly once | yes |
+| `unreadable` | a file that **declared itself a spec** (`mutations` present) and then raised `SpecError` | yes — AC-6.3, AC-4.6 |
+| `skipped` | a file that never claimed to be a spec | no |
+
+`unreadable` exists because an unreadable spec has no `mutations` list and so cannot be described
+through `drifted`, and must not be filed under `skipped`, which would let the run proceed past the
+exact case AC-6.3 requires it to refuse.
+
+**This is why the verdict is `PRECHECK_FAILED` and not `PRECHECK_DRIFTED`.** A run refused solely
+for an unreadable sibling reports `drifted=0 unreadable=1`; calling that outcome "DRIFTED" would
+rebuild, in new code, the collapse this project files against `--check-anchors` (F2), where an
+unusable spec hides under the drifted verdict. One honest word, two counts that discriminate.
+
+The dict still deliberately carries **no** `mutations`/`caught`/`survived`/`refused` keys. Their
+absence is the enforcement of AC-4.1: a formatter cannot print a count that is not there, so the
+no-counts rule cannot regress into printing zeros.
 
 `run_spec()`'s docstring contract — "raises `SpecError` only when the spec itself is unusable; every
 other outcome is a verdict" — is preserved: this is a verdict, not an exception.
@@ -112,8 +131,9 @@ fails to load, which is a reported finding rather than a silent skip (AC-6.3).
 `BASELINE_NOT_GREEN` and `RESTORE_FAILED`:
 
 ```python
-if verdict == "PRECHECK_DRIFTED":
-    print(f"MUTATION: {verdict} specs={result['specs']} drifted={len(result['drifted'])}")
+if verdict == "PRECHECK_FAILED":
+    print(f"MUTATION: {verdict} specs={result['specs']} "
+          f"drifted={len(result['drifted'])} unreadable={len(result['unreadable'])}")
 elif verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
     print(f"MUTATION: {verdict}")
 else:
@@ -123,7 +143,7 @@ else:
 Detail lines name the sibling spec, its **resolved** root, each drifted mutation with its hit count
 and near-miss hints, and every skipped or unclassifiable file. The message states plainly that the
 drift is in a *sibling*, not in the spec the operator asked to run — the two prescribe different
-actions. Then `[H-MAD] <label> mutation PRECHECK_DRIFTED`, and exit **2**, joining the family of
+actions. Then `[H-MAD] <label> mutation PRECHECK_FAILED`, and exit **2**, joining the family of
 outcomes that measured nothing.
 
 ### Re-rooting the committed specs (FR-2)
@@ -169,7 +189,7 @@ uses, so it is cwd-independent and survives the skills symlink.
 | `classify_spec_file` | `h-mad/scripts/h_mad_mutation_harness.py` | new | FR-6 |
 | `_sibling_specs` | `h-mad/scripts/h_mad_mutation_harness.py` | new | FR-3 |
 | precheck block in `run_spec` | `h-mad/scripts/h_mad_mutation_harness.py` | modify | FR-3 |
-| `PRECHECK_DRIFTED` branch in `main` | `h-mad/scripts/h_mad_mutation_harness.py` | modify | FR-4 |
+| `PRECHECK_FAILED` branch in `main` | `h-mad/scripts/h_mad_mutation_harness.py` | modify | FR-4 |
 | 16 h-mad specs | `h-mad/tests/mutation-specs/*.json` | modify | FR-2, `root` only |
 | handoff spec | `handoff/tests/mutation-specs/census_registry.json` | modify | FR-2/AC-2.6, root + prefixes + command |
 | harness tests | `h-mad/tests/test_h_mad_mutation_harness.py` | modify | new behaviour + FR-5 assertion |
@@ -186,7 +206,7 @@ uses, so it is cwd-independent and survives the skills symlink.
 3. Re-root and re-prefix the handoff spec; same assertions plus its suite still green (AC-2.6).
 4. `classify_spec_file` plus its differential corpus (FR-6, AC-6.6).
 5. `_sibling_specs` and the precheck block in `run_spec`, returning the new verdict (FR-3).
-6. `main`'s `PRECHECK_DRIFTED` branch, marker, and exit code (FR-4); re-anchor
+6. `main`'s `PRECHECK_FAILED` branch, marker, and exit code (FR-4); re-anchor
    `mutation_harness.json` in the **same** commit (AC-4.5).
 7. The suite assertions in both projects (FR-5).
 8. Documentation: SKILL.md, registry entry, recovery row, doc test (FR-7).
@@ -210,7 +230,7 @@ mutation counts by construction.
 | `classify_spec_file(path: Path) -> tuple[str, str \| None]` | new, module-level so tests reach it without duplicating it |
 | `_sibling_specs(spec_path: Path) -> list[Path]` | new, module-private |
 | `run_spec(spec_path)` | signature unchanged; may return the new verdict |
-| CLI | no new flags. New stdout verdict `MUTATION: PRECHECK_DRIFTED specs=<N> drifted=<K>`, exit 2 |
+| CLI | no new flags. New stdout verdict `MUTATION: PRECHECK_FAILED specs=<N> drifted=<K>`, exit 2 |
 
 No new flag is added deliberately: an opt-out would be reachable from ordinary use, which is exactly
 what the spec's open question warned against. The harness's own tests avoid the precheck by
@@ -269,7 +289,10 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 | all-clean directory runs normally | " | AC-3.2 |
 | refusal names spec, mutation, resolved root, sibling-vs-self | " | AC-3.3, AC-3.4 |
 | a drifted spec in another directory does not affect the verdict | " | AC-3.5 |
-| verdict line carries `specs=`/`drifted=` and no mutation counts | " | AC-4.1 |
+| verdict line carries `specs=`/`drifted=`/`unreadable=` and no mutation counts | " | AC-4.1 |
+| a sibling declaring itself a spec but failing `_load_spec` refuses the run, lands in `unreadable`, and is named with the loader's error | " | AC-4.6, AC-6.3 |
+| a run refused only for an unreadable sibling prints `drifted=0` with non-zero `unreadable=` | " | AC-4.1, AC-4.6 |
+| AC-5.5's deliberate drift is reverted under `try`/`finally` and the restore verified by re-read | " | AC-5.5 |
 | exit code is 2; `[H-MAD]` marker emitted | " | AC-4.2, AC-4.4 |
 | own spec drifted still yields `REFUSED` | " (existing, unchanged) | backward compatibility |
 | committed specs sweep clean; empty dir fails loudly | " + `handoff/tests/test_mutation_specs_clean.py` | AC-5.1, AC-5.2 |
@@ -348,3 +371,4 @@ Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` a
 - v1.0: Initial design draft. Records the sibling-only scoping decision and why whole-directory
   scoping would have made `REFUSED` unreachable and broken eleven existing tests.
 - v1.1: Design audit v1 (must=6, four distinct): AC-6.3 contradiction fixed so a sibling that declares itself a spec and fails to load refuses the run rather than being skipped; classifier/loader agreement test and repository-wide self-containment test added; connection enforcement now mutates in both directions. Also corrected the REFUSED test count to ten dict-form plus one stdout.
+- v1.2: Design audit v2 (must=2, should=1): added the unreadable slot the AC-6.3 fix required, renamed the verdict to PRECHECK_FAILED so an unreadable-only refusal is not reported as drift, and pinned the AC-5.5 restore discipline.

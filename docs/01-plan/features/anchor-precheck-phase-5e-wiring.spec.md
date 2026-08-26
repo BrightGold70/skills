@@ -110,12 +110,23 @@ happens to run the affected spec.
   house rule that a cannot-judge carries no counts, the pre-refusal needs its own verdict word and
   its own counts.
 - **Acceptance Criteria**:
-  - AC-4.1: A set-wide pre-refusal prints `MUTATION: PRECHECK_DRIFTED specs=<N> drifted=<K>` and
-    **does not** print `mutations=`, `caught=`, `survived=`, or `refused=`.
-  - AC-4.2: `MUTATION: PRECHECK_DRIFTED` exits **2**, matching the harness's existing convention
+  - AC-4.1: A set-wide pre-refusal prints
+    `MUTATION: PRECHECK_FAILED specs=<N> drifted=<K> unreadable=<J>` and **does not** print
+    `mutations=`, `caught=`, `survived=`, or `refused=`. The verdict word is `PRECHECK_FAILED`
+    rather than `PRECHECK_DRIFTED` deliberately: a sibling that declares itself a spec and then
+    fails to load is a refusal cause with `drifted=0`, and naming that outcome "DRIFTED" would
+    reproduce exactly the collapse this feature files against `--check-anchors` (F2), where an
+    unreadable spec hides under the drifted verdict. Two causes, one honest word, two counts.
+  - AC-4.6: A sibling classified as a spec that then raises `SpecError` is represented in the result
+    with its own slot — it has no `mutations` list, so it cannot be reported through the drifted
+    slot, and it must not be reported through the skipped slot, which is reserved for files that
+    never claimed to be specs. It contributes to `unreadable=`, refuses the run, and is named with
+    the loader's own error text. A run refused solely for this reason prints `drifted=0` with a
+    non-zero `unreadable=`, and that combination is asserted by test.
+  - AC-4.2: `MUTATION: PRECHECK_FAILED` exits **2**, matching the harness's existing convention
     that exit 0 is reserved for a run that measured the guards (`ALL_CAUGHT`, `SURVIVED`) and
     anything that measured nothing exits non-zero.
-  - AC-4.3: The verdict word `PRECHECK_DRIFTED` does not appear in any existing consumer's match on
+  - AC-4.3: The verdict word `PRECHECK_FAILED` does not appear in any existing consumer's match on
     `REFUSED`, verified by grepping the repository and SKILL.md for consumers of the `MUTATION:`
     token.
   - AC-4.4: An `[H-MAD]` marker line is emitted for the pre-refusal, matching the pattern every
@@ -144,7 +155,11 @@ happens to run the affected spec.
   - AC-5.4: The test calls `precheck_spec()` and does not re-implement the one-match rule, so the
     suite assertion and the sweep can never disagree about what drift means.
   - AC-5.5: Deliberately drifting one committed anchor makes this test fail, and restoring it makes
-    the test pass — the mutation-style check that the assertion actually bites.
+    the test pass — the mutation-style check that the assertion actually bites. The drift is applied
+    and reverted under `try`/`finally` so an assertion failure, an error, or an interrupt cannot
+    leave the developer's checkout dirty. The harness itself restores on every path including
+    SIGINT/SIGTERM for this reason; a test that mutates real committed files owes the same
+    guarantee, and the restore is verified by re-reading the file rather than assumed.
 
 ### FR-6: A non-spec file in the specs directory is never mistaken for drift
 
@@ -187,13 +202,13 @@ happens to run the affected spec.
 - **Acceptance Criteria**:
   - AC-7.1: SKILL.md §Phase-5e states that the mutation run performs the sweep itself and refuses on
     sibling drift, rather than instructing the operator to run it beforehand.
-  - AC-7.2: The `h_mad_mutation_harness.py` registry entry documents `MUTATION: PRECHECK_DRIFTED`,
+  - AC-7.2: The `h_mad_mutation_harness.py` registry entry documents `MUTATION: PRECHECK_FAILED`,
     its counts, and its exit code.
   - AC-7.3: SKILL.md documents that a relative spec `root` is spec-relative, since FR-1 changes a
     behaviour a spec author can observe.
   - AC-7.4: A doc test asserts the presence of the new verdict word in SKILL.md, matching the
     existing pattern for `ANCHORS_DRIFTED`.
-  - AC-7.5: `references/failure-recovery.md` gains a recovery row for `MUTATION: PRECHECK_DRIFTED`
+  - AC-7.5: `references/failure-recovery.md` gains a recovery row for `MUTATION: PRECHECK_FAILED`
     naming its halt reason and remedy. Its existing 5e row lists `REFUSED`, `BASELINE_NOT_GREEN`,
     `RESTORE_FAILED`, and `UNREADABLE` against `step5e:mutation_unverified:<module>`; a verdict
     absent from that table has no documented route, which is how an operator meets a token with no
@@ -246,3 +261,4 @@ happens to run the affected spec.
   than reusing `REFUSED`'s count-bearing shape.
 - v1.1: Back-propagated from the Phase-3 plan audit (F13): AC-2.5 rewritten to guard anchor text rather than the set of keys touched, and AC-2.6 added requiring every spec to resolve within its own skill. FR-2 now names the structural asymmetry between the two projects' specs.
 - v1.2: F14 from probing invariants.base.md: AC-6.6 added requiring the differential corpus that guard-narrowing mandates, and AC-6.1 tightened to key on the loader's own necessary condition rather than a separate guess at spec shape.
+- v1.3: Design audit v2 back-propagation: verdict renamed to PRECHECK_FAILED with an unreadable= count, AC-4.6 added for the load-failed-sibling slot, and AC-5.5 hardened to restore under try/finally.

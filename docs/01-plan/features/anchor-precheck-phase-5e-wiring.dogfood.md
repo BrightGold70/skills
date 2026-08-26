@@ -386,6 +386,41 @@ Note what this and F13 have in common: both are Axis B violations, both require 
 documents against each other, and both were missed by every audit pass — eight of them now, across
 four cycles, all `low-evidence`.
 
+### F15 — `low-evidence` keys on tool count, and tool count did not predict usefulness
+
+This corrects the reading recorded in F11. There, six Phase-3 plan-audit passes were all flagged
+`low-evidence` and produced one nit between them, and the flag looked like a reliable hollowness
+detector. The Phase-4 design audit falsifies that.
+
+| | tool calls | thinking | must-fix found |
+|---|---|---|---|
+| Phase-3 plan passes (6) | 1–2, all `low-evidence` | 3.2k–5.9k, except one at 14.0k | 0 (the 14.0k pass found 2 nits, one real) |
+| Phase-4 design passes (2) | 1, both `low-evidence` | **8.8k, 10.2k** | **6 (4 distinct), every premise confirmed** |
+| Phase-4 repo-verifying dispatch | **16, `EVIDENCE: PASS`** | 3.1k | 0 — and wrongly declared every AC satisfied |
+
+The `low-evidence` flag fired on **all** of these, including the two passes that found everything.
+So on this transport it does not discriminate: an audit prompt inlines the plan, spec and both
+invariant layers, so a pass never needs to read anything and one tool call is the expected floor.
+J49's own wording is "high thinking **or** ~34 tool calls"; F11 leaned on the tool-count half, which
+is the half this transport structurally suppresses.
+
+**Thinking tracked usefulness; tool count did not.** The two passes above 8k found four real
+defects; the six below 6k found nothing.
+
+The third row is the sharpest part. A dispatch explicitly instructed to verify claims against the
+repository made 16 successful reads, correctly confirmed all seven factual claims it was asked to
+check — root-resolution duplication, the 10+1 REFUSED split, the loader's necessary condition, the
+count-free precedent, both `../..` depths, zero git usage, and the self-referential anchor — and then
+concluded "every FR and AC is fully satisfied", which was false in four places the low-evidence
+passes caught. On one point it even described AC-6.3's *intended* behaviour without noticing the
+design contradicted it.
+
+**Evidence gates answer "did it look", not "did it think".** `h_mad_review_evidence.py` is honest
+about this — it says outright that it answers only whether a review read anything, never whether its
+findings are right — and this is that caveat measured. The practical rule: read the effort block as
+a **triage hint weighted on thinking**, never as a verdict in either direction, and never treat a
+high-evidence pass as more trustworthy than a high-thinking one.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -418,3 +453,6 @@ would have argued for better wording rather than for wiring.
   self-containment conflict that four clean audit passes missed.
 - v1.8: F14 added — FR-6 relaxes a guard without the differential corpus the base layer requires,
   and AC-6.1's classification rule is narrower than what `_load_spec` actually demands.
+- v1.9: F15 added — the Phase-4 design audit falsified F11's reading that `low-evidence` predicts
+  hollowness. Both passes that found all four defects were flagged low-evidence; the 16-read
+  verifying dispatch got the completeness judgement wrong.
