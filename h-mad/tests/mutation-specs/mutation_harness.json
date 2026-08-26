@@ -193,10 +193,10 @@
   },
   {
    "name": "a-bad-spec-aborts-the-sweep",
-   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass.",
+   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        except SpecError as exc:",
-   "replace": "        except ZeroDivisionError as exc:",
+   "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
+   "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
   },
   {
@@ -246,6 +246,30 @@
    "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
    "replace": "            pass",
    "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
+  },
+  {
+   "name": "remove-the-sibling-precheck-call-from-run-spec",
+   "_mechanism": "WIRE direction 1: the callee survives, the CONNECTION is cut. run_spec stops prechecking siblings and mutates a tree a neighbour's drift has already invalidated.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    siblings = _sibling_specs(spec_path)",
+   "replace": "    siblings = {\"spec_paths\": [], \"skipped\": []}",
+   "test": "tests/test_h_mad_mutation_harness.py::test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating"
+  },
+  {
+   "name": "fire-the-sibling-precheck-unconditionally",
+   "_mechanism": "WIRE direction 2: the connection fires ALWAYS. A wire that always refuses passes the remove-the-call test just as happily as a correct one, so only this direction distinguishes them.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if sibling_refusals:",
+   "replace": "    if True:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_all_clean_sibling_directory_still_runs_to_ordinary_verdict"
+  },
+  {
+   "name": "sweep-the-directory-including-the-spec-being-run",
+   "_mechanism": "Self-exclusion is load-bearing: including self makes the spec you ran report as a drifted SIBLING, collapsing the distinction AC-3.4 requires and making the existing REFUSED verdict unreachable for self drift.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        if sibling == spec_path:\n            continue",
+   "replace": "        if False:\n            continue",
+   "test": "tests/test_h_mad_mutation_harness.py::test_self_drift_and_sibling_drift_have_distinct_refusal_text"
   }
  ]
 }

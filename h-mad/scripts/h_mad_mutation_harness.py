@@ -382,6 +382,29 @@ def precheck_spec(spec_path: Path) -> dict:
     return result
 
 
+def _sibling_specs(spec_path: Path) -> dict:
+    """Specs beside `spec_path`, excluding `spec_path` itself.
+
+    Directory sweeps may see JSON files that are not mutation specs. Reuse the
+    same classifier as --check-anchors so "not a spec" is a skip, while a file
+    that declares itself a spec is handed to _load_spec/precheck_spec and can
+    refuse the run if deeper validation fails.
+    """
+    spec_path = Path(spec_path).resolve()
+    spec_paths = []
+    skipped = []
+    for sibling in sorted(spec_path.parent.glob("*.json")):
+        sibling = sibling.resolve()
+        if sibling == spec_path:
+            continue
+        kind, detail = classify_spec_file(sibling)
+        if kind == "spec":
+            spec_paths.append(sibling)
+        else:
+            skipped.append({"path": str(sibling), "reason": detail or kind})
+    return {"spec_paths": spec_paths, "skipped": skipped}
+
+
 def run_spec(spec_path: Path) -> dict:
     """Apply each mutation in turn, run the command, always restore.
 
@@ -395,6 +418,8 @@ def run_spec(spec_path: Path) -> dict:
     mutations = spec["mutations"]
 
     target_command = spec.get("target_command")
+    siblings = _sibling_specs(spec_path)
+    precheck = {"swept": len(siblings["spec_paths"]), "skipped": siblings["skipped"]}
 
     result = {
         "verdict": "ALL_CAUGHT",
@@ -410,7 +435,35 @@ def run_spec(spec_path: Path) -> dict:
         # reason matches the mechanism stays with the author.
         "mechanism": {},
         "hints": {},
+        "precheck": precheck,
     }
+
+    sibling_refusals = []
+    for sibling_path in siblings["spec_paths"]:
+        try:
+            sibling = _load_spec(sibling_path)
+            sibling_root = _resolve_root(sibling, sibling_path)
+            sibling_precheck = precheck_spec(sibling_path)
+        except SpecError as exc:
+            sibling_refusals.append(
+                f"sibling drifted: {sibling_path.name}: spec failed to load ({exc})"
+            )
+            continue
+
+        for entry in sibling_precheck["drifted"]:
+            sibling_refusals.append(
+                f"sibling drifted: {sibling_path.name} root {sibling_root}: "
+                f"{entry['name']}: anchor matched {entry['hits']} times in "
+                f"{entry['file']}, expected exactly 1"
+            )
+        for entry in sibling_precheck["unreadable"]:
+            sibling_refusals.append(
+                f"sibling drifted: {sibling_path.name} root {sibling_root}: {entry}"
+            )
+    if sibling_refusals:
+        result["verdict"] = "REFUSED"
+        result["refused"].extend(sibling_refusals)
+        return result
 
     # Mutations are scored by "did the suite go red?", which means nothing if it
     # was already red. Checking first turns a whole misleading report into one
@@ -470,7 +523,7 @@ def run_spec(spec_path: Path) -> dict:
                 # more than once means the harness would have to choose for the
                 # author, mutating more than the guard under test.
                 result["refused"].append(
-                    f"{mutation['name']}: anchor matched {hits} times in "
+                    f"{mutation['name']}: spec you ran drifted: anchor matched {hits} times in "
                     f"{mutation['file']}, expected exactly 1"
                 )
                 # The verdict is correct and load-bearing either way; what was
