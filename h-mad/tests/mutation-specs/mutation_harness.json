@@ -206,6 +206,22 @@
    "find": "    if len(args.spec) != 1:",
    "replace": "    if False:",
    "test": "tests/test_h_mad_mutation_harness.py::test_a_mutation_run_still_takes_exactly_one_spec"
+  },
+  {
+   "name": "resolve-a-relative-root-against-the-callers-cwd",
+   "_mechanism": "Reverts _resolve_root's relative branch to cwd-relative. The spec then resolves to a different tree depending on where the harness was invoked from -- the portability defect Task 1 closes.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    return (spec_path.parent / root).resolve()",
+   "replace": "    return root.resolve()",
+   "test": "tests/test_h_mad_mutation_harness.py::test_relative_root_is_resolved_against_the_spec_dir_from_any_cwd"
+  },
+  {
+   "name": "default-an-absent-root-to-the-callers-cwd",
+   "_mechanism": "A spec with no `root` key falls back to the process cwd instead of its own directory, so the same spec mutates different files from different cwds.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        return spec_path.parent.resolve()",
+   "replace": "        return Path.cwd().resolve()",
+   "test": "tests/test_h_mad_mutation_harness.py::test_absent_root_defaults_to_the_spec_file_directory"
   }
  ]
 }

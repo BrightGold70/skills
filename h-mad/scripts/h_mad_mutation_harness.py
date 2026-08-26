@@ -124,6 +124,22 @@ def _load_spec(spec_path: Path) -> dict:
     return spec
 
 
+def _resolve_root(spec: dict, spec_path: Path) -> Path:
+    """The directory a spec's `file` paths are relative to.
+
+    Absolute -> itself. Relative -> resolved against the SPEC's directory, not
+    the caller's cwd. Absent -> the spec's directory.
+    """
+    root_value = spec.get("root")
+    if not root_value:
+        return spec_path.parent.resolve()
+
+    root = Path(root_value)
+    if root.is_absolute():
+        return root.resolve()
+    return (spec_path.parent / root).resolve()
+
+
 def _restore_file(path: Path, text: str) -> bool:
     """Write `text` back and RE-READ to prove it landed. True iff it did.
 
@@ -300,7 +316,7 @@ def precheck_spec(spec_path: Path) -> dict:
     """
     spec_path = Path(spec_path)
     spec = _load_spec(spec_path)
-    root = Path(spec.get("root") or spec_path.parent).resolve()
+    root = _resolve_root(spec, spec_path)
 
     result = {
         "spec": str(spec_path),
@@ -352,7 +368,7 @@ def run_spec(spec_path: Path) -> dict:
     """
     spec_path = Path(spec_path)
     spec = _load_spec(spec_path)
-    root = Path(spec.get("root") or spec_path.parent).resolve()
+    root = _resolve_root(spec, spec_path)
     command = spec["command"]
     mutations = spec["mutations"]
 
