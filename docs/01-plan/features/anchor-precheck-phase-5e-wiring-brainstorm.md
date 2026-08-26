@@ -108,6 +108,11 @@ that also fixes the worktree hazard, at the cost of changing `h_mad_mutation_har
 a repo-root discovery rule, or scoping Mechanism 1 to this machine and dropping the portability
 claim.
 
+**Resolved in Phase 2** (recorded here so this section is not read as still open): spec-relative
+resolution for relative roots, with all 17 specs re-rooted — and handoff's additionally re-prefixed,
+because its root sits above its own skill and the domain layer forbids that. See spec FR-1, FR-2,
+AC-2.6.
+
 This is the strongest form of "unskippable by construction" available here, because the obligation
 stops being a step anyone has to remember and becomes a property the suite asserts. It is also the
 direct answer to the blindness found above: the suite currently tests the *documentation* of the
@@ -131,8 +136,8 @@ receipt exists to avoid redoing expensive work; and verifying a receipt honestly
 the swept files have not changed since, which is re-reading the same files at ~the same cost. The
 receipt would save nothing while adding persistent state and a staleness-keying problem.
 
-**It keeps the harness git-free.** `h_mad_mutation_harness.py` touches git **zero** times today (the
-single `git` occurrence in the file is inside a prose comment). Keying a receipt to tree state would
+**It keeps the harness git-free.** `h_mad_mutation_harness.py` touches git **zero** times today — the file contains no
+reference to git at all; the only substring match is inside the word *digit*. Keying a receipt to tree state would
 put git inside a stdlib-only, VCS-agnostic tool, in a repo whose `git stash` untracked-file hazard
 is already documented.
 
@@ -255,3 +260,4 @@ skills symlink couples this repo's suite to sibling repos: run both before mergi
   written** and is corrected here, and a mutation run inside a git worktree resolves to the main
   checkout. Added as the top risk and as a Phase-2 precondition. No design change: the two
   mechanisms stand.
+- v1.5: Corrected the git claim (the file contains no reference to git at all; the only substring match is inside the word digit) and recorded that F9's Phase-2 choice has since been resolved.

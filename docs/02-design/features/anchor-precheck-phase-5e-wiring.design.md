@@ -15,7 +15,9 @@ neighbour's drift produces the new one.
 
 That choice is not cosmetic. Sweeping the whole directory including self would make `REFUSED`
 unreachable for drift — the precheck would fire first on every drifted spec — orphaning its
-`failure-recovery.md` row and breaking eleven existing tests that assert it. Sibling-only also makes
+`failure-recovery.md` row and breaking the eleven existing tests that assert it (ten asserting
+`result["verdict"] == "REFUSED"`, one asserting `MUTATION: REFUSED` on stdout; both counts
+independently confirmed against the suite). Sibling-only also makes
 AC-3.4's "distinguish your spec from a sibling" fall out of the structure rather than being a
 message-formatting rule that could regress silently.
 
@@ -136,6 +138,20 @@ outcomes that measured nothing.
 Applied by a script that rewrites only the named keys and then asserts, per AC-2.5, that every
 `find`/`replace` is byte-identical and that per-spec anchor counts match before and after.
 
+### Two structural guards that outlive this feature (FR-2/AC-2.6, FR-6/AC-6.1)
+
+Both are repository-wide assertions rather than checks on the edit being made, because the property
+they protect can be broken later by a spec nobody is reviewing now:
+
+- **Self-containment across every committed spec.** Walks each `tests/mutation-specs/` directory in
+  the repository, resolves every spec's root, and asserts it lies within that spec's own skill
+  directory. Re-rooting the 17 specs fixes today; this stops a future spec reintroducing a root
+  above its skill.
+- **Classifier/loader agreement.** Asserts the classifier and `_load_spec` cannot drift apart: every
+  corpus file classified `not-a-spec` is one the loader rejects, and every file classified `spec`
+  passes the loader's `mutations` check. Without it the classifier is a *second* statement of what a
+  spec is, which is the single-source failure the design otherwise avoids.
+
 ### The suite assertion (FR-5)
 
 A test in each project globs **its own** `tests/mutation-specs/`, asserts the spec count is non-zero
@@ -203,10 +219,24 @@ construction — a single-spec directory has no siblings — rather than by a su
 ## Error Handling Strategy
 
 Unchanged in kind. `SpecError` remains reserved for the spec being run being unusable, surfacing as
-`MUTATION: UNREADABLE` and exit 2. A **sibling** that fails to load is never allowed to raise out of
-the precheck: it is caught, classified, and reported as a named skipped file, because a neighbour's
-broken JSON must not present as the run spec being unreadable. Drift is a verdict, never an
-exception. Every new outcome prints an `[H-MAD]` marker.
+`MUTATION: UNREADABLE` and exit 2.
+
+A sibling never raises out of the precheck — a neighbour's broken JSON must not present as the run
+spec being unreadable — but **what happens next depends on its classification, and the two outcomes
+are opposite**:
+
+| sibling classification | on load failure | counts toward refusal? |
+|---|---|---|
+| `unclassifiable` (not JSON) or `not-a-spec` (no `mutations`) | named as skipped | **no** |
+| `spec` (has `mutations`) that then fails `_load_spec` | named as a **finding** | **yes — refuses the run** |
+
+The second row is AC-6.3 and is the load-bearing half: a file declaring itself a spec and then
+failing to load is a spec whose guards are unverified, which is the condition this feature exists to
+refuse. Treating it as a skip would let a run proceed past exactly the case it is meant to catch —
+the same silent-pass shape the whole design is built against. Only files that never claimed to be
+specs are skipped.
+
+Drift is a verdict, never an exception. Every new outcome prints an `[H-MAD]` marker.
 
 ## Test Strategy
 
@@ -232,6 +262,7 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 | the existing suite passes unchanged after the resolver switch | " (existing) | AC-1.5 |
 | both entry points resolve one spec identically | " | AC-1.4 |
 | no committed spec has an absolute root | " | AC-2.1 |
+| **every** committed spec across the repository resolves within its own skill directory, not above it — walks all `tests/mutation-specs/` dirs, so a future spec cannot reintroduce a root above its skill | " | AC-2.6 |
 | sweep clean from repo root, `/tmp`, and a copied checkout | " | AC-2.2, AC-2.3 |
 | run inside a worktree leaves the main checkout untouched | " | AC-2.4 |
 | clean spec beside a drifted sibling refuses, zero mutations applied | " | AC-3.1 |
@@ -248,6 +279,7 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 | unparseable JSON reported by name, not counted as drift | " | AC-6.2 |
 | skipped and unclassifiable files are always named in output | " | AC-6.4 |
 | every `.json` currently committed carries a `mutations` key | " | AC-6.5 |
+| classifier and `_load_spec` agree: every corpus file the classifier calls `not-a-spec` is rejected by the loader, and every file it calls `spec` gets past the loader's `mutations` check | " | AC-6.1 |
 | classification corpus, intended softenings enumerated and counted | " | AC-6.1, AC-6.3, AC-6.6 |
 | no existing consumer of the `MUTATION:` token matches the new word | " | AC-4.3 |
 | SKILL.md §Phase-5e says the run sweeps, not that the operator should | " | AC-7.1 |
@@ -286,8 +318,14 @@ Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` a
   rests on the loader's own necessary condition, verified against `_load_spec` rather than its
   documentation.
 - *Connection enforcement* — engaged: the precheck is a connection from `run_spec` to
-  `precheck_spec`. The wire test is AC-3.1 — remove the call alone, leaving `precheck_spec` intact,
-  and the clean-spec-beside-drifted-sibling case stops refusing.
+  `precheck_spec`, and the invariant requires mutating it in **both** directions, not one:
+  - **remove the call**, leaving `precheck_spec` intact → the wire test (AC-3.1, clean spec beside a
+    drifted sibling) must fail. One direction alone certifies a connection that fires *always* just
+    as happily as one that fires correctly.
+  - **force it to fire unconditionally** — refuse regardless of sweep result → the fall-through test
+    (AC-3.2, an all-clean directory runs normally) must fail. Without this, a precheck hard-wired to
+    refuse would pass the wire test.
+  Both mutations are carried in the harness's own spec so they are executed, not merely described.
 - *Assumption verification* — applied: the loader's requirements, the absoluteness of all existing
   roots, and the resolution behaviour were each read from source or measured, not assumed.
 - *Regression provenance* — pre-committed: the eleven `REFUSED` tests are expected green unchanged;
@@ -309,3 +347,4 @@ Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` a
 
 - v1.0: Initial design draft. Records the sibling-only scoping decision and why whole-directory
   scoping would have made `REFUSED` unreachable and broken eleven existing tests.
+- v1.1: Design audit v1 (must=6, four distinct): AC-6.3 contradiction fixed so a sibling that declares itself a spec and fails to load refuses the run rather than being skipped; classifier/loader agreement test and repository-wide self-containment test added; connection enforcement now mutates in both directions. Also corrected the REFUSED test count to ten dict-form plus one stdout.
