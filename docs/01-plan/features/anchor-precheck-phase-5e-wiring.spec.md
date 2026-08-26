@@ -154,7 +154,12 @@ happens to run the affected spec.
   be visible.
 - **Acceptance Criteria**:
   - AC-6.1: A file that parses as JSON but has no `mutations` key is not a spec: it is skipped and
-    does not contribute to the drift count.
+    does not contribute to the drift count. The classifier keys on the **loader's own necessary
+    condition** — `_load_spec` requires a non-empty `mutations` list — rather than on a separate
+    guess at what a spec looks like, and a test asserts the two agree so they cannot drift apart.
+    Note the loader demands more than this (a `command` argv, and `name`/`file`/`find` per
+    mutation); a file carrying `mutations` but failing those is a spec that fails to load, which is
+    AC-6.3's case and not this one.
   - AC-6.2: A file that does not parse as JSON at all cannot be classified, so it is **reported by
     name** and does not contribute to the drift count. It is never silently ignored.
   - AC-6.3: A file that parses as JSON and has a `mutations` key is a spec, so any failure to sweep
@@ -163,6 +168,15 @@ happens to run the affected spec.
     specs than you think" is always visible.
   - AC-6.5: Verified precondition holds as a test: every `.json` file currently in
     `h-mad/tests/mutation-specs/` has a `mutations` key, so none is skipped today.
+  - AC-6.6: The relaxation is shown not to have widened beyond its intended case, per
+    `invariants.base.md` §"Guard narrowing". A differential corpus of file shapes — valid spec,
+    spec with a drifted anchor, `mutations` present but `command` absent, `mutations` present but a
+    mutation missing `find`, valid JSON that is not a spec, malformed JSON, empty file, and a
+    non-`.json` file — is run through the pre-change and post-change classification, the verdicts
+    diffed, and **every** input whose verdict softened is accounted for individually. The intended
+    softenings are enumerated in advance and the count must match exactly. A passing suite is
+    explicitly not accepted as evidence for this AC, since it encodes only the cases already
+    thought of.
 
 ### FR-7: SKILL.md documents the obligation as mechanical rather than advisory
 
@@ -231,3 +245,4 @@ happens to run the affected spec.
   specs), and the contract decision that a set-wide pre-refusal needs its own verdict word rather
   than reusing `REFUSED`'s count-bearing shape.
 - v1.1: Back-propagated from the Phase-3 plan audit (F13): AC-2.5 rewritten to guard anchor text rather than the set of keys touched, and AC-2.6 added requiring every spec to resolve within its own skill. FR-2 now names the structural asymmetry between the two projects' specs.
+- v1.2: F14 from probing invariants.base.md: AC-6.6 added requiring the differential corpus that guard-narrowing mandates, and AC-6.1 tightened to key on the loader's own necessary condition rather than a separate guess at spec shape.

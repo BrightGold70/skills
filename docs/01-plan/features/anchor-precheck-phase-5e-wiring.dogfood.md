@@ -352,6 +352,40 @@ against each other*, which a pass making zero tool calls and ~4.5k thinking toke
 to do. F11's caveat said "insufficient evidence to trust the clean verdict" rather than "the passes
 did nothing"; this is the evidence that the caution was warranted rather than merely procedural.
 
+### F14 — FR-6 relaxes a guard with no differential corpus, which the base layer requires
+
+Second finding from probing, this time against `invariants.base.md` §"Guard narrowing":
+
+> When a change **deliberately makes a guard accept something it used to reject**, the relaxation
+> MUST be shown to be *exactly* the intended case: run a corpus of inputs through the old and new
+> logic and diff the verdicts, then account for **every** input whose verdict softened. A green
+> suite is not evidence here — it encodes the cases someone already thought of, which is the wrong
+> population when the question is "what else did this let through?"
+
+FR-6 is exactly that shape. Today an unusable spec increments `unreadable` and forces
+`ANCHORS_DRIFTED`; under FR-6 a JSON file with no `mutations` key is **skipped** and contributes
+nothing to the drift count. That is a guard accepting something it used to reject, and the spec's
+five ACs describe the intended behaviour without ever proving the relaxation did not widen further
+than intended.
+
+The invariant's second clause is satisfied, and was checked rather than assumed. `_load_spec`
+requires a non-empty `mutations` list (and a non-empty `command` argv), so "has a `mutations` key"
+is a **necessary condition guaranteed by the loader**, not a heuristic re-deriving the format —
+verified by reading the real loader, per §"Assumption verification".
+
+The first clause is not satisfied: no AC calls for a differential corpus.
+
+A related under-specification surfaced in the same check. AC-6.1 keys classification on the
+`mutations` key alone, while `_load_spec` also demands `command` and per-mutation `name`/`file`/
+`find`. A file carrying `mutations` but no `command` is therefore classified as a spec and then
+fails to load — which under AC-6.3 is reported as a real finding rather than skipped. That happens
+to be the desired outcome, but it is desired by accident: the spec never states which of the
+loader's requirements the classifier keys on, so the two could drift apart without anything noticing.
+
+Note what this and F13 have in common: both are Axis B violations, both require reading two
+documents against each other, and both were missed by every audit pass — eight of them now, across
+four cycles, all `low-evidence`.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -382,3 +416,5 @@ would have argued for better wording rather than for wiring.
   first live use, and a version-history bump recorded an unapplied fix.
 - v1.7: F13 added — probing the plan against the domain invariants found an AC-2.5 vs
   self-containment conflict that four clean audit passes missed.
+- v1.8: F14 added — FR-6 relaxes a guard without the differential corpus the base layer requires,
+  and AC-6.1's classification rule is narrower than what `_load_spec` actually demands.
