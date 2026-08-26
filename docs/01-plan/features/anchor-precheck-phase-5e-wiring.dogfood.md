@@ -17,7 +17,7 @@ line, the exit code, and what the tool did or failed to do are.
 | 5e | `h_mad_mutation_harness.py --check-anchors` | **exercised early** (Phase 1) | see F1, F2 below — used to stage the A/B probe |
 | 6 | `h_mad_audit_gate.py --gated` (`1c5d89e`) | pending | stamp is written only on PASS |
 | 6→7 | `h_mad_audit_gate.py --verify-stamp` | pending | read `GATESTAMP:` before Phase 7 closes |
-| — | `h_mad_identifier_sweep.py` | pending | no phase home; if this feature renames nothing, run against the `h-mad-advisor-gate.sh` rename and record `LEFTOVERS` (9 hits, all deliberate) |
+| — | `h_mad_identifier_sweep.py` | **exercised** (Phase 3) | `LEFTOVERS identifiers=1 leftover=11` — see F10. Seed predicted 9; the count grew because recording the prediction added hits |
 | — | `h_mad_ab_dispatch.py` | **exercised** (Phase 1) | see F3–F7; result feeds the spec's rationale |
 
 ## Findings
@@ -227,6 +227,35 @@ Phase 2 must decide between: spec-relative resolution for relative `root` values
 reading), or a repo-root discovery rule, or accepting non-portability and scoping Mechanism 1 to
 this machine. The first is the only one that also fixes the worktree hazard.
 
+### F10 — `h_mad_identifier_sweep.py` exercised against a past rename; all 11 hits deliberate
+
+Run at Phase 3 against the `h-mad-advisor-gate.sh` rename, the exercise the seed prescribes for a
+tool with no phase home. Verdict `SWEEP: LEFTOVERS identifiers=1 leftover=11 allowed=0 related=0
+history=3`, exit 0.
+
+**The seed predicted 9 and the tool reported 11.** Two of the extra hits are this feature's own
+documents — the seed file naming the rename, and the ledger row recording the prediction. Writing
+down the expected count changed it. That is the tool's acknowledged noise source (prose naming a
+renamed thing is both real signal and the main source of false positives) arriving self-inflicted,
+and it is a small argument for why the allowlist is an input rather than something inferred: a
+count is not a stable expectation.
+
+All 11 verified deliberate. Ten are prose, comment, or test-docstring explanations of the rename.
+The eleventh is the one worth the sweep:
+
+```
+h-mad/tests/test_h_mad_advisor_warn.py:38  [test]
+GATE = REPO_ROOT / "h-mad" / "hooks" / "h-mad-advisor-gate.sh"
+```
+
+That is **code**, not prose, assigning a path to a file that no longer exists — the shape a genuine
+stale reference takes. Checked: line 315 is `assert not GATE.exists()`, a guard that the old hook
+stays deleted. Deliberate, and correct.
+
+The observation is that the tool did the useful thing: it surfaced the single code-level hit among
+ten prose hits and left the judgement to the operator, exactly as its contract says. A verdict of
+`LEFTOVERS` is not a claim that anything is wrong.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -249,3 +278,7 @@ would have argued for better wording rather than for wiring.
   suite test.
 - v1.4: F9 added — every committed spec hardcodes a machine-specific absolute `root`, breaking
   Mechanism 1 off this machine and pointing worktree runs at the main checkout.
+- v1.5: F10 added — identifier sweep exercised at Phase 3; 11 hits, all verified deliberate.
+  Checkpoint table updated. Also recorded: `h_mad_doc_shape_check.py` returned its first real
+  verdict of this feature (`PASS type=plan`) on the plan; brainstorm, spec and this ledger are
+  `SKIP type=none` by design, so the plan is what exercised the checker's non-skip path.

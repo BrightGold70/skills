@@ -10,9 +10,10 @@ assertion to hold anywhere but one developer's machine.
 
 A mutation spec's anchor must match its target source exactly once; when it does not, the mutation
 never lands, the suite stays green, and the run reports the guard as enforced. The sweep that
-detects this exists and is documented, but nothing obliges anyone to run it, and seven of 213
-committed anchors were found drifted this way — two of them broken by a refactor made minutes
-earlier in the same session.
+detects this exists and is documented, but nothing obliges anyone to run it. When it was first run
+across the committed specs, seven of 177 anchors were drifted, two of them broken by a refactor made
+minutes earlier in the same session. (That measurement was taken over 14 specs; the tree now carries
+213 anchors across 16.)
 
 This matters now because the same failure recurred three times in one day, to an author who knew the
 tool existed. The obligation has to stop depending on memory.
@@ -103,7 +104,7 @@ classifying files itself rather than reusing the CLI's collapsed verdict.
 | Re-rooted `root` values across all 17 committed specs | data | FR-2 |
 | Guard against an absolute `root` reappearing in a committed spec | test | FR-2 |
 | Sibling sweep executed before the first mutation is applied | behaviour | FR-3 |
-| `MUTATION: PRECHECK_DRIFTED` verdict, counts, and exit code | CLI contract | FR-4 |
+| `MUTATION: PRECHECK_DRIFTED` verdict, counts, exit code, and `[H-MAD]` marker | CLI contract | FR-4 |
 | Refusal message naming spec, mutation, resolved root, and own-vs-sibling | CLI output | FR-3 |
 | Suite assertion over the repository's own committed specs | test | FR-5 |
 | Non-zero spec-count assertion in that test | test | FR-5 |
@@ -167,3 +168,4 @@ output that this plan deliberately leaves unspecified.
 ## Version History
 
 - v1.0: Initial plan draft, derived from the approved spec.
+- v1.1: Audit v1 nits from plan.audit.v1.p2 — corrected the drift measurement to 7-of-177 (the tree now carries 213 across 16 specs) and named the [H-MAD] marker in the FR-4 deliverable.
