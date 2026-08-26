@@ -948,3 +948,55 @@ def test_skill_documents_the_anchor_sweep() -> None:
     assert "a refusal measures NOTHING" in skill, (
         "the sweep is only actionable if the doc says why a REFUSED run is not a pass"
     )
+
+
+# --- committed mutation specs are portable -------------------------------
+
+
+def _committed_mutation_specs() -> list[Path]:
+    repo = Path(__file__).resolve().parents[2]
+    specs = sorted(repo.rglob("tests/mutation-specs/*.json"))
+    # This is a non-vacuity guard, not a count pin: a broken layout/walk must
+    # not certify "no offenders" by iterating over nothing.
+    assert specs, "found no committed mutation specs under tests/mutation-specs/*.json"
+    return specs
+
+
+def _spec_skill_dir(spec_path: Path) -> Path:
+    parts = spec_path.parts
+    assert "tests" in parts, f"mutation spec path has no 'tests' component: {spec_path}"
+    tests_index = len(parts) - 1 - parts[::-1].index("tests")
+    return Path(*parts[:tests_index]).resolve()
+
+
+def test_no_committed_spec_has_an_absolute_root() -> None:
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        root = spec.get("root")
+        if root and Path(root).is_absolute():
+            offenders.append(f"{spec_path}: root={root!r}")
+
+    assert not offenders, (
+        "committed mutation specs must not have absolute roots; "
+        "use a spec-relative root so a bare clone or copied checkout resolves "
+        "the same targets:\n" + "\n".join(offenders)
+    )
+
+
+def test_every_committed_spec_resolves_within_its_own_skill() -> None:
+    offenders = []
+    for spec_path in _committed_mutation_specs():
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        resolved = h_mad_mutation_harness._resolve_root(spec, spec_path)
+        skill_dir = _spec_skill_dir(spec_path)
+        if resolved != skill_dir and skill_dir not in resolved.parents:
+            offenders.append(
+                f"{spec_path}: root resolves to {resolved}, outside skill {skill_dir}"
+            )
+
+    assert not offenders, (
+        "committed mutation specs must resolve within their own skill directory; "
+        "a spec root above the skill can mutate files outside the portable skill "
+        "checkout:\n" + "\n".join(offenders)
+    )
