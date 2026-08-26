@@ -256,6 +256,102 @@ The observation is that the tool did the useful thing: it surfaced the single co
 ten prose hits and left the judgement to the operator, exactly as its contract says. A verdict of
 `LEFTOVERS` is not a claim that anything is wrong.
 
+### F11 — the `Effort:` block caught a double-clean hollow audit cycle on its first live use
+
+Plan audit cycle 1 returned:
+
+```
+AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 delivered=report-file,report-file
+Effort:
+- p1 tools=2 ok=2 failed=0 thinking=4019  low-evidence
+- p2 tools=2 ok=2 failed=0 thinking=14001 low-evidence
+```
+
+`ok=2` is exactly the two successful calls the report-file contract itself costs — the
+`write_to_file` for the report and the `run_command` that writes the `.done` marker. Confirmed
+independently with `h_mad_review_evidence.py`, which returned
+`EVIDENCE: PASS tools=2 ok=2 failed=0 thinking=4019 status=SUCCESS` for pass 1. Neither pass read
+anything.
+
+This is J49's documented cycle-24 signature almost exactly (that case double-cleaned at 6.2k/4.4k
+thinking with the 2 delivery calls each). **At the `AUDITCYCLE:` line alone the cycle is
+indistinguishable from a real clean gate** — `PASS must=0 should=0` is what a genuinely clean audit
+prints too. The block is what made the difference visible, which is the whole claim J49 makes for
+it, observed working.
+
+Per SKILL.md the correct action is to re-dispatch, never to record the PASS, and that is what was
+done (cycle 2).
+
+**Two caveats worth keeping.** First, `low-evidence` is a scoring caveat and not a gate: an audit
+prompt inlines the plan, spec and both invariant files (54.9 KB here), so a pass genuinely does not
+*need* to read the tree, and J49 itself records a 2-call pass that returned a real finding. Second,
+this cycle was not entirely hollow — pass 2 returned two Nits and one of them was a real factual
+error in the plan (see below). So the honest reading is "insufficient evidence to trust the clean
+verdict", not "the passes did nothing".
+
+### F12 — a version-history bump recorded a fix that had not been applied (self-inflicted, Phase 3)
+
+Applying pass 2's nits, the content edit and the version bump were issued in one command. The edit's
+anchor did not match — the assumed line wrapping was wrong — so the `python3` block raised and wrote
+nothing, while `h_mad_version_history.py`, a separate process in the same command, ran anyway and
+appended:
+
+```
+- v1.1: Audit v1 nits ... corrected the drift measurement to 7-of-177 ...
+```
+
+For one command the plan claimed a correction it did not contain. The document's own change log was
+the least reliable statement in it.
+
+`h_mad_version_history.py` behaved exactly as designed — it verified its own splice was
+insertion-only and reported truthfully about *its* write. The defect was sequencing: an unconditional
+bump after an edit that can fail. This is the same shape as the failure the feature exists to
+prevent — an assertion that reports success while the thing it describes did not land — arriving one
+command after writing the plan that describes it.
+
+Caught by re-reading the file rather than by any gate. The generalisable rule: **never issue a
+version bump in the same command as the edit it describes**, or gate it on the edit's exit status.
+
+### F13 — four clean audit passes missed a conflict between AC-2.5 and a domain invariant
+
+Found by probing the plan against `.h-mad/invariants.md` directly, after two consecutive
+`AUDITCYCLE: PASS must=0 should=0` cycles whose four passes were all `low-evidence`.
+
+The repository's Axis B domain layer has exactly two rules, and the first is:
+
+> **Skill self-containment** — A skill MUST remain runnable from a bare clone: no import of another
+> skill's internals, no hardcoded path outside the skill's own directory.
+
+The two projects' specs are structurally different in a way that matters:
+
+| | declared `root` | `mutations[].file` | root is the skill dir? |
+|---|---|---|---|
+| `h-mad` (16 specs) | `<repo>/h-mad` | `scripts/h_mad_*.py` | yes |
+| `handoff` (1 spec) | `<repo>` | `handoff/scripts/...` | **no — one level above** |
+
+`handoff`'s spec also runs `pytest handoff/tests/...` in its `command`. So a spec-relative re-root
+of it yields `../../..`, which is still the repository root — a path outside the skill's own
+directory, and therefore still against invariant #1 even though it is no longer machine-pinned.
+Making it genuinely self-contained requires rooting at `../..` **and** stripping the `handoff/`
+prefix from all 18 `file` values **and** rewriting the `command` pytest path.
+
+That collides with the feature's own acceptance criterion:
+
+> **AC-2.5**: Re-rooting changes only `root` values — every spec's `mutations`, `command`,
+> `target_command`, and anchor text are byte-identical before and after.
+
+AC-2.5 and invariant #1 cannot both hold for the handoff spec. AC-2.5 was written to guard the top
+risk (a silent corruption during a bulk edit that the sweep cannot see, because anchor text is
+untouched), and it is correct for h-mad's 16 — where root genuinely is the only thing that changes.
+It over-generalises to the seventeenth.
+
+Two things this says about the audits. First, the conflict is an Axis B domain-rule violation, which
+this repository's own convention classifies as `## Must-fix` — the category the passes are least
+entitled to miss. Second, it is exactly the class of defect that requires *reading two documents
+against each other*, which a pass making zero tool calls and ~4.5k thinking tokens is poorly placed
+to do. F11's caveat said "insufficient evidence to trust the clean verdict" rather than "the passes
+did nothing"; this is the evidence that the caution was warranted rather than merely procedural.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -282,3 +378,7 @@ would have argued for better wording rather than for wiring.
   Checkpoint table updated. Also recorded: `h_mad_doc_shape_check.py` returned its first real
   verdict of this feature (`PASS type=plan`) on the plan; brainstorm, spec and this ledger are
   `SKIP type=none` by design, so the plan is what exercised the checker's non-skip path.
+- v1.6: F11 and F12 added — the audit-cycle `Effort:` block caught a double-clean hollow cycle on
+  first live use, and a version-history bump recorded an unapplied fix.
+- v1.7: F13 added — probing the plan against the domain invariants found an AC-2.5 vs
+  self-containment conflict that four clean audit passes missed.

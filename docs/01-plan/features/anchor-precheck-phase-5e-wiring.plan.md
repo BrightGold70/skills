@@ -92,6 +92,13 @@ classifying files itself rather than reusing the CLI's collapsed verdict.
   That is the intended forcing function, and it puts weight on the refusal message: it must name
   which spec drifted, and distinguish the one being run from a sibling, or the coupling reads as an
   unexplained blockage.
+- **The two projects' specs are not structurally alike.** h-mad's 16 already root at their own skill
+  directory; handoff's one roots at the repository, prefixes its targets with `handoff/`, and runs
+  pytest from there. The domain layer requires a skill to remain runnable from a bare clone with no
+  hardcoded path outside its own directory, so handoff's spec needs its prefixes and command changed
+  as well as its root — otherwise it stops being machine-pinned while still resolving above its own
+  skill. This is why the re-rooting guard is expressed over anchor text rather than over which keys
+  are allowed to change.
 - **Scoping by directory keeps projects independent.** Each project's runs guard that project's
   specs, which matches how the specs are already organised and avoids inventing a repository-root
   notion the harness does not have.
@@ -101,7 +108,7 @@ classifying files itself rather than reusing the CLI's collapsed verdict.
 | Deliverable | Type | Satisfies |
 |---|---|---|
 | Spec-relative root resolver, shared by the sweep and the run | function | FR-1 |
-| Re-rooted `root` values across all 17 committed specs | data | FR-2 |
+| Portable roots across all 17 committed specs; handoff's also re-prefixed for self-containment | data | FR-2 |
 | Guard against an absolute `root` reappearing in a committed spec | test | FR-2 |
 | Sibling sweep executed before the first mutation is applied | behaviour | FR-3 |
 | `MUTATION: PRECHECK_DRIFTED` verdict, counts, exit code, and `[H-MAD]` marker | CLI contract | FR-4 |
@@ -115,7 +122,7 @@ classifying files itself rather than reusing the CLI's collapsed verdict.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Re-rooting 17 specs silently corrupts one, and the sweep still reports clean because the anchor text was untouched | High | Constrain the edit to the `root` key and diff every other key byte-for-byte; sweep before and after and require identical anchor counts |
+| Re-rooting 17 specs silently corrupts one, and the sweep still reports clean because the anchor text was untouched | High | Guard the anchors, not the key set: require every `find`/`replace` byte-identical before and after, and identical per-spec anchor counts. A corrupted target path with intact anchor text is exactly what the sweep cannot see, so key-set stability is the wrong invariant to assert |
 | The new verdict word is missed by an existing consumer of the `MUTATION:` token | Medium | Enumerate consumers before changing the line; the recovery table and the registry entry are both deliverables, not afterthoughts |
 | Implementing the new verdict drifts the harness's own spec, and the drift is discovered late | Medium | Pinned as an acceptance criterion; re-anchor in the same commit and sweep afterwards |
 | Set-wide refusal blocks unrelated work and the operator cannot tell why | Medium | The refusal names the drifted spec and distinguishes sibling from self; this is the whole reason those are acceptance criteria rather than nice-to-haves |
@@ -169,3 +176,4 @@ output that this plan deliberately leaves unspecified.
 
 - v1.0: Initial plan draft, derived from the approved spec.
 - v1.1: Audit v1 nits from plan.audit.v1.p2 — corrected the drift measurement to 7-of-177 (the tree now carries 213 across 16 specs) and named the [H-MAD] marker in the FR-4 deliverable.
+- v1.2: F13 from manual probing: the re-rooting guard is now expressed over anchor text rather than over which keys may change, and the architecture section records that handoff's spec roots above its own skill and needs its prefixes and command changed for self-containment.

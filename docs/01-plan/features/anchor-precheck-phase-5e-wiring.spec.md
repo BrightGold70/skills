@@ -45,6 +45,16 @@ happens to run the affected spec.
   this makes a mutation run inside a git worktree resolve to the **main** checkout, which matters
   because Phase-5 fanout creates worktrees. Each must be re-rooted to the spec-relative form enabled
   by FR-1.
+
+  The two projects are **not** structurally alike, and the difference decides how far the edit
+  reaches. h-mad's 16 specs already root at the skill's own directory and name targets beneath it
+  (`scripts/h_mad_*.py`), so for them `root` genuinely is the only thing that changes. handoff's one
+  spec roots at the **repository** — one level above its skill — prefixes all 18 targets with
+  `handoff/`, and runs `pytest handoff/tests/...`. Re-rooting it spec-relatively without touching
+  anything else would leave it resolving outside its own skill, which the Axis B domain layer
+  forbids: *a skill MUST remain runnable from a bare clone: no hardcoded path outside the skill's
+  own directory*. Making it portable and self-containment-compliant therefore requires changing its
+  target prefixes and its command as well.
 - **Acceptance Criteria**:
   - AC-2.1: No committed spec under any `tests/mutation-specs/` directory contains an absolute
     `root`. A test asserts this over the whole repository, so a future spec cannot reintroduce one.
@@ -56,9 +66,19 @@ happens to run the affected spec.
     proving the machine-pinning is gone.
   - AC-2.4: A mutation run executed from within a git worktree resolves its targets inside **that
     worktree** and leaves the main checkout's files unmodified.
-  - AC-2.5: Re-rooting changes only `root` values — every spec's `mutations`, `command`,
-    `target_command`, and anchor text are byte-identical before and after, verified by a diff
-    restricted to the `root` key.
+  - AC-2.5: Re-rooting preserves every mutation's **anchor text**: each mutation's `find` and
+    `replace` are byte-identical before and after for every spec, and a sweep reports the same
+    per-spec anchor counts before and after. `root`, `mutations[].file`, and `command` may change
+    only where AC-2.6 requires it. The guard here is anchor corruption during a bulk edit — which
+    the sweep cannot see, because a corrupted target path with intact anchor text still reports
+    cleanly — not the set of keys touched.
+  - AC-2.6: Every committed spec resolves to its own skill's directory or below it; none resolves
+    to a path above the skill it belongs to. `handoff/tests/mutation-specs/census_registry.json` is
+    re-rooted to the handoff skill directory, with the `handoff/` prefix removed from all 18
+    `mutations[].file` values and from its `command` pytest path, so it satisfies the
+    self-containment invariant rather than merely ceasing to be machine-pinned. A test asserts the
+    property across every committed spec, so a future spec cannot reintroduce a root above its own
+    skill.
 
 ### FR-3: The mutation run refuses when any spec in its set has drifted
 
@@ -210,3 +230,4 @@ happens to run the affected spec.
   no gate), the operator's F9 remedy decision (spec-relative resolution plus re-rooting all 17
   specs), and the contract decision that a set-wide pre-refusal needs its own verdict word rather
   than reusing `REFUSED`'s count-bearing shape.
+- v1.1: Back-propagated from the Phase-3 plan audit (F13): AC-2.5 rewritten to guard anchor text rather than the set of keys touched, and AC-2.6 added requiring every spec to resolve within its own skill. FR-2 now names the structural asymmetry between the two projects' specs.
