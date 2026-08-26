@@ -16,6 +16,7 @@ baseline must stop the run instead of scoring every mutation against noise.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 HARNESS = SCRIPTS / "h_mad_mutation_harness.py"
 
 sys.path.insert(0, str(SCRIPTS))
+import h_mad_mutation_harness  # noqa: E402
 from h_mad_mutation_harness import _restore_file, run_spec  # noqa: E402
 
 
@@ -755,6 +757,125 @@ def test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok(
     assert result["verdict"] == "ANCHORS_DRIFTED", result
     assert result["ok"] == 0
     assert result["unreadable"], "a missing target file must not pass silently"
+
+
+# --- root resolution ------------------------------------------------------
+#
+# Specs can live next to their mutation fixtures, and `root` exists to make the
+# target paths independent of where the harness itself is launched from.
+
+
+def _root_resolution_spec(spec_dir: Path, root: str | None) -> Path:
+    project = spec_dir.parent
+    project.mkdir(parents=True, exist_ok=True)
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    (project / "guard.py").write_text(GUARD, encoding="utf-8")
+    spec = {
+        "command": [sys.executable, "-c", CHECK],
+        "mutations": [_kills_the_guard()],
+    }
+    if root is not None:
+        spec["root"] = root
+    spec_path = spec_dir / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+    return spec_path
+
+
+def _from_cwd(cwd: Path, spec_path: Path, guard: Path) -> tuple[str, str, bool]:
+    from h_mad_mutation_harness import precheck_spec
+
+    previous = Path.cwd()
+    try:
+        os.chdir(cwd)
+        try:
+            pre = precheck_spec(spec_path)
+            run = run_spec(spec_path)
+        except OSError as exc:
+            return f"OSError: {exc}", f"OSError: {exc}", guard.read_text(
+                encoding="utf-8"
+            ) == GUARD
+    finally:
+        os.chdir(previous)
+    return pre["verdict"], run["verdict"], guard.read_text(encoding="utf-8") == GUARD
+
+
+def test_relative_root_is_resolved_against_the_spec_dir_from_any_cwd(tmp_path: Path) -> None:
+    spec_path = _root_resolution_spec(tmp_path / "project" / "specs", "..")
+    guard = spec_path.parent.parent / "guard.py"
+    repo_root = Path(__file__).resolve().parents[2]
+    observed = {
+        "spec dir": _from_cwd(spec_path.parent, spec_path, guard),
+        "/tmp": _from_cwd(Path("/tmp"), spec_path, guard),
+        "repo root": _from_cwd(repo_root, spec_path, guard),
+    }
+
+    assert len(set(observed.values())) == 1, (
+        "relative root must be spec-relative, not caller-cwd-relative: "
+        f"{observed}"
+    )
+    assert observed["spec dir"] == ("ANCHORS_OK", "ALL_CAUGHT", True)
+
+
+def test_absolute_root_is_used_exactly_from_any_cwd(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    spec_path = _root_resolution_spec(project / "specs", str(project))
+    guard = project / "guard.py"
+    observed = [
+        _from_cwd(spec_path.parent, spec_path, guard),
+        _from_cwd(Path("/tmp"), spec_path, guard),
+        _from_cwd(Path(__file__).resolve().parents[2], spec_path, guard),
+    ]
+
+    assert observed == [("ANCHORS_OK", "ALL_CAUGHT", True)] * 3
+
+
+def test_absent_root_defaults_to_the_spec_file_directory(tmp_path: Path) -> None:
+    spec_dir = tmp_path / "specs-as-project"
+    spec_dir.mkdir()
+    (spec_dir / "guard.py").write_text(GUARD, encoding="utf-8")
+    spec = {
+        "command": [sys.executable, "-c", CHECK],
+        "mutations": [_kills_the_guard()],
+    }
+    spec_path = spec_dir / "mutations.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    assert _from_cwd(Path("/tmp"), spec_path, spec_dir / "guard.py") == (
+        "ANCHORS_OK", "ALL_CAUGHT", True
+    )
+    assert (spec_dir / "guard.py").read_text(encoding="utf-8") == GUARD
+
+
+def test_precheck_and_run_share_the_root_resolver(monkeypatch, tmp_path: Path) -> None:
+    source = HARNESS.read_text(encoding="utf-8")
+
+    assert "def _resolve_root(spec: dict, spec_path: Path) -> Path:" in source, (
+        "root resolution must live in the shared _resolve_root helper"
+    )
+
+    calls = []
+    shared_root = tmp_path / "shared-root"
+
+    def record_resolved_root(spec: dict, spec_path: Path) -> Path:
+        root = shared_root.resolve()
+        calls.append((spec_path, root))
+        return root
+
+    monkeypatch.setattr(h_mad_mutation_harness, "_resolve_root", record_resolved_root)
+    spec_path = _project(shared_root, [_kills_the_guard()])
+
+    h_mad_mutation_harness.precheck_spec(spec_path)
+    assert len(calls) == 1, "precheck_spec must resolve the root exactly once, via the helper"
+    h_mad_mutation_harness.run_spec(spec_path)
+    assert len(calls) == 2, "run_spec must resolve the root through the same helper"
+
+    assert calls == [(spec_path, shared_root.resolve())] * 2, (
+        "precheck_spec and run_spec must resolve the same spec through the same "
+        f"root helper: {calls}"
+    )
+    assert "Path(spec.get(\"root\") or spec_path.parent).resolve()" not in source, (
+        "the previous cwd-relative root-resolution expression must be removed"
+    )
 
 
 def test_check_anchors_cli_sweeps_several_specs_and_exits_2_on_drift(
