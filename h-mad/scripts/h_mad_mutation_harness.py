@@ -15,6 +15,7 @@ Verdicts, printed as a canonical token:
     MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0     exit 0
     MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0     exit 0
     MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1     exit 2
+    MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
