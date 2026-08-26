@@ -192,12 +192,12 @@
    "test": "tests/test_h_mad_mutation_harness.py::test_precheck_applies_nothing_and_runs_nothing"
   },
   {
-   "name": "a-bad-spec-aborts-the-sweep",
-   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
+   "name": "nothing-swept-reports-anchors-ok",
+   "_mechanism": "A sweep that examined zero specs must be a cannot-judge. Restoring the old fallthrough reports ANCHORS_OK with zero measured anchors, so a bad path or all-non-spec glob reads as a pass.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
-   "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
+   "find": "    if specs == 0:\n        verdict = \"ANCHORS_NOTHING_SWEPT\"\n        print(\n            f\"ANCHORS: {verdict} specs=0 skipped={skipped} \"\n            f\"unclassifiable={unclassifiable}\"\n        )\n        print(f\"[H-MAD] anchors {verdict}\")\n        return 2\n\n",
+   "replace": "",
+   "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_cli_nothing_swept_from_nonexistent_path"
   },
   {
    "name": "a-run-quietly-accepts-several-specs",
@@ -235,8 +235,8 @@
    "name": "swallow-a-corrupt-spec-as-a-skip",
    "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            specs += 1\n            unreadable += 1",
-   "replace": "            skipped += 1",
+   "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE — {exc}\")\n            continue",
+   "replace": "        except SpecError:\n            skipped += 1\n            continue",
    "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
   },
   {
@@ -294,6 +294,14 @@
    "find": "            unreadable_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
    "replace": "            drifted_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
    "test": "tests/test_h_mad_mutation_harness.py::test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift"
+  },
+  {
+   "name": "a-bad-spec-aborts-the-sweep",
+   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
+   "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
+   "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
   }
  ]
 }

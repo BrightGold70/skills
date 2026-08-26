@@ -19,6 +19,9 @@ Verdicts, printed as a canonical token:
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
+    ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 exit 0
+    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=1 exit 2
+    ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=1 exit 2
 
 `survived` and `refused` both sit on the summary line because they answer
 different questions and neither may hide the other: a survivor is a guard that
@@ -698,6 +701,15 @@ def _check_anchors(spec_paths: list[Path]) -> int:
                 print(f"    hint: {hint}")
         for entry in result["unreadable"]:
             print(f"  unreadable: {entry}")
+
+    if specs == 0:
+        verdict = "ANCHORS_NOTHING_SWEPT"
+        print(
+            f"ANCHORS: {verdict} specs=0 skipped={skipped} "
+            f"unclassifiable={unclassifiable}"
+        )
+        print(f"[H-MAD] anchors {verdict}")
+        return 2
 
     verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
     print(

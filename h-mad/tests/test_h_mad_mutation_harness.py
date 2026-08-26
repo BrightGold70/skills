@@ -1340,6 +1340,68 @@ def test_check_anchors_cli_exits_0_when_every_spec_is_clean(tmp_path: Path) -> N
     assert "ANCHORS_OK" in proc.stdout, proc.stdout
 
 
+def test_check_anchors_cli_clean_sweep_keeps_the_five_field_ok_summary(
+    tmp_path: Path,
+) -> None:
+    a = _project(tmp_path / "a", [_kills_the_guard()])
+    b = _project(tmp_path / "b", [_untested_line()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(a), str(b)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines() if line.startswith("ANCHORS: ANCHORS_OK")
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert summary == (
+        "ANCHORS: ANCHORS_OK specs=2 mutations=2 ok=2 drifted=0 unreadable=0"
+    )
+
+
+def test_check_anchors_cli_nothing_swept_from_nonexistent_path(
+    tmp_path: Path,
+) -> None:
+    missing = tmp_path / "nope.json"
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(missing)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("ANCHORS: ANCHORS_NOTHING_SWEPT")
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert summary == "ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=0 unclassifiable=1"
+    assert "ok=" not in summary
+    assert "drifted=" not in summary
+    assert "unreadable=" not in summary
+
+
+def test_check_anchors_cli_nothing_swept_from_only_non_spec_json(
+    tmp_path: Path,
+) -> None:
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(notes)],
+        capture_output=True, text=True,
+    )
+    summary = next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("ANCHORS: ANCHORS_NOTHING_SWEPT")
+    )
+
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert summary == "ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=0"
+    assert "ok=" not in summary
+    assert "drifted=" not in summary
+    assert "unreadable=" not in summary
+
+
 def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> None:
     """One bad spec must not hide later drift on either bad-file path.
 
@@ -1476,6 +1538,7 @@ def test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation(
 
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "missing-command.json" in proc.stdout, proc.stdout
+    assert "ANCHORS: missing-command.json UNREADABLE" in proc.stdout, proc.stdout
     assert "not-a-spec" not in proc.stdout.lower(), (
         "a classified spec that raises SpecError must be a finding, not a skip:\n"
         + proc.stdout
@@ -1550,6 +1613,7 @@ def test_skill_documents_the_anchor_sweep() -> None:
     skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
     assert "--check-anchors" in skill, "Phase 5e never tells anyone to sweep anchors"
     assert "ANCHORS_DRIFTED" in skill, "the drifted token is undocumented"
+    assert "ANCHORS_NOTHING_SWEPT" in skill, "the nothing-swept token is undocumented"
     assert "a refusal measures NOTHING" in skill, (
         "the sweep is only actionable if the doc says why a REFUSED run is not a pass"
     )
@@ -1613,6 +1677,10 @@ def test_recovery_table_carries_the_new_verdict() -> None:
         line for line in recovery.splitlines()
         if line.startswith("| 5e |") and "MUTATION: PRECHECK_FAILED" in line
     ]
+    nothing_swept_rows = [
+        line for line in recovery.splitlines()
+        if line.startswith("| 5e |") and "ANCHORS_NOTHING_SWEPT" in line
+    ]
 
     problems = []
     if not (
@@ -1656,6 +1724,46 @@ def test_recovery_table_carries_the_new_verdict() -> None:
             problems.append(
                 "MUTATION: PRECHECK_FAILED recovery row must name sibling drift "
                 "and the re-anchor/re-run remedy"
+            )
+    if not (
+        "ANCHORS_NOTHING_SWEPT" in skill
+        and "skipped=" in skill
+        and "unclassifiable=" in skill
+        and "exit 2" in skill
+    ):
+        problems.append(
+            "SKILL.md registry entry must document ANCHORS_NOTHING_SWEPT "
+            "with skipped/unclassifiable counts and exit 2"
+        )
+    if not (
+        "ANCHORS_NOTHING_SWEPT" in harness
+        and "skipped=" in harness
+        and "unclassifiable=" in harness
+        and "exit 2" in harness
+    ):
+        problems.append(
+            "h_mad_mutation_harness.py registry must document "
+            "ANCHORS_NOTHING_SWEPT with skipped/unclassifiable counts and exit 2"
+        )
+    if not nothing_swept_rows:
+        problems.append(
+            "failure-recovery.md must add a 5e row for ANCHORS_NOTHING_SWEPT"
+        )
+    else:
+        row = nothing_swept_rows[0]
+        if "step5e:anchor_sweep_nothing_swept:<module>" not in row:
+            problems.append(
+                "ANCHORS_NOTHING_SWEPT recovery row must name its halt reason"
+            )
+        if not (
+            "path" in row
+            and "non-spec" in row
+            and "Fix" in row
+            and "re-run" in row
+        ):
+            problems.append(
+                "ANCHORS_NOTHING_SWEPT recovery row must name path/non-spec "
+                "causes and the fix/re-run remedy"
             )
 
     assert not problems, "PRECHECK_FAILED registry/recovery contract drift:\n" + "\n".join(problems)
