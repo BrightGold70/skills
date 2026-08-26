@@ -68,10 +68,23 @@ Only the third row changes, and no committed or test-constructed spec exercises 
 all 17 committed roots and all 8 test-built roots are absolute), so no current caller observes the
 difference.
 
-### `_sibling_specs(spec_path: Path) -> list[Path]` (new, FR-3)
+### `_sibling_specs(spec_path: Path) -> dict` (new, FR-3)
 
-`sorted(spec_path.parent.glob("*.json"))` minus `spec_path` itself, filtered through
+`sorted(spec_path.parent.glob("*.json"))` minus `spec_path` itself, each hit classified by
 `classify_spec_file()`. Directory-scoped, so `h-mad/` and `handoff/` never sweep each other.
+
+It returns a **census**, not a bare list, because it must report what it declined to sweep as well
+as what it swept:
+
+```python
+{"swept":   [Path, ...],                                   # classified `spec`
+ "skipped": [{"path": str, "reason": "not-a-spec" | "unclassifiable"}, ...]}
+```
+
+**This census shape is defined here once and referenced everywhere below.** An earlier draft
+described it in three places with three different shapes — a flat `list[Path]` signature, a
+top-level `specs` key holding a list, and a `specs=` CLI field holding an integer — which is the
+single-source failure this design otherwise argues for, committed inside the design itself.
 
 ### Precheck inside `run_spec()` (FR-3, FR-4)
 
@@ -85,19 +98,19 @@ malformed or unrecognised `.json` sibling is named when the run fails and silent
 succeeds, which is precisely the invisible-narrowing this feature exists to prevent, reintroduced on
 the success path. AC-6.4 says such files are *always* named; "always" includes `ALL_CAUGHT`.
 
-So every `run_spec()` result carries `{"precheck": {"specs": N, "skipped": [...]}}`, and `main()`
-prints the skipped/unclassifiable detail lines for **every** verdict. Only the refusal path adds the
+So every `run_spec()` result carries `precheck` in the census shape defined above — `swept` as an
+integer count, `skipped` as the list — and `main()` prints the skipped/unclassifiable detail lines
+for **every** verdict. Only the refusal path adds the
 `drifted`/`unreadable` slots below.
 
 If any sibling drifted or failed to load, return immediately:
 
 ```python
 {"verdict": "PRECHECK_FAILED",
- "specs": <siblings swept>,
+ "precheck":   {"swept": <int>, "skipped": [{"path": ..., "reason": ...}]},   # on EVERY shape
  "drifted":    [{"spec": name, "root": str(resolved_root),
                  "mutations": [{"name": ..., "hits": n, "hints": [...]}]}],
- "unreadable": [{"spec": name, "root": str(resolved_root), "error": str(SpecError)}],
- "skipped":    [{"path": name, "reason": "not-a-spec" | "unclassifiable"}]}
+ "unreadable": [{"spec": name, "root": str(resolved_root), "error": str(SpecError)}]}
 ```
 
 Three slots, because a sibling can fail in three distinguishable ways and collapsing any two loses
@@ -145,7 +158,7 @@ fails to load, which is a reported finding rather than a silent skip (AC-6.3).
 
 ```python
 if verdict == "PRECHECK_FAILED":
-    print(f"MUTATION: {verdict} specs={result['specs']} "
+    print(f"MUTATION: {verdict} specs={result['precheck']['swept']} "
           f"drifted={len(result['drifted'])} unreadable={len(result['unreadable'])}")
 elif verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
     print(f"MUTATION: {verdict}")
@@ -242,9 +255,11 @@ and the bare `BASELINE_NOT_GREEN`/`RESTORE_FAILED` shape. The census is not cond
 outcome, because AC-6.4 requires a skipped file to be named on a successful run as well as a failed
 one.
 
-And a **third** verdict shape is added: `{verdict, precheck, specs, drifted[], unreadable[]}`,
-carrying no `mutations`/`caught`/`survived`/`refused` keys by construction — their absence is what
-makes AC-4.1's no-counts rule unbreakable by a formatter.
+And a **third** verdict shape is added: `{verdict, precheck, drifted[], unreadable[]}`, carrying no
+`mutations`/`caught`/`survived`/`refused` keys by construction — their absence is what makes
+AC-4.1's no-counts rule unbreakable by a formatter. There is **no top-level `specs` key** on any
+shape: the summary line's `specs=` field is rendered from `precheck["swept"]`, so one name never
+means a list in one place and a count in another.
 
 ## API / Interface Changes
 
@@ -252,7 +267,7 @@ makes AC-4.1's no-counts rule unbreakable by a formatter.
 |---|---|
 | `_resolve_root(spec: dict, spec_path: Path) -> Path` | new, module-private |
 | `classify_spec_file(path: Path) -> tuple[str, str \| None]` | new, module-level so tests reach it without duplicating it |
-| `_sibling_specs(spec_path: Path) -> list[Path]` | new, module-private |
+| `_sibling_specs(spec_path: Path) -> dict` | new, module-private; returns the census `{swept: [Path], skipped: [{path, reason}]}` |
 | `run_spec(spec_path)` | signature unchanged; may return the new verdict |
 | CLI | no new flags. New stdout verdict `MUTATION: PRECHECK_FAILED specs=<N> drifted=<K>`, exit 2 |
 
@@ -401,3 +416,4 @@ later counts changed.
 - v1.1: Design audit v1 (must=6, four distinct): AC-6.3 contradiction fixed so a sibling that declares itself a spec and fails to load refuses the run rather than being skipped; classifier/loader agreement test and repository-wide self-containment test added; connection enforcement now mutates in both directions. Also corrected the REFUSED test count to ten dict-form plus one stdout.
 - v1.2: Design audit v2 (must=2, should=1): added the unreadable slot the AC-6.3 fix required, renamed the verdict to PRECHECK_FAILED so an unreadable-only refusal is not reported as drift, and pinned the AC-5.5 restore discipline.
 - v1.3: Design audit v3 (must=2, should=1): the skipped/unclassifiable census now survives a clean precheck so AC-6.4 holds on the success path, the AC-2.2 expectation is asserted in full, and the suite assertion filters through classify_spec_file before calling precheck_spec.
+- v1.4: Design audit v4 (must=3): the census bolted on in v1.3 was described in five places with three incompatible shapes. The census is now defined once and referenced everywhere; the top-level specs key is gone, so one name never means a list in one place and a count in another.
