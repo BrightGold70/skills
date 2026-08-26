@@ -944,6 +944,160 @@ def test_all_caught_result_carries_sibling_precheck_census(tmp_path: Path) -> No
     )
 
 
+# --- precheck-failed verdict ---------------------------------------------
+
+
+def test_precheck_failed_summary_line_has_sweep_counts_and_no_mutation_counts(
+    tmp_path: Path,
+) -> None:
+    """AC-4.1: PRECHECK_FAILED prints sweep counts, not mutation counts."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    proc = _run_cli(clean)
+    summary = next(
+        line for line in proc.stdout.splitlines() if line.startswith("MUTATION:")
+    )
+
+    assert summary == "MUTATION: PRECHECK_FAILED specs=1 drifted=1 unreadable=0", (
+        "PRECHECK_FAILED summary must carry only sibling precheck sweep counts: "
+        + proc.stdout
+    )
+    assert "mutations=" not in summary, summary
+    assert "caught=" not in summary, summary
+    assert "survived=" not in summary, summary
+    assert "refused=" not in summary, summary
+
+
+def test_precheck_failed_exits_two(tmp_path: Path) -> None:
+    """AC-4.2: PRECHECK_FAILED is a cannot-judge and exits 2."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[_drifted_anchor()]
+    )
+
+    proc = _run_cli(clean)
+
+    assert "MUTATION: PRECHECK_FAILED" in proc.stdout, (
+        "the precheck refusal must be named PRECHECK_FAILED before its exit "
+        f"code can be trusted: {proc.stdout}"
+    )
+    assert proc.returncode == 2, (
+        f"PRECHECK_FAILED must exit 2, got {proc.returncode}: {proc.stdout}"
+    )
+
+
+def test_refused_consumers_do_not_match_precheck_failed() -> None:
+    """AC-4.3 guard: real repo grep for REFUSED consumers must not match the new word."""
+    repo = Path(__file__).resolve().parents[2]
+    proc = subprocess.run(
+        ["git", "grep", "-n", "MUTATION: REFUSED", "--", "."],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0 and proc.stdout.strip(), (
+        "repository grep found zero MUTATION: REFUSED consumers; the guard "
+        "would be vacuous"
+    )
+    offenders = [
+        line for line in proc.stdout.splitlines()
+        if "MUTATION: PRECHECK_FAILED" in line
+    ]
+    assert not offenders, (
+        "existing consumers keyed on MUTATION: REFUSED must not also match "
+        "MUTATION: PRECHECK_FAILED:\n" + "\n".join(offenders)
+    )
+
+
+def test_precheck_failed_emits_hmad_marker(tmp_path: Path) -> None:
+    """AC-4.4: the new verdict has the same machine-readable marker surface."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[_drifted_anchor()]
+    )
+
+    proc = _run_cli(clean)
+
+    assert "[H-MAD] clean mutation PRECHECK_FAILED" in proc.stdout, (
+        "PRECHECK_FAILED must emit an [H-MAD] marker line naming the new "
+        f"verdict: {proc.stdout}"
+    )
+
+
+def test_committed_mutation_harness_anchor_sweep_is_ok() -> None:
+    """AC-4.5 guard: committed mutation specs, including mutation_harness.json, are anchored."""
+    specs = _committed_mutation_specs()
+    assert any(spec.name == "mutation_harness.json" for spec in specs), (
+        "mutation_harness.json must be part of the committed anchor sweep"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", *map(str, specs)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ANCHORS: ANCHORS_OK" in proc.stdout, proc.stdout
+
+
+def test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift(
+    tmp_path: Path,
+) -> None:
+    """AC-4.6: a sibling SpecError is unreadable, not drifted."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    broken = spec_dir / "broken-sibling.json"
+    broken.write_text(json.dumps({
+        "mutations": [{"name": SIBLING_HOSTILE_NAME}],
+    }), encoding="utf-8")
+
+    proc = _run_cli(clean)
+
+    assert "MUTATION: PRECHECK_FAILED specs=1 drifted=0 unreadable=1" in proc.stdout, (
+        "a run refused solely by a SpecError sibling must print drifted=0 "
+        f"and unreadable=1: {proc.stdout}"
+    )
+    assert "broken-sibling.json" in proc.stdout, proc.stdout
+    assert "spec needs a non-empty `command` argv list of strings" in proc.stdout, (
+        "the unreadable sibling must be named with the loader's own SpecError text: "
+        + proc.stdout
+    )
+    assert proc.returncode == 2, proc.stdout
+
+
 # --- root resolution ------------------------------------------------------
 #
 # Specs can live next to their mutation fixtures, and `root` exists to make the
