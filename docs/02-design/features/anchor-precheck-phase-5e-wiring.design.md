@@ -76,7 +76,20 @@ difference.
 ### Precheck inside `run_spec()` (FR-3, FR-4)
 
 Runs before the baseline command, before any mutation is applied. For each sibling classified as a
-spec, call `precheck_spec()`; collect drift. If any sibling drifted, return immediately:
+spec, call `precheck_spec()`; collect drift.
+
+**The census is produced unconditionally and survives a clean precheck.** `_sibling_specs()` returns
+what it swept *and* what it declined to sweep, and that census is attached to whatever verdict the
+run ends with — not only to a refusal. Returning it solely on the refusal path would mean a
+malformed or unrecognised `.json` sibling is named when the run fails and silently dropped when it
+succeeds, which is precisely the invisible-narrowing this feature exists to prevent, reintroduced on
+the success path. AC-6.4 says such files are *always* named; "always" includes `ALL_CAUGHT`.
+
+So every `run_spec()` result carries `{"precheck": {"specs": N, "skipped": [...]}}`, and `main()`
+prints the skipped/unclassifiable detail lines for **every** verdict. Only the refusal path adds the
+`drifted`/`unreadable` slots below.
+
+If any sibling drifted or failed to load, return immediately:
 
 ```python
 {"verdict": "PRECHECK_FAILED",
@@ -174,9 +187,13 @@ they protect can be broken later by a spec nobody is reviewing now:
 
 ### The suite assertion (FR-5)
 
-A test in each project globs **its own** `tests/mutation-specs/`, asserts the spec count is non-zero
-before evaluating anything, and calls `precheck_spec()` per spec — never re-deriving the one-match
-rule. Failure names each drifted spec, mutation, hit count and resolved root. The specs directory is
+A test in each project globs **its own** `tests/mutation-specs/`, filters every hit through
+`classify_spec_file()` first, asserts the resulting spec count is non-zero, and calls
+`precheck_spec()` only on files classified `spec` — never re-deriving the one-match rule. The filter
+is not optional: handing a `not-a-spec` file straight to `precheck_spec()` raises `SpecError` and
+crashes the test, turning a file the design intends to skip into a suite failure. Files classified
+`not-a-spec` or `unclassifiable` are named in the assertion message for the same reason they are
+named at runtime. Failure names each drifted spec, mutation, hit count and resolved root. The specs directory is
 located from `Path(__file__).resolve().parents[1]`, matching the idiom the existing doc test already
 uses, so it is cwd-independent and survives the skills symlink.
 
@@ -218,9 +235,16 @@ Steps 1–3 must precede 7, because the suite assertion is not portable until th
 The mutation-spec format gains no keys. One key changes meaning: a **relative** `root` is now
 spec-relative rather than cwd-relative. Absolute and absent are unchanged.
 
-`run_spec()`'s return dict gains a third shape, alongside the full-count shape and the bare
-`BASELINE_NOT_GREEN`/`RESTORE_FAILED` shape: `{verdict, specs, drifted[], skipped[]}`, carrying no
-mutation counts by construction.
+`run_spec()`'s return dict changes in two ways.
+
+**Every** shape gains `precheck: {specs: N, skipped: [...]}`, including the existing full-count shape
+and the bare `BASELINE_NOT_GREEN`/`RESTORE_FAILED` shape. The census is not conditional on the
+outcome, because AC-6.4 requires a skipped file to be named on a successful run as well as a failed
+one.
+
+And a **third** verdict shape is added: `{verdict, precheck, specs, drifted[], unreadable[]}`,
+carrying no `mutations`/`caught`/`survived`/`refused` keys by construction — their absence is what
+makes AC-4.1's no-counts rule unbreakable by a formatter.
 
 ## API / Interface Changes
 
@@ -292,6 +316,8 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 | verdict line carries `specs=`/`drifted=`/`unreadable=` and no mutation counts | " | AC-4.1 |
 | a sibling declaring itself a spec but failing `_load_spec` refuses the run, lands in `unreadable`, and is named with the loader's error | " | AC-4.6, AC-6.3 |
 | a run refused only for an unreadable sibling prints `drifted=0` with non-zero `unreadable=` | " | AC-4.1, AC-4.6 |
+| a malformed `.json` sibling is named even when the precheck is clean and the run ends `ALL_CAUGHT` | " | AC-6.4 |
+| the suite assertion filters through `classify_spec_file()` and does not crash on a non-spec `.json` | " | AC-5.1, AC-6.1 |
 | AC-5.5's deliberate drift is reverted under `try`/`finally` and the restore verified by re-read | " | AC-5.5 |
 | exit code is 2; `[H-MAD]` marker emitted | " | AC-4.2, AC-4.4 |
 | own spec drifted still yields `REFUSED` | " (existing, unchanged) | backward compatibility |
@@ -312,7 +338,9 @@ any one of them fails, that is a signal the precheck scope is wrong — not a te
 Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` and the same for
 `handoff/tests/`, both from the repository root. Then
 `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/*.json` expecting
-`ANCHORS_OK specs=16 mutations=213`.
+`ANCHORS_OK specs=16 mutations=213 ok=213 drifted=0 unreadable=0` — asserted in full, exactly as
+AC-2.2 words it, because a truncated expectation cannot distinguish a clean sweep from one whose
+later counts changed.
 
 ## Invariant Compliance
 
@@ -372,3 +400,4 @@ Commands: `/opt/anaconda3/bin/python3.11 -m pytest h-mad/tests/ -v --tb=short` a
   scoping would have made `REFUSED` unreachable and broken eleven existing tests.
 - v1.1: Design audit v1 (must=6, four distinct): AC-6.3 contradiction fixed so a sibling that declares itself a spec and fails to load refuses the run rather than being skipped; classifier/loader agreement test and repository-wide self-containment test added; connection enforcement now mutates in both directions. Also corrected the REFUSED test count to ten dict-form plus one stdout.
 - v1.2: Design audit v2 (must=2, should=1): added the unreadable slot the AC-6.3 fix required, renamed the verdict to PRECHECK_FAILED so an unreadable-only refusal is not reported as drift, and pinned the AC-5.5 restore discipline.
+- v1.3: Design audit v3 (must=2, should=1): the skipped/unclassifiable census now survives a clean precheck so AC-6.4 holds on the success path, the AC-2.2 expectation is asserted in full, and the suite assertion filters through classify_spec_file before calling precheck_spec.
