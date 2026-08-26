@@ -259,7 +259,7 @@
    "name": "fire-the-sibling-precheck-unconditionally",
    "_mechanism": "WIRE direction 2: the connection fires ALWAYS. A wire that always refuses passes the remove-the-call test just as happily as a correct one, so only this direction distinguishes them.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    if sibling_refusals:",
+   "find": "    if drifted_specs or unreadable_specs:",
    "replace": "    if True:",
    "test": "tests/test_h_mad_mutation_harness.py::test_all_clean_sibling_directory_still_runs_to_ordinary_verdict"
   },
@@ -291,8 +291,8 @@
    "name": "specerror-sibling-counts-as-drifted",
    "_mechanism": "A sibling that declares itself a spec but fails deeper validation is unreadable, not anchor drift. Counting it as drifted makes drifted=0 impossible for the unreadable-only refusal this verdict was split out to name.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            result[\"unreadable\"].append(entry)\n            sibling_refusals.append(entry)\n            continue",
-   "replace": "            result[\"drifted\"].append(entry)\n            sibling_refusals.append(entry)\n            continue",
+   "find": "            unreadable_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
+   "replace": "            drifted_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
    "test": "tests/test_h_mad_mutation_harness.py::test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift"
   }
  ]

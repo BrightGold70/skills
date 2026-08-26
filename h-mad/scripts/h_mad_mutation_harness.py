@@ -441,38 +441,47 @@ def run_spec(spec_path: Path) -> dict:
         "unreadable": [],
     }
 
-    sibling_refusals = []
+    drifted_specs = []
+    unreadable_specs = []
     for sibling_path in siblings["spec_paths"]:
         try:
             sibling = _load_spec(sibling_path)
             sibling_root = _resolve_root(sibling, sibling_path)
             sibling_precheck = precheck_spec(sibling_path)
         except SpecError as exc:
-            entry = (
-                f"sibling unreadable: {sibling_path.name}: "
-                f"spec failed to load ({exc})"
-            )
-            result["unreadable"].append(entry)
-            sibling_refusals.append(entry)
+            unreadable_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_path.parent.resolve()),
+                "error": str(exc),
+            })
             continue
 
-        for entry in sibling_precheck["drifted"]:
-            result["drifted"].append(entry)
-            sibling_refusals.append(
-                f"sibling drifted: {sibling_path.name} root {sibling_root}: "
-                f"{entry['name']}: anchor matched {entry['hits']} times in "
-                f"{entry['file']}, expected exactly 1"
-            )
-        for entry in sibling_precheck["unreadable"]:
-            result["unreadable"].append(entry)
-            sibling_refusals.append(
-                f"sibling drifted: {sibling_path.name} root {sibling_root}: {entry}"
-            )
-    if sibling_refusals:
-        result["verdict"] = "REFUSED"
-        result["precheck_failed"] = True
-        result["refused"].extend(sibling_refusals)
-        return result
+        if sibling_precheck["drifted"]:
+            drifted_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_root),
+                "mutations": [
+                    {
+                        "name": entry["name"],
+                        "hits": entry["hits"],
+                        "hints": entry["hints"],
+                    }
+                    for entry in sibling_precheck["drifted"]
+                ],
+            })
+        if sibling_precheck["unreadable"]:
+            unreadable_specs.append({
+                "spec": sibling_path.name,
+                "root": str(sibling_root),
+                "error": "; ".join(sibling_precheck["unreadable"]),
+            })
+    if drifted_specs or unreadable_specs:
+        return {
+            "verdict": "PRECHECK_FAILED",
+            "precheck": precheck,
+            "drifted": drifted_specs,
+            "unreadable": unreadable_specs,
+        }
 
     # Mutations are scored by "did the suite go red?", which means nothing if it
     # was already red. Checking first turns a whole misleading report into one
@@ -693,8 +702,7 @@ def _check_anchors(spec_paths: list[Path]) -> int:
     verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
     print(
         f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
-        f"ok={ok} drifted={drifted} unreadable={unreadable} "
-        f"skipped={skipped} unclassifiable={unclassifiable}"
+        f"ok={ok} drifted={drifted} unreadable={unreadable}"
     )
     if verdict == "ANCHORS_DRIFTED":
         print(
@@ -745,7 +753,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[H-MAD] {label} mutation UNREADABLE")
         return 2
 
-    verdict = "PRECHECK_FAILED" if result.get("precheck_failed") else result["verdict"]
+    verdict = result["verdict"]
     if verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
         print(f"MUTATION: {verdict}")
     elif verdict == "PRECHECK_FAILED":
@@ -762,21 +770,32 @@ def main(argv: list[str] | None = None) -> int:
         )
     mechanism = result.get("mechanism") or {}
     hints = result.get("hints") or {}
-    for name in result["survived"]:
+    for name in result.get("survived", []):
         print(f"  survived: {name}")
         if name in mechanism:
             print(f"    mechanism: {mechanism[name]}")
-    for entry in result["refused"]:
+    for entry in result.get("refused", []):
         print(f"  refused: {entry}")
         name = entry.split(":", 1)[0]
         for hint in hints.get(name, []):
             print(f"    hint: {hint}")
+    for entry in result.get("drifted", []):
+        print(f"  drifted: {entry['spec']} root {entry['root']}")
+        for mutation in entry["mutations"]:
+            print(
+                f"    mutation: {mutation['name']} "
+                f"hits={mutation['hits']}, expected exactly 1"
+            )
+            for hint in mutation["hints"]:
+                print(f"      hint: {hint}")
+    for entry in result.get("unreadable", []):
+        print(f"  unreadable: {entry['spec']} root {entry['root']}: {entry['error']}")
     # Caught mutations carry their killer too. `ALL_CAUGHT` is satisfied by a
     # mutant that died on a crash, a timeout, or an unrelated assertion, and
     # none of those prove the property under test was exercised — so the one
     # judgement the harness must NOT make is printed for the author to make.
-    if result["caught"] and mechanism:
-        killed = [n for n in mechanism if n not in result["survived"]]
+    if result.get("caught") and mechanism:
+        killed = [n for n in mechanism if n not in result.get("survived", [])]
         for name in killed:
             print(f"  caught: {name}")
             print(f"    mechanism: {mechanism[name]}")

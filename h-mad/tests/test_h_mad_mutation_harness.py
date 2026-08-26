@@ -807,11 +807,11 @@ def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(tmp_path: P
 
     result = run_spec(clean)
 
-    assert result["verdict"] == "REFUSED", (
+    assert result["verdict"] == "PRECHECK_FAILED", (
         "run_spec must call the sibling precheck before the baseline command "
         f"and refuse a clean spec beside a drifted sibling: {result}"
     )
-    assert result["caught"] == 0 and not result["survived"], (
+    assert "caught" not in result and "survived" not in result and "mutations" not in result, (
         "sibling precheck refusal must happen before executing any mutation: "
         f"{result}"
     )
@@ -861,15 +861,16 @@ def test_sibling_precheck_refusal_names_spec_mutation_and_resolved_root(tmp_path
     )
 
     result = run_spec(clean)
-    refusal = "\n".join(result.get("refused", []))
+    drifted = result["drifted"]
+    mutation = drifted[0]["mutations"][0]
 
-    assert "drifted-sibling.json" in refusal, (
+    assert drifted[0]["spec"] == "drifted-sibling.json", (
         f"sibling precheck refusal must name the drifted spec filename: {result}"
     )
-    assert SIBLING_HOSTILE_NAME in refusal, (
+    assert mutation["name"] == SIBLING_HOSTILE_NAME, (
         f"sibling precheck refusal must name each drifted mutation: {result}"
     )
-    assert str(root.resolve()) in refusal, (
+    assert drifted[0]["root"] == str(root.resolve()), (
         f"sibling precheck refusal must name the resolved root for that spec: {result}"
     )
 
@@ -897,16 +898,18 @@ def test_self_drift_and_sibling_drift_have_distinct_refusal_text(tmp_path: Path)
     self_result = run_spec(self_spec)
     sibling_result = run_spec(clean)
     self_refusal = "\n".join(self_result.get("refused", []))
-    sibling_refusal = "\n".join(sibling_result.get("refused", []))
 
     assert "spec you ran drifted" in self_refusal, (
         f"self drift must be identified as the spec you ran: {self_result}"
     )
-    assert "sibling drifted" in sibling_refusal, (
+    assert sibling_result["verdict"] == "PRECHECK_FAILED", (
         f"sibling drift must be identified as a sibling, not self drift: {sibling_result}"
     )
-    assert self_refusal != sibling_refusal, (
-        "self drift and sibling drift must not collapse to the same refusal text"
+    assert sibling_result["drifted"][0]["spec"] == "drifted.json", (
+        f"sibling drift must name the sibling spec: {sibling_result}"
+    )
+    assert sibling_result.get("refused") is None, (
+        "self drift and sibling drift must not collapse to the same result shape"
     )
 
 
@@ -1360,7 +1363,7 @@ def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Pat
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "broken.json" in proc.stdout, "unclassifiable JSON must be named on success"
-    assert "unclassifiable=1" in proc.stdout, proc.stdout
+    assert "ANCHORS: broken.json UNCLASSIFIABLE" in proc.stdout, proc.stdout
     assert "drifted=0" in proc.stdout, (
         "unclassifiable JSON must not contribute to anchor drift count:\n"
         + proc.stdout
@@ -1421,7 +1424,8 @@ def test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success(
         "successful sweeps must name skipped and unclassifiable files:\n"
         + proc.stdout
     )
-    assert "skipped=1" in proc.stdout and "unclassifiable=1" in proc.stdout, proc.stdout
+    assert "ANCHORS: notes.json SKIPPED not-a-spec" in proc.stdout, proc.stdout
+    assert "ANCHORS: empty.json UNCLASSIFIABLE" in proc.stdout, proc.stdout
 
 
 def test_every_committed_mutation_spec_classifies_as_spec() -> None:
@@ -1438,19 +1442,22 @@ def test_every_committed_mutation_spec_classifies_as_spec() -> None:
     )
 
 
-def _own_committed_mutation_specs(project_root: Path) -> list[Path]:
+def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[str]]:
     specs_dir = project_root / "tests" / "mutation-specs"
     spec_paths = []
+    skipped = []
     for candidate in sorted(specs_dir.glob("*.json")):
-        kind, _detail = classify_spec_file(candidate)
+        kind, detail = classify_spec_file(candidate)
         if kind == "spec":
             spec_paths.append(candidate)
+        else:
+            skipped.append(f"{candidate}: classifier={kind!r} detail={detail!r}")
     assert spec_paths, f"found no committed mutation specs in {specs_dir}"
-    return spec_paths
+    return spec_paths, skipped
 
 
-def _committed_spec_drift_messages(spec_paths: list[Path]) -> list[str]:
-    failures = []
+def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
+    failures = [f"skipped committed mutation spec: {entry}" for entry in skipped]
     for spec_path in spec_paths:
         try:
             spec = h_mad_mutation_harness._load_spec(spec_path)
@@ -1474,9 +1481,9 @@ def _committed_spec_drift_messages(spec_paths: list[Path]) -> list[str]:
 def test_committed_mutation_specs_are_not_drifted() -> None:
     """Sweeps this project's own tests/mutation-specs/."""
     project_root = Path(__file__).resolve().parents[1]
-    spec_paths = _own_committed_mutation_specs(project_root)
+    spec_paths, skipped = _own_committed_mutation_specs(project_root)
 
-    failures = _committed_spec_drift_messages(spec_paths)
+    failures = _committed_spec_drift_messages(spec_paths, skipped)
 
     assert not failures, (
         "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
