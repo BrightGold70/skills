@@ -118,6 +118,14 @@
    "find": "## Guard narrowing",
    "replace": "## Guard narrowing\n- Note: the controlled PAIR, not just the repro.",
    "test": "tests/test_h_mad_batch_doc_rules.py::TestTheseTestsCanFail::test_each_phrase_is_unique_to_its_section[invariants.base:Assumption verification:the controlled PAIR]"
+  },
+  {
+   "name": "drop-the-offcontract-token-from-the-registry",
+   "_mechanism": "The scanner that closes J30 sat tested and mutation-pinned but ABSENT from SKILL.md for five days, so no orchestrator following the protocol could reach it. Removing its token from the registry entry restores exactly that state, and only the doc pin can see it.",
+   "file": "SKILL.md",
+   "find": "OFFCONTRACT: NONE|FOUND|UNREADABLE",
+   "replace": "a verdict token",
+   "test": "tests/test_h_mad_batch_doc_rules.py::test_the_rule_is_present_in_its_own_section[SKILL:Helper scripts (all in `~/.claude/skills/h-mad/scripts/`):OFFCONTRACT: NONE|FOUND|UNRE]"
   }
  ]
 }
