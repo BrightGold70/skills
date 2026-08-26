@@ -436,6 +436,8 @@ def run_spec(spec_path: Path) -> dict:
         "mechanism": {},
         "hints": {},
         "precheck": precheck,
+        "drifted": [],
+        "unreadable": [],
     }
 
     sibling_refusals = []
@@ -445,23 +447,29 @@ def run_spec(spec_path: Path) -> dict:
             sibling_root = _resolve_root(sibling, sibling_path)
             sibling_precheck = precheck_spec(sibling_path)
         except SpecError as exc:
-            sibling_refusals.append(
-                f"sibling drifted: {sibling_path.name}: spec failed to load ({exc})"
+            entry = (
+                f"sibling unreadable: {sibling_path.name}: "
+                f"spec failed to load ({exc})"
             )
+            result["unreadable"].append(entry)
+            sibling_refusals.append(entry)
             continue
 
         for entry in sibling_precheck["drifted"]:
+            result["drifted"].append(entry)
             sibling_refusals.append(
                 f"sibling drifted: {sibling_path.name} root {sibling_root}: "
                 f"{entry['name']}: anchor matched {entry['hits']} times in "
                 f"{entry['file']}, expected exactly 1"
             )
         for entry in sibling_precheck["unreadable"]:
+            result["unreadable"].append(entry)
             sibling_refusals.append(
                 f"sibling drifted: {sibling_path.name} root {sibling_root}: {entry}"
             )
     if sibling_refusals:
         result["verdict"] = "REFUSED"
+        result["precheck_failed"] = True
         result["refused"].extend(sibling_refusals)
         return result
 
@@ -736,9 +744,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[H-MAD] {label} mutation UNREADABLE")
         return 2
 
-    verdict = result["verdict"]
+    verdict = "PRECHECK_FAILED" if result.get("precheck_failed") else result["verdict"]
     if verdict in {"BASELINE_NOT_GREEN", "RESTORE_FAILED"}:
         print(f"MUTATION: {verdict}")
+    elif verdict == "PRECHECK_FAILED":
+        print(
+            f"MUTATION: {verdict} specs={result['precheck']['swept']} "
+            f"drifted={len(result['drifted'])} "
+            f"unreadable={len(result['unreadable'])}"
+        )
     else:
         print(
             f"MUTATION: {verdict} mutations={result['mutations']} "
@@ -791,6 +805,12 @@ def main(argv: list[str] | None = None) -> int:
             "that matches zero times leaves the guard intact and the suite green, "
             "which is exactly what an enforced guard looks like. Fix the anchor and "
             "re-run (halt `step5e:mutation_unverified:<module>`)."
+        )
+    elif verdict == "PRECHECK_FAILED":
+        print(
+            "  a sibling precheck failed before mutation, so nothing was measured. "
+            "Fix the sibling spec and re-run "
+            "(halt `step5e:mutation_unverified:<module>`)."
         )
 
     print(f"[H-MAD] {label} mutation {verdict}")

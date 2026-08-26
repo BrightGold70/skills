@@ -99,8 +99,8 @@
    "name": "change-the-summary-line-callers-parse",
    "_mechanism": "SKILL.md, failure-recovery.md and the codex verifier prompt all document this exact line. The additions must be detail lines only.",
    "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            f\"MUTATION: {verdict} mutations={result['mutations']} \"",
-   "replace": "            f\"MUTATION: {verdict} total={result['mutations']} \"",
+   "find": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"",
+   "replace": "        print(\n            f\"MUTATION: {verdict} total={result['mutations']} \"",
    "test": "tests/test_h_mad_mutation_harness.py::test_the_summary_line_is_unchanged_by_the_new_detail"
   },
   {
@@ -270,6 +270,30 @@
    "find": "        if sibling == spec_path:\n            continue",
    "replace": "        if False:\n            continue",
    "test": "tests/test_h_mad_mutation_harness.py::test_self_drift_and_sibling_drift_have_distinct_refusal_text"
+  },
+  {
+   "name": "precheck-failed-exits-zero",
+   "_mechanism": "PRECHECK_FAILED is a cannot-judge verdict. Returning zero would let a sibling precheck failure look like usable mutation evidence.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\"} else 2",
+   "replace": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\", \"PRECHECK_FAILED\"} else 2",
+   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_exits_two"
+  },
+  {
+   "name": "precheck-failed-summary-carries-mutation-counts",
+   "_mechanism": "The new precheck verdict must report only the sibling sweep census. Reintroducing mutation counts collapses it back into an ordinary mutation verdict.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "        print(\n            f\"MUTATION: {verdict} specs={result['precheck']['swept']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
+   "replace": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
+   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_summary_line_has_sweep_counts_and_no_mutation_counts"
+  },
+  {
+   "name": "specerror-sibling-counts-as-drifted",
+   "_mechanism": "A sibling that declares itself a spec but fails deeper validation is unreadable, not anchor drift. Counting it as drifted makes drifted=0 impossible for the unreadable-only refusal this verdict was split out to name.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "            result[\"unreadable\"].append(entry)\n            sibling_refusals.append(entry)\n            continue",
+   "replace": "            result[\"drifted\"].append(entry)\n            sibling_refusals.append(entry)\n            continue",
+   "test": "tests/test_h_mad_mutation_harness.py::test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift"
   }
  ]
 }
