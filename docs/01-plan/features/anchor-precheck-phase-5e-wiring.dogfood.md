@@ -477,6 +477,34 @@ likely fix is to record a path relative to the repository root, or to store the 
 path, rather than the basename. This feature's Phase-4 stamp is therefore scoped to the design
 document alone, and the spec is knowingly ungated.
 
+### F17 — the state schema has no field for the 5c baseline sha the protocol depends on
+
+Minor, and the guard that surfaced it behaved correctly, which is the point worth recording.
+
+`h_mad_state_write.py` was asked to record `baseline_sha=b5c8f41` at 5c. It refused:
+
+```
+ERROR: record for '…' would not validate (classified historical); refusing to write.
+If a new field is genuinely needed, declare it in h_mad_state_schema.json rather than
+writing it ad hoc.
+```
+
+The store was left byte-identical. That is exactly the documented behaviour — *"an invented key
+cannot reach disk, which is what turns 'never invent a key' from a rule the orchestrator has to
+remember into one it cannot break"* — and it caught the orchestrator (me) inventing a key on the
+first try. The schema's 17 fields have no slot for it.
+
+The gap is real but small: SKILL.md's Phase-6a-prime says *"Inputs: Phase 5 diff (BASE = 5c sha;
+HEAD = 5g sha)"* and 5f takes `--base <5c sha>`, so the protocol depends on a value the state record
+cannot hold. Nothing is lost, because the value is derivable — `git merge-base main <feature-branch>`
+returned the exact commit — so the practical answer is to derive it rather than store it, and the
+schema arguably should not grow a field for something git already knows.
+
+What it does mean is that the "pin it in state" instinct is not always available, and the writer
+will refuse rather than let the orchestrator improvise a key. Filed as a monitoring row: either add
+the field, or state in SKILL.md that the 5c base is derived from `git merge-base` rather than
+recorded.
+
 ## Note on scope
 
 F1–F6 are observations about the **tools**, not requirements for this feature. **None is in scope**
@@ -515,3 +543,5 @@ would have argued for better wording rather than for wiring.
 - v1.10: F16 added — `--gated` resolves stamped files against the audit file's own directory, so a
   cross-directory document reports STALE permanently; SKILL.md's documented design+impl-plan case
   spans two directories and is therefore the broken one. Proven with a control.
+- v1.11: F17 added — the state schema has no field for the 5c baseline sha; the writer correctly
+  refused the invented key and the value is derivable from `git merge-base`.
