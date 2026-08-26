@@ -1,5 +1,5 @@
 {
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

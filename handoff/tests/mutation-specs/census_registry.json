@@ -1,11 +1,11 @@
 {
  "_why": "This script is how every count in the candidate and J backlogs is produced, so a hole here is invisible in every claim derived from it -- and its worst failure was not a wrong number but a CLEAN one. Each mutation restores one way it can under-read a store, and two run the other way: the coverage guard must not fire on the file's own header prose, and the routing must not capture a candidates row that merely mentions a J-id.",
- "root": "/Users/kimhawk/orca/skills",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",
   "pytest",
-  "handoff/tests/test_skill_candidates_census.py",
+  "tests/test_skill_candidates_census.py",
   "-q"
  ],
  "target_command": [
@@ -18,7 +18,7 @@
   {
    "name": "route-the-j-registry-to-the-candidate-reader",
    "_mechanism": "THE regression: `rows()` ends a row on any line starting with `|`, and skill-monitoring is full of pipe tables. Reported candidates=3 OPEN=0 for 46 real entries -- a CLEAN registry, the one answer nothing prompts you to re-check.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "    if is_monitoring(text):",
    "replace": "    if False:",
    "test": "handoff/tests/test_skill_candidates_census.py::test_a_pipe_table_registry_is_no_longer_read_as_three_candidates"
@@ -26,7 +26,7 @@
   {
    "name": "routing-ignores-the-title",
    "_mechanism": "A candidates row merely MENTIONING a J-id would route to the J reader and report zero entries.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
    "replace": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:0] or [\"Skill Monitoring\"])",
    "test": "handoff/tests/test_skill_candidates_census.py::test_routing_needs_both_the_title_and_a_j_row"
@@ -34,7 +34,7 @@
   {
    "name": "planned-is-not-counted-as-open",
    "_mechanism": "The file's own table says MONITORING and PLANNED are the words that mean open work.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "JOPEN = (\"MONITORING\", \"PLANNED\")",
    "replace": "JOPEN = (\"MONITORING\",)",
    "test": "handoff/tests/test_skill_candidates_census.py::test_monitoring_is_the_word_that_means_open"
@@ -42,7 +42,7 @@
   {
    "name": "take-the-first-status-in-an-entry",
    "_mechanism": "A census once reported J18 open because a NOTE after it contained MONITORING. Two backticked statuses is a quotation, not a verdict.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "        out.append((jid, found[0] if len(found) == 1 else None))",
    "replace": "        out.append((jid, found[0] if found else None))",
    "test": "handoff/tests/test_skill_candidates_census.py::test_prose_containing_a_status_word_does_not_decide_an_entry"
@@ -50,7 +50,7 @@
   {
    "name": "drop-the-vocabulary-diff",
    "_mechanism": "L486's second missing part: a status word nobody documented is drift nobody sees.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "        if used-documented:",
    "replace": "        if False:",
    "test": "handoff/tests/test_skill_candidates_census.py::test_an_undocumented_status_word_is_flagged"
@@ -58,7 +58,7 @@
   {
    "name": "drop-the-coverage-flag",
    "_mechanism": "The generalisable guard. Without it an unsupported row shape reads as an empty backlog, which is exactly how this bug survived. Re-anchored 2026-08-26 after the flag gained its `{why}` explanation; the drift was caught by `--check-anchors` before the run could report REFUSED.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "    flag = \"\" if parsed >= present else (\n        f\"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}\")",
    "replace": "    flag = \"\"",
    "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_flags_an_entry_shape_the_reader_missed"
@@ -66,7 +66,7 @@
   {
    "name": "measure-coverage-against-ids-mentioned-anywhere",
    "_mechanism": "The FALSE-POSITIVE direction. Counting ids mentioned ANYWHERE puts the header's own discussion of the deliberate J31-J33 gaps into the denominator, so the guard cries wolf on the header. Coverage must be measured against a looser ROW shape, never against id mentions.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "        loose=sum(1 for ln in text.split(\"\\n\")\n                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))\n",
    "replace": "        loose=len(set(re.findall(r'\\b[A-Z]+\\d+\\b', text)))\n",
    "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_does_not_cry_wolf_on_the_deliberate_numbering_gaps"
@@ -74,7 +74,7 @@
   {
    "name": "print-a-candidates-total-for-a-j-registry",
    "_mechanism": "`TOTAL candidates=0` for a monitoring-only run is the same false-clean shape this file now guards against.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "if n or bumps_all:",
    "replace": "if True:",
    "test": "handoff/tests/test_skill_candidates_census.py::test_a_monitoring_only_run_prints_no_candidates_total"
@@ -82,7 +82,7 @@
   {
    "name": "severity-emoji-decides-the-status",
    "_mechanism": "The leading emoji is SEVERITY; a red entry can be fixed. Inferring status from it re-invents the guess the Status: line exists to replace.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "        c=collections.Counter(s or \"<none>\" for _, s in entries)",
    "replace": "        c=collections.Counter(\"MONITORING\" for _, s in entries)",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_status_is_read_not_inferred_from_severity"
@@ -90,7 +90,7 @@
   {
    "name": "reject-a-bold-closed-id",
    "_mechanism": "Seven real entries use `**G1** —`; a regex demanding the dash immediately after the id silently drops them.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)(?:\\*\\*)?\\s*[\\u2014\\u2013-]')",
    "replace": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)\\s*[\\u2014\\u2013-]')",
    "test": "handoff/tests/test_skill_candidates_census.py::test_a_bold_closed_id_is_still_an_entry"
@@ -98,7 +98,7 @@
   {
    "name": "hardcode-j-in-the-coverage-denominator",
    "_mechanism": "THE guard rigging its own baseline: filtering the missed prefixes out of the denominator reports clean while dropping 33 real rows.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
    "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
    "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_counts_entries_of_any_prefix_not_just_j"
@@ -106,7 +106,7 @@
   {
    "name": "pin-the-title-to-line-zero",
    "_mechanism": "A blank first line or frontmatter routes the registry to the candidate reader and reproduces `TOTAL candidates=0` -- the exact failure this routing prevents.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
    "replace": "    return \"Skill Monitoring\" in text.split(\"\\n\")[0]",
    "test": "handoff/tests/test_skill_candidates_census.py::test_routing_survives_a_blank_first_line"
@@ -114,7 +114,7 @@
   {
    "name": "the-declined-split-is-not-reported",
    "_mechanism": "DECLINED means both 'idea rejected' and 'useful, no tool will be built'. Without the split the counter reports 22 of one thing, which is the ambiguity the row was filed against.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "    if c.get(\"DECLINED\"):",
    "replace": "    if False:",
    "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
@@ -122,7 +122,7 @@
   {
    "name": "an-unqualified-declined-is-absorbed-into-a-bucket",
    "_mechanism": "A bare marker is exactly the row a reader misreads. Counting it as not-useful hides it inside a bucket it was never sorted into, and the count still looks complete.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "                if not bucket: declined[\"unqualified\"]+=1",
    "replace": "                if not bucket: declined[\"not-useful\"]+=1",
    "test": "handoff/tests/test_skill_candidates_census.py::test_an_unqualified_declined_is_reported_not_absorbed"
@@ -130,7 +130,7 @@
   {
    "name": "every-declined-is-called-not-useful",
    "_mechanism": "Collapsing the two buckets back into one re-creates the overload while still printing a split, which is worse than not printing one: it looks measured.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "                elif \"not codable\" in bucket.group(1): declined[\"useful-not-codable\"]+=1",
    "replace": "                elif False: declined[\"useful-not-codable\"]+=1",
    "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
@@ -138,7 +138,7 @@
   {
    "name": "the-triage-regex-forgets-the-date",
    "_mechanism": "The bucket usually sits after the date and the closing bold (`**DECLINED 2026-08-25 (triage: ...)**`). A tighter pattern matched only 2 of 22 and called the other 20 unqualified -- caught by running it over the real file, never by a fixture built from the tight form.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "TRIAGE = re.compile(r'DECLINED[^(\\n]{0,40}\\(triage:\\s*([^)]*)\\)')",
    "replace": "TRIAGE = re.compile(r'DECLINED\\**\\s*\\(triage:\\s*([^)]*)\\)')",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_live_backlog_has_no_unqualified_declined"
@@ -146,7 +146,7 @@
   {
    "name": "the-coverage-gap-is-unexplained",
    "_mechanism": "An unexplained `33 ROW-SHAPED LINES NOT PARSED` reads as a defect in the reader and invites widening it -- which would reclassify 33 closed historical rows as open work in one commit. Naming the gap is the guard.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "           if \"monitoring\" in tag else \"\")",
    "replace": "           if False else \"\")",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_coverage_gap_names_what_it_is"
@@ -154,7 +154,7 @@
   {
    "name": "the-non-j-rows-are-absorbed-as-entries",
    "_mechanism": "Widening the strict reader to any id-shaped bullet pulls the 33 F/G/H/A/V/P rows into the J registry, where they carry no `Status:` and therefore read as open. All 33 were read on 2026-08-26 and none is live.",
-   "file": "handoff/scripts/skill_candidates_census.py",
+   "file": "scripts/skill_candidates_census.py",
    "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
    "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
    "test": "handoff/tests/test_skill_candidates_census.py::test_the_non_j_rows_are_reported_but_never_parsed_as_entries"

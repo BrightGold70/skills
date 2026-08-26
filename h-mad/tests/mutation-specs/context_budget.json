@@ -62,5 +62,5 @@
   "tests/test_h_mad_context_budget.py",
   "-q"
  ],
- "root": "/Users/kimhawk/orca/skills/h-mad"
+ "root": "../.."
 }

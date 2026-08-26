@@ -1,6 +1,6 @@
 {
  "_why": "The harness scores every other guard in h-mad, so a hole here is invisible everywhere else. These target the machinery that turns 'something went red' into 'the named test bit' -- the discrimination `ALL_CAUGHT` structurally cannot express -- plus the anchor hints and the byte-compatibility of the summary line existing callers parse. Each mutation names the one test it is aimed at, which is also this feature dogfooding itself.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

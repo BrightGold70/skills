@@ -1,6 +1,6 @@
 {
  "_why": "Seven candidate rows landed as documented RULES rather than code, and a rule that no test pins is a rule that quietly disappears. Each mutation deletes or softens one rule and must be caught by that rule's own scoped pin. The last mutation runs the other way: it DUPLICATES a pinned phrase into a second section, which must break the uniqueness pin rather than the presence pin -- a doc test in this repo once passed with its documented guidance deleted, because both of its component words already appeared in nearby prose.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

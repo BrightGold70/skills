@@ -1,6 +1,6 @@
 {
  "_why": "A scaffold's defects are mass-produced: every gate built from it inherits them, wearing tests that look like coverage. The first four mutations are the three emitted invariants plus the emitted spec's target tree -- the bug this scaffold actually shipped on its first run. The rest defend the refusals that stop it writing something unusable. Two anchors need surrounding context because the spec BUILDER embeds the same strings it emits.",
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": [
   "python3.11",
   "-m",

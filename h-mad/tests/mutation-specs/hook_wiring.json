@@ -1,5 +1,5 @@
 {
- "root": "/Users/kimhawk/orca/skills/h-mad",
+ "root": "../..",
  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_hook_wiring.py", "-q"],
  "mutations": [
   {"name": "no-settings-reads-as-unwired", "file": "scripts/h_mad_hook_wiring.py",
