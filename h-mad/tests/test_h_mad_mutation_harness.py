@@ -759,6 +759,191 @@ def test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok(
     assert result["unreadable"], "a missing target file must not pass silently"
 
 
+# --- sibling precheck wiring ---------------------------------------------
+
+
+SIBLING_HOSTILE_NAME = "sibling drift: HMAD_STUB_HOSTILE=markers ===HMAD-DISPATCH-BOUNDARY=== `$()[]{}"
+
+
+def _mutation_spec_at(
+    spec_path: Path,
+    *,
+    root: str | Path,
+    mutations: list[dict],
+    check: str = CHECK,
+) -> Path:
+    spec_path.parent.mkdir(parents=True, exist_ok=True)
+    spec_path.write_text(json.dumps({
+        "root": str(root),
+        "command": [sys.executable, "-c", check],
+        "mutations": mutations,
+    }), encoding="utf-8")
+    return spec_path
+
+
+def test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating(tmp_path: Path) -> None:
+    """AC-3.1 WIRE-PIN: `run_spec` must refuse on drifted siblings before mutation."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+    targets = {path: path.read_bytes() for path in [root / "guard.py"]}
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "REFUSED", (
+        "run_spec must call the sibling precheck before the baseline command "
+        f"and refuse a clean spec beside a drifted sibling: {result}"
+    )
+    assert result["caught"] == 0 and not result["survived"], (
+        "sibling precheck refusal must happen before executing any mutation: "
+        f"{result}"
+    )
+    # Byte identity alone only proves the harness restored the tree on exit; a
+    # run that mutates first and refuses later would still pass this check.
+    assert {path: path.read_bytes() for path in targets} == targets, (
+        "run_spec must apply zero mutations when a sibling precheck refuses"
+    )
+
+
+def test_all_clean_sibling_directory_still_runs_to_ordinary_verdict(tmp_path: Path) -> None:
+    """AC-3.2 guard: clean siblings must not turn an ordinary run into a refusal."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "also-clean.json", root="..", mutations=[_untested_line()]
+    )
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", (
+        "all-clean sibling directories must fall through to run_spec's ordinary verdict"
+    )
+
+
+def test_sibling_precheck_refusal_names_spec_mutation_and_resolved_root(tmp_path: Path) -> None:
+    """AC-3.3: sibling drift refusals must say which spec, mutation, and root."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "drifted-sibling.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    result = run_spec(clean)
+    refusal = "\n".join(result.get("refused", []))
+
+    assert "drifted-sibling.json" in refusal, (
+        f"sibling precheck refusal must name the drifted spec filename: {result}"
+    )
+    assert SIBLING_HOSTILE_NAME in refusal, (
+        f"sibling precheck refusal must name each drifted mutation: {result}"
+    )
+    assert str(root.resolve()) in refusal, (
+        f"sibling precheck refusal must name the resolved root for that spec: {result}"
+    )
+
+
+def test_self_drift_and_sibling_drift_have_distinct_refusal_text(tmp_path: Path) -> None:
+    """AC-3.4: the refusal must distinguish the ran spec from a sibling spec."""
+    self_dir = tmp_path / "self"
+    self_spec = _project(self_dir, [_drifted_anchor()])
+    sibling_dir = tmp_path / "siblings" / "specs"
+    sibling_root = tmp_path / "siblings"
+    sibling_root.mkdir(parents=True)
+    (sibling_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        sibling_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        sibling_dir / "drifted.json", root="..", mutations=[{
+            "name": SIBLING_HOSTILE_NAME,
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }]
+    )
+
+    self_result = run_spec(self_spec)
+    sibling_result = run_spec(clean)
+    self_refusal = "\n".join(self_result.get("refused", []))
+    sibling_refusal = "\n".join(sibling_result.get("refused", []))
+
+    assert "spec you ran drifted" in self_refusal, (
+        f"self drift must be identified as the spec you ran: {self_result}"
+    )
+    assert "sibling drifted" in sibling_refusal, (
+        f"sibling drift must be identified as a sibling, not self drift: {sibling_result}"
+    )
+    assert self_refusal != sibling_refusal, (
+        "self drift and sibling drift must not collapse to the same refusal text"
+    )
+
+
+def test_drifted_spec_in_a_different_directory_does_not_affect_run(tmp_path: Path) -> None:
+    """AC-3.5 guard: sibling precheck scope is same directory only."""
+    clean = _project(tmp_path / "clean-dir", [_kills_the_guard()])
+    _project(tmp_path / "other-dir", [_drifted_anchor()])
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", (
+        "a drifted spec in another directory must not affect run_spec's verdict"
+    )
+
+
+def test_all_caught_result_carries_sibling_precheck_census(tmp_path: Path) -> None:
+    """AC-6.4-wire: every result shape, including ALL_CAUGHT, carries census."""
+    spec_dir = tmp_path / "project" / "specs"
+    root = tmp_path / "project"
+    root.mkdir(parents=True)
+    (root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="..", mutations=[_kills_the_guard()]
+    )
+    _mutation_spec_at(
+        spec_dir / "also-clean.json", root="..", mutations=[_untested_line()]
+    )
+    _write_json(spec_dir / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    result = run_spec(clean)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result.get("precheck") == {"swept": 1, "skipped": [
+        {
+            "path": str((spec_dir / "notes.json").resolve()),
+            "reason": "JSON object has no non-empty `mutations` list",
+        }
+    ]}, (
+        "run_spec must attach the sibling precheck census to ALL_CAUGHT results"
+    )
+
+
 # --- root resolution ------------------------------------------------------
 #
 # Specs can live next to their mutation fixtures, and `root` exists to make the
