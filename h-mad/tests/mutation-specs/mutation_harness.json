@@ -222,6 +222,30 @@
    "find": "        return spec_path.parent.resolve()",
    "replace": "        return Path.cwd().resolve()",
    "test": "tests/test_h_mad_mutation_harness.py::test_absent_root_defaults_to_the_spec_file_directory"
+  },
+  {
+   "name": "classify-a-real-spec-as-not-a-spec",
+   "_mechanism": "The classifier stops honouring _load_spec's non-empty-mutations gate, so a genuine spec is skipped by a directory sweep and its drift goes unreported.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "    if isinstance(mutations, list) and mutations:\n        return \"spec\", None",
+   "replace": "    if False:\n        return \"spec\", None",
+   "test": "tests/test_h_mad_mutation_harness.py::test_classifier_agrees_with_load_spec_on_the_mutations_gate"
+  },
+  {
+   "name": "swallow-a-corrupt-spec-as-a-skip",
+   "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "            specs += 1\n            unreadable += 1",
+   "replace": "            skipped += 1",
+   "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
+  },
+  {
+   "name": "stop-naming-skipped-files-on-a-successful-sweep",
+   "_mechanism": "Skipped files stop being named, so an operator cannot tell `swept 17` from `swept 12 and quietly ignored 5`.",
+   "file": "scripts/h_mad_mutation_harness.py",
+   "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
+   "replace": "            pass",
+   "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
   }
  ]
 }

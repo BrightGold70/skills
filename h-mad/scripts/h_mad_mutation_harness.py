@@ -85,6 +85,28 @@ class SpecError(Exception):
     """The spec could not be read or does not describe a runnable mutation set."""
 
 
+def classify_spec_file(path: Path) -> tuple[str, str | None]:
+    """('spec'|'not-a-spec'|'unclassifiable', detail).
+
+    Directory sweeps see JSON files that are not mutation specs. The classifier
+    keys only on the gate `_load_spec` itself needs before mutation validation:
+    a non-empty `mutations` list.
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        return "unclassifiable", f"cannot read JSON: {exc}"
+    except json.JSONDecodeError as exc:
+        return "unclassifiable", f"not valid JSON: {exc}"
+
+    if not isinstance(data, dict):
+        return "not-a-spec", "JSON object has no non-empty `mutations` list"
+    mutations = data.get("mutations")
+    if isinstance(mutations, list) and mutations:
+        return "spec", None
+    return "not-a-spec", "JSON object has no non-empty `mutations` list"
+
+
 def _load_spec(spec_path: Path) -> dict:
     try:
         spec = json.loads(spec_path.read_text(encoding="utf-8"))
@@ -566,18 +588,29 @@ def run_spec(spec_path: Path) -> dict:
 
 def _check_anchors(spec_paths: list[Path]) -> int:
     """Print an anchor sweep over every spec. 0 iff every anchor still matches once."""
-    specs = ok = drifted = unreadable = mutations = 0
+    specs = ok = drifted = unreadable = mutations = skipped = unclassifiable = 0
     for spec_path in spec_paths:
-        specs += 1
+        kind, detail = classify_spec_file(spec_path)
+        if kind == "not-a-spec":
+            skipped += 1
+            print(f"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}")
+            continue
+        if kind == "unclassifiable":
+            unclassifiable += 1
+            print(f"ANCHORS: {spec_path.name} UNCLASSIFIABLE — {detail}")
+            continue
+
         try:
             result = precheck_spec(spec_path)
         except SpecError as exc:
             # One unusable spec must not abort the sweep: the specs after it are
             # exactly the ones whose drift would then go unreported.
+            specs += 1
             unreadable += 1
             print(f"ANCHORS: {spec_path.name} UNREADABLE — {exc}")
             continue
 
+        specs += 1
         mutations += result["mutations"]
         ok += result["ok"]
         drifted += len(result["drifted"])
@@ -598,7 +631,8 @@ def _check_anchors(spec_paths: list[Path]) -> int:
     verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
     print(
         f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
-        f"ok={ok} drifted={drifted} unreadable={unreadable}"
+        f"ok={ok} drifted={drifted} unreadable={unreadable} "
+        f"skipped={skipped} unclassifiable={unclassifiable}"
     )
     if verdict == "ANCHORS_DRIFTED":
         print(

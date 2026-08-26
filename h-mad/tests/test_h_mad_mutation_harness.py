@@ -909,12 +909,28 @@ def test_check_anchors_cli_exits_0_when_every_spec_is_clean(tmp_path: Path) -> N
 
 
 def test_a_bad_spec_in_the_sweep_does_not_abort_the_others(tmp_path: Path) -> None:
-    """One unreadable spec must not hide the drift in the specs after it."""
+    """One bad spec must not hide later drift on either bad-file path.
+
+    The missing file is unclassifiable and skipped before precheck. The
+    no-command spec classifies as a spec, then reaches precheck's SpecError
+    branch.
+    """
     missing = tmp_path / "nope.json"
+    unreadable_spec = tmp_path / "missing-command.json"
+    unreadable_spec.write_text(json.dumps({
+        "mutations": [{"name": "has no command"}],
+    }), encoding="utf-8")
     dirty = _project(tmp_path / "b", [_drifted_anchor()])
 
     proc = subprocess.run(
-        [sys.executable, str(HARNESS), "--check-anchors", str(missing), str(dirty)],
+        [
+            sys.executable,
+            str(HARNESS),
+            "--check-anchors",
+            str(missing),
+            str(unreadable_spec),
+            str(dirty),
+        ],
         capture_output=True, text=True,
     )
 
