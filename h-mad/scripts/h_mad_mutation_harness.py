@@ -714,6 +714,11 @@ def _check_anchors(spec_paths: list[Path]) -> int:
     return 0 if verdict == "ANCHORS_OK" else 2
 
 
+def _print_skipped_precheck_entries(result: dict) -> None:
+    for entry in result.get("precheck", {}).get("skipped", []):
+        print(f"  skipped: {entry['path']}: {entry['reason']}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="H-MAD Phase-5e mutation harness")
     parser.add_argument(
@@ -768,6 +773,7 @@ def main(argv: list[str] | None = None) -> int:
             f"caught={result['caught']} survived={len(result['survived'])} "
             f"refused={len(result['refused'])}"
         )
+    _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
     hints = result.get("hints") or {}
     for name in result.get("survived", []):

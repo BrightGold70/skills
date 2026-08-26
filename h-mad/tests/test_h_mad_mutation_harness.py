@@ -74,6 +74,42 @@ def _run_cli(spec_path: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[str]]:
+    specs_dir = project_root / "tests" / "mutation-specs"
+    spec_paths = []
+    skipped = []
+    for candidate in sorted(specs_dir.glob("*.json")):
+        kind, detail = classify_spec_file(candidate)
+        if kind == "spec":
+            spec_paths.append(candidate)
+        else:
+            skipped.append(f"{candidate}: classifier={kind!r} detail={detail!r}")
+    assert spec_paths, f"found no committed mutation specs in {specs_dir}"
+    return spec_paths, skipped
+
+
+def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
+    failures = [f"skipped committed mutation spec: {entry}" for entry in skipped]
+    for spec_path in spec_paths:
+        try:
+            spec = h_mad_mutation_harness._load_spec(spec_path)
+            root = h_mad_mutation_harness._resolve_root(spec, spec_path)
+            result = precheck_spec(spec_path)
+        except h_mad_mutation_harness.SpecError as exc:
+            failures.append(f"{spec_path.name}: spec failed to load ({exc})")
+            continue
+
+        for entry in result["drifted"]:
+            failures.append(
+                f"{spec_path.name} root {root}: {entry['name']}: "
+                f"anchor matched {entry['hits']} times in {entry['file']}, "
+                "expected exactly 1"
+            )
+        for entry in result["unreadable"]:
+            failures.append(f"{spec_path.name} root {root}: {entry}")
+    return failures
+
+
 # --- the verdicts ---------------------------------------------------------
 
 
@@ -262,6 +298,38 @@ def test_harness_is_stdlib_only() -> None:
     source = HARNESS.read_text(encoding="utf-8")
     for banned in ("import yaml", "import requests", "from pydantic", "import jsonschema"):
         assert banned not in source, f"{banned} would break the bare-python3 callers"
+
+
+def test_committed_mutation_specs_are_not_drifted() -> None:
+    """Sweeps this project's own tests/mutation-specs/."""
+    project_root = Path(__file__).resolve().parents[1]
+    spec_paths, skipped = _own_committed_mutation_specs(project_root)
+
+    failures = _committed_spec_drift_messages(spec_paths, skipped)
+
+    assert not failures, (
+        "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
+    )
+
+
+def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
+    """A deliberately drifted committed anchor must fail, then restore byte-identical."""
+    spec_path = Path(__file__).resolve().parent / "mutation-specs" / "mutation_harness.json"
+    original = spec_path.read_bytes()
+    try:
+        spec = json.loads(original.decode("utf-8"))
+        spec["mutations"][0]["find"] += "\nINTENTIONAL-ANCHOR-DRIFT"
+        spec_path.write_text(
+            json.dumps(spec, indent=1, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+        failures = _committed_spec_drift_messages([spec_path], [])
+
+        assert any(spec_path.name in failure for failure in failures), failures
+    finally:
+        spec_path.write_bytes(original)
+        assert spec_path.read_bytes() == original
 
 
 # --- per-mutation targets, mechanism attribution, anchor hints -------------
@@ -521,6 +589,23 @@ def test_the_summary_line_is_unchanged_by_the_new_detail(tmp_path: Path) -> None
     spec = _project(tmp_path, [_kills_the_guard()])
     proc = _run_cli(spec)
     assert "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0" in proc.stdout
+
+
+def test_cli_names_skipped_and_unclassifiable_siblings_on_success(tmp_path: Path) -> None:
+    spec = _project(tmp_path, [_kills_the_guard()])
+    not_a_spec = tmp_path / "metadata.json"
+    unclassifiable = tmp_path / "broken.json"
+    not_a_spec.write_text(json.dumps({"notes": "not a mutation spec"}), encoding="utf-8")
+    unclassifiable.write_text("{", encoding="utf-8")
+
+    proc = _run_cli(spec)
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MUTATION: ALL_CAUGHT" in proc.stdout, proc.stdout
+    assert f"  skipped: {not_a_spec.resolve()}:" in proc.stdout, proc.stdout
+    assert "JSON object has no non-empty `mutations` list" in proc.stdout, proc.stdout
+    assert f"  skipped: {unclassifiable.resolve()}:" in proc.stdout, proc.stdout
+    assert "not valid JSON" in proc.stdout, proc.stdout
 
 
 def test_a_multiline_anchor_still_gets_a_near_miss(tmp_path: Path) -> None:
@@ -1439,54 +1524,6 @@ def test_every_committed_mutation_spec_classifies_as_spec() -> None:
     assert not offenders, (
         "every committed tests/mutation-specs/*.json file must classify as spec:\n"
         + "\n".join(offenders)
-    )
-
-
-def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[str]]:
-    specs_dir = project_root / "tests" / "mutation-specs"
-    spec_paths = []
-    skipped = []
-    for candidate in sorted(specs_dir.glob("*.json")):
-        kind, detail = classify_spec_file(candidate)
-        if kind == "spec":
-            spec_paths.append(candidate)
-        else:
-            skipped.append(f"{candidate}: classifier={kind!r} detail={detail!r}")
-    assert spec_paths, f"found no committed mutation specs in {specs_dir}"
-    return spec_paths, skipped
-
-
-def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
-    failures = [f"skipped committed mutation spec: {entry}" for entry in skipped]
-    for spec_path in spec_paths:
-        try:
-            spec = h_mad_mutation_harness._load_spec(spec_path)
-            root = h_mad_mutation_harness._resolve_root(spec, spec_path)
-            result = precheck_spec(spec_path)
-        except h_mad_mutation_harness.SpecError as exc:
-            failures.append(f"{spec_path.name}: spec failed to load ({exc})")
-            continue
-
-        for entry in result["drifted"]:
-            failures.append(
-                f"{spec_path.name} root {root}: {entry['name']}: "
-                f"anchor matched {entry['hits']} times in {entry['file']}, "
-                "expected exactly 1"
-            )
-        for entry in result["unreadable"]:
-            failures.append(f"{spec_path.name} root {root}: {entry}")
-    return failures
-
-
-def test_committed_mutation_specs_are_not_drifted() -> None:
-    """Sweeps this project's own tests/mutation-specs/."""
-    project_root = Path(__file__).resolve().parents[1]
-    spec_paths, skipped = _own_committed_mutation_specs(project_root)
-
-    failures = _committed_spec_drift_messages(spec_paths, skipped)
-
-    assert not failures, (
-        "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
     )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -58,3 +59,23 @@ def test_committed_mutation_specs_are_not_drifted() -> None:
     assert not failures, (
         "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
     )
+
+
+def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
+    """A deliberately drifted committed anchor must fail, then restore byte-identical."""
+    spec_path = Path(__file__).resolve().parent / "mutation-specs" / "census_registry.json"
+    original = spec_path.read_bytes()
+    try:
+        spec = json.loads(original.decode("utf-8"))
+        spec["mutations"][0]["find"] += "\nINTENTIONAL-ANCHOR-DRIFT"
+        spec_path.write_text(
+            json.dumps(spec, indent=1, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+
+        failures = _committed_spec_drift_messages([spec_path], [])
+
+        assert any(spec_path.name in failure for failure in failures), failures
+    finally:
+        spec_path.write_bytes(original)
+        assert spec_path.read_bytes() == original
