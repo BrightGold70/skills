@@ -89,7 +89,7 @@ def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[
 
 
 def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
-    failures = [f"skipped committed mutation spec: {entry}" for entry in skipped]
+    failures = []
     for spec_path in spec_paths:
         try:
             spec = h_mad_mutation_harness._load_spec(spec_path)
@@ -108,6 +108,16 @@ def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -
         for entry in result["unreadable"]:
             failures.append(f"{spec_path.name} root {root}: {entry}")
     return failures
+
+
+def _committed_spec_drift_assertion_message(
+    failures: list[str], skipped: list[str]
+) -> str:
+    lines = ["committed mutation specs have drifted anchors:", *failures]
+    if skipped:
+        lines.append("skipped committed mutation spec files:")
+        lines.extend(f"skipped committed mutation spec: {entry}" for entry in skipped)
+    return "\n".join(lines)
 
 
 # --- the verdicts ---------------------------------------------------------
@@ -307,9 +317,7 @@ def test_committed_mutation_specs_are_not_drifted() -> None:
 
     failures = _committed_spec_drift_messages(spec_paths, skipped)
 
-    assert not failures, (
-        "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
-    )
+    assert not failures, _committed_spec_drift_assertion_message(failures, skipped)
 
 
 def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
@@ -330,6 +338,50 @@ def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
     finally:
         spec_path.write_bytes(original)
         assert spec_path.read_bytes() == original
+
+
+def test_non_spec_json_does_not_fail_committed_spec_drift_check(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    clean = _mutation_spec_at(
+        spec_dir / "clean.json", root="../..", mutations=[_kills_the_guard()]
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([clean], skipped)
+
+    assert failures == []
+
+
+def test_committed_spec_drift_message_names_skipped_files(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text(GUARD, encoding="utf-8")
+    drifted = _mutation_spec_at(
+        spec_dir / "drifted.json",
+        root="../..",
+        mutations=[{
+            "name": "drifted anchor",
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }],
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([drifted], skipped)
+    message = _committed_spec_drift_assertion_message(failures, skipped)
+
+    assert failures, "the drifted spec must gate the assertion"
+    assert "drifted.json" in message
+    assert "note.json" in message
 
 
 # --- per-mutation targets, mechanism attribution, anchor hints -------------
@@ -1453,6 +1505,22 @@ def _classify_for_red(path: Path) -> tuple[str, str | None]:
     return classifier(path)
 
 
+def _load_spec_mutations_gate_passes(spec_path: Path, tmp_path: Path) -> bool:
+    data = json.loads(spec_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return False
+    probe = dict(data)
+    probe["command"] = [sys.executable, "-c", "pass"]
+    probe_path = tmp_path / f"{spec_path.stem}.mutations-gate.json"
+    probe_path.write_text(json.dumps(probe), encoding="utf-8")
+
+    try:
+        h_mad_mutation_harness._load_spec(probe_path)
+    except h_mad_mutation_harness.SpecError as exc:
+        return "spec needs a non-empty `mutations` list" not in str(exc)
+    return True
+
+
 HOSTILE_NON_SPEC_NOTE = "HMAD_STUB_HOSTILE=markers\n===HMAD-DISPATCH-BOUNDARY===\n`$()[]{}"
 
 
@@ -1468,16 +1536,15 @@ def test_classifier_agrees_with_load_spec_on_the_mutations_gate(tmp_path: Path) 
             "mutations": [],
         }),
         _write_json(tmp_path / "non-spec.json", {"name": HOSTILE_NON_SPEC_NOTE}),
+        _write_json(tmp_path / "mutations-without-command.json", {
+            "mutations": [_kills_the_guard()],
+        }),
     ]
 
     disagreements = []
     for spec_path in cases:
         kind, detail = _classify_for_red(spec_path)
-        try:
-            loaded = h_mad_mutation_harness._load_spec(spec_path)
-            loader_has_mutations = bool(loaded["mutations"])
-        except h_mad_mutation_harness.SpecError:
-            loader_has_mutations = False
+        loader_has_mutations = _load_spec_mutations_gate_passes(spec_path, tmp_path)
 
         expected = "spec" if loader_has_mutations else "not-a-spec"
         if kind != expected:
@@ -1490,6 +1557,19 @@ def test_classifier_agrees_with_load_spec_on_the_mutations_gate(tmp_path: Path) 
         "classifier must agree with _load_spec's non-empty mutations gate:\n"
         + "\n".join(disagreements)
     )
+    no_command = tmp_path / "mutations-without-command.json"
+    kind, detail = _classify_for_red(no_command)
+    assert kind == "spec", (
+        "AC-6.3 shape must classify as a spec because it has non-empty mutations: "
+        f"{kind!r} detail={detail!r}"
+    )
+    assert _load_spec_mutations_gate_passes(no_command, tmp_path)
+    try:
+        h_mad_mutation_harness._load_spec(no_command)
+    except h_mad_mutation_harness.SpecError as exc:
+        assert "command" in str(exc)
+    else:
+        raise AssertionError("full loader must still reject a spec with no command")
 
 
 def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Path) -> None:

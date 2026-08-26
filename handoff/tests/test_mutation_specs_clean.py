@@ -28,7 +28,7 @@ def _own_committed_mutation_specs(project_root: Path) -> tuple[list[Path], list[
 
 
 def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -> list[str]:
-    failures = [f"skipped committed mutation spec: {entry}" for entry in skipped]
+    failures = []
     for spec_path in spec_paths:
         try:
             spec = h_mad_mutation_harness._load_spec(spec_path)
@@ -49,6 +49,16 @@ def _committed_spec_drift_messages(spec_paths: list[Path], skipped: list[str]) -
     return failures
 
 
+def _committed_spec_drift_assertion_message(
+    failures: list[str], skipped: list[str]
+) -> str:
+    lines = ["committed mutation specs have drifted anchors:", *failures]
+    if skipped:
+        lines.append("skipped committed mutation spec files:")
+        lines.extend(f"skipped committed mutation spec: {entry}" for entry in skipped)
+    return "\n".join(lines)
+
+
 def test_committed_mutation_specs_are_not_drifted() -> None:
     """Sweeps this project's own tests/mutation-specs/."""
     project_root = Path(__file__).resolve().parents[1]
@@ -56,9 +66,7 @@ def test_committed_mutation_specs_are_not_drifted() -> None:
 
     failures = _committed_spec_drift_messages(spec_paths, skipped)
 
-    assert not failures, (
-        "committed mutation specs have drifted anchors:\n" + "\n".join(failures)
-    )
+    assert not failures, _committed_spec_drift_assertion_message(failures, skipped)
 
 
 def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
@@ -79,3 +87,70 @@ def test_committed_mutation_spec_drift_check_is_discriminating() -> None:
     finally:
         spec_path.write_bytes(original)
         assert spec_path.read_bytes() == original
+
+
+def _write_json(path: Path, value: object) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def _write_mutation_spec(
+    spec_path: Path, *, root: str | Path, mutations: list[dict]
+) -> Path:
+    return _write_json(spec_path, {
+        "root": str(root),
+        "command": [sys.executable, "-c", "pass"],
+        "mutations": mutations,
+    })
+
+
+def test_non_spec_json_does_not_fail_committed_spec_drift_check(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text("THRESHOLD = 5\n", encoding="utf-8")
+    clean = _write_mutation_spec(
+        spec_dir / "clean.json",
+        root="../..",
+        mutations=[{
+            "name": "raise the threshold",
+            "file": "guard.py",
+            "find": "THRESHOLD = 5",
+            "replace": "THRESHOLD = 9",
+        }],
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([clean], skipped)
+
+    assert failures == []
+
+
+def test_committed_spec_drift_message_names_skipped_files(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    spec_dir = project_root / "tests" / "mutation-specs"
+    project_root.mkdir(parents=True)
+    (project_root / "guard.py").write_text("THRESHOLD = 5\n", encoding="utf-8")
+    drifted = _write_mutation_spec(
+        spec_dir / "drifted.json",
+        root="../..",
+        mutations=[{
+            "name": "drifted anchor",
+            "file": "guard.py",
+            "find": "THRESHOLD = 500",
+            "replace": "THRESHOLD = 900",
+        }],
+    )
+    note = _write_json(spec_dir / "note.json", {"note": "not a spec"})
+
+    kind, detail = classify_spec_file(note)
+    skipped = [f"{note}: classifier={kind!r} detail={detail!r}"]
+    failures = _committed_spec_drift_messages([drifted], skipped)
+    message = _committed_spec_drift_assertion_message(failures, skipped)
+
+    assert failures, "the drifted spec must gate the assertion"
+    assert "drifted.json" in message
+    assert "note.json" in message
