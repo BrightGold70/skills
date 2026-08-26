@@ -697,3 +697,24 @@ threshold of a third vendored patch; untouched this session.
   mechanical part is one extra test per doc-lint that runs against the committed document; the
   judgement it must not automate is deciding what the correct count IS. Close to
   `corpus-sweep-before-regex-tighten`, which is the same instinct one step earlier. **Self-pollution note:** the first draft of this very row quoted a bolded terminal marker as an example and the census promptly classified the row as terminal — a row that names a vocabulary word in bold IS that word to every reader of this file. Quote it unbolded.
+- **6a-prime cycle driver (an `audit-cycle` for the ARCHITECTURAL gate)**: `audit-cycle` exists for
+  plan/design/impl-plan, but Phase 6a-prime has no equivalent, so this session hand-assembled the
+  same seven-step loop **7 times** — rebuild the prompt from
+  `agy-architectural-reviewer-prompt.md`, substitute feature/BASE/HEAD/diff-stat/design, append the
+  absolute-path reading instructions, re-`sed` the HEAD sha into the tail file, dispatch `exec agy`,
+  run `h_mad_review_evidence.py` on the log, then `h_mad_extract_verdict.py --key ASSESSMENT` —
+  candidate: yes — every step is already prescribed and mechanical, and the two easiest to skip are
+  the ones with no other home: re-stamping the HEAD sha (a stale sha silently reviews the previous
+  commit) and the evidence gate (`EVIDENCE: PASS tools=N`, which is what separates a review that
+  read from one that only sounds like it did). The judgement it must NOT automate is whether to run
+  another cycle — this run went to seven because cycle 3 was clean and cycle 4 then found a Critical
+  vacuous pass. Sibling of `archreview-record-and-readback` (DECLINED as not-codable), which covers
+  only the close-out; this covers the loop that precedes it.
+- **`hmad-dispatch await <path>` — a bounded wait that is not a sleep ladder**: with foreground
+  `sleep` blocked and a 120s tool timeout, waiting on a backgrounded `exec` was written **~25 times**
+  this session as `for i in 1 2 3; do hmad-dispatch run --timeout 110 -- sleep 105; done` followed by
+  a `test -f <out>` — candidate: yes — `report-wait` already does exactly this for a report path plus
+  `.done` marker, so the verb exists and simply does not cover the `exec --out` case. The loop is
+  pure friction, it obscures the poll's actual purpose, and getting the arithmetic wrong just wastes
+  wall-clock silently. Wants the same contract as `report-wait`: poll a path, bounded by `--timeout`,
+  exit non-zero on expiry, and print nothing on success.
