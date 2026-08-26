@@ -1511,6 +1511,112 @@ def test_skill_documents_the_anchor_sweep() -> None:
     )
 
 
+def _live_skill_dir() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _phase_5e_text(skill: str) -> str:
+    start = skill.index("### Codex authors Phase 5")
+    end = skill.index("Phase 5 implementation is **Codex's job**", start)
+    return skill[start:end]
+
+
+def test_skill_documents_the_precheck_is_automatic() -> None:
+    """AC-7.1/7.3/7.4: Phase-5e documents the run-time sibling precheck."""
+    skill_path = _live_skill_dir() / "SKILL.md"
+    skill = skill_path.read_text(encoding="utf-8")
+    phase_5e = _phase_5e_text(skill)
+    stale_operator_instruction = "Sweep every spec's anchors after any edit"
+
+    problems = []
+    if "MUTATION: PRECHECK_FAILED" not in skill:
+        problems.append("new verdict word MUTATION: PRECHECK_FAILED is absent from SKILL.md")
+    if not (
+        "mutation run" in phase_5e
+        and "performs the sibling sweep" in phase_5e
+        and "refuses on sibling drift" in phase_5e
+    ):
+        problems.append(
+            "Phase-5e must claim the mutation run performs the sibling sweep "
+            "itself and refuses on sibling drift"
+        )
+    if stale_operator_instruction in phase_5e:
+        problems.append(
+            "Phase-5e still instructs the operator to sweep beforehand: "
+            f"{stale_operator_instruction!r}"
+        )
+    if not (
+        "relative spec `root`" in skill
+        and "spec-relative" in skill
+        and "cwd-relative" in skill
+    ):
+        problems.append("SKILL.md must document that a relative spec `root` is spec-relative")
+
+    assert not problems, "documentation precheck/root contract drift:\n" + "\n".join(problems)
+
+
+def test_recovery_table_carries_the_new_verdict() -> None:
+    """AC-7.2/7.5: registry and recovery docs name PRECHECK_FAILED's route."""
+    skill_dir = _live_skill_dir()
+    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    harness = (skill_dir / "scripts" / "h_mad_mutation_harness.py").read_text(
+        encoding="utf-8"
+    )
+    recovery = (skill_dir / "references" / "failure-recovery.md").read_text(
+        encoding="utf-8"
+    )
+    recovery_rows = [
+        line for line in recovery.splitlines()
+        if line.startswith("| 5e |") and "MUTATION: PRECHECK_FAILED" in line
+    ]
+
+    problems = []
+    if not (
+        "MUTATION: PRECHECK_FAILED" in skill
+        and "specs=" in skill
+        and "drifted=" in skill
+        and "unreadable=" in skill
+        and "exit 2" in skill
+    ):
+        problems.append(
+            "SKILL.md registry entry must document MUTATION: PRECHECK_FAILED "
+            "with specs/drifted/unreadable counts and exit 2"
+        )
+    if not (
+        "MUTATION: PRECHECK_FAILED" in harness
+        and "specs=" in harness
+        and "drifted=" in harness
+        and "unreadable=" in harness
+        and "exit 2" in harness
+    ):
+        problems.append(
+            "h_mad_mutation_harness.py registry must document "
+            "MUTATION: PRECHECK_FAILED with counts and exit 2"
+        )
+    if not recovery_rows:
+        problems.append(
+            "failure-recovery.md must add a 5e row for MUTATION: PRECHECK_FAILED"
+        )
+    else:
+        row = recovery_rows[0]
+        if "step5e:mutation_precheck_failed:<module>" not in row:
+            problems.append(
+                "MUTATION: PRECHECK_FAILED recovery row must name its halt reason"
+            )
+        if not (
+            "sibling" in row
+            and "drift" in row
+            and "re-anchor" in row
+            and "re-run" in row
+        ):
+            problems.append(
+                "MUTATION: PRECHECK_FAILED recovery row must name sibling drift "
+                "and the re-anchor/re-run remedy"
+            )
+
+    assert not problems, "PRECHECK_FAILED registry/recovery contract drift:\n" + "\n".join(problems)
+
+
 # --- committed mutation specs are portable -------------------------------
 
 
