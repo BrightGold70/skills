@@ -209,15 +209,33 @@ A divergence is not a failure — it's just information the user needs before ac
 Skip this unless the doc carries a `**Handover-From:**` line. If it does, the work arrived from another lane and READ's default behaviour is **half a protocol**: it restores the todos and never claims anything. The sender released ownership and stopped watching; if you do not take it, the feature is owned by nobody, and a third session can start the same work without either of you seeing a collision.
 
 **1. Claim it — this is the step with no other home.** If the brief names a feature, locate the
-state file the same way HANDOVER Step 2 does (`find`, never a `**/` glob — see the fail-open noted
-there) and ask the oracle first:
+state file the same way HANDOVER Step 2 does — canonical path first, then `find`; never a `**/`
+glob, never `2>/dev/null`, never `head -1`. All three fail-opens are documented there, and all
+three end in the same false "nothing is claimed":
 
 ```bash
-find . -name .bkit-memory.json -path '*/docs/*' -not -path '*/.git/*' 2>/dev/null | head -1
+STATE="./docs/.bkit-memory.json"
+if [ ! -f "$STATE" ]; then
+  ERR=$(mktemp)
+  HITS="$(command find . -name .bkit-memory.json -path '*/docs/*' -not -path '*/.git/*' 2>"$ERR")"
+  RC=$?
+  N=$(printf '%s' "$HITS" | grep -c .)
+  if [ "$RC" -ne 0 ] && [ "$N" -eq 0 ]; then
+    echo "SEARCH FAILED — NOT 'nothing is claimed':"; cat "$ERR"; exit 1
+  fi
+  case "$N" in
+    0) STATE="" ;;
+    1) STATE="$HITS" ;;
+    *) printf 'AMBIGUOUS — %s state files:\n%s\nPick the repo-root one by hand.\n' "$N" "$HITS"
+       exit 1 ;;
+  esac
+fi
+echo "${STATE:-no state file}"
 ```
 
-No state file means nothing is claimed — say so, skip to point 2, and do not invent one. Otherwise
-pass the path it printed:
+A **failed** search is not an empty one, and more than one hit is not a reason to take the first —
+this repository has three. No state file means nothing is claimed: say so, skip to point 2, and do
+not invent one. Otherwise pass the path it printed:
 
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
@@ -408,18 +426,56 @@ This is the step with no other home, and the one whose absence is silent.
 **First find the state file.** h-mad keeps the claim in its orchestrator state — the JSON path h-mad's own SKILL.md passes to `h_mad_state_write.py` in its Phase-0 snippet, `docs/.bkit-memory.json` relative to the project root in every current project. Locate it rather than assuming:
 
 ```bash
-STATE="$(find <target-repo> -name .bkit-memory.json -path '*/docs/*' \
-           -not -path '*/.git/*' -not -path '*/archive/*' 2>/dev/null | head -1)"
+# 1. The canonical path first. h-mad's own Phase-0 snippet writes here, so a search
+#    is the fallback, not the first move — and it is the search that goes wrong.
+STATE="<target-repo>/docs/.bkit-memory.json"
+if [ ! -f "$STATE" ]; then
+  ERR=$(mktemp)
+  # `command find`, and NO `2>/dev/null` — both deliberate; see below.
+  HITS="$(command find <target-repo> -name .bkit-memory.json -path '*/docs/*' \
+            -not -path '*/.git/*' -not -path '*/archive/*' 2>"$ERR")"
+  RC=$?
+  N=$(printf '%s' "$HITS" | grep -c .)
+  if [ "$RC" -ne 0 ] && [ "$N" -eq 0 ]; then
+    echo "SEARCH FAILED — this is NOT 'nothing found'. Do not conclude 'nothing is claimed':"
+    cat "$ERR"; exit 1
+  fi
+  [ -s "$ERR" ] && { echo "warning: search reported errors, result may be partial:"; cat "$ERR"; }
+  case "$N" in
+    0) STATE="" ;;
+    1) STATE="$HITS" ;;
+    *) printf 'AMBIGUOUS — %s state files:\n%s\n' "$N" "$HITS"
+       echo "Pick the one at the TARGET REPO ROOT by hand. Do not take the first."; exit 1 ;;
+  esac
+fi
 [ -n "$STATE" ] || echo "no h-mad state file under <target-repo> — nothing is claimed, skip to Step 3"
 ```
 
-`find`, not `<repo>/**/docs/.bkit-memory.json` — **the glob is a silent fail-open.** Bash ships with
-`globstar` off, where `**` collapses to a single `*`: a real state file two directories down is not
-matched, `$STATE` comes back empty, and this step concludes "nothing is claimed" and skips the
-release entirely. That is the exact outcome this step exists to prevent, arrived at without a
-single error message. (Measured both shells: bash finds a depth-2 file only with `globstar` on;
-zsh finds it, but on *no* match prints `no matches found` past the `2>/dev/null`, since the failure
-is the shell's own glob expansion rather than anything `find`/`ls` emitted.)
+Every deviation from the obvious one-liner is load-bearing, and each answers a *different*
+observed failure:
+
+- **`find`, not `<repo>/**/docs/.bkit-memory.json`** — the glob is a silent fail-open. Bash ships
+  with `globstar` off, where `**` collapses to a single `*`: a real state file two directories down
+  is not matched, `$STATE` comes back empty, and this step concludes "nothing is claimed" and skips
+  the release entirely — the exact outcome it exists to prevent, with no error message. (Measured
+  both shells: bash finds a depth-2 file only with `globstar` on; zsh finds it, but on *no* match
+  prints `no matches found` past the `2>/dev/null`, since the failure is the shell's own glob
+  expansion rather than anything `find`/`ls` emitted.)
+- **No `2>/dev/null`, and the exit code is read** — `find` is not always `find`. A wrapper on
+  `PATH`, a shell function, or a token-proxy hook may intercept it and *refuse* the call: rtk's
+  does, with `rtk find does not support compound predicates or actions (e.g. -not, -exec)` on
+  **stderr** and rc=1. Discard stderr and that refusal becomes an empty result, which reads
+  identically to "no state file". This bit a real handover on 2026-08-27: the first probe reported
+  "nothing is claimed", and it was false. **`failed` and `found nothing` lead to opposite correct
+  actions, so they must not be spelled the same way** — the same asymmetry this skill already
+  enforces for the worktree-comment read. `command find` bypasses a function or alias; the rc check
+  catches an intercepting binary that `command` cannot bypass. Non-zero *with* hits is a partial
+  result (an unreadable directory), which warns rather than halts.
+- **No `| head -1`** — more than one hit is normal and picking one by traversal order is a coin
+  flip. Measured in `orca/skills` on 2026-08-27: **three** matches, and the two `find`
+  implementations on that machine returned them in *different orders*, so `head -1` yielded the
+  repo-root state file one way and a sub-project's the other. Claiming or releasing in the wrong
+  project's state file is silent in both directions. Ambiguity is a stop, not a default.
 
 No state file means no claim to release. Say so and move on; do not invent one.
 

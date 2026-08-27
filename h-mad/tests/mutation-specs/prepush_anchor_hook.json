@@ -1,0 +1,132 @@
+{
+  "_why": "A pre-push hook is the guard shape with the weakest natural feedback: on a clean tree a correct hook and a hook that unconditionally exits 0 are byte-identical, and nobody notices the difference until the drift it was installed to catch is already on main. So every mutation here forces the hook toward exit 0 or toward sweeping nothing -- the two ways it dies quietly -- and each is pinned to the test that must bite. The installer mutations cover the other half: an install that reports success while linking nothing, linking into the wrong repository, or destroying somebody else's hook.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_prepush_anchor_hook.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "drift-allows-the-push",
+      "_mechanism": "The whole point, deleted. The hook still runs, still prints, still reports the drift -- and the push succeeds. A reviewer reading the output sees the block message and would not notice.",
+      "file": "git-hooks/pre-push",
+      "find": "        printf 'Deliberate override: git push --no-verify\\n' >&2\n        exit 1",
+      "replace": "        printf 'Deliberate override: git push --no-verify\\n' >&2\n        exit 0",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestVerdicts::test_drifted_anchor_blocks_and_names_the_spec"
+    },
+    {
+      "name": "nothing-swept-reads-as-clean",
+      "_mechanism": "Collapse ANCHORS_NOTHING_SWEPT into the ANCHORS_OK arm. Nothing was measured, and the hook says nothing at all -- the exact 'a null reads as absence' failure the sweep exists to prevent, now silent at the push boundary.",
+      "file": "git-hooks/pre-push",
+      "find": "    *ANCHORS_NOTHING_SWEPT*)",
+      "replace": "    *ANCHORS_NOTHING_SWEPT_UNREACHABLE*)",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestNothingMeasuredAllows::test_candidates_but_no_specs_warns_and_allows"
+    },
+    {
+      "name": "broken-tooling-blocks-every-push",
+      "_mechanism": "The inverse failure, and the one that makes an operator uninstall the guard. A harness that crashed measured nothing; treating that as drift blocks every push in the clone until someone repairs unrelated tooling.",
+      "file": "git-hooks/pre-push",
+      "find": "        printf 'Treating as broken tooling, not as drift. Push ALLOWED.\\n' >&2\n        exit 0",
+      "replace": "        printf 'Treating as broken tooling, not as drift. Push ALLOWED.\\n' >&2\n        exit 1",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestNothingMeasuredAllows::test_broken_harness_warns_and_allows"
+    },
+    {
+      "name": "missing-harness-blocks-every-push",
+      "_mechanism": "Same failure one step earlier: the harness is simply not installed, which is the normal state of a clone that has never run h-mad. Blocking there makes the hook hostile to every repo it is installed in by default.",
+      "file": "git-hooks/pre-push",
+      "find": "        \"${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/\" >&2\n    exit 0",
+      "replace": "        \"${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/\" >&2\n    exit 1",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestNothingMeasuredAllows::test_missing_harness_warns_and_allows"
+    },
+    {
+      "name": "discovery-sweeps-nothing",
+      "_mechanism": "Break discovery and the hook exits 0 on the empty-candidates path -- silently, from every repository. This is the mutation a hardcoded spec directory would have made permanent: the sweep is over what git tracks, and if that list comes back empty the guard is decoration.",
+      "file": "git-hooks/pre-push",
+      "find": "    CANDIDATES=$(git -c core.quotePath=false ls-files -- '*.json' 2>/dev/null || true)",
+      "replace": "    CANDIDATES=''",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestSpecResolution::test_discovery_finds_specs_in_any_directory"
+    },
+    {
+      "name": "override-is-ignored",
+      "_mechanism": "HMAD_MUTATION_SPEC_DIR silently falls through to discovery. The operator set it precisely because discovery is wrong for their repo, and the hook reports a verdict over the wrong set of specs.",
+      "file": "git-hooks/pre-push",
+      "find": "if [ -n \"${HMAD_MUTATION_SPEC_DIR:-}\" ]; then",
+      "replace": "if false; then",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestSpecResolution::test_env_override_sweeps_an_untracked_directory"
+    },
+    {
+      "name": "override-widens-instead-of-replacing",
+      "_mechanism": "Let discovery run alongside the override. An override that can only ADD specs cannot exclude one, so the operator has no way to narrow a sweep that is blocking their pushes for a spec they do not own.",
+      "file": "git-hooks/pre-push",
+      "find": "    CANDIDATES=$(printf '%s\\n' \"$CANDIDATES\" | grep -v '^$' || true)\nelse",
+      "replace": "    CANDIDATES=$(printf '%s\\n%s' \"$CANDIDATES\" \"$(git -c core.quotePath=false ls-files -- '*.json' 2>/dev/null || true)\" | grep -v '^$' || true)\nif false; then",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestSpecResolution::test_env_override_replaces_discovery_rather_than_adding_to_it"
+    },
+    {
+      "name": "empty-candidates-still-invokes-the-harness",
+      "_mechanism": "Drop the early exit and a repo with no JSON at all reaches --check-anchors with zero arguments: argparse refuses, no ANCHORS_* token is printed, and every push in every specless repository prints a tooling warning. Noise on a path that has nothing to say trains the operator to ignore the one that does.",
+      "file": "git-hooks/pre-push",
+      "find": "if [ -z \"$CANDIDATES\" ]; then",
+      "replace": "if false; then",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestNothingMeasuredAllows::test_no_candidate_json_at_all_is_silent"
+    },
+    {
+      "name": "installer-destroys-a-foreign-hook",
+      "_mechanism": "Back up nothing. Somebody else's pre-push is deleted by an installer whose output says 'installed' -- unrecoverable, and invisible until the hook they wrote stops firing.",
+      "file": "git-hooks/install.sh",
+      "find": "            backup=\"$dest.bak.$(date +%Y%m%d%H%M%S)\"\n            mv \"$dest\" \"$backup\"",
+      "replace": "            backup=\"$dest.bak.$(date +%Y%m%d%H%M%S)\"\n            rm \"$dest\"",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_foreign_hook_is_backed_up_not_destroyed"
+    },
+    {
+      "name": "uninstall-removes-someone-elses-hook",
+      "_mechanism": "The ownership test is what makes --uninstall safe to run blind. Without it the flag deletes whatever sits at that path, which is the one thing an uninstaller must never do.",
+      "file": "git-hooks/install.sh",
+      "find": "        if [ -L \"$dest\" ] && [ \"$(readlink \"$dest\")\" = \"$src\" ]; then\n            rm \"$dest\"",
+      "replace": "        if [ -e \"$dest\" ]; then\n            rm \"$dest\"",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_uninstall_leaves_a_foreign_hook_in_place"
+    },
+    {
+      "name": "installs-under-a-set-core-hookspath",
+      "_mechanism": "Git reads hooks from core.hooksPath, so the link lands somewhere git will never look. The installer reports success, the smoke test passes, and the guard never runs once -- a guard that cannot fire is worse than no guard, because it is believed.",
+      "file": "git-hooks/install.sh",
+      "find": "if [ -n \"$(git config --get core.hooksPath || true)\" ]; then",
+      "replace": "if false; then",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_refuses_when_core_hookspath_is_set"
+    },
+    {
+      "name": "installer-smoke-test-never-fails",
+      "_mechanism": "The smoke test exists so a hook that would block every push is reported at install time rather than discovered on the next push. Silence it and the operator learns about it from a failed push, mid-task.",
+      "file": "git-hooks/install.sh",
+      "find": "        echo \"WARNING: $hook exited non-zero on the current tree — it will block pushes.\" >&2",
+      "replace": "        echo \"note: $hook exited non-zero\" >&2",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_smoke_test_reports_a_hook_that_would_block_every_push"
+    },
+    {
+      "name": "installer-copies-instead-of-linking",
+      "_mechanism": "A copy is the failure h_mad_install_check.py was written for, one level down: it keeps working while drifting arbitrarily far from the checkout, and nothing downstream can tell the two apart.",
+      "file": "git-hooks/install.sh",
+      "find": "    ln -s \"$src\" \"$dest\"\n    echo \"installed: $hook -> $src\"",
+      "replace": "    cp \"$src\" \"$dest\"\n    echo \"installed: $hook -> $src\"",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_installs_a_symlink_and_smoke_tests_it"
+    },
+    {
+      "name": "installs-outside-a-git-repository",
+      "_mechanism": "Without the check, `git rev-parse --git-common-dir` in a non-repo directory walks UP to any enclosing repository and installs there. Running the installer in a scratch directory then silently arms a hook in the parent clone.",
+      "file": "git-hooks/install.sh",
+      "find": "git rev-parse --show-toplevel >/dev/null 2>&1 || {",
+      "replace": "true || {",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_refuses_outside_a_git_repository"
+    }
+  ],
+  "_why_not_absolute_path_format": "An `installer-links-into-the-callers-repo` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. Dropping `--path-format=absolute` from the `--git-common-dir` call survives every test, and measurement says it should: the relative form git returns is relative to the CWD ('.git' from the top level, '../../.git' from a subdirectory, already absolute from a linked worktree), and the installer resolves it AFTER its only `cd` and never changes directory again -- so both forms name the same directory. The failure the flag guards against is the `-C <other-repo> rev-parse --git-common-dir` shape, which resolves '.git' against the CALLER's cwd and silently answers about the wrong repository; this script uses `cd`, not `-C`. The flag stays because it keeps the operator-facing paths absolute and survives a future edit that adds a `cd`, but it is defence in depth, not a live guard, and a mutant of it is indistinguishable from a real coverage gap. The properties it was reaching for are pinned directly by TestInstaller::test_installs_from_a_subdirectory_of_the_repo and ::test_installs_from_a_linked_worktree_into_the_common_dir."
+}

@@ -1687,6 +1687,46 @@ The loop, when a measurement turns into a defect:
 
 Steps 1–4 are the discipline; step 5 is the only part a script can check, which is why the script checks that and nothing else.
 
+## Git hooks (in `~/.claude/skills/h-mad/git-hooks/`)
+
+These are **git** hooks, not Claude Code hooks. `hooks/` holds the latter (`h-mad-tdd-gate.sh`,
+`h-mad-advisor-warn.sh`) and they answer to a different contract; the two directories are kept
+apart because the shared word is the whole confusion.
+
+- `pre-push` — refuses a push when any mutation anchor has drifted, and `install.sh` links it into
+  a clone's common hooks dir (`--repo <dir>` to target another clone, `--uninstall` to remove only
+  symlinks it owns, `git push --no-verify` to override once). This closes the one gap the in-run
+  sibling sweep cannot: 5e's precheck and `--check-anchors` both fire inside a mutation run, and
+  anchors drift as a side effect of **unrelated refactors** — commits that never go through a run.
+  Nothing fails until someone sweeps by hand, and 13 anchors had drifted before the 2026-08-27
+  repair. `git push` is the last boundary before that becomes somebody else's problem.
+
+  **The verdict is scored on the `ANCHORS_*` summary line, never on `$?` alone** (§"Audit-gate
+  signal discipline"), and only `ANCHORS_DRIFTED` blocks. A missing harness, an
+  `ANCHORS_NOTHING_SWEPT`, and a run that printed no `ANCHORS_*` token at all each warn on stderr
+  and **allow** the push: blocking every push in a clone because the tooling is broken is a worse
+  failure than missing one drift, and the inverse — allowing silently — is a different bug, so
+  none of the three is quiet. A repo with no candidate JSON at all is the one silent allow;
+  nothing to guard is not a finding.
+
+  **Which specs get swept is discovered, not configured.** The hook ships in the skill and installs
+  into arbitrary repositories, so a spec directory in this file would be a per-project fork of it —
+  which is precisely how the two copies of a hook drift apart. It sweeps every tracked `*.json`
+  (`git ls-files`) and lets the harness's own classifier decide what is a spec, so it needs no
+  naming convention and costs one small read per tracked JSON. Measured in this repository: 77
+  tracked JSONs, **19 specs across three directories**, one of them inside an unrelated skill — a
+  single-directory parameter would have guarded 16 of the 19 and reported success. Untracked specs
+  are invisible to `git ls-files` by design (a push publishes only what is tracked);
+  `$HMAD_MUTATION_SPEC_DIR` (colon-separated, absolute or repo-relative) **replaces** discovery for
+  the repo where that is wrong — replaces rather than widens, so it can narrow a sweep too.
+
+  Pinned by `tests/test_h_mad_prepush_anchor_hook.py` and
+  `tests/mutation-specs/prepush_anchor_hook.json` (14/14 caught). A pre-push hook is the guard
+  shape with the weakest natural feedback — on a clean tree a correct one and one that
+  unconditionally exits 0 are indistinguishable — so every mutation there forces it toward exit 0
+  or toward sweeping nothing.
+
+
 ## Working a `skill-monitoring` item
 
 `docs/skill-monitoring.md` is the standing bug/improvement registry. Closing one is not "read the

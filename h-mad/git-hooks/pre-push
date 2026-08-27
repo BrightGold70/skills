@@ -1,0 +1,139 @@
+#!/bin/sh
+# pre-push — refuse the push when any H-MAD mutation anchor has drifted.
+#
+# A drifted anchor is a silent no-op that reads as a passing guard: the mutation
+# applies nothing, the suite still goes green, and the invariant the spec aims at
+# is unverified. Anchors drift as a side effect of UNRELATED refactors, so
+# nothing fails until someone runs a spec by hand. The in-run sibling sweep
+# (Phase 5e) and the standalone `--check-anchors` diagnostic both cover drift a
+# mutation run would meet; neither fires on an ordinary refactor commit that
+# never goes through a run. `git push` is that boundary. The check is ~1s.
+#
+# The verdict is scored on the harness's ANCHORS_* summary line, not on the exit
+# code alone. A missing verdict line means the harness itself broke; that warns
+# and ALLOWS the push rather than blocking work on broken tooling. Only a real
+# ANCHORS_DRIFTED blocks. Blocking every push when the tooling is missing is a
+# worse failure than missing one drift.
+#
+# Which specs get swept is DISCOVERED, not hardcoded: this hook ships inside the
+# h-mad skill and is installed into arbitrary repositories, so a hardcoded spec
+# directory would be a per-project fork of this file. Resolution order:
+#
+#   1. $HMAD_MUTATION_SPEC_DIR — colon-separated directories (absolute, or
+#      relative to the repository root). An explicit override for a repo whose
+#      specs are untracked or live outside the work tree.
+#   2. Every tracked *.json in the repository (`git ls-files`). The harness's
+#      own classifier decides what is a spec — a JSON object with a non-empty
+#      `mutations` list — and skips everything else, so this costs one small
+#      read per tracked JSON and needs no naming convention. Measured in the
+#      skills repo: 77 tracked JSONs, 19 specs across THREE directories, one of
+#      them inside a different skill. A single-directory parameter would have
+#      guarded 16 of the 19 and reported success.
+#
+# Untracked specs are invisible to `git ls-files` by design: a push can only
+# publish what is tracked. Use $HMAD_MUTATION_SPEC_DIR when that is wrong.
+#
+# Install:     h-mad/git-hooks/install.sh [--repo <dir>]
+# Uninstall:   h-mad/git-hooks/install.sh --uninstall
+# Bypass once: git push --no-verify
+
+set -u
+
+REPO=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -n "$REPO" ] || exit 0
+cd "$REPO" || exit 0
+
+# Resolve the harness from the skill checkout this hook was installed FROM, so
+# the running hook and its harness cannot come from two different installs.
+# Falls back to the documented skills-root convention when $0 is not a symlink
+# (a copied hook, or a direct invocation from the checkout).
+SELF=$0
+LINK=$(readlink "$SELF" 2>/dev/null) || LINK=''
+if [ -n "$LINK" ]; then
+    case "$LINK" in
+        /*) SELF=$LINK ;;
+        *)  SELF="$(dirname "$SELF")/$LINK" ;;
+    esac
+fi
+SKILL_DIR=$(cd -- "$(dirname -- "$SELF")/.." 2>/dev/null && pwd) || SKILL_DIR=''
+
+HARNESS=''
+if [ -n "$SKILL_DIR" ] && [ -f "$SKILL_DIR/scripts/h_mad_mutation_harness.py" ]; then
+    HARNESS="$SKILL_DIR/scripts/h_mad_mutation_harness.py"
+else
+    FALLBACK="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_mutation_harness.py"
+    [ -f "$FALLBACK" ] && HARNESS="$FALLBACK"
+fi
+if [ -z "$HARNESS" ]; then
+    printf 'pre-push: mutation harness not found — anchor check skipped.\n' >&2
+    printf '          looked beside the installed hook, then in %s\n' \
+        "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/" >&2
+    exit 0
+fi
+
+# Split candidate lists on newlines only, with globbing off, so one harness
+# invocation gets every candidate as a separate argument.
+OLDIFS=$IFS
+IFS='
+'
+set -f
+
+CANDIDATES=''
+if [ -n "${HMAD_MUTATION_SPEC_DIR:-}" ]; then
+    DIRS=$(printf '%s\n' "$HMAD_MUTATION_SPEC_DIR" | tr ':' '\n')
+    for d in $DIRS; do
+        [ -n "$d" ] || continue
+        case "$d" in /*) ;; *) d="$REPO/$d" ;; esac
+        [ -d "$d" ] || continue
+        found=$(find "$d" -type f -name '*.json' | sort)
+        [ -n "$found" ] && CANDIDATES=$(printf '%s\n%s' "$CANDIDATES" "$found")
+    done
+    CANDIDATES=$(printf '%s\n' "$CANDIDATES" | grep -v '^$' || true)
+else
+    CANDIDATES=$(git -c core.quotePath=false ls-files -- '*.json' 2>/dev/null || true)
+fi
+
+if [ -z "$CANDIDATES" ]; then
+    # No candidate JSON at all: this repository does not carry mutation specs.
+    # Nothing to guard is not a failure.
+    set +f
+    IFS=$OLDIFS
+    exit 0
+fi
+
+OUT=$(python3 "$HARNESS" --check-anchors $CANDIDATES </dev/null 2>&1)
+RC=$?
+set +f
+IFS=$OLDIFS
+
+case "$OUT" in
+    *ANCHORS_DRIFTED*)
+        printf '%s\n' "$OUT" | grep -v 'SKIPPED not-a-spec' >&2
+        printf '\npre-push BLOCKED: mutation anchors have drifted (harness exit %s).\n' "$RC" >&2
+        printf 'Re-anchor the specs listed above before pushing.\n' >&2
+        printf 'Deliberate override: git push --no-verify\n' >&2
+        exit 1
+        ;;
+    *ANCHORS_NOTHING_SWEPT*)
+        # Candidates existed and none classified as a spec. Under discovery that
+        # means the repository has JSON but no specs; under an explicit
+        # $HMAD_MUTATION_SPEC_DIR it means the override points somewhere wrong.
+        # Either way nothing was measured, and installing this hook was
+        # deliberate — so say so loudly and ALLOW, on the same rule as broken
+        # tooling: a misconfiguration must not block every push.
+        printf '%s\n' "$OUT" | tail -3 >&2
+        printf '\npre-push: no mutation specs among %s candidate JSON files.\n' \
+            "$(printf '%s\n' "$CANDIDATES" | grep -c '')" >&2
+        printf 'Nothing was measured. Push ALLOWED — check HMAD_MUTATION_SPEC_DIR if this is wrong.\n' >&2
+        exit 0
+        ;;
+    *ANCHORS_OK*)
+        exit 0
+        ;;
+    *)
+        printf '%s\n' "$OUT" >&2
+        printf '\npre-push: anchor check produced no ANCHORS_* verdict (harness exit %s).\n' "$RC" >&2
+        printf 'Treating as broken tooling, not as drift. Push ALLOWED.\n' >&2
+        exit 0
+        ;;
+esac
