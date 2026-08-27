@@ -22,6 +22,28 @@ class RegistryError(Exception):
     """Malformed registry content — a cannot-judge, never a verdict."""
 
 
+def _record_key(record: dict) -> tuple[str, str]:
+    """The registry's identity: `(owning_feature, id)`, never `id` alone.
+
+    `id` is the impl-plan task number (`"Task 4"`), and every impl-plan numbers
+    its tasks from 1 — so two features that both register a Task N collide by
+    construction. Keyed on the bare id, `register` upserted one feature's wire
+    over another's and `compare` (keyed the same way) saw the successor and
+    reported nothing, which is precisely the silent removal the `status`
+    /`removal_provenance`/`removed_by_feature` tombstone fields exist to force
+    an author to declare. Measured before the fix: 1 of 7 records ever
+    registered in this repo had already been lost that way (J43).
+
+    `owning_feature` is a required field, so this key is always available.
+    """
+    return (record["owning_feature"], record["id"])
+
+
+def _record_label(record: dict) -> str:
+    """`<feature>::<id>` for halt reasons — a bare id now names no single wire."""
+    return f"{record['owning_feature']}::{record['id']}"
+
+
 def validate_record(record: dict) -> dict:
     """Return the record, or raise RegistryError naming the offending field."""
     if not isinstance(record, dict):
@@ -73,7 +95,7 @@ def register(entries: list[dict], path: Path) -> list[dict]:
         record.setdefault("status", "active")
         validate_record(record)
         for index, existing in enumerate(records):
-            if existing["id"] == record["id"]:
+            if _record_key(existing) == _record_key(record):
                 records[index] = record
                 break
         else:
@@ -333,9 +355,9 @@ def load_base(sha: str, path: str, repo: Path) -> list[dict]:
 
 
 def compare(base_records: list[dict], head_records: list[dict]) -> list[dict]:
-    """Return BASE records whose ids are absent at HEAD."""
-    head_ids = {record["id"] for record in head_records}
-    return [record for record in base_records if record["id"] not in head_ids]
+    """Return BASE records whose `(owning_feature, id)` is absent at HEAD."""
+    head_keys = {_record_key(record) for record in head_records}
+    return [record for record in base_records if _record_key(record) not in head_keys]
 
 
 def partition(
@@ -501,19 +523,19 @@ def verify(
     drivers: list[str] = []
     if broken:
         for record in broken:
-            drivers.append(f"step5f:wire_regression:{record['id']}")
+            drivers.append(f"step5f:wire_regression:{_record_label(record)}")
     if missing:
         for record in missing:
-            drivers.append(f"step5f:wire_pin_missing:{record['id']}")
+            drivers.append(f"step5f:wire_pin_missing:{_record_label(record)}")
     if ambiguous:
         for record in ambiguous:
-            drivers.append(f"step5f:wire_pin_ambiguous:{record['id']}")
+            drivers.append(f"step5f:wire_pin_ambiguous:{_record_label(record)}")
     if undeclared:
         for record in undeclared:
-            drivers.append(f"step5f:undeclared_removal:{record['id']}")
+            drivers.append(f"step5f:undeclared_removal:{_record_label(record)}")
     if unverified_renames:
         for record in unverified_renames:
-            drivers.append(f"step5f:unverified_rename:{record['id']}")
+            drivers.append(f"step5f:unverified_rename:{_record_label(record)}")
     if not tracked:
         drivers.append("step5f:registry_untracked")
     for reason in drivers:

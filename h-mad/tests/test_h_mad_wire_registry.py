@@ -67,12 +67,12 @@ def _skill_text() -> str:
 def _emitted_halt_reasons() -> set[str]:
     source = (SCRIPTS / "h_mad_wire_registry.py").read_text(encoding="utf-8")
     ast.parse(source)  # Ensure extraction is against valid executable source.
-    emitted = set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|undeclared_removal|unverified_rename):\{record\['id'\]\}|step5f:registry_untracked", source))
-    return {value.replace("{record['id']}", "<id>") for value in emitted}
+    emitted = set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|wire_pin_ambiguous|undeclared_removal|unverified_rename):\{_record_label\(record\)\}|step5f:registry_untracked", source))
+    return {value.replace("{_record_label(record)}", "<feature>::<id>") for value in emitted}
 
 
 def _documented_halt_reasons(text: str) -> set[str]:
-    return set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|undeclared_removal|unverified_rename):<id>|step5f:registry_untracked", text))
+    return set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|wire_pin_ambiguous|undeclared_removal|unverified_rename):<feature>::<id>|step5f:registry_untracked", text))
 
 
 def test_skill_phase5b_documents_featured_wire_registration_and_executable_flags() -> None:
@@ -515,7 +515,7 @@ def test_verify_reports_ambiguous_pin_in_token_driver_and_verdict(
     assert result["verdict"] == "FAIL"
     assert result["ambiguous"] == 1
     assert "ambiguous=1" in result["token"]
-    assert "step5f:wire_pin_ambiguous:ambiguous" in capsys.readouterr().out
+    assert "step5f:wire_pin_ambiguous:regression-provenance-ledger::ambiguous" in capsys.readouterr().out
 
 
 def test_run_pins_empty_does_not_spawn_subprocess(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -597,7 +597,7 @@ def test_run_pins_fails_closed_for_real_error_skip_and_xfail_outcomes(
     result = registry.verify(registry_path, "HEAD", repo, repo, [Path("tests")])
     assert result["verdict"] == "FAIL"
     output = capsys.readouterr().out
-    assert all(f"step5f:wire_regression:{record['id']}" in output for record in records)
+    assert all(f"step5f:wire_regression:{registry._record_label(record)}" in output for record in records)
 
 
 def test_register_cli_writes_requested_record(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -1045,7 +1045,7 @@ def test_active_base_record_absent_at_head_is_an_undeclared_removal(
 
     assert result["undeclared_removals"] == 1
     assert result["verdict"] == "FAIL"
-    assert "step5f:undeclared_removal:active-base" in capsys.readouterr().out
+    assert "step5f:undeclared_removal:regression-provenance-ledger::active-base" in capsys.readouterr().out
 
 
 def test_tombstoned_base_record_absent_at_head_is_not_an_undeclared_removal(
@@ -1089,8 +1089,8 @@ def test_only_active_record_drives_mixed_base_removal_count_and_halt_reason(
     output = capsys.readouterr().out
     assert result["undeclared_removals"] == 1
     assert [record["id"] for record in result["undeclared_removal_records"]] == ["active-base"]
-    assert "step5f:undeclared_removal:active-base" in output
-    assert "step5f:undeclared_removal:declared-tombstone" not in output
+    assert "step5f:undeclared_removal:regression-provenance-ledger::active-base" in output
+    assert "step5f:undeclared_removal:regression-provenance-ledger::declared-tombstone" not in output
 
 
 def test_untracked_broken_registry_keeps_counts_and_detail_marker(
@@ -1106,14 +1106,14 @@ def test_untracked_broken_registry_keeps_counts_and_detail_marker(
     result = registry.verify(path, "HEAD", tmp_path, tmp_path)
     assert result["verdict"] == "UNTRACKED"
     assert result["registered"] == 1 and result["broken"] == 1
-    assert "step5f:wire_regression:bad" in capsys.readouterr().out
+    assert "step5f:wire_regression:regression-provenance-ledger::bad" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("reason, record", [
-    ("step5f:wire_regression:bad", _entry(id="bad")),
-    ("step5f:wire_pin_missing:missing", _entry(id="missing", pin="gone")),
-    ("step5f:undeclared_removal:removed", _entry(id="removed")),
-    ("step5f:unverified_rename:renamed", _entry(id="renamed", status="removed", removal_provenance="renamed", removed_by_feature="x", successor_pin="gone")),
+    ("step5f:wire_regression:regression-provenance-ledger::bad", _entry(id="bad")),
+    ("step5f:wire_pin_missing:regression-provenance-ledger::missing", _entry(id="missing", pin="gone")),
+    ("step5f:undeclared_removal:regression-provenance-ledger::removed", _entry(id="removed")),
+    ("step5f:unverified_rename:regression-provenance-ledger::renamed", _entry(id="renamed", status="removed", removal_provenance="renamed", removed_by_feature="x", successor_pin="gone")),
 ])
 def test_fail_drivers_emit_named_halt_markers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], reason: str, record: dict
@@ -1172,3 +1172,87 @@ def test_main_collection_failure_is_cannot_judge_exit_2_not_fail(
     assert exit_code == 2
     assert "[H-MAD]" in output
     assert "WIREREG: FAIL" not in output
+
+
+class TestFeatureScopedKey:
+    """J43 — `id` is `"Task N"`, and every impl-plan numbers tasks from 1.
+
+    Keyed on the bare `id`, `register` upserts one feature's wire over another's
+    and `compare` then keys on the same bare `id`, so the successor MASKS the
+    eviction: `step5f:undeclared_removal` structurally cannot fire for it. The
+    record schema requires `status`/`removal_provenance`/`removed_by_feature`
+    for a *declared* removal — the entire apparatus the upsert walked around.
+
+    Measured over the full history of this repo's `.h-mad/wires.jsonl` before the
+    fix: 7 distinct `(owning_feature, id)` pairs ever registered, 6 at HEAD, and
+    the missing one — `audit-cycle-verb :: Task 4` — was invisible to `compare`
+    because `anchor-precheck-phase-5e-wiring :: Task 4` occupied its id. The loss
+    was also unrestorable: re-registering it evicted the successor, because the
+    registry could hold exactly one `"Task 4"` across all features, ever.
+    """
+
+    def test_same_id_under_a_different_feature_does_not_evict(self, tmp_path: Path) -> None:
+        path = tmp_path / "wires.jsonl"
+        registry.register([_entry(id="Task 4", owning_feature="feature-a")], path)
+        result = registry.register([_entry(id="Task 4", owning_feature="feature-b")], path)
+        assert len(result) == 2
+        assert {(r["owning_feature"], r["id"]) for r in result} == {
+            ("feature-a", "Task 4"), ("feature-b", "Task 4"),
+        }
+
+    def test_same_id_under_the_same_feature_still_updates_in_place(self, tmp_path: Path) -> None:
+        """The accept direction. Mutation testing only proves the reject one, and
+        a key that never matches would pass every test above while turning the
+        registry into an append-only log of stale duplicates."""
+        path = tmp_path / "wires.jsonl"
+        registry.register([_entry(id="Task 4", owning_feature="feature-a")], path)
+        result = registry.register(
+            [_entry(id="Task 4", owning_feature="feature-a", callee="tools.other")], path
+        )
+        assert len(result) == 1
+        assert result[0]["callee"] == "tools.other"
+
+    def test_the_evicted_record_is_restorable_alongside_its_successor(self, tmp_path: Path) -> None:
+        """The property that made the original loss permanent, not just silent."""
+        path = tmp_path / "wires.jsonl"
+        registry.register([_entry(id="Task 4", owning_feature="successor")], path)
+        result = registry.register([_entry(id="Task 4", owning_feature="evicted")], path)
+        assert len(result) == 2
+
+    def test_compare_reports_a_removal_masked_by_the_same_id_at_head(self) -> None:
+        base = _entry(id="Task 4", owning_feature="feature-a")
+        head = _entry(id="Task 4", owning_feature="feature-b")
+        assert registry.compare([base], [head]) == [base]
+
+    def test_compare_does_not_report_a_record_still_present_under_its_own_feature(self) -> None:
+        record = _entry(id="Task 4", owning_feature="feature-a")
+        other = _entry(id="Task 4", owning_feature="feature-b")
+        assert registry.compare([record], [record, other]) == []
+
+    def test_halt_reason_names_the_feature_so_two_removals_are_distinguishable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Once two features may each own a `Task 4`, a halt reason carrying only
+        the bare id names neither of them."""
+        assert registry._record_label(_entry(id="Task 4", owning_feature="feature-a")) == (
+            "feature-a::Task 4"
+        )
+        assert registry._record_label(_entry(id="Task 4", owning_feature="feature-b")) == (
+            "feature-b::Task 4"
+        )
+
+
+def test_live_registry_still_holds_the_wire_that_was_silently_evicted() -> None:
+    """J43's measured casualty, pinned so a re-eviction is a test failure.
+
+    A later feature may legitimately retire this wire — but only by declaring it
+    with a tombstone, which is exactly the path the id-keyed upsert bypassed.
+    """
+    live = Path(__file__).resolve().parents[2] / ".h-mad" / "wires.jsonl"
+    records = [json.loads(line) for line in live.read_text(encoding="utf-8").splitlines() if line.strip()]
+    matching = [
+        r for r in records
+        if r["owning_feature"] == "audit-cycle-verb" and r["id"] == "Task 4"
+    ]
+    assert matching, "audit-cycle-verb::Task 4 is absent — it was evicted, not declared removed"
+    assert matching[0]["pin"] == "test_fail_in_either_pass_fails_cycle"

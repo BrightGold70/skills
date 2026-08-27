@@ -1,0 +1,59 @@
+{
+  "_why": "The registry's whole job is to notice a wire disappearing, and for one record it did the disappearing itself: keyed on the bare `id`, `register` upserted one feature's Task 4 over another's and `compare` — keyed the same way — saw the successor and reported nothing. Every mutation here restores the bare-id key at one of the four places it lives, because the defect was not a missing check but an identity that was one field too small, and each spelling of it fails silently in the same direction: a real removal reads as no removal at all.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_registry.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "identity-drops-the-owning-feature",
+      "_mechanism": "The defect at its source. Every consumer keeps calling the right helper and the helper answers with the wrong identity, so registration, comparison and the halt reasons all regress together — which is exactly why the key is one function rather than four expressions.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    return (record[\"owning_feature\"], record[\"id\"])",
+      "replace": "    return (record[\"id\"],)",
+      "test": "tests/test_h_mad_wire_registry.py::TestFeatureScopedKey::test_same_id_under_a_different_feature_does_not_evict"
+    },
+    {
+      "name": "register-upserts-on-the-bare-id-again",
+      "_mechanism": "The original line, restored verbatim. A second feature's Task 4 evicts the first, and nothing anywhere reports it -- no tombstone, no provenance, no halt. This is the write that lost `audit-cycle-verb :: Task 4`.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "            if _record_key(existing) == _record_key(record):",
+      "replace": "            if existing[\"id\"] == record[\"id\"]:",
+      "test": "tests/test_h_mad_wire_registry.py::TestFeatureScopedKey::test_the_evicted_record_is_restorable_alongside_its_successor"
+    },
+    {
+      "name": "compare-masks-a-removal-behind-the-same-id",
+      "_mechanism": "The half that made the loss invisible rather than merely destructive. With the successor occupying the id, the evicted record is 'present at HEAD' and `step5f:undeclared_removal` structurally cannot fire — a guard reporting PASS about a wire it can no longer see.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    head_keys = {_record_key(record) for record in head_records}\n    return [record for record in base_records if _record_key(record) not in head_keys]",
+      "replace": "    head_ids = {record[\"id\"] for record in head_records}\n    return [record for record in base_records if record[\"id\"] not in head_ids]",
+      "test": "tests/test_h_mad_wire_registry.py::TestFeatureScopedKey::test_compare_reports_a_removal_masked_by_the_same_id_at_head"
+    },
+    {
+      "name": "halt-reason-names-no-single-wire",
+      "_mechanism": "Once two features may each own a `Task 4`, `step5f:undeclared_removal:Task 4` identifies neither of them, and two simultaneous removals emit the same line twice. The verdict stays correct while the remedy becomes unactionable, which is the failure mode a halt reason exists to prevent.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    return f\"{record['owning_feature']}::{record['id']}\"",
+      "replace": "    return f\"{record['id']}\"",
+      "test": "tests/test_h_mad_wire_registry.py::TestFeatureScopedKey::test_halt_reason_names_the_feature_so_two_removals_are_distinguishable"
+    },
+    {
+      "name": "documented-contract-drifts-from-the-emitted-one",
+      "_mechanism": "SKILL.md is the contract 5f is run from. The fidelity test scrapes the emitted f-strings and diffs them against the documented tokens, so a halt reason that changes shape without the doc following it is caught here rather than by an operator grepping for a string the code no longer prints.",
+      "file": "SKILL.md",
+      "find": "`step5f:undeclared_removal:<feature>::<id>`",
+      "replace": "`step5f:undeclared_removal:<id>`",
+      "test": "tests/test_h_mad_wire_registry.py::test_skill_documents_exactly_all_registry_halt_reasons"
+    }
+  ]
+}
