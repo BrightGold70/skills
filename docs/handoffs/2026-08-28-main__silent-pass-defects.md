@@ -51,15 +51,15 @@ action queue is empty — this is a clean stopping point, not a pause.
 
 ## Next Steps
 
-The handed-over queue is empty; these are genuine follow-ups, none urgent.
+The handed-over queue is empty; these are genuine follow-ups, none urgent. (The
+`docs/skill-candidates.md` reconcile that would have been item 1 was done by this handoff's own
+scout pass — census reports 0 open `yes` rows.)
 
-1. Reconcile the open rows in `docs/skill-candidates.md` — the automation scout is the only writer,
-   so statuses decay if nobody flips them. Run `/handoff` scout or edit directly.
-2. Consider giving `unclassifiable` its own verdict word once every consumer scores verdicts by
+1. Consider giving `unclassifiable` its own verdict word once every consumer scores verdicts by
    exit code rather than an ordered substring `case` — `h-mad/scripts/h_mad_mutation_harness.py`
    (search `ANCHORS_UNREADABLE if unreadable or unclassifiable`). Deliberately deferred this
    session; the fold is correct until the consumers change.
-3. `[suggested]` Extend `check_siblings()` to the `~/.claude/hooks/` tree the same way, so a hook
+2. `[suggested]` Extend `check_siblings()` to the `~/.claude/hooks/` tree the same way, so a hook
    installed as a copy is caught alongside a skill — `h-mad/scripts/h_mad_install_check.py`
    (`_check_hook_link` currently only checks existence, not shape).
 
@@ -97,7 +97,7 @@ The handed-over queue is empty; these are genuine follow-ups, none urgent.
 - `~/.claude/.install-backups/handoff.copy-backup-20260828-173431` — the replaced copy; safe to delete
 - Deleted local branch `wip/check-anchors-local-4aeee78` (was `4aeee78`, unpushed, recoverable via reflog)
 
-**Uncommitted changes:** none — tree clean, `main` in sync with `origin/main` at `e4340c5`.
+**Uncommitted changes:** none — tree clean. `e4340c5` was the last code commit; this handoff itself lands on top of it, so `main` tips at the `chore(handoff)` commit and is in sync with `origin/main`.
 
 **To resume:**
 ```bash
