@@ -47,9 +47,16 @@
     {
       "name": "combine-fail-verdict-guard-drop",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    for result in results:\n        if result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n\n    return \"PASS\", None",
-      "replace": "    for result in results:\n        if False and result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n\n    return \"PASS\", None",
+      "find": "    for result in results:\n        if result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n",
+      "replace": "    for result in results:\n        if False and result.verdict == \"FAIL\":\n            return \"FAIL\", f\"findings:p{result.index}\"\n",
       "failure_test": "test_combine_fails_when_any_pass_has_findings"
+    },
+    {
+      "name": "combine-rc-guard-drop",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for result in results:\n        if result.rc:\n",
+      "replace": "    for result in results:\n        if False and result.rc:\n",
+      "failure_test": "test_timed_out_pass_cannot_certify_a_clean_cycle"
     }
   ]
 }
