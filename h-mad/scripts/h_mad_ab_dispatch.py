@@ -192,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="directory for the two prompts and two logs")
     parser.add_argument("--run", action="append", metavar="TOKEN",
                         help="argv token for the dispatch; repeat. "
-                             "{prompt} and {log} are substituted per arm. "
+                             "{prompt}, {log} and {arm} are substituted per arm — "
+                             "use {arm} in any OTHER per-arm path, or both arms share it. "
                              "A token beginning with '-' is fine in either form: "
                              "`--run --model` and `--run=--model` both work")
     argv, run_tokens = _split_run_tokens(sys.argv[1:] if argv is None else list(argv))
@@ -222,7 +223,16 @@ def main(argv: list[str] | None = None) -> int:
 
     def runner(arm: str, prompt_path: Path, log_path: Path) -> int:
         argv_arm = [
-            token.replace("{prompt}", str(prompt_path)).replace("{log}", str(log_path))
+            # `{arm}` as well as `{prompt}`/`{log}`: without it every OTHER
+            # per-arm path in the argv is byte-identical across arms, so arm B
+            # overwrites arm A's output and the comparison reads B against B —
+            # silently, and reporting SAME, which is the most believable wrong
+            # answer this tool can give (J40/F5). A placeholder rather than
+            # flag-awareness: the tool cannot know which of an arbitrary argv is a
+            # path, and a guess would be wrong for the next runner.
+            token.replace("{prompt}", str(prompt_path))
+                 .replace("{log}", str(log_path))
+                 .replace("{arm}", arm)
             for token in args.run
         ]
         try:

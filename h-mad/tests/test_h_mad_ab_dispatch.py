@@ -457,3 +457,63 @@ def test_skill_documents_a_run_form_that_actually_parses():
     # The documented form must not be the bare space-separated one that argparse
     # rejects for a dash-leading token, unless the tool now accepts it.
     assert "argv token" in line
+
+
+class TestPerArmPathScoping:
+    """J40 (F5) — only `{prompt}` and `{log}` were substituted, so every OTHER
+    per-arm path in `--run` was byte-identical across the two arms.
+
+    An operator writing `--run --out --run /tmp/result.json` gets one file: arm B
+    overwrites arm A, and the comparison then reads B against B. That is silent,
+    and it produces `SAME` — "the rule is not causally effective" — which is the
+    single most believable wrong answer this tool can give, and the one its whole
+    verdict set exists to prevent elsewhere.
+
+    Fixed with an `{arm}` placeholder rather than by teaching the tool about
+    specific flags: the tool cannot know which of an arbitrary argv is a path, and
+    a guess would be wrong for the next runner. `{arm}` composes with anything.
+    """
+
+    def test_two_arms_no_longer_share_an_output_path(self, tmp_path):
+        """End to end through the CLI: the arms must not collide on a path the
+        operator supplied, which is the whole of F5."""
+        template = tmp_path / "t.md"
+        template.write_text("R: {{V}}\n", encoding="utf-8")
+        target = tmp_path / "res_{arm}.txt"
+        result = subprocess.run(
+            [sys.executable, str(AB), "--template", str(template),
+             "--var", "V", "--a", "on", "--b", "off",
+             "--observe", r"RESULT: (\w+)", "--out", str(tmp_path / "o"),
+             "--run", "sh", "--run", "-c",
+             "--run", f"printf 'RESULT: %s\\n' \"$0\" > {target}; printf 'RESULT: %s\\n' \"$0\" > {{log}}",
+             "--run", "{arm}"],
+            capture_output=True, text=True,
+        )
+        assert (tmp_path / "res_a.txt").exists(), result.stdout + result.stderr
+        assert (tmp_path / "res_b.txt").exists(), result.stdout + result.stderr
+
+    def test_a_run_without_the_arm_placeholder_is_unchanged(self, tmp_path):
+        """Accept direction: adding a placeholder must not disturb callers that
+        never use it."""
+        template = tmp_path / "t.md"
+        template.write_text("R: {{V}}\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(AB), "--template", str(template),
+             "--var", "V", "--a", "on", "--b", "off",
+             "--observe", r"RESULT: (\w+)", "--out", str(tmp_path / "o"),
+             "--run", "true"],
+            capture_output=True, text=True,
+        )
+        assert "usage:" not in (result.stdout + result.stderr)
+
+
+def test_skill_states_the_environment_is_not_controlled():
+    """J40 (F3) — the tool controls the PROMPT and nothing else.
+
+    An arm difference outside the declared variable — a changed file on disk, a
+    different model default, an env var — is invisible to it, and `UNCONTROLLED`
+    only ever compares the two prompts. That is a real limit on what a `SAME` or a
+    difference means, and an unstated limit reads as a guarantee.
+    """
+    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    assert "does not control the environment" in skill

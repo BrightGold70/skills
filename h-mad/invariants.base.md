@@ -216,6 +216,21 @@
   step they blamed. Re-run the MEASUREMENT as well as the claim — a brief's conclusion can be right
   while its method is wrong.
 
+## Counts a dispatch reports
+- **Re-derive every COUNT a dispatched agent reports; never carry it into a document, a commit
+  message or a verdict on the agent's word.** A report that is right about its actions can still be
+  wrong about its numbers, and the two failures look identical from outside — the prose is accurate,
+  the figures are confident, and nothing in the report signals which is which.
+- Measured 2026-08-26: an `exec codex` report stated an anchor sweep as `mutations=238` when the
+  tree held **244**, with every spec byte-identical to HEAD and every other figure in the same
+  report checking out. Nothing had changed; the number was invented. The cheap control existed the
+  whole time — `--check-anchors` prints the count in about a second.
+- This is narrower than §"Assumption verification" and it applies at a different moment: there the
+  risk is an assumption written without evidence, here it is evidence that was produced, looks
+  right, and is false. Prefer a count you can re-derive with one command over any count a
+  dispatch hands you, and when a count is load-bearing for a verdict, re-derive it before recording
+  the verdict rather than after.
+
 ## Wrapper–runtime reconciliation
 - A wrapper verb over an **external runtime's CLI** MUST be exercised **live against that runtime**
   — a full create → list → remove cycle, or the verb's own equivalent round trip — before it ships,

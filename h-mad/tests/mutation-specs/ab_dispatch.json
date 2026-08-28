@@ -141,6 +141,14 @@
       "find": "        if arg == \"--run\" and index + 1 < len(argv):",
       "replace": "        if False:",
       "test": "tests/test_h_mad_ab_dispatch.py::TestRunTokenParsing::test_dash_leading_token_in_the_documented_space_separated_form"
+    },
+    {
+      "name": "both-arms-share-every-other-path",
+      "_mechanism": "J40/F5 restored. Without {arm}, every per-arm path the operator passes beyond {prompt}/{log} is byte-identical across arms: arm B overwrites arm A and the comparison reads B against B. It reports SAME -- 'the rule is not causally effective' -- which is the most believable wrong answer this tool can produce and the one its verdict set exists to prevent.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "                 .replace(\"{arm}\", arm)",
+      "replace": "                 .replace(\"{arm}\", \"\")",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestPerArmPathScoping::test_two_arms_no_longer_share_an_output_path"
     }
   ]
 }
