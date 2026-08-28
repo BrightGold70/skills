@@ -1415,9 +1415,15 @@ def test_check_anchors_cli_exits_0_when_every_spec_is_clean(tmp_path: Path) -> N
     assert "ANCHORS_OK" in proc.stdout, proc.stdout
 
 
-def test_check_anchors_cli_clean_sweep_keeps_the_five_field_ok_summary(
+def test_check_anchors_cli_clean_sweep_keeps_the_seven_field_ok_summary(
     tmp_path: Path,
 ) -> None:
+    """Was five fields; `skipped`/`unclassifiable` joined it under AC-6.5.
+
+    Both were already counted on every sweep and printed only on the
+    NOTHING_SWEPT line, so a consumer reading just the summary could not tell a
+    sweep that set files aside from one that did not.
+    """
     a = _project(tmp_path / "a", [_kills_the_guard()])
     b = _project(tmp_path / "b", [_untested_line()])
 
@@ -1431,7 +1437,8 @@ def test_check_anchors_cli_clean_sweep_keeps_the_five_field_ok_summary(
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert summary == (
-        "ANCHORS: ANCHORS_OK specs=2 mutations=2 ok=2 drifted=0 unreadable=0"
+        "ANCHORS: ANCHORS_OK specs=2 mutations=2 ok=2 drifted=0 unreadable=0 "
+        "skipped=0 unclassifiable=0"
     )
 
 
@@ -1596,7 +1603,12 @@ def test_classifier_agrees_with_load_spec_on_the_mutations_gate(tmp_path: Path) 
 
 
 def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Path) -> None:
-    """AC-6.2: corrupt JSON is unclassifiable, reported by name, and not drift."""
+    """AC-6.2 (rev AC-6.5): corrupt JSON is unclassifiable, named, blocking, not drift.
+
+    Superseded the original AC-6.2, which asserted exit 0. A consumer that renders
+    harness output only on a blocking verdict then showed the operator nothing, so a
+    broken spec could sit in the tree indefinitely announced on a line nobody printed.
+    """
     clean = _project(tmp_path / "clean", [_kills_the_guard()])
     malformed = tmp_path / "broken.json"
     malformed.write_text("{not-json", encoding="utf-8")
@@ -1611,8 +1623,12 @@ def test_unparseable_json_is_named_and_not_counted_as_anchor_drift(tmp_path: Pat
         capture_output=True, text=True,
     )
 
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "broken.json" in proc.stdout, "unclassifiable JSON must be named on success"
+    assert proc.returncode == 2, (
+        "a file that is not JSON at all judged nothing, so the sweep is not "
+        "clean:\n" + proc.stdout
+    )
+    assert "ANCHORS: ANCHORS_UNREADABLE" in proc.stdout, proc.stdout
+    assert "broken.json" in proc.stdout, "unclassifiable JSON must be named"
     assert "ANCHORS: broken.json UNCLASSIFIABLE" in proc.stdout, proc.stdout
     assert "drifted=0" in proc.stdout, (
         "unclassifiable JSON must not contribute to anchor drift count:\n"
@@ -1651,7 +1667,11 @@ def test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation(
 def test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success(
     tmp_path: Path,
 ) -> None:
-    """AC-6.4: skipped and unclassifiable files are listed even for ANCHORS_OK."""
+    """AC-6.4 (rev AC-6.5): set-aside files are listed whatever the verdict.
+
+    The two categories part ways at the verdict now -- not-a-spec passes, an
+    unparseable file blocks -- but both must still be named on the sweep.
+    """
     clean = _project(tmp_path / "clean", [_kills_the_guard()])
     notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
     broken = tmp_path / "empty.json"
@@ -1669,8 +1689,8 @@ def test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success(
         capture_output=True, text=True,
     )
 
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "ANCHORS_OK" in proc.stdout, proc.stdout
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "ANCHORS_UNREADABLE" in proc.stdout, proc.stdout
     assert "notes.json" in proc.stdout and "empty.json" in proc.stdout, (
         "successful sweeps must name skipped and unclassifiable files:\n"
         + proc.stdout
@@ -2005,3 +2025,71 @@ class TestUnreadableIsNotDrift:
         h_mad_mutation_harness._check_anchors([spec])
         out = capsys.readouterr().out
         assert "drifted=" in out and "unreadable=" in out, out
+
+
+# --- AC-6.5: an unparseable file blocks, and both counts ride every summary ---
+#
+# Revision of AC-6.2/AC-6.4. `not-a-spec` (valid JSON, no `mutations`) is the
+# category that earns "not every file under docs/mutations/ is a spec"; a file
+# that is not JSON at all was never covered by that rationale. It folds into
+# ANCHORS_UNREADABLE rather than taking a verdict word of its own because the
+# consuming pre-push hook scores verdicts with an ordered substring `case` whose
+# default arm ALLOWS the push -- a new word would be silently non-blocking there.
+
+
+def test_a_not_a_spec_sibling_still_passes_the_sweep(tmp_path: Path) -> None:
+    """AC-6.5: valid JSON without mutations stays non-fatal -- the deliberate case."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(notes)],
+        capture_output=True, text=True,
+    )
+
+    assert proc.returncode == 0, (
+        "not every file under a spec directory is a spec; valid JSON that "
+        "declares no mutations must not block:\n" + proc.stdout
+    )
+    assert "ANCHORS: ANCHORS_OK" in proc.stdout, proc.stdout
+    assert "notes.json" in proc.stdout, proc.stdout
+
+
+def test_every_summary_line_carries_skipped_and_unclassifiable(tmp_path: Path) -> None:
+    """AC-6.5: the counts are computed on every sweep, so print them on every sweep."""
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+    notes = _write_json(tmp_path / "notes.json", {"title": HOSTILE_NON_SPEC_NOTE})
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(notes)],
+        capture_output=True, text=True,
+    )
+
+    summary = next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("ANCHORS: ANCHORS_OK")
+    )
+    assert "skipped=1" in summary, (
+        "a consumer that renders only the summary must be able to see that a "
+        "file was set aside:\n" + summary
+    )
+    assert "unclassifiable=0" in summary, summary
+
+
+def test_the_unreadable_advice_names_the_unparseable_case(tmp_path: Path) -> None:
+    """AC-6.5: folding into UNREADABLE must not leave the advice line misleading."""
+    malformed = tmp_path / "broken.json"
+    malformed.write_text("{not-json", encoding="utf-8")
+    clean = _project(tmp_path / "clean", [_kills_the_guard()])
+
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS), "--check-anchors", str(clean), str(malformed)],
+        capture_output=True, text=True,
+    )
+
+    assert "unclassifiable=1" in proc.stdout, proc.stdout
+    assert "not JSON at all" in proc.stdout, (
+        "UNREADABLE now covers two causes; the advice must name the new one so "
+        "the operator is not sent hunting for a missing target file:\n"
+        + proc.stdout
+    )

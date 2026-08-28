@@ -19,9 +19,10 @@ Verdicts, printed as a canonical token:
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
-    ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 exit 0
-    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=0 exit 2
-    ANCHORS: ANCHORS_UNREADABLE specs=17 mutations=243 ok=240 drifted=2 unreadable=1 exit 2
+    ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 skipped=1 unclassifiable=0 exit 0
+    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=0 skipped=0 unclassifiable=0 exit 2
+    ANCHORS: ANCHORS_UNREADABLE specs=17 mutations=243 ok=240 drifted=2 unreadable=1 skipped=0 unclassifiable=0 exit 2
+      (also the verdict when unclassifiable>0 — a file that is not JSON at all)
     ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=1 exit 2
 
 `survived` and `refused` both sit on the summary line because they answer
@@ -719,16 +720,30 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         print(f"[H-MAD] anchors {verdict}")
         return 2
 
+    # An unparseable file rides the UNREADABLE verdict rather than taking a word
+    # of its own: the consuming pre-push hook scores verdicts with an ordered
+    # substring `case` whose default arm ALLOWS the push, so a new word would be
+    # silently non-blocking there. `unclassifiable=` on the summary keeps the two
+    # causes distinguishable without a coordinated release.
     verdict = (
-        "ANCHORS_UNREADABLE" if unreadable
+        "ANCHORS_UNREADABLE" if unreadable or unclassifiable
         else "ANCHORS_DRIFTED" if drifted
         else "ANCHORS_OK"
     )
     print(
         f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
-        f"ok={ok} drifted={drifted} unreadable={unreadable}"
+        f"ok={ok} drifted={drifted} unreadable={unreadable} "
+        f"skipped={skipped} unclassifiable={unclassifiable}"
     )
-    if verdict == "ANCHORS_UNREADABLE":
+    if unclassifiable:
+        print(
+            "  a file under a swept glob that is not JSON at all is a broken spec "
+            "until proven otherwise — it judged nothing, so this is not a clean "
+            "anchor check. Fix it, or stop matching it with the glob. (A file that "
+            "IS valid JSON but declares no mutations is reported SKIPPED not-a-spec "
+            "and never blocks.)"
+        )
+    if unreadable:
         print(
             "  a spec whose TARGET FILE cannot be read aims at something that is no "
             "longer there, so its guard is unverified and it cannot be re-anchored "
