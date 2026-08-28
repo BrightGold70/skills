@@ -1,0 +1,60 @@
+{
+  "_why": "Two guards, and they are load-bearing for each other: a marker-less poll is only safe because --out is written atomically, and an atomic write only matters because something polls for the file. Mutating either alone must fail, which is what pins the pair.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_report_wait.py",
+    "tests/test_hmad_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "marker-less-becomes-the-default",
+      "_mechanism": "Flip the opt-in and every existing report-wait caller silently loses the .done contract -- the one thing keeping a half-written report unreadable. Nobody asked for that, and nothing in their invocation would show it changed.",
+      "file": "scripts/h_mad_report_wait.py",
+      "find": "                sleep=time.sleep, require_marker=True):",
+      "replace": "                sleep=time.sleep, require_marker=False):",
+      "test": "tests/test_h_mad_report_wait.py::TestNoDoneMarker::test_the_default_still_requires_the_marker"
+    },
+    {
+      "name": "an-empty-file-counts-as-complete",
+      "_mechanism": "With the marker gone, non-emptiness is the ONLY integrity check left. Drop it and a freshly-created zero-byte file reads as a finished report -- exactly what a `>` redirect produces at the instant it truncates.",
+      "file": "scripts/h_mad_report_wait.py",
+      "find": "        if marker_ok and os.path.isfile(path) and os.path.getsize(path) > 0:",
+      "replace": "        if marker_ok and os.path.isfile(path):",
+      "test": "tests/test_h_mad_report_wait.py::TestNoDoneMarker::test_an_empty_file_is_still_not_complete"
+    },
+    {
+      "name": "out-is-written-non-atomically-again",
+      "_mechanism": "The half the poller's correctness rests on. A plain cp can be observed mid-copy, so the marker-less poll -- which trusts the file's appearance -- reads a truncated verdict as a real one. Restores the race the .done marker was invented to prevent, by another door. Pinned by a STRUCTURAL assertion because atomicity has no externally observable trace that cp+rm does not also produce -- this mutation is what proved the behavioural tests could not see it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  mv -f \"$tmp\" \"$dest\"",
+      "replace": "  cp \"$tmp\" \"$dest\"; rm -f \"$tmp\"",
+      "test": "tests/test_hmad_dispatch.py::TestAtomicOutWrite::test_the_write_is_a_rename_not_a_copy"
+    },
+    {
+      "name": "the-temp-crosses-a-filesystem",
+      "_mechanism": "Same-directory is what makes the rename atomic. Put the temp in /tmp and `mv` silently degrades to copy-then-unlink across a filesystem boundary -- the race returns while the code still reads as atomic. Re-anchored when the $$ temp was replaced by mktemp to fix a collision the full suite caught; --check-anchors refused rather than measuring nothing.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  tmp=\"$(mktemp \"$(dirname -- \"$dest\")/.hmad_out.XXXXXX\")\" || return 1",
+      "replace": "  tmp=\"$(mktemp \"/tmp/.hmad_out.XXXXXX\")\" || return 1",
+      "test": "tests/test_hmad_dispatch.py::TestAtomicOutWrite::test_the_temp_sits_beside_the_destination"
+    },
+    {
+      "name": "one-temp-path-for-every-write",
+      "_mechanism": "The bug this helper shipped with for one suite run. `$$` is constant across every --out a single wrapper invocation writes, and audit-cycle writes one per pass -- so two writes share a temp and one clobbers the other. audit-cycle silently lost its p1 report. Fixing a race by adding a race.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  tmp=\"$(mktemp \"$(dirname -- \"$dest\")/.hmad_out.XXXXXX\")\" || return 1",
+      "replace": "  tmp=\"$(dirname -- \"$dest\")/.hmad_out.$$.tmp\"",
+      "test": "tests/test_hmad_dispatch.py::TestAtomicOutWrite::test_two_writes_in_one_process_do_not_share_a_temp"
+    }
+  ]
+}

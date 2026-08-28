@@ -612,7 +612,7 @@ and because the verb's shape is otherwise hard to justify:
    Reading that as the dispatch rc turns **every failure into a success** — the same
    `$?`-shaped defect §"Audit-gate signal discipline" forbids elsewhere. Capture rc from
    the command itself (`echo $? > <o>.rc`, verified returning 3 and 7 correctly), or use
-   `report-wait`, which polls a path plus a `.done` marker and is transport-agnostic.
+   `report-wait`, which polls a path plus a `.done` marker and is transport-agnostic. **For a backgrounded `exec`, poll its `--out` with `report-wait <out> --no-done-marker`** rather than a sleep ladder — waiting on one was written ~25 times in a single session as `for i in 1 2 3; do hmad-dispatch run --timeout 110 -- sleep 105; done` plus a `test -f`, whose purpose is invisible to the next reader and whose arithmetic, when wrong, wastes wall-clock silently. The flag is opt-in because the `.done` marker is what keeps a half-written report unreadable for every other caller, and it is only sound at all because `exec` writes `--out` **atomically** (temp + rename): a `cp` or a `>` redirect can put a partial — or, for a redirect, a zero-byte — file under a poller checking existence, and a truncated verdict reads exactly like a real one. Note the verb name: `await` is already taken by the Orca task-id wait and answers a different contract.
    `exec-pane` never calls `terminal wait` at all.
 
 3. **`wait --for exit` is unusable here in both directions.** End the command with `exit`

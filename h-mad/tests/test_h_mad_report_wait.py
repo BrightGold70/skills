@@ -5,9 +5,13 @@ be invoked directly with `python3 h_mad_report_wait.py <path> …`, so the
 coordinator can poll for a dropped report WITHOUT re-parsing hmad-dispatch.sh
 while a dispatched implementer is mid-edit on that wrapper.
 """
+import io
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from h_mad_report_wait import report_wait  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "h_mad_report_wait.py"
 
@@ -65,3 +69,80 @@ def test_wrapper_independent_no_hmad_dispatch_reference():
     assert "subprocess" not in src
     assert "os.system" not in src and "os.popen" not in src
     assert "import os" in src and "import sys" in src  # stdlib only
+
+
+class TestNoDoneMarker:
+    """The `exec --out` case: a file that IS its own completion signal.
+
+    `report-wait` exists for an agent that writes a report and then drops
+    `<path>.done`, and the marker is the whole point — it is what makes a
+    half-written report unreadable. `exec --out` has no marker: the file is copied
+    into place once the agent has finished, so its appearance is the signal.
+
+    Waiting on that was written ~25 times in one session as
+    `for i in 1 2 3; do hmad-dispatch run --timeout 110 -- sleep 105; done` plus a
+    `test -f <out>` — a sleep ladder whose arithmetic, when wrong, silently wastes
+    wall-clock and whose purpose is invisible to the next reader.
+
+    `--no-done-marker` is opt-IN, and deliberately so: defaulting to
+    existence-as-completion would silently weaken every existing `report-wait`
+    caller, turning the marker contract off for people who never asked.
+    """
+
+    def test_a_file_without_a_marker_is_returned(self, tmp_path):
+        path = tmp_path / "out.txt"
+        path.write_text("VERDICT: ok\n", encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+
+        rc = report_wait(str(path), timeout=1, interval=0, out=out, err=err,
+                         require_marker=False)
+
+        assert rc == 0
+        assert out.getvalue() == "VERDICT: ok\n"
+
+    def test_an_empty_file_is_still_not_complete(self, tmp_path):
+        """Non-emptiness is the only integrity check left once the marker is gone,
+        so it must not be dropped with it."""
+        path = tmp_path / "out.txt"
+        path.write_text("", encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+
+        rc = report_wait(str(path), timeout=0, interval=0, out=out, err=err,
+                         require_marker=False)
+
+        assert rc == 1
+        assert out.getvalue() == ""
+
+    def test_the_default_still_requires_the_marker(self, tmp_path):
+        """The regression that would matter most: existing callers rely on the
+        marker to keep a half-written report unreadable."""
+        path = tmp_path / "out.txt"
+        path.write_text("half a rep", encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+
+        rc = report_wait(str(path), timeout=0, interval=0, out=out, err=err)
+
+        assert rc == 1, "a file with no .done marker must not be read by default"
+        assert out.getvalue() == ""
+
+    def test_the_timeout_message_names_the_right_condition(self, tmp_path):
+        """With no marker there is no marker to report missing; saying so would
+        send the reader looking for a file that was never part of the contract."""
+        path = tmp_path / "out.txt"
+        out, err = io.StringIO(), io.StringIO()
+
+        report_wait(str(path), timeout=0, interval=0, out=out, err=err,
+                    require_marker=False)
+
+        assert ".done" not in err.getvalue(), err.getvalue()
+
+    def test_cli_exposes_the_flag(self, tmp_path):
+        path = tmp_path / "out.txt"
+        path.write_text("VERDICT: ok\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), str(path), "--timeout", "1",
+             "--interval", "0", "--no-done-marker"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "VERDICT: ok" in result.stdout

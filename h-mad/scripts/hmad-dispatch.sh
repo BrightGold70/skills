@@ -1275,6 +1275,26 @@ _cmd_gate_wait() {  # <gate_id> [--timeout <s>] [--interval <s>]
   return 1
 }
 
+_write_out_atomic() {  # <dest> [<srcfile>] — content on stdin when no srcfile
+  # `--out` is what a waiter polls for, so it must never be observable
+  # half-written. `cp` is not atomic and `> "$dest"` truncates before it writes, so
+  # both can put a partial (or zero-byte) file under a poller that is checking
+  # existence — and a truncated verdict reads exactly like a real one. Write to a
+  # temp in the SAME directory, then rename: rename(2) is atomic within a
+  # filesystem, and same-directory is what keeps it a rename rather than a copy.
+  local dest="$1" src="${2:-}" tmp
+  # mktemp, not "$$": a single wrapper invocation can write --out more than
+  # once (audit-cycle stages a report per pass), and $$ is constant across
+  # them — one shared temp path means one write can clobber another's. Caught
+  # by the full suite: audit-cycle silently lost its p1 report. Fixing a race
+  # with a race is the failure this helper exists to prevent.
+  tmp="$(mktemp "$(dirname -- "$dest")/.hmad_out.XXXXXX")" || return 1
+  if [ -n "$src" ]; then cp "$src" "$tmp" || { rm -f "$tmp"; return 1; }
+  else cat > "$tmp" || { rm -f "$tmp"; return 1; }
+  fi
+  mv -f "$tmp" "$dest"
+}
+
 _cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
   # Wait for a dispatched agent to DROP a report file, then emit it. This is the
   # reliable alternative to wait+read+sentinel-extract under Orca: the agent writes
@@ -1285,6 +1305,12 @@ _cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
   # can write a file works (cmux or orca), so it needs no _require_orca.
   # The .done marker (not just file existence) is the signal, so a half-written
   # report is never read; the file must also be non-empty.
+  #
+  # `--no-done-marker` polls a file that IS its own completion signal — the
+  # `exec --out` case, copied into place once the agent has finished. Opt-in:
+  # the marker is what keeps a half-written report unreadable for everyone
+  # else, and it is sound here only because `exec` now writes `--out`
+  # atomically (`_write_out_atomic`).
   #
   # H3 decoupling: the polling loop lives in the standalone stdlib script
   # h_mad_report_wait.py, which this verb delegates to. When the dispatched
@@ -2425,7 +2451,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     _HMAD_EXEC_BEAT_LOG=""
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && cp "$last" "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && _write_out_atomic "$out" "$last"
       cat "$last"
       [ -n "$auto_log" ] && cat "$log" >&2 || true
       [ -n "$auto_log" ] && rm -f "$log"
@@ -2477,7 +2503,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     resp="$(_agy_ndjson_response "$log" "$pre_lines")"
     verdict="$resp"
     if [ -n "$resp" ]; then
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$resp" > "$out"
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$resp" | _write_out_atomic "$out"
       printf '%s\n' "$resp"
       # An auto-log is dumped as a DIGEST, not raw: the raw stream is NDJSON with
       # full tool payloads embedded, and spraying that at stderr buries the very
@@ -2533,7 +2559,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
       echo "hmad-dispatch: exec: verdict recovered from log ($log)" >&2
       verdict="$recovered"
       printf '%s\n' "$recovered"
-      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$recovered" > "$out" || true
+      [ -n "$out" ] && _out_clobber_ok "$out" "$out_fp" && printf '%s\n' "$recovered" | _write_out_atomic "$out" || true
     fi
     if git -C "$cd_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       local delta

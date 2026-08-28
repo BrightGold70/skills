@@ -4386,3 +4386,92 @@ def test_worktree_list_is_documented_in_the_verb_line(tmp_path):
     header = [ln for ln in text.splitlines()[:10] if ln.startswith("# Verbs:")]
     assert header, "the header verb line is gone"
     assert "worktree-list" in header[0]
+
+
+class TestAtomicOutWrite:
+    """`--out` is what a waiter polls for, so it must never be half-written.
+
+    `report-wait --no-done-marker` treats the file's appearance as completion,
+    which is sound only if the file appears complete. Before this, `exec` wrote
+    `--out` three different non-atomic ways — a `cp` and two `>` redirects — and a
+    redirect truncates BEFORE it writes, so a poller could catch a zero-byte or
+    partial file. A truncated verdict reads exactly like a real one, which is the
+    failure the `.done` marker exists to prevent; adding a marker-less poller
+    without this would have re-entered it by another door.
+    """
+
+    def _run(self, script: str, tmp_path):
+        return subprocess.run(
+            ["bash", "-c", f'source "{WRAPPER}" 2>/dev/null || true\n{script}'],
+            capture_output=True, text=True, cwd=str(tmp_path),
+        )
+
+    def test_content_from_a_source_file_lands_whole(self, tmp_path):
+        src = tmp_path / "src.txt"
+        src.write_text("VERDICT: ok\n", encoding="utf-8")
+        dest = tmp_path / "out.txt"
+        self._run(f'_write_out_atomic "{dest}" "{src}"', tmp_path)
+        assert dest.read_text(encoding="utf-8") == "VERDICT: ok\n"
+
+    def test_content_from_stdin_lands_whole(self, tmp_path):
+        dest = tmp_path / "out.txt"
+        self._run(f'printf "VERDICT: ok\\n" | _write_out_atomic "{dest}"', tmp_path)
+        assert dest.read_text(encoding="utf-8") == "VERDICT: ok\n"
+
+    def test_no_temp_file_is_left_behind(self, tmp_path):
+        dest = tmp_path / "out.txt"
+        self._run(f'printf "x\\n" | _write_out_atomic "{dest}"', tmp_path)
+        leftovers = list(tmp_path.glob(".hmad_out.*"))
+        assert leftovers == [], leftovers
+
+    def test_the_temp_sits_beside_the_destination(self, tmp_path):
+        """Same directory is what makes the rename atomic. A temp in /tmp would
+        cross a filesystem, and `mv` would silently degrade to copy-then-unlink —
+        the very race this replaces, reintroduced invisibly."""
+        source = WRAPPER.read_text(encoding="utf-8")
+        body = source[source.index("_write_out_atomic() {"):]
+        body = body[:body.index("\n}\n")]
+        assert 'dirname -- "$dest"' in body, body
+
+    def test_the_write_is_a_rename_not_a_copy(self, tmp_path):
+        """Asserted structurally, on purpose.
+
+        Atomicity is a property of the MECHANISM and cannot be observed from
+        outside without racing the writer — every externally visible trace of
+        `mv` (content lands, no temp remains) is equally satisfied by
+        `cp` + `rm`, which is not atomic. Mutation testing proved exactly that:
+        swapping `mv -f` for `cp; rm -f` left every behavioural assertion green.
+        So the guard has to name the syscall.
+        """
+        source = WRAPPER.read_text(encoding="utf-8")
+        body = source[source.index("_write_out_atomic() {"):]
+        body = body[:body.index("\n}\n")]
+        assert "mv -f" in body, body
+        assert "cp \"$tmp\"" not in body, body
+
+    def test_two_writes_in_one_process_do_not_share_a_temp(self, tmp_path):
+        """The regression this helper introduced and the full suite caught.
+
+        The first version keyed the temp on `$$`, which is constant across every
+        write a single wrapper invocation makes — and audit-cycle writes `--out`
+        once per pass. One shared temp path means one write can clobber another's,
+        and the p1 report vanished. Fixing a race by adding a race is precisely
+        what this helper exists to prevent, so the uniqueness is pinned.
+        """
+        source = WRAPPER.read_text(encoding="utf-8")
+        body = source[source.index("_write_out_atomic() {"):]
+        body = body[:body.index("\n}\n")]
+        assert "mktemp" in body, body
+        assert ".hmad_out.$$." not in body, body
+
+    def test_every_out_write_goes_through_the_helper(self, tmp_path):
+        """Swept, not spot-checked: three sites wrote `--out` and all three were
+        non-atomic in two different ways. A fourth added later must not quietly
+        reopen the hole."""
+        source = WRAPPER.read_text(encoding="utf-8")
+        offenders = [
+            line.strip() for line in source.splitlines()
+            if '"$out"' in line and "_out_clobber_ok" in line
+            and "_write_out_atomic" not in line
+        ]
+        assert offenders == [], offenders

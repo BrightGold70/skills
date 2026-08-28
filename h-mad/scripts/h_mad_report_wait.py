@@ -27,7 +27,8 @@ import sys
 import time
 
 
-def report_wait(path, timeout, interval, *, out=sys.stdout, err=sys.stderr, sleep=time.sleep):
+def report_wait(path, timeout, interval, *, out=sys.stdout, err=sys.stderr,
+                sleep=time.sleep, require_marker=True):
     if path is None or path == "":
         print("h_mad_report_wait: missing required argument: report-path", file=err)
         return 2
@@ -35,19 +36,30 @@ def report_wait(path, timeout, interval, *, out=sys.stdout, err=sys.stderr, slee
         print(f"h_mad_report_wait: report-path looks like a flag: {path} "
               f"(pass the path first)", file=err)
         return 2
+    # `require_marker=False` is the `exec --out` case: that file has no marker
+    # because it is COPIED into place once the agent has finished, so its
+    # appearance is the completion signal. Opt-IN, never the default — flipping it
+    # would silently turn the marker contract off for every existing caller, and
+    # the marker is the only thing standing between them and a half-written report.
+    #
+    # It is sound only because `hmad-dispatch exec` writes `--out` atomically
+    # (temp + os.replace). A plain `cp` there would put a truncated file under this
+    # poller's nose and a truncated verdict reads exactly like a real one — the
+    # failure the marker was invented to prevent, re-entered by another door.
     marker = path + ".done"
     tick = interval if interval >= 1 else 1
     elapsed = 0
     while elapsed <= timeout:
-        if os.path.isfile(marker) and os.path.isfile(path) and os.path.getsize(path) > 0:
+        marker_ok = os.path.isfile(marker) if require_marker else True
+        if marker_ok and os.path.isfile(path) and os.path.getsize(path) > 0:
             with open(path, "r") as f:
                 out.write(f.read())
             return 0
         if interval > 0:
             sleep(interval)
         elapsed += tick
-    print(f"[H-MAD] report-wait timed out after {timeout}s "
-          f"(missing {marker} or empty {path})", file=err)
+    missing = f"missing {marker} or empty {path}" if require_marker else f"missing or empty {path}"
+    print(f"[H-MAD] report-wait timed out after {timeout}s ({missing})", file=err)
     # A missing report is not a verdict. It has been caused by the dispatch never
     # arriving (a rotated handle: the pane shows `terminal_handle_stale`) and by
     # the agent stopping mid-run with correct work already on disk
@@ -74,8 +86,15 @@ def main(argv=None):
     p.add_argument("--timeout", type=int, default=300)
     default_interval = int(os.environ.get("HMAD_REPORT_POLL_INTERVAL", "2"))
     p.add_argument("--interval", type=int, default=default_interval)
+    p.add_argument(
+        "--no-done-marker", dest="require_marker", action="store_false",
+        help="treat the file's own appearance as completion, with no .done marker. "
+             "For `exec --out`, which is copied into place at completion. Opt-in: the "
+             "marker is what keeps a half-written report unreadable for everyone else.",
+    )
     args = p.parse_args(argv)
-    return report_wait(args.path, args.timeout, args.interval)
+    return report_wait(args.path, args.timeout, args.interval,
+                       require_marker=args.require_marker)
 
 
 if __name__ == "__main__":
