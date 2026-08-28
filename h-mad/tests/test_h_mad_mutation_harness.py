@@ -2093,3 +2093,65 @@ def test_the_unreadable_advice_names_the_unparseable_case(tmp_path: Path) -> Non
         "the operator is not sent hunting for a missing target file:\n"
         + proc.stdout
     )
+
+
+# --- JSONC configs are classifiable, corrupted specs are still not -----------
+#
+# A directory sweep sees config files as well as specs. `tsconfig.json` and
+# friends are JSONC, which is not valid strict JSON, and refusing to classify one
+# made the whole sweep UNREADABLE -- failing the pre-push hook for every commit in
+# the repository over a file that could never have been a spec.
+
+
+JSONC_CONFIG = """{
+  "compilerOptions": {
+    // a line comment
+    "target": "ES2020",
+
+    /* a block comment */
+    "strict": true
+  }
+}
+"""
+
+
+def test_jsonc_config_is_not_a_spec(tmp_path: Path) -> None:
+    path = tmp_path / "tsconfig.json"
+    path.write_text(JSONC_CONFIG, encoding="utf-8")
+    kind, detail = classify_spec_file(path)
+    assert kind == "not-a-spec"
+    assert "mutations" in detail
+
+
+def test_jsonc_that_carries_mutations_stays_unclassifiable(tmp_path: Path) -> None:
+    """The fail-closed direction, and the reason the retry is one-way.
+
+    `_load_spec` parses with strict json, so this file could never load as a
+    spec -- but quietly calling it 'not a spec' is how a real spec written or
+    corrupted into JSONC would vanish from the sweep.
+    """
+    path = tmp_path / "sneaky.json"
+    path.write_text(
+        '{\n  // a comment\n  "mutations": [{"name": "m"}]\n}\n', encoding="utf-8"
+    )
+    kind, detail = classify_spec_file(path)
+    assert kind == "unclassifiable"
+    assert "not valid JSON" in detail
+
+
+def test_corrupted_json_is_still_unclassifiable(tmp_path: Path) -> None:
+    """The control. Removing comments does not repair truncation, so the
+    fail-closed path this whole classifier exists for is untouched."""
+    path = tmp_path / "corrupt.json"
+    path.write_text('{"mutations": [{"name": "m"', encoding="utf-8")
+    kind, detail = classify_spec_file(path)
+    assert kind == "unclassifiable"
+    assert "not valid JSON" in detail
+
+
+def test_strip_jsonc_leaves_comment_markers_inside_strings(tmp_path: Path) -> None:
+    """A naive stripper would cut the value in half and turn a valid config into
+    an unclassifiable one -- the opposite of the fix."""
+    mod = h_mad_mutation_harness
+    text = '{"url": "https://example.com/a//b", "path": "/*not*/a comment"}'
+    assert mod._strip_jsonc(text) == text

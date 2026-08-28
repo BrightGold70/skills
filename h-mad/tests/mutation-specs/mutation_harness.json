@@ -59,7 +59,7 @@
       "name": "drop-the-near-miss-hint",
       "_mechanism": "The REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved. Anchored in `anchor_status`, which both the precheck and the run read.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found — the anchor may be gone entirely\"\n        ]",
+      "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found \u2014 the anchor may be gone entirely\"\n        ]",
       "replace": "        return hits, []",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_drifted_anchor_gets_a_near_miss_with_a_line_number"
     },
@@ -169,7 +169,7 @@
     },
     {
       "name": "precheck-calls-a-drifted-anchor-ok",
-      "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
+      "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land \u2014 exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
       "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
@@ -235,7 +235,7 @@
       "name": "swallow-a-corrupt-spec-as-a-skip",
       "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE — {exc}\")\n            continue",
+      "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE \u2014 {exc}\")\n            continue",
       "replace": "        except SpecError:\n            skipped += 1\n            continue",
       "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
     },
@@ -243,7 +243,7 @@
       "name": "stop-naming-skipped-files-on-a-successful-sweep",
       "_mechanism": "Skipped files stop being named, so an operator cannot tell `swept 17` from `swept 12 and quietly ignored 5`.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
+      "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec \u2014 {detail}\")",
       "replace": "            pass",
       "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
     },
@@ -297,11 +297,18 @@
     },
     {
       "name": "a-bad-spec-aborts-the-sweep",
-      "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
+      "_mechanism": "One unreadable spec would hide the drift in every spec after it \u2014 and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
       "file": "scripts/h_mad_mutation_harness.py",
       "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
       "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
+    },
+    {
+      "name": "classify-jsonc-retry-drop",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
+      "replace": "        if True:\n        try:\n            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding=\"utf-8\")))\n        except (OSError, json.JSONDecodeError):\n            return \"unclassifiable\", f\"not valid JSON: {exc}\"\n",
+      "failure_test": "test_jsonc_config_is_not_a_spec"
     }
   ]
 }

@@ -91,6 +91,47 @@ class SpecError(Exception):
     """The spec could not be read or does not describe a runnable mutation set."""
 
 
+def _strip_jsonc(text: str) -> str:
+    """Remove `//` and `/* */` comments that sit outside string literals.
+
+    JSONC is the config dialect TypeScript, VS Code and friends write. It is
+    never a mutation-spec dialect: `_load_spec` parses with strict ``json``, so
+    a spec written with comments could not load even if we accepted it here.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    in_string = False
+    while i < n:
+        ch = text[i]
+        if in_string:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n:
+            if text[i + 1] == "/":
+                end = text.find("\n", i)
+                i = n if end == -1 else end
+                continue
+            if text[i + 1] == "*":
+                end = text.find("*/", i + 2)
+                i = n if end == -1 else end + 2
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def classify_spec_file(path: Path) -> tuple[str, str | None]:
     """('spec'|'not-a-spec'|'unclassifiable', detail).
 
@@ -103,7 +144,27 @@ def classify_spec_file(path: Path) -> tuple[str, str | None]:
     except OSError as exc:
         return "unclassifiable", f"cannot read JSON: {exc}"
     except json.JSONDecodeError as exc:
-        return "unclassifiable", f"not valid JSON: {exc}"
+        # A directory sweep sees config files, not only specs, and a JSONC config
+        # (`tsconfig.json` and friends) is not valid strict JSON. Refusing to
+        # classify one makes the whole sweep UNREADABLE, which fails the pre-push
+        # hook for every commit in the repository -- a real, repo-wide block whose
+        # cause is a file that could never have been a spec.
+        #
+        # Retry with comments removed, and accept the answer ONLY in the direction
+        # that cannot hide a corrupted spec: if it now parses and carries no
+        # `mutations` list, it is definitively not a spec. A file that parses only
+        # after comment-stripping AND carries a `mutations` list stays
+        # unclassifiable -- `_load_spec` would reject it anyway, and silence there
+        # is exactly the hole the fail-closed default exists to keep shut. A
+        # genuinely corrupted spec does not become valid by removing comments, so
+        # that path is untouched.
+        try:
+            relaxed = json.loads(_strip_jsonc(Path(path).read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            return "unclassifiable", f"not valid JSON: {exc}"
+        if isinstance(relaxed, dict) and relaxed.get("mutations"):
+            return "unclassifiable", f"not valid JSON: {exc}"
+        return "not-a-spec", "JSONC config file, no non-empty `mutations` list"
 
     if not isinstance(data, dict):
         return "not-a-spec", "JSON object has no non-empty `mutations` list"
