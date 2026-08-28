@@ -316,3 +316,144 @@ def test_differing_exit_codes_do_not_manufacture_a_difference(
 
     assert result["verdict"] == "SAME", result
     assert result["exits"]["b"] == 9
+
+
+class TestObservableFidelity:
+    """J39 — `_observe` took the FIRST regex match; every other extractor in this
+    skill takes the LAST.
+
+    `h_mad_extract_verdict.py` uses `matches[-1]` deliberately, because an agent's
+    log contains the prompt before it contains the answer. `_observe` used
+    `pattern.search()`, so a prompt echo — the observable's own name, quoted back
+    in the instruction the agent was given — wins over the value the agent
+    actually produced. Measured before the fix: a log containing the instruction
+    `emit a line like RESULT: <n>`, then `RESULT: 0` as the echo, then `RESULT: 42`
+    as the real answer, returned **0**.
+
+    The consequence is specific to what this tool is for. Both arms echo the same
+    prompt, so both observe the same value, so the run reports `SAME` — "the rule
+    is present and not causally effective" — which is a *finding*, not an error. A
+    tool built to establish causality would have been reporting the prompt back to
+    the operator as a result.
+    """
+
+    def test_the_last_match_wins_not_the_prompt_echo(self, tmp_path):
+        import re
+        from h_mad_ab_dispatch import _observe
+
+        log = tmp_path / "arm.log"
+        log.write_text(
+            "Instruction: emit a line like RESULT: <n>\n"
+            "RESULT: 0\n"
+            "...agent works...\n"
+            "RESULT: 42\n",
+            encoding="utf-8",
+        )
+
+        assert _observe(log, re.compile(r"RESULT: (\d+)")) == "42"
+
+    def test_a_single_match_is_unchanged(self, tmp_path):
+        """The accept direction — last-match must not break the ordinary log."""
+        import re
+        from h_mad_ab_dispatch import _observe
+
+        log = tmp_path / "arm.log"
+        log.write_text("noise\nRESULT: 7\nmore noise\n", encoding="utf-8")
+
+        assert _observe(log, re.compile(r"RESULT: (\d+)")) == "7"
+
+    def test_no_match_is_still_none(self, tmp_path):
+        """`None` drives INCONCLUSIVE. Two silent arms must never compare equal,
+        so this may not start returning an empty string."""
+        import re
+        from h_mad_ab_dispatch import _observe
+
+        log = tmp_path / "arm.log"
+        log.write_text("nothing here\n", encoding="utf-8")
+
+        assert _observe(log, re.compile(r"RESULT: (\d+)")) is None
+
+    def test_matches_the_extractor_this_skill_already_standardised_on(self, tmp_path):
+        """Pinned against the real extractor rather than restating its rule here.
+
+        The defect was an inconsistency, so the assertion is the consistency: if
+        `extract_verdict` ever changes which match wins, this fails and someone
+        decides deliberately instead of the two drifting apart again.
+        """
+        import re
+        from h_mad_ab_dispatch import _observe
+        from h_mad_extract_verdict import extract_verdict
+
+        body = "VALUE: first\nnoise\nVALUE: last\n"
+        log = tmp_path / "arm.log"
+        log.write_text(body, encoding="utf-8")
+
+        assert _observe(log, re.compile(r"VALUE: (\w+)")) == extract_verdict(body, "VALUE")
+
+    def test_a_regex_without_a_capture_group_is_refused_at_the_boundary(self, tmp_path):
+        """Already true before this change; pinned because last-match is being
+        rewritten around `group(1)` and losing this would turn an operator error
+        into a stack trace mid-dispatch. Probed first: the guard exists and prints
+        `--observe needs exactly one capture group`, so this is a regression pin,
+        not a new fix."""
+        result = subprocess.run(
+            [sys.executable, str(AB), "--template", str(tmp_path / "t.md"),
+             "--var", "V", "--a", "x", "--b", "y",
+             "--observe", r"RESULT: \d+", "--out", str(tmp_path / "o"),
+             "--run", "true"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 2, result.stdout
+        assert "capture group" in (result.stdout + result.stderr)
+
+
+class TestRunTokenParsing:
+    """J38 — the invocation SKILL.md documents is the one that fails.
+
+    `--run` is `action="append"`, so argparse treats a value beginning with `-` as
+    an option: `--run --model` errors with `expected one argument` while
+    `--run=--model` works. Every real dispatch argv starts with flags, so the
+    documented space-separated form is broken for essentially every real use.
+    """
+
+    def test_dash_leading_token_in_the_documented_space_separated_form(self, tmp_path):
+        template = tmp_path / "t.md"
+        template.write_text("R: {{V}}\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(AB), "--template", str(template),
+             "--var", "V", "--a", "on", "--b", "off",
+             "--observe", r"RESULT: (\d+)", "--out", str(tmp_path / "o"),
+             "--run", "echo", "--run", "--model", "--run", "gpt-5.5"],
+            capture_output=True, text=True,
+        )
+        combined = result.stdout + result.stderr
+        # Assert PARSING, never the outcome: INCONCLUSIVE legitimately exits 2, so
+        # scoring this on the exit code would pass for a tool that never parsed the
+        # argv at all — the same "exit code is not a verdict" trap this tool exists
+        # to enforce elsewhere.
+        assert "expected one argument" not in combined, combined
+        assert "usage:" not in combined, combined
+
+    def test_the_equals_form_still_works(self, tmp_path):
+        """It is what every existing caller had to use; it must not regress."""
+        template = tmp_path / "t.md"
+        template.write_text("R: {{V}}\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(AB), "--template", str(template),
+             "--var", "V", "--a", "on", "--b", "off",
+             "--observe", r"RESULT: (\d+)", "--out", str(tmp_path / "o"),
+             "--run=echo", "--run=--model", "--run=gpt-5.5"],
+            capture_output=True, text=True,
+        )
+        combined = result.stdout + result.stderr
+        assert "expected one argument" not in combined, combined
+        assert "usage:" not in combined, combined
+
+
+def test_skill_documents_a_run_form_that_actually_parses():
+    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    line = next(l for l in skill.splitlines() if "h_mad_ab_dispatch.py" in l and "--run" in l)
+    assert "--run" in line
+    # The documented form must not be the bare space-separated one that argparse
+    # rejects for a dash-leading token, unless the tool now accepts it.
+    assert "argv token" in line

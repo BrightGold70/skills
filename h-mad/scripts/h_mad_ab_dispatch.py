@@ -72,16 +72,57 @@ def is_controlled(template: str, var: str, value_a: str, value_b: str) -> str:
     return ""
 
 
+def _split_run_tokens(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Pull `--run <token>` pairs out of argv before argparse sees them.
+
+    argparse treats any value beginning with `-` as an option, so `--run --model`
+    fails with `expected one argument` while `--run=--model` works — and every real
+    dispatch argv starts with flags, which made the space-separated form SKILL.md
+    documents broken for essentially every real invocation (J38). Consuming the
+    token positionally here is what lets both forms work; the `=` form is left for
+    argparse so existing callers, who had to use it, are untouched.
+    """
+    rest: list[str] = []
+    tokens: list[str] = []
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "--run" and index + 1 < len(argv):
+            tokens.append(argv[index + 1])
+            index += 2
+            continue
+        rest.append(arg)
+        index += 1
+    return rest, tokens
+
+
 def _observe(log_path: Path, pattern: re.Pattern) -> str | None:
-    """The first capture of `pattern` in the log, or None if there is nothing."""
+    """The LAST capture of `pattern` in the log, or None if there is nothing.
+
+    Last, not first, and for the same reason `h_mad_extract_verdict.py` takes
+    `matches[-1]`: an agent's log contains the PROMPT before it contains the
+    answer, so the first match is routinely the observable's own name quoted back
+    out of the instruction the agent was given. Measured (J39): a log reading
+    `emit a line like RESULT: <n>` / `RESULT: 0` / … / `RESULT: 42` observed `0`.
+
+    That failure is specific to what this tool is for. Both arms echo the same
+    prompt, so both observe the same echoed value, so the run reports `SAME` — "the
+    rule is present and not causally effective" — which is a FINDING, not an
+    error. A tool built to establish causality was capable of reporting the prompt
+    back to the operator as its result.
+
+    `None` when nothing matched, never `""`: an unobserved arm must stay
+    distinguishable from an observed empty one, because two silent arms compare
+    equal and `SAME` is the most believable lie available (§`INCONCLUSIVE`).
+    """
     try:
         text = log_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
     if not text.strip():
         return None
-    match = pattern.search(text)
-    return match.group(1) if match else None
+    matches = list(pattern.finditer(text))
+    return matches[-1].group(1) if matches else None
 
 
 def run_ab(
@@ -149,10 +190,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="regex with ONE capture group, applied to each arm's log")
     parser.add_argument("--out", type=Path, required=True,
                         help="directory for the two prompts and two logs")
-    parser.add_argument("--run", action="append", required=True, metavar="TOKEN",
+    parser.add_argument("--run", action="append", metavar="TOKEN",
                         help="argv token for the dispatch; repeat. "
-                             "{prompt} and {log} are substituted per arm")
+                             "{prompt} and {log} are substituted per arm. "
+                             "A token beginning with '-' is fine in either form: "
+                             "`--run --model` and `--run=--model` both work")
+    argv, run_tokens = _split_run_tokens(sys.argv[1:] if argv is None else list(argv))
     args = parser.parse_args(argv)
+    if run_tokens:
+        args.run = (args.run or []) + run_tokens
+    if not args.run:
+        parser.error("--run is required")
 
     try:
         pattern = re.compile(args.observe)

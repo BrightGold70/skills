@@ -1,122 +1,146 @@
 {
- "root": "../..",
- "command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "tests/test_h_mad_ab_dispatch.py",
-  "-q"
- ],
- "target_command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "-q"
- ],
- "mutations": [
-  {
-   "name": "a-silent-arm-reads-as-same",
-   "_mechanism": "The defect the whole tool exists to prevent: two arms that observed nothing compare equal, and `SAME` is the most believable lie available — it reads as a real finding about the variable.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if silent:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_an_arm_that_produced_no_log_is_inconclusive"
-  },
-  {
-   "name": "an-empty-log-counts-as-an-observation",
-   "_mechanism": "Exit 0 with an empty log is exactly the shape of a dispatch killed by its parent shell — the failure this repo spent a session misreading as `agy is down`.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if not text.strip():\n        return None",
-   "replace": "    if False:\n        return None",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_a_blank_log_is_not_an_observation_even_for_a_permissive_probe"
-  },
-  {
-   "name": "a-non-matching-log-counts-as-an-observation",
-   "_mechanism": "A log that ran and says nothing about the observable is evidence the probe was aimed wrong, not evidence of sameness.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    return match.group(1) if match else None",
-   "replace": "    return match.group(1) if match else \"\"",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_an_arm_whose_observable_never_matched_is_inconclusive"
-  },
-  {
-   "name": "the-control-check-is-skipped",
-   "_mechanism": "An uncontrolled pair runs to completion, the numbers differ, and the difference is attributed to the wrong cause. The run looks exactly like a successful experiment.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if reason:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_a_template_without_the_variable_is_uncontrolled"
-  },
-  {
-   "name": "a-value-may-smuggle-the-placeholder",
-   "_mechanism": "A value containing {{VAR}} re-expands, so the arms differ in more than the declared variable while still looking like a single-variable diff.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if placeholder in value_a or placeholder in value_b:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_a_value_that_smuggles_in_the_other_arm_is_uncontrolled"
-  },
-  {
-   "name": "two-identical-values-are-a-valid-experiment",
-   "_mechanism": "Nothing varies, so any observed difference is noise between two runs of the same prompt — and it would be recorded as the variable's effect.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if value_a == value_b:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_two_equal_values_are_uncontrolled"
-  },
-  {
-   "name": "a-missing-placeholder-is-fine",
-   "_mechanism": "Both arms are then byte-identical; the tool would report DIFFERENT on run-to-run variation alone.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if placeholder not in template:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_a_template_without_the_variable_is_uncontrolled"
-  },
-  {
-   "name": "the-exit-code-decides-the-verdict",
-   "_mechanism": "The one surface that must never carry the finding. A killed dispatch, a skipped test and a clean run all exit 0, and this repo has been fooled by each of the three. The discriminating direction is observations EQUAL with exits DIFFERENT: a test where BOTH differ passes under the mutant, and named it a survivor.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    same = observations[\"a\"] == observations[\"b\"]",
-   "replace": "    same = exits[\"a\"] == exits[\"b\"]",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_differing_exit_codes_do_not_manufacture_a_difference"
-  },
-  {
-   "name": "the-crashed-arm-is-hidden",
-   "_mechanism": "The exit code is not scored, but it must still be reported: an arm that crashed and happened to differ would otherwise read as a clean result.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "        exits[arm] = runner(arm, prompt_path, log_path)",
-   "replace": "        runner(arm, prompt_path, log_path)",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_a_nonzero_exit_does_not_decide_the_verdict"
-  },
-  {
-   "name": "the-prompts-are-not-written",
-   "_mechanism": "An A/B nobody can re-read afterwards is an anecdote, and the arms are exactly what a reader needs to check the control claim independently.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "        prompt_path.write_text(prompts[arm], encoding=\"utf-8\")",
-   "replace": "        prompt_path.touch()",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_both_prompts_are_written_so_the_experiment_can_be_re_read"
-  },
-  {
-   "name": "an-observe-without-a-capture-group-is-accepted",
-   "_mechanism": "`match.group(1)` then raises AFTER both dispatches have been paid for — the most expensive possible moment to discover a typo in the probe.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    if pattern.groups < 1:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_cli_requires_a_capture_group"
-  },
-  {
-   "name": "the-cli-exits-0-on-inconclusive",
-   "_mechanism": "A caller reading `$?` cannot tell an experiment that measured nothing from one that measured a difference.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    return 0 if verdict in {\"DIFFERENT\", \"SAME\"} else 2",
-   "replace": "    return 0",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_cli_exits_2_on_inconclusive"
-  },
-  {
-   "name": "both-arms-get-the-same-value",
-   "_mechanism": "Silent collapse to a single-arm run wearing an experiment's report.",
-   "file": "scripts/h_mad_ab_dispatch.py",
-   "find": "    return template.replace(placeholder, value_a), template.replace(placeholder, value_b)",
-   "replace": "    return template.replace(placeholder, value_a), template.replace(placeholder, value_a)",
-   "test": "tests/test_h_mad_ab_dispatch.py::test_the_two_arms_differ_only_at_the_variable"
-  }
- ]
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_ab_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-silent-arm-reads-as-same",
+      "_mechanism": "The defect the whole tool exists to prevent: two arms that observed nothing compare equal, and `SAME` is the most believable lie available — it reads as a real finding about the variable.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if silent:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_an_arm_that_produced_no_log_is_inconclusive"
+    },
+    {
+      "name": "an-empty-log-counts-as-an-observation",
+      "_mechanism": "Exit 0 with an empty log is exactly the shape of a dispatch killed by its parent shell — the failure this repo spent a session misreading as `agy is down`.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if not text.strip():\n        return None",
+      "replace": "    if False:\n        return None",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_blank_log_is_not_an_observation_even_for_a_permissive_probe"
+    },
+    {
+      "name": "a-non-matching-log-counts-as-an-observation",
+      "_mechanism": "A log that ran and says nothing about the observable is evidence the probe was aimed wrong, not evidence of sameness. Re-anchored when J39 rewrote this line from first-match to last-match — the drift the harness caught rather than a reviewer, and the reason `--check-anchors` runs before every mutation run.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    return matches[-1].group(1) if matches else None",
+      "replace": "    return matches[-1].group(1) if matches else \"\"",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_an_arm_whose_observable_never_matched_is_inconclusive"
+    },
+    {
+      "name": "the-control-check-is-skipped",
+      "_mechanism": "An uncontrolled pair runs to completion, the numbers differ, and the difference is attributed to the wrong cause. The run looks exactly like a successful experiment.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if reason:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_template_without_the_variable_is_uncontrolled"
+    },
+    {
+      "name": "a-value-may-smuggle-the-placeholder",
+      "_mechanism": "A value containing {{VAR}} re-expands, so the arms differ in more than the declared variable while still looking like a single-variable diff.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if placeholder in value_a or placeholder in value_b:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_value_that_smuggles_in_the_other_arm_is_uncontrolled"
+    },
+    {
+      "name": "two-identical-values-are-a-valid-experiment",
+      "_mechanism": "Nothing varies, so any observed difference is noise between two runs of the same prompt — and it would be recorded as the variable's effect.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if value_a == value_b:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_two_equal_values_are_uncontrolled"
+    },
+    {
+      "name": "a-missing-placeholder-is-fine",
+      "_mechanism": "Both arms are then byte-identical; the tool would report DIFFERENT on run-to-run variation alone.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if placeholder not in template:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_template_without_the_variable_is_uncontrolled"
+    },
+    {
+      "name": "the-exit-code-decides-the-verdict",
+      "_mechanism": "The one surface that must never carry the finding. A killed dispatch, a skipped test and a clean run all exit 0, and this repo has been fooled by each of the three. The discriminating direction is observations EQUAL with exits DIFFERENT: a test where BOTH differ passes under the mutant, and named it a survivor.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    same = observations[\"a\"] == observations[\"b\"]",
+      "replace": "    same = exits[\"a\"] == exits[\"b\"]",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_differing_exit_codes_do_not_manufacture_a_difference"
+    },
+    {
+      "name": "the-crashed-arm-is-hidden",
+      "_mechanism": "The exit code is not scored, but it must still be reported: an arm that crashed and happened to differ would otherwise read as a clean result.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        exits[arm] = runner(arm, prompt_path, log_path)",
+      "replace": "        runner(arm, prompt_path, log_path)",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_nonzero_exit_does_not_decide_the_verdict"
+    },
+    {
+      "name": "the-prompts-are-not-written",
+      "_mechanism": "An A/B nobody can re-read afterwards is an anecdote, and the arms are exactly what a reader needs to check the control claim independently.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        prompt_path.write_text(prompts[arm], encoding=\"utf-8\")",
+      "replace": "        prompt_path.touch()",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_both_prompts_are_written_so_the_experiment_can_be_re_read"
+    },
+    {
+      "name": "an-observe-without-a-capture-group-is-accepted",
+      "_mechanism": "`match.group(1)` then raises AFTER both dispatches have been paid for — the most expensive possible moment to discover a typo in the probe.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if pattern.groups < 1:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_cli_requires_a_capture_group"
+    },
+    {
+      "name": "the-cli-exits-0-on-inconclusive",
+      "_mechanism": "A caller reading `$?` cannot tell an experiment that measured nothing from one that measured a difference.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    return 0 if verdict in {\"DIFFERENT\", \"SAME\"} else 2",
+      "replace": "    return 0",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_cli_exits_2_on_inconclusive"
+    },
+    {
+      "name": "both-arms-get-the-same-value",
+      "_mechanism": "Silent collapse to a single-arm run wearing an experiment's report.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    return template.replace(placeholder, value_a), template.replace(placeholder, value_b)",
+      "replace": "    return template.replace(placeholder, value_a), template.replace(placeholder, value_a)",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_the_two_arms_differ_only_at_the_variable"
+    },
+    {
+      "name": "observe-takes-the-prompt-echo",
+      "_mechanism": "J39 restored. An agent's log carries the PROMPT before the answer, so first-match returns the observable's own name quoted out of the instruction. Both arms echo the same prompt, so both observe the same value and the run reports SAME -- 'the rule is present and not causally effective'. That is a FINDING, not an error, which is why nothing downstream can catch it: the tool built to establish causality reports the prompt back as its result.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    return matches[-1].group(1) if matches else None",
+      "replace": "    return matches[0].group(1) if matches else None",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestObservableFidelity::test_the_last_match_wins_not_the_prompt_echo"
+    },
+    {
+      "name": "an-unobserved-arm-returns-empty-instead-of-none",
+      "_mechanism": "`None` is what drives INCONCLUSIVE. Return `\"\"` and two silent arms compare EQUAL, so a run that observed nothing reports SAME -- the exact lie the verdict set was designed around, reached through the observer instead of the comparator. Pinned to the BLANK-log test on purpose: this branch is the empty log, not the non-matching one, and the harness caught the mis-attribution by reporting the mutant as killed by the wrong assertion while its named test passed.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "    if not text.strip():\n        return None",
+      "replace": "    if not text.strip():\n        return \"\"",
+      "test": "tests/test_h_mad_ab_dispatch.py::test_a_blank_log_is_not_an_observation_even_for_a_permissive_probe"
+    },
+    {
+      "name": "run-token-parsing-reverts-to-argparse",
+      "_mechanism": "J38 restored. argparse reads any value beginning with '-' as an option, so the space-separated form SKILL.md documents dies with `expected one argument` -- for every real dispatch argv, since they all start with flags. The tool is then broken precisely as documented, which is the shape that survives longest.",
+      "file": "scripts/h_mad_ab_dispatch.py",
+      "find": "        if arg == \"--run\" and index + 1 < len(argv):",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_ab_dispatch.py::TestRunTokenParsing::test_dash_leading_token_in_the_documented_space_separated_form"
+    }
+  ]
 }
