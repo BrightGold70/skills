@@ -4401,8 +4401,24 @@ class TestAtomicOutWrite:
     """
 
     def _run(self, script: str, tmp_path):
+        """Source the wrapper for its helpers, with the dispatch call stripped.
+
+        `main "$@"` sits unguarded at the bottom beside `set -euo pipefail`, so
+        sourcing the file whole dispatches the EMPTY verb, hits the `*)` arm and
+        returns 2 -- and errexit, re-armed by line 5 inside the caller's own
+        shell, turns that into an exit of the sourcing shell before any helper
+        can be called. `|| true` does not save it. This is the same strip
+        `test_hmad_dispatch_audit_cycle.py` performs to reach `_cmd_*`, and
+        `test_verb_no_self_invocation` pins the `main "$@"` ending both rely on.
+        """
+        text = WRAPPER.read_text(encoding="utf-8")
+        assert text.rstrip().endswith('main "$@"'), (
+            "the strip below depends on the wrapper ending in its dispatch call"
+        )
+        lib = tmp_path / "wrapper-lib.sh"
+        lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
         return subprocess.run(
-            ["bash", "-c", f'source "{WRAPPER}" 2>/dev/null || true\n{script}'],
+            ["bash", "-c", f'source "{lib}"\n{script}'],
             capture_output=True, text=True, cwd=str(tmp_path),
         )
 
