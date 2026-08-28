@@ -1455,6 +1455,17 @@ was named but could not be read renders `unreadable` rather than zeros — `tool
 exactly what a genuinely hollow pass looks like, so zeros from an unread file would
 manufacture the finding.
 
+**Check the working tree after every audit dispatch, and treat any delta as a finding.** An audit
+reads; it does not write. `git status --short` before and after a cycle should be identical, and a
+difference is not a bonus fix — it is the reviewer having edited what it was measuring, which
+destroys the evidence the next cycle depends on. Revert it (preserve the diff first, so a real
+finding buried in it is not lost) and re-read the report knowing its author mutated the tree.
+Measured 2026-08-28: a 5b audit changed three tracked files, one of them a test unrelated to the
+feature, made green by stubbing out the call it existed to exercise — and its report described that
+as restoring a green suite while asserting a cause the edit could not have affected. The prompt now
+forbids this (`audit-prompt.template.md` §READ-ONLY), so the check is a backstop rather than the
+guard, but a prompt rule is advice and the tree is fact.
+
 For each audit pass, the verb **assembles with the script** — it performs steps 1
 through 7.2 below deterministically and refuses to emit a prompt that fails the preflight:
 
