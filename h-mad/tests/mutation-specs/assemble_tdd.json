@@ -1,188 +1,204 @@
 {
- "_why": "The assembler exists to make five recorded hand-assembly mistakes unrepeatable, so each of those has a mutation restoring it. The rest defend the two things that are judgement rather than default -- the stated counts and the wiring pin -- and the task slicer, where truncating or over-running a task body ships the wrong scope with no visible error. Every mutation is born pinned to the one test it is aimed at.",
- "root": "../..",
- "command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "tests/test_h_mad_assemble_tdd.py",
-  "-q"
- ],
- "target_command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "-q"
- ],
- "mutations": [
-  {
-   "name": "default-the-missing-counts",
-   "_mechanism": "The judgement the row explicitly carves out. A default decides whether an immediate pass is a guard or a weakened test.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    elif phase == \"red\" and (expect_fail is None or expect_pass is None):",
-   "replace": "    elif False:",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestJudgementIsNotAutomated::test_a_red_without_counts_is_refused_not_defaulted"
-  },
-  {
-   "name": "treat-zero-counts-as-absent",
-   "_mechanism": "`--expect-pass 0` is a real answer. A falsy test would refuse a correct dispatch and read as strictness.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    elif phase == \"red\" and (expect_fail is None or expect_pass is None):",
-   "replace": "    elif phase == \"red\" and (not expect_fail or not expect_pass):",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestJudgementIsNotAutomated::test_zero_is_a_stated_count_not_an_absent_one"
-  },
-  {
-   "name": "drop-the-model-pin",
-   "_mechanism": "Mistake 1. The config default cannot execute tools and fails as a well-formed STATUS: BLOCKED, so nothing downstream looks wrong.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        f\"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\\\\",",
-   "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))} \\\\\",",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_1_the_model_is_pinned_because_the_default_cannot_execute_tools"
-  },
-  {
-   "name": "skip-the-interpreter-probe",
-   "_mechanism": "Mistake 2. A bare python3 is 3.14 here and the independent re-run errors instead of measuring.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    if not interpreter_has_pytest(python):",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
-  },
-  {
-   "name": "probe-always-passes",
-   "_mechanism": "A detector that cannot fail makes every interpreter refusal vacuous -- the accept direction of the same guard.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        return subprocess.run(\n            [python, \"-c\", \"import pytest\"], capture_output=True\n        ).returncode == 0",
-   "replace": "        return True",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
-  },
-  {
-   "name": "allow-the-read-only-sandbox",
-   "_mechanism": "Mistake 4. Kills pytest's tempdir, so the run passes without measuring anything.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        if args.sandbox == \"read-only\":",
-   "replace": "        if False:",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_4_a_read_only_sandbox_is_refused_for_a_run_that_executes_pytest"
-  },
-  {
-   "name": "drop-the-scope-warning",
-   "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project. NOTE: the first version of this mutation was a SYNTAX ERROR, so pytest died at collection and the run was credited as `killed by its named test` -- a FAKE KILL, caught only once scoring started requiring the named test to actually fail.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        \"That path is the scope. Do not widen it — an unscoped run collects the \"\n        \"sibling project and dies on pre-existing errors.\"",
-   "replace": "        \"\"",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_5_the_scoped_test_path_is_stated_and_bounded"
-  },
-  {
-   "name": "stop-the-task-body-at-any-heading",
-   "_mechanism": "A task whose body has its own sub-heading would be truncated at the first one, silently shipping half a task.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    starts = [i for i, ln in enumerate(lines) if _TASK_RE.match(ln)]",
-   "replace": "    starts = [i for i, ln in enumerate(lines) if ln.startswith(\"#\")]",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTaskSlicing::test_a_task_body_is_not_truncated_at_its_own_sub_heading"
-  },
-  {
-   "name": "let-the-task-body-run-past-the-next-task",
-   "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope. Since `_body_end` landed, this bound only bites on a plan that MIXES heading levels (a `### Task 2` under a `## Task 1` is deeper, so the heading bound reads it as Task 1's own sub-heading) — which is why the killer test is the mixed-level one and not the same-level slicing test that used to name it.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        next_task = starts[position + 1] if position + 1 < len(starts) else len(lines)",
-   "replace": "        next_task = len(lines)",
-   "test": "tests/test_h_mad_assemble_tdd.py::test_a_deeper_next_task_still_ends_the_previous_one"
-  },
-  {
-   "name": "accept-a-wiring-task-with-no-pin",
-   "_mechanism": "Nothing downstream can see the wire; 5e would establish GREEN for a connection with no load-bearing test.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        if not meta[\"pin\"]:\n            raise Halt(\"no_wire_pin\", f\"task={task_id}\")",
-   "replace": "        if False:\n            raise Halt(\"no_wire_pin\", f\"task={task_id}\")",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestWiringShape::test_a_wiring_task_without_a_pin_halts"
-  },
-  {
-   "name": "gate-a-wiring-task-on-counts",
-   "_mechanism": "Counts cannot gate a wiring task -- the RED split returns identically whether or not the wire exists.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    if shape == \"wiring\":\n        if not meta[\"pin\"]:",
-   "replace": "    if False:\n        if not meta[\"pin\"]:",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestWiringShape::test_a_wiring_task_is_not_refused_for_missing_counts"
-  },
-  {
-   "name": "drop-the-residual-slot-preflight",
-   "_mechanism": "A raw <INLINE_...> reaching the agent reads as an unfilled template and is silently discounted.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    if residual:\n        raise Halt(\"residual_slots\", \", \".join(residual))",
-   "replace": "    if False:\n        raise Halt(\"residual_slots\", \", \".join(residual))",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestPreflight::test_a_template_with_an_unknown_slot_halts"
-  },
-  {
-   "name": "preflight-matches-bare-prose-slot-names",
-   "_mechanism": "Prose names a slot bare; only a real slot is bracketed. Matching bare names refuses every assembly against the shipped template.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
-   "replace": "RESIDUAL = re.compile(r\"INLINE[^>]*|<REPORT_FILE_PATH>\")",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestPreflight::test_bare_prose_mentions_of_a_slot_are_not_residuals"
-  },
-  {
-   "name": "emit-the-same-phase-directive-for-both",
-   "_mechanism": "The template carries BOTH RED and GREEN instructions; without the stamp the agent picks.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        \"green\": \"**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests \"",
-   "replace": "        \"green\": \"**THIS DISPATCH IS PHASE 5d (RED).** Make the failing tests \"",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_the_phase_is_stamped_because_the_template_carries_both"
-  },
-  {
-   "name": "narrow-the-residual-preflight",
-   "_mechanism": "A slot with a typo or lowercase evades an `[A-Z_]+` pattern and reaches the agent as a broken prompt with no refusal at all.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
-   "replace": "RESIDUAL = re.compile(r\"<INLINE_[A-Z_]+>|<REPORT_FILE_PATH>\")",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_typod_slot_is_still_a_residual"
-  },
-  {
-   "name": "unquote-the-interpolated-paths",
-   "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        f\"{q(python)} -m pytest {q(test_path)} -v\",",
-   "replace": "        f\"{python} -m pytest {test_path} -v\",",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
-  },
-  {
-   "name": "proceed-after-a-failed-dispatch",
-   "_mechanism": "The block would read a missing --out file and run pytest anyway, turning a dispatch that never ran into a verdict-shaped nothing.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        'if [ \"$rc\" -ne 0 ]; then echo \"dispatch failed rc=$rc\" >&2; exit \"$rc\"; fi',",
-   "replace": "        \"\",",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_the_block_halts_when_the_dispatch_fails"
-  },
-  {
-   "name": "the-last-task-swallows-the-trailing-section",
-   "_mechanism": "Bounding on the next TASK header alone runs the last task to EOF. Measured over the corpus 2026-08-26: 19 of 20 impl-plans, 746 lines, up to 257 of changelog and cross-task verification pasted into one task's TDD prompt.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        end = _body_end(lines, index, next_task)",
-   "replace": "        end = next_task",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_the_last_task_stops_at_a_trailing_section"
-  },
-  {
-   "name": "a-deeper-sub-heading-ends-the-task",
-   "_mechanism": "`<=` becoming `<` is wrong in the other direction: an equal-level heading no longer ends the body. `<` alone would keep the old bug for `## Version History` after a `## Task`.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        if found is not None and found <= level:",
-   "replace": "        if found is not None:",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
-  },
-  {
-   "name": "a-fence-comment-truncates-the-task",
-   "_mechanism": "Impl-plans are full of shell blocks whose comments start at column 0, so `# do the thing` inside one would cut the task off at its own example — the same reason section_bounds in h_mad_version_history.py tracks fences.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "        if line.lstrip().startswith(\"```\"):\n            fenced = not fenced\n            continue\n        if fenced:\n            continue",
-   "replace": "        if line.lstrip().startswith(\"```\"):\n            continue",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_hash_comment_inside_a_fence_is_not_a_heading"
-  },
-  {
-   "name": "a-task-header-level-is-guessed-instead-of-read",
-   "_mechanism": "A hardcoded level 3 bounds a `## Task` as if it were `###`, so the task's own `### Sub-heading` reads as equal-level and ends the body. The discriminating test is the SUB-HEADING one: `test_a_higher_level_heading_ends_a_deeper_task` passes under this mutant (`##` is <= 3 either way) and named it a survivor, which is a weak-test result, not a missing guard.",
-   "file": "scripts/h_mad_assemble_tdd.py",
-   "find": "    level = _heading_level(lines[start]) or 2",
-   "replace": "    level = 3",
-   "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
-  }
- ],
- "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."
+  "_why": "The assembler exists to make five recorded hand-assembly mistakes unrepeatable, so each of those has a mutation restoring it. The rest defend the two things that are judgement rather than default -- the stated counts and the wiring pin -- and the task slicer, where truncating or over-running a task body ships the wrong scope with no visible error. Every mutation is born pinned to the one test it is aimed at.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_tdd.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "default-the-missing-counts",
+      "_mechanism": "The judgement the row explicitly carves out. A default decides whether an immediate pass is a guard or a weakened test.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    elif phase == \"red\" and (expect_fail is None or expect_pass is None):",
+      "replace": "    elif False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestJudgementIsNotAutomated::test_a_red_without_counts_is_refused_not_defaulted"
+    },
+    {
+      "name": "treat-zero-counts-as-absent",
+      "_mechanism": "`--expect-pass 0` is a real answer. A falsy test would refuse a correct dispatch and read as strictness.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    elif phase == \"red\" and (expect_fail is None or expect_pass is None):",
+      "replace": "    elif phase == \"red\" and (not expect_fail or not expect_pass):",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestJudgementIsNotAutomated::test_zero_is_a_stated_count_not_an_absent_one"
+    },
+    {
+      "name": "drop-the-model-pin",
+      "_mechanism": "Mistake 1. The config default cannot execute tools and fails as a well-formed STATUS: BLOCKED, so nothing downstream looks wrong.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        f\"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\\\\",",
+      "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))} \\\\\",",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_1_the_model_is_pinned_because_the_default_cannot_execute_tools"
+    },
+    {
+      "name": "skip-the-interpreter-probe",
+      "_mechanism": "Mistake 2. A bare python3 is 3.14 here and the independent re-run errors instead of measuring.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if not interpreter_has_pytest(python):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
+    },
+    {
+      "name": "probe-always-passes",
+      "_mechanism": "A detector that cannot fail makes every interpreter refusal vacuous -- the accept direction of the same guard.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        return subprocess.run(\n            [python, \"-c\", \"import pytest\"], capture_output=True\n        ).returncode == 0",
+      "replace": "        return True",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion"
+    },
+    {
+      "name": "allow-the-read-only-sandbox",
+      "_mechanism": "Mistake 4. Kills pytest's tempdir, so the run passes without measuring anything.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if args.sandbox == \"read-only\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_4_a_read_only_sandbox_is_refused_for_a_run_that_executes_pytest"
+    },
+    {
+      "name": "drop-the-scope-warning",
+      "_mechanism": "Mistake 5. Without it the agent widens the run and collects the sibling project. NOTE: the first version of this mutation was a SYNTAX ERROR, so pytest died at collection and the run was credited as `killed by its named test` -- a FAKE KILL, caught only once scoring started requiring the named test to actually fail.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        \"That path is the scope. Do not widen it — an unscoped run collects the \"\n        \"sibling project and dies on pre-existing errors.\"",
+      "replace": "        \"\"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_5_the_scoped_test_path_is_stated_and_bounded"
+    },
+    {
+      "name": "stop-the-task-body-at-any-heading",
+      "_mechanism": "A task whose body has its own sub-heading would be truncated at the first one, silently shipping half a task.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    starts = [i for i, ln in enumerate(lines) if _TASK_RE.match(ln)]",
+      "replace": "    starts = [i for i, ln in enumerate(lines) if ln.startswith(\"#\")]",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTaskSlicing::test_a_task_body_is_not_truncated_at_its_own_sub_heading"
+    },
+    {
+      "name": "let-the-task-body-run-past-the-next-task",
+      "_mechanism": "The dispatch would carry the following tasks too, so the agent implements out of scope. Since `_body_end` landed, this bound only bites on a plan that MIXES heading levels (a `### Task 2` under a `## Task 1` is deeper, so the heading bound reads it as Task 1's own sub-heading) — which is why the killer test is the mixed-level one and not the same-level slicing test that used to name it.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        next_task = starts[position + 1] if position + 1 < len(starts) else len(lines)",
+      "replace": "        next_task = len(lines)",
+      "test": "tests/test_h_mad_assemble_tdd.py::test_a_deeper_next_task_still_ends_the_previous_one"
+    },
+    {
+      "name": "accept-a-wiring-task-with-no-pin",
+      "_mechanism": "Nothing downstream can see the wire; 5e would establish GREEN for a connection with no load-bearing test.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if not meta[\"pin\"]:\n            raise Halt(\"no_wire_pin\", f\"task={task_id}\")",
+      "replace": "        if False:\n            raise Halt(\"no_wire_pin\", f\"task={task_id}\")",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestWiringShape::test_a_wiring_task_without_a_pin_halts"
+    },
+    {
+      "name": "gate-a-wiring-task-on-counts",
+      "_mechanism": "Counts cannot gate a wiring task -- the RED split returns identically whether or not the wire exists.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if shape == \"wiring\":\n        if not meta[\"pin\"]:",
+      "replace": "    if False:\n        if not meta[\"pin\"]:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestWiringShape::test_a_wiring_task_is_not_refused_for_missing_counts"
+    },
+    {
+      "name": "drop-the-residual-slot-preflight",
+      "_mechanism": "A raw <INLINE_...> reaching the agent reads as an unfilled template and is silently discounted.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    if residual:\n        raise Halt(\"residual_slots\", \", \".join(residual))",
+      "replace": "    if False:\n        raise Halt(\"residual_slots\", \", \".join(residual))",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPreflight::test_a_template_with_an_unknown_slot_halts"
+    },
+    {
+      "name": "preflight-matches-bare-prose-slot-names",
+      "_mechanism": "Prose names a slot bare; only a real slot is bracketed. Matching bare names refuses every assembly against the shipped template.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
+      "replace": "RESIDUAL = re.compile(r\"INLINE[^>]*|<REPORT_FILE_PATH>\")",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestPreflight::test_bare_prose_mentions_of_a_slot_are_not_residuals"
+    },
+    {
+      "name": "emit-the-same-phase-directive-for-both",
+      "_mechanism": "The template carries BOTH RED and GREEN instructions; without the stamp the agent picks.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        \"green\": \"**THIS DISPATCH IS PHASE 5e (GREEN).** Make the failing tests \"",
+      "replace": "        \"green\": \"**THIS DISPATCH IS PHASE 5d (RED).** Make the failing tests \"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestAssembles::test_the_phase_is_stamped_because_the_template_carries_both"
+    },
+    {
+      "name": "narrow-the-residual-preflight",
+      "_mechanism": "A slot with a typo or lowercase evades an `[A-Z_]+` pattern and reaches the agent as a broken prompt with no refusal at all.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "RESIDUAL = re.compile(r\"<INLINE[^>]*>|<REPORT_FILE_PATH>\")",
+      "replace": "RESIDUAL = re.compile(r\"<INLINE_[A-Z_]+>|<REPORT_FILE_PATH>\")",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_typod_slot_is_still_a_residual"
+    },
+    {
+      "name": "unquote-the-interpolated-paths",
+      "_mechanism": "A path with a space becomes two shell arguments and the pasted block silently runs the wrong thing.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        f\"{q(python)} -m pytest {q(test_path)} -v\",",
+      "replace": "        f\"{python} -m pytest {test_path} -v\",",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_a_path_with_spaces_is_quoted_in_the_block"
+    },
+    {
+      "name": "proceed-after-a-failed-dispatch",
+      "_mechanism": "The block would read a missing --out file and run pytest anyway, turning a dispatch that never ran into a verdict-shaped nothing.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        'if [ \"$rc\" -ne 0 ]; then echo \"dispatch failed rc=$rc\" >&2; exit \"$rc\"; fi',",
+      "replace": "        \"\",",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestSurfacedByReview::test_the_block_halts_when_the_dispatch_fails"
+    },
+    {
+      "name": "the-last-task-swallows-the-trailing-section",
+      "_mechanism": "Bounding on the next TASK header alone runs the last task to EOF. Measured over the corpus 2026-08-26: 19 of 20 impl-plans, 746 lines, up to 257 of changelog and cross-task verification pasted into one task's TDD prompt.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        end = _body_end(lines, index, next_task)",
+      "replace": "        end = next_task",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_the_last_task_stops_at_a_trailing_section"
+    },
+    {
+      "name": "a-deeper-sub-heading-ends-the-task",
+      "_mechanism": "`<=` becoming `<` is wrong in the other direction: an equal-level heading no longer ends the body. `<` alone would keep the old bug for `## Version History` after a `## Task`.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if found is not None and found <= level:",
+      "replace": "        if found is not None:",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
+    },
+    {
+      "name": "a-fence-comment-truncates-the-task",
+      "_mechanism": "Impl-plans are full of shell blocks whose comments start at column 0, so `# do the thing` inside one would cut the task off at its own example — the same reason section_bounds in h_mad_version_history.py tracks fences.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        if line.lstrip().startswith(\"```\"):\n            fenced = not fenced\n            continue\n        if fenced:\n            continue",
+      "replace": "        if line.lstrip().startswith(\"```\"):\n            continue",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_hash_comment_inside_a_fence_is_not_a_heading"
+    },
+    {
+      "name": "a-task-header-level-is-guessed-instead-of-read",
+      "_mechanism": "A hardcoded level 3 bounds a `## Task` as if it were `###`, so the task's own `### Sub-heading` reads as equal-level and ends the body. The discriminating test is the SUB-HEADING one: `test_a_higher_level_heading_ends_a_deeper_task` passes under this mutant (`##` is <= 3 either way) and named it a survivor, which is a weak-test result, not a missing guard.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    level = _heading_level(lines[start]) or 2",
+      "replace": "    level = 3",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTrailingSections::test_a_deeper_sub_heading_still_belongs_to_the_task"
+    },
+    {
+      "name": "module-path-goes-verbatim-into-the-filename",
+      "_mechanism": "J34 restored. Every module in HemaSuite is `tools/...` and every module in this repo is `h-mad/scripts/...`, so the DEFAULT invocation halts with prompt_unwritable on a directory nobody created -- the stager unusable in both projects that run h-mad, with a hand-passed --prompt/--out/--log as the standing workaround.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "    slug = _filename_slug(args.feature, args.module, args.phase)",
+      "replace": "    slug = f\"{args.feature}_{args.module}_{args.phase}\"",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestModulePathSlug::test_a_module_in_a_subdirectory_no_longer_halts"
+    },
+    {
+      "name": "sanitisation-leaks-into-the-prompt-body",
+      "_mechanism": "The one way this fix is WORSE than the bug it replaces. The module path in the prompt is the instruction Codex acts on; sanitise it there and the implementer is aimed at `tools_thing.py`, a file that does not exist -- a loud halt traded for a silent wrong edit. Mutated at the CALL SITE, not inside the helper: the helper is correct, and the whole risk of this fix is applying it to the wrong value.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "impl_plan=impl_plan, project_root=args.project_root, module=args.module,",
+      "replace": "impl_plan=impl_plan, project_root=args.project_root, module=_filename_slug(args.module),",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestModulePathSlug::test_the_prompt_body_still_names_the_REAL_module_path"
+    }
+  ],
+  "_why_not_write_before_halt": "A `write-the-prompt-before-the-halt` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. In `main()` the prompt write sits after the `except Halt: return 2`, and `filled` does not exist before `assemble()` returns -- so a halt structurally cannot reach the write and there is no mutant that makes it. The property 'a halt writes no prompt' is guaranteed by order, not by a guard, and TestCli::test_a_halt_exits_two_and_writes_no_prompt asserts it directly. An equivalent mutant reports as `survived`, which is byte-identical to a real coverage gap."
 }

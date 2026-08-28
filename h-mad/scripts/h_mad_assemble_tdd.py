@@ -292,6 +292,31 @@ def command_block(
     ])
 
 
+def _filename_slug(*parts: str) -> str:
+    """Join `parts` into a slug safe to use as a single filename component.
+
+    FILENAMES ONLY. `--module` is a repo-relative path, and it used to be
+    interpolated verbatim into the default `--prompt`/`--out`/`--log`, so a module
+    in a subdirectory produced a path whose parent directory was never created —
+    `HALT prompt_unwritable`, exit 2, nothing written. Every module in HemaSuite is
+    `tools/…` and every module in this repo is `h-mad/scripts/…`, so the DEFAULT
+    invocation was unusable in both projects that run h-mad (J34).
+
+    The module path inside the assembled prompt is left untouched, because that is
+    the instruction the implementer acts on: rewriting `tools/thing.py` to
+    `tools_thing.py` there would aim Codex at a file that does not exist, trading a
+    loud halt for a silent wrong edit.
+
+    Two paths differing only in a separator (`tools/thing.py` and
+    `tools_thing.py`) collapse to the same slug. That is accepted rather than
+    hashed around: they would also have to share a feature and a phase to collide,
+    and a filename an operator cannot read is a worse daily cost than a collision
+    no plan has ever produced.
+    """
+    cleaned = [re.sub(r"[^A-Za-z0-9._-]+", "_", part).strip("_") for part in parts]
+    return "_".join(part for part in cleaned if part) or "unnamed"
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Stage a Phase-5d/5e Codex dispatch")
     ap.add_argument("--feature", required=True)
@@ -319,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--template", type=Path, default=TEMPLATE)
     args = ap.parse_args(argv)
 
-    slug = f"{args.feature}_{args.module}_{args.phase}"
+    slug = _filename_slug(args.feature, args.module, args.phase)
     impl_plan = args.impl_plan or (
         args.project_root / "docs" / "01-plan" / "features" / f"{args.feature}.impl-plan.md"
     )

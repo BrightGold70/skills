@@ -547,3 +547,91 @@ def test_a_deeper_next_task_still_ends_the_previous_one() -> None:
     assert "Body of task one." in body
     assert "second-but-deeper" not in body, body
     assert "Body of task two." not in body
+
+
+class TestModulePathSlug:
+    """J34 — `--module` was interpolated verbatim into the default filenames.
+
+    `slug = f"{feature}_{module}_{phase}"` composes the default `--prompt`,
+    `--out` and `--log`, so a module in a subdirectory produced a path whose
+    parent directory was never created. The row originally called this
+    "survivable because it prints commands rather than running them" — true of
+    `--out`/`--log`, which are only interpolated into the printed block, but NOT
+    of `--prompt`, which the tool WRITES. It halted: `ASSEMBLE-TDD: HALT
+    prompt_unwritable`, exit 2, nothing on disk.
+
+    Scope is why this is Critical rather than cosmetic: every module in HemaSuite
+    is `tools/…` and every module in this repo is `h-mad/scripts/…`, so the
+    DEFAULT invocation of the 5d/5e stager was unusable in both projects that run
+    h-mad, and the standing workaround was passing all three paths by hand.
+
+    The sanitisation is for FILENAMES ONLY. The module path inside the prompt is
+    the instruction Codex acts on, and a fix that rewrote `tools/thing.py` to
+    `tools_thing.py` there would send the implementer at a file that does not
+    exist — trading a loud halt for a silent wrong edit, which is a strictly worse
+    failure than the one being fixed.
+    """
+
+    def _cli(self, tmp_path: Path, module: str, *extra: str):
+        root = tmp_path / "proj"
+        (root / "docs" / "01-plan" / "features").mkdir(parents=True, exist_ok=True)
+        (root / "docs" / "01-plan" / "features" / "feat.impl-plan.md").write_text(
+            PLAN, encoding="utf-8")
+        return run_cli(
+            "--feature", "feat", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(root), "--module", module,
+            "--test-path", "tests/test_mod.py",
+            "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, *extra,
+        )
+
+    def test_a_module_in_a_subdirectory_no_longer_halts(self, tmp_path):
+        result = self._cli(tmp_path, "tools/thing.py")
+        assert "prompt_unwritable" not in result.stdout, result.stdout
+        assert result.returncode == 0, result.stdout
+
+    def test_the_default_prompt_path_has_no_separators(self, tmp_path):
+        result = self._cli(tmp_path, "tools/deep/thing.py")
+        line = next(l for l in result.stdout.splitlines() if l.startswith("ASSEMBLE-TDD: PASS"))
+        prompt_path = line.split()[2]
+        assert "/" not in prompt_path[len("/tmp/"):], prompt_path
+
+    def test_the_printed_out_and_log_paths_have_no_separators(self, tmp_path):
+        """The other half of J34 — cosmetic only because it is pasted, but pasted
+        verbatim it takes out `--out` AND `--log` at once, and that signature is
+        indistinguishable from a dispatch that never ran."""
+        result = self._cli(tmp_path, "tools/thing.py")
+        for flag in ("--out", "--log"):
+            token = next(
+                part for line in result.stdout.splitlines() if flag in line
+                for part in line.split()
+                if part.startswith("/tmp/exec_")
+            )
+            assert "/" not in token[len("/tmp/"):], (flag, token)
+
+    def test_the_prompt_body_still_names_the_REAL_module_path(self, tmp_path):
+        """The one way this fix could be worse than the bug.
+
+        Sanitisation is for filenames. If it leaked into the prompt, Codex would
+        be told to edit `tools_thing.py` — a file that does not exist — and a loud
+        halt would have become a silent wrong edit.
+        """
+        result = self._cli(tmp_path, "tools/thing.py")
+        line = next(l for l in result.stdout.splitlines() if l.startswith("ASSEMBLE-TDD: PASS"))
+        body = Path(line.split()[2]).read_text(encoding="utf-8")
+        assert "tools/thing.py" in body
+        assert "tools_thing.py" not in body
+
+    def test_a_flat_module_keeps_its_existing_filename(self, tmp_path):
+        """Accept direction: the fix must not churn paths that were already fine."""
+        result = self._cli(tmp_path, "mod.py")
+        assert "/tmp/h_mad_feat_mod.py_red.txt" in result.stdout, result.stdout
+
+    def test_an_explicit_prompt_path_is_still_honoured(self, tmp_path):
+        """The standing operator workaround must keep working — people have it in
+        their notes, and breaking it would be the second surprise in a row."""
+        chosen = tmp_path / "mine.txt"
+        result = self._cli(tmp_path, "tools/thing.py", "--prompt", str(chosen))
+        assert result.returncode == 0, result.stdout
+        assert str(chosen) in result.stdout
+        assert chosen.exists()
