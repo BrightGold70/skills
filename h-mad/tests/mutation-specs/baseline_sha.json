@@ -1,0 +1,75 @@
+{
+  "_why": "This script replaces a hand-run command that returned the wrong commit PLAUSIBLY -- a real sha, on the right branch, one off. So the mutations are not 'does it crash' but 'does it return a different wrong-but-believable commit', plus the one that matters more: does a value nobody vouches for stay distinguishable from one that is verified. Every mutation here either moves the baseline to another real commit or collapses the `sha=` / `candidate=` discrimination, because those are the two ways this script can fail while looking like it worked.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_baseline_sha.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "returns-the-branch-tip-instead-of-its-first-commit",
+      "_mechanism": "`rev-list` is newest-first, so taking [0] returns the branch TIP -- which is 5g, not 5c. The review diff then collapses to nearly nothing and reports no issues, which reads exactly like a clean review.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "    return lines[-1] if lines else None",
+      "replace": "    return lines[0] if lines else None",
+      "test": "tests/test_h_mad_baseline_sha.py::TestDerivation::test_derives_the_branchs_first_commit"
+    },
+    {
+      "name": "walks-into-a-merged-side-branch",
+      "_mechanism": "Drop `--first-parent` and a merged side branch can supply a commit older than 5c that is also absent from trunk, so the baseline silently moves BEFORE the impl-plan. Same class as the merge-base bug this script replaces, reached by a different route.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "    out = _git(repo, \"rev-list\", \"--first-parent\", branch, \"--not\", trunk)",
+      "replace": "    out = _git(repo, \"rev-list\", branch, \"--not\", trunk)",
+      "test": "tests/test_h_mad_baseline_sha.py::TestDerivation::test_a_merged_side_branch_cannot_supply_an_older_first_commit"
+    },
+    {
+      "name": "the-self-check-never-fires",
+      "_mechanism": "The property that decided derive-over-store: this derivation can tell you it is wrong. Disable the check and it becomes exactly what a stored sha is -- a confident answer with nothing behind it -- while every OK it prints still looks verified.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "    if not _touches_impl_plan(repo, sha):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_baseline_sha.py::TestSelfVerification::test_unverified_when_something_was_committed_before_5c"
+    },
+    {
+      "name": "an-unvouched-value-is-emitted-as-sha",
+      "_mechanism": "The discrimination the whole row is about. `UNVERIFIED` means the assumption was checked and FAILED, so its candidate must not be scrapeable by a caller matching `sha=`. Spell it `sha=` and the cannot-vouch verdict becomes indistinguishable from a verified one to every consumer that reads the token rather than the word.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "            f\"candidate={result['candidate']} branch={args.branch}\"",
+      "replace": "            f\"sha={result['candidate']} branch={args.branch}\"",
+      "test": "tests/test_h_mad_baseline_sha.py::TestSelfVerification::test_unverified_names_the_candidate_but_never_as_a_sha"
+    },
+    {
+      "name": "a-cannot-derive-exits-zero",
+      "_mechanism": "`UNREADABLE` is an operational error, not a verdict -- nothing was derived. Exiting 0 lets it sit in the same bucket as a real answer for any caller that scores `$?`, which is the habit this skill spends its verdict tokens trying to break.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "        print(\"[H-MAD] baseline UNREADABLE\")\n        return 2",
+      "replace": "        print(\"[H-MAD] baseline UNREADABLE\")\n        return 0",
+      "test": "tests/test_h_mad_baseline_sha.py::TestCannotJudge::test_unknown_ref_is_an_operational_error_carrying_no_sha"
+    },
+    {
+      "name": "an-empty-branch-reports-a-sha",
+      "_mechanism": "A branch with no commits beyond trunk has no 5c at all. Returning the trunk tip as the answer is the most believable wrong value available, since it is a real commit the branch really does contain.",
+      "file": "scripts/h_mad_baseline_sha.py",
+      "find": "        return {\"verdict\": \"NONE\", \"sha\": None, \"candidate\": None,\n                \"reason\": \"no_commits_on_branch\"}",
+      "replace": "        return {\"verdict\": \"OK\", \"sha\": _git(repo, \"rev-parse\", trunk), \"candidate\": None,\n                \"reason\": None}",
+      "test": "tests/test_h_mad_baseline_sha.py::TestCannotJudge::test_a_branch_with_no_commits_beyond_trunk_is_none"
+    },
+    {
+      "name": "skill-stops-naming-the-wrong-command",
+      "_mechanism": "The row's real fix is the contract, not the script: `git merge-base` is what an operator reaches for, and a doc that merely prescribes the right command without marking the wrong one leaves the reflex intact. Anchored at the 5f site alone on purpose -- 5f and 6a-prime are read in isolation, so stripping the warning from EITHER one must fail, which is why the test counts both rather than checking the string exists somewhere in the file.",
+      "file": "SKILL.md",
+      "find": "- **5f** — **Derive the 5c sha, never `git merge-base`.** ",
+      "replace": "- **5f** — **Derive the 5c sha.** ",
+      "test": "tests/test_h_mad_baseline_sha.py::test_skill_documents_the_derivation_and_forbids_merge_base"
+    }
+  ]
+}
