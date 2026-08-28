@@ -1,0 +1,48 @@
+{
+  "_why": "The check's whole value is noticing an install that still loads while lying about its contents. It did that for h-mad and, for 68 days, not for its neighbour -- a correct h-mad symlink beside a `handoff` directory copied in June, with the check reporting PASS over it. Every mutation here restores one spelling of 'a correct h-mad vouches for the rest', because each fails in the same silent direction: the stale copy keeps loading and nothing says so.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_install_check.py", "tests/test_h_mad_install_check_docs.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-sibling-root-is-the-skill-not-the-repo",
+      "_mechanism": "The live defect at its source. `~/.claude/skills/h-mad` resolves to the repo's h-mad SUBDIRECTORY, so globbing there walks h-mad's own subfolders, matches no SKILL.md and vouches for a checkout never looked at. Every unit test passed against a fixture that made this invisible; only a test shaped like a real install can see it.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        checkout.parent if checkout is not None else None",
+      "replace": "        checkout if checkout is not None else None",
+      "test": "tests/test_h_mad_install_check.py::TestSiblingSkills::test_the_sibling_root_is_derived_one_level_up_from_the_link"
+    },
+    {
+      "name": "a-copied-sibling-is-not-reported",
+      "_mechanism": "Treat a real directory as acceptable. This is the 68-day bug restored exactly: the copy loads, drifts arbitrarily far from the checkout, and the check calls it healthy.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "            issues.append(f\"SIBLING_NOT_SYMLINK:{link} (expected -> {expected})\")",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_install_check.py::TestSiblingSkills::test_a_sibling_installed_as_a_copy_is_reported"
+    },
+    {
+      "name": "a-sibling-from-another-checkout-passes",
+      "_mechanism": "SPLIT_INSTALL one directory over: the link resolves and the skill loads, from a tree nobody is editing. Dropping the target comparison makes any symlink acceptable.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        elif target != expected:",
+      "replace": "        elif False:",
+      "test": "tests/test_h_mad_install_check.py::TestSiblingSkills::test_a_sibling_pointing_at_another_checkout_is_reported"
+    },
+    {
+      "name": "an-uninstalled-skill-is-reported-as-broken",
+      "_mechanism": "The converse failure: drop the not-installed skip and every skill in the checkout the operator chose NOT to install becomes an issue. A check that cries wolf on a healthy install gets ignored, which costs the real finding.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if not link.is_symlink() and not link.exists():\n            continue",
+      "replace": "        if False:\n            continue",
+      "test": "tests/test_h_mad_install_check.py::TestSiblingSkills::test_a_sibling_that_is_not_installed_is_not_an_issue"
+    },
+    {
+      "name": "the-checkout-is-compared-against-itself",
+      "_mechanism": "Drop the same-directory guard and a checkout that IS the skills directory reports every skill as a copy of itself -- issues that name real paths and mean nothing.",
+      "file": "scripts/h_mad_install_check.py",
+      "find": "        if repo.resolve() == skills_dir.resolve():",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_install_check.py::test_siblings_are_skipped_when_the_checkout_is_the_skills_dir"
+    }
+  ]
+}

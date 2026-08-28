@@ -254,3 +254,148 @@ def test_hook_link_default_matches_what_the_gate_tests_hardcode():
 
     hardcoded = Path.home() / ".claude" / "hooks" / "h-mad-tdd-gate.sh"
     assert ic.DEFAULT_HOOK_LINK == hardcoded
+
+
+class TestSiblingSkills:
+    """h-mad's own install was checked; every OTHER skill this repo ships was not.
+
+    Measured 2026-08-28: `~/.claude/skills/h-mad` was a correct symlink while
+    `~/.claude/skills/handoff` was a plain directory copied 68 days earlier. The
+    stale copy kept loading — it is the SKILL.md a session actually reads — so a
+    fix that had been committed to the checkout a week before was invisible at
+    runtime, and the skill silently behaved as its June self. h-mad passing its
+    own check said nothing about it, which is the gap here.
+    """
+
+    def _repo(self, tmp_path, names):
+        """The REAL shape: skills are siblings under a repo root.
+
+        `~/.claude/skills/h-mad` resolves to the repo's `h-mad` SUBDIRECTORY,
+        not the repo root -- so the siblings live one level up from whatever
+        the skills link resolves to. An earlier fixture put the skills and the
+        h-mad SKILL.md in the same directory; every test passed and the live
+        install still reported PASS over a stale copy, because the glob was
+        walking h-mad's own subdirectories.
+        """
+        repo = tmp_path / "checkout"
+        for name in ("h-mad", *names):
+            (repo / name).mkdir(parents=True)
+            (repo / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+        (repo / "h-mad" / "hooks").mkdir(parents=True, exist_ok=True)
+        (repo / "h-mad" / "hooks" / "h-mad-tdd-gate.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        return repo
+
+    def _skills_dir(self, tmp_path):
+        d = tmp_path / "skills"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def test_a_sibling_installed_as_a_copy_is_reported(self, tmp_path):
+        repo = self._repo(tmp_path, ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "handoff").mkdir()
+        (skills / "handoff" / "SKILL.md").write_text("stale\n", encoding="utf-8")
+
+        issues = registry_check_siblings(repo, skills)
+
+        assert any(i.startswith("SIBLING_NOT_SYMLINK:") for i in issues), issues
+        assert "handoff" in " ".join(issues)
+
+    def test_a_sibling_symlinked_into_the_checkout_is_clean(self, tmp_path):
+        repo = self._repo(tmp_path, ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "handoff").symlink_to(repo / "handoff")
+
+        assert registry_check_siblings(repo, skills) == []
+
+    def test_a_sibling_that_is_not_installed_is_not_an_issue(self, tmp_path):
+        """Not every skill in the checkout is one the operator wants installed."""
+        repo = self._repo(tmp_path, ["handoff", "unused"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "handoff").symlink_to(repo / "handoff")
+
+        assert registry_check_siblings(repo, skills) == []
+
+    def test_a_sibling_pointing_at_another_checkout_is_reported(self, tmp_path):
+        """The split-install failure, one level out: it loads, from the wrong tree."""
+        repo = self._repo(tmp_path, ["handoff"])
+        other = self._repo(tmp_path / "elsewhere", ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "handoff").symlink_to(other / "handoff")
+
+        issues = registry_check_siblings(repo, skills)
+        assert any(i.startswith("SIBLING_WRONG_CHECKOUT:") for i in issues), issues
+
+    def test_a_dangling_sibling_link_is_reported(self, tmp_path):
+        repo = self._repo(tmp_path, ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "handoff").symlink_to(repo / "handoff-gone")
+
+        issues = registry_check_siblings(repo, skills)
+        assert any(i.startswith("SIBLING_DANGLING:") for i in issues), issues
+
+    def test_the_cli_reports_a_sibling_copy_as_a_verdict_not_an_error(self, tmp_path):
+        """FAIL is a verdict: exit 0, per the audit-gate signal discipline."""
+        repo = self._repo(tmp_path, ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "h-mad").symlink_to(repo / "h-mad")
+        (skills / "handoff").mkdir()
+        hook = tmp_path / "hooks" / "h-mad-tdd-gate.sh"
+        hook.parent.mkdir(parents=True)
+        hook.symlink_to(repo / "h-mad" / "hooks" / "h-mad-tdd-gate.sh")
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT),
+             "--skills-link", str(skills / "h-mad"),
+             "--hook-link", str(hook)],
+            capture_output=True, text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "INSTALL: FAIL" in result.stdout, result.stdout
+        assert "SIBLING_NOT_SYMLINK" in result.stdout, result.stdout
+
+
+    def test_the_sibling_root_is_derived_one_level_up_from_the_link(self, tmp_path):
+        """Regression: the live check reported PASS over a real stale copy.
+
+        `check()` derived the sibling root from what the skills link resolved
+        to -- the `h-mad` subdirectory -- so it globbed h-mad's own subfolders,
+        found no SKILL.md, and vouched for a checkout it had never looked at.
+        """
+        repo = self._repo(tmp_path, ["handoff"])
+        skills = self._skills_dir(tmp_path)
+        (skills / "h-mad").symlink_to(repo / "h-mad")
+        (skills / "handoff").mkdir()
+        (skills / "handoff" / "SKILL.md").write_text("stale\n", encoding="utf-8")
+        hook = tmp_path / "hooks" / "h-mad-tdd-gate.sh"
+        hook.parent.mkdir(parents=True)
+        hook.symlink_to(repo / "h-mad" / "hooks" / "h-mad-tdd-gate.sh")
+
+        issues = install_check_module().check(skills / "h-mad", hook)
+
+        assert any(i.startswith("SIBLING_NOT_SYMLINK:") for i in issues), issues
+
+
+def install_check_module():
+    import h_mad_install_check
+    return h_mad_install_check
+
+
+def registry_check_siblings(repo, skills_dir):
+    import h_mad_install_check
+    return h_mad_install_check.check_siblings(repo, skills_dir)
+
+
+def test_siblings_are_skipped_when_the_checkout_is_the_skills_dir(tmp_path):
+    """No comparison exists when a skill's install path IS its source path.
+
+    Comparing anyway reports every skill as a copy of itself — which is exactly
+    what broke `test_correct_symlink_install_passes`, whose fixture puts the
+    checkout and the links in one directory.
+    """
+    repo = tmp_path / "skills"
+    (repo / "handoff").mkdir(parents=True)
+    (repo / "handoff" / "SKILL.md").write_text("x\n", encoding="utf-8")
+
+    assert install_check_module().check_siblings(repo, repo) == []

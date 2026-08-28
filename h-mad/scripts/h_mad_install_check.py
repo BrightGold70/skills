@@ -93,7 +93,48 @@ def _check_hook_link(hook_link: Path) -> tuple[list[str], Path | None]:
     return issues, hook_link.resolve()
 
 
-def check(skills_link: Path, hook_link: Path) -> list[str]:
+def check_siblings(repo: Path, skills_dir: Path) -> list[str]:
+    """Issues with the OTHER skills this checkout ships; empty means healthy.
+
+    h-mad checked its own two links and nothing else. Measured 2026-08-28:
+    `~/.claude/skills/h-mad` was a correct symlink while
+    `~/.claude/skills/handoff` was a plain directory copied 68 days earlier.
+    The copy is what a session actually loads, so a fix committed to the
+    checkout a week before was invisible at runtime and the skill behaved as
+    its June self — the same silent drift this script was written for, one
+    directory over, where its check could not see it.
+
+    A skill that is simply NOT installed is not an issue: not every skill in a
+    checkout is one the operator wants loaded. Only a present-but-wrong install
+    is reported, because only that one loads while lying about its contents.
+    """
+    issues: list[str] = []
+    # When the checkout IS the skills directory, every skill dir is its own
+    # install and there is nothing to compare — comparing anyway reports each
+    # one as a copy of itself.
+    try:
+        if repo.resolve() == skills_dir.resolve():
+            return issues
+    except OSError:
+        return issues
+    for skill_md in sorted(repo.glob("*/" + CHECKOUT_MARKER)):
+        name = skill_md.parent.name
+        link = skills_dir / name
+        if not link.is_symlink() and not link.exists():
+            continue
+        expected = (repo / name).resolve()
+        if not link.is_symlink():
+            issues.append(f"SIBLING_NOT_SYMLINK:{link} (expected -> {expected})")
+            continue
+        target = link.resolve()
+        if not target.exists():
+            issues.append(f"SIBLING_DANGLING:{link} -> {target}")
+        elif target != expected:
+            issues.append(f"SIBLING_WRONG_CHECKOUT:{link} -> {target} (expected {expected})")
+    return issues
+
+
+def check(skills_link: Path, hook_link: Path, repo: Path | None = None) -> list[str]:
     """All issues with the install shape; empty means healthy."""
     skill_issues, checkout = _check_skills_link(skills_link)
     hook_issues, hook_target = _check_hook_link(hook_link)
@@ -107,6 +148,18 @@ def check(skills_link: Path, hook_link: Path) -> list[str]:
         if hook_target != expected:
             issues.append(f"SPLIT_INSTALL:skills={checkout} hook={hook_target}")
 
+    # A correct h-mad link vouches for nothing but h-mad, so the neighbours are
+    # checked too. The sibling root is one level UP from what the link resolves
+    # to: `~/.claude/skills/h-mad` points at the repo's `h-mad` SUBDIRECTORY,
+    # and the other skills are its siblings there. Deriving it from `checkout`
+    # itself globbed h-mad's own subfolders, matched no SKILL.md, and reported
+    # PASS over a genuinely stale copy — measured against the live install.
+    sibling_repo = Path(repo) if repo is not None else (
+        checkout.parent if checkout is not None else None
+    )
+    if sibling_repo is not None:
+        issues += check_siblings(sibling_repo, skills_link.parent)
+
     return issues
 
 
@@ -116,6 +169,12 @@ def main() -> int:
     )
     parser.add_argument("--skills-link", default=str(DEFAULT_SKILLS_LINK))
     parser.add_argument("--hook-link", default=str(DEFAULT_HOOK_LINK))
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help="checkout whose sibling skills to check; defaults to whatever "
+             "--skills-link resolves to",
+    )
     args = parser.parse_args()
 
     # The one genuine operational error: no path to check, so there is no
@@ -133,7 +192,11 @@ def main() -> int:
         )
         return 2
 
-    issues = check(Path(args.skills_link), Path(args.hook_link))
+    issues = check(
+        Path(args.skills_link),
+        Path(args.hook_link),
+        Path(args.repo) if args.repo else None,
+    )
 
     if issues:
         print(f"INSTALL: FAIL issues={len(issues)}")

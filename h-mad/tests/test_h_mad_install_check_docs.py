@@ -109,6 +109,9 @@ def test_every_detail_line_has_a_named_remedy():
         "HOOK_NOT_INSTALLED",
         "HOOK_DANGLING",
         "SPLIT_INSTALL",
+        "SIBLING_NOT_SYMLINK",
+        "SIBLING_DANGLING",
+        "SIBLING_WRONG_CHECKOUT",
     ):
         assert token in body, f"{token} has no remedy named in the bootstrap protocol"
     # The two link-creating remedies must be runnable, not described.
@@ -139,6 +142,9 @@ def test_every_detail_line_named_in_the_docs_exists_in_the_script():
         "HOOK_NOT_INSTALLED",
         "HOOK_DANGLING",
         "SPLIT_INSTALL",
+        "SIBLING_NOT_SYMLINK",
+        "SIBLING_DANGLING",
+        "SIBLING_WRONG_CHECKOUT",
     ):
         assert token in script, f"{token} documented but not implemented"
         assert token in skill, f"{token} implemented but not documented"
