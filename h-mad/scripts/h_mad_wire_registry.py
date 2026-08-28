@@ -44,14 +44,69 @@ def _record_label(record: dict) -> str:
     return f"{record['owning_feature']}::{record['id']}"
 
 
+def pins(record: dict, field: str = "pin") -> list[str]:
+    """`pin` as a list, whether it was stored as a string or a list.
+
+    One wiring task can wire N call sites, and one pin per record could only
+    ever prove site 1 — the rest were left to ACs and the wire-scoped revert,
+    which the registry cannot see. A string stays a string on disk: every
+    record written before the list form is still read unchanged, and `register`
+    keeps writing a bare string when it is given exactly one pin.
+    """
+    value = record[field]
+    return [value] if isinstance(value, str) else list(value)
+
+
+def pin_labels(record: dict, offending: list[str]) -> list[str]:
+    """One halt-reason label per offending pin.
+
+    `<feature>::<id>` for a single-pin record, so every string emitted before
+    multi-pin is byte-identical; `<feature>::<id>#<pin>` once a record carries
+    more than one, because two broken sites on one record would otherwise emit
+    the same line twice and name neither — the J43 defect one level down.
+    """
+    label = _record_label(record)
+    if len(pins(record)) == 1:
+        return [label]
+    return [f"{label}#{pin}" for pin in offending]
+
+
+def unresolved_pins(record: dict, collected: set[str], field: str = "pin") -> list[str]:
+    """The pins of `record` that do not resolve to exactly one collected node id."""
+    offending: list[str] = []
+    for pin in pins(record, field):
+        if "::" in pin and pin in collected:
+            continue
+        if len([node for node in collected if node.endswith("::" + pin)]) != 1:
+            offending.append(pin)
+    return offending
+
+
+def _validate_pin_field(record: dict, field: str) -> None:
+    """A pin is a non-empty string, or a list of distinct non-empty strings."""
+    value = record[field]
+    if isinstance(value, str):
+        return
+    if not isinstance(value, list):
+        raise RegistryError(f"{field} must be a string or a list of strings")
+    if not value:
+        raise RegistryError(f"{field} list must not be empty")
+    for element in value:
+        if not isinstance(element, str) or not element:
+            raise RegistryError(f"{field} list must hold non-empty strings: {element!r}")
+    if len(set(value)) != len(value):
+        raise RegistryError(f"{field} list must not repeat a pin")
+
+
 def validate_record(record: dict) -> dict:
     """Return the record, or raise RegistryError naming the offending field."""
     if not isinstance(record, dict):
         raise RegistryError("record must be an object")
     required = ("kind", "id", "caller", "callee", "pin", "owning_feature", "registered_ts")
     for field in required:
-        if field not in record or record[field] in (None, ""):
+        if field not in record or record[field] in (None, "") or record[field] == []:
             raise RegistryError(f"missing required field: {field}")
+    _validate_pin_field(record, "pin")
     if record["kind"] not in VALID_KINDS:
         raise RegistryError(f"invalid kind: {record['kind']!r}")
     if record.get("status", "active") == "removed":
@@ -62,8 +117,10 @@ def validate_record(record: dict) -> dict:
             raise RegistryError("missing removed_by_feature")
         if provenance == "superseded" and not record.get("superseding_feature"):
             raise RegistryError("missing superseding_feature")
-        if provenance == "renamed" and not record.get("successor_pin"):
-            raise RegistryError("missing successor_pin")
+        if provenance == "renamed":
+            if not record.get("successor_pin"):
+                raise RegistryError("missing successor_pin")
+            _validate_pin_field(record, "successor_pin")
     return record
 
 
@@ -374,28 +431,51 @@ def partition(
             return [pin]
         return [node_id for node_id in collected if node_id.endswith("::" + pin)]
 
+    def resolve_all(record: dict, field: str) -> tuple[list[str] | None, str]:
+        """-> (node_ids, "") when EVERY pin resolves once, else (None, bucket).
+
+        A record is only as verified as its weakest pin: one unresolved site
+        makes the whole record unjudgeable, because a partial pass would report
+        a wire as proven while a site it names went unchecked. Ambiguity
+        outranks absence — a pin naming more than one test must be qualified
+        before the record can be judged at all, and qualifying it often fixes
+        the sibling too.
+        """
+        node_ids: list[str] = []
+        bucket = ""
+        for pin in pins(record, field):
+            matches = resolve(pin)
+            if len(matches) == 1:
+                node_ids.append(matches[0])
+            elif matches:
+                bucket = "ambiguous"
+            elif bucket != "ambiguous":
+                bucket = "missing"
+        return (None, bucket) if bucket else (node_ids, "")
+
     for record in records:
         if record.get("status", "active") == "active":
-            matches = resolve(record["pin"])
-            if len(matches) == 1:
+            node_ids, bucket = resolve_all(record, "pin")
+            if node_ids is not None:
                 resolved = dict(record)
-                resolved["node_id"] = matches[0]
+                resolved["node_ids"] = node_ids
+                resolved["node_id"] = node_ids[0]
                 resolving.append(resolved)
-            elif not matches:
+            elif bucket == "missing":
                 missing.append(record)
             else:
                 ambiguous.append(record)
             continue
         if record.get("removal_provenance") != "renamed":
             continue
-        successor = record["successor_pin"]
-        matches = resolve(successor)
-        if len(matches) == 1:
+        node_ids, bucket = resolve_all(record, "successor_pin")
+        if node_ids is not None:
             resolved = dict(record)
-            resolved["pin"] = successor
-            resolved["node_id"] = matches[0]
+            resolved["pin"] = record["successor_pin"]
+            resolved["node_ids"] = node_ids
+            resolved["node_id"] = node_ids[0]
             resolving.append(resolved)
-        elif not matches:
+        elif bucket == "missing":
             unverified_renames.append(record)
         else:
             ambiguous.append(record)
@@ -439,9 +519,15 @@ def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) ->
     """Run resolving pytest pins and return (verified, broken)."""
     if not resolving:
         return [], []
-    pins = [record.get("node_id") or record["pin"] for record in resolving]
+    def _group(record: dict) -> list[str]:
+        if record.get("node_ids"):
+            return record["node_ids"]
+        return [record["node_id"]] if record.get("node_id") else pins(record)
+
+    per_record = [_group(record) for record in resolving]
+    all_pins = list(dict.fromkeys(pin for group in per_record for pin in group))
     result = subprocess.run(
-        [python, "-m", "pytest", "-q", "-rA", "-vv", *pins],
+        [python, "-m", "pytest", "-q", "-rA", "-vv", *all_pins],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -452,18 +538,22 @@ def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) ->
     for line in result.stdout.splitlines():
         status = next((value for value in statuses if re.search(rf"\b{value}\b", line)), None)
         if status:
-            for pin in pins:
+            for pin in all_pins:
                 if pin in line:
                     outcomes[pin] = status
 
     verified: list[dict] = []
     broken: list[dict] = []
-    for record in resolving:
-        pin = record.get("node_id") or record["pin"]
-        if outcomes.get(pin) == "PASSED":
+    for record, group in zip(resolving, per_record):
+        failed = [pin for pin in group if outcomes.get(pin) != "PASSED"]
+        if not failed:
             verified.append(record)
-        else:
-            broken.append(record)
+            continue
+        # Every failing site is named: a record reported broken on one pin while
+        # another also failed would send the author to fix half the wire.
+        record["broken_pins"] = failed
+        broken.append(record)
+        for pin in failed:
             reason = outcomes.get(pin, "ABSENT FROM PYTEST OUTPUT")
             print(f"BROKEN {record['owning_feature']}: {pin} ({reason})")
     return verified, broken
@@ -523,13 +613,17 @@ def verify(
     drivers: list[str] = []
     if broken:
         for record in broken:
-            drivers.append(f"step5f:wire_regression:{_record_label(record)}")
+            for label in pin_labels(record, record.get("broken_pins", [])):
+                drivers.append(f"step5f:wire_regression:{label}")
     if missing:
         for record in missing:
-            drivers.append(f"step5f:wire_pin_missing:{_record_label(record)}")
+            for label in pin_labels(record, unresolved_pins(record, collected)):
+                drivers.append(f"step5f:wire_pin_missing:{label}")
     if ambiguous:
         for record in ambiguous:
-            drivers.append(f"step5f:wire_pin_ambiguous:{_record_label(record)}")
+            field = "pin" if record.get("status", "active") == "active" else "successor_pin"
+            for label in pin_labels(record, unresolved_pins(record, collected, field)):
+                drivers.append(f"step5f:wire_pin_ambiguous:{label}")
     if undeclared:
         for record in undeclared:
             drivers.append(f"step5f:undeclared_removal:{_record_label(record)}")
@@ -581,7 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     register_parser.add_argument("--id", required=True)
     register_parser.add_argument("--caller", required=True)
     register_parser.add_argument("--callee", required=True)
-    register_parser.add_argument("--pin", required=True)
+    register_parser.add_argument("--pin", required=True, action="append", metavar="PIN")
     register_parser.add_argument("--feature", required=True)
     challenge_parser = subparsers.add_parser("challenge")
     challenge_parser.add_argument("--base")
@@ -607,7 +701,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             stored = register([{
                 "kind": "wire", "id": args.id, "caller": args.caller,
-                "callee": args.callee, "pin": args.pin,
+                "callee": args.callee,
+                "pin": args.pin[0] if len(args.pin) == 1 else args.pin,
                 "owning_feature": args.feature,
             }], args.registry)
         except (OSError, RegistryError) as exc:

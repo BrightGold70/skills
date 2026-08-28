@@ -1,5 +1,5 @@
 {
-  "_why": "The registry's whole job is to notice a wire disappearing, and for one record it did the disappearing itself: keyed on the bare `id`, `register` upserted one feature's Task 4 over another's and `compare` — keyed the same way — saw the successor and reported nothing. Every mutation here restores the bare-id key at one of the four places it lives, because the defect was not a missing check but an identity that was one field too small, and each spelling of it fails silently in the same direction: a real removal reads as no removal at all.",
+  "_why": "The registry's whole job is to notice a wire disappearing, and for one record it did the disappearing itself: keyed on the bare `id`, `register` upserted one feature's Task 4 over another's and `compare` \u2014 keyed the same way \u2014 saw the successor and reported nothing. Every mutation here restores the bare-id key at one of the four places it lives, because the defect was not a missing check but an identity that was one field too small, and each spelling of it fails silently in the same direction: a real removal reads as no removal at all.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -17,7 +17,7 @@
   "mutations": [
     {
       "name": "identity-drops-the-owning-feature",
-      "_mechanism": "The defect at its source. Every consumer keeps calling the right helper and the helper answers with the wrong identity, so registration, comparison and the halt reasons all regress together — which is exactly why the key is one function rather than four expressions.",
+      "_mechanism": "The defect at its source. Every consumer keeps calling the right helper and the helper answers with the wrong identity, so registration, comparison and the halt reasons all regress together \u2014 which is exactly why the key is one function rather than four expressions.",
       "file": "scripts/h_mad_wire_registry.py",
       "find": "    return (record[\"owning_feature\"], record[\"id\"])",
       "replace": "    return (record[\"id\"],)",
@@ -33,7 +33,7 @@
     },
     {
       "name": "compare-masks-a-removal-behind-the-same-id",
-      "_mechanism": "The half that made the loss invisible rather than merely destructive. With the successor occupying the id, the evicted record is 'present at HEAD' and `step5f:undeclared_removal` structurally cannot fire — a guard reporting PASS about a wire it can no longer see.",
+      "_mechanism": "The half that made the loss invisible rather than merely destructive. With the successor occupying the id, the evicted record is 'present at HEAD' and `step5f:undeclared_removal` structurally cannot fire \u2014 a guard reporting PASS about a wire it can no longer see.",
       "file": "scripts/h_mad_wire_registry.py",
       "find": "    head_keys = {_record_key(record) for record in head_records}\n    return [record for record in base_records if _record_key(record) not in head_keys]",
       "replace": "    head_ids = {record[\"id\"] for record in head_records}\n    return [record for record in base_records if record[\"id\"] not in head_ids]",
@@ -54,6 +54,46 @@
       "find": "`step5f:undeclared_removal:<feature>::<id>`",
       "replace": "`step5f:undeclared_removal:<id>`",
       "test": "tests/test_h_mad_wire_registry.py::test_skill_documents_exactly_all_registry_halt_reasons"
+    },
+    {
+      "name": "a-partial-pin-pass-reports-the-wire-as-proven",
+      "_mechanism": "The multi-pin defect at its source: accept the record as soon as ANY pin resolves. A task wiring three sites then verifies on site 1 while sites 2 and 3 go unchecked -- indistinguishable from a green wire, which is the exact blindness the list form exists to remove.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "            elif bucket != \"ambiguous\":",
+      "replace": "            elif False:",
+      "test": "tests/test_h_mad_wire_registry.py::TestMultiPin::test_one_unresolved_pin_makes_the_whole_record_missing"
+    },
+    {
+      "name": "one-broken-site-passes-if-another-passes",
+      "_mechanism": "Verify on the FIRST pin only. A regression in site 2 is invisible whenever site 1 still passes, so the registry reports verified for a wire that is half cut.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        failed = [pin for pin in group if outcomes.get(pin) != \"PASSED\"]",
+      "replace": "        failed = [pin for pin in group[:1] if outcomes.get(pin) != \"PASSED\"]",
+      "test": "tests/test_h_mad_wire_registry.py::test_run_pins_breaks_a_record_when_only_one_of_its_pins_fails"
+    },
+    {
+      "name": "two-broken-sites-emit-the-same-halt-line-twice",
+      "_mechanism": "J43's defect one level down: drop the per-pin suffix and both offending sites on one record produce a byte-identical halt reason, naming neither. The author fixes one and the gate stays red with no way to tell which is left.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    return [f\"{label}#{pin}\" for pin in offending]",
+      "replace": "    return [label for pin in offending]",
+      "test": "tests/test_h_mad_wire_registry.py::TestMultiPin::test_a_halt_reason_names_the_offending_pin_on_a_multi_pin_record"
+    },
+    {
+      "name": "a-repeated-pin-is-accepted",
+      "_mechanism": "Drop the duplicate check and the same site can be registered twice, inflating a record's apparent coverage while proving one site.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if len(set(value)) != len(value):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_wire_registry.py::TestMultiPin::test_a_duplicate_pin_is_rejected"
+    },
+    {
+      "name": "a-single-pin-register-starts-writing-a-list",
+      "_mechanism": "Always store the list. Every single-pin record's on-disk shape changes, which is the migration the feature-scoped key deliberately avoided needing.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "                \"pin\": args.pin[0] if len(args.pin) == 1 else args.pin,",
+      "replace": "                \"pin\": args.pin,",
+      "test": "tests/test_h_mad_wire_registry.py::TestMultiPin::test_cli_register_with_one_pin_still_stores_a_string"
     }
   ]
 }

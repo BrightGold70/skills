@@ -67,8 +67,21 @@ def _skill_text() -> str:
 def _emitted_halt_reasons() -> set[str]:
     source = (SCRIPTS / "h_mad_wire_registry.py").read_text(encoding="utf-8")
     ast.parse(source)  # Ensure extraction is against valid executable source.
-    emitted = set(re.findall(r"step5f:(?:wire_regression|wire_pin_missing|wire_pin_ambiguous|undeclared_removal|unverified_rename):\{_record_label\(record\)\}|step5f:registry_untracked", source))
-    return {value.replace("{_record_label(record)}", "<feature>::<id>") for value in emitted}
+    # The three pin-bearing reasons emit one line PER offending pin, so they
+    # interpolate `{label}` from pin_labels(); the other two still name the
+    # record as a whole. Both placeholders canonicalise to the same shape --
+    # the `#<pin>` suffix a multi-pin record adds is documented as prose, not
+    # as a separate token, so this set comparison stays exact.
+    emitted = set(re.findall(
+        r"step5f:(?:wire_regression|wire_pin_missing|wire_pin_ambiguous):\{label\}"
+        r"|step5f:(?:undeclared_removal|unverified_rename):\{_record_label\(record\)\}"
+        r"|step5f:registry_untracked",
+        source,
+    ))
+    return {
+        value.replace("{_record_label(record)}", "<feature>::<id>").replace("{label}", "<feature>::<id>")
+        for value in emitted
+    }
 
 
 def _documented_halt_reasons(text: str) -> set[str]:
@@ -1256,3 +1269,181 @@ def test_live_registry_still_holds_the_wire_that_was_silently_evicted() -> None:
     ]
     assert matching, "audit-cycle-verb::Task 4 is absent — it was evicted, not declared removed"
     assert matching[0]["pin"] == "test_fail_in_either_pass_fails_cycle"
+
+
+class TestMultiPin:
+    """A wiring task with N call sites needs N pins on ONE record.
+
+    Before this, the registry keyed one row per task id and matched `pin`
+    exactly with no list form, so a task wiring three sites could only register
+    site 1; sites 2 and 3 were enforced by ACs and the wire-scoped revert, never
+    by the registry. `pin` now takes a string (unchanged) or a list.
+    """
+
+    def test_a_list_pin_validates(self) -> None:
+        record = _entry(pin=["test_site_one", "test_site_two"], registered_ts="t")
+        assert registry.validate_record(record) is record
+
+    def test_a_string_pin_still_validates(self) -> None:
+        assert registry.validate_record(_entry(pin="test_site_one", registered_ts="t"))
+
+    def test_an_empty_pin_list_is_rejected(self) -> None:
+        with pytest.raises(registry.RegistryError, match="pin"):
+            registry.validate_record(_entry(pin=[], registered_ts="t"))
+
+    def test_a_non_string_pin_element_is_rejected(self) -> None:
+        with pytest.raises(registry.RegistryError, match="pin"):
+            registry.validate_record(_entry(pin=["test_ok", 7], registered_ts="t"))
+
+    def test_a_duplicate_pin_is_rejected(self) -> None:
+        with pytest.raises(registry.RegistryError, match="pin"):
+            registry.validate_record(_entry(pin=["test_same", "test_same"], registered_ts="t"))
+
+    def test_every_pin_must_resolve_for_the_record_to_resolve(self) -> None:
+        record = _entry(pin=["test_site_one", "test_site_two"])
+        collected = {"t/a.py::test_site_one", "t/b.py::test_site_two"}
+        resolving, missing, ambiguous, _ = registry.partition([record], collected)
+        assert len(resolving) == 1, (missing, ambiguous)
+        assert resolving[0]["node_ids"] == [
+            "t/a.py::test_site_one", "t/b.py::test_site_two"
+        ]
+
+    def test_one_unresolved_pin_makes_the_whole_record_missing(self) -> None:
+        record = _entry(pin=["test_site_one", "test_site_two"])
+        resolving, missing, ambiguous, _ = registry.partition(
+            [record], {"t/a.py::test_site_one"}
+        )
+        assert not resolving, "a record is only as verified as its weakest pin"
+        assert len(missing) == 1 and not ambiguous
+
+    def test_an_ambiguous_pin_outranks_a_missing_sibling(self) -> None:
+        record = _entry(pin=["test_gone", "test_dup"])
+        collected = {"t/a.py::test_dup", "t/b.py::test_dup"}
+        resolving, missing, ambiguous, _ = registry.partition([record], collected)
+        assert not resolving
+        assert len(ambiguous) == 1 and not missing, (
+            "a pin naming more than one test is the stronger defect: it must be "
+            "qualified before the record can be judged at all"
+        )
+
+    def test_a_halt_reason_names_the_offending_pin_on_a_multi_pin_record(
+        self, tmp_path: Path
+    ) -> None:
+        """The J43 lesson, one level down: two failures on one record must differ.
+
+        `<feature>::<id>` alone would emit the same line twice and the author
+        could not tell which site broke.
+        """
+        record = _entry(pin=["test_gone_one", "test_gone_two"], id="Task 4")
+        _, missing, _, _ = registry.partition([record], set())
+        assert len(missing) == 1
+        labels = registry.pin_labels(missing[0], registry.unresolved_pins(missing[0], set()))
+        assert labels == [
+            "regression-provenance-ledger::Task 4#test_gone_one",
+            "regression-provenance-ledger::Task 4#test_gone_two",
+        ], labels
+
+    def test_a_single_pin_label_is_unchanged(self) -> None:
+        """Every existing halt-reason string must stay byte-identical."""
+        record = _entry(pin="test_gone", id="Task 4")
+        labels = registry.pin_labels(record, ["test_gone"])
+        assert labels == ["regression-provenance-ledger::Task 4"], labels
+
+    def test_register_stores_one_pin_as_a_bare_string(self, tmp_path: Path) -> None:
+        """The on-disk shape of a single-pin record must not change."""
+        path = tmp_path / "wires.jsonl"
+        registry.register([_entry(pin="test_only")], path)
+        assert json.loads(path.read_text().splitlines()[0])["pin"] == "test_only"
+
+    def test_register_round_trips_a_list_pin(self, tmp_path: Path) -> None:
+        path = tmp_path / "wires.jsonl"
+        registry.register([_entry(pin=["test_a", "test_b"])], path)
+        assert json.loads(path.read_text().splitlines()[0])["pin"] == ["test_a", "test_b"]
+
+    def test_cli_register_accepts_a_repeated_pin_flag(self, tmp_path: Path) -> None:
+        path = tmp_path / "wires.jsonl"
+        rc = registry.main([
+            "register", "--registry", str(path), "--id", "Task 4",
+            "--caller", "a.b", "--callee", "c.d",
+            "--pin", "test_a", "--pin", "test_b", "--feature", "f",
+        ])
+        assert rc == 0
+        assert json.loads(path.read_text().splitlines()[0])["pin"] == ["test_a", "test_b"]
+
+    def test_cli_register_with_one_pin_still_stores_a_string(self, tmp_path: Path) -> None:
+        path = tmp_path / "wires.jsonl"
+        registry.main([
+            "register", "--registry", str(path), "--id", "Task 4",
+            "--caller", "a.b", "--callee", "c.d", "--pin", "test_a", "--feature", "f",
+        ])
+        assert json.loads(path.read_text().splitlines()[0])["pin"] == "test_a"
+
+    def test_a_renamed_tombstone_takes_a_list_successor(self) -> None:
+        record = _entry(
+            pin=["test_old_one", "test_old_two"], status="removed",
+            removal_provenance="renamed", removed_by_feature="f",
+            successor_pin=["test_new_one", "test_new_two"], registered_ts="t",
+        )
+        assert registry.validate_record(record) is record
+        collected = {"t/a.py::test_new_one", "t/b.py::test_new_two"}
+        resolving, _, _, unverified = registry.partition([record], collected)
+        assert len(resolving) == 1 and not unverified
+
+
+def test_skill_documents_the_multi_pin_contract() -> None:
+    """The list form and its `#<pin>` halt-reason suffix must be findable in SKILL.md."""
+    phase5 = _section(_skill_text(), "Phase 5 (Implementation) sub-steps")
+    assert "may be a single test or a LIST" in phase5
+    assert "step5f:wire_pin_missing:<feature>::<id>#<pin>" in phase5
+    assert "EVERY pin passes" in phase5
+    assert "Ambiguity outranks absence" in phase5
+
+
+def test_run_pins_breaks_a_record_when_only_one_of_its_pins_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wire is only as verified as its weakest site.
+
+    Site 1 passing while site 2 regresses must NOT read as a verified wire --
+    that is precisely the blindness one pin per record left in place.
+    """
+    class Result:
+        stdout = (
+            "PASSED t/a.py::test_site_one\n"
+            "FAILED t/b.py::test_site_two\n"
+        )
+        returncode = 1
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: Result())
+    record = _entry(
+        pin=["test_site_one", "test_site_two"],
+        node_ids=["t/a.py::test_site_one", "t/b.py::test_site_two"],
+    )
+
+    verified, broken = registry.run_pins([record], tmp_path)
+
+    assert verified == [] and len(broken) == 1
+    assert broken[0]["broken_pins"] == ["t/b.py::test_site_two"], (
+        "only the failing site is named, so the author is not sent to re-check "
+        "a site that passed"
+    )
+
+
+def test_run_pins_verifies_a_record_only_when_every_pin_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Result:
+        stdout = (
+            "PASSED t/a.py::test_site_one\n"
+            "PASSED t/b.py::test_site_two\n"
+        )
+        returncode = 0
+
+    monkeypatch.setattr(registry.subprocess, "run", lambda *a, **k: Result())
+    record = _entry(
+        pin=["test_site_one", "test_site_two"],
+        node_ids=["t/a.py::test_site_one", "t/b.py::test_site_two"],
+    )
+
+    verified, broken = registry.run_pins([record], tmp_path)
+    assert len(verified) == 1 and broken == []
