@@ -1,0 +1,67 @@
+{
+  "_why": "The two steps this driver exists for are the two an operator skips, and both fail SILENTLY: a stale BASE reviews the previous commit and comes back clean, and a review that read nothing returns a confident verdict word. So the mutations attack the ORDER and the REFUSALS, not the happy path -- every one of them leaves a run that still prints a verdict-shaped line.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archreview_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-review-that-read-nothing-is-recorded",
+      "_mechanism": "The 1510-confident-bytes defect, restored. The reviewer read nothing, its last line says READY_TO_MERGE, and that word reaches orchestrator state -- after which every later gate is judging a review that never happened.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if tools == 0:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestScoreRecordsOnlyAProvenReview::test_a_review_that_read_nothing_is_refused_and_records_nothing"
+    },
+    {
+      "name": "the-verdict-gate-runs-before-the-evidence-gate",
+      "_mechanism": "Order IS the contract. Extract first and a hollow review with a verdict word is recorded before anything asks whether it read -- the gates both exist, in the wrong sequence, which reads as correct in review.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    tools = _tools_that_completed(log_path)",
+      "replace": "    tools = 1 if _extract_assessment(review) else _tools_that_completed(log_path)",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestScoreRecordsOnlyAProvenReview::test_a_review_that_read_nothing_is_refused_and_records_nothing"
+    },
+    {
+      "name": "the-readback-is-dropped",
+      "_mechanism": "`archreview` is not in the schema's `required` array, so a write that never landed still reports STATE: PASS. Without the comparison the driver reports `recorded=yes` about a field that is absent.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if stored != verdict:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestScoreRecordsOnlyAProvenReview::test_a_dropped_write_is_caught_by_the_readback"
+    },
+    {
+      "name": "the-first-assessment-wins",
+      "_mechanism": "The prompt instructs the reviewer to 'return ASSESSMENT: NO if your reads fail', so the review echoes a verdict word before it produces one. First-match reads the instruction back -- J39 in a different file.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    for value in reversed(matches):",
+      "replace": "    for value in matches:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestScoreRecordsOnlyAProvenReview::test_the_last_assessment_wins"
+    },
+    {
+      "name": "a-degenerate-range-is-staged",
+      "_mechanism": "BASE == HEAD is an empty diff. The review runs, examines nothing, and returns READY_TO_MERGE truthfully -- the stale-sha failure of J41 one level up, where the wrong range is indistinguishable from a clean feature.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if base == head:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestStage::test_base_and_head_must_differ"
+    },
+    {
+      "name": "a-live-placeholder-ships-in-the-prompt",
+      "_mechanism": "A prompt still carrying `<INLINE_...>` asks the reviewer to review a placeholder, and reads as a real prompt to the dispatcher, the log and the extractor alike.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if left:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestStage::test_an_unsubstituted_placeholder_is_refused"
+    }
+  ]
+}
