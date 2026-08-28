@@ -1,307 +1,307 @@
 {
- "_why": "The harness scores every other guard in h-mad, so a hole here is invisible everywhere else. These target the machinery that turns 'something went red' into 'the named test bit' -- the discrimination `ALL_CAUGHT` structurally cannot express -- plus the anchor hints and the byte-compatibility of the summary line existing callers parse. Each mutation names the one test it is aimed at, which is also this feature dogfooding itself.",
- "root": "../..",
- "command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "tests/test_h_mad_mutation_harness.py",
-  "-q"
- ],
- "target_command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "-q"
- ],
- "mutations": [
-  {
-   "name": "ignore-the-named-test-and-score-the-whole-suite",
-   "_mechanism": "Reverts to exit-code scoring. A mutant caught by an unrelated assertion then counts as a kill -- the exact blindness this feature closes.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            if target_command and mutation.get(\"test\"):\n                scoring_command = list(target_command) + [mutation[\"test\"]]",
-   "replace": "            if False:\n                scoring_command = list(target_command) + [mutation[\"test\"]]",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
-  },
-  {
-   "name": "a-wrong-catcher-counts-as-a-kill",
-   "_mechanism": "The named test PASSING is scored as caught anyway, so suite-red is treated as proof the property was exercised. Re-anchored on the `elif` after the collection-error branch was added: anchoring on the branch condition made this a DUPLICATE of `credit-a-collection-error-as-a-kill` and it survived its own pinned test.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                elif not pin_green:\n                    result[\"caught\"] += 1",
-   "replace": "                elif True:\n                    result[\"caught\"] += 1",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
-  },
-  {
-   "name": "drop-the-red-pin-precheck",
-   "_mechanism": "L559: without it, a kill credited against a pin that was already failing measures nothing, and the whole-suite baseline cannot see a single red pin.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            if scoring_command is not None and mutation.get(\"test\"):\n                _, pin_output = _run(scoring_command, root)",
-   "replace": "            if False:\n                _, pin_output = _run(scoring_command, root)",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
-  },
-  {
-   "name": "half-wired-spec-is-accepted-silently",
-   "_mechanism": "A `test` with no `target_command` would fall through to whole-suite scoring while the spec claims a per-test verdict that was never computed.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        raise SpecError(\"a mutation names a `test` but the spec has no `target_command`\")",
-   "replace": "        pass",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_test_field_without_a_target_command_is_a_spec_error"
-  },
-  {
-   "name": "accept-a-non-string-test-field",
-   "_mechanism": "A non-string nodeid would reach subprocess argv and fail as a launch error, which scores as red -- a fake kill.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            raise SpecError(f\"mutation {index} ({mutation['name']}) has a non-string `test`\")",
-   "replace": "            pass",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_non_string_test_field_is_a_spec_error"
-  },
-  {
-   "name": "drop-the-near-miss-hint",
-   "_mechanism": "The REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved. Anchored in `anchor_status`, which both the precheck and the run read.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found — the anchor may be gone entirely\"\n        ]",
-   "replace": "        return hits, []",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_drifted_anchor_gets_a_near_miss_with_a_line_number"
-  },
-  {
-   "name": "near-miss-matches-the-whole-multiline-anchor",
-   "_mechanism": "Comparing a multi-line `find` against single lines finds nothing useful, so every hint degrades to 'no near miss' while looking implemented.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    needle = find.split(\"\\n\", 1)[0].strip()\n    if not needle:",
-   "replace": "    needle = find.strip()\n    if not needle:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_multiline_anchor_still_gets_a_near_miss"
-  },
-  {
-   "name": "guess-a-near-miss-at-any-distance",
-   "_mechanism": "Dropping the cutoff makes every refusal produce a confident and unrelated suggestion -- worse than no hint, because it reads as an answer.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    best = sorted((s for s in scored if s[0] >= 0.6), key=lambda s: (-s[0], s[1]))[:limit]",
-   "replace": "    best = sorted((s for s in scored if s[0] >= 0.0), key=lambda s: (-s[0], s[1]))[:limit]",
-   "test": "tests/test_h_mad_mutation_harness.py::test_an_anchor_with_no_near_miss_says_so_rather_than_guessing"
-  },
-  {
-   "name": "ambiguous-anchor-gets-no-line-numbers",
-   "_mechanism": "The author is told the anchor matched N times but not where, which is the same manual re-grep in the other direction.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        + \", \".join(str(n) for n in _match_lines(source, find))",
-   "replace": "        + \"\"",
-   "test": "tests/test_h_mad_mutation_harness.py::test_an_ambiguous_anchor_is_told_where_its_matches_are"
-  },
-  {
-   "name": "hints-are-computed-but-never-printed",
-   "_mechanism": "A result dict nobody can see. The CLI is the only surface an operator reads.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        for hint in hints.get(name, []):\n            print(f\"    hint: {hint}\")",
-   "replace": "        for hint in []:\n            print(f\"    hint: {hint}\")",
-   "test": "tests/test_h_mad_mutation_harness.py::test_the_cli_prints_hints_under_the_refusal"
-  },
-  {
-   "name": "change-the-summary-line-callers-parse",
-   "_mechanism": "SKILL.md, failure-recovery.md and the codex verifier prompt all document this exact line. The additions must be detail lines only.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"",
-   "replace": "        print(\n            f\"MUTATION: {verdict} total={result['mutations']} \"",
-   "test": "tests/test_h_mad_mutation_harness.py::test_the_summary_line_is_unchanged_by_the_new_detail"
-  },
-  {
-   "name": "a-launch-failure-reads-as-green",
-   "_mechanism": "'I could not measure' must never resolve to 'the guard is fine'. Pre-existing invariant, re-pinned because _run replaced _suite_is_green.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        return False, f\"could not launch: {exc}\"",
-   "replace": "        return True, f\"could not launch: {exc}\"",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_command_that_cannot_launch_is_red_not_green"
-  },
-  {
-   "name": "identical-lines-collapse-to-one-location",
-   "_mechanism": "`list.index()` on a de-duplicated candidate list reports the FIRST occurrence twice, so a line appearing at 1 and 3 is printed as 1 and 1. Found by dogfooding this spec against the harness itself.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        for i, ln in enumerate(lines)\n        if ln.strip()",
-   "replace": "        for i, ln in enumerate(lines)\n        if ln.strip() and lines.index(ln) == i",
-   "test": "tests/test_h_mad_mutation_harness.py::test_identical_lines_are_reported_at_both_locations"
-  },
-  {
-   "name": "stale-bytecode-masks-a-same-size-mutation",
-   "_mechanism": "CPython invalidates a .pyc on (source mtime, size). A same-size mutation inside the same mtime second reuses the stale bytecode, so the mutant never executes while the file on disk is genuinely mutated -- a false `survived` indistinguishable from a coverage gap. Measured 4/6 before the fix. Pinned by a DIRECT assertion that `_run` purges, not by an end-to-end nested run: that version depends on two writes landing in the same mtime second, and the mutation also removes the purge from the nested harness the test drives, so the test's own mechanism moves under it.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    _purge_bytecode(root)\n    try:\n        proc = subprocess.run(",
-   "replace": "    try:\n        proc = subprocess.run(",
-   "test": "tests/test_h_mad_mutation_harness.py::test_every_run_purges_bytecode_before_launching"
-  },
-  {
-   "name": "purge-deletes-more-than-bytecode",
-   "_mechanism": "A purge that removed whole __pycache__ trees, or reached outside them, would be destroying the tree it is measuring.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        for entry in cached.glob(\"*.pyc\"):",
-   "replace": "        for entry in cached.glob(\"*\"):",
-   "test": "tests/test_h_mad_mutation_harness.py::test_purging_bytecode_leaves_the_sources_alone"
-  },
-  {
-   "name": "credit-a-collection-error-as-a-kill",
-   "_mechanism": "Measured: a syntax error exits 2 BEFORE the named test's assertion runs, and this was credited as `killed by its named test`. It proves the code breaks when broken and nothing about the property -- the wrong-mechanism family the named-test scoring exists to catch, arriving through the runner instead of another assertion.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                if not pin_green and not ran_and_failed(counts):",
-   "replace": "                if False:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_that_breaks_collection_is_refused_not_credited_as_a_kill"
-  },
-  {
-   "name": "a-skipped-pin-reads-as-green",
-   "_mechanism": "Measured: `@pytest.mark.skip` exits 0, so an exit-code pre-check declares a DISABLED test green. The mutant then survives and reads as a missing guard when the test was simply turned off.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    return (counts.get(\"passed\", 0) > 0\n            and not counts.get(\"failed\") and not counts.get(\"error\")\n            and not counts.get(\"skipped\"))",
-   "replace": "    return not counts.get(\"failed\") and not counts.get(\"error\")",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_skipped_named_test_is_refused_not_treated_as_green"
-  },
-  {
-   "name": "a-missing-pin-reads-as-green",
-   "_mechanism": "A nodeid that matches nothing runs nothing, and `no tests ran` must not clear the pre-check -- otherwise a typo in a spec silently disables its scoring.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    return (counts.get(\"passed\", 0) > 0",
-   "replace": "    return (counts.get(\"passed\", 0) >= 0",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_that_does_not_exist_is_refused_as_did_not_run"
-  },
-  {
-   "name": "a-genuinely-red-pin-is-scored-anyway",
-   "_mechanism": "L559's original case, now discriminated from `did not run`: a kill credited against a pin that was already failing measures nothing.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "                if not ran_and_passed(counts):",
-   "replace": "                if False:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
-  },
-  {
-   "name": "precheck-calls-a-drifted-anchor-ok",
-   "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
-   "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_flags_a_drifted_anchor_with_its_hit_count"
-  },
-  {
-   "name": "precheck-passes-an-unreadable-target",
-   "_mechanism": "A spec pointing at a file that no longer exists is the same unverified guard by another route; counting only `drifted` lets it read as clean.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        if not result[\"drifted\"] and not result[\"unreadable\"]",
-   "replace": "        if not result[\"drifted\"]",
-   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok"
-  },
-  {
-   "name": "precheck-runs-the-spec-command",
-   "_mechanism": "The precheck is only worth running because it costs file reads instead of a suite per spec; launching the command gives back the cost it exists to avoid.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    cache: dict[Path, str] = {}\n    for mutation in spec[\"mutations\"]:",
-   "replace": "    cache: dict[Path, str] = {}\n    _run(spec[\"command\"], root)\n    for mutation in spec[\"mutations\"]:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_applies_nothing_and_runs_nothing"
-  },
-  {
-   "name": "nothing-swept-reports-anchors-ok",
-   "_mechanism": "A sweep that examined zero specs must be a cannot-judge. Restoring the old fallthrough reports ANCHORS_OK with zero measured anchors, so a bad path or all-non-spec glob reads as a pass.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    if specs == 0:\n        verdict = \"ANCHORS_NOTHING_SWEPT\"\n        print(\n            f\"ANCHORS: {verdict} specs=0 skipped={skipped} \"\n            f\"unclassifiable={unclassifiable}\"\n        )\n        print(f\"[H-MAD] anchors {verdict}\")\n        return 2\n\n",
-   "replace": "",
-   "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_cli_nothing_swept_from_nonexistent_path"
-  },
-  {
-   "name": "a-run-quietly-accepts-several-specs",
-   "_mechanism": "`--check-anchors` widened the positional to N; if the run widens with it, a single command applies and restores mutations across several trees at once.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    if len(args.spec) != 1:",
-   "replace": "    if False:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_mutation_run_still_takes_exactly_one_spec"
-  },
-  {
-   "name": "resolve-a-relative-root-against-the-callers-cwd",
-   "_mechanism": "Reverts _resolve_root's relative branch to cwd-relative. The spec then resolves to a different tree depending on where the harness was invoked from -- the portability defect Task 1 closes.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    return (spec_path.parent / root).resolve()",
-   "replace": "    return root.resolve()",
-   "test": "tests/test_h_mad_mutation_harness.py::test_relative_root_is_resolved_against_the_spec_dir_from_any_cwd"
-  },
-  {
-   "name": "default-an-absent-root-to-the-callers-cwd",
-   "_mechanism": "A spec with no `root` key falls back to the process cwd instead of its own directory, so the same spec mutates different files from different cwds.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        return spec_path.parent.resolve()",
-   "replace": "        return Path.cwd().resolve()",
-   "test": "tests/test_h_mad_mutation_harness.py::test_absent_root_defaults_to_the_spec_file_directory"
-  },
-  {
-   "name": "classify-a-real-spec-as-not-a-spec",
-   "_mechanism": "The classifier stops honouring _load_spec's non-empty-mutations gate, so a genuine spec is skipped by a directory sweep and its drift goes unreported.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    if isinstance(mutations, list) and mutations:\n        return \"spec\", None",
-   "replace": "    if False:\n        return \"spec\", None",
-   "test": "tests/test_h_mad_mutation_harness.py::test_classifier_agrees_with_load_spec_on_the_mutations_gate"
-  },
-  {
-   "name": "swallow-a-corrupt-spec-as-a-skip",
-   "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE — {exc}\")\n            continue",
-   "replace": "        except SpecError:\n            skipped += 1\n            continue",
-   "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
-  },
-  {
-   "name": "stop-naming-skipped-files-on-a-successful-sweep",
-   "_mechanism": "Skipped files stop being named, so an operator cannot tell `swept 17` from `swept 12 and quietly ignored 5`.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
-   "replace": "            pass",
-   "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
-  },
-  {
-   "name": "remove-the-sibling-precheck-call-from-run-spec",
-   "_mechanism": "WIRE direction 1: the callee survives, the CONNECTION is cut. run_spec stops prechecking siblings and mutates a tree a neighbour's drift has already invalidated.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    siblings = _sibling_specs(spec_path)",
-   "replace": "    siblings = {\"spec_paths\": [], \"skipped\": []}",
-   "test": "tests/test_h_mad_mutation_harness.py::test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating"
-  },
-  {
-   "name": "fire-the-sibling-precheck-unconditionally",
-   "_mechanism": "WIRE direction 2: the connection fires ALWAYS. A wire that always refuses passes the remove-the-call test just as happily as a correct one, so only this direction distinguishes them.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    if drifted_specs or unreadable_specs:",
-   "replace": "    if True:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_all_clean_sibling_directory_still_runs_to_ordinary_verdict"
-  },
-  {
-   "name": "sweep-the-directory-including-the-spec-being-run",
-   "_mechanism": "Self-exclusion is load-bearing: including self makes the spec you ran report as a drifted SIBLING, collapsing the distinction AC-3.4 requires and making the existing REFUSED verdict unreachable for self drift.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        if sibling == spec_path:\n            continue",
-   "replace": "        if False:\n            continue",
-   "test": "tests/test_h_mad_mutation_harness.py::test_self_drift_and_sibling_drift_have_distinct_refusal_text"
-  },
-  {
-   "name": "precheck-failed-exits-zero",
-   "_mechanism": "PRECHECK_FAILED is a cannot-judge verdict. Returning zero would let a sibling precheck failure look like usable mutation evidence.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\"} else 2",
-   "replace": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\", \"PRECHECK_FAILED\"} else 2",
-   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_exits_two"
-  },
-  {
-   "name": "precheck-failed-summary-carries-mutation-counts",
-   "_mechanism": "The new precheck verdict must report only the sibling sweep census. Reintroducing mutation counts collapses it back into an ordinary mutation verdict.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "        print(\n            f\"MUTATION: {verdict} specs={result['precheck']['swept']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
-   "replace": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
-   "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_summary_line_has_sweep_counts_and_no_mutation_counts"
-  },
-  {
-   "name": "specerror-sibling-counts-as-drifted",
-   "_mechanism": "A sibling that declares itself a spec but fails deeper validation is unreadable, not anchor drift. Counting it as drifted makes drifted=0 impossible for the unreadable-only refusal this verdict was split out to name.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            unreadable_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
-   "replace": "            drifted_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
-   "test": "tests/test_h_mad_mutation_harness.py::test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift"
-  },
-  {
-   "name": "a-bad-spec-aborts-the-sweep",
-   "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
-   "file": "scripts/h_mad_mutation_harness.py",
-   "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
-   "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
-   "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
-  }
- ]
+  "_why": "The harness scores every other guard in h-mad, so a hole here is invisible everywhere else. These target the machinery that turns 'something went red' into 'the named test bit' -- the discrimination `ALL_CAUGHT` structurally cannot express -- plus the anchor hints and the byte-compatibility of the summary line existing callers parse. Each mutation names the one test it is aimed at, which is also this feature dogfooding itself.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "ignore-the-named-test-and-score-the-whole-suite",
+      "_mechanism": "Reverts to exit-code scoring. A mutant caught by an unrelated assertion then counts as a kill -- the exact blindness this feature closes.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if target_command and mutation.get(\"test\"):\n                scoring_command = list(target_command) + [mutation[\"test\"]]",
+      "replace": "            if False:\n                scoring_command = list(target_command) + [mutation[\"test\"]]",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
+    },
+    {
+      "name": "a-wrong-catcher-counts-as-a-kill",
+      "_mechanism": "The named test PASSING is scored as caught anyway, so suite-red is treated as proof the property was exercised. Re-anchored on the `elif` after the collection-error branch was added: anchoring on the branch condition made this a DUPLICATE of `credit-a-collection-error-as-a-kill` and it survived its own pinned test.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                elif not pin_green:\n                    result[\"caught\"] += 1",
+      "replace": "                elif True:\n                    result[\"caught\"] += 1",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
+    },
+    {
+      "name": "drop-the-red-pin-precheck",
+      "_mechanism": "L559: without it, a kill credited against a pin that was already failing measures nothing, and the whole-suite baseline cannot see a single red pin.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            if scoring_command is not None and mutation.get(\"test\"):\n                _, pin_output = _run(scoring_command, root)",
+      "replace": "            if False:\n                _, pin_output = _run(scoring_command, root)",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
+    },
+    {
+      "name": "half-wired-spec-is-accepted-silently",
+      "_mechanism": "A `test` with no `target_command` would fall through to whole-suite scoring while the spec claims a per-test verdict that was never computed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        raise SpecError(\"a mutation names a `test` but the spec has no `target_command`\")",
+      "replace": "        pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_test_field_without_a_target_command_is_a_spec_error"
+    },
+    {
+      "name": "accept-a-non-string-test-field",
+      "_mechanism": "A non-string nodeid would reach subprocess argv and fail as a launch error, which scores as red -- a fake kill.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            raise SpecError(f\"mutation {index} ({mutation['name']}) has a non-string `test`\")",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_non_string_test_field_is_a_spec_error"
+    },
+    {
+      "name": "drop-the-near-miss-hint",
+      "_mechanism": "The REFUSED verdict stays correct but the recovery goes back to a manual re-grep for whatever the author's own edits moved. Anchored in `anchor_status`, which both the precheck and the run read.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        return hits, [f\"near miss {h}\" for h in _near_misses(source, find)] or [\n            \"no near miss found — the anchor may be gone entirely\"\n        ]",
+      "replace": "        return hits, []",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_drifted_anchor_gets_a_near_miss_with_a_line_number"
+    },
+    {
+      "name": "near-miss-matches-the-whole-multiline-anchor",
+      "_mechanism": "Comparing a multi-line `find` against single lines finds nothing useful, so every hint degrades to 'no near miss' while looking implemented.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    needle = find.split(\"\\n\", 1)[0].strip()\n    if not needle:",
+      "replace": "    needle = find.strip()\n    if not needle:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_multiline_anchor_still_gets_a_near_miss"
+    },
+    {
+      "name": "guess-a-near-miss-at-any-distance",
+      "_mechanism": "Dropping the cutoff makes every refusal produce a confident and unrelated suggestion -- worse than no hint, because it reads as an answer.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    best = sorted((s for s in scored if s[0] >= 0.6), key=lambda s: (-s[0], s[1]))[:limit]",
+      "replace": "    best = sorted((s for s in scored if s[0] >= 0.0), key=lambda s: (-s[0], s[1]))[:limit]",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_anchor_with_no_near_miss_says_so_rather_than_guessing"
+    },
+    {
+      "name": "ambiguous-anchor-gets-no-line-numbers",
+      "_mechanism": "The author is told the anchor matched N times but not where, which is the same manual re-grep in the other direction.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        + \", \".join(str(n) for n in _match_lines(source, find))",
+      "replace": "        + \"\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_ambiguous_anchor_is_told_where_its_matches_are"
+    },
+    {
+      "name": "hints-are-computed-but-never-printed",
+      "_mechanism": "A result dict nobody can see. The CLI is the only surface an operator reads.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        for hint in hints.get(name, []):\n            print(f\"    hint: {hint}\")",
+      "replace": "        for hint in []:\n            print(f\"    hint: {hint}\")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_cli_prints_hints_under_the_refusal"
+    },
+    {
+      "name": "change-the-summary-line-callers-parse",
+      "_mechanism": "SKILL.md, failure-recovery.md and the codex verifier prompt all document this exact line. The additions must be detail lines only.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"",
+      "replace": "        print(\n            f\"MUTATION: {verdict} total={result['mutations']} \"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_summary_line_is_unchanged_by_the_new_detail"
+    },
+    {
+      "name": "a-launch-failure-reads-as-green",
+      "_mechanism": "'I could not measure' must never resolve to 'the guard is fine'. Pre-existing invariant, re-pinned because _run replaced _suite_is_green.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        return False, f\"could not launch: {exc}\"",
+      "replace": "        return True, f\"could not launch: {exc}\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_command_that_cannot_launch_is_red_not_green"
+    },
+    {
+      "name": "identical-lines-collapse-to-one-location",
+      "_mechanism": "`list.index()` on a de-duplicated candidate list reports the FIRST occurrence twice, so a line appearing at 1 and 3 is printed as 1 and 1. Found by dogfooding this spec against the harness itself.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        for i, ln in enumerate(lines)\n        if ln.strip()",
+      "replace": "        for i, ln in enumerate(lines)\n        if ln.strip() and lines.index(ln) == i",
+      "test": "tests/test_h_mad_mutation_harness.py::test_identical_lines_are_reported_at_both_locations"
+    },
+    {
+      "name": "stale-bytecode-masks-a-same-size-mutation",
+      "_mechanism": "CPython invalidates a .pyc on (source mtime, size). A same-size mutation inside the same mtime second reuses the stale bytecode, so the mutant never executes while the file on disk is genuinely mutated -- a false `survived` indistinguishable from a coverage gap. Measured 4/6 before the fix. Pinned by a DIRECT assertion that `_run` purges, not by an end-to-end nested run: that version depends on two writes landing in the same mtime second, and the mutation also removes the purge from the nested harness the test drives, so the test's own mechanism moves under it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    _purge_bytecode(root)\n    try:\n        proc = subprocess.run(",
+      "replace": "    try:\n        proc = subprocess.run(",
+      "test": "tests/test_h_mad_mutation_harness.py::test_every_run_purges_bytecode_before_launching"
+    },
+    {
+      "name": "purge-deletes-more-than-bytecode",
+      "_mechanism": "A purge that removed whole __pycache__ trees, or reached outside them, would be destroying the tree it is measuring.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        for entry in cached.glob(\"*.pyc\"):",
+      "replace": "        for entry in cached.glob(\"*\"):",
+      "test": "tests/test_h_mad_mutation_harness.py::test_purging_bytecode_leaves_the_sources_alone"
+    },
+    {
+      "name": "credit-a-collection-error-as-a-kill",
+      "_mechanism": "Measured: a syntax error exits 2 BEFORE the named test's assertion runs, and this was credited as `killed by its named test`. It proves the code breaks when broken and nothing about the property -- the wrong-mechanism family the named-test scoring exists to catch, arriving through the runner instead of another assertion.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                if not pin_green and not ran_and_failed(counts):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_that_breaks_collection_is_refused_not_credited_as_a_kill"
+    },
+    {
+      "name": "a-skipped-pin-reads-as-green",
+      "_mechanism": "Measured: `@pytest.mark.skip` exits 0, so an exit-code pre-check declares a DISABLED test green. The mutant then survives and reads as a missing guard when the test was simply turned off.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return (counts.get(\"passed\", 0) > 0\n            and not counts.get(\"failed\") and not counts.get(\"error\")\n            and not counts.get(\"skipped\"))",
+      "replace": "    return not counts.get(\"failed\") and not counts.get(\"error\")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_skipped_named_test_is_refused_not_treated_as_green"
+    },
+    {
+      "name": "a-missing-pin-reads-as-green",
+      "_mechanism": "A nodeid that matches nothing runs nothing, and `no tests ran` must not clear the pre-check -- otherwise a typo in a spec silently disables its scoring.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return (counts.get(\"passed\", 0) > 0",
+      "replace": "    return (counts.get(\"passed\", 0) >= 0",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_that_does_not_exist_is_refused_as_did_not_run"
+    },
+    {
+      "name": "a-genuinely-red-pin-is-scored-anyway",
+      "_mechanism": "L559's original case, now discriminated from `did not run`: a kill credited against a pin that was already failing measures nothing.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                if not ran_and_passed(counts):",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_named_test_already_red_is_refused_not_scored"
+    },
+    {
+      "name": "precheck-calls-a-drifted-anchor-ok",
+      "_mechanism": "The sweep reports ANCHORS_OK over specs whose mutations cannot land — exactly the false all-clear the precheck exists to end, and cheaper to trust than the run it stands in for.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if hits == 1:",
+      "replace": "        hits, hints = anchor_status(cache[target], mutation[\"find\"])\n        if True:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_flags_a_drifted_anchor_with_its_hit_count"
+    },
+    {
+      "name": "precheck-passes-an-unreadable-target",
+      "_mechanism": "A spec whose target file is GONE must not pass. Re-anchored when J37 split the verdict word: the mutation now flips the unreadable branch to ANCHORS_OK, which is the same silent pass by the same route. The drift was caught by --check-anchors refusing rather than by review.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        \"ANCHORS_UNREADABLE\"\n        if result[\"unreadable\"]",
+      "replace": "        \"ANCHORS_OK\"\n        if result[\"unreadable\"]",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok"
+    },
+    {
+      "name": "precheck-runs-the-spec-command",
+      "_mechanism": "The precheck is only worth running because it costs file reads instead of a suite per spec; launching the command gives back the cost it exists to avoid.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    cache: dict[Path, str] = {}\n    for mutation in spec[\"mutations\"]:",
+      "replace": "    cache: dict[Path, str] = {}\n    _run(spec[\"command\"], root)\n    for mutation in spec[\"mutations\"]:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_applies_nothing_and_runs_nothing"
+    },
+    {
+      "name": "nothing-swept-reports-anchors-ok",
+      "_mechanism": "A sweep that examined zero specs must be a cannot-judge. Restoring the old fallthrough reports ANCHORS_OK with zero measured anchors, so a bad path or all-non-spec glob reads as a pass.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if specs == 0:\n        verdict = \"ANCHORS_NOTHING_SWEPT\"\n        print(\n            f\"ANCHORS: {verdict} specs=0 skipped={skipped} \"\n            f\"unclassifiable={unclassifiable}\"\n        )\n        print(f\"[H-MAD] anchors {verdict}\")\n        return 2\n\n",
+      "replace": "",
+      "test": "tests/test_h_mad_mutation_harness.py::test_check_anchors_cli_nothing_swept_from_nonexistent_path"
+    },
+    {
+      "name": "a-run-quietly-accepts-several-specs",
+      "_mechanism": "`--check-anchors` widened the positional to N; if the run widens with it, a single command applies and restores mutations across several trees at once.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if len(args.spec) != 1:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_mutation_run_still_takes_exactly_one_spec"
+    },
+    {
+      "name": "resolve-a-relative-root-against-the-callers-cwd",
+      "_mechanism": "Reverts _resolve_root's relative branch to cwd-relative. The spec then resolves to a different tree depending on where the harness was invoked from -- the portability defect Task 1 closes.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return (spec_path.parent / root).resolve()",
+      "replace": "    return root.resolve()",
+      "test": "tests/test_h_mad_mutation_harness.py::test_relative_root_is_resolved_against_the_spec_dir_from_any_cwd"
+    },
+    {
+      "name": "default-an-absent-root-to-the-callers-cwd",
+      "_mechanism": "A spec with no `root` key falls back to the process cwd instead of its own directory, so the same spec mutates different files from different cwds.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        return spec_path.parent.resolve()",
+      "replace": "        return Path.cwd().resolve()",
+      "test": "tests/test_h_mad_mutation_harness.py::test_absent_root_defaults_to_the_spec_file_directory"
+    },
+    {
+      "name": "classify-a-real-spec-as-not-a-spec",
+      "_mechanism": "The classifier stops honouring _load_spec's non-empty-mutations gate, so a genuine spec is skipped by a directory sweep and its drift goes unreported.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if isinstance(mutations, list) and mutations:\n        return \"spec\", None",
+      "replace": "    if False:\n        return \"spec\", None",
+      "test": "tests/test_h_mad_mutation_harness.py::test_classifier_agrees_with_load_spec_on_the_mutations_gate"
+    },
+    {
+      "name": "swallow-a-corrupt-spec-as-a-skip",
+      "_mechanism": "A file that classifies `spec` and then fails deeper validation is counted as a skip instead of a finding. The sweep then reports success while a corrupt spec's guard is unverified -- the exact blindness the classifier must not introduce.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        except SpecError as exc:\n            # One unusable spec must not abort the sweep: the specs after it are\n            # exactly the ones whose drift would then go unreported.\n            specs += 1\n            unreadable += 1\n            print(f\"ANCHORS: {spec_path.name} UNREADABLE — {exc}\")\n            continue",
+      "replace": "        except SpecError:\n            skipped += 1\n            continue",
+      "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
+    },
+    {
+      "name": "stop-naming-skipped-files-on-a-successful-sweep",
+      "_mechanism": "Skipped files stop being named, so an operator cannot tell `swept 17` from `swept 12 and quietly ignored 5`.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            print(f\"ANCHORS: {spec_path.name} SKIPPED not-a-spec — {detail}\")",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_mutation_harness.py::test_anchor_sweep_names_skipped_and_unclassifiable_files_on_success"
+    },
+    {
+      "name": "remove-the-sibling-precheck-call-from-run-spec",
+      "_mechanism": "WIRE direction 1: the callee survives, the CONNECTION is cut. run_spec stops prechecking siblings and mutates a tree a neighbour's drift has already invalidated.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    siblings = _sibling_specs(spec_path)",
+      "replace": "    siblings = {\"spec_paths\": [], \"skipped\": []}",
+      "test": "tests/test_h_mad_mutation_harness.py::test_clean_spec_beside_a_drifted_sibling_refuses_before_mutating"
+    },
+    {
+      "name": "fire-the-sibling-precheck-unconditionally",
+      "_mechanism": "WIRE direction 2: the connection fires ALWAYS. A wire that always refuses passes the remove-the-call test just as happily as a correct one, so only this direction distinguishes them.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if drifted_specs or unreadable_specs:",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_all_clean_sibling_directory_still_runs_to_ordinary_verdict"
+    },
+    {
+      "name": "sweep-the-directory-including-the-spec-being-run",
+      "_mechanism": "Self-exclusion is load-bearing: including self makes the spec you ran report as a drifted SIBLING, collapsing the distinction AC-3.4 requires and making the existing REFUSED verdict unreachable for self drift.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if sibling == spec_path:\n            continue",
+      "replace": "        if False:\n            continue",
+      "test": "tests/test_h_mad_mutation_harness.py::test_self_drift_and_sibling_drift_have_distinct_refusal_text"
+    },
+    {
+      "name": "precheck-failed-exits-zero",
+      "_mechanism": "PRECHECK_FAILED is a cannot-judge verdict. Returning zero would let a sibling precheck failure look like usable mutation evidence.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\"} else 2",
+      "replace": "    return 0 if verdict in {\"ALL_CAUGHT\", \"SURVIVED\", \"PRECHECK_FAILED\"} else 2",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_exits_two"
+    },
+    {
+      "name": "precheck-failed-summary-carries-mutation-counts",
+      "_mechanism": "The new precheck verdict must report only the sibling sweep census. Reintroducing mutation counts collapses it back into an ordinary mutation verdict.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        print(\n            f\"MUTATION: {verdict} specs={result['precheck']['swept']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
+      "replace": "        print(\n            f\"MUTATION: {verdict} mutations={result['mutations']} \"\n            f\"drifted={len(result['drifted'])} \"\n            f\"unreadable={len(result['unreadable'])}\"\n        )",
+      "test": "tests/test_h_mad_mutation_harness.py::test_precheck_failed_summary_line_has_sweep_counts_and_no_mutation_counts"
+    },
+    {
+      "name": "specerror-sibling-counts-as-drifted",
+      "_mechanism": "A sibling that declares itself a spec but fails deeper validation is unreadable, not anchor drift. Counting it as drifted makes drifted=0 impossible for the unreadable-only refusal this verdict was split out to name.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            unreadable_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
+      "replace": "            drifted_specs.append({\n                \"spec\": sibling_path.name,\n                \"root\": str(sibling_path.parent.resolve()),\n                \"error\": str(exc),\n            })\n            continue",
+      "test": "tests/test_h_mad_mutation_harness.py::test_specerror_sibling_is_unreadable_precheck_failed_with_zero_drift"
+    },
+    {
+      "name": "a-bad-spec-aborts-the-sweep",
+      "_mechanism": "One unreadable spec would hide the drift in every spec after it — and the sweep's whole value is that it reports on all of them in one pass. Anchor widened to include the precheck_spec call above it: Task 4 added a second `except SpecError` in run_spec's sibling loop, so the bare clause is no longer unique.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            result = precheck_spec(spec_path)\n        except SpecError as exc:",
+      "replace": "            result = precheck_spec(spec_path)\n        except ZeroDivisionError as exc:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_bad_spec_in_the_sweep_does_not_abort_the_others"
+    }
+  ]
 }

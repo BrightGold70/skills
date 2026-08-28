@@ -134,6 +134,35 @@ class TestVerdicts:
         assert "bad.json" in result.stderr
 
 
+    def test_an_unreadable_target_blocks_the_push(self, tmp_path):
+        """J37 coupling. The hook matched only ANCHORS_DRIFTED, so when the harness
+        gained a separate ANCHORS_UNREADABLE verdict this case fell through to the
+        catch-all and printed *"no ANCHORS_* verdict ... Push ALLOWED"* — allowing
+        the push AND misreporting a perfectly good verdict as broken tooling.
+
+        Measured before the hook was updated. A spec whose target file is gone is
+        an unverified guard exactly as a drifted one is, so it must block; it is a
+        distinct verdict only because the remedy differs.
+        """
+        repo = _init_repo(tmp_path)
+        spec = repo / "specs" / "gone.json"
+        spec.parent.mkdir(parents=True, exist_ok=True)
+        spec.write_text(json.dumps({
+            "root": ".", "command": ["true"],
+            "mutations": [{"name": "m", "file": "deleted.py",
+                           "find": "X", "replace": "R"}],
+        }), encoding="utf-8")
+        _commit_all(repo)
+
+        result = _run_hook(repo)
+
+        assert result.returncode == 1, result.stderr
+        assert "pre-push BLOCKED" in result.stderr
+        assert "no ANCHORS_* verdict" not in result.stderr, (
+            "a real verdict must never be reported as broken tooling"
+        )
+
+
 class TestNothingMeasuredAllows:
     """Three ways to measure nothing. All allow; none may do so silently."""
 

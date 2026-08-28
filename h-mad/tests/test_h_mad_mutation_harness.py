@@ -896,7 +896,11 @@ def test_precheck_reports_an_unreadable_target_rather_than_calling_it_ok(
         {"name": "gone", "file": "deleted.py", "find": "anything", "replace": "x"},
     ]))
 
-    assert result["verdict"] == "ANCHORS_DRIFTED", result
+    # ANCHORS_UNREADABLE, not ANCHORS_DRIFTED: this test asserted the collapsed
+    # verdict, which was the defect J37 describes rather than the property it was
+    # written for. What it exists to pin — that a missing target does not pass
+    # silently — is unchanged and still asserted below.
+    assert result["verdict"] == "ANCHORS_UNREADABLE", result
     assert result["ok"] == 0
     assert result["unreadable"], "a missing target file must not pass silently"
 
@@ -1918,3 +1922,86 @@ def test_every_committed_spec_resolves_within_its_own_skill() -> None:
         "a spec root above the skill can mutate files outside the portable skill "
         "checkout:\n" + "\n".join(offenders)
     )
+
+
+class TestUnreadableIsNotDrift:
+    """J37 — two distinct cannot-judges shared one verdict word.
+
+    `precheck_spec` recorded a spec whose TARGET FILE cannot be read in the same
+    verdict as one whose anchor merely moved: *"An unreadable target is a drift
+    too"*. The counts were separate on the summary line, but the word was not —
+    and the word is what gets read. The operator's next action differs entirely:
+    re-anchor the spec, versus restore a file that is gone. You cannot re-anchor
+    into a file that does not exist, which is why UNREADABLE outranks DRIFTED
+    rather than the other way round — the same precedence rule that makes REFUSED
+    outrank SURVIVED and the wire-pin gate's UNSHAPED outrank FAIL.
+
+    The `MUTATION:` half is deliberately NOT given new verdict words. `REFUSED`
+    has five distinct causes and the remedy for every one of them is the same halt
+    (`step5e:mutation_unverified`), so five words would be worse than the disease;
+    what the operator lacked was the split, which the summary now carries as
+    `unreadable=`.
+    """
+
+    def _spec(self, tmp_path, target_exists: bool, anchor: str = "SENTINEL"):
+        root = tmp_path / "repo"
+        (root / "src").mkdir(parents=True, exist_ok=True)
+        if target_exists:
+            (root / "src" / "mod.py").write_text("x = SENTINEL\n", encoding="utf-8")
+        spec = root / "spec.json"
+        spec.write_text(json.dumps({
+            "root": ".", "command": ["true"],
+            "mutations": [{"name": "m", "file": "src/mod.py",
+                           "find": anchor, "replace": "R"}],
+        }), encoding="utf-8")
+        return spec
+
+    def test_a_missing_target_is_unreadable_not_drifted(self, tmp_path, capsys):
+        spec = self._spec(tmp_path, target_exists=False)
+        rc = h_mad_mutation_harness._check_anchors([spec])
+        out = capsys.readouterr().out
+        assert "ANCHORS_UNREADABLE" in out, out
+        assert "ANCHORS_DRIFTED" not in out, out
+        assert rc == 2
+
+    def test_a_moved_anchor_is_still_drifted(self, tmp_path, capsys):
+        """The accept direction — the existing verdict must not be swallowed."""
+        spec = self._spec(tmp_path, target_exists=True, anchor="NOT_PRESENT")
+        rc = h_mad_mutation_harness._check_anchors([spec])
+        out = capsys.readouterr().out
+        assert "ANCHORS_DRIFTED" in out, out
+        assert "ANCHORS_UNREADABLE" not in out, out
+        assert rc == 2
+
+    def test_a_clean_spec_is_still_ok(self, tmp_path, capsys):
+        spec = self._spec(tmp_path, target_exists=True)
+        rc = h_mad_mutation_harness._check_anchors([spec])
+        out = capsys.readouterr().out
+        assert "ANCHORS_OK" in out, out
+        assert rc == 0
+
+    def test_unreadable_outranks_drifted_when_both_are_present(self, tmp_path, capsys):
+        """Precedence is the point: you cannot re-anchor into a file that is gone,
+        so the missing file is the first thing the operator must act on."""
+        good = self._spec(tmp_path, target_exists=True, anchor="NOT_PRESENT")
+        bad_root = tmp_path / "other"
+        (bad_root).mkdir(parents=True, exist_ok=True)
+        bad = bad_root / "spec.json"
+        bad.write_text(json.dumps({
+            "root": ".", "command": ["true"],
+            "mutations": [{"name": "m", "file": "gone.py", "find": "X", "replace": "R"}],
+        }), encoding="utf-8")
+
+        rc = h_mad_mutation_harness._check_anchors([good, bad])
+        out = capsys.readouterr().out
+        assert "ANCHORS_UNREADABLE" in out, out
+        assert rc == 2
+        # Both counts stay visible — the word chooses the FIRST action, it does
+        # not hide the other finding.
+        assert "drifted=1" in out and "unreadable=1" in out, out
+
+    def test_the_summary_still_carries_both_counts(self, tmp_path, capsys):
+        spec = self._spec(tmp_path, target_exists=False)
+        h_mad_mutation_harness._check_anchors([spec])
+        out = capsys.readouterr().out
+        assert "drifted=" in out and "unreadable=" in out, out

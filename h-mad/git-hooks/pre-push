@@ -12,8 +12,10 @@
 # The verdict is scored on the harness's ANCHORS_* summary line, not on the exit
 # code alone. A missing verdict line means the harness itself broke; that warns
 # and ALLOWS the push rather than blocking work on broken tooling. Only a real
-# ANCHORS_DRIFTED blocks. Blocking every push when the tooling is missing is a
-# worse failure than missing one drift.
+# ANCHORS_DRIFTED or ANCHORS_UNREADABLE blocks — both are unverified guards, and
+# they are separate verdicts because the remedy differs: re-anchor a spec, versus
+# restore a file that is gone (J37). Blocking every push when the tooling is
+# missing is a worse failure than missing one drift.
 #
 # Which specs get swept is DISCOVERED, not hardcoded: this hook ships inside the
 # h-mad skill and is installed into arbitrary repositories, so a hardcoded spec
@@ -107,10 +109,11 @@ set +f
 IFS=$OLDIFS
 
 case "$OUT" in
-    *ANCHORS_DRIFTED*)
+    *ANCHORS_DRIFTED*|*ANCHORS_UNREADABLE*)
         printf '%s\n' "$OUT" | grep -v 'SKIPPED not-a-spec' >&2
-        printf '\npre-push BLOCKED: mutation anchors have drifted (harness exit %s).\n' "$RC" >&2
-        printf 'Re-anchor the specs listed above before pushing.\n' >&2
+        printf '\npre-push BLOCKED: mutation anchors are unverified (harness exit %s).\n' "$RC" >&2
+        printf 'Re-anchor the drifted specs above; RESTORE any file reported unreadable\n' >&2
+        printf 'first, since a spec cannot be re-anchored into a file that is gone.\n' >&2
         printf 'Deliberate override: git push --no-verify\n' >&2
         exit 1
         ;;

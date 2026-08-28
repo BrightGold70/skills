@@ -126,6 +126,14 @@
       "find": "git rev-parse --show-toplevel >/dev/null 2>&1 || {",
       "replace": "true || {",
       "test": "tests/test_h_mad_prepush_anchor_hook.py::TestInstaller::test_refuses_outside_a_git_repository"
+    },
+    {
+      "name": "an-unreadable-target-stops-blocking",
+      "_mechanism": "The J37 coupling, restored. Drop ANCHORS_UNREADABLE from the blocking arm and a spec whose target file is GONE falls through to the catch-all: the push is allowed, and the harness's real verdict is reported to the operator as 'no ANCHORS_* verdict ... broken tooling'. Measured live during the J37 fix -- this is not hypothetical, it is what the hook did the moment the harness gained the new word.",
+      "file": "git-hooks/pre-push",
+      "find": "    *ANCHORS_DRIFTED*|*ANCHORS_UNREADABLE*)",
+      "replace": "    *ANCHORS_DRIFTED*)",
+      "test": "tests/test_h_mad_prepush_anchor_hook.py::TestVerdicts::test_an_unreadable_target_blocks_the_push"
     }
   ],
   "_why_not_absolute_path_format": "An `installer-links-into-the-callers-repo` mutation was written and REMOVED as equivalent, recorded here so a later reader does not re-add it. Dropping `--path-format=absolute` from the `--git-common-dir` call survives every test, and measurement says it should: the relative form git returns is relative to the CWD ('.git' from the top level, '../../.git' from a subdirectory, already absolute from a linked worktree), and the installer resolves it AFTER its only `cd` and never changes directory again -- so both forms name the same directory. The failure the flag guards against is the `-C <other-repo> rev-parse --git-common-dir` shape, which resolves '.git' against the CALLER's cwd and silently answers about the wrong repository; this script uses `cd`, not `-C`. The flag stays because it keeps the operator-facing paths absolute and survives a future edit that adds a `cd`, but it is defence in depth, not a live guard, and a mutant of it is indistinguishable from a real coverage gap. The properties it was reaching for are pinned directly by TestInstaller::test_installs_from_a_subdirectory_of_the_repo and ::test_installs_from_a_linked_worktree_into_the_common_dir."

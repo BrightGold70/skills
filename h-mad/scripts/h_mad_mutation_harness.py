@@ -14,13 +14,14 @@ Verdicts, printed as a canonical token:
 
     MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0     exit 0
     MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0     exit 0
-    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1     exit 2
+    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 exit 2
     MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
     MUTATION: UNREADABLE                                               exit 2
     ANCHORS: ANCHORS_OK specs=17 mutations=243 ok=243 drifted=0 unreadable=0 exit 0
-    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=1 exit 2
+    ANCHORS: ANCHORS_DRIFTED specs=17 mutations=243 ok=240 drifted=2 unreadable=0 exit 2
+    ANCHORS: ANCHORS_UNREADABLE specs=17 mutations=243 ok=240 drifted=2 unreadable=1 exit 2
     ANCHORS: ANCHORS_NOTHING_SWEPT specs=0 skipped=1 unclassifiable=1 exit 2
 
 `survived` and `refused` both sit on the summary line because they answer
@@ -376,12 +377,19 @@ def precheck_spec(spec_path: Path) -> dict:
                 "hints": hints,
             })
 
-    # An unreadable target is a drift too — the spec points somewhere that is no
-    # longer there, which is the same unverified guard by another route.
+    # An unreadable target and a moved anchor are BOTH unverified guards, but they
+    # are not the same cannot-judge and the operator's next action differs: restore
+    # a file that is gone, versus re-anchor a spec. You cannot re-anchor into a file
+    # that does not exist, so UNREADABLE outranks DRIFTED — the same precedence rule
+    # that makes REFUSED outrank SURVIVED and the wire-pin gate's UNSHAPED outrank
+    # FAIL. The counts stay separate on the summary either way; what J37 was about
+    # is that the WORD is the part that gets read.
     result["verdict"] = (
-        "ANCHORS_OK"
-        if not result["drifted"] and not result["unreadable"]
+        "ANCHORS_UNREADABLE"
+        if result["unreadable"]
         else "ANCHORS_DRIFTED"
+        if result["drifted"]
+        else "ANCHORS_OK"
     )
     return result
 
@@ -711,11 +719,22 @@ def _check_anchors(spec_paths: list[Path]) -> int:
         print(f"[H-MAD] anchors {verdict}")
         return 2
 
-    verdict = "ANCHORS_OK" if not drifted and not unreadable else "ANCHORS_DRIFTED"
+    verdict = (
+        "ANCHORS_UNREADABLE" if unreadable
+        else "ANCHORS_DRIFTED" if drifted
+        else "ANCHORS_OK"
+    )
     print(
         f"ANCHORS: {verdict} specs={specs} mutations={mutations} "
         f"ok={ok} drifted={drifted} unreadable={unreadable}"
     )
+    if verdict == "ANCHORS_UNREADABLE":
+        print(
+            "  a spec whose TARGET FILE cannot be read aims at something that is no "
+            "longer there, so its guard is unverified and it cannot be re-anchored "
+            "until the file is restored — fix that before the drifted specs below "
+            "(halt `step5e:mutation_unverified:<module>`)."
+        )
     if verdict == "ANCHORS_DRIFTED":
         print(
             "  a drifted anchor mutates nothing, so its run REFUSES and the guard "
@@ -783,7 +802,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"MUTATION: {verdict} mutations={result['mutations']} "
             f"caught={result['caught']} survived={len(result['survived'])} "
-            f"refused={len(result['refused'])}"
+            f"refused={len(result['refused'])} "
+            # `refused` has five causes and one remedy, so splitting the VERDICT
+            # would be worse than the disease; what the operator lacked is which
+            # cause, and an unreadable target is the one whose next action differs
+            # — restore a file, not re-anchor a spec (J37).
+            f"unreadable={sum(1 for e in result['refused'] if 'cannot read' in e)}"
         )
     _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}
