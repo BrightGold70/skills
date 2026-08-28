@@ -20,7 +20,8 @@ PassSpec = namedtuple("PassSpec", "index report_path out_path rc log_path",
                       defaults=(None,))
 PassResult = namedtuple(
     "PassResult",
-    "index delivered collected_path verdict must should findings effort",
+    "index delivered collected_path verdict must should findings effort rc",
+    defaults=(0,),
 )
 
 # The report-file delivery contract itself costs two successful tool calls: write
@@ -34,6 +35,10 @@ PassResult = namedtuple(
 # `view_file|grep_search` and reported a false zero when agy switched to
 # `run_command`. Classifying calls as reads-vs-writes here would re-create it.
 DELIVERY_FLOOR = 2
+
+# `timeout(1)` exits 124 when it kills the command. `_cmd_exec agy` wraps the
+# dispatch in it, so this is the rc a pass that ran out of wall-clock carries.
+TIMEOUT_RC = 124
 GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$")
 
 
@@ -376,6 +381,28 @@ def combine(results: list[PassResult]) -> tuple[str, str | None]:
         if result.verdict == "FAIL":
             return "FAIL", f"findings:p{result.index}"
 
+    # A pass whose dispatch did not exit cleanly did not finish, so its report is
+    # at best partial and cannot certify anything. Checked AFTER the FAIL loop on
+    # purpose: findings a truncated pass did manage to write are still findings,
+    # and FAIL is the direction that never falsely gates. What this closes is the
+    # other direction -- an agy leg killed at `--timeout` (rc 124) that had already
+    # written a GATE line scored a clean PASS, because rc was carried in PassSpec
+    # and read by nobody. Observed live on cycle 27 of manuscript-model-provenance:
+    # `EMPTY final message`, 0 tools, verdict PASS. Raising --timeout removed the
+    # phantom, which is what a real timeout looks like.
+    #
+    # UNVERIFIED, not a new verdict word: every consumer that already branches on
+    # UNVERIFIED keeps working. Adding a word here would silently un-guard each of
+    # them.
+    for result in results:
+        if result.rc:
+            token = (
+                "dispatch_timeout"
+                if result.rc == TIMEOUT_RC
+                else f"dispatch_rc{result.rc}"
+            )
+            return "UNVERIFIED", f"{token}:p{result.index}"
+
     return "PASS", None
 
 
@@ -548,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                         should=should,
                         findings=findings,
                         effort=measure_effort(spec.log_path),
+                        rc=spec.rc,
                     )
                 )
             verdict, reason = combine(results)

@@ -40,6 +40,7 @@ def pass_result(
     should: int = 0,
     findings: list[dict] | None = None,
     effort: dict | None = None,
+    rc: int = 0,
 ):
     ac = audit_cycle()
     return ac.PassResult(
@@ -51,6 +52,7 @@ def pass_result(
         should=should,
         findings=[] if findings is None else findings,
         effort=effort,
+        rc=rc,
     )
 
 
@@ -1844,3 +1846,74 @@ class TestEffortIsSurfaced:
         assert "tools=" not in line
         assert "thinking=" not in line
         assert "low-evidence" not in line
+
+
+# --- dispatch rc is part of the verdict -------------------------------------
+#
+# The pass rc travelled from `hmad-dispatch audit-cycle` into PassSpec and was
+# then read by nobody, so a leg killed at `--timeout` (rc 124) that had already
+# written a GATE line scored a clean PASS. Observed live on cycle 27 of
+# manuscript-model-provenance: `EMPTY final message`, 0 tools, verdict PASS.
+
+
+def test_timed_out_pass_cannot_certify_a_clean_cycle():
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1),
+        pass_result(index=2, rc=124),
+    ])
+    assert verdict == "UNVERIFIED"
+    assert reason == "dispatch_timeout:p2"
+
+
+def test_nonzero_rc_that_is_not_a_timeout_is_named_by_its_code():
+    ac = audit_cycle()
+    verdict, reason = ac.combine([pass_result(index=1, rc=3)])
+    assert verdict == "UNVERIFIED"
+    assert reason == "dispatch_rc3:p1"
+
+
+def test_clean_dispatch_still_passes():
+    """The control. Without it, `return UNVERIFIED` unconditionally would pass
+    both tests above."""
+    ac = audit_cycle()
+    verdict, reason = ac.combine([pass_result(index=1), pass_result(index=2)])
+    assert verdict == "PASS"
+    assert reason is None
+
+
+def test_findings_from_a_timed_out_pass_still_fail():
+    """FAIL is checked before rc on purpose: findings a truncated pass did manage
+    to write are still findings, and FAIL never falsely gates."""
+    ac = audit_cycle()
+    verdict, reason = ac.combine([pass_result(index=1, verdict="FAIL", must=1, rc=124)])
+    assert verdict == "FAIL"
+    assert reason == "findings:p1"
+
+
+def test_no_report_outranks_rc():
+    """A pass that delivered nothing is reported as no_report, not as its rc --
+    the more specific diagnosis wins."""
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, delivered="none", verdict=None, rc=124),
+    ])
+    assert verdict == "UNVERIFIED"
+    assert reason == "no_report:p1"
+
+
+def test_render_surfaces_the_rc_reason():
+    ac = audit_cycle()
+    results = [pass_result(index=1), pass_result(index=2, rc=124)]
+    verdict, reason = ac.combine(results)
+    text = ac.render(
+        results,
+        verdict,
+        reason,
+        feature="f",
+        size_status="ok",
+        passes=2,
+    )
+    line = auditcycle_lines(text)[0]
+    assert "AUDITCYCLE: UNVERIFIED" in line
+    assert "reason=dispatch_timeout:p2" in line
