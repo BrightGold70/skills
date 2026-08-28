@@ -204,14 +204,59 @@ def claim(
     return _mutate(state_file, feature, apply)
 
 
-def release(state_file: Path, feature: str) -> dict:
-    """Give up ownership. Safe to call when unowned."""
+def release(
+    state_file: Path,
+    feature: str,
+    session_id: str | None = None,
+    force: bool = False,
+) -> dict:
+    """Give up ownership. Safe to call when unowned.
+
+    Guarded on the SAME staleness window as `claim` (`h_mad_state_ownership`), and
+    for the same reason. This function used to clear the owner unconditionally,
+    which made `--release` + `--claim` a complete bypass of `claim`'s force guard:
+    a live owner's in-flight feature changed hands with no `force` anywhere, exit 0
+    at every step and no warning to anyone (J45). `claim`'s docstring already
+    argues the principle — `force` is the verb for taking a feature from a session
+    that is still RUNNING — and an unguarded release is that same erosion reached
+    by a different route.
+
+    Three cases stay free, so the guard cannot teach a force reflex:
+
+      * unowned — nothing to protect;
+      * a STALE owner — ordinary cleanup after a crashed session, which is exactly
+        the case `claim` refuses to route through `force`;
+      * `session_id` matching the live owner — a session releasing its OWN claim,
+        which is the routine end of every piece of work.
+
+    Only releasing a claim that is live AND someone else's is a takeover, and only
+    that needs `force`. An unidentified caller on a live claim fails closed: that
+    is the ad-hoc terminal case, which is where the accidental release happens, and
+    the refusal names `--session-id` rather than `--force` so the routine remedy is
+    the one an operator reaches for.
+    """
 
     def apply(records: dict):
         if feature not in records:
             raise StateWriteError(f"no such feature: {feature}")
+        record = records[feature]
+        owner = record.get("owner_session_id")
+        if owner and not force and owner != session_id:
+            from h_mad_state_ownership import owner_is_live
+
+            if owner_is_live(record.get("owner_heartbeat_ts")):
+                who = (
+                    f"you passed --session-id {session_id!r}"
+                    if session_id else "you did not say which session you are"
+                )
+                raise StateWriteError(
+                    f"{feature!r} is owned by session {owner!r} and still live "
+                    f"({who}); refusing to release. If it is YOURS, pass "
+                    f"--session-id {owner!r}. If you are taking it from a running "
+                    "session, that is a takeover — pass force, and coordinate first."
+                )
         return {
-            **records[feature],
+            **record,
             "owner_session_id": None,
             "owner_heartbeat_ts": None,
         }
@@ -251,7 +296,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claim", metavar="SESSION_ID", help="Take ownership of the feature")
     parser.add_argument("--release", action="store_true", help="Give up ownership")
     parser.add_argument(
-        "--force", action="store_true", help="With --claim, take over an existing claim"
+        "--session-id", dest="session_id", default=None,
+        help="With --release, who you are. A session releasing its OWN live claim "
+             "needs this; a stale or unowned claim does not. Without it, releasing a "
+             "LIVE claim is refused rather than silently taking it (J45).",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="With --claim, take over an existing claim. With --release, give up "
+             "ANOTHER live session's claim — a takeover either way."
     )
     args = parser.parse_args(argv)
 
@@ -261,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.claim:
             claim(args.state_file, args.feature, args.claim, force=args.force)
         if args.release:
-            release(args.state_file, args.feature)
+            release(args.state_file, args.feature, args.session_id, args.force)
         fields = {}
         for item in args.set:
             if "=" not in item:

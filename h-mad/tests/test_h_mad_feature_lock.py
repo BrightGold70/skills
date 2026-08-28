@@ -167,7 +167,109 @@ class TestCliSurface:
                             "--claim", "sess-a"], capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
         assert read(p)["demo"]["owner_session_id"] == "sess-a"
+        # --session-id because the claim above is live and this session owns it.
+        # Releasing a live claim anonymously is refused (J45); see
+        # TestReleaseOwnershipGuard for that half.
         r = subprocess.run([sys.executable, str(w), str(p), "--feature", "demo",
-                            "--release"], capture_output=True, text=True)
+                            "--release", "--session-id", "sess-a"],
+                           capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
+        assert read(p)["demo"]["owner_session_id"] is None
+
+
+class TestReleaseOwnershipGuard:
+    """J45 — `--release` guarded nothing, so `--release` + `--claim` took a LIVE
+    owner's feature with no `--force` anywhere.
+
+    `claim()` refuses a live owner and its docstring is explicit that `force` is
+    "the verb for taking a feature from a session that is still RUNNING", warning
+    that routing routine cases through it "teaches an operator to pass it by
+    reflex, which is how the guard stops protecting the case it exists for".
+    `release()` sat one function below with no window at all — so the two-step
+    bypassed the guard entirely, exit 0 throughout, no warning to anyone.
+
+    The asymmetry that makes this fixable without a force reflex: a session
+    releasing its OWN claim is the routine path and stays free, and a stale claim
+    stays freely releasable because that is ordinary cleanup. Only releasing a
+    claim that is live AND someone else's is a takeover, and only that needs the
+    deliberate flag. Both halves now read one window (`h_mad_state_ownership`),
+    which is the property `claim()` already had to be fixed once to get.
+    """
+
+    def _live(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        sw.claim(p, "demo", "sess-owner")           # heartbeat = now, unambiguously live
+        return p
+
+    def test_self_release_of_a_live_claim_still_works(self, tmp_path):
+        """The routine end-of-work path. If this needed --force the guard would be
+        teaching the exact reflex it exists to prevent."""
+        p = self._live(tmp_path)
+        sw.release(p, "demo", session_id="sess-owner")
+        assert read(p)["demo"]["owner_session_id"] is None
+
+    def test_releasing_a_stale_claim_needs_no_force(self, tmp_path):
+        """Ordinary cleanup — the case that must not be routed through --force."""
+        p = store(tmp_path, {"demo": dict(VALID)})
+        sw.claim(p, "demo", "sess-owner", now="2026-07-01T00:00:00Z")
+        sw.release(p, "demo")
+        assert read(p)["demo"]["owner_session_id"] is None
+
+    def test_releasing_an_unowned_feature_is_still_safe(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        sw.release(p, "demo")
+        assert read(p)["demo"]["owner_session_id"] is None
+
+    def test_releasing_another_sessions_live_claim_is_refused(self, tmp_path):
+        p = self._live(tmp_path)
+        with pytest.raises(sw.StateWriteError, match="sess-owner"):
+            sw.release(p, "demo", session_id="sess-other")
+        assert read(p)["demo"]["owner_session_id"] == "sess-owner", "must not have released"
+
+    def test_releasing_a_live_claim_without_saying_who_you_are_is_refused(self, tmp_path):
+        """Fails closed. An unidentified caller is the ad-hoc terminal case, which
+        is precisely where the accidental release happens."""
+        p = self._live(tmp_path)
+        with pytest.raises(sw.StateWriteError):
+            sw.release(p, "demo")
+        assert read(p)["demo"]["owner_session_id"] == "sess-owner"
+
+    def test_force_takes_a_live_foreign_claim(self, tmp_path):
+        """The deliberate route stays open — this is a takeover, and now it is
+        spelled like one."""
+        p = self._live(tmp_path)
+        sw.release(p, "demo", session_id="sess-other", force=True)
+        assert read(p)["demo"]["owner_session_id"] is None
+
+    def test_the_refusal_routes_to_session_id_not_to_force(self, tmp_path):
+        """The message is the guard's whole value: pointing an operator at --force
+        for a case --session-id solves is how the reflex gets taught."""
+        p = self._live(tmp_path)
+        with pytest.raises(sw.StateWriteError) as excinfo:
+            sw.release(p, "demo")
+        assert "--session-id" in str(excinfo.value)
+
+    def test_release_and_claim_no_longer_bypasses_force(self, tmp_path):
+        """The bypass itself, end to end — the thing J45 measured.
+
+        Before the fix: claim was refused, release succeeded, claim then succeeded,
+        and the live owner's in-flight feature had changed hands with no --force.
+        """
+        p = self._live(tmp_path)
+        with pytest.raises(sw.StateWriteError):
+            sw.claim(p, "demo", "sess-attacker")        # step 1 was always refused
+        with pytest.raises(sw.StateWriteError):
+            sw.release(p, "demo")                        # step 2 is the hole, now shut
+        assert read(p)["demo"]["owner_session_id"] == "sess-owner"
+
+    def test_cli_release_accepts_session_id_and_force(self, tmp_path):
+        p = self._live(tmp_path)
+        w = SCRIPTS / "h_mad_state_write.py"
+        bad = subprocess.run([sys.executable, str(w), str(p), "--feature", "demo",
+                              "--release"], capture_output=True, text=True)
+        assert bad.returncode == 2, bad.stdout
+        ok = subprocess.run([sys.executable, str(w), str(p), "--feature", "demo",
+                             "--release", "--session-id", "sess-owner"],
+                            capture_output=True, text=True)
+        assert ok.returncode == 0, ok.stderr
         assert read(p)["demo"]["owner_session_id"] is None

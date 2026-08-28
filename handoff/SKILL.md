@@ -509,8 +509,16 @@ Use `.get()` throughout: a state file that exists but has no record for this fea
 
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
-  "<state-path from the find above>" --feature "<feature>" --release
+  "<state-path from the find above>" --feature "<feature>" --release \
+  --session-id "<your-session-id>"
 ```
+
+`--session-id` is **your own**, and it is required here because your claim is still live — you are
+releasing it seconds before handing over. Releasing a live claim without saying who you are is
+refused rather than silently performed, because `--release` + `--claim` used to take a running
+session's feature with no `--force` anywhere (J45). If the refusal says the owner is someone else,
+that is a real finding: you are about to hand over work you do not hold. Do not reach for force to
+get past it.
 
 Hand work over without this and the receiver inherits a feature still owned by a session that has stopped. Depending on the version they run, `--claim` either refuses outright or makes them reach for `--force` — and `--force` is the verb for taking a feature from a session that is still *live*. Training a receiver to pass it routinely wears out the one guard protecting a running session.
 

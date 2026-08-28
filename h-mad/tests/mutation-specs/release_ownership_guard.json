@@ -1,0 +1,67 @@
+{
+  "_why": "This guard has two failure directions and they are not symmetric. Loosened, it reopens J45 -- release+claim silently takes a running session's feature. Tightened, it is worse than useless: a routine self-release or a stale-claim cleanup that demands --force teaches an operator to pass force by reflex, which is the exact erosion `claim()`'s docstring says destroys the guard it belongs to. So the mutations here run in BOTH directions, and the accept cases are mutated as deliberately as the reject one.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_feature_lock.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "release-guards-nothing-again",
+      "_mechanism": "J45 restored verbatim. The owner is cleared unconditionally, so `--release` + `--claim` takes a live session's in-flight feature with no force anywhere -- exit 0 at every step, no warning to anyone, and `claim()`'s force guard reduced to decoration.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if owner and not force and owner != session_id:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_releasing_another_sessions_live_claim_is_refused"
+    },
+    {
+      "name": "a-stale-claim-now-needs-force",
+      "_mechanism": "Drop the liveness window and EVERY owned claim refuses, including the 21-day corpse that cleanup exists for. The operator's only route becomes force, which is how force stops meaning 'taking it from a running session' -- the precise degradation `claim()` was already fixed once to avoid.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "            if owner_is_live(record.get(\"owner_heartbeat_ts\")):",
+      "replace": "            if True:",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_releasing_a_stale_claim_needs_no_force"
+    },
+    {
+      "name": "a-session-cannot-release-its-own-claim",
+      "_mechanism": "Ignore the caller's identity and the routine end of every piece of work is refused. The guard would fire on the one path it must never touch, and the fastest way past it is force.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        owner = record.get(\"owner_session_id\")",
+      "replace": "        owner = record.get(\"owner_session_id\"); session_id = None",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_self_release_of_a_live_claim_still_works"
+    },
+    {
+      "name": "force-no-longer-opens-the-takeover-route",
+      "_mechanism": "The deliberate path has to stay open, or the guard is not a guard but a wall -- and a wall gets removed. A takeover must remain possible while being spelled like one.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if owner and not force and owner != session_id:",
+      "replace": "        if owner and owner != session_id:",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_force_takes_a_live_foreign_claim"
+    },
+    {
+      "name": "the-refusal-teaches-the-force-reflex",
+      "_mechanism": "The message IS the guard's value. An unidentified caller releasing their own live claim needs --session-id, not force; naming force first sends the routine case down the takeover path, and after enough repetitions force is what everyone types. A refusal that routes wrongly is worse than no refusal, because it looks like it is helping.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "                    f\"({who}); refusing to release. If it is YOURS, pass \"\n                    f\"--session-id {owner!r}. If you are taking it from a running \"",
+      "replace": "                    f\"({who}); refusing to release. Pass force to take it. \"\n                    f\"If you are taking it from a running \"",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_the_refusal_routes_to_session_id_not_to_force"
+    },
+    {
+      "name": "an-anonymous-caller-is-treated-as-the-owner",
+      "_mechanism": "Fails OPEN on the ad-hoc terminal case, which is exactly where the accidental release happens: an operator tidying stale claims picks the wrong feature, passes no identity, and the tool silently agrees. That is the accident J45 was filed for, not the hostile case.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if owner and not force and owner != session_id:",
+      "replace": "        if owner and not force and session_id is not None and owner != session_id:",
+      "test": "tests/test_h_mad_feature_lock.py::TestReleaseOwnershipGuard::test_releasing_a_live_claim_without_saying_who_you_are_is_refused"
+    }
+  ]
+}

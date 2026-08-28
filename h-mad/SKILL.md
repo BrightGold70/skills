@@ -161,7 +161,10 @@ python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.js
 # every other route (resume_manual / enter_autonomous / halted) — the feature
 # already exists, so claim it without --create.
 python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
-  --feature "<feature>" --claim "<session-id>"      # ... work ... then --release
+  --feature "<feature>" --claim "<session-id>"
+# ... work ... then release it, naming yourself — a live claim will not release
+# anonymously, because --release + --claim used to bypass --claim's force guard (J45):
+#   --feature "<feature>" --release --session-id "<session-id>"
 ```
 
 **A non-`owned_elsewhere` token guarantees the claim will be accepted.** The router
@@ -1188,7 +1191,7 @@ on `UNKNOWN`, which carries no `used=` precisely so a cannot-judge cannot be rea
 **On `CTXBUDGET: HALT mode=run`, halt `<phase>:context_ceiling`** and follow the ordinary halt
 protocol, with the one addition that is the entire point of this route: **write the handoff before
 you stop**, so the next session resumes instead of re-deriving. Then release the claim
-(`h_mad_state_write.py --feature <feature> --release`), or the resuming session inherits a lock from
+(`h_mad_state_write.py --feature <feature> --release --session-id <your-session-id>`; a live claim refuses to release anonymously, J45), or the resuming session inherits a lock from
 a session that has stopped. A halt that leaves no handoff has spent the ceiling and bought nothing.
 
 **`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-warn.sh` speaks on the glob
