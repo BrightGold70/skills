@@ -926,9 +926,13 @@ was the last thing that ever happened to the file. WRITE reported success, the d
 INDEX entry was written, the learnings landed; only `git log --all -- <path>`, which nothing
 prompted anyone to run, showed zero commits. Three docs became orphans that way on 2026-08-29.
 
-For `main` and `direct` the script commits but does not push — continue to §Sync and §Push below.
-For `ref` it has already pushed, so **skip §Sync and §Push** and report what it printed. A failed
-ref push does not fail the closeout: the commit is local and the file is still referenced.
+For **`main` only**, the script commits but does not push — continue to §Sync and §Push below.
+For `direct` and `ref` the script has already pushed and you must **skip §Sync and §Push**: those
+commands carry no `-C`, so they act on the session's cwd. In `main` mode that is the canonical tree
+and they are correct; from a linked worktree they would inspect, rebase and push **this** worktree's
+feature branch while the report claimed the handoff was pushed — leaving the handoff commit
+unpushed on the canonical branch, which is the original silent failure wearing a new hat. A failed
+push does not fail the closeout either way: the commit is local and the file is still referenced.
 
 To land a `ref`-mode handoff on the default branch later, `git cherry-pick` the commit the script
 names. Never `git merge` the ref — its first commit is parented on whatever the canonical tree's

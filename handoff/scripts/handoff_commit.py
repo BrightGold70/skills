@@ -182,7 +182,23 @@ def to_repo_relative(root: Path, paths: list[str]) -> list[str]:
 
 
 def existing(root: Path, rel_paths: list[str]) -> list[str]:
-    """Drop paths that do not exist — `--skip-learnings` leaves nothing to add."""
+    """Drop trailing paths that do not exist, but never the first one.
+
+    `--skip-learnings` / `--skip-scout` legitimately leave later paths unwritten,
+    so dropping a missing `docs/learnings.md` is correct. The FIRST path is the
+    handoff doc, and §Save has always just written it — if it is missing, the
+    caller mistyped it. Absorbing that as "nothing to commit, rc=0" would end the
+    closeout with an unreferenced file while every observable says the handoff
+    worked, which is precisely the silent shape this script exists to remove.
+    """
+    if not rel_paths:
+        raise HandoffCommitError("no paths given")
+    first = rel_paths[0]
+    if not (root / first).exists():
+        raise HandoffCommitError(
+            f"the handoff doc does not exist at {root / first} — refusing to report "
+            "a successful closeout for a file that was never written"
+        )
     return [r for r in rel_paths if (root / r).exists()]
 
 
@@ -260,6 +276,37 @@ def commit_to_ref(
     raise HandoffCommitError(f"could not update {ref} after {_CAS_ATTEMPTS} tries: {last_err}")
 
 
+def push_branch(root: Path, branch: str) -> tuple[bool, str]:
+    """Push the canonical tree's branch. Best-effort; used by `direct` mode only.
+
+    `direct` commits into the CANONICAL tree while the session's cwd is a linked
+    worktree, so SKILL.md's §Sync/§Push cannot do this job: those commands carry
+    no `-C`, so from a linked worktree they would inspect, rebase and push *this*
+    worktree's feature branch while the report claimed the handoff was pushed —
+    leaving the handoff commit sitting unpushed on the canonical branch. The push
+    has to be `-C root` or it is the original silent failure wearing a new hat.
+    """
+    if not _out(["remote"], root, check=False):
+        return False, "no remote configured"
+    r = _git(["push", "origin", branch], root, check=False)
+    if r.returncode == 0:
+        return True, branch
+    _git(["fetch", "origin"], root, check=False)
+    # Only rebase a tree we still know to be clean. Between the commit and here,
+    # another session sharing this checkout may have started work; rebasing under
+    # them is a far worse outcome than an unpushed (but referenced) commit.
+    if status_entries(root):
+        return False, "remote moved and the canonical tree is no longer clean; not rebasing"
+    rb = _git(["pull", "--rebase", "origin", branch], root, check=False)
+    if rb.returncode != 0:
+        _git(["rebase", "--abort"], root, check=False)
+        return False, "remote diverged; the handoff commit is local-only"
+    r2 = _git(["push", "origin", branch], root, check=False)
+    if r2.returncode == 0:
+        return True, branch
+    return False, (r2.stderr.strip() or r2.stdout.strip() or "push rejected")
+
+
 def push_ref(root: Path, ref: str, slug: str) -> tuple[bool, str]:
     """Push the handoff ref to origin as a normal branch. Best-effort.
 
@@ -319,9 +366,21 @@ def run(
         sha = commit_in_tree(root, rel, message)
         if sha is None:
             report.append("result: NOTHING-TO-COMMIT (paths already match HEAD)")
+            return 0, report
+        branch = current_branch(root)
+        report.append(f"result: COMMITTED {sha[:12]} on {branch}")
+        if mode == "main":
+            # cwd IS the canonical tree here, so SKILL.md's §Sync/§Push operate on
+            # the right repo. Leave them to it rather than duplicating them.
+            report.append("push: not attempted (SKILL.md §Sync/§Push owns `main` mode)")
+        elif push:
+            ok, detail = push_branch(root, branch)
+            report.append(
+                f"push: OK -> origin {detail}" if ok else f"push: FAILED ({detail}) "
+                "— the commit is local; the file is still referenced"
+            )
         else:
-            report.append(f"result: COMMITTED {sha[:12]} on {current_branch(root)}")
-            report.append("push: not attempted (SKILL.md §Sync/§Push owns this mode)")
+            report.append("push: skipped (--no-push)")
         return 0, report
 
     slug = branch_slug(cwd)

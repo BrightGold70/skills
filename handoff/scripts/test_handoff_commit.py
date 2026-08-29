@@ -253,3 +253,75 @@ def test_dry_run_writes_nothing(tmp_path):
     assert rc == 0
     assert "DRY-RUN" in "\n".join(report)
     assert _refcount(repo, f) == 0
+
+
+# ---------------------------------------------------------------- push ownership
+
+
+def _with_origin(tmp_path: Path, repo: Path) -> Path:
+    bare = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    _git(repo, "remote", "add", "origin", str(bare))
+    _git(repo, "push", "-q", "-u", "origin", "main")
+    return bare
+
+
+def test_direct_mode_pushes_the_canonical_branch_itself(tmp_path):
+    # SKILL.md's §Sync/§Push carry no `-C`, so from a linked worktree they would
+    # act on the feature branch, not the canonical one the commit landed on. If
+    # the script does not push here, the handoff commit silently never leaves the
+    # machine while the closeout reports success.
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    bare = _with_origin(tmp_path, repo)
+    wt = _linked(repo, tmp_path / "wt")
+    f = _write_handoff(repo)
+
+    rc, report = hc.run([str(f)], "chore(handoff): direct", repo=str(wt), push=True)
+    assert rc == 0, report
+    joined = "\n".join(report)
+    assert "mode: direct" in joined, joined
+    assert "push: OK" in joined, joined
+
+    rel = str(f.relative_to(repo))
+    assert _git(bare, "log", "--oneline", "main", "--", rel).strip(), (
+        "the handoff commit never reached origin"
+    )
+    # and it must NOT have pushed the linked worktree's feature branch
+    assert "feature/x" not in _git(bare, "branch", "--format=%(refname:short)")
+
+
+def test_ref_mode_pushes_the_ref_as_a_normal_branch(tmp_path):
+    # A custom refs/handoffs/* namespace on the remote is invisible to default
+    # fetch refspecs and to the forge UI — which is the whole point of pushing.
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    _with_origin(tmp_path, repo)
+    bare = tmp_path / "origin.git"
+    wt = _linked(repo, tmp_path / "wt")
+    (repo / "README.md").write_text("dirty\n")
+    f = _write_handoff(repo)
+
+    rc, report = hc.run([str(f)], "chore(handoff): ref", repo=str(wt), push=True)
+    assert rc == 0 and "push: OK" in "\n".join(report), report
+    branches = _git(bare, "branch", "--format=%(refname:short)").split()
+    assert "handoff/feature-x" in branches, branches
+
+
+# ---------------------------------------------------------------- input guard
+
+
+def test_a_missing_handoff_doc_is_fatal_not_a_quiet_success(tmp_path):
+    # Absorbing a mistyped path as "nothing to commit, rc=0" would end the
+    # closeout with an unreferenced file while every observable said it worked —
+    # the exact silent shape this script exists to remove, reintroduced at its
+    # own front door.
+    repo = tmp_path / "r"
+    _init_repo(repo)
+    with pytest.raises(hc.HandoffCommitError, match="refusing to report"):
+        hc.run(
+            [str(repo / "docs" / "handoffs" / "typo.md")],
+            "chore(handoff): x",
+            repo=str(repo),
+            push=False,
+        )

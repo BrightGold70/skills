@@ -681,6 +681,12 @@ COMMIT_ROUTING = [
         "this and the skip looks reasonable again",
     ),
     (
+        "those commands carry no `-C`, so they act on the session's cwd",
+        "in `direct`/`ref` mode the commit lands in the canonical tree while cwd is "
+        "a linked worktree; following §Sync/§Push there rebases and pushes the "
+        "WRONG branch and reports the handoff as pushed",
+    ),
+    (
         "Never `git merge` the ref",
         "the ref's first parent can be an arbitrary stale feature tip; merging "
         "would drag that whole history onto the default branch",
