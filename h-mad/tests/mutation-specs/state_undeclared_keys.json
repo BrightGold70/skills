@@ -1,0 +1,75 @@
+{
+  "_why": "This guard has two failure directions and, like the release guard, they are not symmetric. Loosened, an invented key reaches disk and the schema stops meaning anything. Tightened — which is where it actually failed — it refuses every write to a record that already carries such a key, including `--release`, so a live feature halted mid-Phase-5 could be neither handed over nor taken, and the only documented remedy was to widen the schema permanently for three keys nothing read. The refusal's TEXT is mutated as deliberately as its condition, because a refusal that names a tier instead of the offending keys leaves the operator with no move but the hand-edit the whole write path exists to prevent; it fails by being unactionable rather than by being wrong, which is why it survived review.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_state_write.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "an-invented-key-reaches-disk-again",
+      "_mechanism": "The loosening direction. Drop the pre-write classification and the writer becomes the prose rule it replaced: nothing sits between an invented key and the file, which is how the store drifted to 38 shapes over 53 keys in the first place.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "                if classify(record) != \"strict\":",
+      "replace": "                if False:",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_a_write_that_introduces_an_undeclared_key_is_still_refused"
+    },
+    {
+      "name": "the-refusal-names-the-tier-not-the-keys",
+      "_mechanism": "J48 restored verbatim. 'classified historical' is a category, not a cause: it tells the operator something is wrong and nothing about what, so the only way to find the three offending keys is to open the JSON by hand — the exact act the write path exists to stop. The verdict is correct and the remedy is unreachable.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    unknown = undeclared_keys(record)\n    if not unknown:",
+      "replace": "    unknown = []\n    if not unknown:",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_refusal_names_the_offending_keys_not_just_the_tier"
+    },
+    {
+      "name": "the-refusal-offers-no-way-out",
+      "_mechanism": "Keep the diagnosis and drop the route. Naming the keys without naming the verb still leaves removal-by-hand as the operator's only inference, and hand-editing is how an undeclared key got onto the record to begin with — the guard would be teaching the practice it exists to prevent.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "            \"it is gone — including --release, which is how a stale claim would \"\n            f\"normally be cleared. Repair with: --feature {feature} \"\n            \"--drop-undeclared (it names what it removes and validates what is \"\n            \"left).\"",
+      "replace": "            \"it is gone. Declare the field in h_mad_state_schema.json.\"",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_refusal_points_at_the_repair_verb"
+    },
+    {
+      "name": "a-preexisting-key-is-blamed-on-the-current-write",
+      "_mechanism": "Collapse the two categories and every refusal accuses the write being attempted. The operator is sent to audit a `--release` that introduced nothing, while the keys that actually brick the record — put there by some earlier session — go unmentioned as pre-existing. Misattribution is expensive precisely because the message is otherwise accurate.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    introduced = [key for key in unknown if key not in prior]\n    preexisting = [key for key in unknown if key in prior]",
+      "replace": "    introduced = list(unknown)\n    preexisting = []",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_refusal_distinguishes_a_preexisting_key_from_an_introduced_one"
+    },
+    {
+      "name": "the-repair-strips-a-declared-key-too",
+      "_mechanism": "Widen the removal from 'undeclared' to 'everything not required' and the repair quietly discards live state — `owner_session_id`, `archreview`, `codex_status` — while reporting success. A repair that loses data is worse than the brick it fixes, because the brick was at least visible.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        removed.extend(undeclared_keys(record))",
+      "replace": "        removed.extend(k for k in record if k not in _NEW_RECORD_DEFAULTS)",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_drop_undeclared_removes_exactly_the_undeclared_keys"
+    },
+    {
+      "name": "the-repair-launders-an-otherwise-broken-record",
+      "_mechanism": "Write the stripped record without revalidating it. Stripping then becomes a bypass of the strict schema rather than a route back to it: a record with a bad `phase` or a missing required field lands on disk because the operator asked for an unrelated repair.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "    return _mutate(state_file, feature, apply), removed",
+      "replace": "    return _mutate(state_file, feature, apply, _skip_validation=True), removed",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_drop_undeclared_cannot_launder_an_otherwise_broken_record"
+    },
+    {
+      "name": "the-repair-rewrites-a-clean-record",
+      "_mechanism": "Return a record instead of None when there is nothing to remove, and every invocation rewrites the store. The repair stops being idempotent, so running it defensively — which its own refusal message invites — churns the file and its mtime for no change.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if not removed:\n            return None  # nothing to repair; leave the store byte-identical",
+      "replace": "        if not removed:\n            return dict(record)",
+      "test": "tests/test_h_mad_state_write.py::TestUndeclaredKeys::test_drop_undeclared_is_idempotent_on_a_clean_record"
+    }
+  ]
+}

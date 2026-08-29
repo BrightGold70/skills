@@ -23,6 +23,17 @@ This module is that seam. Three properties, in order of importance:
 Only the record being written is validated. Real stores hold legacy records
 that predate v2.2; validating the whole store on every write would make the
 writer unusable on any project with history.
+
+Property 1 has a corollary that took a live incident to find (J48). Validating
+the merged record means a key that reached the store by some OTHER route — a
+hand-edit, a record written before this module existed — makes that record
+unwritable here forever: claim, release and halt-recording all refused, on a
+feature halted mid-Phase-5, leaving the hand-edit as the only way out. A guard
+whose only escape is the practice it exists to prevent is not finished. So the
+refusal names the offending keys and distinguishes the ones the current write
+introduced from the ones already there, and `drop_undeclared()` is the sanctioned
+repair — removal, not a wider schema, because the keys that cause this are by
+construction ones nothing reads.
 """
 from __future__ import annotations
 
@@ -40,7 +51,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from h_mad_state_ownership import owner_is_live  # noqa: E402
-from h_mad_state_validate import classify  # noqa: E402
+from h_mad_state_validate import classify, undeclared_keys  # noqa: E402
 
 
 class StateWriteError(Exception):
@@ -57,6 +68,48 @@ _NEW_RECORD_DEFAULTS: dict[str, Any] = {
     "halt_reason": None,
     "halt_ts": None,
 }
+
+
+def _refusal(feature: str, record: dict, prior: dict) -> str:
+    """Say which keys are wrong and, for a pre-existing one, how to get out.
+
+    The old message said only "classified historical", which names a tier rather
+    than a cause and leaves the operator no move but to read the JSON by hand —
+    the one act the write path exists to prevent. Worse, it read as a complaint
+    about the write being attempted when the offending keys were usually already
+    on the record, so the write being blamed was innocent (J48).
+    """
+    unknown = undeclared_keys(record)
+    if not unknown:
+        return (
+            f"record for {feature!r} would not validate "
+            f"(classified {classify(record)}); refusing to write. "
+            "The store is unchanged."
+        )
+    introduced = [key for key in unknown if key not in prior]
+    preexisting = [key for key in unknown if key in prior]
+    parts = [
+        f"record for {feature!r} carries {len(unknown)} key(s) the schema does "
+        f"not declare: {', '.join(unknown)}."
+    ]
+    if introduced:
+        parts.append(
+            f"This write introduces {', '.join(introduced)}. If the field is "
+            "genuinely needed, declare it in h_mad_state_schema.json rather than "
+            "writing it ad hoc."
+        )
+    if preexisting:
+        parts.append(
+            f"{', '.join(preexisting)} "
+            f"{'was' if len(preexisting) == 1 else 'were'} already on the record "
+            "before this write, so EVERY write to this feature is refused until "
+            "it is gone — including --release, which is how a stale claim would "
+            f"normally be cleared. Repair with: --feature {feature} "
+            "--drop-undeclared (it names what it removes and validates what is "
+            "left)."
+        )
+    parts.append("Refusing to write; the store is unchanged.")
+    return " ".join(parts)
 
 
 def _load(state_file: Path) -> dict:
@@ -114,13 +167,9 @@ def _mutate(state_file: Path, feature: str, apply) -> dict:
             records = data["orchestrator_state"]
             record = apply(records)
             if record is not None:
-                verdict = classify(record)
-                if verdict != "strict":
+                if classify(record) != "strict":
                     raise StateWriteError(
-                        f"record for {feature!r} would not validate "
-                        f"(classified {verdict}); refusing to write. "
-                        "If a new field is genuinely needed, declare it in "
-                        "h_mad_state_schema.json rather than writing it ad hoc."
+                        _refusal(feature, record, records.get(feature, {}))
                     )
                 records[feature] = record
                 _atomic_write(state_file, data)
@@ -152,6 +201,42 @@ def set_fields(state_file: Path, feature: str, **fields: Any) -> dict:
         return {**records[feature], **fields}
 
     return _mutate(state_file, feature, apply)
+
+
+def drop_undeclared(state_file: Path, feature: str) -> tuple[dict, list[str]]:
+    """Strip keys the strict schema does not declare. The sanctioned repair.
+
+    The write guard is right to refuse an undeclared key, but it validates the
+    whole merged record, so a key that reached the store by some other route —
+    a hand-edit, a record predating the guard — makes the record permanently
+    unwritable through the only tool allowed to write it. Claim, release and
+    halt-recording were all refused on a feature halted mid-Phase-5, and the
+    single documented remedy ("declare it in the schema") is the wrong one for
+    a key nothing reads: it buys the record's mobility by permanently widening
+    the schema for a field that was never real.
+
+    So the repair is removal, and it is its own verb rather than a flag on the
+    other writes. A caller asking to release a claim is not asking to discard
+    fields, and the operator who repairs a record should see exactly which keys
+    went. Returns `(record, removed)`; `removed` is empty when there was nothing
+    to repair, which makes the call idempotent.
+
+    What is left is validated like any other write, so a record that is broken
+    for some other reason — a missing required field, a bad type — is still
+    refused, and stripping cannot launder it into the store.
+    """
+    removed: list[str] = []
+
+    def apply(records: dict):
+        if feature not in records:
+            raise StateWriteError(f"no such feature: {feature}")
+        record = records[feature]
+        removed.extend(undeclared_keys(record))
+        if not removed:
+            return None  # nothing to repair; leave the store byte-identical
+        return {key: value for key, value in record.items() if key not in removed}
+
+    return _mutate(state_file, feature, apply), removed
 
 
 def claim(
@@ -293,6 +378,14 @@ def main(argv: list[str] | None = None) -> int:
         "as strings — so phase=null writes null and current_phase=5 writes 5.",
     )
     parser.add_argument("--started-ts", help="started_ts for --create")
+    parser.add_argument(
+        "--drop-undeclared", action="store_true",
+        help="Remove keys the schema does not declare, naming each one. The "
+             "repair for a record made unwritable by an ad-hoc key — including "
+             "one that reached the store by hand-edit (J48). Runs before any "
+             "other operation in the same invocation, so a bricked record can "
+             "be repaired and released in one command.",
+    )
     parser.add_argument("--claim", metavar="SESSION_ID", help="Take ownership of the feature")
     parser.add_argument("--release", action="store_true", help="Give up ownership")
     parser.add_argument(
@@ -311,6 +404,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.create:
             create_feature(args.state_file, args.feature, args.started_ts)
+        if args.drop_undeclared:
+            # Before the other operations: repairing and releasing a bricked
+            # record in one command is the whole point of the verb.
+            _, removed = drop_undeclared(args.state_file, args.feature)
+            if removed:
+                print(f"STATE-WRITE: DROPPED feature={args.feature} "
+                      f"keys={len(removed)} {','.join(removed)}")
+            else:
+                print(f"STATE-WRITE: DROPPED feature={args.feature} keys=0")
         if args.claim:
             claim(args.state_file, args.feature, args.claim, force=args.force)
         if args.release:

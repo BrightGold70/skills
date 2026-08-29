@@ -147,12 +147,20 @@ STRICT_SCHEMA = SCRIPT_DIR / "h_mad_state_schema.json"
 HISTORICAL_SCHEMA = SCRIPT_DIR / "h_mad_state_schema_historical.json"
 
 _validators: dict = {}
+_schemas: dict = {}
+
+
+def _schema(path: Path) -> dict:
+    key = str(path)
+    if key not in _schemas:
+        _schemas[key] = json.loads(path.read_text(encoding="utf-8"))
+    return _schemas[key]
 
 
 def _validator(path: Path):
     key = str(path)
     if key not in _validators:
-        _validators[key] = _make_validator(json.loads(path.read_text(encoding="utf-8")))
+        _validators[key] = _make_validator(_schema(path))
     return _validators[key]
 
 
@@ -165,6 +173,26 @@ def classify(record: object) -> str:
     if _validator(HISTORICAL_SCHEMA).is_valid(record):
         return "historical"
     return "invalid"
+
+
+def undeclared_keys(record: object) -> list[str]:
+    """The record's keys that the strict schema does not declare.
+
+    `classify` answers which TIER a record sits in. That is the right answer for
+    a report and the wrong one for a refusal: `historical` names a category, not
+    a cause, so a writer that refuses with only the tier tells an operator that
+    something is wrong and nothing about what. Measured (J48): three ad-hoc keys
+    bricked a live record mid-Phase-5 and the refusal named none of them, so the
+    only way to find them was to read the JSON by hand — which is the very thing
+    the write path exists to stop anyone doing.
+    """
+    if not isinstance(record, dict):
+        return []
+    schema = _schema(STRICT_SCHEMA)
+    if schema.get("additionalProperties", True) is not False:
+        return []
+    declared = set(schema.get("properties", {}))
+    return sorted(key for key in record if key not in declared)
 
 
 def classify_store(records: dict, strict_only: bool = False) -> dict:

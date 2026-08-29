@@ -1391,6 +1391,28 @@ is what turns "never invent a key" from a rule the orchestrator has to remember
 into one it cannot break. Only the record being written is validated; legacy
 siblings are left alone, so the writer works on stores with history.
 
+**If a record already carries an undeclared key, repair it with
+`--drop-undeclared` — do not widen the schema and do not hand-edit.** The guard
+validates the whole merged record, so a key that reached the store by some other
+route (a hand-edit, a record written before the guard) makes that record
+permanently unwritable: claim, release and halt-recording are all refused, which
+strands a live feature (J48 — three ad-hoc Phase-5 keys, `current_step`,
+`phase5_baseline`, `phase5_progress`, none of which anything read). The refusal
+names the offending keys and says which of them your write introduced versus
+which were already there. Declaring a key in `h_mad_state_schema.json` is the
+remedy only for a field that is genuinely needed and will be *read*; buying a
+record's mobility by permanently widening the schema for a write-only note is
+the wrong trade.
+
+```bash
+# repair and release a bricked record in one command; it names what it removes
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature <feature> --drop-undeclared --release --session-id <your-session-id>
+```
+
+What is left is validated like any other write, so stripping cannot launder a
+record that is broken for some other reason into the store.
+
 **After writing a record, verify it meets v2.2** — belt and braces, and the way
 to check a record written before the writer existed:
 
@@ -1686,7 +1708,7 @@ export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 - `h_mad_state_schema_historical.json` — permissive tier for pre-v2.2 records
 - `h_mad_phase7_preconditions.py` — Phase 7 gate: `check()` + CLI printing `PHASE7: READY|BLOCKED`, exit 0 on verdict / 2 on operational error. Enforces 6-before-7 by reading state and the gap analysis.
 - `h_mad_state_staleness.py` — compares state against git and reports disagreement (`STALENESS: CLEAN|SUSPECT`); catches a record that is well-formed and no longer true.
-- `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. Use this instead of hand-editing state.
+- `h_mad_state_write.py` — the orchestrator_state write path: `create_feature()` / `set_fields()` / `drop_undeclared()` + CLI printing `STATE-WRITE: OK`, exit 0 on success / 2 on refusal. Validates the record against the strict schema before writing, replaces the file atomically, and serialises concurrent writers on a lock sidecar. A refusal names the undeclared keys and distinguishes the ones this write introduced from the ones already on the record; `--drop-undeclared` is the sanctioned repair for the latter, which would otherwise leave the record unwritable — including by `--release` (J48). Use this instead of hand-editing state.
 - `h_mad_version_history.py` — the phase-doc `## Version History` bump: `bump()` / `plan_insertion()` + CLI printing `VERSION-HISTORY: OK|DRY-RUN path=<p> version=<v> line=<n> placement=<append|prepend>`, exit 0 on a completed write / 2 on refusal. Refusals print `VERSION-HISTORY: REFUSED path=<p> reason=<r>` carrying **no `line=`**, and an unreadable path prints a bare `VERSION-HISTORY: UNREADABLE` — a cannot-write must never read as a write that landed. Reasons: `anchor_missing`, `anchor_ambiguous`, `table_shape`, `unknown_shape`, `mixed_order`, `duplicate_version`, `bad_version`, `empty_text`, `multiline_text`, `splice_not_additive`, `unreadable`. **Use this instead of a hand-rolled anchored substitution** — the value is the assert, not the append: a `.replace()` whose anchor has drifted writes nothing and reports success, so a skipped bump and a completed bump are indistinguishable from the caller's side. Placement is derived from the section, never assumed: measured over 713 real sections, 191 of the 246 multi-entry ones are ascending, 29 descending and 26 unsorted, so a blind append-at-end is wrong for 22% of them and silently so. Tables (140 of 713) are refused rather than reformatted, the unsorted case is refused rather than guessed, and every write self-checks that its own splice was insertion-only. Stdlib-only.
 - `h_mad_state_validate.py` — two-tier state validator: `classify()` + CLI printing `STATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--strict-only` enforces v2.2 on a record you just wrote
 - `h_mad_telemetry.py` — Phase 7 cycle count recorder + summary. Also copies `substrate` from the feature's state record onto the run row (written at Phase-5 start — see §"Phase 5 (Implementation) sub-steps"); the row carries an explicit `null` when it was never recorded, so an unrecorded run is distinguishable from a pre-field one.
