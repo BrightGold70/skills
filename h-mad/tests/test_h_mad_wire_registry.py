@@ -1447,3 +1447,111 @@ def test_run_pins_verifies_a_record_only_when_every_pin_passes(
 
     verified, broken = registry.run_pins([record], tmp_path)
     assert len(verified) == 1 and broken == []
+
+
+def _nested_repo(tmp_path: Path) -> tuple[Path, Path, str]:
+    """A git repo whose sub-project carries its own registry. Returns (root, sub, base).
+
+    At BASE the root registry holds two records of a feature that exists only at
+    the root, and the sub-project registry holds one of its own. Nothing is
+    removed between BASE and HEAD, so the truth for the sub-project is PASS.
+    """
+    import json as _json
+    import subprocess as _sp
+
+    root = tmp_path / "monorepo"
+    sub = root / "subproject"
+    (root / ".h-mad").mkdir(parents=True)
+    (sub / ".h-mad").mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        _sp.run(["git", *args], cwd=root, check=True, capture_output=True, text=True)
+
+    git("init", "-q", "-b", "main")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+
+    def jsonl(records: list[dict]) -> str:
+        return "".join(_json.dumps(r, sort_keys=True) + "\n" for r in records)
+
+    (root / ".h-mad" / "wires.jsonl").write_text(jsonl([
+        {"owning_feature": "root-only-feature", "id": "Task 1", "status": "active"},
+        {"owning_feature": "root-only-feature", "id": "Task 2", "status": "active"},
+    ]), encoding="utf-8")
+    (sub / ".h-mad" / "wires.jsonl").write_text(jsonl([
+        {"owning_feature": "sub-feature", "id": "Task 1", "status": "active"},
+    ]), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    base = _sp.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    (sub / "note.txt").write_text("unrelated change\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "head")
+    return root, sub, base
+
+
+def test_base_path_resolves_against_the_git_root_not_the_repo_argument(
+    tmp_path: Path,
+) -> None:
+    """J49 — `git show <sha>:<path>` reads from the work tree root, never cwd.
+
+    So the base path must be root-relative. `--repo` defaults to cwd, and in a
+    nested project cwd is the sub-project: a `--repo`-relative path then named a
+    real file at the ROOT, which is a different registry. Invisible in a
+    single-project repo, where the two coincide.
+    """
+    root, sub, _ = _nested_repo(tmp_path)
+    registry_path = sub / ".h-mad" / "wires.jsonl"
+
+    assert registry._registry_base_path(registry_path, sub) == "subproject/.h-mad/wires.jsonl"
+    assert registry._registry_base_path(registry_path, root) == "subproject/.h-mad/wires.jsonl", (
+        "the resolved path must not depend on which directory --repo names"
+    )
+
+
+def test_nested_project_verify_does_not_invent_removals_from_the_root_registry(
+    tmp_path: Path,
+) -> None:
+    """The whole defect, end to end: a clean sub-project must not report removals."""
+    root, sub, base = _nested_repo(tmp_path)
+    registry_path = sub / ".h-mad" / "wires.jsonl"
+
+    loaded = registry.load_base(base, registry._registry_base_path(registry_path, sub), sub)
+    assert [r["owning_feature"] for r in loaded] == ["sub-feature"], (
+        "load_base read the root's registry instead of the sub-project's"
+    )
+    assert registry.compare(loaded, registry.load(registry_path)) == [], (
+        "nothing was removed, so undeclared_removals must be empty"
+    )
+
+
+def test_base_path_refuses_a_registry_outside_the_work_tree(tmp_path: Path) -> None:
+    """The old fallback silently compared against DEFAULT_REGISTRY — a stranger."""
+    root, _, _ = _nested_repo(tmp_path)
+    outside = tmp_path / "elsewhere" / "wires.jsonl"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("", encoding="utf-8")
+
+    with pytest.raises(registry.RegistryError) as exc:
+        registry._registry_base_path(outside, root)
+    assert "outside the git work tree" in str(exc.value)
+
+
+def test_load_base_refuses_a_directory_that_is_not_a_work_tree(tmp_path: Path) -> None:
+    """No work tree is a cannot-judge, and it is `load_base` that says so.
+
+    `_registry_base_path` deliberately does not raise here: with no root there is
+    nothing to be relative to, and raising would only move git's own refusal
+    earlier under a second message.
+    """
+    plain = tmp_path / "not-a-repo"
+    (plain / ".h-mad").mkdir(parents=True)
+    registry_path = plain / ".h-mad" / "wires.jsonl"
+    registry_path.write_text("", encoding="utf-8")
+
+    resolved = registry._registry_base_path(registry_path, plain)
+    with pytest.raises(registry.RegistryError):
+        registry.load_base("HEAD", resolved, plain)
