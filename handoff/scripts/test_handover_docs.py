@@ -647,3 +647,82 @@ def test_example_handoff_filenames_carry_the_branch_separator() -> None:
         if "__" not in name
     ]
     assert not bad, f"example handoff filenames missing the `__` separator: {bad}"
+
+
+# --------------------------------------------------------------------------
+# The commit finale must reach a destination on every route.
+#
+# The defect these pin: §Save writes into the canonical main-worktree store, and
+# the finale used to decline to commit whenever it ran from a linked worktree.
+# Both halves were individually right and jointly broken — nothing closed the
+# loop between them, so the honest "I did not commit this" note was the last
+# thing that ever happened to the file. Three docs orphaned on 2026-08-29.
+# --------------------------------------------------------------------------
+
+COMMIT_ROUTING = [
+    (
+        "handoff/scripts/handoff_commit.py",
+        "the finale must route through the script; a hand-written branch on ROOT "
+        "is what dropped the linked-worktree case on the floor",
+    ),
+    (
+        "every one of them ends with the file reachable from a ref",
+        "states the property the three destinations exist to hold — without it a "
+        "future edit can add a fourth route that simply declines again",
+    ),
+    (
+        "refs/handoffs/<branch-slug>",
+        "names the destination for the case that actually bites: linked worktree "
+        "plus a dirty or off-default canonical tree",
+    ),
+    (
+        "It moves no HEAD, stages nothing and touches no working tree",
+        "the reason the original objection no longer justifies skipping — drop "
+        "this and the skip looks reasonable again",
+    ),
+    (
+        "those commands carry no `-C`, so they act on the session's cwd",
+        "in `direct`/`ref` mode the commit lands in the canonical tree while cwd is "
+        "a linked worktree; following §Sync/§Push there rebases and pushes the "
+        "WRONG branch and reports the handoff as pushed",
+    ),
+    (
+        "Never `git merge` the ref",
+        "the ref's first parent can be an arbitrary stale feature tip; merging "
+        "would drag that whole history onto the default branch",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "literal,why", COMMIT_ROUTING, ids=[lit[:45] for lit, _ in COMMIT_ROUTING]
+)
+def test_commit_routing_literal_present(literal: str, why: str) -> None:
+    assert " ".join(literal.split()) in _norm(SKILL), f"SKILL.md dropped guidance: {why}"
+
+
+def test_no_route_through_the_finale_declines_to_commit() -> None:
+    # The regression guard. The old prose read "Do **not** auto-commit into the
+    # main worktree's branch" and offered no alternative; any wording that
+    # re-introduces a terminal decline puts the orphan bug back.
+    text = _norm(SKILL)
+    for banned in (
+        "Do **not** auto-commit into the main worktree's branch",
+        "committing/pushing it is a deliberate step to run from the main worktree",
+    ):
+        assert " ".join(banned.split()) not in text, (
+            "the finale declines to commit again with no destination — this is the "
+            "exact prose that orphaned three handoff docs"
+        )
+
+
+def test_the_commit_script_is_reachable_from_the_write_phase_list() -> None:
+    # Same both-halves-must-land rule as the foreign-work step: the section can
+    # be perfect and still be dead prose if WRITE never sends anyone to it.
+    text = _norm(SKILL)
+    assert 'Proceed to §"Commit and push"' in text, (
+        "WRITE's phase list no longer routes to the commit finale"
+    )
+    assert (SKILL.parent / "scripts" / "handoff_commit.py").is_file(), (
+        "SKILL.md points at handoff_commit.py but the script is not shipped"
+    )
