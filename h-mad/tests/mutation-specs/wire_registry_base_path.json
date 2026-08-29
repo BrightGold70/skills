@@ -1,0 +1,51 @@
+{
+  "_why": "The base path is the one input to `verify` that nothing downstream can sanity-check. Every record it loads is well-formed, every sha it reads is real, and `compare` does its job perfectly on the wrong file — so a mis-resolved path does not degrade the verdict, it replaces it with a confident verdict about two unrelated registries. That is why it survived: the output is FAIL-shaped and names real feature ids, so the reflex is to go investigate the feature it names. Each mutation here restores a spelling of the same mistake — resolving against something other than the git root — and every one of them is invisible in a single-project repo, where cwd and the root coincide. The nested fixture is therefore not an edge case in these tests; it is the only configuration in which the guard can be observed at all.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_registry.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "base-path-resolves-against-repo-again",
+      "_mechanism": "J49 restored verbatim. `git show <sha>:<path>` reads from the work tree root regardless of its cwd, so a `--repo`-relative path in a nested project names a real file at the ROOT — a different project's registry. The comparison then reports every record of that registry as an undeclared removal of this one, naming features with zero records in the file it claims to be comparing.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    base = root if root is not None else repo",
+      "replace": "    base = repo",
+      "test": "tests/test_h_mad_wire_registry.py::test_nested_project_verify_does_not_invent_removals_from_the_root_registry"
+    },
+    {
+      "name": "git-root-lookup-always-fails-so-repo-wins",
+      "_mechanism": "The same defect reached from the other side: leave the resolution correct and break the lookup that feeds it. `_git_root` returning None everywhere silently restores the `--repo`-relative behaviour, and because the fallback exists for a legitimate case (no work tree at all) it reads as a deliberate branch rather than a broken one.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    if result.returncode != 0 or not root:\n        return None\n    return Path(root)",
+      "replace": "    return None",
+      "test": "tests/test_h_mad_wire_registry.py::test_base_path_resolves_against_the_git_root_not_the_repo_argument"
+    },
+    {
+      "name": "an-outside-registry-is-compared-against-the-default-again",
+      "_mechanism": "The pre-fix fallback: when the registry is not under the root, silently substitute `.h-mad/wires.jsonl`. This is the same defect by a shorter route — an unrelated file compared with a straight face — and it is worse than the nested case because there is no relationship whatever between the two files. A cannot-judge is the only honest answer, and the fallback converts it into a verdict.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "        if root is None:\n            return DEFAULT_REGISTRY\n        raise RegistryError(",
+      "replace": "        return DEFAULT_REGISTRY\n        raise RegistryError(",
+      "test": "tests/test_h_mad_wire_registry.py::test_base_path_refuses_a_registry_outside_the_work_tree"
+    },
+    {
+      "name": "no-work-tree-raises-instead-of-deferring",
+      "_mechanism": "The over-tightening direction, which matters because the accept case here is load-bearing. Raising in `_registry_base_path` when there is no root moves git's own refusal earlier under a second, competing message, and turns every caller that stubs the base read into a hard failure — the shape of change that gets a guard reverted rather than fixed.",
+      "file": "scripts/h_mad_wire_registry.py",
+      "find": "    base = root if root is not None else repo",
+      "replace": "    base = root if root is not None else _raise_no_root(repo)",
+      "test": "tests/test_h_mad_wire_registry.py::test_load_base_refuses_a_directory_that_is_not_a_work_tree"
+    }
+  ]
+}

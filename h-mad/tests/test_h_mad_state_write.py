@@ -292,3 +292,92 @@ class TestLocking:
             sw.set_fields(p, "demo", phase="bogus")
         sw.set_fields(p, "demo", iterate_cycles=1)
         assert read(p)["demo"]["iterate_cycles"] == 1
+
+
+class TestUndeclaredKeys:
+    """J48 — an ad-hoc key must not brick the record it lands on.
+
+    A prior session wrote `current_step`, `phase5_baseline` and `phase5_progress`
+    into a live record. The guard then refused EVERY subsequent write, on a
+    feature halted mid-Phase-5: the claim could be neither released nor taken.
+    The guard was right to refuse the keys and wrong to leave no way out but the
+    hand-edit the write path exists to prevent — and its message named the tier
+    ("historical") rather than the keys, so an operator could not tell what to
+    remove without reading the JSON.
+    """
+
+    BRICKED = dict(
+        VALID,
+        owner_session_id="dead-session",
+        owner_heartbeat_ts="2026-07-22T00:00:00Z",
+        current_step="5d",
+        phase5_baseline="abc123",
+        phase5_progress="3/7",
+    )
+
+    def test_a_write_that_introduces_an_undeclared_key_is_still_refused(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        with pytest.raises(sw.StateWriteError):
+            sw.set_fields(p, "demo", phase5_progress="3/7")
+        assert "phase5_progress" not in read(p)["demo"]
+
+    def test_refusal_names_the_offending_keys_not_just_the_tier(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.BRICKED)})
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.release(p, "demo")
+        message = str(exc.value)
+        for key in ("current_step", "phase5_baseline", "phase5_progress"):
+            assert key in message, f"refusal does not name {key}: {message}"
+
+    def test_refusal_points_at_the_repair_verb(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.BRICKED)})
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.release(p, "demo")
+        assert "--drop-undeclared" in str(exc.value)
+
+    def test_refusal_distinguishes_a_preexisting_key_from_an_introduced_one(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID, phase5_progress="3/7")})
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.set_fields(p, "demo", current_step="5d")
+        message = str(exc.value)
+        assert "introduces current_step" in message
+        assert "phase5_progress was already on the record" in message
+
+    def test_drop_undeclared_removes_exactly_the_undeclared_keys(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.BRICKED)})
+        _, removed = sw.drop_undeclared(p, "demo")
+        assert sorted(removed) == ["current_step", "phase5_baseline", "phase5_progress"]
+        record = read(p)["demo"]
+        assert not (set(removed) & set(record))
+        assert record["owner_session_id"] == "dead-session"  # declared keys survive
+        assert record["current_phase"] == 5
+
+    def test_drop_undeclared_restores_the_record_to_writable(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.BRICKED)})
+        sw.drop_undeclared(p, "demo")
+        sw.release(p, "demo")
+        assert read(p)["demo"]["owner_session_id"] is None
+
+    def test_drop_undeclared_is_idempotent_on_a_clean_record(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        before = p.read_text()
+        _, removed = sw.drop_undeclared(p, "demo")
+        assert removed == []
+        assert p.read_text() == before
+
+    def test_drop_undeclared_cannot_launder_an_otherwise_broken_record(self, tmp_path):
+        """Stripping is not a bypass: what is left is validated like any write."""
+        p = store(tmp_path, {"demo": dict(VALID, phase="bogus", phase5_progress="3/7")})
+        before = p.read_text()
+        with pytest.raises(sw.StateWriteError):
+            sw.drop_undeclared(p, "demo")
+        assert p.read_text() == before
+
+    def test_cli_repairs_and_releases_a_bricked_record_in_one_command(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.BRICKED)})
+        result = run(p, "--feature", "demo", "--drop-undeclared", "--release")
+        assert result.returncode == 0, result.stderr
+        assert "DROPPED" in result.stdout
+        for key in ("current_step", "phase5_baseline", "phase5_progress"):
+            assert key in result.stdout, f"CLI does not report dropping {key}"
+        assert read(p)["demo"]["owner_session_id"] is None

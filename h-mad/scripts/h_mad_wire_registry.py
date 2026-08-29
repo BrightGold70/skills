@@ -559,12 +559,58 @@ def run_pins(resolving: list[dict], repo: Path, python: str = sys.executable) ->
     return verified, broken
 
 
+def _git_root(repo: Path) -> Path | None:
+    """The work tree root — the only directory `git show <sha>:<path>` reads from.
+
+    `None` when `repo` is not in a work tree. That is not this function's error
+    to raise: the base read that follows calls `git rev-parse` itself and refuses
+    a non-repo loudly, so failing here would only move the same refusal earlier
+    and duplicate its message.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=repo, capture_output=True, text=True, check=False,
+    )
+    root = result.stdout.strip()
+    if result.returncode != 0 or not root:
+        return None
+    return Path(root)
+
+
 def _registry_base_path(registry: Path, repo: Path) -> str:
-    """Return the registry's repo-relative POSIX path, or the default safely."""
+    """Return the registry's path relative to the GIT ROOT, as `git show` reads it.
+
+    Relative to the git root, NOT to `--repo`. `git show <sha>:<path>` resolves
+    `<path>` from the work tree root regardless of the cwd it is run in, so a
+    `--repo`-relative path is only correct when `--repo` happens to BE the root.
+    That holds in a single-project repo, which is why this was invisible: there
+    the two coincide. In a nested project they do not, and the old path named a
+    real file at the root that is a DIFFERENT registry — so `compare()` measured
+    one project's registry against another's and reported every record of the
+    root's registry as an undeclared removal. Measured (J49, HemaSuite
+    2026-08-29): a sub-project verify returned `FAIL undeclared_removals=5`,
+    naming five records of a feature with zero records in the file being
+    compared, where the truth was `PASS registered=23 verified=23`.
+
+    A registry outside the work tree is refused rather than silently falling back
+    to `DEFAULT_REGISTRY`, which was the same defect by a shorter route: an
+    unrelated file compared with a straight face.
+
+    With no work tree at all there is no root to be relative to, so the
+    `--repo`-relative path stands. Nothing reads it: `load_base` runs
+    `git rev-parse` first and refuses a non-repo there.
+    """
+    root = _git_root(repo)
+    base = root if root is not None else repo
     try:
-        return registry.resolve().relative_to(repo.resolve()).as_posix()
+        return registry.resolve().relative_to(base.resolve()).as_posix()
     except ValueError:
-        return DEFAULT_REGISTRY
+        if root is None:
+            return DEFAULT_REGISTRY
+        raise RegistryError(
+            f"registry {registry} is outside the git work tree {root}; "
+            "refusing to guess a base path for it"
+        ) from None
 
 
 def trackedness(path: Path, repo: Path) -> tuple[bool, str | None]:
