@@ -266,3 +266,98 @@ def test_it_refuses_to_decide_whether_to_run_another_cycle():
     assert loops == [] or all(
         not isinstance(n, ast.While) for n in loops
     ), "no while-loop: one cycle per invocation, the operator decides on another"
+
+
+class TestSummaryReachesTheReviewer:
+    """#31 — `--summary` took a literal string while `--design` read a file.
+
+    An operator who writes the Phase-5 summary to a file and passes
+    `--summary /tmp/summary.md` gets the PATH substituted into the prompt, not
+    the 35 lines they wrote. `--design` is `type=Path` and is `read_text()`;
+    `--summary` was neither. The staging still reported STAGED, and the two
+    architectural review legs ran without the context they were given.
+
+    The tell was byte length: two stagings with DIFFERENT summary files produced
+    prompts of identical size, because both substituted a path of equal length.
+    """
+
+    def _tpl(self, tmp_path):
+        t = tmp_path / "tpl.md"
+        t.write_text(
+            "feature <INLINE_FEATURE>\nbase <INLINE_BASE_SHA>\nhead <INLINE_HEAD_SHA>\n"
+            "files <INLINE_DIFF_FILES>\ndesign <INLINE_AUDITED_DESIGN>\n"
+            "summary <INLINE_PHASE_5_SUMMARY>\n", encoding="utf-8")
+        return t
+
+    def _stage(self, tmp_path, summary_arg, prompt_name="p.txt"):
+        design = tmp_path / "d.md"
+        design.write_text("the design\n", encoding="utf-8")
+        prompt = tmp_path / prompt_name
+        result = _run("stage", "--feature", "feat", "--template", str(self._tpl(tmp_path)),
+                      "--base", "aaa1111", "--head", "bbb2222",
+                      "--design", str(design), "--diff-files", "a.py",
+                      "--summary", summary_arg, "--prompt", str(prompt))
+        return result, prompt
+
+    def test_a_summary_file_is_read_not_pasted_as_a_path(self, tmp_path):
+        body_text = "Task 7 rewrote the transport guard and re-pinned the anchor.\n"
+        summary = tmp_path / "phase5_summary.md"
+        summary.write_text(body_text, encoding="utf-8")
+
+        result, prompt = self._stage(tmp_path, str(summary))
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        staged = prompt.read_text(encoding="utf-8")
+        assert body_text.strip() in staged, (
+            "the summary FILE's contents never reached the prompt — the path was "
+            "substituted instead, so the reviewer read a filename"
+        )
+        assert str(summary) not in staged, "the path itself must not be pasted in"
+
+    def test_two_different_summary_files_produce_different_prompts(self, tmp_path):
+        """The byte-length tell: equal-length paths made distinct summaries look identical."""
+        a = tmp_path / "sum_a.md"
+        b = tmp_path / "sum_b.md"
+        a.write_text("Alpha finding: the flush fires before the disclosure.\n", encoding="utf-8")
+        b.write_text("Beta finding: the guard reads a different field entirely.\n", encoding="utf-8")
+
+        _r1, p1 = self._stage(tmp_path, str(a), "p1.txt")
+        _r2, p2 = self._stage(tmp_path, str(b), "p2.txt")
+
+        assert p1.read_text(encoding="utf-8") != p2.read_text(encoding="utf-8")
+
+    def test_an_inline_summary_string_still_works(self, tmp_path):
+        """Back-compat: a literal summary that is not a path must still substitute."""
+        result, prompt = self._stage(tmp_path, "did things inline")
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "did things inline" in prompt.read_text(encoding="utf-8")
+
+    def test_a_missing_summary_file_is_a_staging_failure(self, tmp_path):
+        """A path-shaped argument that does not exist must not be pasted as text."""
+        result, prompt = self._stage(tmp_path, str(tmp_path / "does_not_exist.md"))
+
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert not prompt.exists(), "a failed staging must not leave a prompt behind"
+
+    def test_a_value_whose_slot_is_absent_is_a_staging_failure(self, tmp_path):
+        """#31's other half: a required value with no slot reaches nobody.
+
+        The existing guard catches the inverse — a slot left UNSUBSTITUTED. A
+        template that simply lacks the slot leaves nothing behind, so it passed.
+        """
+        t = tmp_path / "no_summary_slot.md"
+        t.write_text(
+            "feature <INLINE_FEATURE>\nbase <INLINE_BASE_SHA>\nhead <INLINE_HEAD_SHA>\n"
+            "files <INLINE_DIFF_FILES>\ndesign <INLINE_AUDITED_DESIGN>\n", encoding="utf-8")
+        design = tmp_path / "d.md"
+        design.write_text("the design\n", encoding="utf-8")
+        prompt = tmp_path / "p.txt"
+
+        result = _run("stage", "--feature", "feat", "--template", str(t),
+                      "--base", "aaa1111", "--head", "bbb2222",
+                      "--design", str(design), "--diff-files", "a.py",
+                      "--summary", "did things", "--prompt", str(prompt))
+
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "INLINE_PHASE_5_SUMMARY" in (result.stdout + result.stderr)
