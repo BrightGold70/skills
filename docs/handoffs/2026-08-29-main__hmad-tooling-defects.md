@@ -24,6 +24,14 @@ have an empty `orchestrator_state`, verified, so there is nothing to release and
 
 ## Next Steps
 
+**All three are done — closed out 2026-08-29 in `90fce10`, `e87fe24`, merged as `2b569da`.** One
+premise below did not survive verification: Next Step 2 asks for whatever in the Phase-5 flow wrote
+the three keys, and **there is nothing to find**. No code in this repo writes them — the only
+`--set` key any script or document passes is `codex_status`, which is declared. They were
+hand-written, which prose alone governed, so the enforceable fix landed at the guard instead (see
+that item for what was actually done). Left in place below as written, because the analysis that
+found the defects is still the best account of them.
+
 1. **`h_mad_wire_registry.py verify` — derive the repo root instead of defaulting `--repo` to cwd.**
    `_registry_base_path(registry, repo)` computes the base-registry path relative to `--repo`, then
    `load_base()` runs `git show <base>:<path>`. Git resolves that path from the **git root**, not
@@ -66,14 +74,19 @@ have an empty `orchestrator_state`, verified, so there is nothing to release and
 
 ## Open / Blocked Items
 
-- **#48 — ad-hoc state fields brick the orchestrator record** — status: handed over, not started.
+- **#48 — ad-hoc state fields brick the orchestrator record** — status: **DONE** (`90fce10`). Worse
+  than described: claim, release AND halt-recording were all refused, and the refusal named the tier
+  rather than the keys. The refusal now names them and separates introduced from pre-existing;
+  `--drop-undeclared` is the sanctioned repair. No Phase-5 writer existed to stop — see Next Steps.
   · repo: `/Users/kimhawk/orca/skills` · branch: `main` · worktree: `/Users/kimhawk/orca/skills`
   · touched: `h-mad/scripts/h_mad_state_write.py`, `h-mad/scripts/h_mad_state_schema.json`,
     `h-mad/scripts/h_mad_state_validate.py`, and whatever in the Phase-5 flow authored the keys
   · evidence: the three key names and their full values are quoted in the HemaSuite session
     transcript of 2026-08-29; the downstream strip is described in Next Step 2 above.
-- **#49 — `verify` compares two different registries in a nested project** — status: handed over,
-  not started.
+- **#49 — `verify` compares two different registries in a nested project** — status: **DONE**
+  (`e87fe24`). Resolved against `git rev-parse --show-toplevel`, so the default `--repo` is now
+  correct with no operator action. A registry outside the work tree is refused rather than silently
+  compared against `DEFAULT_REGISTRY` — the same defect by a shorter route, found while fixing this.
   · repo: `/Users/kimhawk/orca/skills` · branch: `main` · worktree: `/Users/kimhawk/orca/skills`
   · touched: `h-mad/scripts/h_mad_wire_registry.py` (`verify`, `_registry_base_path`, `load_base`)
   · reproduce: the command block in Next Step 1, against HemaSuite `911a377f` or later.
