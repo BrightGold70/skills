@@ -160,6 +160,39 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path) -> 
     return 0
 
 
+def _resolve_summary(summary: str) -> "tuple[str, str | None]":
+    """Return ``(text, error)`` for a --summary that may be a path OR literal prose.
+
+    `--design` is `type=Path` and is read; `--summary` was a bare string
+    substituted verbatim, so `--summary /tmp/phase5.md` sent the reviewer a
+    filename (J31). Accept both shapes rather than breaking callers that pass
+    the summary inline:
+
+      * an existing file            -> its contents
+      * path-SHAPED but missing     -> an error, never pasted verbatim
+      * anything else               -> the literal string
+
+    "Path-shaped" is deliberately narrow — a single line, no blank space around
+    a separator, or a document suffix. Real inline summaries are prose with
+    spaces and usually newlines, so they do not collide.
+    """
+    if not summary or "\n" in summary:
+        return summary, None
+    candidate = Path(summary).expanduser()
+    try:
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8"), None
+    except OSError as exc:
+        return summary, exc.__class__.__name__
+    looks_like_path = (
+        " " not in summary
+        and ("/" in summary or candidate.suffix.lower() in (".md", ".txt", ".log"))
+    )
+    if looks_like_path:
+        return summary, f"no such file: {summary}"
+    return summary, None
+
+
 def stage(feature: str, template: Path, base: str, head: str, design: Path,
           diff_files: str, summary: str, prompt: Path) -> int:
     if base == head:
@@ -174,14 +207,37 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
         _emit(f"UNREADABLE reason={exc.__class__.__name__}")
         return 2
 
-    for slot, value in (
+    # J31: --summary took a literal string while --design read a file, so an
+    # operator who wrote the Phase-5 summary to a file and passed its path got
+    # the PATH substituted into the prompt. Staging still said STAGED, and two
+    # architectural review legs ran without the context they were handed. The
+    # tell was byte length: two different summary files produced prompts of
+    # identical size, both holding a path of equal length.
+    summary_text, err = _resolve_summary(summary)
+    if err is not None:
+        _emit(f"UNREADABLE_SUMMARY reason={err}")
+        print("  --summary looks like a path but does not resolve; pasting it "
+              "verbatim would send the reviewer a filename instead of the summary.")
+        return 2
+
+    pairs = (
         ("<INLINE_FEATURE>", feature),
         ("<INLINE_BASE_SHA>", base),
         ("<INLINE_HEAD_SHA>", head),
         ("<INLINE_DIFF_FILES>", diff_files),
         ("<INLINE_AUDITED_DESIGN>", design_text),
-        ("<INLINE_PHASE_5_SUMMARY>", summary),
-    ):
+        ("<INLINE_PHASE_5_SUMMARY>", summary_text),
+    )
+
+    # J31: the UNSUBSTITUTED guard below catches a slot left unfilled. The
+    # inverse — a required value whose slot the template does not carry — left
+    # nothing behind and passed silently, so the value reached nobody. Both are
+    # staging failures. Computed BEFORE substitution, reported AFTER, so that a
+    # template shipping a live placeholder still fails as UNSUBSTITUTED: that
+    # prompt reaches a reviewer and reads as real, which is the worse outcome.
+    absent = [slot for slot, _ in pairs if slot not in body]
+
+    for slot, value in pairs:
         body = body.replace(slot, value)
 
     left = sorted(set(_PLACEHOLDER.findall(body)))
@@ -189,6 +245,12 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
         _emit(f"UNSUBSTITUTED slots={','.join(left)}")
         print("  a prompt shipped with a live placeholder asks the reviewer to "
               "review the placeholder, and reads as a real prompt to everything else.")
+        return 2
+
+    if absent:
+        _emit(f"MISSING_SLOTS slots={','.join(absent)} template={template}")
+        print("  a required input with no slot in the template reaches the "
+              "reviewer nowhere, and the staging otherwise looks successful.")
         return 2
 
     prompt.write_text(body, encoding="utf-8")
