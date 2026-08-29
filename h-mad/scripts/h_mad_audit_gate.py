@@ -82,17 +82,28 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     non-`None` content but NO bullet — a prose, numbered, or blockquote finding a
     reviewer wrote off-template — we count 1 rather than 0, so such a finding
     fails the gate (fail-safe) instead of being silently missed (F14).
+
+    A section that carried bullets and had every one acknowledged is CLEAN. That
+    is the `## Acknowledged-not-fixed` escape working as documented, and it must
+    not fall into the off-template fail-safe below: both cases leave no countable
+    bullet, but only the bulletless one is an unscored finding. Conflating them
+    capped the escape at one bullet per section (a 2-bullet section scored 1 with
+    both bullets acknowledged), so no multi-finding gate could ever be cleared.
     """
     payloads = [_payload(line) for line in content]
     if all(_is_none_sentinel(p) for p in payloads):
         return 0
-    bullets = [
+    marked = [
         p for line, p in zip(content, payloads)
         if _bullet_remainder(line.strip()) is not None
-        and p and not _is_none_sentinel(p) and p not in acknowledged
+        and p and not _is_none_sentinel(p)
     ]
+    bullets = [p for p in marked if p not in acknowledged]
     if bullets:
         return len(bullets)
+    if marked:
+        # Bullets were present and every one is acknowledged → cleared.
+        return 0
     # Non-None content with no countable bullet → at least one off-template finding.
     joined = " ".join(p for p in payloads if p)
     return 0 if joined in acknowledged else 1

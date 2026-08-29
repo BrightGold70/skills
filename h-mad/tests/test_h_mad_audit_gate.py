@@ -92,6 +92,53 @@ def test_classify_acknowledged_items_are_excluded_from_counts() -> None:
     assert result["should_count"] == 1
 
 
+def test_classify_section_with_every_bullet_acknowledged_is_clean() -> None:
+    """A section whose bullets are ALL acknowledged is cleared, not off-template.
+
+    The `bullets` list going empty has two causes that must not share an answer:
+    the section never carried a bullet marker (prose/numbered finding written
+    off-template — count 1, fail-safe), or it carried bullets and the operator
+    acknowledged every one (count 0, the escape hatch working as documented).
+    Conflating them made `## Acknowledged-not-fixed` unable to clear any section
+    holding two or more findings — measured on `guideline-claim-like-visibility`,
+    where it capped the escape at one bullet per section and left three gates
+    permanently FAIL.
+    """
+    text = "\n".join(
+        [
+            "## Must-fix",
+            "- alpha",
+            "- beta",
+            "## Should-fix",
+            "- gamma",
+            "## Acknowledged-not-fixed",
+            "- alpha",
+            "- beta",
+            "- gamma",
+            "",
+        ]
+    )
+
+    result = classify(text, acknowledged={"alpha", "beta", "gamma"})
+
+    assert result == {"verdict": "PASS", "must_count": 0, "should_count": 0}
+
+
+def test_classify_off_template_prose_still_counts_when_not_acknowledged() -> None:
+    """The fail-safe the fix narrows must keep firing for genuinely bulletless content."""
+    text = "\n".join(
+        [
+            "## Must-fix",
+            "The plan contradicts the design on AC-3.2.",
+            "## Should-fix",
+            "None",
+            "",
+        ]
+    )
+
+    assert classify(text, acknowledged={"alpha"})["must_count"] == 1
+
+
 def test_cli_clean_file_prints_pass_marker_and_exits_zero(tmp_path: Path) -> None:
     audit_file = tmp_path / "audit.md"
     audit_file.write_text("## Must-fix\nNone\n## Should-fix\nNone\n", encoding="utf-8")
