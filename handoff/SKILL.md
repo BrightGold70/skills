@@ -880,10 +880,12 @@ git diff --stat HEAD        # sanity-check scope
 Stage the **actual absolute paths** written in §Save, not a cwd-relative `docs/handoffs/…` — under a linked worktree the cwd path points at the wrong tree and would stage nothing.
 
 This block re-derives `HP` rather than inheriting it from §Save: **shell variables do not survive
-between tool calls**, so `$HP`, `$DIR` and `$BR` set back there are already empty here — and an
-empty `HP` does not merely error, it makes `ROOT` empty, which sends the branch below down the
-"linked worktree" path that skips the commit on purpose. Re-deriving `ROOT` and `LEARN` is safe
-because both are pure functions of the repo. `$FILE` is **not** — §Save's concurrency guard may
+between tool calls**, so `$HP`, `$DIR` and `$BR` set back there are already empty here. An empty
+`HP` used to be the dangerous case rather than the loud one — it made `ROOT` empty, and a
+hand-written branch then concluded "linked worktree" and skipped the commit *on the main
+worktree*, reporting the skip as correct behaviour. That branch is gone: routing now happens inside
+`handoff_commit.py`, which reads the repo itself, so an empty `HP` can only fail as a missing
+script path. Re-deriving `ROOT` and `LEARN` is safe because both are pure functions of the repo. `$FILE` is **not** — §Save's concurrency guard may
 have appended a `-2`/`-<HHMMSS>` discriminator, so re-deriving it would name a file that does not
 exist. Substitute the literal path §Save actually wrote.
 
@@ -894,22 +896,45 @@ LEARN="$(python3 "$HP" learnings)"
 echo "$ROOT" "$LEARN"                        # carry these forward as literals too
 ```
 
-- **On the main worktree** (`ROOT` == `git rev-parse --show-toplevel`): stage + commit normally:
-  ```bash
-  git add "<the handoff path §Save wrote>" "<the learnings path echoed above>"
-  git add docs/skill-candidates.md 2>/dev/null || true   # only if scout ran
-  git commit -m "chore(handoff): YYYY-MM-DD <slug>
+Route the commit through **`handoff_commit.py`** rather than branching on `ROOT` by hand. It reads
+the same repo state and picks one of three destinations — and **every one of them ends with the
+file reachable from a ref**, which the hand-written branch this replaced did not:
 
-  Session closeout: <one-line summary from Session Summary>."
-  ```
-  Literal paths, not `$FILE`/`$LEARN` — this is a separate tool call and those are empty here.
-  `git add ""` at least fails loudly (`fatal: empty string is not a valid pathspec`). The
-  dangerous one is above it: an empty `HP` makes `ROOT` empty, `ROOT` then never equals the
-  toplevel, and the branch below concludes "linked worktree" and **deliberately does not
-  commit** — on the main worktree, reporting the skip as correct behaviour. Measured, both.
-- **On a linked worktree** (`ROOT` != current toplevel): the handoff + learnings were written into the **main** tree, not here. Do **not** auto-commit into the main worktree's branch — it may be mid-work on an unrelated branch, and a surprise handoff commit there is worse than none. The file is already written and shared (that is the durability win); note in your report that committing/pushing it is a deliberate step to run from the main worktree if cross-machine persistence is wanted.
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_commit.py" \
+  "<the handoff path §Save wrote>" "<the learnings path echoed above>" \
+  -m "chore(handoff): YYYY-MM-DD <slug>
 
-Do not use `git add -A` — only stage the handoff and learnings files.
+Session closeout: <one-line summary from Session Summary>."
+```
+
+Add the absolute `docs/skill-candidates.md` under the canonical root as a third path only if scout
+ran. Paths that do not exist are dropped, so `--skip-learnings` needs no special-casing. Pass the
+**literal** paths, not `$FILE`/`$LEARN` — this is a separate tool call and shell variables do not
+survive between them.
+
+| canonical-root state | destination |
+|---|---|
+| it **is** this worktree | normal commit on the current branch (`main`) |
+| linked worktree; canonical tree clean and on its default branch | normal commit **there** (`direct`) |
+| linked worktree; canonical tree dirty or off-default | commit onto `refs/handoffs/<branch-slug>` through a throwaway index, then push to `origin` as `handoff/<branch-slug>` (`ref`) |
+
+`ref` mode is what closes the loop. It moves no HEAD, stages nothing and touches no working tree,
+so the objection that used to make this step decline the commit — the main worktree may be mid-work
+on an unrelated branch — no longer costs the doc. **What happened before it existed:** the decline
+was the last thing that ever happened to the file. WRITE reported success, the doc was on disk, the
+INDEX entry was written, the learnings landed; only `git log --all -- <path>`, which nothing
+prompted anyone to run, showed zero commits. Three docs became orphans that way on 2026-08-29.
+
+For `main` and `direct` the script commits but does not push — continue to §Sync and §Push below.
+For `ref` it has already pushed, so **skip §Sync and §Push** and report what it printed. A failed
+ref push does not fail the closeout: the commit is local and the file is still referenced.
+
+To land a `ref`-mode handoff on the default branch later, `git cherry-pick` the commit the script
+names. Never `git merge` the ref — its first commit is parented on whatever the canonical tree's
+HEAD happened to be, which can be an arbitrary stale feature tip.
+
+Do not use `git add -A` — only the handoff and learnings files.
 
 ### Sync with remote (before push)
 
