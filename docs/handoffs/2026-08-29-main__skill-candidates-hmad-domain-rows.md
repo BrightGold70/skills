@@ -25,11 +25,14 @@ rows vs 136). This is HemaSuite's debt that happens to be *about* your code.
 
 ## Key Learnings
 
-- **The store re-files rather than updates, so one concern can be open in three places.**
-  `mutation-anchor-preverify` appears at rows ~354, ~416 and ~662, each a fresh re-proof citing the
-  earlier ones. Flipping the ~416 instance to `LANDED` today left the other two open. Two
-  consequences: the "199 open" figure **overstates distinct concerns**, and closing a row means
-  sweeping the file for its siblings, not editing one line.
+- **Re-filing happens, but it is rare — corrected within the hour of first writing this.**
+  `mutation-anchor-preverify` is re-filed at rows ~354, ~416 and ~662, each a fresh re-proof citing
+  the earlier ones, and flipping ~416 to `LANDED` left a sibling open. This brief originally
+  generalised from that one row to "the store re-files rather than updates" and told you the 199
+  figure **overstates distinct concerns**. Measured across the whole open set, that is false: **199
+  open rows carry 199 distinct names, zero duplicates, and exactly one row cites an earlier one.**
+  So the count is honest, and a sibling sweep is worth a glance at a row header (`(row ~N)`) rather
+  than a step in the method. The generalisation was n=1; the correction is the full set.
 - **The keyword split below is a heuristic and needs confirming.** It matched on
   `h-mad|hmad|h_mad|handoff skill|audit-cycle|hmad-dispatch|orca-cli|mutation harness|mutation-anchor|audit gate|skill`.
   Expect both directions of error — a HemaSuite row that merely mentions "skill", and an h-mad row
