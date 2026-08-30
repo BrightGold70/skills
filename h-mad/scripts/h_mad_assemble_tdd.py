@@ -8,10 +8,17 @@ INDEPENDENTLY rather than trusting the verdict. Hand-assembling it 20+ times
 across two sessions produced five distinct mistakes, and every one is an
 invocation default rather than a judgement:
 
-  1. Omitting `--model gpt-5.5`. The config default cannot execute tools at all,
-     and — this is the trap — it fails as a well-formed `STATUS: BLOCKED`, not
-     as an error. `exec` injects no model of its own (`hmad-dispatch.sh` only
-     forwards `--model` when given), so the default has to live here.
+  1. Pinning a model here at all. The dispatch INHERITS the codex CLI's own
+     setting — `$CODEX_HOME/config.toml`'s `model` / `model_reasoning_effort`,
+     the same file the TUI writes — so changing the model in one place moves
+     both surfaces together. A default baked in here silently outranks that and
+     the two drift. So `--model`/`--effort` are OVERRIDES: absent unless the
+     caller asks. (They still matter as an escape hatch: `gpt-5.6-luna` cannot
+     execute a single tool and fails as a well-formed `STATUS: BLOCKED` rather
+     than an error, so if the config source is ever pointed at a model like
+     that, a dispatch looks like a task verdict. Read the codex session header
+     in the `--log`, which names the resolved model and effort.) Effort reaches
+     codex as `-c model_reasoning_effort=<e>`; codex has no `--effort` flag.
   2. A bare `python3`, which on this machine is 3.14 and has no pytest. The
      independent re-run then errors instead of measuring.
   3. Passing the prompt inline when `exec` takes a FILE PATH — `no such prompt
@@ -56,7 +63,10 @@ from h_mad_wire_pin_gate import _TASK_RE, _parse_tasks  # noqa: E402
 
 TOKEN = "ASSEMBLE-TDD"
 TEMPLATE = SKILL_DIR / "references" / "codex-implementer-prompt.md"
-DEFAULT_MODEL = "gpt-5.5"
+# No model/effort default: an unpinned dispatch inherits the codex CLI's own
+# config, so the model the TUI shows is the model 5d/5e runs. See mistake 1.
+DEFAULT_MODEL = None
+DEFAULT_EFFORT = None
 
 # Only a real slot is bracketed; prose refers to a slot by bare name. A raw
 # `<INLINE_…>` reaching the agent reads as an unfilled template and is silently
@@ -268,14 +278,21 @@ def assemble(
 
 def command_block(
     *, feature: str, module: str, phase: str, prompt: Path, out: Path,
-    log: Path, timeout: int, model: str, python: str, test_path: str,
-    project_root: Path,
+    log: Path, timeout: int, python: str, test_path: str,
+    project_root: Path, model: str | None = None, effort: str | None = None,
 ) -> str:
     key = "STATUS"
     step = "5d" if phase == "red" else "5e"
     q = shlex.quote
+    # Overrides only. Unset means "whatever the codex CLI is configured to use",
+    # which is the point — see mistake 1.
+    over = ""
+    if model:
+        over += f" --model {q(model)}"
+    if effort:
+        over += f" --effort {q(effort)}"
     return "\n".join([
-        f"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\",
+        f"hmad-dispatch exec codex {q(str(prompt))}{over} \\",
         f"  --cd {q(str(project_root))} \\",
         f"  --out {q(str(out))} --log {q(str(log))} --timeout {q(str(timeout))} &",
         "dispatch_pid=$!",
@@ -339,7 +356,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prompt", type=Path)
     ap.add_argument("--report-file", default="")
     ap.add_argument("--timeout", type=int, default=900)
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--model", default=DEFAULT_MODEL,
+                    help="OVERRIDE; unset inherits the codex CLI's own configured model")
+    ap.add_argument("--effort", default=DEFAULT_EFFORT,
+                    help="OVERRIDE; unset inherits the CLI's own model_reasoning_effort. "
+                         "Forwarded as -c model_reasoning_effort, since codex has no --effort flag")
     ap.add_argument("--sandbox", help="passed through; read-only is refused for a phase that runs pytest")
     ap.add_argument("--template", type=Path, default=TEMPLATE)
     args = ap.parse_args(argv)
@@ -386,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(command_block(
         feature=args.feature, module=args.module, phase=args.phase, prompt=prompt,
-        out=out, log=log, timeout=args.timeout, model=args.model,
+        out=out, log=log, timeout=args.timeout, model=args.model, effort=args.effort,
         python=args.python, test_path=args.test_path, project_root=args.project_root,
     ))
     print(f"[H-MAD] {args.feature} tdd-assemble {args.phase} {meta['task']}")

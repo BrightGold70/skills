@@ -175,15 +175,21 @@ class TestWiringShape:
 class TestTheFiveRecordedMistakes:
     """One test per hand-assembly mistake the row records."""
 
-    def test_1_the_model_is_pinned_because_the_default_cannot_execute_tools(
+    def test_1_the_model_and_effort_are_overrides_carried_only_when_given(
         self, tmp_path: Path
     ) -> None:
-        block = command_block(
+        """A pin here would outrank the codex CLI's own config, so the model the
+        TUI shows and the model 5d/5e runs would drift apart. Given explicitly,
+        both must still reach the block — that is the escape hatch for a config
+        pointed at a model that cannot execute tools (`gpt-5.6-luna`)."""
+        kw = dict(
             feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
-            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
             python=PYTHON, test_path="tests/t.py", project_root=tmp_path,
         )
-        assert "--model gpt-5.5" in block
+        pinned = command_block(model="gpt-5.6-sol", effort="high", **kw)
+        assert "--model gpt-5.6-sol" in pinned
+        assert "--effort high" in pinned
 
     def test_2_an_interpreter_without_pytest_is_refused_with_a_suggestion(
         self, plan: Path, tmp_path: Path
@@ -200,7 +206,7 @@ class TestTheFiveRecordedMistakes:
         prompt = tmp_path / "p.txt"
         block = command_block(
             feature="f", module="m", phase="red", prompt=prompt,
-            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
             python=PYTHON, test_path="tests/t.py", project_root=tmp_path,
         )
         assert f"exec codex {prompt}" in block
@@ -299,6 +305,27 @@ class TestCli:
         assert "h_mad_extract_verdict.py" in proc.stdout
         assert "--key STATUS" in proc.stdout
         assert prompt.exists()
+
+    def test_no_model_or_effort_is_pinned_so_the_cli_setting_governs(
+        self, plan: Path, tmp_path: Path
+    ) -> None:
+        """`hmad-dispatch.sh` forwards `--model`/`--effort` only when given, and codex
+        resolves the rest from `$CODEX_HOME/config.toml` — the same file its TUI writes.
+        A default emitted here would silently outrank that, so changing the model in
+        the CLI would stop moving 5d/5e with it."""
+        proc = run_cli(
+            "--feature", "f", "--task", "Task 1", "--phase", "red",
+            "--project-root", str(tmp_path), "--module", "m",
+            "--test-path", "tests/t.py", "--impl-plan", str(plan),
+            "--expect-fail", "3", "--expect-pass", "1",
+            "--python", PYTHON, "--prompt", str(tmp_path / "prompt.txt"),
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        dispatch = next(
+            l for l in proc.stdout.splitlines() if l.startswith("hmad-dispatch exec codex")
+        )
+        assert "--model" not in dispatch, dispatch
+        assert "--effort" not in dispatch, dispatch
 
     def test_the_block_re_runs_the_tests_independently_of_the_verdict(
         self, plan: Path, tmp_path: Path
@@ -416,7 +443,7 @@ class TestSurfacedByReview:
         """Raw interpolation splits a spaced path into two shell arguments."""
         block = command_block(
             feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
-            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
             python="/opt/my python/bin/python3", test_path="tests/a b.py",
             project_root=tmp_path,
         )
@@ -428,7 +455,7 @@ class TestSurfacedByReview:
         turning a dispatch that never ran into a verdict-shaped nothing."""
         block = command_block(
             feature="f", module="m", phase="red", prompt=tmp_path / "p.txt",
-            out=tmp_path / "o", log=tmp_path / "l", timeout=900, model="gpt-5.5",
+            out=tmp_path / "o", log=tmp_path / "l", timeout=900,
             python=PYTHON, test_path="tests/t.py", project_root=tmp_path,
         )
         guard = 'if [ "$rc" -ne 0 ]; then'

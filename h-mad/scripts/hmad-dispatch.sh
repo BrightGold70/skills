@@ -2358,7 +2358,7 @@ _cmd_progress() {  # <logfile> [--lines <n>] [--pid <pid>]
   return 0
 }
 
-_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --effort <e> --sandbox]
+_cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
   # to reap: this verb returns the agent's own exit code, no idle poll. The agent's
@@ -2395,11 +2395,9 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     --log) log="$2"; shift 2 ;;             # stream live transcript here for `tail -f`
     --timeout) timeout="$2"; shift 2 ;;
     --sandbox) sandbox="$2"; shift 2 ;;   # codex: read-only|workspace-write|danger…; agy: any value enables its --sandbox
-    --effort) effort="$2"; shift 2 ;;      # agy only
+    --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
-  [ "$agent" = codex ] && [ -n "$effort" ] && {
-    echo "hmad-dispatch: exec: --effort is agy-only" >&2; return 2; }
   command -v "$agent" >/dev/null 2>&1 || {
     echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -2440,6 +2438,10 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--out <fil
     local args=(exec --cd "$cd_dir" --sandbox "$sandbox"
                 --output-last-message "$last" --skip-git-repo-check)
     [ -n "$model" ] && args+=(--model "$model")
+    # Codex has no --effort flag; reasoning effort is a config override. `-c` parses
+    # the value as TOML and falls back to the raw string, so a bare `high` lands as
+    # the literal the model expects. Unset leaves ~/.codex/config.toml's own default.
+    [ -n "$effort" ] && args+=(-c "model_reasoning_effort=$effort")
     # Prompt via stdin ('-') — no keystroke cap. Transcript is the live progress
     # signal (the --output-last-message file only lands at completion, so it is
     # NOT tailable). Transcript always goes to the log (a direct redirect, not a
@@ -2958,8 +2960,6 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
     *) _unknown_opt exec-pane "$1"; return $? ;;
   esac; done
 
-  [ "$agent" = codex ] && [ -n "$effort" ] && {
-    echo "hmad-dispatch: exec-pane: --effort is agy-only" >&2; return 2; }
   [ "$want_split" -eq 1 ] && [ "$new_tab" -eq 1 ] && {
     echo "hmad-dispatch: exec-pane: --split and --new-tab are mutually exclusive" >&2; return 2; }
   case "$direction" in horizontal|vertical) ;;

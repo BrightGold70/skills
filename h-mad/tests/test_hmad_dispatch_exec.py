@@ -416,12 +416,27 @@ def test_codex_exec_sandbox_override(tmp_path):
     assert "--sandbox workspace-write" not in cap.read_text()
 
 
-def test_codex_exec_rejects_agy_only_effort_flag(tmp_path):
+def test_codex_exec_maps_effort_to_a_config_override(tmp_path):
+    """Codex has no `--effort` flag; reasoning effort is `-c model_reasoning_effort`.
+    A bare `--effort high` passed through verbatim would die as an unknown flag."""
     b = _bindir(tmp_path, ["codex"])
+    cap = tmp_path / "cap.txt"
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--effort", "high"],
-            env=_env(b))
-    assert r.returncode == 2
-    assert "--effort is agy-only" in r.stderr
+            env=_env(b), capture=cap)
+    assert r.returncode == 0, r.stderr
+    argv = cap.read_text()
+    assert "-c model_reasoning_effort=high" in argv
+    assert "--effort high" not in argv
+
+
+def test_codex_exec_omits_the_effort_override_when_unset(tmp_path):
+    """Unset must leave ~/.codex/config.toml's own default in force, not pin one."""
+    b = _bindir(tmp_path, ["codex"])
+    cap = tmp_path / "cap.txt"
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b), capture=cap)
+    assert r.returncode == 0, r.stderr
+    assert "model_reasoning_effort" not in cap.read_text()
 
 
 # --- agy backend --------------------------------------------------------------
