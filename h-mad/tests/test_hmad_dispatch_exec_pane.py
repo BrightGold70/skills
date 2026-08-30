@@ -357,11 +357,16 @@ def test_focus_reaches_terminal_create_on_the_new_tab_path(tmp_path):
     assert "--focus" in _orca_calls(cap)
 
 
-def test_effort_is_agy_only(tmp_path):
-    b = _bindir(tmp_path, ["codex"], tmp_path / "orca.txt")
-    r = run(["exec-pane", "codex", str(_prompt(tmp_path)), "--effort", "high"], env=_env(b))
-    assert r.returncode == 2
-    assert "agy-only" in r.stderr
+def test_effort_is_forwarded_for_codex_too(tmp_path):
+    """exec-pane only wraps `exec`, which now maps codex effort to
+    `-c model_reasoning_effort`. Refusing it here would make the pane path the
+    only one that cannot run a 5d/5e dispatch at its pinned effort."""
+    cap = tmp_path / "orca.txt"
+    b = _bindir(tmp_path, ["codex"], cap)
+    r = run(["exec-pane", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--effort", "high"], env=_env(b))
+    assert r.returncode == 0, r.stderr
+    assert "--effort 'high'" in _pane_cmd(cap)
 
 
 def test_unknown_agent_and_missing_prompt_are_refused(tmp_path):

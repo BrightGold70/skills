@@ -32,12 +32,20 @@
       "test": "tests/test_h_mad_assemble_tdd.py::TestJudgementIsNotAutomated::test_zero_is_a_stated_count_not_an_absent_one"
     },
     {
-      "name": "drop-the-model-pin",
-      "_mechanism": "Mistake 1. The config default cannot execute tools and fails as a well-formed STATUS: BLOCKED, so nothing downstream looks wrong.",
+      "name": "hardcode-a-model-into-the-block",
+      "_mechanism": "A pin emitted here outranks the codex CLI's own config, so the model the TUI shows and the model 5d/5e actually runs drift apart silently — the block still looks right and the dispatch still passes.",
       "file": "scripts/h_mad_assemble_tdd.py",
-      "find": "        f\"hmad-dispatch exec codex {q(str(prompt))} --model {q(model)} \\\\\",",
+      "find": "        f\"hmad-dispatch exec codex {q(str(prompt))}{over} \\\\\",",
+      "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))}{over} --model gpt-5.6-sol \\\\\",",
+      "test": "tests/test_h_mad_assemble_tdd.py::TestCli::test_no_model_or_effort_is_pinned_so_the_cli_setting_governs"
+    },
+    {
+      "name": "drop-the-model-and-effort-overrides",
+      "_mechanism": "Without the override channel there is no escape hatch when the CLI's configured model cannot execute tools (gpt-5.6-luna fails as a well-formed STATUS: BLOCKED), and every explicit --model/--effort is silently discarded.",
+      "file": "scripts/h_mad_assemble_tdd.py",
+      "find": "        f\"hmad-dispatch exec codex {q(str(prompt))}{over} \\\\\",",
       "replace": "        f\"hmad-dispatch exec codex {q(str(prompt))} \\\\\",",
-      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_1_the_model_is_pinned_because_the_default_cannot_execute_tools"
+      "test": "tests/test_h_mad_assemble_tdd.py::TestTheFiveRecordedMistakes::test_1_the_model_and_effort_are_overrides_carried_only_when_given"
     },
     {
       "name": "skip-the-interpreter-probe",
