@@ -775,7 +775,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `worktree ps` `agents[]` and all three previews were empty. `orca terminal read --terminal <h> --json`
   → `.result.terminal.tail` identified all three unambiguously on the first try (a Codex TUI banner, an
   Antigravity CLI banner, and a bare Oh-My-Zsh prompt), which resolved the pin — recurrence: 1, but it
-  resolved a live UNRESOLVED that the existing fallbacks could not — candidate: **maybe** — a
+  resolved a live UNRESOLVED that the existing fallbacks could not — candidate: maybe — a
   `pin-agents` Pass-N that greps `.tail` for each agent's banner would close the gap that the
   `agentType` join and the preview scan both leave open. The guard it must keep is the one that made
   this safe by hand: pin only when **exactly one** candidate matches, because a wrong-but-live pin
@@ -786,7 +786,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   reads `.result.terminal.handle` from the create response and uses it directly — registering it in
   the pane pool and dispatching to it — while `_cmd_launch` sixty lines earlier refuses that same
   field as unpinnable. Both cannot be right, and the 5/5 probe says `exec-pane`'s assumption is the
-  one that holds on 1.4.192 — recurrence: 1 — candidate: **maybe** — not a defect today and NOT
+  one that holds on 1.4.192 — recurrence: 1 — candidate: maybe — not a defect today and NOT
   fixed here (joining `exec-pane` by `paneKey` is a behaviour change with its own tests, out of scope
   for a doc reconciliation). Recorded because the failure is asymmetric: if the placeholder behaviour
   ever recurs, `launch` fails loud by design and `exec-pane` silently pools a handle that does not
@@ -826,3 +826,36 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   deliberately NOT changed with the create path: nothing here has ever probed a split response, so
   whether it even carries a `paneKey` is unknown, and inventing a join for a shape nobody has seen is
   how a guard gets written against an imagined field. Probe one split response before touching it.
+
+## 2026-08-31 — j1-pane-pin-takeover-and-handover (scout)
+
+- **verify an OUTBOUND handover actually landed**: after delivering, check three things that only the
+  receiver can produce — the feature's `owner_session_id` in `docs/.bkit-memory.json` changed to a
+  session that is not you, the target worktree comment flipped from `handover:` to `taken over:`, and
+  the receiving pane's own output says so (`orca terminal read` → `.result.terminal.tail`) —
+  recurrence: 1 — candidate: maybe — the sender-side counterpart to `verify-inbound-handover`
+  (2026-08-03, closed as skill guidance), and the gap it fills is real: HANDOVER's own §Step 5 says
+  `accepted: true` proves a live handle took bytes and **not** that anyone picked the work up, then
+  §Step 6 says stop monitoring — so the skill correctly forbids *watching* and offers nothing for
+  *checking once, later*. Those are different asks and only the second is cheap. Worth a row because
+  this is the first handover in this repo whose landing was confirmed rather than assumed. Not
+  urgent: three read-only commands, and the judgement it must not automate is what to do when the
+  answer is no.
+- **response-shape census for an Orca verb**: call `orca terminal create --json` N times across
+  varied selectors, tabulate one field's presence against the others, join each response to
+  `terminal list`, and close every pane afterwards — hand-rolled 8 times in one session to decide
+  whether a guard was dormant — recurrence: 8 — candidate: maybe — the tabulating is trivial; the
+  half that actually goes wrong is **cleanup**, since a probe that leaks panes pollutes the pane pool
+  and the next `pin-agents` run. A `--cleanup`-guaranteed probe loop (create → record → close in a
+  trap) would make "measure a response shape" a safe thing to do casually, which matters because the
+  alternative is reasoning from a doc comment. Note the finding it produced was that **5/5 said one
+  thing and the 8th said the opposite** — n<8 here would have shipped the wrong conclusion, so the
+  tool's value is in making a larger N cheap, not in the loop itself.
+- **create the handover lane LAST, or fast-forward it**: `orca worktree create` snapshots the branch
+  at that instant, so two commits pushed afterwards — including a correction to the brief's own
+  central premise — never reached the receiver's checkout — recurrence: 1 — candidate: no — this is a
+  sequencing rule, not a tool, and it belongs as a sentence in the handoff skill's HANDOVER §Step 5
+  rather than as code. Recorded because the failure was **invisible**: the takeover succeeded anyway,
+  since READ resolves the *canonical* main-worktree store rather than the lane's own, so the receiver
+  read the corrected brief while its checkout held the stale one. A design property saved it, not the
+  sender.
