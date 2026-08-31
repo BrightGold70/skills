@@ -1,0 +1,43 @@
+{
+  "_why": "`exec-pane` and `launch` read the SAME create-response field and treat it differently on purpose, so both directions of the disagreement have to be pinned or the next reader 'fixes' the inconsistency back. Two of these mutants are the obvious one (stop joining, pool the placeholder) and its inverse (refuse instead of falling back) -- the inverse matters because a fail-loud exec-pane still PASSES a 'resolves by paneKey' test while breaking every host build that omits the field. The third pins the deadline, and it is the one that nearly went unmeasured: the first attempt at it appended `; true` inside the command substitution, which produced an empty `resolved` -- the fallback the test already expects -- so the mutant landed on the same behaviour and survived while proving nothing. The mutant that discriminates removes the `return 1` and hangs, which costs ~120s per run because the test's own subprocess timeout is what catches it. Anchor sweeps stay fast; only a full mutation run pays that.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec_pane.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "join-result-ignored-placeholder-is-pooled",
+      "_mechanism": "Resolve the pane correctly, then throw the answer away and keep the create-response handle. This is the pre-fix behaviour exactly, and it is invisible from stdout and from the dispatch's own success -- the pane still runs, the verdict still lands. Only the slot registry holds the wrong value, and only the NEXT dispatch pays for it. Pinned to the test that asserts on the slot directory rather than on stderr for that reason.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "        handle=\"$resolved\"",
+      "replace": "        handle=\"$handle\"",
+      "test": "tests/test_hmad_dispatch_exec_pane.py::test_created_pane_is_pooled_under_its_adopted_handle_not_the_response_one"
+    },
+    {
+      "name": "missing-panekey-refuses-instead-of-falling-back",
+      "_mechanism": "Copy `launch`'s refusal into `exec-pane`, which is the change a reader who sees only the inconsistency would make. It is wrong here because `pane_cmd` is already executing when the response is read: refusing strands live work to protect a pool entry and a stderr line. This mutant is why the fallback needs a test of its own -- without one, the refusal passes every remaining assertion in the file.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      echo \"hmad-dispatch: exec-pane: create response carries no paneKey; falling back",
+      "replace": "      return 1; echo \"hmad-dispatch: exec-pane: create response carries no paneKey; falling back",
+      "test": "tests/test_hmad_dispatch_exec_pane.py::test_missing_panekey_falls_back_to_the_response_handle_and_says_so"
+    },
+    {
+      "name": "join-never-expires",
+      "_mechanism": "Delete the deadline from the shared helper so a paneKey that never appears polls forever. Both call sites bound their join and both would hang; exec-pane is the one measured here because its fallback is what the deadline exists to reach. Caught by the test's subprocess timeout, so this mutation is the slow one in the spec (~120s).",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    [ \"$(date +%s)\" -ge \"$deadline\" ] && return 1\n",
+      "replace": "    :\n",
+      "test": "tests/test_hmad_dispatch_exec_pane.py::test_unresolvable_panekey_falls_back_after_the_deadline"
+    }
+  ]
+}
