@@ -294,6 +294,16 @@ actually refused to run.
 - **Anything in another repo, worktree or lane** — including a sibling branch that is cleanly
   fast-forwardable. It may have a live owner who is not watching your session, and "it was only a
   fast-forward" is not a defence when their working tree changes under a running agent.
+  **The gate that would have made this resolvable was proposed, specified, and refused —
+  2026-09-01.** The proposal: resolve it when no agent is live in that worktree, checked with
+  `orca terminal read` over its panes. It cannot work, and the reason generalises past Orca: a tail
+  proves an agent is **present** (a banner), never that one is **absent** — a quiet tail is an idle
+  agent between turns, and a non-Orca session (a plain shell, an editor terminal, another Claude
+  Code in that directory) is invisible to every Orca-side check. So the gate answers "present" or
+  "could not verify", never "absent", and this step's own predicate rule then forbids the repair.
+  **A gate that can never legitimately pass IS this never-list entry.** The check and the pull are
+  also not atomic, so even a true answer decays before the repair runs. Do not re-derive it: report
+  the sibling with its command instead (below).
 - **A claim held by a LIVE session.** That is a collision and a finding, not a lock to break.
 - **Any premise the brief asserts about the world.** It needs a probe, not a repair. A brief is a
   claim made by a session that has stopped; re-running its reproduce commands is Step 3.5's job and
@@ -302,6 +312,22 @@ actually refused to run.
   leaks dispatches into a stranger's shell — strictly worse than leaving it unresolved.
 - **Anything needing `--force`, `-D`, `rm`, or a push.** If the repair is not reversible by the next
   reader, it is not mechanical.
+
+**Report it with the command, don't run it.** A refused repair still has an ergonomic half that is
+free, and taking it is what keeps the never-list from feeling like pure loss: name the exact command
+in the divergence line so the user runs it with one keystroke when *they* judge the lane idle. For
+the fast-forwardable sibling this costs nothing and touches nothing — worktrees of one repo share an
+object store and a ref namespace, so the count comes from **here**, with no `-C` into their tree and
+no read of their working files:
+
+```bash
+git rev-list --left-right --count "refs/remotes/origin/<branch>...refs/heads/<branch>"   # <behind> <ahead>
+```
+
+Step 0 already fetched, so that is offline and read-only. Report it in the shape the Step 5 template
+shows: what is true, that you did **not** act, and the command that would. The judgement the gate
+could not make — is anyone working that lane — is one the user makes for free, so hand it to them
+rather than guessing on their behalf.
 
 **Say what you did.** Step 5 gains a **Resolved** block, separate from **Divergences**. Name the
 command for each repair so it can be undone. A repair nobody is told about is indistinguishable from
@@ -371,7 +397,8 @@ do that" and the next reader stops expecting it.
 
 **Divergences** (reported, NOT resolved — each needs you):
 - PID 37219 (compile_guidelines_db): exited — log mtime 3h ago. Treat as complete; verify output.
-- Sibling worktree `feature/12` is 2 behind and cleanly fast-forwardable — left alone; it has a live owner.
+- Sibling worktree `feature/12` is 2 behind and cleanly fast-forwardable — **not pulled**; its owner
+  may be mid-turn. Run `git -C ../feature-12 pull --ff-only` when that lane is idle.
 
 **Todos restored:** 4 items. **Restored to:** `.omc/notepad.md` (no task tool in this install). Starting at:
 1. [guideline-rag@main] Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)

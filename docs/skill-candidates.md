@@ -958,3 +958,20 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `pin-agents`, and the hand re-pin afterwards leaves no trace pointing back at it — the same shape
   as the wire-pin gate that blocked correct work and was worked around by rewriting the document.
   A test needs both arms: one live pin + one stale, assert the live one **survives**.
+- **the "no live agent in that worktree" gate for READ Step 3.6 — proposed, specified, FALSIFIED**:
+  carried out of the 2026-09-01 handoff as `[suggested]` "widen the allowlist to the fast-forwardable
+  sibling; the gate would need *no live agent in that worktree*, checkable via `orca terminal read`".
+  Probed before writing anything: the check cannot exist. `orca terminal read` returns a tail, and a
+  tail proves an agent is **present** (a banner) and never that one is **absent** — a quiet tail is an
+  idle agent between turns, and any non-Orca session in that directory (a plain shell, an editor
+  terminal, another Claude Code) emits nothing an Orca-side check can see. The gate therefore answers
+  "present" or "could not verify", never "absent", and Step 3.6's own fail-closed predicate then
+  forbids the repair — so the gate can never legitimately pass, which is the definition of the
+  never-list entry it was meant to remove. Check and pull are also not atomic. — candidate: no — the
+  generalisable rule ("a gate that can never legitimately pass IS a never-list entry") and the
+  falsification both landed in `handoff/SKILL.md` §Step 3.6 with 5 mutants, together with the half
+  that *is* free: report the sibling with the ready command, counting from the shared ref namespace
+  (`git rev-list --left-right --count refs/remotes/origin/<b>...refs/heads/<b>`) so the measurement
+  never touches the lane it describes. Filed here rather than left in the handoff because a Next Step
+  that is refused on inspection leaves no trace otherwise, and the idea is attractive enough to be
+  had again.

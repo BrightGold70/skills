@@ -140,3 +140,66 @@ def test_the_historical_record_rule_survives_the_new_commit() -> None:
             "READ must not edit the doc's content")
     require("which changes no content",
             "the one permitted write must be distinguished from an edit")
+
+
+# --- the sibling gate was PROPOSED and REFUSED, and the refusal is the record --
+#
+# Task carried from the 2026-09-01 handoff: "widen Step 3.6's allowlist to the
+# fast-forwardable sibling, gated on no live agent in that worktree". The gate was
+# specified and then falsified before any code was written, so what ships is the
+# negative result. These pins exist because the idea is genuinely attractive and
+# WILL be had again -- and a refusal nobody wrote down is re-derived from scratch,
+# which is the same "the workaround leaves no trace" shape as the wire-pin gate.
+
+
+def test_the_refused_gate_is_recorded_where_the_next_reader_will_look() -> None:
+    """Named in the never-list entry itself, not in a commit message.
+
+    A reader who has this idea reads the bullet that refuses it. If the reason
+    lives anywhere else, they re-derive the proposal instead of finding it
+    already answered.
+    """
+    require("The gate that would have made this resolvable was proposed, specified, and refused",
+            "the refused proposal must be findable from the entry that refuses it")
+
+
+def test_the_presence_absence_asymmetry_is_the_stated_reason() -> None:
+    """A tail proves presence; nothing proves absence.
+
+    This is the load-bearing half and it generalises past Orca: a quiet pane is
+    an idle agent, and a non-Orca session is invisible to any Orca-side check.
+    Softening it to "check whether an agent is there" restores the proposal.
+    """
+    require("proves an agent is **present** (a banner), never that one is **absent**",
+            "presence is observable, absence is not — that is why the gate fails")
+    require("invisible to every Orca-side check",
+            "a non-Orca session in that worktree is unobservable, not merely unlikely")
+
+
+def test_the_verdict_is_stated_as_a_rule_not_a_preference() -> None:
+    """The general form, so the next unbuildable gate is recognised as one."""
+    require("A gate that can never legitimately pass IS this never-list entry",
+            "the reusable rule, not a one-off judgement about this worktree")
+
+
+def test_a_refused_repair_still_names_its_command() -> None:
+    """The ergonomic half of the repair is free and is not refused.
+
+    The reason the never-list is tolerable is that the user loses one keystroke,
+    not the information. Dropping this turns every never-list entry into pure
+    toil and re-creates the pressure to widen the allowlist.
+    """
+    require("**Report it with the command, don't run it.**",
+            "reporting with the ready command is the sanctioned half of this repair")
+    require('git rev-list --left-right --count "refs/remotes/origin/<branch>...refs/heads/<branch>"',
+            "the count must come from here, via the shared ref namespace")
+    require("with no `-C` into their tree and\nno read of their working files",
+            "the measurement itself must not touch the lane it describes")
+
+
+def test_the_template_demonstrates_the_ready_command() -> None:
+    """The template is what gets copied; a bare refusal there teaches a bare refusal."""
+    i = RAW.index("**Divergences** (reported, NOT resolved")
+    block = RAW[i:RAW.index("**Todos restored:**", i)]
+    assert "not pulled" in block, block
+    assert "pull --ff-only" in block, "the divergence line must carry the command it did not run"

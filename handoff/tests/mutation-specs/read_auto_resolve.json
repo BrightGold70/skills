@@ -1,5 +1,5 @@
 {
-  "_why": "Step 3.6's value is carried by its SHORT lists, and the short list is the fragile one. Every mutant here widens the step exactly the way a future reader's instinct will: drop the scope limit from the heading, soften the fail-closed predicate, or delete one never-list entry that looks locally safe. None of them break a behaviour a normal test could see \u2014 the step is guidance, so the guidance is what gets pinned, and a deleted sentence is invisible until the resume it would have stopped.",
+  "_why": "Step 3.6's value is carried by its SHORT lists, and the short list is the fragile one. Every mutant here widens the step exactly the way a future reader's instinct will: drop the scope limit from the heading, soften the fail-closed predicate, or delete one never-list entry that looks locally safe. None of them break a behaviour a normal test could see — the step is guidance, so the guidance is what gets pinned, and a deleted sentence is invisible until the resume it would have stopped. The 2026-09-01 additions pin the REFUSAL of a gate that was proposed for this very step: the record of why it cannot be built, and the reporting half that makes refusing it affordable.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -11,15 +11,15 @@
   "mutations": [
     {
       "name": "scope-limit-dropped-from-the-heading",
-      "_mechanism": "`and only that` is the whole contract. Without it the heading reads as 'resolve what is resolvable', which is the blanket rule the step exists to refuse \u2014 and a reader who never reaches the never-list has already been told the wrong thing.",
+      "_mechanism": "`and only that` is the whole contract. Without it the heading reads as 'resolve what is resolvable', which is the blanket rule the step exists to refuse — and a reader who never reaches the never-list has already been told the wrong thing.",
       "file": "SKILL.md",
-      "find": "### Step 3.6: Resolve what is mechanically resolvable \u2014 and only that",
+      "find": "### Step 3.6: Resolve what is mechanically resolvable — and only that",
       "replace": "### Step 3.6: Resolve the divergences",
       "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_step_is_scoped_in_its_own_title"
     },
     {
       "name": "fail-closed-predicate-softened",
-      "_mechanism": "Delete the line that distinguishes an unevaluable gate from a passing one. This repo has shipped that exact conflation twice \u2014 `find` under rtk refusing to run and reading as 'nothing is claimed', and an unreadable worktree comment reading as empty and clobbering a human's note. Without the line, a gate that errors reads as a green light.",
+      "_mechanism": "Delete the line that distinguishes an unevaluable gate from a passing one. This repo has shipped that exact conflation twice — `find` under rtk refusing to run and reading as 'nothing is claimed', and an unreadable worktree comment reading as empty and clobbering a human's note. Without the line, a gate that errors reads as a green light.",
       "file": "SKILL.md",
       "find": "**\"I could not check\" and \"the check said yes\" must never\ntake the same branch.**",
       "replace": "Check before repairing.",
@@ -27,7 +27,7 @@
     },
     {
       "name": "fast-forwardable-sibling-no-longer-refused-by-name",
-      "_mechanism": "The most tempting entry in the never-list, and the one that looks cleanest: no divergence, no uncommitted work, a pure fast-forward. Removing the explicit clause leaves only the general 'another worktree' rule, which a reader will reason their way past \u2014 the cost is not to git, it is that another session's files change under a running agent.",
+      "_mechanism": "The most tempting entry in the never-list, and the one that looks cleanest: no divergence, no uncommitted work, a pure fast-forward. Removing the explicit clause leaves only the general 'another worktree' rule, which a reader will reason their way past — the cost is not to git, it is that another session's files change under a running agent.",
       "file": "SKILL.md",
       "find": "including a sibling branch that is cleanly\n  fast-forwardable.",
       "replace": "which is out of scope.",
@@ -35,10 +35,10 @@
     },
     {
       "name": "allowlist-no-longer-declared-closed",
-      "_mechanism": "Drop `Nothing outside it.` and the ban on extending the list in the moment. The entries all survive, so the step still looks correct \u2014 but the failure mode was never a wrong entry, it was growth: each new case is argued individually and looks safe, and the step becomes the blanket rule one row at a time.",
+      "_mechanism": "Drop `Nothing outside it.` and the ban on extending the list in the moment. The entries all survive, so the step still looks correct — but the failure mode was never a wrong entry, it was growth: each new case is argued individually and looks safe, and the step becomes the blanket rule one row at a time.",
       "file": "SKILL.md",
-      "find": "**Resolve \u2014 the allowlist. Nothing outside it.**",
-      "replace": "**Resolve \u2014 the allowlist.**",
+      "find": "**Resolve — the allowlist. Nothing outside it.**",
+      "replace": "**Resolve — the allowlist.**",
       "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_allowlist_is_declared_closed"
     },
     {
@@ -48,6 +48,46 @@
       "find": "If Step 3.6 resolved nothing, say\n`**Resolved:** none` rather than omitting the block;",
       "replace": "If Step 3.6 resolved nothing, omit the block;",
       "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_an_empty_resolved_block_is_still_printed"
+    },
+    {
+      "name": "refused-gate-record-deleted",
+      "_mechanism": "Delete the sentence that says the sibling gate was proposed and refused. Every other pin still passes -- the never-list entry is intact -- but the REASON is gone, so the next reader with this idea finds a bare prohibition, re-derives the `orca terminal read` proposal, and argues for it from scratch. A refusal nobody wrote down is not a decision, it is a coin flip that happened to land once.",
+      "file": "SKILL.md",
+      "find": "**The gate that would have made this resolvable was proposed, specified, and refused —\n  2026-09-01.**",
+      "replace": "**Out of scope.**",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_refused_gate_is_recorded_where_the_next_reader_will_look"
+    },
+    {
+      "name": "presence-absence-asymmetry-softened",
+      "_mechanism": "Reduce the load-bearing half to 'checks whether an agent is there', which is exactly what the proposal assumed the tool could do. Presence is observable (a banner); absence is not -- a quiet tail is an idle agent, and a non-Orca session in that directory emits nothing at all. Without the asymmetry the gate reads as buildable and the never-list entry becomes a preference.",
+      "file": "SKILL.md",
+      "find": "proves an agent is **present** (a banner), never that one is **absent**",
+      "replace": "checks whether an agent is there",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_presence_absence_asymmetry_is_the_stated_reason"
+    },
+    {
+      "name": "verdict-downgraded-to-a-preference",
+      "_mechanism": "Replace the general rule with a judgement about this one case. The rule is what makes the next unbuildable gate recognisable BEFORE it is built; a preference invites the reader to weigh it against convenience, which is the argument the proposal already won on its own terms until the gate was probed.",
+      "file": "SKILL.md",
+      "find": "**A gate that can never legitimately pass IS this never-list entry.**",
+      "replace": "This one is probably not worth the risk.",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_verdict_is_stated_as_a_rule_not_a_preference"
+    },
+    {
+      "name": "ready-command-dropped-from-a-refused-repair",
+      "_mechanism": "Strip the instruction to name the command the step declined to run. The never-list survives, so this looks like a tidy-up -- but it converts every refused entry into pure toil for the user, which is precisely the pressure that produces the next 'can we widen the allowlist just for this one case'. The refusal is affordable only because the information is not withheld with it.",
+      "file": "SKILL.md",
+      "find": "**Report it with the command, don't run it.**",
+      "replace": "**Report it.**",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_a_refused_repair_still_names_its_command"
+    },
+    {
+      "name": "template-regresses-to-a-bare-refusal",
+      "_mechanism": "The template is copied verbatim far more often than the prose above it is read. A divergence line that says only 'left alone' teaches the bare refusal no matter what the guidance says, and guidance the template contradicts loses every time.",
+      "file": "SKILL.md",
+      "find": "- Sibling worktree `feature/12` is 2 behind and cleanly fast-forwardable — **not pulled**; its owner\n  may be mid-turn. Run `git -C ../feature-12 pull --ff-only` when that lane is idle.",
+      "replace": "- Sibling worktree `feature/12` is 2 behind and cleanly fast-forwardable — left alone; it has a live owner.",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_template_demonstrates_the_ready_command"
     }
   ]
 }
