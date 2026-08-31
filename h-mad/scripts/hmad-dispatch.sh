@@ -852,6 +852,29 @@ _cmd_pin() {  # <agent> <handle> — record ONE agent's handle in the pin file
   echo "[H-MAD] pinned $1 -> $2 ($pf)" >&2
 }
 
+# Join a create-response `paneKey` (`<tabId>:<leafId>`, the same key J16 joins
+# on) against `terminal list` and print the handle the pane was actually adopted
+# under. Polls because adoption is not instantaneous; a live probe resolved in
+# under 5s. Prints nothing and returns 1 if the key never appears in time.
+#
+# Shared by `launch` and `exec-pane` deliberately: two copies of the jq join
+# would drift, and they must agree on what "the pane's real handle" means even
+# though they disagree on what to do when the join fails (see each call site).
+_resolve_pane_by_key() {  # <paneKey> [timeout-seconds]
+  local pane_key="${1:-}" secs="${2:-20}" handle deadline
+  [ -n "$pane_key" ] || return 1
+  deadline=$(( $(date +%s) + secs ))
+  while :; do
+    handle="$(orca terminal list --json 2>/dev/null \
+      | jq -r --arg k "$pane_key" \
+          '.result.terminals[]? | select(((.tabId//"")+":"+(.leafId//"")) == $k) | .handle' \
+          2>/dev/null | head -1)"
+    [ -n "$handle" ] && { printf '%s\n' "$handle"; return 0; }
+    [ "$(date +%s)" -ge "$deadline" ] && return 1
+    sleep 1
+  done
+}
+
 _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   # H5 durable path: h-mad OWNS the agent launch, so its identity is captured at
   # spawn from the create response's `paneKey`, joined against `terminal list`
@@ -886,9 +909,11 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   #
   # 2026-08-31 re-probe (Orca 1.4.192, 5 creates, 2 worktrees): every response
   # carried a paneKey, and the create handle was IDENTICAL to the adopted handle
-  # 5/5. So the placeholder behaviour above is intermittent, not invariant, and
-  # `_cmd_exec_pane` -- which still reads `.result.terminal.handle` directly --
-  # is not broken today. The join stays because it is correct under BOTH
+  # 5/5. So the placeholder behaviour above is intermittent, not invariant --
+  # which is why `_cmd_exec_pane` was not broken by trusting that field, and why
+  # it now joins by paneKey too (falling back rather than refusing, since its
+  # product is a running dispatch and not a pin). The join stays because it is
+  # correct under BOTH
   # behaviours. The no-paneKey guard below stays because all 5 responses carried
   # `surface: visible`, so the documented background-handle fallback (`orca
   # terminal create --help`), the live hypothesis for the original omission, was
@@ -900,17 +925,7 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
     echo "hmad-dispatch: launch $agent — create response carries no paneKey, so the pane cannot be identified; nothing was pinned. The create-response handle is a pre-adoption placeholder (J1) and must not be pinned. Pin manually after confirming the pane: hmad-dispatch pin $agent <handle>" >&2
     return 1
   fi
-  # Adoption is not instantaneous; a live probe resolved in under 5s.
-  local deadline=$(( $(date +%s) + ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20} ))
-  while :; do
-    handle="$(orca terminal list --json 2>/dev/null \
-      | jq -r --arg k "$pane_key" \
-          '.result.terminals[]? | select(((.tabId//"")+":"+(.leafId//"")) == $k) | .handle' \
-          2>/dev/null | head -1)"
-    [ -n "$handle" ] && break
-    [ "$(date +%s)" -ge "$deadline" ] && break
-    sleep 1
-  done
+  handle="$(_resolve_pane_by_key "$pane_key" "${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}")" || handle=""
   if [ -z "$handle" ]; then
     echo "hmad-dispatch: launch $agent — paneKey $pane_key did not appear in 'orca terminal list' within ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}s; the pane may not have started. Nothing was pinned." >&2
     return 1
@@ -3102,7 +3117,34 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   else
     local create_args=(terminal create --worktree "path:$cd_dir" --title "$title" --command "$pane_cmd" --json)
     [ "$focus" -eq 1 ] && create_args+=(--focus)
-    handle="$(_orca_json '.result.terminal.handle' "${create_args[@]}")" || return 1
+    # J1, and the reason this call site does NOT copy `launch`'s refusal: both
+    # read `.result.terminal.handle`, which has been observed to be a
+    # pre-adoption placeholder the pane never adopts (and observed, on Orca
+    # 1.4.192, to be the real handle -- it is intermittent). What differs is the
+    # PRODUCT. `launch` yields a durable PIN that every later dispatch resolves
+    # through, so a wrong value poisons the whole session and refusing is right.
+    # Here the product is a RUNNING DISPATCH: `pane_cmd` is already executing by
+    # the time this response is read, and the handle only feeds the pane pool and
+    # a stderr line. Failing loud would strand live work to protect a
+    # convenience. So: prefer the paneKey join, fall back to the create handle,
+    # and say which happened. Strictly better than trusting the handle outright,
+    # never worse than it.
+    local cresp cpane_key resolved
+    cresp="$(_orca_json '.result.terminal | tojson' "${create_args[@]}")" || return 1
+    handle="$(printf '%s' "$cresp" | jq -r '.handle // empty' 2>/dev/null)"
+    cpane_key="$(printf '%s' "$cresp" | jq -r '.paneKey // empty' 2>/dev/null)"
+    if [ -n "$cpane_key" ]; then
+      # Short deadline, not `launch`'s 20s: a fallback exists here, so waiting
+      # longer buys little and delays a dispatch that is already running.
+      resolved="$(_resolve_pane_by_key "$cpane_key" "${HMAD_PANE_RESOLVE_TIMEOUT:-5}")" || resolved=""
+      if [ -n "$resolved" ]; then
+        handle="$resolved"
+      else
+        echo "hmad-dispatch: exec-pane: paneKey $cpane_key did not appear in 'orca terminal list' within ${HMAD_PANE_RESOLVE_TIMEOUT:-5}s; falling back to the create-response handle $handle (J1: if that is a placeholder, the pool entry is inert). The dispatch is running either way." >&2
+      fi
+    else
+      echo "hmad-dispatch: exec-pane: create response carries no paneKey; falling back to the create-response handle $handle (J1: if that is a placeholder, the pool entry is inert). The dispatch is running either way." >&2
+    fi
   fi
   [ -n "$handle" ] || { echo "hmad-dispatch: exec-pane: Orca returned no terminal handle" >&2; return 1; }
   # Only NEW panes join the pool. A pane created by `--split <handle>` of someone

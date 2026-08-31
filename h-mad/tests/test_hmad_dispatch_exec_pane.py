@@ -847,3 +847,98 @@ def test_wait_times_out_without_claiming_the_dispatch_failed(tmp_path):
              "--wait", "--wait-timeout", "4"], env=_env(b))
     assert r.returncode == 124
     assert "still live" in r.stderr
+
+
+# --------------------------------------------------------------------------
+# J1 — the created pane is resolved by paneKey, not trusted from the response
+#
+# `launch` and `exec-pane` read the SAME field (`.result.terminal.handle`) and
+# treat it differently on purpose: launch refuses it outright because its product
+# is a durable pin, while exec-pane's product is a dispatch that is already
+# running, so it prefers the join and falls back rather than stranding the work.
+# These tests pin the fallback as a REAL branch, not an accident -- an exec-pane
+# that hard-failed on a missing paneKey would pass a "resolves by paneKey" test
+# and break every host build that omits the field.
+# --------------------------------------------------------------------------
+
+def _orca_panekey(tmp_path, capture, create_terminal, list_terminals):
+    """An orca stub with a settable `terminal create` payload and pane list."""
+    b = tmp_path / "bin"
+    b.mkdir(exist_ok=True)
+    d = b / "agy"; d.write_text((STUBS / "agy").read_text()); d.chmod(0o755)
+    script = "\n".join([
+        "#!/usr/bin/env bash",
+        'printf "%s\\n" "$*" >> ' + str(capture),
+        'case "$1 $2" in',
+        '  "terminal list")   echo ' + repr_sh(
+            '{"ok":true,"result":{"terminals":[' + list_terminals + ']}}') + ' ;;',
+        '  "terminal create") echo ' + repr_sh(
+            '{"ok":true,"result":{"terminal":' + create_terminal + '}}') + ' ;;',
+        '  *) echo ' + repr_sh('{"ok":true,"result":{}}') + ' ;;',
+        'esac',
+        'exit 0',
+        '',
+    ])
+    (b / "orca").write_text(script)
+    (b / "orca").chmod(0o755)
+    return b
+
+
+def test_created_pane_is_pooled_under_its_adopted_handle_not_the_response_one(tmp_path):
+    """The whole point of the fix: the POOL must hold the handle that exists.
+
+    Asserting only on stderr would pass with the placeholder still pooled --
+    `_pane_slot_register` is the consumer that decides whether the next dispatch
+    is handed a handle Orca has never heard of, so the slot dir is the assertion.
+    """
+    cap = tmp_path / "orca.txt"
+    b = _orca_panekey(
+        tmp_path, cap,
+        create_terminal='{"handle":"term_placeholder","tabId":"tab9","paneKey":"tab9:leaf9"}',
+        list_terminals='{"handle":"term_real","tabId":"tab9","leafId":"leaf9"}')
+    env = _env(b)
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    d = _slots(env)
+    assert (d / "term_real.busy").is_dir(), sorted(p.name for p in d.iterdir())
+    assert (d / "term_real.cd").exists(), sorted(p.name for p in d.iterdir())
+    assert not (d / "term_placeholder.busy").exists(), "placeholder was pooled"
+    assert "term_real" in r.stderr
+    # The fallback path must NOT have been taken -- otherwise this test would
+    # still pass on a build that never joins at all.
+    assert "falling back" not in r.stderr, r.stderr
+
+
+def test_missing_panekey_falls_back_to_the_response_handle_and_says_so(tmp_path):
+    """No paneKey is not a reason to strand a dispatch that is already running."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_panekey(
+        tmp_path, cap,
+        create_terminal='{"handle":"term_NEW","tabId":"tab2"}',
+        list_terminals='')
+    env = _env(b)
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    assert r.returncode == 0, r.stderr
+    assert "carries no paneKey" in r.stderr, r.stderr
+    assert (_slots(env) / "term_NEW.busy").is_dir()
+    # and the dispatch really was handed to a pane, not merely reported
+    assert "terminal create" in _orca_calls(cap)
+
+
+def test_unresolvable_panekey_falls_back_after_the_deadline(tmp_path):
+    """A key that never appears must expire into the fallback, never hang."""
+    cap = tmp_path / "orca.txt"
+    b = _orca_panekey(
+        tmp_path, cap,
+        create_terminal='{"handle":"term_NEW","tabId":"tab2","paneKey":"tab2:leafGONE"}',
+        list_terminals='{"handle":"term_other","tabId":"tabZ","leafId":"leafZ"}')
+    env = _env(b, HMAD_PANE_RESOLVE_TIMEOUT=1)
+    start = time.time()
+    r = run(["exec-pane", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path)], env=env)
+    elapsed = time.time() - start
+    assert r.returncode == 0, r.stderr
+    assert "did not appear" in r.stderr, r.stderr
+    assert (_slots(env) / "term_NEW.busy").is_dir()
+    assert not (_slots(env) / "term_other.busy").exists(), "joined the wrong pane"
+    # Bounded by the deadline, not by the caller's patience.
+    assert elapsed < 30, f"took {elapsed:.1f}s -- deadline not honoured"

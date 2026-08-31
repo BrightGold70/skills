@@ -586,7 +586,13 @@ releases its own slot from inside itself, so a pooled pane is provably a shell a
 provably idle. Foreign panes are never probed — proving one is an idle shell is not
 possible from Orca metadata (there is no busy/idle field), and probing by sending text
 would type into an agent's TUI if the guess were wrong. `--no-reuse` forces a fresh pane;
-`--split`/`--new-tab` bypass the pool entirely. Slot state lives in files under
+`--split`/`--new-tab` bypass the pool entirely. A pooled pane is registered under the handle
+resolved by joining the create response's `paneKey` against `terminal list`, not the
+`.result.terminal.handle` the response carries — that field has been observed to be a
+pre-adoption placeholder (J1), and pooling one would hand the next dispatch a handle Orca
+has never heard of. Unlike `launch`, a response with no `paneKey` is not fatal here: the
+dispatch is already running by then, so it falls back to the response handle with a
+warning (`HMAD_PANE_RESOLVE_TIMEOUT`, default 5s, bounds the join). Slot state lives in files under
 `.h-mad/panes/` (override with `HMAD_PANE_SLOT_DIR`) rather than in the tab title,
 because the shell rewrites the title via OSC on every prompt — a pane renamed to
 `h-mad slot · idle` reads back as `~/orca/skills` the moment it reaches a prompt.

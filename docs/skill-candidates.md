@@ -792,3 +792,21 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   ever recurs, `launch` fails loud by design and `exec-pane` silently pools a handle that does not
   exist — which is the original J1 symptom, on the surface nobody guarded. The cheap version is to
   reuse the existing paneKey-join helper rather than a second guard.
+  — **LANDED 2026-08-31**, the cheap way the row predicted: the join loop came out of `_cmd_launch`
+  into `_resolve_pane_by_key <paneKey> [timeout]` and both call sites use it. The two call sites
+  **deliberately disagree on failure**, which is the part the row did not anticipate: `launch` refuses
+  (its product is a durable pin, and a wrong value poisons every later dispatch), `exec-pane` warns and
+  falls back to the response handle (its product is a dispatch already running by the time the response
+  is read — refusing would strand live work to protect a pool entry and a stderr line). A fail-loud
+  `exec-pane` would have passed a "resolves by paneKey" test and broken every host build that omits the
+  field, so the fallback is pinned as its own test, not left implicit. 3 tests, 3/3 mutants caught in
+  both directions (ignore-the-join, refuse-instead-of-fall-back, never-expire). Note the first deadline
+  mutant was **degenerate** — `; true` inside the command substitution produced an empty `resolved`,
+  which is the fallback the test already expects, so it landed on the same behaviour and proved nothing;
+  the mutant that discriminates removes the deadline `return 1` and hangs.
+- **`.result.split.handle` is the same shape of gap, unprobed**: `hmad-dispatch.sh:3100`
+  (`--split <handle>`) reads a handle out of a **different** response object (`.result.split`, not
+  `.result.terminal`) and pools it the same way — recurrence: 0 — candidate: **no, pending evidence** —
+  deliberately NOT changed with the create path: nothing here has ever probed a split response, so
+  whether it even carries a `paneKey` is unknown, and inventing a join for a shape nobody has seen is
+  how a guard gets written against an imagined field. Probe one split response before touching it.
