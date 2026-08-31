@@ -933,3 +933,28 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   documents: a bash block's `#` comments end a naive section scan early. Two helpers with the same
   name now sit in one file because I did not check for the first — a shared one would have made that
   collision impossible.
+
+## 2026-09-01 — handoff-resume-divergence-fix (scout)
+
+- **`pin-agents` DESTROYS a still-live pin while repairing the other agent**: the pin file has two
+  writers with opposite semantics, and only one of them says so. `_cmd_pin` merges — it reads the
+  existing file, drops the one `^<agent>=` line, and re-appends — while `_cmd_pin_agents` resolves
+  both agents FRESH into a `mktemp` and `mv`s it over the file, by design ("it never reads the pin
+  file it is about to write"). That design note accounts for a *stale* pin being overwritten; it does
+  not account for a **live** one being deleted. Measured live this session on Orca 1.4.192: `env`
+  reported `codex -> term_f483657a…` plus `agy … STALE (no such terminal)`, `PREFLIGHT: FAIL
+  stale=agy`. One `hmad-dispatch pin-agents` — run to fix `agy` — resolved `agy`, printed `codex
+  UNRESOLVED`, and left the file containing exactly one line, `agy=…`. The dropped codex handle was
+  **not** stale: re-pinning it by hand succeeded, and `_cmd_pin` refuses any handle absent from
+  `orca terminal list`, so the pin it destroyed was valid. The loss is guaranteed rather than
+  incidental for codex specifically, because the same function's own comment states auto-detect
+  cannot re-find codex once its banner decays — so every `pin-agents` run after that point trades a
+  working codex pin for a rediscovered agy one — candidate: yes — the fix is to seed `$tmp` from the
+  existing pin file the way `_cmd_pin` does, and drop a prior line only when the agent re-resolves or
+  its pinned handle is proven dead (`_orca_handle_live` is already in the file and is what `pin` and
+  `env` use). Keep the loud `rc=1` on unresolved: the bug is not the exit code, it is that the
+  repair had a side effect nobody asked for. The tell that this had been silently absorbed before:
+  `env` names re-pinning as the remedy for a stale pin, so the operator's instinct is to run
+  `pin-agents`, and the hand re-pin afterwards leaves no trace pointing back at it — the same shape
+  as the wire-pin gate that blocked correct work and was worked around by rewriting the document.
+  A test needs both arms: one live pin + one stale, assert the live one **survives**.
