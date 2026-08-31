@@ -782,22 +782,19 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   passes the liveness check and silently leaks dispatches into a stranger's shell. Note `.tail` is the
   field name — `.content`/`.output`/`.preview` are all absent, and reading them returns nothing in a way
   that looks exactly like an empty pane.
-- **`exec-pane` is the surface with no J1 guard at all**: `hmad-dispatch.sh:3094` (`_cmd_exec_pane`)
-  reads `.result.terminal.handle` from the create response and uses it directly — registering it in
-  the pane pool and dispatching to it — while `_cmd_launch` sixty lines earlier refuses that same
-  field as unpinnable. Both cannot be right, and the 5/5 probe says `exec-pane`'s assumption is the
-  one that holds on 1.4.192 — recurrence: 1 — candidate: maybe — not a defect today and NOT
-  fixed here (joining `exec-pane` by `paneKey` is a behaviour change with its own tests, out of scope
-  for a doc reconciliation). Recorded because the failure is asymmetric: if the placeholder behaviour
-  ever recurs, `launch` fails loud by design and `exec-pane` silently pools a handle that does not
-  exist — which is the original J1 symptom, on the surface nobody guarded. The cheap version is to
-  reuse the existing paneKey-join helper rather than a second guard.
+- **`exec-pane` was the surface with no J1 guard at all**: `_cmd_exec_pane` read
+  `.result.terminal.handle` from the create response and used it directly — registering it in the
+  pane pool and dispatching to it — while `_cmd_launch` refused that same field as unpinnable. The
+  failure is asymmetric: a durable launch pin must be proven live, while an exec-pane dispatch is
+  already running and a placeholder can only leave an inert pool entry. The cheap version was to
+  reuse the existing paneKey-join helper rather than a second unconditional guard.
   — **LANDED 2026-08-31**, the cheap way the row predicted: the join loop came out of `_cmd_launch`
   into `_resolve_pane_by_key <paneKey> [timeout]` and both call sites use it. The two call sites
-  **deliberately disagree on failure**, which is the part the row did not anticipate: `launch` refuses
-  (its product is a durable pin, and a wrong value poisons every later dispatch), `exec-pane` warns and
-  falls back to the response handle (its product is a dispatch already running by the time the response
-  is read — refusing would strand live work to protect a pool entry and a stderr line). A fail-loud
+  **deliberately disagree on failure**, which is the part the row did not anticipate: `launch` requires
+  a paneKey join or exact-handle liveness proof (its product is a durable pin, and a wrong value poisons
+  every later dispatch), while `exec-pane` warns and falls back immediately (its product is a dispatch
+  already running by the time the response is read — waiting or refusing would strand live work to
+  protect a pool entry and a stderr line). A fail-loud
   `exec-pane` would have passed a "resolves by paneKey" test and broken every host build that omits the
   field, so the fallback is pinned as its own test, not left implicit. 3 tests, 3/3 mutants caught in
   both directions (ignore-the-join, refuse-instead-of-fall-back, never-expire). Note the first deadline
@@ -820,12 +817,28 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   a finding. Handed to `BrightGold70/j1-residual-probes` with the repro. **The guard at
   `hmad-dispatch.sh` is NOT dormant — do not delete it.** Filed here rather than only in the brief
   because a session's doc is exactly where the last two versions of this item went to die.
-- **`.result.split.handle` is the same shape of gap, unprobed**: `hmad-dispatch.sh:3100`
+  — **CAUSE IS COMMAND-DISCRIMINATED ON 1.4.192; FALLBACK LANDED.** The receiving lane ran matched
+  immediate-create arms in fresh throwaway worktrees. Ten `sleep 300` terminals created 117–134ms
+  after their worktrees each carried a paneKey; ten `codex` terminals created 115–134ms after theirs
+  omitted it **10/10**; three `agy --dangerously-skip-permissions` controls carried it 3/3. Combined
+  with the sender's eight probes: **codex 11/11 missing, sleep 0/16 missing, agy 0/3 missing**, plus
+  one additional key-bearing id-selector control. Every one of the 31 responses said
+  `surface: visible`, so neither elapsed time nor surface explains the
+  omission, and `surface: background` was not inducible. Every paneKey-less codex response handle
+  appeared exactly once in `terminal list`. That last fact supplies the safe path the old guard lacked:
+  `launch` still prefers the paneKey join, but when the key is absent it now polls for the **exact**
+  response handle and pins only if that handle independently appears live. A historical J1 placeholder
+  that never appears, or an unreadable listing, still fails loud. Focused tests cover live, absent, and
+  unreadable shapes; a live disposable-worktree `hmad-dispatch launch codex` pinned the validated handle.
+- **`.result.split.handle` was the same shape of gap; now measured and closed**: `_cmd_exec_pane`
   (`--split <handle>`) reads a handle out of a **different** response object (`.result.split`, not
-  `.result.terminal`) and pools it the same way — recurrence: 0 — candidate: **no, pending evidence** —
-  deliberately NOT changed with the create path: nothing here has ever probed a split response, so
-  whether it even carries a `paneKey` is unknown, and inventing a join for a shape nobody has seen is
-  how a guard gets written against an imagined field. Probe one split response before touching it.
+  `.result.terminal`) and pools it the same way. It was deliberately not changed with the create path:
+  inventing a join for a shape nobody has seen is how a guard gets written against an imagined field.
+  **CLOSED 2026-08-31, no code change.** The raw response was
+  `{"split":{"handle":"term_…","tabId":"aaf3…","paneRuntimeId":1}}`: no `paneKey`, `leafId`,
+  or other joinable pane identity. The response handle matched exactly one live split pane carrying the
+  same `tabId`, and both panes were cleaned up. There is nothing safe to route through
+  `_resolve_pane_by_key`; retaining `.result.split.handle` is the evidence-backed outcome.
 
 ## 2026-08-31 — j1-pane-pin-takeover-and-handover (scout)
 

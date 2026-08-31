@@ -847,24 +847,63 @@ def test_launch_pins_the_live_handle_not_the_create_response_one(tmp_path):
     assert r2.stdout.strip() == "term_real"
 
 
-def test_launch_fails_loud_when_create_response_has_no_panekey(tmp_path):
-    # Without paneKey there is nothing to join on, and the create handle is known
-    # wrong. Guessing (worktree + recency) could pin a bystander pane, so refuse.
+def test_launch_validates_and_pins_live_create_handle_when_panekey_missing(tmp_path):
+    # Orca 1.4.192 omits paneKey for `--command codex` deterministically (11/11
+    # live probes) while returning a genuine handle. Exact-handle liveness is a
+    # safe fallback: it identifies no bystander, while historical J1 placeholder
+    # handles never appeared in the listing and therefore still fail loud.
     b = _bindir(tmp_path, ["orca"])
     pins = tmp_path / "pins.env"
     r = run(["launch", "codex"], substrate="orca",
             env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
                  "HMAD_STUB_ORCA_CREATE_STDOUT":
+                     '{"ok":true,"result":{"terminal":{"handle":"term_live"}}}',
+                 "HMAD_STUB_ORCA_STDOUT":
+                     '{"ok":true,"result":{"terminals":[{"handle":"term_live",'
+                     '"tabId":"tab9","leafId":"leaf9","title":"codex"}]}}'})
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "term_live"
+    assert "codex=term_live" in pins.read_text()
+    assert "carries no paneKey" in r.stderr, r.stderr
+    assert "validated create-response handle" in r.stderr, r.stderr
+
+
+def test_launch_fails_loud_when_panekey_and_live_create_handle_are_missing(tmp_path):
+    # No paneKey and a response handle absent from terminal list is the original
+    # J1 placeholder shape. Never guess by worktree/recency; it could pin a
+    # bystander. The exact-handle validation must expire into this refusal.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    r = run(["launch", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_LAUNCH_RESOLVE_TIMEOUT": "1",
+                 "HMAD_STUB_ORCA_CREATE_STDOUT":
                      '{"ok":true,"result":{"terminal":{"handle":"term_placeholder"}}}',
                  "HMAD_STUB_ORCA_STDOUT": _LIST_RESP})
     assert r.returncode != 0
-    # Assert the SPECIFIC branch. Both refusals mention "paneKey", so a loose
-    # match passes when this guard is deleted and the poll loop times out
-    # instead -- caught by mutation testing, 21.9s of wasted polling wearing a
-    # passing test as a disguise.
     assert "carries no paneKey" in r.stderr, r.stderr
+    assert "was not present" in r.stderr, r.stderr
     assert "did not appear" not in r.stderr, "fell through to the timeout branch"
     assert not pins.exists(), "nothing may be pinned when identity is unknown"
+
+
+def test_launch_fails_loud_when_create_handle_liveness_is_unreadable(tmp_path):
+    # "Could not read terminal list" is not evidence that the response handle
+    # is live. The strict fallback must fail closed; `_cmd_pin` deliberately has
+    # a looser unknown-listing policy for operator-provided pins, so this test
+    # prevents launch from delegating the decision to that second check.
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    r = run(["launch", "codex"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_LAUNCH_RESOLVE_TIMEOUT": "1",
+                 "HMAD_STUB_ORCA_CREATE_STDOUT":
+                     '{"ok":true,"result":{"terminal":{"handle":"term_unknown"}}}',
+                 "HMAD_STUB_ORCA_STDOUT": "not-json"})
+    assert r.returncode != 0
+    assert "carries no paneKey" in r.stderr, r.stderr
+    assert "was not present" in r.stderr, r.stderr
+    assert not pins.exists(), "unverified handle must not be pinned"
 
 
 def test_launch_fails_loud_when_panekey_never_appears(tmp_path):

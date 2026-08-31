@@ -875,11 +875,35 @@ _resolve_pane_by_key() {  # <paneKey> [timeout-seconds]
   done
 }
 
+# A missing paneKey cannot be joined, but the create-response handle is still
+# usable when Orca independently reports that exact handle as live. This is a
+# strict fallback, not the looser `_cmd_pin` check: an unreadable listing and a
+# readable listing without the handle both expire here. Historical J1
+# placeholders never appeared in `terminal list`, while Orca 1.4.192's
+# paneKey-less `--command codex` handles appeared exactly once 11/11.
+_resolve_pane_by_handle() {  # <create-response-handle> [timeout-seconds]
+  local response_handle="${1:-}" secs="${2:-20}" deadline rc
+  [ -n "$response_handle" ] || return 1
+  deadline=$(( $(date +%s) + secs ))
+  while :; do
+    _orca_handle_live "$response_handle"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$response_handle"
+      return 0
+    fi
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   # H5 durable path: h-mad OWNS the agent launch, so its identity is captured at
-  # spawn from the create response's `paneKey`, joined against `terminal list`
-  # — not from `.result.terminal.handle` (see J1 below), and never from the
-  # decaying title/preview — and pinned immediately. Zero manual step. Use this
+  # spawn from the create response's `paneKey`, joined against `terminal list`;
+  # when Orca omits the key, the exact `.result.terminal.handle` must itself
+  # appear live before use (see J1 below). Never use decaying title/preview
+  # identity. The verified handle is pinned immediately. Zero manual step. Use this
   # to start a fresh Codex/agy for a run; reuse an operator-launched pane via
   # `pin`/`pin-agents` instead. The launch command is overridable per agent.
   _require_orca launch || return $?
@@ -907,32 +931,42 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   # list` by that key. Identity is still owned at spawn -- it is just read from
   # the field that survives adoption.
   #
-  # 2026-08-31 re-probe (Orca 1.4.192, 5 creates, 2 worktrees): every response
-  # carried a paneKey, and the create handle was IDENTICAL to the adopted handle
-  # 5/5. So the placeholder behaviour above is intermittent, not invariant --
-  # which is why `_cmd_exec_pane` was not broken by trusting that field, and why
-  # it now joins by paneKey too (falling back rather than refusing, since its
-  # product is a running dispatch and not a pin). The join stays because it is
-  # correct under BOTH
-  # behaviours. The no-paneKey guard below stays because all 5 responses carried
-  # `surface: visible`, so the documented background-handle fallback (`orca
-  # terminal create --help`), the live hypothesis for the original omission, was
-  # never induced and remains unmeasured.
-  local resp pane_key handle
+  # 2026-08-31 re-probe (Orca 1.4.192, 31 creates): the omission is command-
+  # discriminated, not timing- or surface-discriminated. `sleep 300` carried a
+  # paneKey 16/16; `agy --dangerously-skip-permissions` carried one 3/3; one
+  # additional id-selector control carried one; `codex` omitted it 11/11. All
+  # 31 responses said `surface: visible`, including every
+  # omission, and ten controlled calls started 115-134ms after fresh worktree
+  # creation in each payload arm. Every paneKey-less codex response handle was
+  # present exactly once in `terminal list`.
+  #
+  # Keep the paneKey join as the primary path because it survives both real and
+  # placeholder create handles. When Orca omits the key, validate the exact
+  # response handle against the live listing before pinning it. This keeps the
+  # J1 guard for the unsafe historical shape (placeholder never appears) while
+  # making `launch codex` work on the current runtime's deterministic shape.
+  local resp pane_key response_handle handle resolution_source
   resp="$(_orca_json '.result.terminal | tojson' "${args[@]}")" || return $?
   pane_key="$(printf '%s' "$resp" | jq -r '.paneKey // empty' 2>/dev/null)"
+  response_handle="$(printf '%s' "$resp" | jq -r '.handle // empty' 2>/dev/null)"
   if [ -z "$pane_key" ]; then
-    echo "hmad-dispatch: launch $agent — create response carries no paneKey, so the pane cannot be identified; nothing was pinned. The create-response handle is a pre-adoption placeholder (J1) and must not be pinned. Pin manually after confirming the pane: hmad-dispatch pin $agent <handle>" >&2
-    return 1
-  fi
-  handle="$(_resolve_pane_by_key "$pane_key" "${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}")" || handle=""
-  if [ -z "$handle" ]; then
-    echo "hmad-dispatch: launch $agent — paneKey $pane_key did not appear in 'orca terminal list' within ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}s; the pane may not have started. Nothing was pinned." >&2
-    return 1
+    handle="$(_resolve_pane_by_handle "$response_handle" "${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}")" || handle=""
+    if [ -z "$handle" ]; then
+      echo "hmad-dispatch: launch $agent — create response carries no paneKey, and its handle ${response_handle:-<empty>} was not present in 'orca terminal list' within ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}s; identity is unsafe, so nothing was pinned (J1)." >&2
+      return 1
+    fi
+    resolution_source="create response carries no paneKey; validated create-response handle"
+  else
+    handle="$(_resolve_pane_by_key "$pane_key" "${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}")" || handle=""
+    if [ -z "$handle" ]; then
+      echo "hmad-dispatch: launch $agent — paneKey $pane_key did not appear in 'orca terminal list' within ${HMAD_LAUNCH_RESOLVE_TIMEOUT:-20}s; the pane may not have started. Nothing was pinned." >&2
+      return 1
+    fi
+    resolution_source="resolved via paneKey $pane_key"
   fi
   _cmd_pin "$agent" "$handle" >/dev/null || { echo "hmad-dispatch: launch $agent — pin failed" >&2; return 1; }
   printf '%s\n' "$handle"
-  echo "[H-MAD] launched $agent -> $handle (resolved via paneKey $pane_key, pinned)" >&2
+  echo "[H-MAD] launched $agent -> $handle ($resolution_source, pinned)" >&2
 }
 
 _cmd_task_create() {  # $1 label, $2 specfile
@@ -3117,18 +3151,18 @@ _cmd_exec_pane() {  # <codex|agy> <promptfile> [exec opts] [pane opts]
   else
     local create_args=(terminal create --worktree "path:$cd_dir" --title "$title" --command "$pane_cmd" --json)
     [ "$focus" -eq 1 ] && create_args+=(--focus)
-    # J1, and the reason this call site does NOT copy `launch`'s refusal: both
+    # J1, and the reason this call site does NOT copy `launch`'s validation: both
     # read `.result.terminal.handle`, which has been observed to be a
     # pre-adoption placeholder the pane never adopts (and observed, on Orca
     # 1.4.192, to be the real handle -- it is intermittent). What differs is the
     # PRODUCT. `launch` yields a durable PIN that every later dispatch resolves
-    # through, so a wrong value poisons the whole session and refusing is right.
-    # Here the product is a RUNNING DISPATCH: `pane_cmd` is already executing by
-    # the time this response is read, and the handle only feeds the pane pool and
-    # a stderr line. Failing loud would strand live work to protect a
-    # convenience. So: prefer the paneKey join, fall back to the create handle,
-    # and say which happened. Strictly better than trusting the handle outright,
-    # never worse than it.
+    # through, so without paneKey it requires the response handle to appear live
+    # before pinning. Here the product is a RUNNING DISPATCH: `pane_cmd` is
+    # already executing by the time this response is read, and the handle only
+    # feeds the pane pool and a stderr line. Waiting and failing loud would strand
+    # live work to protect a convenience. So: prefer the paneKey join, fall back
+    # immediately to the create handle, and say which happened. If that handle is
+    # a historical J1 placeholder, the resulting pool entry is merely inert.
     local cresp cpane_key resolved
     cresp="$(_orca_json '.result.terminal | tojson' "${create_args[@]}")" || return 1
     handle="$(printf '%s' "$cresp" | jq -r '.handle // empty' 2>/dev/null)"

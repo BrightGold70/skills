@@ -853,9 +853,10 @@ def test_wait_times_out_without_claiming_the_dispatch_failed(tmp_path):
 # J1 — the created pane is resolved by paneKey, not trusted from the response
 #
 # `launch` and `exec-pane` read the SAME field (`.result.terminal.handle`) and
-# treat it differently on purpose: launch refuses it outright because its product
-# is a durable pin, while exec-pane's product is a dispatch that is already
-# running, so it prefers the join and falls back rather than stranding the work.
+# treat it differently on purpose: launch requires paneKey or independent proof
+# that the exact response handle is live because its product is a durable pin,
+# while exec-pane's product is a dispatch that is already running, so it prefers
+# the join and falls back immediately rather than stranding the work.
 # These tests pin the fallback as a REAL branch, not an accident -- an exec-pane
 # that hard-failed on a missing paneKey would pass a "resolves by paneKey" test
 # and break every host build that omits the field.

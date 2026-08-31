@@ -1,0 +1,35 @@
+{
+  "_why": "Orca 1.4.192 omits paneKey for `--command codex` 11/11 while returning a genuine handle, but historical J1 create handles sometimes never appeared in terminal list. Launch may therefore fall back only after strict proof that the exact response handle is live. These mutants pin both halves: the current codex shape must work, and an unreadable listing must never count as liveness.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "validated-create-handle-discarded",
+      "_mechanism": "The exact response handle appears live, but launch throws it away and preserves the old fail-loud behaviour. This recreates the Orca 1.4.192 `launch codex` outage while leaving the paneKey path untouched.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    resolution_source=\"create response carries no paneKey; validated create-response handle\"",
+      "replace": "    return 1; resolution_source=\"create response carries no paneKey; validated create-response handle\"",
+      "test": "tests/test_hmad_dispatch.py::test_launch_validates_and_pins_live_create_handle_when_panekey_missing"
+    },
+    {
+      "name": "unreadable-listing-counts-as-live",
+      "_mechanism": "Treat `_orca_handle_live`'s unknown result (2) as success. `_cmd_pin` intentionally tolerates unknown listings for operator pins, so this mutation would otherwise pin an unverified create response and reopen J1.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"$rc\" -eq 0 ]; then\n      printf '%s\\n' \"$response_handle\"",
+      "replace": "    if [ \"$rc\" -ne 1 ]; then\n      printf '%s\\n' \"$response_handle\"",
+      "test": "tests/test_hmad_dispatch.py::test_launch_fails_loud_when_create_handle_liveness_is_unreadable"
+    }
+  ]
+}
