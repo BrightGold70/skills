@@ -1219,10 +1219,32 @@ Read the **token**, never `$?` — as with every other gate here it exits 0 on a
 on `UNKNOWN`, which carries no `used=` precisely so a cannot-judge cannot be read as an `OK`.
 
 **On `CTXBUDGET: HALT mode=run`, halt `<phase>:context_ceiling`** and follow the ordinary halt
-protocol, with the one addition that is the entire point of this route: **write the handoff before
-you stop**, so the next session resumes instead of re-deriving. Then release the claim
+protocol, with the one addition that is the entire point of this route: **invoke the `handoff` skill
+in WRITE mode before you stop** — `Skill(skill: "handoff")`, or `/handoff` — so the next session
+resumes instead of re-deriving. Then release the claim
 (`h_mad_state_write.py --feature <feature> --release --session-id <your-session-id>`; a live claim refuses to release anonymously, J45), or the resuming session inherits a lock from
 a session that has stopped. A halt that leaves no handoff has spent the ceiling and bought nothing.
+
+**Invoke the skill; do not hand-write a doc that looks like one.** The two are not
+interchangeable, and the difference is invisible at the moment of writing and fatal at the moment of
+resuming. The skill's WRITE mode resolves the **canonical main-worktree store** and names the file
+`YYYY-MM-DD-<branch-slug>__<slug>.md`; its READ mode locates a handoff by exactly that store and
+that slug. A doc written by hand into the current linked worktree, or named freely, is not *slightly*
+harder to find — it is **invisible to the resume**, which is the entire thing the ceiling was spent
+to buy. WRITE also does four things a hand-written doc omits, each of which the next session depends
+on: the central `~/.claude/handoffs/INDEX.md` entry (the only cross-project view), durable learnings,
+the **auto-memory store** (`docs/learnings.md` is not loaded next session; the memory index is), and
+a commit routed through `handoff_commit.py`, which guarantees the doc is reachable from a ref instead
+of sitting untracked — three handoffs were orphaned exactly that way on 2026-08-29.
+
+**Budgeting the write itself.** You are at 80% by construction, so WRITE's own phases cost context
+too. They are not equally load-bearing: the doc, the index entry, and the commit are **not
+discretionary** — without them the halt bought nothing. The two escape hatches, in the order to reach
+for them, are `--skip-scout` (it reconciles a long candidates backlog and is the most context-hungry
+phase) and then `--skip-memories`. Prefer skipping the scout: memories are what actually surface in
+the next session, so skipping them last is the cheaper loss. If the halted work belongs to a
+different repo or worktree, that is the skill's HANDOVER mode, not WRITE — it releases the claim as
+part of the transfer, so do not also release it here.
 
 **`HALT` is not `DENY`, deliberately.** `hooks/h-mad-advisor-warn.sh` speaks on the glob
 `*"CTXBUDGET: DENY"*`. Had a run-ceiling breach reused that word, no existing consumer could tell an
@@ -1293,7 +1315,7 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never auto-merge on `WITH_FIXES` or `NO` from agy.
 - Never write `phase = null` before Phase 5g completes (that disarms the TDD hook prematurely).
 - Never run `git push --force`.
-- Never continue a run past `CTXBUDGET: HALT mode=run` (80% window used) — halt `<phase>:context_ceiling`, **write the handoff**, and release the claim. Overflow mid-phase is unrecoverable and compacting afterwards recovers nothing; see §"Run-context ceiling".
+- Never continue a run past `CTXBUDGET: HALT mode=run` (80% window used) — halt `<phase>:context_ceiling`, **invoke the `handoff` skill in WRITE mode** (`Skill(skill: "handoff")`; never a hand-written doc — READ finds a handoff only in the canonical store under its branch slug), and release the claim. Overflow mid-phase is unrecoverable and compacting afterwards recovers nothing; see §"Run-context ceiling".
 - Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Surfaced by `hooks/h-mad-advisor-warn.sh` in any session where it is wired — an ADVISORY, not enforcement: `advisor` is a server-side tool no tool-scoped hook event fires for, so nothing can refuse the call (J44). Documentation everywhere else.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 - Never time-bound a command with `timeout` or `gtimeout` — **neither is a macOS system component**, so the form is unportable in both directions. Where coreutils is absent the call dies at 127 and the reflex is to re-run the same command *unbounded*, which does not fail at the deadline, it hangs the phase. Where someone has run `brew install coreutils` it silently *works*, which is worse: the 127 that used to expose the improvisation never fires. **What this box has is not an input to the rule** — h-mad already owns a time-bounder, reachable wherever `hmad-dispatch` is, so the form is forbidden unconditionally rather than because of any downstream failure; for anything committed or dispatched it is a new external CLI dependency besides. A local `command -v timeout` that succeeds is not licence — it proves only that this box has coreutils. Use `hmad-dispatch run --timeout <s> -- <cmd...>` (exit 124 at the deadline, GNU convention; the same process-group watchdog `exec` uses). If no time-bounder is reachable, **halt** — an unbounded retry is a silent downgrade, and in a log a hang and slow work look identical.

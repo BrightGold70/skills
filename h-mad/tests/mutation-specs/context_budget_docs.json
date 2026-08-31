@@ -1,108 +1,140 @@
 {
- "root": "../..",
- "command": [
-  "python3.11",
-  "-m",
-  "pytest",
-  "tests/test_h_mad_context_budget_docs.py",
-  "-q"
- ],
- "mutations": [
-  {
-   "name": "soften-ceiling-in-never-list",
-   "file": "SKILL.md",
-   "find": "- Never call `advisor()` above ~45% window used",
-   "replace": "- Avoid calling `advisor()` late in a session"
-  },
-  {
-   "name": "drop-the-50-percent-line",
-   "file": "SKILL.md",
-   "find": "**At 50% used, one advisor call = 100%.**",
-   "replace": "It gets expensive."
-  },
-  {
-   "name": "drop-no-parameters",
-   "file": "SKILL.md",
-   "find": "takes **no parameters**: the payload is the entire transcript",
-   "replace": "sends context"
-  },
-  {
-   "name": "drop-fork-tradeoff",
-   "file": "SKILL.md",
-   "find": "but runs on **your** model",
-   "replace": "and is strictly better"
-  },
-  {
-   "name": "drop-snapshot-warning",
-   "file": "SKILL.md",
-   "find": "Its input is snapshotted at call time",
-   "replace": "It is best kept small"
-  },
-  {
-   "name": "promote-compact-over-substitute",
-   "file": "SKILL.md",
-   "find": "Compacting is lossy",
-   "replace": "Compacting is free"
-  },
-  {
-   "name": "drop-helper-from-list",
-   "file": "SKILL.md",
-   "find": "- `h_mad_context_budget.py` \u2014 orchestrator context budget",
-   "replace": "- `h_mad_ctx_unused.py` \u2014 orchestrator context budget"
-  },
-  {
-   "name": "drop-resolution-paragraph",
-   "file": "SKILL.md",
-   "find": "It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`",
-   "replace": "It finds a transcript"
-  },
-  {
-   "name": "drop-measured-false-correction",
-   "file": "SKILL.md",
-   "find": "That was **measured false\non 2.1.241**",
-   "replace": "That is **confirmed\non 2.1.241**"
-  },
-  {
-   "name": "drop-live-fire-test",
-   "file": "SKILL.md",
-   "find": "HMAD_CONTEXT_WINDOW=1000 claude    # then run ANY tool \u2014 the budget line MUST appear",
-   "replace": "claude"
-  },
-  {
-   "name": "drop-silent-on-cannot-judge",
-   "file": "SKILL.md",
-   "find": "The advisory **stays silent** on every cannot-judge",
-   "replace": "The advisory warns on every cannot-judge"
-  },
-  {
-   "name": "drop-wiring-limit",
-   "file": "SKILL.md",
-   "find": "it protects only sessions where it is wired",
-   "replace": "it protects everything"
-  },
-  {
-   "name": "advisor-becomes-default-again",
-   "file": "SKILL.md",
-   "find": "`advisor()` is not the default advisory channel for an H-MAD run; **agy is**.",
-   "replace": "`advisor()` is the default advisory channel for an H-MAD run."
-  },
-  {
-   "name": "route-by-difficulty",
-   "file": "SKILL.md",
-   "find": "not by how hard the question feels",
-   "replace": "by how hard the question feels"
-  },
-  {
-   "name": "drop-trajectory-warning",
-   "file": "SKILL.md",
-   "find": "naive fix you rolled back five minutes ago",
-   "replace": "useful answer"
-  },
-  {
-   "name": "drop-agy-wrong-phases",
-   "file": "SKILL.md",
-   "find": "**5d/5e\n(the RED/GREEN loop) and 6b (iterate) are where agy is the wrong tool**",
-   "replace": "agy works everywhere"
-  }
- ]
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_context_budget_docs.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "soften-ceiling-in-never-list",
+      "file": "SKILL.md",
+      "find": "- Never call `advisor()` above ~45% window used",
+      "replace": "- Avoid calling `advisor()` late in a session"
+    },
+    {
+      "name": "drop-the-50-percent-line",
+      "file": "SKILL.md",
+      "find": "**At 50% used, one advisor call = 100%.**",
+      "replace": "It gets expensive."
+    },
+    {
+      "name": "drop-no-parameters",
+      "file": "SKILL.md",
+      "find": "takes **no parameters**: the payload is the entire transcript",
+      "replace": "sends context"
+    },
+    {
+      "name": "drop-fork-tradeoff",
+      "file": "SKILL.md",
+      "find": "but runs on **your** model",
+      "replace": "and is strictly better"
+    },
+    {
+      "name": "drop-snapshot-warning",
+      "file": "SKILL.md",
+      "find": "Its input is snapshotted at call time",
+      "replace": "It is best kept small"
+    },
+    {
+      "name": "promote-compact-over-substitute",
+      "file": "SKILL.md",
+      "find": "Compacting is lossy",
+      "replace": "Compacting is free"
+    },
+    {
+      "name": "drop-helper-from-list",
+      "file": "SKILL.md",
+      "find": "- `h_mad_context_budget.py` \u2014 orchestrator context budget",
+      "replace": "- `h_mad_ctx_unused.py` \u2014 orchestrator context budget"
+    },
+    {
+      "name": "drop-resolution-paragraph",
+      "file": "SKILL.md",
+      "find": "It finds **your** session's transcript by `CLAUDE_CODE_SESSION_ID`",
+      "replace": "It finds a transcript"
+    },
+    {
+      "name": "drop-measured-false-correction",
+      "file": "SKILL.md",
+      "find": "That was **measured false\non 2.1.241**",
+      "replace": "That is **confirmed\non 2.1.241**"
+    },
+    {
+      "name": "drop-live-fire-test",
+      "file": "SKILL.md",
+      "find": "HMAD_CONTEXT_WINDOW=1000 claude    # then run ANY tool \u2014 the budget line MUST appear",
+      "replace": "claude"
+    },
+    {
+      "name": "drop-silent-on-cannot-judge",
+      "file": "SKILL.md",
+      "find": "The advisory **stays silent** on every cannot-judge",
+      "replace": "The advisory warns on every cannot-judge"
+    },
+    {
+      "name": "drop-wiring-limit",
+      "file": "SKILL.md",
+      "find": "it protects only sessions where it is wired",
+      "replace": "it protects everything"
+    },
+    {
+      "name": "advisor-becomes-default-again",
+      "file": "SKILL.md",
+      "find": "`advisor()` is not the default advisory channel for an H-MAD run; **agy is**.",
+      "replace": "`advisor()` is the default advisory channel for an H-MAD run."
+    },
+    {
+      "name": "route-by-difficulty",
+      "file": "SKILL.md",
+      "find": "not by how hard the question feels",
+      "replace": "by how hard the question feels"
+    },
+    {
+      "name": "drop-trajectory-warning",
+      "file": "SKILL.md",
+      "find": "naive fix you rolled back five minutes ago",
+      "replace": "useful answer"
+    },
+    {
+      "name": "drop-agy-wrong-phases",
+      "file": "SKILL.md",
+      "find": "**5d/5e\n(the RED/GREEN loop) and 6b (iterate) are where agy is the wrong tool**",
+      "replace": "agy works everywhere"
+    },
+    {
+      "name": "ceiling-says-write-a-handoff-not-invoke-the-skill",
+      "_mechanism": "Revert the route to the wording it carried for weeks. 'Write the handoff' is satisfiable by a markdown file written anywhere under any name -- which READ, which matches the canonical store and an exact `<branch-slug>__`, cannot find. The halt still happens, the doc still exists, and the resume it was spent to buy silently does not.",
+      "file": "SKILL.md",
+      "find": "**invoke the `handoff` skill\nin WRITE mode before you stop** \u2014 `Skill(skill: \"handoff\")`, or `/handoff` \u2014 so the next session",
+      "replace": "**write the handoff before\nyou stop** \u2014 so the next session",
+      "_killed_by": "tests/test_h_mad_context_budget_docs.py::TestCeilingRoutesToTheHandoffSkill::test_names_the_skill_and_its_write_mode"
+    },
+    {
+      "name": "drop-why-a-hand-written-doc-is-invisible",
+      "_mechanism": "Keep the instruction, delete its reason. A rule whose cost is unstated reads as style, and the first reader in a hurry writes the file by hand -- the failure is invisible at write time and only appears at the resume, in a different session, where nobody connects the two.",
+      "file": "SKILL.md",
+      "find": "it is **invisible to the resume**, which is the entire thing the ceiling was spent\nto buy.",
+      "replace": "it is harder to find.",
+      "_killed_by": "tests/test_h_mad_context_budget_docs.py::TestCeilingRoutesToTheHandoffSkill::test_forbids_a_hand_written_substitute_and_says_why"
+    },
+    {
+      "name": "invert-the-escape-hatch-order",
+      "_mechanism": "Sacrifice memories before the scout. Both are 'optional', so the order looks like a stylistic preference -- but `docs/learnings.md` is not loaded next session and the auto-memory index is, so skipping memories first throws away the only phase whose output the next session actually reads, while keeping the most context-hungry one.",
+      "file": "SKILL.md",
+      "find": "for them, are `--skip-scout` (it reconciles a long candidates backlog and is the most context-hungry\nphase) and then `--skip-memories`. Prefer skipping the scout:",
+      "replace": "for them, are `--skip-memories` and then `--skip-scout` (it reconciles a long candidates backlog and\nis the most context-hungry phase). Prefer skipping memories:",
+      "_killed_by": "tests/test_h_mad_context_budget_docs.py::TestCeilingRoutesToTheHandoffSkill::test_budgets_the_write_itself_and_ranks_the_escape_hatches"
+    },
+    {
+      "name": "never-list-keeps-the-vague-instruction",
+      "_mechanism": "Leave the prose route upgraded but revert the ban list. The list is where a reader in a hurry actually stops, so a correct section behind a vague bullet is the version most people will follow.",
+      "file": "SKILL.md",
+      "find": "**invoke the `handoff` skill in WRITE mode** (`Skill(skill: \"handoff\")`; never a hand-written doc \u2014 READ finds a handoff only in the canonical store under its branch slug), and release the claim.",
+      "replace": "**write the handoff**, and release the claim.",
+      "_killed_by": "tests/test_h_mad_context_budget_docs.py::TestCeilingRoutesToTheHandoffSkill::test_the_never_list_routes_to_the_skill_too"
+    }
+  ]
 }

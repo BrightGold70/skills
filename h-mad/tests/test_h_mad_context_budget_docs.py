@@ -65,6 +65,23 @@ def _section() -> str:
     return " ".join(section.split())
 
 
+
+def _titled_section(text: str, title: str) -> str:
+    """The named `##` section, bounded by the NEXT `##` heading.
+
+    Distinct from `_section()` above, which extracts one fixed MARKER section.
+
+    Not a fixed-width slice. A character window silently stops covering the end of
+    its own section the moment anyone adds a paragraph to it, so the assertions
+    below would go quietly vacuous exactly when the section grew -- measured: a
+    routing paragraph added to the run-ceiling section pushed the `HALT`/`DENY`
+    distinction past a 4000-char window and turned a real pin into a failure whose
+    honest reading was "the test lost sight of the text", not "the doc regressed".
+    """
+    start = text.index(title)
+    nxt = text.find("\n## ", start + 1)
+    return text[start:] if nxt == -1 else text[start:nxt]
+
 class TestThePrice:
     def test_states_the_payload_is_unselectable(self):
         """The first question a reader asks is "can I send it less?". No."""
@@ -281,25 +298,76 @@ class TestRunCeilingDocumented:
     def test_requires_the_handoff_before_stopping(self):
         """The halt is worthless without it — that is the whole point of the route."""
         s = SKILL_MD.read_text()
-        i = s.index("Run-context ceiling")
-        section = s[i:i + 4000]
+        section = _titled_section(s, "Run-context ceiling")
         assert "handoff" in section.lower()
         assert "--release" in section
 
     def test_says_why_halt_and_not_warn(self):
         s = SKILL_MD.read_text()
-        i = s.index("Run-context ceiling")
-        section = s[i:i + 4000]
+        section = _titled_section(s, "Run-context ceiling")
         assert "unrecoverable" in section
 
     def test_pins_halt_is_not_deny(self):
         """Anti-conflation with the live advisor hook, stated where a reader will hit it."""
         s = SKILL_MD.read_text()
-        i = s.index("Run-context ceiling")
-        section = s[i:i + 4000]
+        section = _titled_section(s, "Run-context ceiling")
         assert "DENY" in section and "HALT" in section
 
     def test_the_halt_route_is_in_failure_recovery(self):
         fr = (REPO_ROOT / "h-mad" / "references" / "failure-recovery.md").read_text(encoding="utf-8")
         assert "context_ceiling" in fr
 
+
+
+class TestCeilingRoutesToTheHandoffSkill:
+    """The ceiling buys a resumable session, and only the skill delivers one.
+
+    "Write the handoff" was the instruction for a long time, and it is satisfiable
+    by a markdown file written anywhere under any name -- which the handoff skill's
+    READ mode cannot find. READ locates a doc by the CANONICAL main-worktree store
+    and an exact `<branch-slug>__` match, so a hand-written doc in a linked worktree
+    is not merely untidy: it is invisible to the resume the halt was spent to buy,
+    and nothing reports that at the time of writing.
+    """
+
+    def test_names_the_skill_and_its_write_mode(self):
+        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        assert "handoff" in section and "WRITE" in section
+        assert 'Skill(skill: "handoff")' in section, (
+            "the route must be invocable as written -- 'write the handoff' is "
+            "advice, not a route"
+        )
+
+    def test_forbids_a_hand_written_substitute_and_says_why(self):
+        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        assert "branch-slug" in section or "branch slug" in section
+        assert "canonical" in section.lower()
+        assert "invisible to the resume" in section
+
+    def test_names_what_write_adds_that_a_doc_omits(self):
+        """Each of these is a thing the NEXT session depends on, not a nicety."""
+        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        for token in ("INDEX.md", "auto-memory", "handoff_commit.py"):
+            assert token in section, token
+
+    def test_budgets_the_write_itself_and_ranks_the_escape_hatches(self):
+        """At 80% the write costs context too, so the order of sacrifice matters."""
+        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        assert "--skip-scout" in section and "--skip-memories" in section
+        assert "not\ndiscretionary" in section or "not discretionary" in section
+        assert section.index("--skip-scout") < section.index("--skip-memories"), (
+            "the cheaper loss must be named first -- memories are what surface "
+            "in the next session"
+        )
+
+    def test_the_never_list_routes_to_the_skill_too(self):
+        """A reader who reaches the ban list must not be told merely to 'write' one."""
+        s = SKILL_MD.read_text()
+        never = s[s.index("## What you NEVER do"):]
+        line = next(ln for ln in never.splitlines() if "CTXBUDGET: HALT mode=run" in ln)
+        assert "handoff" in line and "skill" in line, line
+
+    def test_points_handover_at_the_other_mode(self):
+        """Work that belongs elsewhere must not be closed out as if it were ours."""
+        section = _titled_section(SKILL_MD.read_text(), "Run-context ceiling")
+        assert "HANDOVER" in section
