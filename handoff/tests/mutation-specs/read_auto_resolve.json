@@ -1,0 +1,53 @@
+{
+  "_why": "Step 3.6's value is carried by its SHORT lists, and the short list is the fragile one. Every mutant here widens the step exactly the way a future reader's instinct will: drop the scope limit from the heading, soften the fail-closed predicate, or delete one never-list entry that looks locally safe. None of them break a behaviour a normal test could see \u2014 the step is guidance, so the guidance is what gets pinned, and a deleted sentence is invisible until the resume it would have stopped.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_handoff_read_auto_resolve.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "scope-limit-dropped-from-the-heading",
+      "_mechanism": "`and only that` is the whole contract. Without it the heading reads as 'resolve what is resolvable', which is the blanket rule the step exists to refuse \u2014 and a reader who never reaches the never-list has already been told the wrong thing.",
+      "file": "SKILL.md",
+      "find": "### Step 3.6: Resolve what is mechanically resolvable \u2014 and only that",
+      "replace": "### Step 3.6: Resolve the divergences",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_step_is_scoped_in_its_own_title"
+    },
+    {
+      "name": "fail-closed-predicate-softened",
+      "_mechanism": "Delete the line that distinguishes an unevaluable gate from a passing one. This repo has shipped that exact conflation twice \u2014 `find` under rtk refusing to run and reading as 'nothing is claimed', and an unreadable worktree comment reading as empty and clobbering a human's note. Without the line, a gate that errors reads as a green light.",
+      "file": "SKILL.md",
+      "find": "**\"I could not check\" and \"the check said yes\" must never\ntake the same branch.**",
+      "replace": "Check before repairing.",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_predicate_rule_fails_closed"
+    },
+    {
+      "name": "fast-forwardable-sibling-no-longer-refused-by-name",
+      "_mechanism": "The most tempting entry in the never-list, and the one that looks cleanest: no divergence, no uncommitted work, a pure fast-forward. Removing the explicit clause leaves only the general 'another worktree' rule, which a reader will reason their way past \u2014 the cost is not to git, it is that another session's files change under a running agent.",
+      "file": "SKILL.md",
+      "find": "including a sibling branch that is cleanly\n  fast-forwardable.",
+      "replace": "which is out of scope.",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_fast_forwardable_sibling_is_named_explicitly"
+    },
+    {
+      "name": "allowlist-no-longer-declared-closed",
+      "_mechanism": "Drop `Nothing outside it.` and the ban on extending the list in the moment. The entries all survive, so the step still looks correct \u2014 but the failure mode was never a wrong entry, it was growth: each new case is argued individually and looks safe, and the step becomes the blanket rule one row at a time.",
+      "file": "SKILL.md",
+      "find": "**Resolve \u2014 the allowlist. Nothing outside it.**",
+      "replace": "**Resolve \u2014 the allowlist.**",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_the_allowlist_is_declared_closed"
+    },
+    {
+      "name": "empty-resolved-block-may-be-omitted",
+      "_mechanism": "Let a resume that repaired nothing print no Resolved block. Absence then reads as 'this resume does not do repairs', the next reader stops expecting them, and a step that silently did nothing is indistinguishable from one that was never run.",
+      "file": "SKILL.md",
+      "find": "If Step 3.6 resolved nothing, say\n`**Resolved:** none` rather than omitting the block;",
+      "replace": "If Step 3.6 resolved nothing, omit the block;",
+      "_killed_by": "tests/test_handoff_read_auto_resolve.py::test_an_empty_resolved_block_is_still_printed"
+    }
+  ]
+}

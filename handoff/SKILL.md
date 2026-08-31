@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, and restoring the todo list (a task tool where one exists, else OMC's durable `.omc/notepad.md`, else an inline checklist in the report — the step never no-ops, and always names the sink it used); READ halts before doing anything when the session is not fresh, printing the `/clear` + re-invoke sequence for the user to run (no tool can trigger /clear), and switches output to caveman-ultra when that skill is installed. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
+description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, resolving the divergences that have exactly one correct repair (a short allowlist, each gated to fail closed; everything else is reported, never repaired) and restoring the todo list (a task tool where one exists, else OMC's durable `.omc/notepad.md`, else an inline checklist in the report — the step never no-ops, and always names the sink it used); READ halts before doing anything when the session is not fresh, printing the `/clear` + re-invoke sequence for the user to run (no tool can trigger /clear), and switches output to caveman-ultra when that skill is installed. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
 ---
 
 # Handoff
@@ -261,6 +261,56 @@ A stale claim is takeable by plain `--claim` — reach for `--force` only agains
 
 **Do not** silently work a handed-over item without claiming it. That is the failure this step exists for: the sender let go, you started, and the state file says nobody owns it.
 
+### Step 3.6: Resolve what is mechanically resolvable — and only that
+
+A resume that merely *reports* divergences hands the user a second task list on top of the one it
+just restored. Most divergences have exactly one correct repair and no judgment in them; a few carry
+a decision; a few belong to someone else. Repairing the first class is the point of this step.
+Repairing the other two is how a resume does damage.
+
+**The predicate rule — fail closed.** Every repair below is gated. If the gate cannot be *evaluated*
+— a command errors, a listing is unreadable, an oracle is missing — that is not licence to proceed:
+report it as a divergence and move on. **"I could not check" and "the check said yes" must never
+take the same branch.** Same asymmetry the WRITE stamp already enforces for an unreadable worktree
+comment, and the same one that made `find` under rtk report "nothing is claimed" when it had
+actually refused to run.
+
+**Resolve — the allowlist. Nothing outside it.**
+
+| divergence | gate that must PASS first | repair |
+|---|---|---|
+| behind upstream, tree clean | clean **and** strictly behind (not diverged) | `git pull --ff-only` |
+| feature record absent, brief carries `**Handover-From:**` | Step 3.5's oracle ran | `--create --claim` |
+| claim on **this** feature held by a session that is not live | `h_mad_resume_decision.py` returns anything but `owned_elsewhere` | plain `--release` then `--claim` — never `--force` |
+| the handoff doc you just read is untracked | it is that file and only that file | commit it |
+| a cited PID is dead / its log is cold | `ps` answered, and the doc is recent enough for the PID to mean anything | do not restore "monitor PID N" — restore "verify what it produced" instead |
+| a cited path moved | `git log --follow --diff-filter=R` names the rename | rewrite the todo's path, and say so in the todo |
+| a cited PR is merged or closed | `gh` answered (not: `gh` is missing) | drop the todo |
+| an agent pane is unresolved | **exactly one** candidate matches by content (`orca terminal read` → `.result.terminal.tail`) | pin that one |
+
+**Never resolve — report these, every time.**
+
+- **A dirty or diverged tree.** No pull, rebase or merge. Unchanged from Step 3.
+- **Anything in another repo, worktree or lane** — including a sibling branch that is cleanly
+  fast-forwardable. It may have a live owner who is not watching your session, and "it was only a
+  fast-forward" is not a defence when their working tree changes under a running agent.
+- **A claim held by a LIVE session.** That is a collision and a finding, not a lock to break.
+- **Any premise the brief asserts about the world.** It needs a probe, not a repair. A brief is a
+  claim made by a session that has stopped; re-running its reproduce commands is Step 3.5's job and
+  the answer may be that the work is already done, or was never true.
+- **More than one candidate for a pane pin.** A wrong-but-live pin passes every liveness check and
+  leaks dispatches into a stranger's shell — strictly worse than leaving it unresolved.
+- **Anything needing `--force`, `-D`, `rm`, or a push.** If the repair is not reversible by the next
+  reader, it is not mechanical.
+
+**Say what you did.** Step 5 gains a **Resolved** block, separate from **Divergences**. Name the
+command for each repair so it can be undone. A repair nobody is told about is indistinguishable from
+a state that was never broken — and the user then cannot tell a resume that fixed four things from
+one that found nothing.
+
+**Opt out** with `--report-only`, which runs Step 3 and skips this step entirely. Use it when
+resuming into a tree someone else is actively working.
+
 ### Step 4: Restore the todo list
 
 Repopulate todos from the doc's **Next Steps** and **Open / Blocked Items**. Each Next Step becomes a `pending` task with the cited path/command in the description. Each Open/Blocked Item becomes a `pending` task tagged with its blocker if any. Do this even if Next Steps is short — the point is that the user can start on item 1 without re-typing the list.
@@ -310,9 +360,18 @@ After reconciliation and the todo restore, give the user a brief resume report.
 **Remote:** 2 behind origin/main → fast-forwarded to `a1b2c3d`
 **Uncommitted changes:** 2 files (matches handoff)
 
-**Divergences:**
+**Split the two lists.** `Resolved` and `Divergences` answer different questions — what you changed
+versus what the user must decide — and merging them hides both. If Step 3.6 resolved nothing, say
+`**Resolved:** none` rather than omitting the block; an absent block reads as "this resume does not
+do that" and the next reader stops expecting it.
+
+**Resolved** (Step 3.6 — mechanical repairs, each undoable):
+- Stale claim on `guideline-rag` (owner `36032fe8`, heartbeat 2d old, oracle: not live) — released, then claimed as this session.
+- `protocol/sections/background.md` → `protocol/sections/intro.md` (`git log --follow` names the rename) — todo 3 rewritten.
+
+**Divergences** (reported, NOT resolved — each needs you):
 - PID 37219 (compile_guidelines_db): exited — log mtime 3h ago. Treat as complete; verify output.
-- `protocol/sections/background.md` cited in Next Steps — file not found (may have been renamed).
+- Sibling worktree `feature/12` is 2 behind and cleanly fast-forwardable — left alone; it has a live owner.
 
 **Todos restored:** 4 items. **Restored to:** `.omc/notepad.md` (no task tool in this install). Starting at:
 1. [guideline-rag@main] Verify compile_guidelines_db output (`yq '.documents | length' MANIFEST.yaml` ≥ 55)
@@ -335,7 +394,12 @@ Then stop. Don't start executing tasks — the user reads the report and decides
 - Don't offer to run `/clear` yourself. It is a built-in CLI command with no tool behind it — only
   the user can trigger it, and it would wipe this skill mid-run. Print the two lines and wait.
 - Don't let a missing caveman skill (Step 0b) fail the resume, and don't announce its absence.
-- Don't rewrite or update the handoff doc in read mode — it's a historical record.
+- Don't rewrite or update the handoff doc in read mode — it's a historical record. (Step 3.6 may
+  *commit* an untracked handoff doc, which changes no content.)
+- Don't resolve a divergence that is not on Step 3.6's allowlist, and don't extend the allowlist in
+  the moment. The list is short because each entry had to be shown to have exactly one correct
+  repair and a gate that fails closed; "this one is obviously safe too" is how a resume starts
+  mutating a tree it does not own.
 - Don't run tests or builds as part of reconciliation.
 - Don't assume the in-flight process is still running if the doc is >4h old.
 - Don't `git pull` when the tree is dirty or the branch has diverged — fast-forward-only (`git pull --ff-only`) on a clean tree, otherwise flag and let the user resolve. Never `git merge`/`git rebase`/`git push` during a resume.
