@@ -804,6 +804,22 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   mutant was **degenerate** — `; true` inside the command substitution produced an empty `resolved`,
   which is the fallback the test already expects, so it landed on the same behaviour and proved nothing;
   the mutant that discriminates removes the deadline `return 1` and hangs.
+  — **PREMISE CORRECTED, same day.** The row above says the omission "was never induced" and that
+  `surface: visible` on 5/5 left the background-handle fallback as the live hypothesis. Both halves
+  are now wrong. Creating a `codex` terminal into a freshly created worktree returned
+  `{"handle":"term_69165bc9…","paneKey":null,"surface":"visible"}` — the omission **reproduced**, and
+  it reproduced with `surface: visible`, so that field does **not** discriminate and the
+  adopt-failure hypothesis is falsified as stated. The create handle was **real** (present in
+  `terminal list` once, with `tabId`/`leafId`), making this the *inverse* of the original J1 report:
+  the key was missing while the handle was good, so refusing to pin would have been the wrong call
+  and `exec-pane`'s fallback was the right one. Two immediate isolation probes both carried a
+  paneKey — same new worktree via `path:` with a `sleep` payload, and a pre-existing worktree via
+  `id:` — so neither newness nor selector form is sufficient alone. **1 omission in 8 creates.** The
+  surviving untested variable is elapsed time since `worktree create` (the failing call was seconds
+  after it; the succeeding one into the same worktree came later), which is n=1 and a hypothesis, not
+  a finding. Handed to `BrightGold70/j1-residual-probes` with the repro. **The guard at
+  `hmad-dispatch.sh` is NOT dormant — do not delete it.** Filed here rather than only in the brief
+  because a session's doc is exactly where the last two versions of this item went to die.
 - **`.result.split.handle` is the same shape of gap, unprobed**: `hmad-dispatch.sh:3100`
   (`--split <handle>`) reads a handle out of a **different** response object (`.result.split`, not
   `.result.terminal`) and pools it the same way — recurrence: 0 — candidate: **no, pending evidence** —

@@ -62,20 +62,54 @@ Decide from what comes back, not from symmetry with `create`:
   `docs/skill-candidates.md` under the existing `2026-08-31 — j1-launch-pane-pin` heading and close
   the row. That is a real outcome, not a failure.
 
-### 2. The `surface: background` branch — the live hypothesis, never induced
+### 2. The missing `paneKey` — REPRODUCED at handover, and `surface` is not the cause
 
+**This item changed while the handover was being delivered. Read this instead of the framing you
+may have seen elsewhere.**
+
+The inherited hypothesis was that a response omits `paneKey` when the UI cannot adopt the pane —
 `orca terminal create --help` says it *"falls back to a background handle if the UI cannot adopt
-it"*. Every one of the 5 probe responses carried `"surface":"visible"`, so that branch has **never
-been measured**, and it remains the standing hypothesis for the original J1 omission (a response
-with no `paneKey` at all). It is also the entire reason the no-`paneKey` guard at
-`hmad-dispatch.sh` is retained rather than deleted as dormant.
+it"* — and that it had never been induced. Creating the agent terminal for **this very worktree**
+induced it:
 
-Nobody has found a way to induce it from the CLI on demand. Ideas worth trying, cheapest first:
-create against a worktree whose Orca window is closed or minimised; create while the app is
-backgrounded; create against a worktree Orca knows but has no open tab for. **If it cannot be
-induced, say so and stop** — "not inducible from the CLI on Orca 1.4.192" is a durable finding and
-closes the row honestly. Do not delete the guard on the strength of 5 visible-surface samples;
-n=5 on one build cannot falsify an intermittent defect.
+```
+orca terminal create --worktree id:47c13b8f-…::/Users/kimhawk/orca/workspaces/skills/j1-residual-probes \
+  --title j1-residual-probes --command 'codex' --json
+  -> {"handle":"term_69165bc9-686b-4298-9e01-15c3dfa599e8","paneKey":null,"surface":"visible"}
+```
+
+Three things follow, and the second is the one that matters most:
+
+1. **The guard is not dormant.** `hmad-dispatch launch` against that create would have refused, and
+   `exec-pane` would have taken its fallback. Do not delete the no-`paneKey` guard.
+2. **`surface` does NOT discriminate.** The failing response carried `"surface":"visible"`, so the
+   adopt-failure/background-handle hypothesis is **falsified as stated**. Anyone continuing this
+   should not go looking for a `surface` value that predicts the omission; there isn't one in the
+   evidence.
+3. **The create handle was REAL.** `term_69165bc9…` appears in `terminal list` exactly once, with a
+   `tabId`/`leafId`. So this instance is the *inverse* of the original J1 report: the response
+   omitted the key while the handle was genuine. Refusing to pin would have been the wrong call
+   here, which is precisely why `exec-pane` falls back rather than refusing.
+
+**What was ruled out** — two immediate isolation probes, both `surface: visible`, both with a
+`paneKey`:
+
+| Probe | Condition | `paneKey` |
+|---|---|---|
+| P6 | same brand-new worktree, `path:` selector, `--command 'sleep 300'` | present |
+| P7 | pre-existing worktree, `id:` selector | present |
+
+So neither "the worktree is new" nor "the `id:` selector" is sufficient on its own. Tally across
+the day: **1 omission in 8 creates.** The one difference not yet ruled out is timing — the failing
+call was issued seconds after `worktree create`, while that worktree's UI was still materialising,
+whereas P6 into the same worktree came later and succeeded. That is a hypothesis, not a finding;
+it has n=1 and must be treated as such.
+
+Next probe worth running: create repeatedly and immediately after `worktree create`, N≈10, and see
+whether the omission tracks elapsed time since the worktree appeared. If it does, the guard's
+message should say "retry" rather than "pin manually". If it does not, record the rate and stop —
+an intermittent upstream omission with a working fallback on both call sites is a filed bug, not a
+blocker, and is worth reporting upstream the way `stablyai/orca#13005` was.
 
 ## Key Learnings
 
