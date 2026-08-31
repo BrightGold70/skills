@@ -804,11 +804,17 @@ def test_pin_agents_fails_loud_on_unresolved(tmp_path):
     assert "agy=t-agy" in pins.read_text()   # the resolved agent is still frozen
 
 
-# J1: `terminal create` returns a handle the pane never has. Confirmed three
-# times, most recently 2026-07-23 with a direct probe: create said
+# J1: `terminal create` can return a handle the pane never has. Confirmed three
+# times through 2026-07-23, most recently with a direct probe: create said
 # `term_d1f7a348…`, the pane that materialized was `term_f0966e2b…`, and the
-# create-response handle never appeared in `terminal list` at all. It is a
-# pre-adoption placeholder.
+# create-response handle never appeared in `terminal list` at all.
+#
+# Re-probed 2026-08-31 on Orca 1.4.192 (5 creates, 2 worktrees): the create
+# handle equalled the adopted handle 5/5. The placeholder is therefore
+# INTERMITTENT, not invariant, so these tests pin the behaviour that is correct
+# either way -- resolve by paneKey -- rather than the claim that the create
+# handle is always wrong. The stub below keeps them deliberately distinct
+# (`term_placeholder` vs `term_real`) so the join is what is being measured.
 #
 # What IS stable across both is the `paneKey` the create response also returns —
 # the same `<tabId>:<leafId>` J16 joins on. So launch creates, then resolves the

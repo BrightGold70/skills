@@ -854,7 +854,8 @@ _cmd_pin() {  # <agent> <handle> — record ONE agent's handle in the pin file
 
 _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   # H5 durable path: h-mad OWNS the agent launch, so its identity is captured at
-  # spawn from the create response (`.result.terminal.handle`) — never from the
+  # spawn from the create response's `paneKey`, joined against `terminal list`
+  # — not from `.result.terminal.handle` (see J1 below), and never from the
   # decaying title/preview — and pinned immediately. Zero manual step. Use this
   # to start a fresh Codex/agy for a run; reuse an operator-launched pane via
   # `pin`/`pin-agents` instead. The launch command is overridable per agent.
@@ -882,6 +883,16 @@ _cmd_launch() {  # <agent> [--worktree <sel>] [--focus]
   # already joins on. So: create, then resolve the real handle from `terminal
   # list` by that key. Identity is still owned at spawn -- it is just read from
   # the field that survives adoption.
+  #
+  # 2026-08-31 re-probe (Orca 1.4.192, 5 creates, 2 worktrees): every response
+  # carried a paneKey, and the create handle was IDENTICAL to the adopted handle
+  # 5/5. So the placeholder behaviour above is intermittent, not invariant, and
+  # `_cmd_exec_pane` -- which still reads `.result.terminal.handle` directly --
+  # is not broken today. The join stays because it is correct under BOTH
+  # behaviours. The no-paneKey guard below stays because all 5 responses carried
+  # `surface: visible`, so the documented background-handle fallback (`orca
+  # terminal create --help`), the live hypothesis for the original omission, was
+  # never induced and remains unmeasured.
   local resp pane_key handle
   resp="$(_orca_json '.result.terminal | tojson' "${args[@]}")" || return $?
   pane_key="$(printf '%s' "$resp" | jq -r '.paneKey // empty' 2>/dev/null)"

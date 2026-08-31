@@ -782,3 +782,13 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   passes the liveness check and silently leaks dispatches into a stranger's shell. Note `.tail` is the
   field name — `.content`/`.output`/`.preview` are all absent, and reading them returns nothing in a way
   that looks exactly like an empty pane.
+- **`exec-pane` is the surface with no J1 guard at all**: `hmad-dispatch.sh:3094` (`_cmd_exec_pane`)
+  reads `.result.terminal.handle` from the create response and uses it directly — registering it in
+  the pane pool and dispatching to it — while `_cmd_launch` sixty lines earlier refuses that same
+  field as unpinnable. Both cannot be right, and the 5/5 probe says `exec-pane`'s assumption is the
+  one that holds on 1.4.192 — recurrence: 1 — candidate: **maybe** — not a defect today and NOT
+  fixed here (joining `exec-pane` by `paneKey` is a behaviour change with its own tests, out of scope
+  for a doc reconciliation). Recorded because the failure is asymmetric: if the placeholder behaviour
+  ever recurs, `launch` fails loud by design and `exec-pane` silently pools a handle that does not
+  exist — which is the original J1 symptom, on the surface nobody guarded. The cheap version is to
+  reuse the existing paneKey-join helper rather than a second guard.
