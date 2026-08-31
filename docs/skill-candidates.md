@@ -743,3 +743,42 @@ threshold of a third vendored patch; untouched this session.
 
 - **which model did this dispatch actually run?**: after removing the model pin, every check of "what will/did `exec` resolve" was hand-written twice per agent — for codex, `sed -n '1,9p' <log>` to read the session header's `model:`/`reasoning effort:`; for agy, a Python scan of `~/.gemini/antigravity-cli/log/cli-*.log` for `Propagating selected model override to backend: label="…"` (because `ls -t` is dead under rtk and the NDJSON stream carries no model field at all) — recurrence: 5 in one session — candidate: yes — a `hmad-dispatch resolved-model <codex|agy> [--log <f>]` verb, or a line in `env`, would answer it once per agent instead of per invocation. The value is not convenience: with nothing pinned, the resolved model is the ONLY evidence of what a 5d/5e dispatch ran, and a configured `gpt-5.6-luna` returns a well-formed `STATUS: BLOCKED` that looks exactly like a task verdict. Both extractors are one line each and both are already written in `h-mad/SKILL.md` prose, where they cannot be executed.
 - **config-flip propagation probe**: proving "changing the CLI setting moves the dispatch" needs backup → flip → probe → restore → sha256-verify-identical, run once per agent against two different config formats (TOML for codex, JSON for agy) — recurrence: 2 (one session) — candidate: maybe — the shape is general (any inherited-setting claim needs it, and current-state resolution is NOT propagation), but n=2 on one afternoon is thin, and the risky half is the restore, which a script makes no safer than a `trap … EXIT INT TERM` already does. Re-file if a third inherited setting shows up.
+
+## 2026-08-31 — j1-launch-pane-pin (takeover probe)
+
+Filed by the takeover of `docs/handoffs/2026-08-31-main__j1-launch-pane-pin-durability.md` (handover
+from HemaSuite `feature/41-headless-nlm-auth-gating`). The item existed for at least two sessions as
+TodoList `#54` and nothing else; this heading is the durable home its Next Step 2 asked for.
+
+- **J1 "create response carries no paneKey" — premise DID NOT REPRODUCE on Orca 1.4.192**: five
+  `orca terminal create --worktree <sel> --command 'sleep 300' --title j1-probe-N --json` calls
+  (3× `active`, 1× `path:/Users/kimhawk/orca/HemaSuite`, 1× `branch:feature/41-headless-nlm-auth-gating`)
+  each returned a `paneKey` of the form `<tabId>:<leafId>`, and each joined to exactly one live
+  handle in `terminal list` — recurrence: 0/5 — candidate: **no** (nothing to build) — status:
+  **DORMANT, guard retained**. Two things this probe did NOT establish, and both are why the guard at
+  `h-mad/scripts/hmad-dispatch.sh:889` stays: (1) every response carried `"surface":"visible"`, so the
+  documented fallback in `orca terminal create --help` — *"falls back to a background handle if the UI
+  cannot adopt it"* — was never induced, and that branch remains the live hypothesis for the original
+  omission; it is not reachable from the CLI on demand. (2) n=5 in one afternoon on one build cannot
+  falsify a defect the brief describes as intermittent. Re-probe before removing anything.
+- **the `.result.terminal.handle` half of J1 did not reproduce either — and the doc asserts it as
+  settled**: `h-mad/references/agent-substrate.md:27` calls that field "a pre-adoption placeholder the
+  pane never has (J1, confirmed 3×)". In all 5 probes the create-response handle was **identical** to
+  the handle the pane was later adopted under, and appeared in `terminal list` exactly once — recurrence:
+  5/5 contradicting — candidate: **no** (a doc correction, not a tool). The 2026-08-02 observation is
+  not disputed for the build it was taken on; what is wrong is the tense. "The pane never has" reads as
+  invariant and is now false, which matters because it is the stated justification for the whole
+  resolve-by-paneKey path. Fold this into the open task on reconciling `agent-substrate.md:27` against
+  `hmad-dispatch.sh:860`.
+- **positive pane ID via `terminal read`, not previews**: `hmad-dispatch env` reported
+  `codex -> UNRESOLVED` with three candidate panes it could not tell apart — Orca named none of them in
+  `worktree ps` `agents[]` and all three previews were empty. `orca terminal read --terminal <h> --json`
+  → `.result.terminal.tail` identified all three unambiguously on the first try (a Codex TUI banner, an
+  Antigravity CLI banner, and a bare Oh-My-Zsh prompt), which resolved the pin — recurrence: 1, but it
+  resolved a live UNRESOLVED that the existing fallbacks could not — candidate: **maybe** — a
+  `pin-agents` Pass-N that greps `.tail` for each agent's banner would close the gap that the
+  `agentType` join and the preview scan both leave open. The guard it must keep is the one that made
+  this safe by hand: pin only when **exactly one** candidate matches, because a wrong-but-live pin
+  passes the liveness check and silently leaks dispatches into a stranger's shell. Note `.tail` is the
+  field name — `.content`/`.output`/`.preview` are all absent, and reading them returns nothing in a way
+  that looks exactly like an empty pane.
