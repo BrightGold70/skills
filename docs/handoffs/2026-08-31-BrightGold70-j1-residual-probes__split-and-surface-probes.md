@@ -1,7 +1,7 @@
 # Handoff — J1 residuals: the two response shapes nobody has measured
 
 **Date:** 2026-08-31
-**Branch:** `feature/j1-residual-probes`
+**Branch:** `BrightGold70/j1-residual-probes`
 **Project:** `/Users/kimhawk/orca/skills` (h-mad)
 **Handover-From:** skills · main · session dbb07b5d-3005-4ef1-8bfc-4199894b1e15
 
@@ -110,7 +110,7 @@ n=5 on one build cannot falsify an intermittent defect.
 ## Open / Blocked Items
 
 - **Both items above** — status: not started, not blocked. Neither has a dependency; run them in either order.
-  - `repo: /Users/kimhawk/orca/skills · branch: feature/j1-residual-probes · worktree: this one`
+  - `repo: /Users/kimhawk/orca/skills · branch: BrightGold70/j1-residual-probes · worktree: /Users/kimhawk/orca/workspaces/skills/j1-residual-probes`
   - Code: `h-mad/scripts/hmad-dispatch.sh` (`_cmd_exec_pane` split branch; `_resolve_pane_by_key`)
   - Tests: `h-mad/tests/test_hmad_dispatch_exec_pane.py`, spec `h-mad/tests/mutation-specs/exec_pane_panekey.json`
   - Row: `docs/skill-candidates.md`, heading `2026-08-31 — j1-launch-pane-pin (takeover probe)`
@@ -124,7 +124,7 @@ n=5 on one build cannot falsify an intermittent defect.
 
 **To resume:**
 ```bash
-cd /Users/kimhawk/orca/skills
+cd /Users/kimhawk/orca/workspaces/skills/j1-residual-probes
 export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 git log --oneline -5                      # a53b07c..e42c776 is the finished half
 python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/exec_pane_panekey.json
