@@ -838,7 +838,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `{"split":{"handle":"term_…","tabId":"aaf3…","paneRuntimeId":1}}`: no `paneKey`, `leafId`,
   or other joinable pane identity. The response handle matched exactly one live split pane carrying the
   same `tabId`, and both panes were cleaned up. There is nothing safe to route through
-  `_resolve_pane_by_key`; retaining `.result.split.handle` is the evidence-backed outcome.
+  `_resolve_pane_by_key`; retaining `.result.split.handle` is the evidence-backed outcome —
+  candidate: no — the measurement was the whole deliverable: there is no joinable field to route,
+  so there is no guard to build. Reopen only if a host response grows a pane identity on
+  `.result.split`.
 
 ## 2026-08-31 — j1-pane-pin-takeover-and-handover (scout)
 
