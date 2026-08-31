@@ -905,3 +905,28 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   discriminating test") was right and cheap here, and because it is the third time this week a
   survivor turned out to be a missing HOSTILE fixture rather than a missing guard. Tidy fixtures put
   the real value first; real plans do not.
+
+## 2026-09-01 — wire-pin-gate-and-skill-upgrades (scout)
+
+- **check for a live run before merging a shared skill change**: `~/.claude/skills/h-mad` is a
+  symlink into this repo, so a merge to `main` changes the *installed* skill in every session
+  immediately — including one mid-cycle. Measured from the other side this session: `3219bdd` landed
+  while a HemaSuite h-mad run was in flight and, per that lane's own record, "silently invalidated a
+  batch-18 decision" — nothing broke, the damage was to reasoning already done, because a verdict
+  recorded as a fact had been produced by a gate that then moved — recurrence: 1 — candidate: maybe —
+  the check is mechanical (`hmad-dispatch worktree-ps` comments plus `.h-mad/telemetry.jsonl` for a
+  feature whose last phase is recent), and the output is a one-line warning naming the lanes, not a
+  block. The judgement it must not automate is whether to hold the merge. Note the *consumer*-side
+  rule already exists and is the one that saved this ("re-measure tooling, never cite your own
+  earlier finding"); this row is the sender-side mirror, which nothing currently prompts.
+- **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
+  `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
+  covering the end of its own section the moment a paragraph was added — the pin failed for the wrong
+  reason ("the test lost sight of the text", not "the doc regressed"), and had the growth been
+  elsewhere it would have gone **vacuous** instead of failing — recurrence: 1 here, but the pattern is
+  in every doc-rule test file that scopes by offset — candidate: maybe — the fix was six lines
+  (`_titled_section`: find the heading, bound on the next `## `), and the reason it is worth sharing
+  rather than re-deriving is the fence caveat the existing `_section()` in that same file already
+  documents: a bash block's `#` comments end a naive section scan early. Two helpers with the same
+  name now sit in one file because I did not check for the first — a shared one would have made that
+  collision impossible.
