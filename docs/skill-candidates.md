@@ -872,3 +872,36 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   since READ resolves the *canonical* main-worktree store rather than the lane's own, so the receiver
   read the corrected brief while its checkout held the stale one. A design property saved it, not the
   sender.
+
+## 2026-08-31 — wire-pin-numbered-labels
+
+- **a gate that fails CLOSED can hide for weeks**: `h_mad_wire_pin_gate.py`'s field regex allowed only
+  `**`, a parenthetical qualifier, or `:` after the label word, so `**WIRE 1**:` / `**WIRE 2A**:` /
+  `**WIRE-PIN 1**:` matched nothing and a two-wire task read as `wiring` shape carrying **no wire at
+  all** — a blocking `missing WIRE` on a correctly-written plan — recurrence: 1 (5 wires across 2
+  tasks, live) — candidate: no — a defect, not a tool; **LANDED 2026-08-31**. Filed because the
+  *shape* generalises and is worth a doctrine line: the reason nobody found it is that it failed in
+  the SAFE direction. A gate that emits a false PASS gets hunted; a gate that blocks correct work
+  gets **worked around by hand** — here by rewriting the plan's labels to canonical pairs — and the
+  workaround leaves no trace pointing at the gate. Ask of every gate not only "can it pass something
+  it should fail?" but "can it fail something it should pass, and what would an author do about it?"
+  The tell to look for is a hand-edit that makes a document conform to a tool rather than a fix that
+  makes the tool read the document.
+- **the second bug was underneath the first, and only the fix exposed it**: making the labels visible
+  was half the work. `_parse_tasks` kept ONE wire slot per task, and the registry's identity is
+  `(owning_feature, id)` — so two wires from one task **collide by construction** and the second
+  upserts the first, while the gate still prints `registered=2`. That is the same collision shape as
+  J43 (which widened the key from bare `id`), one level down, and it is strictly worse than the
+  blocking FAIL it replaced: a short registry is indistinguishable from a plan that only had one
+  wire, and the count agrees with it — recurrence: 1 — candidate: no — fixed by carrying the label
+  suffix into the registered id (`Task 12 (WIRE 2)`); a bare `**WIRE**:` keeps the plain task id, so
+  no existing record changes identity and no migration is needed. **A regex-only fix would have
+  turned a loud blocker into a silent under-registration.**
+- **the surviving mutant named a fixture I did not have**: `only-the-first-wire-is-obligated`
+  (`task["wires"][:1]`) survived every test in the new class, because all of them put the real value
+  FIRST. It is not an equivalent mutant — it differs exactly when a template placeholder occupies
+  `**WIRE 1**:` and the real wire is `**WIRE 2**:`, which is the ordinary shape of a partly-filled
+  plan — recurrence: 1 — candidate: no — recorded because the harness's advice ("write the
+  discriminating test") was right and cheap here, and because it is the third time this week a
+  survivor turned out to be a missing HOSTILE fixture rather than a missing guard. Tidy fixtures put
+  the real value first; real plans do not.

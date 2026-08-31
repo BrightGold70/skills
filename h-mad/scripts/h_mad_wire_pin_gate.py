@@ -60,9 +60,21 @@ _TASK_RE = re.compile(
 
 # `**WIRE-PIN** (`wiring` shape only): `test_x``  — the parenthetical qualifier in
 # the impl-plan template is part of the label, not of the value.
+# A task that connects two seams has two wires, and the template offers no way to
+# say so except by numbering the labels -- `**WIRE 1**:`, `**WIRE 2A**:`, each with
+# its `**WIRE-PIN N**:`. Without the suffix group those lines matched NOTHING, so
+# the task read as `wiring` shape carrying no wire at all: a blocking `missing
+# WIRE` on a correctly-written plan. It failed CLOSED, which is why it went
+# unnoticed -- a halted plan gets its labels rewritten by hand rather than reported.
+#
+# The suffix must start with a digit. Anything looser turns an ordinary sentence
+# opening with the label word into a field, and this gate's whole value is that a
+# `wiring` task cannot hide -- a regex that matches prose would hand it a new place
+# to hide rather than closing one.
 _FIELD_RE = re.compile(
-    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*(Task\s+shape|WIRE-PIN|WIRE)\s*\*{0,2}"
-    r"\s*(?:\([^)]*\))?\s*\*{0,2}\s*:\s*(.*)$",
+    r"^\s*(?:[-*•]\s+)?\*{0,2}\s*(?P<label>Task\s+shape|WIRE-PIN|WIRE)"
+    r"(?:\s*(?P<suffix>[0-9][\w.]*))?\s*\*{0,2}"
+    r"\s*(?:\([^)]*\))?\s*\*{0,2}\s*:\s*(?P<value>.*)$",
     re.IGNORECASE,
 )
 
@@ -148,8 +160,13 @@ def _parse_tasks(text: str) -> list[dict]:
                 # can be quoted back: "add the field" is the wrong remedy for a
                 # field that is present and misspelled.
                 "shape_raw": None,
+                # Scalars kept deliberately: `h_mad_assemble_tdd` imports
+                # `_parse_tasks` and reads `meta["pin"]`. They hold the FIRST real
+                # value; `wires`/`pins` hold every one, with its label suffix.
                 "wire": None,
                 "pin": None,
+                "wires": [],
+                "pins": [],
             }
             tasks.append(current)
             continue
@@ -158,16 +175,21 @@ def _parse_tasks(text: str) -> list[dict]:
         field = _FIELD_RE.match(line)
         if not field:
             continue
-        label = " ".join(field.group(1).split()).lower()
-        value = field.group(2)
+        label = " ".join(field.group("label").split()).lower()
+        value = field.group("value")
+        suffix = field.group("suffix")
         if label == "task shape":
             current["shape"] = _declared_shape(value)
             if _is_real_value(value):
                 current["shape_raw"] = _clean(value)
         elif label == "wire-pin":
-            current["pin"] = value
+            current["pins"].append((suffix, value))
+            if current["pin"] is None or not _is_real_value(current["pin"]):
+                current["pin"] = value
         elif label == "wire":
-            current["wire"] = value
+            current["wires"].append((suffix, value))
+            if current["wire"] is None or not _is_real_value(current["wire"]):
+                current["wire"] = value
     return tasks
 
 
@@ -205,8 +227,8 @@ def check(plan_path: Path) -> dict:
     for task in wiring:
         missing = [
             label
-            for label, value in (("WIRE", task["wire"]), ("WIRE-PIN", task["pin"]))
-            if not _is_real_value(value)
+            for label, values in (("WIRE", task["wires"]), ("WIRE-PIN", task["pins"]))
+            if not any(_is_real_value(value) for _, value in values)
         ]
         if missing:
             unpinned.append(f"{task['id']} ({task['name']}): missing {', '.join(missing)}")
@@ -228,8 +250,8 @@ def check(plan_path: Path) -> dict:
             continue
         present = [
             label
-            for label, value in (("WIRE", task["wire"]), ("WIRE-PIN", task["pin"]))
-            if _is_real_value(value)
+            for label, values in (("WIRE", task["wires"]), ("WIRE-PIN", task["pins"]))
+            if any(_is_real_value(value) for _, value in values)
         ]
         if present:
             mislabeled.append(
@@ -262,35 +284,64 @@ def _register_wiring_tasks(
     for task in tasks:
         if task["shape"] != "wiring":
             continue
-        wire = task["wire"]
-        pin = task["pin"]
-        if not _is_real_value(wire) or not _is_real_value(pin):
-            skipped += 1
-            continue
-        match = _WIRE_ARROW_RE.search(wire)
-        if match is None:
-            skipped += 1
-            print(
-                f"  registration skipped: {task['id']} ({task['name']}): "
-                f"WIRE has no recognised arrow: {wire!r}"
+        # EVERY declared wire is registered, not just the first. A task with
+        # `**WIRE 1**:`/`**WIRE 2**:` declares two connections, and registering one
+        # of them under-fills the registry SILENTLY -- worse than the blocking
+        # `missing WIRE` that numbered labels used to produce, because a short
+        # registry looks exactly like a plan that only had one wire.
+        real_pins = [(suffix, value) for suffix, value in task["pins"] if _is_real_value(value)]
+        pins_by_suffix = {suffix: value for suffix, value in real_pins}
+        for wire_suffix, wire in task["wires"]:
+            if not _is_real_value(wire):
+                continue
+            # Pair by label suffix; fall back to the lone pin only when there is
+            # exactly one, which is the bare `**WIRE-PIN**:` spelling. Anything
+            # ambiguous is skipped LOUDLY rather than paired by position -- a wire
+            # registered against the wrong pin is a false entry, and the registry is
+            # consulted later precisely to decide whether a connection is tested.
+            if wire_suffix in pins_by_suffix:
+                pin = pins_by_suffix[wire_suffix]
+            elif len(real_pins) == 1:
+                pin = real_pins[0][1]
+            else:
+                skipped += 1
+                print(
+                    f"  registration skipped: {task['id']} ({task['name']}): "
+                    f"WIRE {wire_suffix or ''}".rstrip()
+                    + f" has no matching WIRE-PIN among {sorted(pins_by_suffix)}"
+                )
+                continue
+            match = _WIRE_ARROW_RE.search(wire)
+            if match is None:
+                skipped += 1
+                print(
+                    f"  registration skipped: {task['id']} ({task['name']}): "
+                    f"WIRE has no recognised arrow: {wire!r}"
+                )
+                continue
+            caller, callee = wire.replace("`", "").split(match.group(0), 1)
+            caller, callee = caller.strip(), callee.strip()
+            pin = pin.replace("`", "").strip()
+            if not caller or not callee or not pin:
+                skipped += 1
+                continue
+            # The registry's identity is `(owning_feature, id)`, so two wires from
+            # ONE task collide by construction and the second upserts the first --
+            # the same shape as the J43 collision that key was widened to fix, one
+            # level down. A numbered wire therefore carries its label into the id.
+            # A bare `**WIRE**:` keeps the plain task id, so every record already
+            # in a registry keeps its identity and no migration is needed.
+            wire_id = task["id"] if wire_suffix is None else f"{task['id']} (WIRE {wire_suffix})"
+            entries.append(
+                {
+                    "kind": "wire",
+                    "id": wire_id,
+                    "caller": caller,
+                    "callee": callee,
+                    "pin": pin,
+                    "owning_feature": feature,
+                }
             )
-            continue
-        caller, callee = wire.replace("`", "").split(match.group(0), 1)
-        caller, callee = caller.strip(), callee.strip()
-        pin = pin.replace("`", "").strip()
-        if not caller or not callee or not pin:
-            skipped += 1
-            continue
-        entries.append(
-            {
-                "kind": "wire",
-                "id": task["id"],
-                "caller": caller,
-                "callee": callee,
-                "pin": pin,
-                "owning_feature": feature,
-            }
-        )
     if entries:
         h_mad_wire_registry.register(entries, registry)
     return len(entries), skipped

@@ -806,3 +806,140 @@ def test_check_signature_and_wirepin_grammar_are_additive_only() -> None:
     assert list(signature.parameters) == ["plan_path"]
     assert signature.parameters["plan_path"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert check.__annotations__.keys() == {"plan_path", "return"}
+
+
+# --- numbered wire labels ------------------------------------------------
+#
+# A task that connects two seams declares two wires, and the impl-plan template
+# gives no way to say that except by numbering the labels: `**WIRE 1**:` /
+# `**WIRE 2A**:`, each with its `**WIRE-PIN N**:`. Before this was handled the
+# gate's field regex allowed only `**`, a parenthetical qualifier, or `:` after
+# the label word, so every numbered line failed to match and the task read as
+# `wiring` shape carrying NO wire at all -- a hard FAIL on correct work, and the
+# registry silently short of the wires the plan declared.
+#
+# The direction matters: this fails CLOSED (a blocking `missing WIRE`), never a
+# false PASS. That is why it survived unnoticed -- it halts, and a halted plan
+# gets its labels rewritten by hand rather than reported as a gate defect.
+
+
+def _numbered_task(n: int, wires: list[tuple[str, str]], pins: list[tuple[str, str]]) -> str:
+    out = [f"## Task {n}: multi\n", "**Production file**: `engine/run.py`\n",
+           "**Test file**: `tests/test_run.py`\n", "**Task shape**: `wiring`\n"]
+    out += [f"**WIRE {suffix}**: {value}\n" for suffix, value in wires]
+    out += [f"**WIRE-PIN {suffix}**: {value}\n" for suffix, value in pins]
+    out.append("\n**Acceptance Criteria**:\n- [ ] AC-1.1: something testable\n\n")
+    return "".join(out)
+
+
+class TestNumberedWireLabels:
+    def test_numbered_labels_are_seen_at_all(self, tmp_path: Path) -> None:
+        """`**WIRE 1**:` is a wire. The bare-label spelling is not the only one."""
+        plan = _plan(tmp_path, _numbered_task(
+            8,
+            [("1", "`a.py:x` -> `b.y`"), ("2A", "`a.py:p` -> `b.q`")],
+            [("1", "`test_x`"), ("2A", "`test_p`")],
+        ))
+        result = check(plan)
+        assert result["verdict"] == "PASS", result
+        assert result["unpinned"] == [], result["unpinned"]
+
+    def test_numbered_pin_alone_is_seen(self, tmp_path: Path) -> None:
+        """The blindness was the numbering, not the WIRE keyword -- WIRE-PIN too."""
+        plan = _plan(tmp_path, _numbered_task(
+            9, [("1", "`a.py:x` -> `b.y`")], [("1", "`test_x`")]))
+        result = check(plan)
+        assert result["verdict"] == "PASS", result
+
+    def test_numbered_wire_without_any_pin_still_fails(self, tmp_path: Path) -> None:
+        """Seeing more labels must not weaken the obligation the gate exists for."""
+        plan = _plan(tmp_path, _numbered_task(
+            10, [("1", "`a.py:x` -> `b.y`")], []))
+        result = check(plan)
+        assert result["verdict"] == "FAIL", result
+        # Before the fix this test passed VACUOUSLY: the task failed because the
+        # numbered WIRE was invisible too, so "missing WIRE, WIRE-PIN" satisfied a
+        # bare `"WIRE-PIN" in entry` check while proving nothing about the pin
+        # obligation. Assert the wire IS seen, so only the pin is reported.
+        assert result["unpinned"] == ["Task 10 (multi): missing WIRE-PIN"], result["unpinned"]
+
+    def test_numbered_wire_under_a_non_wiring_shape_is_mislabeled(
+        self, tmp_path: Path
+    ) -> None:
+        """The `wiring`-only rule must apply to numbered labels too, or the new
+        spelling becomes a fresh hiding place for exactly what the gate catches."""
+        body = _numbered_task(11, [("1", "`a.py:x` -> `b.y`")], [("1", "`test_x`")])
+        body = body.replace("**Task shape**: `wiring`", "**Task shape**: `refactor`")
+        result = check(_plan(tmp_path, body))
+        assert result["verdict"] == "FAIL", result
+        assert any("WIRE" in entry for entry in result["mislabeled"]), result["mislabeled"]
+
+    def test_every_numbered_wire_reaches_the_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The half a regex fix alone would miss: two declared wires, two records.
+
+        The parser kept ONE wire slot per task, so a numbered plan that passed the
+        gate would still register only the last wire -- under-registering silently,
+        which is worse than the FAIL it replaced.
+        """
+        plan = _plan(tmp_path, _numbered_task(
+            12,
+            [("1", "`engine/run.py:dispatch` -> `tools.shadow.measure`"),
+             ("2", "`engine/run.py:finish` -> `tools.shadow.close`")],
+            [("1", "`test_dispatch_calls_measure`"),
+             ("2", "`test_finish_calls_close`")],
+        ))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+        assert rc == 0
+        records = registry.load(registry_path)
+        assert len(records) == 2, f"expected both wires registered, got {records}"
+        assert {r["callee"] for r in records} == {"tools.shadow.measure", "tools.shadow.close"}
+        assert {r["pin"] for r in records} == {
+            "test_dispatch_calls_measure", "test_finish_calls_close"}
+
+    def test_an_unpairable_wire_is_skipped_loudly_not_paired_by_position(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        """A wire with no matching pin must not borrow a neighbour's.
+
+        Pairing by position would be the obvious shortcut and would silently file a
+        connection against a test that does not cover it — and the registry is
+        consulted later precisely to decide whether a connection is tested, so a
+        wrong pin is worse than a missing record.
+        """
+        plan = _plan(tmp_path, _numbered_task(
+            13,
+            [("1", "`engine/run.py:dispatch` -> `tools.shadow.measure`"),
+             ("2", "`engine/run.py:finish` -> `tools.shadow.close`")],
+            [("1", "`test_dispatch_calls_measure`"),
+             ("3", "`test_unrelated`")],
+        ))
+        registry_path = tmp_path / ".h-mad" / "wires.jsonl"
+        rc = _run_main_with_registration_args(monkeypatch, plan, registry_path)
+        assert rc == 0
+        records = registry.load(registry_path)
+        assert [r["callee"] for r in records] == ["tools.shadow.measure"], records
+        assert "test_unrelated" not in {r["pin"] for r in records}, records
+        assert "no matching WIRE-PIN" in capsys.readouterr().out
+
+    def test_a_later_numbered_label_satisfies_the_obligation(self, tmp_path: Path) -> None:
+        """The obligation is judged over EVERY label, not the first one.
+
+        The template ships a placeholder on every task, so a plan that fills in
+        `**WIRE 2**:` while leaving `**WIRE 1**:` as `<...>` is ordinary, not
+        pathological. Judging only the first label reports `missing WIRE` on a task
+        that plainly has one — the same blocking-on-correct-work failure the
+        numbered-label defect caused, reached from the verdict side instead of the
+        regex side. A mutation truncating the scan to `[:1]` survived every other
+        test in this class until this fixture existed.
+        """
+        plan = _plan(tmp_path, _numbered_task(
+            14,
+            [("1", "<wire that will be filled in>"), ("2", "`a.py:x` -> `b.y`")],
+            [("1", "<pin id>"), ("2", "`test_x`")],
+        ))
+        result = check(plan)
+        assert result["verdict"] == "PASS", result
+        assert result["unpinned"] == [], result["unpinned"]

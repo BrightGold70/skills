@@ -1,0 +1,51 @@
+{
+  "_why": "The numbered-label defect was invisible for weeks because it failed CLOSED: `**WIRE 1**:` matched nothing, the task read as `wiring` with no wire, and Phase 5b emitted a blocking `missing WIRE` on a correct plan. A halted plan gets its labels rewritten by hand, so the gate was never suspected. Every mutant here restores one half of that blindness, or the silent under-registration underneath it \u2014 which is the worse failure, because a short registry looks exactly like a plan that only had one wire.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_wire_pin_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "label-suffix-group-removed",
+      "_mechanism": "Drop the optional suffix from the field regex \u2014 the original defect exactly. Numbered labels stop matching, so a two-wire task reports `missing WIRE, WIRE-PIN` and 5b blocks correct work.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "    r\"(?:\\s*(?P<suffix>[0-9][\\w.]*))?\\s*\\*{0,2}\"",
+      "replace": "    r\"\\s*\\*{0,2}\"",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestNumberedWireLabels::test_numbered_labels_are_seen_at_all"
+    },
+    {
+      "name": "only-the-first-wire-is-obligated",
+      "_mechanism": "Judge the obligation on the back-compat scalar instead of the full list. A task whose only WIRE is numbered then reads as having none, which is the blocking half of the defect seen from the verdict side rather than the regex side. Discriminating fixture: first label a placeholder, second real -- with `[:1]` the real one is never scanned.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            for label, values in ((\"WIRE\", task[\"wires\"]), (\"WIRE-PIN\", task[\"pins\"]))\n            if not any(_is_real_value(value) for _, value in values)",
+      "replace": "            for label, values in ((\"WIRE\", task[\"wires\"][:1]), (\"WIRE-PIN\", task[\"pins\"][:1]))\n            if not any(_is_real_value(value) for _, value in values)",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestNumberedWireLabels::test_a_later_numbered_label_satisfies_the_obligation"
+    },
+    {
+      "name": "numbered-wires-collide-in-the-registry",
+      "_mechanism": "Register every wire under the bare task id again. The registry's identity is `(owning_feature, id)`, so the second wire upserts the first and one of the two declared connections vanishes \u2014 while the gate still prints `registered=2`. This is the mutant that matters: it is silent, and the count agrees with it.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            wire_id = task[\"id\"] if wire_suffix is None else f\"{task['id']} (WIRE {wire_suffix})\"",
+      "replace": "            wire_id = task[\"id\"]",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestNumberedWireLabels::test_every_numbered_wire_reaches_the_registry"
+    },
+    {
+      "name": "unpairable-wire-borrows-a-neighbours-pin",
+      "_mechanism": "Pair by position whenever any pin exists, instead of only when exactly one does. A wire then gets filed against a test that does not cover it \u2014 a FALSE registry entry, which is worse than a missing one because the registry is consulted later to decide whether a connection is tested.",
+      "file": "scripts/h_mad_wire_pin_gate.py",
+      "find": "            elif len(real_pins) == 1:",
+      "replace": "            elif real_pins:",
+      "test": "tests/test_h_mad_wire_pin_gate.py::TestNumberedWireLabels::test_an_unpairable_wire_is_skipped_loudly_not_paired_by_position"
+    }
+  ]
+}
