@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session 97490faf-189a-4e27-9693-08e15dab804c
+**Taken-Over-By:** skills · main · session 86c6aded-ad23-43ea-befb-7ef3d46139c3 · 2026-09-01 — worked 2026-09-01 — all four stores re-measured with the census (every carried count was stale). This repo's own store is effectively DONE: 0 `yes`, 3 open of 150, 113 terminal — brief step 3 was already complete. HemaSuite's main store had GROWN 204→310. Remaining open rows carry forward via `carry-forward-sources`; see Open Items in the closing handoff
 
 ## Session Summary
 

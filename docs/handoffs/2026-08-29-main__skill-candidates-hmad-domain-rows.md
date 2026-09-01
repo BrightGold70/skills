@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session f419d046-63a7-4e32-bac0-040f9bcabb04
+**Taken-Over-By:** skills · main · session 86c6aded-ad23-43ea-befb-7ef3d46139c3 · 2026-09-01 — worked 2026-09-01 — all 36 re-derived by name through the census parser (the recorded line numbers were stale; the file grew 204→310). 4 flipped LANDED against source, 3 checked and deliberately left open, 1 was already LANDED, rest remain. HemaSuite `6529a94f`
 
 > **Parked, not dispatched.** Nothing was sent to a terminal. This brief is filed here so the next
 > `/handoff read` in this worktree picks it up through the takeover path. Pick it up when it suits;

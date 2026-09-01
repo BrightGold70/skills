@@ -1043,7 +1043,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   immediately — including one mid-cycle. Measured from the other side this session: `3219bdd` landed
   while a HemaSuite h-mad run was in flight and, per that lane's own record, "silently invalidated a
   batch-18 decision" — nothing broke, the damage was to reasoning already done, because a verdict
-  recorded as a fact had been produced by a gate that then moved — recurrence: 1 — candidate: maybe —
+  recorded as a fact had been produced by a gate that then moved — recurrence: 2 — candidate: yes —
   the check is mechanical (`hmad-dispatch worktree-ps` comments plus `.h-mad/telemetry.jsonl` for a
   feature whose last phase is recent), and the output is a one-line warning naming the lanes, not a
   block. The judgement it must not automate is whether to hold the merge. Note the *consumer*-side
@@ -1052,7 +1052,7 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   — **TRIAGED 2026-09-01: useful and codable — stays open.** `worktree-ps` comments plus
   `.h-mad/telemetry.jsonl` are both already readable, and the output is a one-line warning naming
   the lanes rather than a block. Measured from the receiving side: `3219bdd` landed mid-cycle in
-  another lane and invalidated a decision that had already been recorded as fact.
+  another lane and invalidated a decision that had already been recorded as fact. **Recurrence 2, 2026-09-01**: the handoff/h-mad defect batch merged to `main` while a HemaSuite lane sat mid-Phase-5 on `feature/41`. The check was done BY HAND and it was the right call — `h_mad_do_preconditions` had been widened to score every audit at the latest cycle, so an A/B of old vs new across all 79 HemaSuite features was run before merging (0 verdict flips; probe proven sensitive by 9 pairs holding >1 live audit at the latest cycle). Doing it by hand is the evidence it is not yet mechanical.
 - **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
   `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
   covering the end of its own section the moment a paragraph was added — the pin failed for the wrong
