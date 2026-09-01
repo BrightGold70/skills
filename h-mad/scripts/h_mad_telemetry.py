@@ -27,12 +27,24 @@ from h_mad_cycle_counts import analysis_artifacts, audit_artifacts, audit_cycles
 
 
 def resolve_docs_root(docs_root: str | None, state_path: Path) -> Path:
-    """Resolve the documentation root used for cycle-count derivation."""
+    """Resolve the documentation root used for cycle-count derivation.
+
+    Anchored to the STATE FILE, never to the process CWD. The state file argument
+    already names the project tree the feature belongs to; where the operator
+    happens to have started the process does not. H-MAD is routinely driven from a
+    monorepo root against a sub-project's state file, so a relative fallback makes
+    the answer depend on the caller's shell.
+
+    The fallback used to be a bare `Path("docs")`, which is the same defect the
+    Phase-7 analysis path had: run from a tree that happens to hold a file at the
+    matching relative path and the derivation reads ANOTHER project's artifacts
+    while reporting success.
+    """
     if docs_root is not None:
         return Path(docs_root)
     if state_path.parent.name == "docs":
         return state_path.parent
-    return Path("docs")
+    return state_path.parent / "docs"
 
 
 def cmd_record(args: argparse.Namespace) -> int:
