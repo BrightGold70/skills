@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.14)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.7, 14 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.16)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.8, 15 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -355,10 +355,16 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
   # envelope becomes IDENTITY evidence, and this pass resolves a handle from it.
   # That is the unsafe direction; every other FR-4 case declines. Verified
   # 2026-09-01 that a real `terminal read --json` carries top-level `ok: true`.
+  #
+  # `else empty`, NOT `else tostring`. The measured live shape is an ARRAY, and
+  # `tostring` accepted every other non-null type -- a scalar, an object, a
+  # number -- so a malformed payload that merely CONTAINS a banner became
+  # identity evidence by the same unsafe route the .ok gate closes. Declining an
+  # unexpected shape costs a resolution that the OS-evidence pass still gets.
   printf '%s' "$raw" \
     | jq -re 'if (.ok? // false) != true then empty
               else (.result.terminal.tail? // empty) end
-              | if type == "array" then join("\n") else tostring end' 2>/dev/null \
+              | if type == "array" then join("\n") else empty end' 2>/dev/null \
     || return 1
 }
 ```
@@ -405,7 +411,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 
       Seeding also makes the test true to the failure it guards: this suite is run from inside
       live h-mad sessions, which is exactly where the variable is exported. The seed rather than
-      a second AC is what kept the node table intact at the time (38 then, 39 since AC-2.9).
+      a second AC is what kept the node table intact at the time; it is 40 now, after AC-2.9 and AC-2.10.
 - [ ] AC-2.6: Assert the timeout VALUE at a function seam, not on the wall clock. Using the
       strip-`main` harness (below), shadow `_cmd_run` with a stub that appends its argv to a file
       and returns a canned readable envelope, then call `_orca_tail_sig`:
@@ -523,6 +529,16 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       exit and an unreadable pane all decline; an accepted error envelope RESOLVES, and resolves
       to whatever handle the stale payload happens to name. `rc` and key-presence both read
       "fine" here, which is why neither AC-2.2 nor AC-2.3 covers it. Impl-plan audit v19.
+
+- [ ] AC-2.10: For an `ok:true` envelope whose `.result.terminal.tail` is **not an array**
+      (`"tail": "OpenAI Codex v1.2"`, and separately `"tail": {"0":"OpenAI Codex v1.2"}`),
+      `_orca_tail_sig` exits 1 and writes nothing.
+
+      The measured live shape is an array; `else tostring` accepted every other non-null type and
+      turned a malformed payload that merely CONTAINS a banner into identity evidence — the same
+      unsafe direction as the `ok:false` envelope, reached through the type branch instead of the
+      envelope verdict. Declining an unexpected shape costs nothing a resolution depends on: the
+      OS-evidence pass still runs. Impl-plan audit v20.
 
 **Dependencies on other tasks**: Task 1 (must complete first)
 
@@ -1081,8 +1097,9 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "name": "jq-r-not-jq-re",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_missing_tail_key_returns_1",
-   "find": "| jq -re '(.result.terminal.tail? // empty)",
-   "replace": "| jq -r '(.result.terminal.tail? // empty)"
+   "_mechanism": "Drop the -e. jq then exits 0 on empty output, so an absent key, an ok:false envelope and a non-array payload all stop being unreadable. Re-anchored at audit v20: the .ok gate changed the filter's opening and this find matched nothing, which is silent -- an anchor that matches zero times reports the guard as enforced.",
+   "find": "| jq -re 'if (.ok? // false) != true then empty",
+   "replace": "| jq -r 'if (.ok? // false) != true then empty"
   },
   {
    "name": "local-masks-helper-rc",
@@ -1208,16 +1225,16 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "_mechanism": "Drop the array branch so a multi-line tail is stringified instead of joined. The measured live shape IS an array, so this is the extraction T2 exists to pin.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_reads_array_tail",
-   "find": "              | if type == \"array\" then join(\"\\n\") else tostring end'",
-   "replace": "              | tostring'"
+   "find": "then join(\"\\n\") else empty end'",
+   "replace": "then tostring else empty end'"
   },
   {
    "name": "tail-empty-guard-dropped",
-   "_mechanism": "Remove `// empty`, so an envelope with no tail key yields null, `tostring` prints the literal \"null\", and jq exits 0 — a missing key becomes evidence. This is FR-4's bypass.",
+   "_mechanism": "Remove `// empty` from the inner branch, so an envelope with no tail key yields null and reaches the type test as a non-array. Re-anchored at audit v20 onto the inner `else (...) end`, since the .ok gate moved the filter's opening.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_missing_tail_key_returns_1",
-   "find": "    | jq -re '(.result.terminal.tail? // empty)",
-   "replace": "    | jq -re '(.result.terminal.tail?)"
+   "find": "              else (.result.terminal.tail? // empty) end",
+   "replace": "              else (.result.terminal.tail?) end"
   },
   {
    "name": "timeout-default-dropped",
@@ -1226,6 +1243,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
    "replace": "  raw=\"$(_cmd_run --timeout \"$HMAD_TAIL_READ_TIMEOUT\" -- \\"
+  },
+  {
+   "name": "non-array-tail-accepted",
+   "_mechanism": "Restore `else tostring`, so any non-array payload that survives the .ok gate is stringified and matched. A malformed tail that merely CONTAINS a banner then becomes identity evidence -- the same unsafe direction as the ok:false envelope, reached through the type branch instead.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_rejects_non_array_tail",
+   "find": "              | if type == \"array\" then join(\"\\n\") else empty end'",
+   "replace": "              | if type == \"array\" then join(\"\\n\") else tostring end'"
   },
   {
    "name": "envelope-ok-false-accepted",
@@ -1245,7 +1270,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "timeout-override-ignored",
-   "_mechanism": "Hardcode the bound at 2, ignoring the caller's override. The read still succeeds on a healthy pane and still times out on a hung one, so only a bound that separates 1 s from 2 s can see it -- AC-2.6's `< 1.5 s`. Under v1.14's `>= 0.5 s and < 2.5 s` window both values passed and the override contract was green without being enforced.",
+   "_mechanism": "Hardcode the bound at 2, ignoring the caller's override. The read still succeeds on a healthy pane and still times out on a hung one, so no wall-clock window sees it reliably. AC-2.6's _cmd_run argv SEAM does: the recorded call carries --timeout 2 where 1 was asked for. v1.15 tried to discriminate this with a `< 1.5 s` threshold; v1.16 replaced that with the seam because scheduler delay can push a correct run past it.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
@@ -1253,7 +1278,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "time-bound-removed",
-   "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against -- and AC-2.6's upper bound is the only thing that sees it, since the unbounded call still returns the right answer whenever the pane is healthy.",
+   "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against. Killed primarily by AC-2.6's argv seam, which records NO _cmd_run call at all; the loose `< 2.5 s` bound is a second, independent witness, since an unbounded call lets the stub's own 3 s sleep run to completion.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
@@ -1350,6 +1375,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-2.6 | `test_tail_sig_times_out` | RED: FAIL | also kills mut `time-bound-removed` |
 | AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
 | AC-2.9 | `test_tail_sig_rejects_ok_false_envelope` | RED: FAIL | also kills mut `envelope-ok-false-accepted` |
+| AC-2.10 | `test_tail_sig_rejects_non_array_tail` | RED: FAIL | also kills mut `non-array-tail-accepted` |
 | AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | — |
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
 | AC-3.3 | `test_tail_pass_env_reports_handle` | RED: FAIL | — |
@@ -1377,7 +1403,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
-**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 38
+**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 40
 nodes, T5's four included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
@@ -1493,12 +1519,12 @@ false half is recorded so the next reader does not re-derive it.
    | task | nodes | FAIL at RED | PASS at RED | the PASS nodes |
    |---|---|---|---|---|
    | T1 | 6 | 3 | 3 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv` |
-   | T2 | 8 | 7 | 1 | `test_tail_no_timeout_binary_invocation` |
+   | T2 | 9 | 8 | 1 | `test_tail_no_timeout_binary_invocation` |
    | T3 | 16 | 10 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
    | T4 | 4 | 4 | 0 | — |
    | T5 | 4 | 3 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **39** | **28** | **11** | |
+   | **total** | **40** | **29** | **11** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1509,13 +1535,13 @@ false half is recorded so the next reader does not re-derive it.
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
    grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 38  total nodes
    grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 11  --expect-pass
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 28  --expect-fail
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 29  --expect-fail
    ```
 
    **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
    `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
    `--expect-pass`; feeding it 27/11 would guarantee `step5d:red_not_all_failing` on every task
-   (T1 expects 3/3, T2 7/1, …). Derive per task from the same authoritative rows — the AC prefix
+   (T1 expects 3/3, T2 8/1, …). Derive per task from the same authoritative rows — the AC prefix
    identifies the task:
 
    ```bash
@@ -1527,8 +1553,8 @@ false half is recorded so the next reader does not re-derive it.
    done
    ```
 
-   Expected: T1 3/3 · T2 7/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 28/11 over 39 —
-   and **every row carries exactly ONE AC label** so the per-task regex sees all 38. Two rows
+   Expected: T1 3/3 · T2 8/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 29/11 over 40 —
+   and **every row carries exactly ONE AC label** so the per-task regex sees all 40. Two rows
    briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
    under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
    proof column as the procedure it is —
@@ -1539,7 +1565,7 @@ false half is recorded so the next reader does not re-derive it.
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 38 / 11 / 27 against this file.
+   anchored to the full row shape above and verified to return 40 / 11 / 29 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1601,3 +1627,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.14: Impl-plan audit v17 (codex) — must 6 -> 3, and two of the three were consequences of work done OUTSIDE this feature. AC-3.16 required a >= 3000-LINE stub while Orca hard-caps .terminal.tail at 2000, so the fixture modelled a state production cannot emit; bytes are the SIGPIPE mechanism and lines are the constraint, so the fixture is now >= 200 KB in <= 2000 lines (~1900 x 126 chars) and AC-4.5 takes the same shape. The probe blocks keep their 3000 x 80 form because they were measuring the pipeline, not standing in for Orca. The carried "284 existing tests" was stale on four live sites: a SIGPIPE fix in the same wrapper from an unrelated lane (282a3a5, plus the agy-recovery and cmux-alive gates) added nodes to this module while the plan sat open — re-derived to 290 by collection, with the selector re-checked at 0/290 and 2/290. Five guard mutations were missing despite Task 6 claiming every new guard is stubbed to its permissive value: the array join, the independent // empty, the ${HMAD_TAIL_READ_TIMEOUT:-2} default, the _cmd_run bound, and the harness scrub (24 mutations now). AC-2.1 was too weak to pin the first of those — "contains both on separate lines" is satisfied by the bare `jq -r` the code comment warns against, since pretty-printed JSON prints array elements on separate lines too; asserted by equality on "alpha\nbeta\n" now. AC-2.5 gained an ambient parent-env seed, without which the harness-scrub mutation is unkillable — folded into the existing node rather than added as AC-2.1b, which would have moved every count in the 38-node table. Also: the helper's own comment still said timeout/gtimeout are "absent from this file" — a site the v16 sweep missed — Task 6's first `../..` statement said repository root where the second correctly says the h-mad skill dir, the SIGPIPE rationale described the pre-AC-3.16 state as current, and AC-2.6 said "ten trials" over eight listed timings.
 - v1.15: Impl-plan audit v18 (codex) — must stayed at 3 and ALL THREE were defects in the timeout scaffold this plan had just rewritten. AC-2.6's `>= 0.5 s` lower bound REJECTS the correct implementation: _cmd_run's watchdog rides bash's integer SECONDS, and the audit's own controlled run produced a valid rc-124 at 0.376 s. The lower bound is gone, replaced by an argv-capture assertion that the read was attempted -- deterministic, and it does the job the bound was reaching for. The upper bound moved 2.5 -> 1.5 s to DISCRIMINATE the override: measured, --timeout 1 lands 0.376-1.16 s and --timeout 2 lands 1.936-2.232 s, so the old window contained both and the explicit-override contract was green without being enforced; `timeout-override-ignored` is the mutation that now proves it (25 mutations). `harness-ambient-timeout-not-scrubbed` was a FIFTH equivalent mutant, introduced by v1.14 -- the cycle that added it to CLOSE a coverage gap. Seeded at 9, both sides of the mutation complete a healthy read and the node asserts only rc 0, so nothing observable changes. The seed is 0 now, which the bounder rejects outright: measured, --timeout 0|notanumber|"" all exit rc 2 in ~0.04 s, so unscrubbed the helper returns 1 and the assertion fails. AC-2.7's predicate missed the quoted command forms `"timeout" 2 orca` -- it demands whitespace after `timeout` and a closing quote sits there. The obvious repair (optional quotes each side) repeats the v1.0 mistake: measured, it matches 10 lines of the valid file, because a quoted VARIABLE EXPANSION (`"$timeout"`) is not a command. Matched-pair alternation only: 0 live hits, 13/13 invocations caught, 0/7 false positives. Task 6's prose also called all six of these 'helper guards' when one mutates the Python test harness, and the harness mutation's _mechanism still named AC-2.1b.
 - v1.16: Impl-plan audit v19 (codex) — must went UP, 3 -> 5, and the first was self-inflicted: v1.15 removed AC-2.6's >= 0.5 s lower bound in the opening and left the trailing paragraph asserting "0.5 still rejects an instant return, which is the only thing the lower bound is for". Two mutually exclusive instructions in one AC; the later one reinstates the bound that the same AC proves rejects correct code. AC-2.6 is rewritten around a FUNCTION SEAM: shadow _cmd_run in the strip-main harness and assert the recorded argv carries --timeout 1 under the override and --timeout 2 unset. That is deterministic where the < 1.5 s threshold was not -- scheduler delay can push a correct --timeout 1 run past it -- and it kills timeout-override-ignored, timeout-default-dropped and time-bound-removed without any timing at all; the loose < 2.5 s bound stays as a second witness of the last. TWO safety gaps closed. _orca_tail_sig accepted an exit-0 `ok:false` envelope: rc and key-presence both read fine, so neither AC-2.2 nor AC-2.3 covered it, and a stale banner inside a FAILED read would have become identity evidence -- the one FR-4 direction that RESOLVES rather than declines. The .ok gate goes in first (verified: a real terminal read --json carries top-level ok:true, and _cmd_worktree_rm already guards this F11 class at :1639), with AC-2.9 and envelope-ok-false-accepted. And test_skill_md_frontmatter_unchanged enforced only half its contract -- `any(startswith("description:"))` accepts an EMPTY description and any rewrite -- now pinned to the exact opening and a length floor, with skill-md-description-reworded to discriminate it. 27 mutations. The three manual mutate-and-restore procedures (AC-2.8, AC-5.4, AC-6.11) now require a re-read of the FILE after the edit and after the restore plus an empty git diff --stat: observing a test flip proves the test reacts to something, not that the file holds what you think, and a silent no-op or a failed restore looks identical to success. Source plan: Convention Prerequisites still said "confirm each new test fails against the unfixed wrapper" -- a blanket RED that would trigger step5d:red_not_all_failing -- while v1.7's history claimed the rule had been back-propagated out. The claim was in the changelog and the instruction was still in the body. AC-2.9 adds a node, so the counts were re-derived from the authoritative rows, not edited: 28 FAIL / 11 PASS over 39, T2 7/1, swept through the per-task list, the derivation comment, the plan and the design.
+- v1.17: Impl-plan audit v20 (codex) — all three must-fixes were consequences of v1.16's own edits. Adding the `.ok` gate changed the filter's opening line, and `jq-r-not-jq-re` and `tail-empty-guard-dropped` still anchored on the OLD prefix: both would have matched ZERO times after implementation, which is silent — an anchor that matches nothing reports its guard as enforced. Re-anchored (the first onto the new `jq -re 'if ...` opening, the second onto the inner `else (...) end`), and a check now exists that resolves every mutation's `find` against the prescribed helper body; it passes 10/10 for the helper anchors, the two misses being the `_orca_find` and Python-harness mutations, which live elsewhere by design. The count sweep was also incomplete: `all 38`, `38 total nodes`, `sees all 38` and `verified to return 38 / 11 / 27` survived three phrasing variants my greps did not cover. Second safety gap of the same family as AC-2.9: `else tostring` accepted every non-null non-array payload, so a malformed tail merely CONTAINING a banner became identity evidence — `else empty` now, with AC-2.10 and `non-array-tail-accepted` (28 mutations). The `.ok` rule and the exact extraction are back-propagated to the design, FR-4 is explicit in the spec as AC-4.4 (neither case reads as an error to the checks that catch the rest: rc is 0 and the key is present), and the source-design citation is corrected. Two stale `_mechanism` strings still described the `< 1.5 s` window the v1.16 seam replaced. Counts re-derived, not edited: 29 FAIL / 11 PASS over 40, T2 8/1, spec 15 ACs.

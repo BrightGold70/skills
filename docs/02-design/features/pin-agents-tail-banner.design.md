@@ -86,8 +86,27 @@ records the key as *present* and did not record its type, and `h-mad/SKILL.md` a
 `.result.terminal.tail[]`. A bare `jq -r '.result.terminal.tail'` on an array prints
 pretty-printed JSON — brackets, quotes, commas — which still substring-matches a signature, so
 the mistake fails no test written from this design and ships a matcher over a shape nobody chose.
-Join it: `(.result.terminal.tail? // empty) | if type == "array" then join("\n") else tostring end`,
-with `// empty` **before** the type branch so an absent key still exits non-zero (`else tostring`
+Check the ENVELOPE VERDICT first, then join:
+
+```
+if (.ok? // false) != true then empty
+else (.result.terminal.tail? // empty) end
+| if type == "array" then join("\n") else empty end
+```
+
+**`.ok` first.** An Orca error envelope exits 0 and still carries a `result` object, so the
+process rc and key-presence both read "fine" while the payload is an error — the F11 class
+`_cmd_worktree_rm` is already guarded against. Here it is worse than a wrong rc: partial or stale
+tail text inside a FAILED read becomes identity evidence and this pass resolves a handle from it.
+That is the only FR-4 direction that RESOLVES; every other one declines. Verified 2026-09-01 that
+a real `terminal read --json` carries top-level `ok: true`. Pinned by impl-plan AC-2.9 and mutation
+`envelope-ok-false-accepted`.
+
+**`else empty`, not `else tostring`.** The measured live shape is an array; `tostring` accepted
+every other non-null type, so a malformed payload that merely CONTAINS a banner became identity
+evidence by the same unsafe route. Pinned by impl-plan AC-2.10 and `non-array-tail-accepted`.
+
+`// empty` stays **before** the type branch so an absent key still exits non-zero (`else tostring`
 on a null yields the string `"null"` at rc 0, re-opening the exact hole `-e` closes).
 
 **`--cursor 0` is load-bearing and must not be dropped.** Without it the call returns the
@@ -292,7 +311,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **28 of 39 nodes fail at RED and 11 pass**, so a blanket
+   Measured on the node enumeration: **29 of 40 nodes fail at RED and 11 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -386,3 +405,4 @@ resolution, or it merely restates Pass 0.
 - v1.13: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
 - v1.14: Impl-plan audit v16 (codex) — two corrections. The live check still required only that pins be cleared with no `HMAD_ORCA_*_TERMINAL` exported, despite v1.13's own history claiming the pin-FILE re-read had landed here; the body now carries it as step 1, with the reason stated — `--clear` mutates the pin FILE and the environment is a different surface, so a surviving file pin short-circuits `_orca_find` exactly as an exported one would and the check would pass with the feature reverted. History claiming a fix the body lacks is the recurring shape in this document's own record. Second, the API comment, the invariant-compliance bullet and the traceability row still said `hmad-dispatch run --timeout` and "`timeout`/`gtimeout` appear nowhere"; both now say in-process `_cmd_run` and "no line INVOKES", matching impl-plan AC-2.7's command-position predicate.
 - v1.15: Impl-plan audit v19 (codex) — node counts re-derived to 28 FAIL / 11 PASS over 39 after AC-2.9 was added (an exit-0 `ok:false` envelope was being accepted as identity evidence).
+- v1.16: Impl-plan audit v20 (codex) — the error-envelope rule was in the impl-plan and not here, so an implementer following the declared source would have omitted a gate the plan calls load-bearing. The exact extraction now appears in the design body with the `.ok` check first and `else empty` in place of `else tostring`, plus the reason for each. Node counts re-derived to 29 / 11 over 40.
