@@ -197,7 +197,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **29 of 40 nodes RED, 11 green**, each of
+  legitimately green before any code exists. Measured: **28 of 40 nodes RED, 12 green**, each of
   the 11 tied to a mutation that must be killed by that specific node. RED observation OR a
   discriminating mutation is what distinguishes new coverage from a restatement of current
   behaviour — one or the other, never neither
@@ -261,3 +261,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.12: Impl-plan audit v20 (codex) — node counts re-derived to 29 FAIL / 11 PASS over 40 and the AC count to 15, after AC-2.10 rejected non-array tail payloads (a malformed payload containing a banner was becoming identity evidence, the same unsafe direction AC-2.9 closed for `ok:false` envelopes).
 - v1.13: Impl-plan audit v21 (codex) — `// empty` is no longer described as an independently load-bearing guard; since the type branch ends `else empty` it is redundant defence in depth, measured identical with and without it, and the mutation that claimed to pin it was equivalent and has been removed.
 - v1.14: Impl-plan audit v22 (codex) — the live-check criterion now requires an ISOLATED pin file that is SEEDED with known dummy pins before clearing. It previously sent the operator at the repository's real `.h-mad/orca-pins.env`, and the isolation fix that corrected that landed only in the impl-plan; on a fresh path, absence before and after proves nothing about whether the clear ran.
+- v1.15: Impl-plan audit v23 (codex) — node counts re-derived to 28 FAIL / 12 PASS over 40 after AC-1.5 was reclassified green at RED: it tests only test-file helpers that T1's own RED patch introduces, so it cannot be observed failing.

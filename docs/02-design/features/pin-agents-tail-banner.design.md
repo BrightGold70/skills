@@ -48,9 +48,15 @@ said `$scoped` for both, so the narrowing was silent drift, not a decision.
 `$scoped` is the right pool on the merits too. It is already worktree-scoped and already
 excludes the caller's own pane, and tail evidence is stronger than a title match — so a pane
 Pass 1 failed to match on an inherited title is exactly the pane this pass should be able to
-identify. Widening does not weaken the safety property: exactly-one still gates the
-resolution, and a wider pool can only turn a resolution into a decline, never into a wrong
-pane.
+identify. Widening does not weaken the safety property — but NOT because a wider pool can only
+turn a resolution into a decline. That claim was here until impl-plan audit v23 and it is
+backwards: adding one uniquely banner-matching pane turns a decline INTO a resolution, which is
+precisely this feature's intended path. The safety rests on three things that hold at any pool
+size: `$scoped` is already bounded to the worktree and excludes the caller's own pane, so
+widening cannot reach a pane the caller had no business resolving; every candidate must match
+the agent's own banner predicate and must NOT match a rival's; and exactly-one still gates the
+resolution, so a second matching pane declines rather than picking. A wider pool changes which
+panes are eligible, never the test each one has to pass.
 
 **What `_agent_pv_re` actually matches — the banner, never the launch command.** The helper is
 reused unchanged, and it matches *program banners* (`openai codex`, `model: *gpt-`, a model id
@@ -315,7 +321,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **29 of 40 nodes fail at RED and 11 pass**, so a blanket
+   Measured on the node enumeration: **28 of 40 nodes fail at RED and 12 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -416,3 +422,4 @@ resolution, or it merely restates Pass 0.
 - v1.16: Impl-plan audit v20 (codex) — the error-envelope rule was in the impl-plan and not here, so an implementer following the declared source would have omitted a gate the plan calls load-bearing. The exact extraction now appears in the design body with the `.ok` check first and `else empty` in place of `else tostring`, plus the reason for each. Node counts re-derived to 29 / 11 over 40.
 - v1.17: Impl-plan audit v21 (codex) — the Components table still said 14 ACs and the Test Plan had no row for spec v1.8's AC-4.4, so the design under-reported the contract it is the source for; both corrected. The `// empty` note is rewritten: it is defence in depth, not an independently pinned guard, because `else empty` on the type branch already discards a null.
 - v1.18: Impl-plan audit v22 (codex) — the live check directed the operator at the ambient pin file, destroying live coordinator and agent pins to verify an unrelated feature. It now runs against an isolated `HMAD_ORCA_PIN_FILE` that is seeded with known dummy pins first, so the clear has something observable to remove.
+- v1.19: Impl-plan audit v23 (codex) — the `$scoped` justification was backwards. It claimed a wider candidate pool 'can only turn a resolution into a decline, never into a wrong pane', but adding one uniquely banner-matching pane turns a decline INTO a resolution — this feature's intended path. Widening is safe for reasons that hold at any pool size: the scope boundary, the wanted/rival banner predicates, and exactly-one gating. Node counts re-derived to 28 / 12 over 40.

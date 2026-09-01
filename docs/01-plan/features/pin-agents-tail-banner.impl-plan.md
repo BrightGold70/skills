@@ -138,6 +138,15 @@ followed verbatim has to name the binding the target module actually has.
 - [ ] AC-1.5: `_orca_read_env("a", "b")` produces an envelope whose `.result.terminal.tail` is the
       JSON array `["a","b"]`, and `_orca_read_dir` writes one file per mapping key named
       `<handle>.json`.
+
+      **Green at RED, necessarily — it cannot be observed failing.** Both helpers are TEST-FILE
+      helpers that T1's own RED patch introduces, so the node passes the moment the patch lands;
+      withholding them yields a `NameError`, which is a missing-symbol failure rather than a
+      behavioural one, and would force test implementation during GREEN. Classifying it `RED:
+      FAIL` made T1's 3/3 split and the 29/11 aggregate unsatisfiable — a correct dispatch would
+      have halted on `red_not_all_failing`. Impl-plan audit v23. It therefore carries mutation
+      proof instead: `stub-read-env-not-array` and `stub-read-dir-writes-one-file`, one per
+      asserted property, both pinned to this node.
 - [ ] AC-1.6: The stub still appends its argv line to `HMAD_STUB_CAPTURE` for a `terminal read`
       call, **including the missing-file case that exits 1** — AC-2.4, AC-3.6, AC-3.7 and AC-3.10
       all assert on that capture, and AC-3.10 in particular must be able to see that a read WAS
@@ -1179,6 +1188,22 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "replace": "  if false && by_pane=\"$(_orca_find_by_pane \"$token\" \"$scoped\" \"$scope_wt\")\" && [ -n \"$by_pane\" ]; then"
   },
   {
+   "name": "stub-read-env-not-array",
+   "_mechanism": "Emit the tail as a joined STRING instead of a JSON array. The measured live shape is an array and production joins it, so a stub that models a string would let a non-array-rejecting implementation pass. Pins the first half of AC-1.5, which is green at RED because the helper is introduced by T1's own patch.",
+   "file": "tests/test_hmad_dispatch.py",
+   "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_helpers_shape",
+   "find": "\"handle\": \"h\", \"tail\": list(lines), \"truncated\": False}}})",
+   "replace": "\"handle\": \"h\", \"tail\": \"\\n\".join(lines), \"truncated\": False}}})"
+  },
+  {
+   "name": "stub-read-dir-writes-one-file",
+   "_mechanism": "Write only the FIRST mapping entry, so a handle the caller supplied is served as UNREADABLE. Several later ACs distinguish readable from unreadable candidates per handle; a stub that silently serves one would make those fixtures mean something other than what they say. Pins the second half of AC-1.5.",
+   "file": "tests/test_hmad_dispatch.py",
+   "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_helpers_shape",
+   "find": "    for handle, text in envelopes.items():",
+   "replace": "    for handle, text in list(envelopes.items())[:1]:"
+  },
+  {
    "name": "stub-branch-swallows-terminal-list",
    "file": "tests/stubs/orca",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_dir_does_not_capture_terminal_list",
@@ -1379,7 +1404,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-1.2 | `test_tail_stub_read_dir_missing_handle_fails` | RED: FAIL | — |
 | AC-1.3 | `test_tail_stub_read_dir_does_not_capture_terminal_list` | RED: PASS | mut `stub-branch-swallows-terminal-list` |
 | AC-1.4 | `test_tail_stub_read_unset_preserves_legacy_behaviour` | RED: PASS | mut `stub-branch-ignores-env-var` |
-| AC-1.5 | `test_tail_stub_read_helpers_shape` | RED: FAIL | — |
+| AC-1.5 | `test_tail_stub_read_helpers_shape` | RED: PASS | muts `stub-read-env-not-array`, `stub-read-dir-writes-one-file` |
 | AC-1.6 | `test_tail_stub_read_still_captures_argv` | RED: PASS | mut `stub-branch-above-capture` |
 | AC-2.1 | `test_tail_sig_reads_array_tail` | RED: FAIL | also kills mut `tail-array-not-joined` |
 | AC-2.2 | `test_tail_sig_read_failure_returns_1` | RED: FAIL | — |
@@ -1535,13 +1560,13 @@ false half is recorded so the next reader does not re-derive it.
 
    | task | nodes | FAIL at RED | PASS at RED | the PASS nodes |
    |---|---|---|---|---|
-   | T1 | 6 | 3 | 3 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv` |
+   | T1 | 6 | 2 | 4 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv`, `…helpers_shape` |
    | T2 | 9 | 8 | 1 | `test_tail_no_timeout_binary_invocation` |
    | T3 | 16 | 10 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
    | T4 | 4 | 4 | 0 | — |
    | T5 | 4 | 3 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **40** | **29** | **11** | |
+   | **total** | **40** | **28** | **12** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1551,14 +1576,14 @@ false half is recorded so the next reader does not re-derive it.
    ```bash
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
    grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 40  total nodes
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 11  --expect-pass
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 29  --expect-fail
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 12  --expect-pass
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 28  --expect-fail
    ```
 
    **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
    `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
-   `--expect-pass`; feeding it 29/11 would guarantee `step5d:red_not_all_failing` on every task
-   (T1 expects 3/3, T2 8/1, …). Derive per task from the same authoritative rows — the AC prefix
+   `--expect-pass`; feeding it 28/12 would guarantee `step5d:red_not_all_failing` on every task
+   (T1 expects 2/4, T2 8/1, …). Derive per task from the same authoritative rows — the AC prefix
    identifies the task:
 
    ```bash
@@ -1570,7 +1595,7 @@ false half is recorded so the next reader does not re-derive it.
    done
    ```
 
-   Expected: T1 3/3 · T2 8/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 29/11 over 40 —
+   Expected: T1 2/4 · T2 8/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 28/12 over 40 —
    and **every row carries exactly ONE AC label** so the per-task regex sees all 40. Two rows
    briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
    under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
@@ -1639,7 +1664,8 @@ false half is recorded so the next reader does not re-derive it.
       pass produced the resolution.
    4. If a pane was created for the check, close it and **re-list terminals to confirm the
       removal** — asserting the cleanup landed, on the same rule that makes the mutation harness
-      re-read the tree after a restore.
+      re-read the tree after a restore. Remove the isolated pin file's `mktemp -d`
+      directory in the same step, or each run leaves an empty temporary directory behind.
 
 ## Version History
 - v1.0: Initial implementation plan draft.
@@ -1662,3 +1688,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.17: Impl-plan audit v20 (codex) — all three must-fixes were consequences of v1.16's own edits. Adding the `.ok` gate changed the filter's opening line, and `jq-r-not-jq-re` and `tail-empty-guard-dropped` still anchored on the OLD prefix: both would have matched ZERO times after implementation, which is silent — an anchor that matches nothing reports its guard as enforced. Re-anchored (the first onto the new `jq -re 'if ...` opening, the second onto the inner `else (...) end`), and a check now exists that resolves every mutation's `find` against the prescribed helper body; it passes 10/10 for the helper anchors, the two misses being the `_orca_find` and Python-harness mutations, which live elsewhere by design. The count sweep was also incomplete: `all 38`, `38 total nodes`, `sees all 38` and `verified to return 38 / 11 / 27` survived three phrasing variants my greps did not cover. Second safety gap of the same family as AC-2.9: `else tostring` accepted every non-null non-array payload, so a malformed tail merely CONTAINING a banner became identity evidence — `else empty` now, with AC-2.10 and `non-array-tail-accepted` (28 mutations). The `.ok` rule and the exact extraction are back-propagated to the design, FR-4 is explicit in the spec as AC-4.4 (neither case reads as an error to the checks that catch the rest: rc is 0 and the key is present), and the source-design citation is corrected. Two stale `_mechanism` strings still described the `< 1.5 s` window the v1.16 seam replaced. Counts re-derived, not edited: 29 FAIL / 11 PASS over 40, T2 8/1, spec 15 ACs.
 - v1.18: Impl-plan audit v21 (codex) — a SIXTH equivalent mutant, and v1.17 created it. Changing the type branch to `else empty` made `tail-empty-guard-dropped` behaviourally identical to the unmutated filter: a null from an absent key is discarded at the type branch whether or not `// empty` catches it first. Verified as a controlled pair on four inputs (missing key, array tail, string tail, ok:false) — byte-identical output and rc 4/0/4/4 both ways. The mutation is removed rather than re-anchored, `// empty` is now documented as defence in depth rather than an independently pinned guard, and the claim that it was one is corrected in the plan and the design (27 mutations). The count sweep missed a FIFTH time — `# 38  total nodes` annotating the very command that returns 40, and a worked example feeding `27/11`. Design was stale on two cross-document surfaces: its Components table still said 14 ACs and its Test Plan had no row for spec v1.8's AC-4.4; both fixed. Two should-fixes taken: the live check now runs against an ISOLATED HMAD_ORCA_PIN_FILE, because clearing the repository's real pin file destroys the operator's live coordinator and agent pins to verify a feature that has nothing to do with them; and AC-3.6's fixture must blind Passes 1 and 2, or `wire-force-fire-after-pass0` survives — with Pass 0 forced to fall through, a matching title or preview resolves before the tail pass and no `terminal read` is ever issued, so the mutant passes the assertion written to catch it.
 - v1.19: Impl-plan audit v22 (codex) — must 3 -> 1, and the one is v1.18's own isolation fix verifying a NO-OP. `HMAD_ORCA_PIN_FILE="$(mktemp -d)/orca-pins.env"` names a file that does not exist, so running `pin-agents --clear` and then observing absence proves nothing: the same observation holds if the clear path is broken or never ran. The step now SEEDS the isolated file with known dummy pins, confirms they are present, clears, and confirms those specific handles are gone — absence is evidence only where presence was established first. That is the seventh consecutive cycle whose finding was created by the previous cycle's fix. The isolation itself had also landed only here, so the plan's Success Criteria and the design still sent an operator at the ambient pin file; both back-propagated. `test_os_evidence_pass_renumbered_to_four` asserted only the ABSENCE of the false sentence, which a deletion satisfies as well as the prescribed correction does; a positive assertion on the replacement wording is added. AC-6.12..AC-6.20 called all nine of its mutations green-at-RED proofs when the last two are pinned to AC-3.16 and AC-4.5, both RED: FAIL — seven proofs plus two independent SIGPIPE guard mutations, now stated that way. Source-design citation corrected. The audit independently re-derived the 290-test baseline, the 40-node table and the 27-mutation count and found all three correct.
+- v1.20: Impl-plan audit v23 (codex) — must 1, and it is a RED CLASSIFICATION that could not hold. AC-1.5 was marked `RED: FAIL` while `test_tail_stub_read_helpers_shape` tests only `_orca_read_env` and `_orca_read_dir`, both TEST-FILE helpers that T1's own RED patch introduces: the node passes the moment the patch lands, and withholding the helpers yields a NameError, which is a missing-symbol failure rather than a behavioural one and would force test implementation during GREEN. T1's 3/3 split and the 29/11 aggregate were therefore unsatisfiable and a correct dispatch would have halted on red_not_all_failing. Reclassified green at RED with two discriminating mutations, one per asserted property — `stub-read-env-not-array` (the measured live shape is an array and production joins it) and `stub-read-dir-writes-one-file` (a handle the caller supplied must not be served as unreadable). Counts re-derived, not edited: 28 FAIL / 12 PASS over 40, T1 2/4, swept through the impl-plan, plan and design. 29 mutations. The design's `$scoped` justification was also backwards — it claimed a wider pool 'can only turn a resolution into a decline', when adding one uniquely banner-matching pane turns a decline INTO a resolution, which is this feature's whole point; the safety is now grounded where it actually lives (the scope boundary, the wanted/rival predicates, and exactly-one), not in a false monotonicity claim. Nit: the live check now removes its `mktemp -d` directory.
