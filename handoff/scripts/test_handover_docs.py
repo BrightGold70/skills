@@ -726,3 +726,32 @@ def test_the_commit_script_is_reachable_from_the_write_phase_list() -> None:
     assert (SKILL.parent / "scripts" / "handoff_commit.py").is_file(), (
         "SKILL.md points at handoff_commit.py but the script is not shipped"
     )
+
+
+# --- Step 7: checking once is not monitoring --------------------------------
+
+
+def test_step_7_exists_and_is_distinguished_from_supervision() -> None:
+    """Step 6 says stop monitoring and Step 5 says the receipt proves nothing.
+    Between them sat a real gap: asking ONCE, later, whether it was picked up."""
+    text = SKILL.read_text(encoding="utf-8")
+    doc = " ".join(text.split())
+    assert "### Step 7 (optional, later): check ONCE that it landed" in text
+    assert "Not a walk-back of Step 6" in doc, (
+        "the step must say why it does not contradict `stop monitoring`")
+    assert "handover_landed.py" in doc
+
+
+def test_unknown_is_not_reported_as_not_yet() -> None:
+    """The asymmetry that makes this safe for a sender who has already let go."""
+    doc = " ".join(SKILL.read_text(encoding="utf-8").split())
+    assert "`UNKNOWN` (rc 2) is not `NOT_YET` (rc 1)" in doc
+    assert "re-deliver work that is already in progress" in doc
+
+
+def test_the_unimplemented_third_signal_is_named_with_its_reason() -> None:
+    """A dropped requirement that is not written down reads as an oversight, and
+    the next reader re-derives it. The blocker is a missing wrapper verb."""
+    doc = " ".join(SKILL.read_text(encoding="utf-8").split())
+    assert "deliberately **not** implemented" in doc
+    assert "no wrapper verb reads an arbitrary terminal handle" in doc

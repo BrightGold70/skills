@@ -1,0 +1,45 @@
+{
+  "_why": "The sender has already released the claim and stopped watching, so this tool is consulted precisely when nobody is looking at the receiving lane. Every mutant here makes it answer confidently in the direction that costs something: a false NOT_YET sends the sender to re-deliver work already in progress (two sessions, one feature, one branch, contradictory conclusions), and a false LANDED closes the loop on a handover that fell on the floor. None of them change the tool's shape — it still prints two signal lines and one verdict.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "scripts/test_handover_landed.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "unknown-collapses-into-not-yet",
+      "_mechanism": "Delete the UNKNOWN verdict, so an unreadable state file and an absent wrapper both render as 'nobody took it'. This is the exact conflation the rest of this skill spends paragraphs refusing, and here it has a cost rather than just being untidy: the one reader of this output has let go of the work and will act on NOT_YET by delivering it again.",
+      "file": "scripts/handover_landed.py",
+      "find": "    if all(s == \"unknown\" for s in signals):",
+      "replace": "    if False:",
+      "_killed_by": "scripts/test_handover_landed.py::test_an_unreadable_state_file_is_unknown_not_not_yet"
+    },
+    {
+      "name": "missing-worktrees-container-reads-as-no-such-worktree",
+      "_mechanism": "Restore the `.get(\"worktrees\", [])` shape. A payload whose container moved (a raw `orca` response nests it under `.result`) then scans an empty list and reports 'no worktree at <path>' — a wrong key and an empty list are the same value and opposite answers, and the tool picks the wrong one silently.",
+      "file": "scripts/handover_landed.py",
+      "find": "    if \"worktrees\" not in payload:",
+      "replace": "    if False:",
+      "_killed_by": "scripts/test_handover_landed.py::test_a_missing_worktrees_container_is_unknown_not_absent"
+    },
+    {
+      "name": "both-signals-required-instead-of-one",
+      "_mechanism": "Demand that BOTH signals say taken. Off Orca the comment signal is permanently `unknown`, so a genuine pickup proven by the claim reads as NOT_YET on every machine without a runtime — the tool becomes useless exactly where it is most needed, and does it by being stricter, which looks like rigour.",
+      "file": "scripts/handover_landed.py",
+      "find": "    if \"taken\" in signals:",
+      "replace": "    if all(s == \"taken\" for s in signals):",
+      "_killed_by": "scripts/test_handover_landed.py::test_no_wrapper_on_path_is_unknown_not_a_crash"
+    },
+    {
+      "name": "the-senders-own-stamp-counts-as-pickup",
+      "_mechanism": "Accept either prefix, so the `handover:` stamp the SENDER wrote in Step 4 is read as proof the receiver acted. The whole tool exists because only receiver-produced signals count; this makes it echo the sender back at themselves and report LANDED on a handover nobody touched.",
+      "file": "scripts/handover_landed.py",
+      "find": "            if comment.startswith(TAKEN):",
+      "replace": "            if comment.startswith(TAKEN) or comment.startswith(HANDED):",
+      "_killed_by": "scripts/test_handover_landed.py::test_the_senders_own_handover_stamp_is_not_pickup"
+    }
+  ]
+}

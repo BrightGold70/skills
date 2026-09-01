@@ -1,0 +1,144 @@
+"""Checking once that a handover landed — and refusing to guess when it can't.
+
+The asymmetry is the whole design. The sender has already released the claim and
+stopped watching, so a false NOT_YET is expensive: it invites them to re-deliver
+work that is already in progress, and two sessions on one feature produce
+contradictory conclusions on one branch. "I could not check" therefore has its
+own verdict and its own exit code, and never borrows NOT_YET's.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parent / "handover_landed.py"
+
+
+def run(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(SCRIPT), *args],
+                          capture_output=True, text=True)
+
+
+def state(tmp_path: Path, record: dict | None) -> str:
+    p = tmp_path / ".bkit-memory.json"
+    body = {"orchestrator_state": {"feat": record} if record is not None else {}}
+    p.write_text(json.dumps(body), encoding="utf-8")
+    return str(p)
+
+
+def fake_dispatch(tmp_path: Path, payload: str, rc: int = 0) -> str:
+    """A stub standing in for the wrapper. The script must go through
+    `hmad-dispatch` and never call `orca` — this skill states that twice."""
+    p = tmp_path / "hmad-dispatch"
+    p.write_text(f"#!/bin/sh\ncat <<'JSON'\n{payload}\nJSON\nexit {rc}\n", encoding="utf-8")
+    p.chmod(p.stat().st_mode | stat.S_IEXEC)
+    return str(p)
+
+
+def ps(path: str, comment: str) -> str:
+    return json.dumps({"worktrees": [{"path": path, "comment": comment}]})
+
+
+# --- the claim signal -------------------------------------------------------
+
+
+def test_a_claim_held_by_someone_else_is_pickup(tmp_path) -> None:
+    s = state(tmp_path, {"owner_session_id": "receiver-1", "owner_heartbeat_ts": "2026-09-01T10:00:00Z"})
+    r = run("--state", s, "--feature", "feat", "--sender-session", "sender-1")
+    assert r.returncode == 0, r.stdout
+    assert "LANDED" in r.stdout and "receiver-1" in r.stdout
+
+
+def test_still_owned_by_the_sender_is_not_pickup(tmp_path) -> None:
+    s = state(tmp_path, {"owner_session_id": "sender-1"})
+    r = run("--state", s, "--feature", "feat", "--sender-session", "sender-1")
+    assert r.returncode == 1 and "NOT_YET" in r.stdout
+
+
+def test_released_and_unclaimed_is_not_pickup(tmp_path) -> None:
+    """The normal state right after a correct handover: the sender released, and
+    nobody has claimed yet."""
+    s = state(tmp_path, {"owner_session_id": None})
+    r = run("--state", s, "--feature", "feat", "--sender-session", "sender-1")
+    assert r.returncode == 1 and "NOT_YET" in r.stdout
+
+
+def test_a_missing_record_is_answered_not_guessed(tmp_path) -> None:
+    s = state(tmp_path, None)
+    r = run("--state", s, "--feature", "feat", "--sender-session", "sender-1")
+    assert r.returncode == 1 and "unclaimed" in r.stdout
+
+
+def test_an_unreadable_state_file_is_unknown_not_not_yet(tmp_path) -> None:
+    """The load-bearing asymmetry: a sender who has let go must not be told the
+    receiver dropped it because a file would not parse."""
+    p = tmp_path / ".bkit-memory.json"
+    p.write_text("{not json", encoding="utf-8")
+    r = run("--state", str(p), "--feature", "feat", "--sender-session", "s1")
+    assert r.returncode == 2, r.stdout
+    assert "UNKNOWN" in r.stdout and "NOT evidence" in r.stdout
+
+
+def test_a_missing_state_file_is_unknown(tmp_path) -> None:
+    r = run("--state", str(tmp_path / "nope.json"), "--feature", "feat", "--sender-session", "s1")
+    assert r.returncode == 2 and "UNKNOWN" in r.stdout
+
+
+# --- the worktree-comment signal --------------------------------------------
+
+
+def test_a_taken_over_stamp_is_pickup(tmp_path) -> None:
+    s = state(tmp_path, {"owner_session_id": None})       # claim says not yet
+    d = fake_dispatch(tmp_path, ps("/repo/wt", "taken over: feat · phase 5 · next: task 2"))
+    r = run("--state", s, "--feature", "feat", "--sender-session", "s1",
+            "--worktree-path", "/repo/wt", "--hmad-dispatch", d)
+    assert r.returncode == 0, r.stdout
+    assert "LANDED" in r.stdout, "one receiver-produced signal is proof"
+
+
+def test_the_senders_own_handover_stamp_is_not_pickup(tmp_path) -> None:
+    s = state(tmp_path, {"owner_session_id": None})
+    d = fake_dispatch(tmp_path, ps("/repo/wt", "handover: feat · delivered · next: pick up"))
+    r = run("--state", s, "--feature", "feat", "--sender-session", "s1",
+            "--worktree-path", "/repo/wt", "--hmad-dispatch", d)
+    assert r.returncode == 1 and "NOT_YET" in r.stdout
+
+
+def test_a_missing_worktrees_container_is_unknown_not_absent(tmp_path) -> None:
+    """`.get("worktrees", [])` would turn a wrong key into 'no such worktree' —
+    the same value, the opposite answer. Asserted instead."""
+    s = state(tmp_path, {"owner_session_id": None})
+    d = fake_dispatch(tmp_path, json.dumps({"result": {"worktrees": []}}))
+    r = run("--state", s, "--feature", "feat", "--sender-session", "s1",
+            "--worktree-path", "/repo/wt", "--hmad-dispatch", d)
+    assert "container" in r.stdout
+    assert r.returncode == 1, "the claim signal still answered, so this is not UNKNOWN"
+
+
+def test_no_wrapper_on_path_is_unknown_not_a_crash(tmp_path) -> None:
+    """Off Orca this is the normal case, and the claim signal alone must still
+    produce a verdict."""
+    s = state(tmp_path, {"owner_session_id": "receiver-1"})
+    r = run("--state", s, "--feature", "feat", "--sender-session", "s1",
+            "--worktree-path", "/repo/wt", "--hmad-dispatch", str(tmp_path / "absent"))
+    assert r.returncode == 0 and "LANDED" in r.stdout
+
+
+def test_both_signals_unavailable_is_unknown(tmp_path) -> None:
+    r = run("--state", str(tmp_path / "nope.json"), "--feature", "feat",
+            "--sender-session", "s1", "--worktree-path", "/repo/wt",
+            "--hmad-dispatch", str(tmp_path / "absent"))
+    assert r.returncode == 2 and "Do not re-deliver" in r.stdout
+
+
+def test_the_script_never_invokes_orca_directly() -> None:
+    """This skill states twice that all Orca access goes through the wrapper."""
+    src = SCRIPT.read_text(encoding="utf-8")
+    import re
+    calls = re.findall(r'"orca[ "]|\borca\s+terminal\b|\borca\s+worktree\b', src)
+    assert not calls, f"direct orca invocation in the script: {calls}"

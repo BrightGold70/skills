@@ -691,6 +691,37 @@ Drop the item from your own todo list — and if Step 4's sink was durable (`.om
 
 **"Stop monitoring" means stop watching the receiver — it does not mean end your turn.** When HANDOVER was invoked *as a step inside another mode* (WRITE's §"Route foreign-worktree work before closing out" does exactly this), it is a **returning subroutine**: finish the handover, then go back and complete every remaining step of the calling mode. Treating "let go" as terminal is how a session closeout gets orphaned — the foreign item moves correctly and the handoff doc is then never saved, committed, or pushed.
 
+### Step 7 (optional, later): check ONCE that it landed
+
+Not a walk-back of Step 6. *Watching* a receiver is supervision and belongs to the
+`orchestration` skill; *asking once, later, whether they took it* is three read-only
+lookups and a different question — and Step 5 has already established that the delivery
+receipt answers neither. Run it when you next think of that lane, not on a timer:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handover_landed.py" \
+  --state "<target-repo>/docs/.bkit-memory.json" --feature "<feature>" \
+  --sender-session "<your-session-id>" --worktree-path "<target-worktree-path>"
+```
+
+It reports only what the RECEIVER produced: the claim moved to a session that is not
+you, or the worktree comment flipped from `handover:` to `taken over:`. One of the two
+is proof; the other being unavailable is the normal case off Orca, so it does not
+demand both.
+
+**`UNKNOWN` (rc 2) is not `NOT_YET` (rc 1), and the difference is the point.** You have
+already released the claim and stopped watching, so being told "nobody took it" because
+a file would not parse is what makes you re-deliver work that is already in progress —
+and two sessions on one feature produce contradictory conclusions on one branch. An
+unreadable state file, an absent wrapper, a worktree that is not listed: all `UNKNOWN`,
+none of them evidence it was dropped.
+
+The receiving pane's own output is a third signal the row that asked for this named, and
+it is deliberately **not** implemented: no wrapper verb reads an arbitrary terminal
+handle (`hmad-dispatch read` resolves a PINNED agent), this skill does not call `orca`
+directly, and a pane can echo a prompt it never acted on. The missing verb is filed as
+the first half of the pane-ID candidate.
+
 ### HANDOVER don'ts
 
 - Don't deliver before releasing the claim — the receiver inherits a deadlock they can only break with `--force`.

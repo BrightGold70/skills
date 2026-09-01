@@ -958,6 +958,18 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   surfaces that already exist (`owner_session_id`, the worktree comment prefix,
   `.result.terminal.tail`). The judgement it must not automate — what to do when the answer is no —
   is outside the check, not inside it.
+  — **LANDED 2026-09-01** as `handoff/scripts/handover_landed.py` + HANDOVER §Step 7, with **two** of the
+  three signals, and the third named rather than quietly dropped. Implemented: the claim moved to a
+  session that is not the sender, and the worktree comment flipped `handover:` -> `taken over:`. NOT
+  implemented: the receiving pane's tail — no wrapper verb reads an arbitrary handle (`hmad-dispatch
+  read` resolves a PINNED agent), this skill does not call `orca` directly, and a pane can echo a
+  prompt it never acted on; that missing verb is the same prerequisite the pane-ID row now carries.
+  The design decision the row did not anticipate: `UNKNOWN` needs its own verdict and its own exit
+  code. The reader of this output has already released the claim and stopped watching, so rendering
+  "I could not check" as "nobody took it" is what sends them to re-deliver work already in progress —
+  two sessions on one feature, one branch, contradictory conclusions. One signal is proof rather than
+  both, because off Orca the comment signal is permanently unavailable and demanding both would make
+  the tool useless exactly where it has no alternative. 12 tests, 4 mutants ALL_CAUGHT.
 - **response-shape census for an Orca verb**: call `orca terminal create --json` N times across
   varied selectors, tabulate one field's presence against the others, join each response to
   `terminal list`, and close every pane afterwards — hand-rolled 8 times in one session to decide
