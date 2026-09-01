@@ -71,11 +71,13 @@ exist to exclude.
 
 **The tail pass uses its OWN line-complete banner grammar, `_agent_tail_re`, for BOTH the wanted
 and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
-neither is a leading-position grammar: measured across 19 prose probes, the shipped regex declines
-0, a line anchor 7, a leading-position grammar 14, and only a LINE-COMPLETE shape — the banner must
+neither is a leading-position grammar: measured across 24 prose probes, the shipped regex declines
+0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
+bounded grammar — the banner must
 consume its whole line, allowing just a version, a `model:` field, an effort word, a `·` and a cwd,
-or a bounded parenthetical — declines all 19, with all 12 real banner and status lines still
-matching. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
+— a dotted-numeric version, a DOTTED model id, an effort word or version parenthetical, and a
+prefix of whitespace or box-drawing only — declines all 24, with all 12 real banner and status
+lines still matching. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
 real agent pane for merely MENTIONING the other agent, the mirror false-negative (impl-plan AC-4.6,
 mutation `rival-re-prose-unsafe`). The
 helper is NOT hardened against prose, and the claim that it was is falsified: measured 2026-09-01,
@@ -164,7 +166,10 @@ $ echo '{"result":{"terminal":{"handle":"h1"}}}' | jq -re '.result.terminal.tail
 rc=1
 ```
 
-`-r` prints the literal `null` and exits **0** for an absent key, so the "no `.terminal.tail`
+`-r` prints the literal `null` and exits **0** for an absent key **in the simple
+`.result.terminal.tail` probe filter measured here** — NOT in the prescribed filter, which adds
+`// empty` and `else empty` and emits zero bytes at rc 0 (see above; `-e` closes the RC hole).
+With that caveat the probe still shows why the "no `.terminal.tail`
 key → unreadable" requirement (FR-4) would be silently bypassed and a keyless response would
 be scored as a pane whose tail is the string "null" — a non-match rather than an unreadable.
 `-e` is what makes the missing key a non-zero status.
@@ -457,3 +462,4 @@ resolution, or it merely restates Pass 0.
 - v1.22: Impl-plan audit v26 (codex) — records that `_agent_pv_re` is NOT hardened against prose (measured 7/7 matches on ordinary sentences) and that the tail pass therefore anchors its matcher to line start, while Passes 1-2 keep the shared helper unchanged. Also corrects the literal-`null` explanation: with `// empty` and `else empty` in place, `jq -r` on a missing tail emits zero bytes at rc 0, so `-e` closes the RC hole rather than a null-printing one. Node counts re-derived to 29 / 12 over 41.
 - v1.23: Impl-plan audit v27 (codex) — Test Plan gains a row for spec AC-1.4 (prose declines, real banners resolve), Components corrected to 16 ACs, node counts re-derived to 30 / 12 over 42.
 - v1.24: Impl-plan audit v28 (codex) — the design still prescribed the anchor-only rule that audit v27 rejected and diagrammed the pass as `tail via _agent_pv_re`, so the declared source would have reproduced the wrong-pane defect. Architecture, matcher rule, rival rule and Test Plan now carry the line-complete `_agent_tail_re` grammar used for BOTH the wanted and rival checks, with the 19/12 measurement. Node counts re-derived to 31 / 12 over 43.
+- v1.25: Impl-plan audit v29 (codex) — matcher description updated to the bounded grammar and the 24/12 corpus, and the stale literal-`null` conclusion in the later Extraction subsection scoped explicitly to the simple probe filter, so the design gives ONE explanation for the load-bearing `-e` guard rather than two.

@@ -74,10 +74,10 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     product name or model id only inside ordinary sentences — `OpenAI Codex documentation
     changed`, `## Gemini 3.1 Pro release notes`, `I am comparing model: gpt-5.6-terra with ours`
     — does not resolve. `_agent_pv_re` alone does NOT satisfy this: measured 2026-09-01 it
-    matches 14 of 14 such probes, and it is shared with Passes 1-2, whose inputs are short
+    matches 24 of 24 such probes, and it is shared with Passes 1-2, whose inputs are short
     titles and previews rather than arbitrary retained scrollback. The tail pass therefore
     applies a banner/status grammar on top of it — the signature must end its line or continue
-    with version/model/effort structure — which declines 14/14 while all 11 real banner and
+    with version/model/effort structure — which declines 24/24 while all 12 real banner and
     status-line controls still match. This is a wrong-pane rule, not a precision preference:
     the candidate pool includes ordinary shell panes and tail evidence is historical, so
     without it a shell that once printed release notes resolves as the agent.
@@ -203,3 +203,4 @@ of failure; leaving it undocumented would.
 - v1.7: Impl-plan audit v16 (codex) — AC-4.3 rewritten. It prescribed `hmad-dispatch run --timeout` (the subprocess form the implementation contract rejects in favour of the in-process `_cmd_run`) and asserted that `timeout`/`gtimeout` "appear nowhere in the implementation" — a SUBSTRING claim that impl-plan AC-2.7 does not make and could not pass, since the predicate is command position and the regex matched 66 lines of the existing file. The AC now names `_cmd_run` and says no line **invokes** either binary, so the comment that tells an implementer why `timeout 2 orca …` is not an option stays legal.
 - v1.8: Impl-plan audit v20 (codex) — FR-4 gained AC-4.4. "Errors" now explicitly includes an envelope that exits 0 carrying `"ok": false`, and a `.terminal.tail` that is not an array. Both were outside the generic wording because neither reads as an error to the checks that catch the rest — the process rc is 0 and the key is present — and both are the only FR-4 directions that would RESOLVE rather than decline.
 - v1.9: Impl-plan audit v27 (codex) — FR-1 gains AC-1.4. The spec still presented `_agent_pv_re` as a program-banner discriminator and carried no prose-rejection criterion, so the load-bearing false-positive rule was absent from the authoritative contract while the impl-plan implemented it. AC-1.4 states the tail-only matcher constraint (the signature must end its line or continue with version/model/effort structure) and the measurement behind it: `_agent_pv_re` alone matches 14 of 14 prose probes; the grammar declines all 14 while 11 real banner and status lines still match.
+- v1.10: Impl-plan audit v29 (codex) — AC-1.4's measurement corrected to the current corpus: `_agent_pv_re` matches 24 of 24 prose probes, the tail grammar declines all 24, and all 12 real banner and status controls still match. The spec had been citing a superseded 14/11 corpus.
