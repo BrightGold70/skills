@@ -286,7 +286,7 @@ actually refused to run.
 | a cited PID is dead / its log is cold | `ps` answered, and the doc is recent enough for the PID to mean anything | do not restore "monitor PID N" — restore "verify what it produced" instead |
 | a cited path moved | `git log --follow --diff-filter=R` names the rename | rewrite the todo's path, and say so in the todo |
 | a cited PR is merged or closed | `gh` answered (not: `gh` is missing) | drop the todo |
-| an agent pane is unresolved | **exactly one** candidate matches by content (`orca terminal read` → `.result.terminal.tail`) | pin that one |
+| an agent pane is unresolved | **exactly one** candidate matches by content — the raw `orca terminal read` → `.result.terminal.tail`, because no wrapper verb reads an arbitrary handle yet (`hmad-dispatch read` resolves a pinned AGENT, not a handle); that gap is filed as a candidate | pin that one |
 
 **Never resolve — report these, every time.**
 
@@ -296,7 +296,8 @@ actually refused to run.
   fast-forward" is not a defence when their working tree changes under a running agent.
   **The gate that would have made this resolvable was proposed, specified, and refused —
   2026-09-01.** The proposal: resolve it when no agent is live in that worktree, checked with
-  `orca terminal read` over its panes. It cannot work, and the reason generalises past Orca: a tail
+  the raw `orca terminal read` over its panes — raw because, as above, no wrapper verb addresses a
+  handle. It cannot work, and the reason generalises past Orca: a tail
   proves an agent is **present** (a banner), never that one is **absent** — a quiet tail is an idle
   agent between turns, and a non-Orca session (a plain shell, an editor terminal, another Claude
   Code in that directory) is invisible to every Orca-side check. So the gate answers "present" or

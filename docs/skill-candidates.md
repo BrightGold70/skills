@@ -873,6 +873,12 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `.result.terminal.tail` for each agent's banner, keeping the exactly-one guard. Confirmed live
   again on 2026-09-01: `pin-agents` still reports `codex UNRESOLVED` on this repo and the pin
   survives only because the carry fix now keeps it — auto-detect itself is still blind.
+  — **prerequisite named 2026-09-01**: no wrapper verb reads an ARBITRARY handle. `hmad-dispatch read`
+  resolves a pinned AGENT (`codex`/`agy`) via `_resolve_target`, so every place this skill and h-mad
+  prescribe reading a candidate pane names the raw `orca terminal read` instead — which the
+  handoff skill's own "never call orca directly" guard then flags. That guard was RED from
+  2026-08-31 for exactly this reason and nobody saw it (see the suite-collection row). Whatever
+  shape this Pass-N takes, a handle-addressed read verb is its first half.
 - **`exec-pane` was the surface with no J1 guard at all**: `_cmd_exec_pane` read
   `.result.terminal.handle` from the create response and used it directly — registering it in the
   pane pool and dispatching to it — while `_cmd_launch` refused that same field as unpinnable. The
@@ -1104,3 +1110,18 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   never touches the lane it describes. Filed here rather than left in the handoff because a Next Step
   that is refused on inspection leaves no trace otherwise, and the idea is attractive enough to be
   had again.
+- **the suite command excluded a whole test directory, and every "full suite passed" was blind to it**:
+  the habitual invocation was `pytest h-mad/tests handoff/tests`, and `handoff/scripts` holds 110 more
+  tests beside the scripts they pin. `test_orca_is_only_ever_reached_through_the_wrapper` had been RED
+  there since **2026-08-31** — bisected, and it predates this session — while four commits and a
+  handoff document's own closing verification all reported a green suite. Not a failing gate: a
+  passing one that was never asked the question, which is the same shape as the fence-blind section
+  bound found the same day (a bound nobody set wrong, just set narrow) — candidate: yes —
+  **LANDED 2026-09-01** as `pytest.ini` with `testpaths = h-mad/tests handoff/tests handoff/scripts`
+  plus `test_suite_collection.py`, which asserts COMPLETENESS WITHIN each declared skill rather than
+  across the repo: this checkout also vendors three independent projects with their own dependency
+  sets, and dragging them into a bare `pytest` is their owners' decision, not a side effect of this
+  fix. `testpaths` applies only when pytest gets no path arguments, so an install-path run
+  (`pytest ~/.claude/skills/h-mad/tests/`) is unchanged. 1 mutant, ALL_CAUGHT — it restores the exact
+  pre-fix `testpaths` line, because a guard that cannot fail on the configuration that caused the bug
+  is decoration. Bare `pytest` now collects **2513**, up from 2403.
