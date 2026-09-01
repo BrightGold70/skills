@@ -85,7 +85,10 @@ Since `$scoped` includes ordinary shell panes and tail evidence is historical, a
 printed release notes was resolvable AS THE AGENT — the wrong-pane class FR-2 forbids. The regex
 is hardened against the two examples that motivated it, and that was generalised into a safety
 premise it does not support. Measured over 24 prose probes and 12 real banner/status lines: the shipped helper declines 0,
-this grammar declines all 24, and all 12 positives still match (impl-plan AC-3.17). Both regexes were verified against the REAL panes on
+this grammar declines all 24, and all 12 positives still match (impl-plan **AC-2.12**, which
+owns the helper's own 24/12 corpus in the task that defines it; AC-3.17 is the CALLER-connection
+node and uses a mixed banner-plus-prose-decoy fixture, so pointing the corpus at it sends
+verification to the wrong test surface — impl-plan audit v38). Both regexes were verified against the REAL panes on
 2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
@@ -301,3 +304,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.24: Impl-plan audit v32 (codex) — 'the work is running the EXISTING helper against `.tail`' was still the headline description of a feature that no longer does that; corrected to the tail-only `_agent_tail_re`. Green-at-RED split corrected to 12 + 1 against the count of 13.
 - v1.25: Impl-plan audit v33 (codex) — the green-at-RED proof map assigned the AC-2.8 procedure to 'the twelfth' node immediately after stating twelve are mutation-backed, leaving the thirteenth unaccounted; it is the thirteenth. Counts re-derived to 32 FAIL / 13 PASS over 45.
 - v1.26: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. This document's flat parenthetical is replaced by a pointer to the normative block plus the fold.
+- v1.27: Impl-plan audit v38 (codex) should-fix: this document pointed the direct 24-negative/12-positive matcher corpus at impl-plan AC-3.17, but v1.30 moved that corpus to AC-2.12, in the task that OWNS the helper; AC-3.17 is the caller-connection node and uses a mixed banner-plus-prose-decoy fixture. The stale pointer sent verification to the wrong test surface.
