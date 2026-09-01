@@ -778,6 +778,16 @@ _cmd_verify() {
   return 1
 }
 
+_cmd_resolved_model() {  # <codex|agy> [--log <f>] — what model actually ran
+  # With nothing pinned, `exec` inherits each agent's own configuration, so the
+  # resolved model is the only evidence of what a 5d/5e dispatch ran — and a model
+  # that cannot execute a tool still returns a well-formed STATUS: BLOCKED. The
+  # helper prints ONE validated line or exits 2 naming what it could not
+  # establish; it never guesses, because a wrong model here is read as fact.
+  _need "${1:-}" agent || return $?
+  python3 "$(dirname "${BASH_SOURCE[0]}")/h_mad_resolved_model.py" "$@"
+}
+
 _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the pin file
   # H4: auto-detect by preview decays once an agent does work. Call this after the
   # Phase-5 substrate check to freeze the resolved handles into the session pin
@@ -3484,6 +3494,7 @@ main() {
     launch) _cmd_launch "$@" ;;
     pin) _cmd_pin "$@" ;;
     pin-agents) _cmd_pin_agents "$@" ;;
+    resolved-model) _cmd_resolved_model "$@" ;;
     send)   _cmd_send "$@" ;;
     ask)    _cmd_ask "$@" ;;
     exec)   _cmd_exec "$@" ;;

@@ -810,6 +810,22 @@ threshold of a third vendored patch; untouched this session.
   prose, where they cannot run; `hmad-dispatch resolved-model <agent>` or a line in `env` is a
   direct port. Recurrence 5 in one session, and with nothing pinned the resolved model is the only
   evidence of what a 5d/5e dispatch actually ran.
+  — **LANDED 2026-09-01** as `h_mad_resolved_model.py` + `hmad-dispatch resolved-model`, and the row's
+  premise was **half false**: the codex extractor did port as one line, the agy one did not. Measured
+  against the real 620-log corpus before writing it. (1) The agy log **tears mid-line** under
+  concurrent writers, so the documented `label="[^"]+"` matched across a newline and produced eight
+  fragments such as `GeminERROR: logging before google.Init: …` — a naive port reports one of those as
+  the model, with rc=0. Bounding the capture to one line and 60 chars removes all eight and keeps
+  every real label (2,670 matches, three distinct values). (2) `ls -t` was never the issue people
+  thought: mtime order and NAME order **disagree**, because a long-lived agy pane and a short
+  `exec agy` log side by side — so "the newest log" answers a different question depending which you
+  pick, and the tool now names the file that answered and REFUSES when the two most recent disagree.
+  An `exec agy --log` is stream-json with no model field; passing one is refused rather than silently
+  answered from the cli corpus. `configured` and `resolved` are separate words in the output because a
+  config says what will run, never what did. 10 tests, 4 mutants ALL_CAUGHT. A fifth mutant survived
+  and was the useful one: it targeted a substring blacklist over the label, and measuring the corpus
+  showed that guard rejected **nothing** the bound had not already excluded — so the dead guard was
+  deleted rather than a fixture invented to make it bite.
 - **config-flip propagation probe**: proving "changing the CLI setting moves the dispatch" needs backup → flip → probe → restore → sha256-verify-identical, run once per agent against two different config formats (TOML for codex, JSON for agy) — recurrence: 2 (one session) — candidate: maybe — the shape is general (any inherited-setting claim needs it, and current-state resolution is NOT propagation), but n=2 on one afternoon is thin, and the risky half is the restore, which a script makes no safer than a `trap … EXIT INT TERM` already does. Re-file if a third inherited setting shows up.
   — **DECLINED 2026-09-01 (triage: useful, not codable)** — the row's own analysis: the risky half is
   the restore, and a script makes that no safer than the `trap … EXIT INT TERM` already does. n=2 in

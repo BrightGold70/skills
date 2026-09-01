@@ -1,0 +1,45 @@
+{
+  "_why": "Every mutant here makes the tool ANSWER where it should refuse, and an answer from this tool is read as fact — it is the only evidence of what a 5d/5e dispatch ran once nothing is pinned. None of them break a shape a normal test would notice: the output line still parses, still names a plausible model, still exits 0. Two of them restore the extractor exactly as it was written in prose, which is how this was going to ship before the real 620-log corpus was measured on 2026-09-01. A fifth mutant was written and then removed with the guard it targeted: a substring blacklist over the captured label survived, and measuring the real corpus showed it rejected nothing the bound had not already excluded. Deleting the dead guard was the correct response to the survivor — adding a fixture to make it bite would have manufactured a test for a code path production never reaches.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_resolved_model.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "label-capture-goes-greedy-across-newlines",
+      "_mechanism": "The prose version of this regex verbatim. `[^\"]+` runs past the end of the torn line and swallows everything up to the NEXT quote, which is in a different log record — so a good label sitting after a torn one is consumed as part of the garbage and disappears entirely. The bounded charset is what keeps a tear local.",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "AGY_LABEL = re.compile(r'Propagating selected model override to backend: label=\"([^\"\\n]{1,60})\"')",
+      "replace": "AGY_LABEL = re.compile(r'Propagating selected model override to backend: label=\"([^\"]+)\"')",
+      "_killed_by": "tests/test_h_mad_resolved_model.py::test_a_torn_line_does_not_hide_a_good_one"
+    },
+    {
+      "name": "disagreement-between-the-two-newest-logs-ignored",
+      "_mechanism": "Never compare against the runner-up, so the newest file by mtime always wins. Measured: a long-lived agy pane and a short `exec agy` run log side by side, and mtime order disagreed with name order — so this silently picks one session's model and presents it as the dispatch's. The refusal is the only honest answer when nothing attributes a log to a run.",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    for other in files[1:2]:",
+      "replace": "    for other in []:",
+      "_killed_by": "tests/test_h_mad_resolved_model.py::test_two_recent_logs_disagreeing_refuses_instead_of_picking"
+    },
+    {
+      "name": "configured-reported-as-resolved",
+      "_mechanism": "Collapse the one word that carries the epistemics. A config states what WILL run and is routinely out of date with a dispatch that overrode it; labelling it `resolved` turns a guess into evidence at exactly the moment someone is trying to establish what a BLOCKED verdict actually came from.",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    _emit(\"codex\", m.group(1), e.group(1) if e else \"-\", \"configured\", str(cfg))",
+      "replace": "    _emit(\"codex\", m.group(1), e.group(1) if e else \"-\", \"resolved\", str(cfg))",
+      "_killed_by": "tests/test_h_mad_resolved_model.py::test_codex_without_a_log_says_configured_not_resolved"
+    },
+    {
+      "name": "agy-stream-json-log-falls-back-instead-of-refusing",
+      "_mechanism": "Accept an `exec agy --log` and quietly answer from the cli log corpus instead. The caller asked about THIS dispatch and gets the model of whatever agy process wrote last — the question changes and nothing in the output says so. Refusing is what keeps the source and the question aligned.",
+      "file": "scripts/h_mad_resolved_model.py",
+      "find": "    if a.log:\n        # Refusing beats answering from a different source",
+      "replace": "    if False:\n        # Refusing beats answering from a different source",
+      "_killed_by": "tests/test_h_mad_resolved_model.py::test_agy_refuses_a_stream_json_dispatch_log"
+    }
+  ]
+}
