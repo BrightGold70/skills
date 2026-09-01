@@ -186,7 +186,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 
 ## Success Criteria
 
-- All 15 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-4.4, AC-5.1, AC-5.2 — counted from the spec by the
+- All 16 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-1.4, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-4.4, AC-5.1, AC-5.2 — counted from the spec by the
   ROW-ANCHORED derivation
 
       grep -oE '^ *- AC-[0-9]\.[0-9]' <spec> | grep -oE 'AC-[0-9]\.[0-9]' | sort -u | wc -l
@@ -207,7 +207,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **29 of 41 nodes RED, 12 green**, and the
+  legitimately green before any code exists. Measured: **30 of 42 nodes RED, 12 green**, and the
   12 split **11 + 1**: eleven are each tied to a mutation that must be killed by that specific
   node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
@@ -281,3 +281,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.16: Impl-plan audit v24 (codex) — the green-at-RED accounting said "each of the 11" beside a count of 12, leaving the twelfth node's reject direction unstated on the declared source. It is 11 + 1: eleven mutation-backed nodes, and `test_tail_no_timeout_binary_invocation`, whose proof is impl-plan AC-2.8's insert/observe/remove procedure. The live check also now removes the isolated pin file's `mktemp -d` directory.
 - v1.17: Impl-plan audit v25 (codex) — the live check's `mktemp -d` cleanup now requires re-reading the path to confirm the directory is gone. Removing a directory mutates state, so the command is not its own proof; `rm -rf` on a path that was never created succeeds silently.
 - v1.18: Impl-plan audit v26 (codex) — the 'hardened against prose' premise was FALSE and load-bearing. `_agent_pv_re` matches ordinary prose about the agents (7/7 probes), so with `$scoped` covering shell panes and tail evidence being historical, a shell that printed release notes was resolvable as the agent. The tail pass now anchors the matcher to line start (0/7 prose, 7/7 real banners); the shared helper is unchanged. Node counts re-derived to 29 FAIL / 12 PASS over 41.
+- v1.19: Impl-plan audit v27 (codex) — the line anchor alone did not close the prose class: line-LEADING prose still matched, because the v1.18 corpus only contained mid-sentence shapes. The tail pass now applies a banner grammar (14/14 prose declines, 11/11 real banners still match). Counts re-derived to 30 FAIL / 12 PASS over 42, and the AC list gains spec AC-1.4.

@@ -213,7 +213,7 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 | Pass 4 comment | `h-mad/scripts/hmad-dispatch.sh` | modify | "every pass above found nothing" is no longer true |
 | Retention-cap comment at the new pass | `h-mad/scripts/hmad-dispatch.sh` | new | AC-5.1 + AC-5.2: records the measured 2000-line cap, that agent TUIs do not normally reach it, that a shell-heavy pane fails to UNRESOLVED, and that BELOW the cap a stale banner still resolves |
 | `_orca_find` prose | `h-mad/SKILL.md` | modify | line ~320 reads "joins them as **Pass 0**, ahead of the title and preview passes" — incomplete once a tail pass exists between preview and OS evidence |
-| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 15 ACs (count from the spec, never carry it — this cell was stale once) |
+| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 16 ACs (count from the spec, never carry it — this cell was stale once) |
 | mutation spec | `h-mad/tests/mutation-specs/tail_signature_pass.json` | new | guard discrimination |
 
 ## Implementation Order
@@ -326,6 +326,7 @@ separate manual step in Success Criteria.
 | 13 | retention limit documented at the pass | AC-5.1 |
 | 14 | stale-pane limit documented at the pass | AC-5.2 |
 | 15 | exit-0 `"ok":false` envelope, and a non-array `.terminal.tail`, both decline rather than resolving | AC-4.4 (impl-plan AC-2.9, AC-2.10) |
+| 16 | tail carrying the agent's name only in PROSE declines; real banner and status lines still resolve | AC-1.4 (impl-plan AC-3.17) |
 
 Test 7 is the one that can pass vacuously — assert on the STUB's call count, not on the
 resolution, or it merely restates Pass 0.
@@ -337,7 +338,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **29 of 41 nodes fail at RED and 12 pass**, so a blanket
+   Measured on the node enumeration: **30 of 42 nodes fail at RED and 12 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -445,3 +446,4 @@ resolution, or it merely restates Pass 0.
 - v1.20: Impl-plan audit v24 (codex) — the live check now removes the isolated pin file's `mktemp -d` directory, matching the impl-plan; without it each run leaks one empty temporary directory.
 - v1.21: Impl-plan audit v25 (codex) — same as the plan: the isolated pin file's `mktemp -d` cleanup must be confirmed by re-reading, not assumed from the command's success.
 - v1.22: Impl-plan audit v26 (codex) — records that `_agent_pv_re` is NOT hardened against prose (measured 7/7 matches on ordinary sentences) and that the tail pass therefore anchors its matcher to line start, while Passes 1-2 keep the shared helper unchanged. Also corrects the literal-`null` explanation: with `// empty` and `else empty` in place, `jq -r` on a missing tail emits zero bytes at rc 0, so `-e` closes the RC hole rather than a null-printing one. Node counts re-derived to 29 / 12 over 41.
+- v1.23: Impl-plan audit v27 (codex) — Test Plan gains a row for spec AC-1.4 (prose declines, real banners resolve), Components corrected to 16 ACs, node counts re-derived to 30 / 12 over 42.
