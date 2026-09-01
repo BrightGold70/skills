@@ -1334,22 +1334,33 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
 }
 ```
 
-**Six mutations target T2's time-and-extraction controls — five in the helper, one in the
-PYTHON TEST HARNESS — and none of them is a green-at-RED proof.** The
-proof column exists to discriminate nodes that pass before any code is written; these four nodes
-are RED: FAIL and need no such proof. They are mutated anyway because Task 6's own claim is that
-every new guard is stubbed to its PERMISSIVE value, and impl-plan audit v17 found five that were
-not: the array `join("\n")`, the `${HMAD_TAIL_READ_TIMEOUT:-2}` default, the `_cmd_run` bound
-itself, and the harness's ambient-environment scrub. (A fifth targeted `// empty`; audit v21
-showed it was EQUIVALENT once v1.17's `else empty` landed, and it is gone.) Audit v18 added
-a sixth, `timeout-override-ignored` — the default and the bound were each mutated, but nothing
-mutated the caller's OVERRIDE being honoured. The harness one is `file:
-tests/test_hmad_dispatch.py`, not the wrapper: the scrub it removes lives in test code, and
-saying "helper guards" of all six was wrong. Each is an
-INDEPENDENT control — removing any one leaves the other four intact and the pass still resolving
-a healthy pane — so a whole-helper revert cannot stand in for them. The rows above name them,
-because the last time a mutation targeted a node whose proof column said `—`, the prose beside it
-still claimed no mutation targeted it (v10).
+**FIVE mutations target T2's time-and-extraction controls — four in the wrapper, one in the
+PYTHON TEST HARNESS — pinned to THREE nodes, and none of them is a green-at-RED proof.**
+
+| mutation | file | node |
+|---|---|---|
+| `tail-array-not-joined` | wrapper | AC-2.1 |
+| `timeout-default-dropped` | wrapper | AC-2.5 |
+| `harness-ambient-timeout-not-scrubbed` | `tests/test_hmad_dispatch.py` | AC-2.5 |
+| `time-bound-removed` | wrapper | AC-2.6 |
+| `timeout-override-ignored` | wrapper | AC-2.6 |
+
+The proof column exists to discriminate nodes that pass before any code is written; these three
+nodes are RED: FAIL and need no such proof. They are mutated anyway because Task 6's own claim is
+that every new guard is stubbed to its PERMISSIVE value, and impl-plan audit v17 found four that
+were not: the array `join("\n")`, the `${HMAD_TAIL_READ_TIMEOUT:-2}` default, the `_cmd_run` bound
+itself, and the harness's ambient-environment scrub. Audit v18 added `timeout-override-ignored` —
+the default and the bound were each mutated, but nothing mutated the caller's OVERRIDE being
+honoured. A sixth, targeting `// empty`, was removed at audit v21: v1.17's `else empty` made it
+EQUIVALENT.
+
+Each is an INDEPENDENT control — removing any one leaves the other four intact and the pass still
+resolving a healthy pane — so a whole-helper revert cannot stand in for them. **The counts in this
+paragraph are the ones that went stale**: it said six mutations, five in the helper, four nodes,
+while its own "the other four" implied five, and impl-plan audit v24 caught the contradiction. The
+table above is now the enumeration, so the numbers and the list cannot drift apart. The rows above
+also name each mutation, because the last time one targeted a node whose proof column said `—`,
+the prose beside it still claimed no mutation targeted it (v10).
 
 **`wire-disconnect-callee-intact` and `wire-force-fire-after-pass0` are the base invariant's
 bidirectional connection requirement, and neither is covered by any other mutation here.**
@@ -1689,3 +1700,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.18: Impl-plan audit v21 (codex) — a SIXTH equivalent mutant, and v1.17 created it. Changing the type branch to `else empty` made `tail-empty-guard-dropped` behaviourally identical to the unmutated filter: a null from an absent key is discarded at the type branch whether or not `// empty` catches it first. Verified as a controlled pair on four inputs (missing key, array tail, string tail, ok:false) — byte-identical output and rc 4/0/4/4 both ways. The mutation is removed rather than re-anchored, `// empty` is now documented as defence in depth rather than an independently pinned guard, and the claim that it was one is corrected in the plan and the design (27 mutations). The count sweep missed a FIFTH time — `# 38  total nodes` annotating the very command that returns 40, and a worked example feeding `27/11`. Design was stale on two cross-document surfaces: its Components table still said 14 ACs and its Test Plan had no row for spec v1.8's AC-4.4; both fixed. Two should-fixes taken: the live check now runs against an ISOLATED HMAD_ORCA_PIN_FILE, because clearing the repository's real pin file destroys the operator's live coordinator and agent pins to verify a feature that has nothing to do with them; and AC-3.6's fixture must blind Passes 1 and 2, or `wire-force-fire-after-pass0` survives — with Pass 0 forced to fall through, a matching title or preview resolves before the tail pass and no `terminal read` is ever issued, so the mutant passes the assertion written to catch it.
 - v1.19: Impl-plan audit v22 (codex) — must 3 -> 1, and the one is v1.18's own isolation fix verifying a NO-OP. `HMAD_ORCA_PIN_FILE="$(mktemp -d)/orca-pins.env"` names a file that does not exist, so running `pin-agents --clear` and then observing absence proves nothing: the same observation holds if the clear path is broken or never ran. The step now SEEDS the isolated file with known dummy pins, confirms they are present, clears, and confirms those specific handles are gone — absence is evidence only where presence was established first. That is the seventh consecutive cycle whose finding was created by the previous cycle's fix. The isolation itself had also landed only here, so the plan's Success Criteria and the design still sent an operator at the ambient pin file; both back-propagated. `test_os_evidence_pass_renumbered_to_four` asserted only the ABSENCE of the false sentence, which a deletion satisfies as well as the prescribed correction does; a positive assertion on the replacement wording is added. AC-6.12..AC-6.20 called all nine of its mutations green-at-RED proofs when the last two are pinned to AC-3.16 and AC-4.5, both RED: FAIL — seven proofs plus two independent SIGPIPE guard mutations, now stated that way. Source-design citation corrected. The audit independently re-derived the 290-test baseline, the 40-node table and the 27-mutation count and found all three correct.
 - v1.20: Impl-plan audit v23 (codex) — must 1, and it is a RED CLASSIFICATION that could not hold. AC-1.5 was marked `RED: FAIL` while `test_tail_stub_read_helpers_shape` tests only `_orca_read_env` and `_orca_read_dir`, both TEST-FILE helpers that T1's own RED patch introduces: the node passes the moment the patch lands, and withholding the helpers yields a NameError, which is a missing-symbol failure rather than a behavioural one and would force test implementation during GREEN. T1's 3/3 split and the 29/11 aggregate were therefore unsatisfiable and a correct dispatch would have halted on red_not_all_failing. Reclassified green at RED with two discriminating mutations, one per asserted property — `stub-read-env-not-array` (the measured live shape is an array and production joins it) and `stub-read-dir-writes-one-file` (a handle the caller supplied must not be served as unreadable). Counts re-derived, not edited: 28 FAIL / 12 PASS over 40, T1 2/4, swept through the impl-plan, plan and design. 29 mutations. The design's `$scoped` justification was also backwards — it claimed a wider pool 'can only turn a resolution into a decline', when adding one uniquely banner-matching pane turns a decline INTO a resolution, which is this feature's whole point; the safety is now grounded where it actually lives (the scope boundary, the wanted/rival predicates, and exactly-one), not in a false monotonicity claim. Nit: the live check now removes its `mktemp -d` directory.
+- v1.21: Impl-plan audit v24 (codex) — both must-fixes were stale PROSE left behind by my own earlier edits, not new defects. Task 6's control-family paragraph still said six mutations, five in the helper, and four nodes, after v1.19 deleted the equivalent `// empty` mutation; its own sentence "removing any one leaves the other four" already implied five. Verified against the spec: FIVE mutations, FOUR in the wrapper and one in the Python harness, pinned to THREE nodes (AC-2.1, AC-2.5, AC-2.6). The paragraph now carries a mutation/file/node TABLE, so the count and the enumeration are one surface and cannot drift apart again — the same remedy the RED table already uses. The source plan was also one proof short: it reported 12 green-at-RED nodes and then said "each of the 11" is tied to a mutation, leaving `test_tail_no_timeout_binary_invocation` with no stated proof on the surface that is the declared source. It is 11 + 1 — eleven mutation-backed, and one carrying AC-2.8's insert/observe/remove procedure. The isolated pin file's `mktemp -d` cleanup, added here at v1.20, is back-propagated to the plan and design.
