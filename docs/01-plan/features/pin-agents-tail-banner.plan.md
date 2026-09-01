@@ -87,16 +87,16 @@ printed release notes was resolvable AS THE AGENT — the wrong-pane class **FR-
 forbids, NOT FR-2: one prose pane matching is exactly ONE match, so FR-2's cardinality rule is
 satisfied while the resolution is still wrong (impl-plan audit v41). The regex
 is hardened against the two examples that motivated it, and that was generalised into a safety
-premise it does not support. Measured over 24 prose probes and 12 real banner/status lines: the shipped helper declines 0,
-this grammar declines all 24, and all 12 positives still match (impl-plan **AC-2.12**, which
-owns the helper's own 24/12 corpus in the task that defines it; AC-3.17 is the CALLER-connection
+premise it does not support. Measured over 29 prose probes and 12 real banner/status lines: the shipped helper declines 0,
+this grammar declines all 29, and all 12 positives still match (impl-plan **AC-2.12**, which
+owns the helper's own 29/12 corpus in the task that defines it; AC-3.17 is the CALLER-connection
 node and uses a mixed banner-plus-prose-decoy fixture, so pointing the corpus at it sends
 verification to the wrong test surface — impl-plan audit v38). Both regexes were verified against the REAL panes on
 2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
 `Gemini 3.1 Pro (High)`). The work is running a TAIL-ONLY matcher, `_agent_tail_re`, against
-`.tail` — not the existing helper, which matches prose 24/24 — instead
+`.tail` — not the existing helper, which matches prose 29/29 — instead
 of `.preview`. An earlier check of this against a hand-written reconstruction reported
 "agy: NO MATCH" and was wrong — the reconstruction is not the production surface.
 
@@ -309,3 +309,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.26: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. This document's flat parenthetical is replaced by a pointer to the normative block plus the fold.
 - v1.27: Impl-plan audit v38 (codex) should-fix: this document pointed the direct 24-negative/12-positive matcher corpus at impl-plan AC-3.17, but v1.30 moved that corpus to AC-2.12, in the task that OWNS the helper; AC-3.17 is the caller-connection node and uses a mixed banner-plus-prose-decoy fixture. The stale pointer sent verification to the wrong test surface.
 - v1.28: Impl-plan audit v41 (codex) should-fix: this document still called the prose false positive 'the wrong-pane class FR-2 forbids', and its goals list mapped 'never resolve to the wrong pane' to FR-2 alone. FR-2 is the exactly-one CARDINALITY rule — one prose pane matching is one match, so FR-2 is satisfied while the resolution is wrong. It is FR-1 / spec AC-1.4. The impl-plan corrected this at v1.41 and the sweep stopped at that document; this is the paired surface it missed.
+- v1.29: Impl-plan audit v42 (codex): the tail matcher accepted unbalanced parentheses and non-dotted pseudo-versions that the stated grammar excludes. Corpus grown 24 -> 29 with those shapes and this document's figures swept to match; _agent_pv_re's prose-match figure was re-measured over the new corpus (29/29), not edited.
