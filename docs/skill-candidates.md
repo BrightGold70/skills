@@ -983,6 +983,17 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   — **TRIAGED 2026-09-01: useful and codable — stays open.** recurrence 8 in one session, and the half
   that goes wrong is cleanup, which is exactly what a create/record/close-in-a-trap loop fixes. Its
   value is making a larger N cheap: 5/5 said one thing and the 8th said the opposite.
+  — **LANDED 2026-09-01** as `h_mad_response_probe.py`, built around the half the row said goes wrong.
+  A `trap` is not enough and the tests say why: it does not survive a kill, and it cannot help at all
+  with the window between a pane existing and the process learning its handle. So every attempt is
+  journalled to disk BEFORE the create, cleanup runs from `finally` AND from installed SIGINT/SIGTERM
+  handlers, `--resume <journal>` closes what an earlier run could not, and an attempt with no handle is
+  reported as a POSSIBLE leak rather than dropped. Closes are journalled too, so `--resume` is
+  idempotent — a second one must not close a handle the runtime has since reissued to someone else's
+  pane, which would make the cleanup tool worse than the leak. Kept command-agnostic (create/close as
+  argv templates) so it is testable with no runtime and is not welded to one verb. 7 tests, 5 mutants
+  ALL_CAUGHT, one per escape route: no intent line, no cleanup on the normal path, a no-op `--resume`,
+  unrecorded closes, and no signal handlers.
 - **create the handover lane LAST, or fast-forward it**: `orca worktree create` snapshots the branch
   at that instant, so two commits pushed afterwards — including a correction to the brief's own
   central premise — never reached the receiver's checkout — recurrence: 1 — candidate: no — this is a

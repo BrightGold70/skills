@@ -1,0 +1,53 @@
+{
+  "_why": "The tabulating is trivial and none of these mutants touch it. Every one of them lets a pane survive the probe, and a leaked pane is not visible from the probe's own output — it shows up later as a polluted pane pool and a `pin-agents` run that resolves the wrong thing. The three escape routes a `trap` alone cannot cover are pinned separately: an exception (the `finally`), a signal (the installed handlers), and a create whose handle this process never learned (the journal's intent line).",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_response_probe.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "intent-not-journalled-so-an-unnamed-pane-vanishes",
+      "_mechanism": "Stop recording the attempt before the create. A create that errors, hangs or is killed then leaves nothing in the journal, and the run reports `possible_leaks=0` — a clean bill of health for the one case where something may exist that this process never got to name. This is the window a trap structurally cannot close.",
+      "file": "scripts/h_mad_response_probe.py",
+      "find": "            journal.intent(i)",
+      "replace": "            pass",
+      "_killed_by": "tests/test_h_mad_response_probe.py::test_a_create_that_fails_is_a_POSSIBLE_leak_not_a_clean_run"
+    },
+    {
+      "name": "cleanup-skipped-on-the-normal-path",
+      "_mechanism": "The `finally` still runs, and closes nothing. Output is otherwise identical — the measurement is right, the summary prints `closed=0`, and every pane the probe made is still alive. Eight hand-rolled probes in one session is eight chances for this to go unnoticed until the pool is full.",
+      "file": "scripts/h_mad_response_probe.py",
+      "find": "        closed, failed = close_all(journal, a.close)\n        _, pending = journal.outstanding()\n        for i, state, h in rows:",
+      "replace": "        closed, failed = 0, []\n        _, pending = journal.outstanding()\n        for i, state, h in rows:",
+      "_killed_by": "tests/test_h_mad_response_probe.py::test_it_measures_presence_and_closes_every_pane"
+    },
+    {
+      "name": "resume-closes-nothing",
+      "_mechanism": "The recovery path becomes a no-op that reports success. It is the last line of defence — the one that covers a kill outrunning both the `finally` and the handlers — and it is exactly the path nobody exercises until they need it.",
+      "file": "scripts/h_mad_response_probe.py",
+      "find": "        closed, failed = close_all(journal, a.close)\n        _, pending = journal.outstanding()\n        print(f\"CLEANUP: closed={closed} failed={len(failed)} possible_leaks={len(pending)}\")\n        return 0",
+      "replace": "        closed, failed = 0, []\n        _, pending = journal.outstanding()\n        print(f\"CLEANUP: closed={closed} failed={len(failed)} possible_leaks={len(pending)}\")\n        return 0",
+      "_killed_by": "tests/test_h_mad_response_probe.py::test_resume_closes_what_an_earlier_run_left_open"
+    },
+    {
+      "name": "closes-not-recorded-so-resume-double-closes",
+      "_mechanism": "A handle stays in the journal forever, so every later `--resume` closes it again. By then the runtime may have reissued that handle to someone else's pane, and a cleanup tool that kills a stranger's terminal is worse than the leak it was written to fix.",
+      "file": "scripts/h_mad_response_probe.py",
+      "find": "            journal.closed(h)",
+      "replace": "            pass",
+      "_killed_by": "tests/test_h_mad_response_probe.py::test_resume_is_idempotent"
+    },
+    {
+      "name": "signal-handlers-not-installed",
+      "_mechanism": "Default SIGTERM terminates the process without unwinding, so the `finally` never runs and every pane created so far is orphaned. Ctrl-C during a long probe is the single most likely way this tool ever exits early.",
+      "file": "scripts/h_mad_response_probe.py",
+      "find": "    signal.signal(signal.SIGINT, _on_signal)\n    signal.signal(signal.SIGTERM, _on_signal)",
+      "replace": "    pass",
+      "_killed_by": "tests/test_h_mad_response_probe.py::test_a_signal_still_closes_what_was_created"
+    }
+  ]
+}
