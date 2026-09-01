@@ -361,8 +361,13 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
            orca terminal read --terminal "$h" --cursor 0 --limit 4000 --json 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] || return 1
   # `// empty` BEFORE the type branch: an absent key must produce no output so
-  # `jq -e` exits non-zero. `jq -r` prints the literal "null" and exits 0, which
-  # is why `-e` is load-bearing. The `// empty` itself is now REDUNDANT -- the
+  # `jq -e` exits non-zero. `-e` is load-bearing, but NOT for the reason this
+  # comment used to give: with `// empty` and the final `else empty` in place,
+  # `jq -r` on a missing tail emits zero bytes at rc 0 (measured), not the
+  # literal "null". The literal-null result belongs to the simpler
+  # `.result.terminal.tail | tostring` form used in the measurement probes. The
+  # hole `-e` actually closes is the rc: without it, empty output exits 0 and
+  # the caller reads an unreadable pane as a readable empty one. The `// empty` itself is now REDUNDANT -- the
   # type branch ends `else empty` and discards a null anyway (measured identical
   # on four inputs) -- and is kept as defence in depth against that branch
   # changing back. No mutation pins it; see AC-6.2.
@@ -654,7 +659,12 @@ AC-3.2 assert on, so a resolution that happened to come from another pass cannot
   # `if local tout="$(...)"` returns `local`'s status (always 0) and discards the
   # helper's rc, turning every unreadable pane into a readable empty one.
   local tail_re tail_ids="" th tout tn tail_h
-  tail_re="$(_agent_pv_re "$token")"
+  # ANCHORED to line start. `_agent_pv_re` is shipped and shared with Passes 1-2,
+  # so it is NOT changed here; the anchor is applied by THIS pass, which is the
+  # only consumer whose input is arbitrary retained scrollback. Measured
+  # 2026-09-01: unanchored, all 7 prose probes MATCH (see AC-3.17); anchored,
+  # 0 of 7 match and all 7 real banner/status lines still do.
+  tail_re="^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$token"))"
   while IFS= read -r th; do
     [ -n "$th" ] || continue
     if tout="$(_orca_tail_sig "$th")"; then
@@ -807,6 +817,37 @@ status is `grep`'s alone.
       Orca — that shape is fine in a probe and wrong in a fixture. Build the fixture as
       **1900 lines x ~126 chars ≈ 240 KB**: same byte size, same banner-on-line-1 layout, inside
       the cap. Impl-plan audit v17 caught the mismatch.
+- [ ] AC-3.17 (spec FR-2): A candidate whose tail carries the agent's tokens only inside ORDINARY
+      PROSE does **not** resolve. Corpus, measured 2026-09-01 — all seven match the UNANCHORED
+      regex and none matches the anchored one:
+
+      | probe | agent |
+      |---|---|
+      | `Release notes for OpenAI Codex are available` | codex |
+      | `I am comparing model: gpt-5.6-terra with ours` | codex |
+      | `see openai codex docs` | codex |
+      | `we ran gpt-5.6-terra high on that repo` | codex |
+      | `The Antigravity CLI documentation changed` | agy |
+      | `Compare Gemini 3.1 Pro with Claude` | agy |
+      | `about antigravity cli usage` | agy |
+
+      Positive controls in the same test, all still matching: `OpenAI Codex (v0.145.0)  model:
+      gpt-5.6-terra`, `gpt-5.6-terra high · ~/repo`, `  OpenAI Codex (v0.145.0)`,
+      `│ model: gpt-5.6-terra`, `Antigravity CLI v1.2.3`, `Gemini 3.1 Pro`,
+      `  Antigravity CLI v1.2.3`.
+
+      **This is a wrong-pane class, not a tidiness one.** `$scoped` includes ordinary shell
+      panes, and tail evidence is explicitly HISTORICAL — so a plain shell that once ran
+      `cat CHANGELOG` or printed release notes was resolvable AS THE AGENT, contradicting FR-2.
+      The plan claimed `_agent_pv_re` was "hardened against prose"; it is hardened against the
+      two examples that motivated it (`comparing gpt-5 output with ours`, `the codex agent is
+      running`, both still declining) and that was generalised into a safety premise it does not
+      support. Impl-plan audit v26 falsified it 4/4 and the corpus above extends it to 7/7.
+
+      `_agent_pv_re` itself is NOT changed: it is shipped and shared with Passes 1-2, whose
+      inputs are short titles and previews rather than arbitrary scrollback. The anchor is
+      applied by this pass alone, so no existing behaviour moves.
+
 **Dependencies on other tasks**: Task 2 (must complete first)
 
 ---
@@ -1178,8 +1219,8 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "name": "entry-gated-on-n-eq-0",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_runs_on_ambiguous_title",
-   "find": "  tail_re=\"$(_agent_pv_re \"$token\")\"",
-   "replace": "  tail_re=\"$(_agent_pv_re \"$token\")\"; [ \"$n\" -eq 0 ] || tail_re='__IMPOSSIBLE_MATCH__'"
+   "find": "  tail_re=\"^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re \"$token\"))\"",
+   "replace": "  tail_re=\"^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re \"$token\"))\"; [ \"$n\" -eq 0 ] || tail_re='__IMPOSSIBLE_MATCH__'"
   },
   {
    "name": "wire-disconnect-callee-intact",
@@ -1233,11 +1274,19 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "replace": "true"
   },
   {
+   "name": "tail-re-unanchored",
+   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All seven prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-2 forbids, reachable because $scoped includes shell panes and tail evidence is historical.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
+   "find": "  tail_re=\"^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re \"$token\"))\"",
+   "replace": "  tail_re=\"$(_agent_pv_re \"$token\")\""
+  },
+  {
    "name": "tail-re-widened-to-launch-line",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
-   "find": "  tail_re=\"$(_agent_pv_re \"$token\")\"",
-   "replace": "  tail_re=\"$(_agent_pv_re \"$token\")|^${token} .--dangerously\""
+   "find": "  tail_re=\"^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re \"$token\"))\"",
+   "replace": "  tail_re=\"^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re \"$token\"))|^${token} .--dangerously\""
   },
   {
    "name": "tail-sig-fabricates-banner-on-failure",
@@ -1355,8 +1404,12 @@ PYTHON TEST HARNESS — pinned to THREE nodes, and none of them is a green-at-RE
 
 The proof column exists to discriminate nodes that pass before any code is written; these three
 nodes are RED: FAIL and need no such proof. They are mutated anyway because Task 6's own claim is
-that every new guard is stubbed to its PERMISSIVE value, and impl-plan audit v17 found four that
-were not: the array `join("\n")`, the `${HMAD_TAIL_READ_TIMEOUT:-2}` default, the `_cmd_run` bound
+that every ENUMERATED guard in the table above is stubbed to its PERMISSIVE value. (The claim used
+to be "every new guard", which is stronger than the inventory: several independently asserted
+controls — the missing-file `exit 1`, the retention of `--limit 4000` and `--json` — carry no
+mutation. They are RED: FAIL nodes and so still satisfy the base discrimination rule, but the
+deliverable should not read as broader than what it lists. Impl-plan audit v26.) Audit v17 found
+four that were not stubbed: the array `join("\n")`, the `${HMAD_TAIL_READ_TIMEOUT:-2}` default, the `_cmd_run` bound
 itself, and the harness's ambient-environment scrub. Audit v18 added `timeout-override-ignored` —
 the default and the bound were each mutated, but nothing mutated the caller's OVERRIDE being
 honoured. A sixth, targeting `// empty`, was removed at audit v21: v1.17's `else empty` made it
@@ -1450,6 +1503,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-3.14 | `test_tail_pass_call_form_is_source_pinned` | RED: FAIL | — |
 | AC-3.15 | `test_tail_pass_stale_pane_comment_present` | RED: FAIL | — |
 | AC-3.16 | `test_tail_pass_long_tail_early_signature_resolves` | RED: FAIL | — |
+| AC-3.17 | `test_tail_pass_prose_mentioning_agent_does_not_resolve` | RED: FAIL | also kills mut `tail-re-unanchored` |
 | AC-4.1 | `test_tail_pass_rejects_rival_signature` | RED: FAIL | — |
 | AC-4.2 | *withdrawn* | — | subsumed by `test_tail_pass_zero_matches_declines`: a rival-only tail fails the agent's own signature and never reaches the count, so NO mutation on rival rejection can discriminate it. Number retained so AC-4.1/4.3/4.4 do not renumber. |
 | AC-4.3 | `test_tail_pass_rival_rejection_symmetric` | RED: FAIL | — |
@@ -1461,7 +1515,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
-**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 40
+**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 41
 nodes, T5's four included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
@@ -1581,11 +1635,11 @@ false half is recorded so the next reader does not re-derive it.
    |---|---|---|---|---|
    | T1 | 6 | 2 | 4 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv`, `…helpers_shape` |
    | T2 | 9 | 8 | 1 | `test_tail_no_timeout_binary_invocation` |
-   | T3 | 16 | 10 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
+   | T3 | 17 | 11 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
    | T4 | 4 | 4 | 0 | — |
    | T5 | 4 | 3 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **40** | **28** | **12** | |
+   | **total** | **41** | **29** | **12** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1594,14 +1648,14 @@ false half is recorded so the next reader does not re-derive it.
 
    ```bash
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 40  total nodes
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 41  total nodes
    grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 12  --expect-pass
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 28  --expect-fail
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 29  --expect-fail
    ```
 
    **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
    `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
-   `--expect-pass`; feeding it 28/12 would guarantee `step5d:red_not_all_failing` on every task
+   `--expect-pass`; feeding it 29/12 would guarantee `step5d:red_not_all_failing` on every task
    (T1 expects 2/4, T2 8/1, …). Derive per task from the same authoritative rows — the AC prefix
    identifies the task:
 
@@ -1614,8 +1668,8 @@ false half is recorded so the next reader does not re-derive it.
    done
    ```
 
-   Expected: T1 2/4 · T2 8/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 28/12 over 40 —
-   and **every row carries exactly ONE AC label** so the per-task regex sees all 40. Two rows
+   Expected: T1 2/4 · T2 8/1 · T3 11/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 29/12 over 41 —
+   and **every row carries exactly ONE AC label** so the per-task regex sees all 41. Two rows
    briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
    under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
    proof column as the procedure it is —
@@ -1626,7 +1680,7 @@ false half is recorded so the next reader does not re-derive it.
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 40 / 12 / 28 against this file.
+   anchored to the full row shape above and verified to return 41 / 12 / 29 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1715,3 +1769,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.20: Impl-plan audit v23 (codex) — must 1, and it is a RED CLASSIFICATION that could not hold. AC-1.5 was marked `RED: FAIL` while `test_tail_stub_read_helpers_shape` tests only `_orca_read_env` and `_orca_read_dir`, both TEST-FILE helpers that T1's own RED patch introduces: the node passes the moment the patch lands, and withholding the helpers yields a NameError, which is a missing-symbol failure rather than a behavioural one and would force test implementation during GREEN. T1's 3/3 split and the 29/11 aggregate were therefore unsatisfiable and a correct dispatch would have halted on red_not_all_failing. Reclassified green at RED with two discriminating mutations, one per asserted property — `stub-read-env-not-array` (the measured live shape is an array and production joins it) and `stub-read-dir-writes-one-file` (a handle the caller supplied must not be served as unreadable). Counts re-derived, not edited: 28 FAIL / 12 PASS over 40, T1 2/4, swept through the impl-plan, plan and design. 29 mutations. The design's `$scoped` justification was also backwards — it claimed a wider pool 'can only turn a resolution into a decline', when adding one uniquely banner-matching pane turns a decline INTO a resolution, which is this feature's whole point; the safety is now grounded where it actually lives (the scope boundary, the wanted/rival predicates, and exactly-one), not in a false monotonicity claim. Nit: the live check now removes its `mktemp -d` directory.
 - v1.21: Impl-plan audit v24 (codex) — both must-fixes were stale PROSE left behind by my own earlier edits, not new defects. Task 6's control-family paragraph still said six mutations, five in the helper, and four nodes, after v1.19 deleted the equivalent `// empty` mutation; its own sentence "removing any one leaves the other four" already implied five. Verified against the spec: FIVE mutations, FOUR in the wrapper and one in the Python harness, pinned to THREE nodes (AC-2.1, AC-2.5, AC-2.6). The paragraph now carries a mutation/file/node TABLE, so the count and the enumeration are one surface and cannot drift apart again — the same remedy the RED table already uses. The source plan was also one proof short: it reported 12 green-at-RED nodes and then said "each of the 11" is tied to a mutation, leaving `test_tail_no_timeout_binary_invocation` with no stated proof on the surface that is the declared source. It is 11 + 1 — eleven mutation-backed, and one carrying AC-2.8's insert/observe/remove procedure. The isolated pin file's `mktemp -d` cleanup, added here at v1.20, is back-propagated to the plan and design.
 - v1.22: Impl-plan audit v25 (codex) — a SIXTH sweep miss, and it is the class the v1.21 self-check was written to catch: a LIVE dispatch instruction still said the row commands were 'verified to return 40 / 11 / 29' where the table immediately above it, and the commands themselves, give 40 / 12 / 28. Prose carrying a count it does not enumerate stays the dominant failure here. Second, `marker-to-stdout` mutated only the STREAM ROUTING of the success marker; routing and content are separable guards on one line, and AC-3.1 and the live check both consume the exact phrase `bound <handle> by tail evidence`, so a reworded marker left both asserting on a string that no longer exists while stdout stayed clean. Added `marker-content-changed`, pinned to AC-3.1, and verified as a controlled triple that unmutated / routing / content each produce a DIFFERENT observable (stderr full marker, stdout full marker, stderr truncated marker) — neither mutant is equivalent. 30 mutations. Third, the `mktemp -d` cleanup added at v1.20-v1.21 was itself unverified: removing a directory mutates filesystem state, so the command is not its own proof, and `rm -rf` on a path never created succeeds silently. All three live-check surfaces now retain the path and assert its absence. Source-design citation corrected v1.18 -> v1.21.
+- v1.23: Impl-plan audit v26 (codex) — the first finding of this run that falsifies a SAFETY PREMISE rather than a document claim. The plan, design and spec all treated `_agent_pv_re` as 'hardened against prose' and rested the unique-match safety argument on it. It is not: measured 4/4 by the audit and 7/7 by the corpus now in AC-3.17, ordinary sentences like `Release notes for OpenAI Codex are available` and `Compare Gemini 3.1 Pro with Claude` MATCH it. Since `$scoped` includes ordinary shell panes and tail evidence is explicitly historical, a plain shell that once printed release notes or documentation was resolvable AS THE AGENT — the wrong-pane class FR-2 forbids. The regex is hardened against the two examples that motivated it (both still declining), and that was generalised into a premise it does not support. Fix: the TAIL PASS anchors the matcher to line start; `_agent_pv_re` itself is untouched because it is shipped and shared with Passes 1-2, whose inputs are short titles and previews rather than arbitrary scrollback. Measured anchored: 0 of 7 prose probes match, 7 of 7 real banner and status lines still do. AC-3.17 carries the corpus and the positive controls; `tail-re-unanchored` is the mutation. Changing the `tail_re` line also broke two existing mutation anchors that referenced it — re-anchored in the SAME edit, which is the c20 lesson applied prospectively for once. Counts re-derived: 41 nodes, 29 FAIL, 12 PASS, T3 11/6; 31 mutations. Two shoulds: the literal-`null` explanation for `jq -r` was true of the simpler probe filter and false of the shipped one (measured: zero bytes at rc 0, so `-e` closes the RC hole, not a null-printing hole), corrected on both surfaces; and Task 6's 'every new guard is mutated' was broader than its own inventory — narrowed to the enumerated table, noting that the unmutated controls are RED: FAIL nodes and so still discriminated.

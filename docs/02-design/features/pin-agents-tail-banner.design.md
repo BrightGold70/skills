@@ -69,6 +69,19 @@ AC-1.2 accordingly; do not "fix" this by widening `_agent_pv_re`, which would al
 rival rejection and Pass 2's preview match and re-admit the false-positive class those patterns
 exist to exclude.
 
+**The tail pass ANCHORS that regex to line start; `_agent_pv_re` itself is unchanged.** The
+helper is NOT hardened against prose, and the claim that it was is falsified: measured 2026-09-01,
+`Release notes for OpenAI Codex are available`, `I am comparing model: gpt-5.6-terra with ours`,
+`The Antigravity CLI documentation changed` and `Compare Gemini 3.1 Pro with Claude` all MATCH it,
+and a seven-probe corpus reproduces that 7 for 7. It is hardened against the two examples that
+motivated it (`comparing gpt-5 output with ours`, `the codex agent is running`) and no further.
+That matters only for THIS pass: `$scoped` includes ordinary shell panes and tail evidence is
+historical, so a shell that once printed release notes was resolvable AS THE AGENT — the
+wrong-pane class FR-2 forbids. Passes 1 and 2 read short titles and previews rather than arbitrary
+scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
+moves. Anchored: 0 of 7 prose probes match, 7 of 7 real banner and status lines still do. Pinned
+by impl-plan AC-3.17 and mutation `tail-re-unanchored`.
+
 **Per-candidate test.** For each candidate handle, read the tail with exactly this command
 and match the agent's existing signature; reject a candidate whose tail matches the RIVAL's
 signature before counting it:
@@ -114,9 +127,12 @@ evidence by the same unsafe route. Pinned by impl-plan AC-2.10 and `non-array-ta
 
 `// empty` stays before the type branch as defence in depth, NOT as an independently pinned
 guard: with `else empty` on the type branch a null from an absent key is discarded there anyway
-(measured identical with and without it on four inputs). `-e` is the load-bearing part — `jq -r`
-prints the literal `"null"` at rc 0. Impl-plan audit v21 removed the mutation that claimed to pin
-`// empty` alone, because it was equivalent.
+(measured identical with and without it on four inputs). `-e` is the load-bearing part, but not
+for the reason stated here until impl-plan audit v26: with `// empty` AND the final `else empty`,
+`jq -r` on a missing tail emits zero bytes at rc 0 — not the literal `"null"`, which is what the
+simpler `.tail | tostring` probe filter produces. The hole `-e` closes is the RC: without it,
+empty output exits 0 and an unreadable pane reads as a readable empty one. Audit v21 removed the
+mutation that claimed to pin `// empty` alone, because it was equivalent.
 
 **`--cursor 0` is load-bearing and must not be dropped.** Without it the call returns the
 most RECENT rows, while the agent's banner sits at the START of scrollback. On the panes
@@ -321,7 +337,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **28 of 40 nodes fail at RED and 12 pass**, so a blanket
+   Measured on the node enumeration: **29 of 41 nodes fail at RED and 12 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -428,3 +444,4 @@ resolution, or it merely restates Pass 0.
 - v1.19: Impl-plan audit v23 (codex) — the `$scoped` justification was backwards. It claimed a wider candidate pool 'can only turn a resolution into a decline, never into a wrong pane', but adding one uniquely banner-matching pane turns a decline INTO a resolution — this feature's intended path. Widening is safe for reasons that hold at any pool size: the scope boundary, the wanted/rival banner predicates, and exactly-one gating. Node counts re-derived to 28 / 12 over 40.
 - v1.20: Impl-plan audit v24 (codex) — the live check now removes the isolated pin file's `mktemp -d` directory, matching the impl-plan; without it each run leaks one empty temporary directory.
 - v1.21: Impl-plan audit v25 (codex) — same as the plan: the isolated pin file's `mktemp -d` cleanup must be confirmed by re-reading, not assumed from the command's success.
+- v1.22: Impl-plan audit v26 (codex) — records that `_agent_pv_re` is NOT hardened against prose (measured 7/7 matches on ordinary sentences) and that the tail pass therefore anchors its matcher to line start, while Passes 1-2 keep the shared helper unchanged. Also corrects the literal-`null` explanation: with `// empty` and `else empty` in place, `jq -r` on a missing tail emits zero bytes at rc 0, so `-e` closes the RC hole rather than a null-printing one. Node counts re-derived to 29 / 12 over 41.

@@ -66,8 +66,18 @@ deliberately — Pass 1 (title) and Pass 2 (preview) are not liveness-gated eith
 new failure class, and a liveness gate would need `lsof` and contradict AC-3.3. Only Pass 0 and
 Pass 3 (OS evidence) carry liveness.
 
-**No new signature constants.** `_agent_pv_re` already returns per-agent regexes hardened
-against prose, and both were verified against the REAL panes on 2026-09-01:
+**No new signature constants, but the tail pass ANCHORS them.** `_agent_pv_re` is reused
+unchanged — it is shipped and shared with Passes 1-2 — and this pass wraps its output in a
+line-start anchor before matching. **The claim that it is "hardened against prose" was FALSE and
+load-bearing**: impl-plan audit v26 matched `Release notes for OpenAI Codex are available`,
+`I am comparing model: gpt-5.6-terra with ours`, `The Antigravity CLI documentation changed` and
+`Compare Gemini 3.1 Pro with Claude` against it, 4 for 4, and a 7-probe corpus reproduced it.
+Since `$scoped` includes ordinary shell panes and tail evidence is historical, a shell that once
+printed release notes was resolvable AS THE AGENT — the wrong-pane class FR-2 forbids. The regex
+is hardened against the two examples that motivated it, and that was generalised into a safety
+premise it does not support. Anchored, 0 of 7 prose probes match and 7 of 7 real banner/status
+lines still do (impl-plan AC-3.17). Both regexes were verified against the REAL panes on
+2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
 `Gemini 3.1 Pro (High)`). The work is running the EXISTING helper against `.tail` instead
@@ -197,7 +207,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **28 of 40 nodes RED, 12 green**, and the
+  legitimately green before any code exists. Measured: **29 of 41 nodes RED, 12 green**, and the
   12 split **11 + 1**: eleven are each tied to a mutation that must be killed by that specific
   node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
@@ -270,3 +280,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.15: Impl-plan audit v23 (codex) — node counts re-derived to 28 FAIL / 12 PASS over 40 after AC-1.5 was reclassified green at RED: it tests only test-file helpers that T1's own RED patch introduces, so it cannot be observed failing.
 - v1.16: Impl-plan audit v24 (codex) — the green-at-RED accounting said "each of the 11" beside a count of 12, leaving the twelfth node's reject direction unstated on the declared source. It is 11 + 1: eleven mutation-backed nodes, and `test_tail_no_timeout_binary_invocation`, whose proof is impl-plan AC-2.8's insert/observe/remove procedure. The live check also now removes the isolated pin file's `mktemp -d` directory.
 - v1.17: Impl-plan audit v25 (codex) — the live check's `mktemp -d` cleanup now requires re-reading the path to confirm the directory is gone. Removing a directory mutates state, so the command is not its own proof; `rm -rf` on a path that was never created succeeds silently.
+- v1.18: Impl-plan audit v26 (codex) — the 'hardened against prose' premise was FALSE and load-bearing. `_agent_pv_re` matches ordinary prose about the agents (7/7 probes), so with `$scoped` covering shell panes and tail evidence being historical, a shell that printed release notes was resolvable as the agent. The tail pass now anchors the matcher to line start (0/7 prose, 7/7 real banners); the shared helper is unchanged. Node counts re-derived to 29 FAIL / 12 PASS over 41.
