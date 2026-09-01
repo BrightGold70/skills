@@ -22,6 +22,8 @@ import re
 import sys
 from pathlib import Path
 
+from h_mad_telemetry import resolve_docs_root
+
 MATCH_RATE_THRESHOLD = 90.0
 
 # Tolerates "## Match Rate: 96%", "Match rate: 89.5%", and the bolded "**0%**"
@@ -129,6 +131,34 @@ def check(record: dict, analysis_path: Path) -> dict:
     return {"ready": not blockers, "blockers": blockers, "warnings": warnings}
 
 
+def resolve_analysis_path(
+    explicit: Path | None, state_path: Path, feature: str
+) -> Path:
+    """Where the gap analysis lives, anchored to the STATE FILE, never to the CWD.
+
+    The state file argument already names the project tree the feature belongs to.
+    Where the operator started the process does not, and H-MAD is routinely driven
+    from a monorepo root against a sub-project's state file -- which is HemaSuite's
+    whole layout (`hematology-paper-writer/docs/.bkit-memory.json`).
+
+    The default used to be a relative `docs/03-analysis/<feature>.analysis.md`, so
+    the same state and the same files produced `BLOCKED analysis_missing` from the
+    monorepo root and `READY blockers=0` from the sub-project. The false BLOCKED is
+    the safe direction; its mirror is not. Start the process in any tree holding a
+    file at the matching relative path and the gate closes Phase 7 on ANOTHER
+    feature's analysis, with nothing in the output saying which file it read.
+
+    An explicit `--analysis` is returned untouched. Re-rooting a path the operator
+    typed would be a second surprise in the opposite direction.
+
+    Shares `resolve_docs_root` with telemetry rather than re-deriving it: two
+    copies of one rule is how the audit-gate caller drifted from the gate CLI (#39).
+    """
+    if explicit is not None:
+        return explicit
+    return resolve_docs_root(None, state_path) / "03-analysis" / f"{feature}.analysis.md"
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the Phase 7 precondition CLI."""
     parser = argparse.ArgumentParser(description="H-MAD Phase 7 preconditions")
@@ -156,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: no such feature: {args.feature}", file=sys.stderr)
         return 2
 
-    analysis = args.analysis or Path("docs/03-analysis") / f"{args.feature}.analysis.md"
+    analysis = resolve_analysis_path(args.analysis, args.state_file, args.feature)
     result = check(record, analysis)
 
     verdict = "READY" if result["ready"] else "BLOCKED"

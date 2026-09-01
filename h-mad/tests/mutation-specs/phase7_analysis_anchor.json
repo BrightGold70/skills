@@ -1,0 +1,50 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase7_analysis_anchor.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-default-goes-back-to-a-cwd-relative-path",
+      "_mechanism": "The original defect. Same state and same files give BLOCKED from the monorepo root and READY from the sub-project -- and in a tree that happens to hold a matching relative path, READY on another feature's analysis with nothing in the output naming the file it read.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "    return resolve_docs_root(None, state_path) / \"03-analysis\" / f\"{feature}.analysis.md\"",
+      "replace": "    return Path(\"docs/03-analysis\") / f\"{feature}.analysis.md\"",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheUnsafeDirection::test_a_decoy_analysis_in_the_cwd_is_not_read"
+    },
+    {
+      "name": "the-docs-root-fallback-goes-back-to-a-bare-relative-docs",
+      "_mechanism": "The half-fix that looks complete. Anchoring only the `state is inside docs/` branch leaves every other layout resolving against the CWD, and that branch is the one nobody tests because HemaSuite happens to keep state in docs/. Shared with telemetry, so the same silent mis-rooting reaches cycle-count derivation too.",
+      "file": "scripts/h_mad_telemetry.py",
+      "find": "    return state_path.parent / \"docs\"",
+      "replace": "    return Path(\"docs\")",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheAnchorHelper::test_a_state_file_outside_docs_still_never_uses_the_cwd"
+    },
+    {
+      "name": "an-explicit-analysis-path-gets-re-rooted",
+      "_mechanism": "The over-correction, and it is silent in the opposite direction: a path the operator typed is quietly moved under the state file's docs tree, so `--analysis mine.md` reads a file they did not name and did not write. Anchoring the DEFAULT must not touch an explicit argument.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "    if explicit is not None:\n        return explicit",
+      "replace": "    if False:\n        return explicit",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheExplicitOverrideStillWins::test_a_relative_analysis_flag_is_still_the_users_own_cwd_choice"
+    },
+    {
+      "name": "the-state-in-docs-branch-is-skipped",
+      "_mechanism": "Without it a state file at `<proj>/docs/.bkit-memory.json` resolves to `<proj>/docs/docs/03-analysis`, which does not exist -- a false BLOCKED on every project laid out the normal way. Loud, but it would be attributed to a missing analysis rather than to the resolver.",
+      "file": "scripts/h_mad_telemetry.py",
+      "find": "    if state_path.parent.name == \"docs\":\n        return state_path.parent",
+      "replace": "    if False:\n        return state_path.parent",
+      "test": "tests/test_h_mad_phase7_analysis_anchor.py::TestTheAnchorHelper::test_a_state_file_in_docs_anchors_to_that_docs"
+    }
+  ]
+}
