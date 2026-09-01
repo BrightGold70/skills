@@ -1,0 +1,12 @@
+## Summary
+The structural checks re-derive cleanly: 45 RED-table nodes (32 FAIL, 13 PASS), 37 unique parsed mutations, 30 fence markers, and 290 currently collected dispatch tests. Two blocking defects remain in Task 4: the prescribed hoist erases its own matcher value, and the rival-matcher wire still lacks the required opposite-direction connection mutation.
+
+## Must-fix
+- Task 4 assigns `rival_tail_re="$(_agent_tail_re "$rival")"` in the existing Pass-1 case block, but Task 3 later executes `local tail_re rival_tail_re ...` immediately before the tail loop — in Bash, declaring that name local after the earlier assignment initializes the new local to empty (controlled probe: `assigned_before_local; local rival_tail_re` prints an empty value), while the earlier assignment also leaks into global scope. The rival guard therefore never fires, so AC-4.1/4.3/4.4/4.5 cannot pass under the prescribed code. Move the assignment after the tail pass's local declaration and before the loop, or localize it in the earlier declaration and remove the later redeclaration; make the T3/T4 code blocks and mutation anchors describe the same ordering.
+- The rival-matcher wire has no opposite-direction connection mutation: both `wire-rival-matcher-disconnected` and `rival-re-prose-unsafe` replace `rival_tail_re="$(_agent_tail_re "$rival")"`, so both remove the `_agent_tail_re` call; one substitutes empty and the other substitutes a broader unrelated regex. This violates the base Connection enforcement requirement to remove the connection and also force it while leaving the callee/call intact. Add a shared-anchor counterpart analogous to `wire-wanted-matcher-forced-empty` (execute `_agent_tail_re "$rival"`, discard its result, then install a universal matcher) and pin its wrong-fire direction to AC-4.6; retain `rival-re-prose-unsafe` separately as matcher-semantics coverage and update mutation counts.
+
+## Should-fix
+- The implementation plan explicitly says the second Pass-3-to-Pass-4 cross-reference is absent from the paired design's Components table, and the design still names only the opening Pass 4 comment — back-propagate the second `hmad-dispatch.sh` comment site to the design so the declared source and implementation inventory agree.
+
+## Nit
+- AC-4.6 still has a stray closing `**` after “both directions”, and the T4 code comment fragment “Same predicate Pass 2 applies NOT the shared...” remains ungrammatical.
