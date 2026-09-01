@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-01 · gotcha · [0.7] · `h-mad,sigpipe,orca,measurement,handoff:2026-09-01-phase5-audit-convergence` — Before claiming a size-triggered defect burned in the field, measure the population: 7 live Orca panes held max 1578 B, 2.4% of the 64 KB SIGPIPE threshold; telemetry logged zero wait calls, so no-records is not evidence.
 - 2026-09-01 · gotcha · [0.7] · `h-mad,phase5,tdd,handoff:2026-09-01-phase5-audit-convergence` — h_mad_assemble_tdd consumes PER-TASK expect-fail/expect-pass, not aggregate. State a RED contract per TEST NODE, never per AC: a node carrying two ACs lands in both columns and the counts can never match a pytest run.
 - 2026-09-01 · pattern · [0.9] · `mutation-testing,h-mad,test-discrimination,handoff:2026-09-01-phase5-audit-convergence` — A mutant that kills by crashing (set -e abort, broken collection) or that lands on the SAME behaviour proves nothing about the property. Give every mutation a named test, and pin the FIXTURE when the kill depends on its shape.
 - 2026-09-01 · gotcha · [0.9] · `shell,pipefail,sigpipe,hmad-dispatch,handoff:2026-09-01-phase5-audit-convergence` — printf X | grep -q under set -o pipefail returns 141 when grep exits early and printf takes SIGPIPE: a MATCH reads as a non-match. Invisible below the ~64KB pipe buffer, so every small fixture passes. Use a here-string.
