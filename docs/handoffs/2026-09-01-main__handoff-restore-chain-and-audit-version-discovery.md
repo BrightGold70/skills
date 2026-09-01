@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** orca/skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/41-headless-nlm-auth-gating · session 1d372f45-8b01-441a-8495-9a927e441272
+**Taken-Over-By:** skills · BrightGold70/handoff-restore-chain · session 86c6aded-ad23-43ea-befb-7ef3d46139c3 · 2026-09-01
 
 ## Session Summary
 

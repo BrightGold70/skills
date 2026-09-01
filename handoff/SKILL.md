@@ -159,6 +159,10 @@ python3 "$HP" pending-handovers; RC=$?
 
 This was placed in check 3 as an exception once, gated "use when this branch has none" — which put the remedy for an inbound-handover bug in the branch that only runs when the other branch fails. Measured 2026-09-01 on HemaSuite: `latest --branch feature-41-…` and bare `latest` returned the same file while **9** briefs in that store carried `**Handover-From:**`, none of them reachable. One of those was a 15-item backlog that had been explicitly handed over and was never picked up. Fixing a defect in the fallback path leaves the primary path defective.
 
+**Cold start — the first run in a repo over-reports, and that is expected.** `**Taken-Over-By:**` is a newer field than the stores it filters, so on first use *every* historical handover brief shows as pending, including ones that were taken over and finished long ago. Measured on `orca/skills` 2026-09-01: **16** pending, of which the great majority are closed work. Triage them once — for each brief that was already picked up, add the `**Taken-Over-By:**` line (Step 3.5's format, with the session that did the work if you know it, else `unknown · backfilled <YYYY-MM-DD>`) and commit. After that pass the queue is live and short.
+
+Do **not** skip the triage and learn to ignore a long queue instead — an alert that is always wrong is worse than no alert, and this scan exists precisely because a real brief sat unread among ordinary docs. Equally, do not bulk-stamp briefs you have not checked: a brief wrongly marked taken over is invisible again, which is the original defect restored by the tool built to fix it. If the queue is long and you cannot triage it now, say so to the user and record it as an open item.
+
 The scan filters on `**Taken-Over-By:**`, which Step 3.5 stamps into the brief. That marker lives in the doc because the doc store is what this scan reads: the `taken over:` worktree comment is worktree-scoped and the advisory claim lives in a gitignored, machine-local state file, so neither survives into the store and neither can tell a taken-over brief from an abandoned one.
 
 ### Step 2: Read it

@@ -211,6 +211,18 @@ class TestTheSkillDocumentsTheMechanism:
         step = step[: step.index("### Step 3.6")]
         assert "**Taken-Over-By:**" in step
 
+    def test_the_cold_start_over_report_is_documented(self) -> None:
+        """`Taken-Over-By:` is newer than the stores it filters, so the first run
+        in a repo flags every historical brief -- 16 of them on this repo. An
+        alert that is always wrong gets trained away, and the scan then fails the
+        way the thing it replaced did."""
+        locate = self.SKILL.read_text(encoding="utf-8")
+        locate = locate[locate.index("### Step 1: Locate the doc") :]
+        locate = " ".join(locate[: locate.index("### Step 2: Read it")].split())
+        assert "Cold start" in locate
+        # Both halves: triage it, but never bulk-stamp what you have not checked.
+        assert "do not bulk-stamp briefs you have not checked" in locate.lower()
+
     def test_the_marker_is_defined_in_the_template(self) -> None:
         """The defect this repo also carries as D3: an undefined field doing
         load-bearing work. A marker the locator filters on must be specified."""
