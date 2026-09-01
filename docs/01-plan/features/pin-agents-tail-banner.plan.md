@@ -67,9 +67,15 @@ new failure class, and a liveness gate would need `lsof` and contradict AC-3.3. 
 Pass 3 (OS evidence) carry liveness.
 
 **The tail pass uses its OWN matcher, `_agent_tail_re`, for BOTH the wanted and the rival check.** `_agent_pv_re` is left untouched — it is shipped and shared with Passes 1-2 — and the tail pass
-does NOT wrap it: `_agent_tail_re` carries its own bounded, line-complete grammar per agent
-(a banner must consume its line, allowing only a dotted-numeric version, a `model:` field, an
-effort word, a `·` and a cwd, or an effort/version parenthetical). Rival rejection in this pass
+does NOT wrap it: `_agent_tail_re` carries its own bounded, line-complete grammar per agent — a
+banner shape must consume its WHOLE line. **The continuations are PER-ARM and this document does
+not list them**: the normative statement is the `_agent_tail_re` block in
+`pin-agents-tail-banner.impl-plan.md` §Task 2, described once in
+`pin-agents-tail-banner.design.md` §Detailed Design, and a flat list here was wrong on three of
+five rows (the `model:` field and the `·`-plus-cwd are codex-only; the effort/version
+parenthetical is agy-only). The match is **case-insensitive** — the literals are lowercase and
+every real banner is capitalised, so every call site uses `grep -Eiq`; under a case-sensitive
+`grep -E` nine of the twelve positive controls decline. Rival rejection in this pass
 uses that same helper rather than the `$rival_re` computed for Pass 1, or a real agent pane is
 suppressed for merely mentioning the other agent. **The claim that it is "hardened against prose" was FALSE and
 load-bearing**: impl-plan audit v26 matched `Release notes for OpenAI Codex are available`,
@@ -294,3 +300,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.23: Impl-plan audit v31 (codex) — this document still prescribed the REJECTED matcher: a line-start wrapper around the shared `_agent_pv_re`, and rival rejection 'reused from Pass 1'. Both are the prose-unsafe path; the tail pass uses `_agent_tail_re`, with its own bounded per-agent grammar, for the wanted AND rival checks. Green-at-RED split corrected to 12 + 1 against the count of 13.
 - v1.24: Impl-plan audit v32 (codex) — 'the work is running the EXISTING helper against `.tail`' was still the headline description of a feature that no longer does that; corrected to the tail-only `_agent_tail_re`. Green-at-RED split corrected to 12 + 1 against the count of 13.
 - v1.25: Impl-plan audit v33 (codex) — the green-at-RED proof map assigned the AC-2.8 procedure to 'the twelfth' node immediately after stating twelve are mutation-backed, leaving the thirteenth unaccounted; it is the thirteenth. Counts re-derived to 32 FAIL / 13 PASS over 45.
+- v1.26: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. This document's flat parenthetical is replaced by a pointer to the normative block plus the fold.

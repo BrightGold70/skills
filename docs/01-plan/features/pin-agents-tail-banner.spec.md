@@ -83,8 +83,13 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     matches 24 of 24 such probes, and it is shared with Passes 1-2, whose inputs are short
     titles and previews rather than arbitrary retained scrollback. The tail pass therefore
     uses its own INDEPENDENT bounded literals — the signature must end its line or continue
-    with version/model/effort structure — which declines 24/24 while all 12 real banner and
-    status-line controls still match. This is a wrong-pane rule, not a precision preference:
+    with the version/model/effort structure ITS OWN AGENT ARM permits (per-arm, not one shared
+    list; the arms are normative in the impl-plan's `_agent_tail_re` block) — matched
+    **case-insensitively**, which declines 24/24 while all 12 real banner and status-line
+    controls still match. The fold is part of the criterion, not an implementation choice:
+    the literals are lowercase and real banners are capitalised, so measured 2026-09-02 a
+    case-sensitive match declines 9 of those 12 positives while still declining all 24
+    negatives — passing the half of the corpus that cannot see the error. This is a wrong-pane rule, not a precision preference:
     the candidate pool includes ordinary shell panes and tail evidence is historical, so
     without it a shell that once printed release notes resolves as the agent.
   - AC-1.2: **The launch command line is not itself a signature.** A pane whose tail carries
@@ -217,3 +222,4 @@ of failure; leaving it undocumented would.
 - v1.14: Impl-plan audit v33 (codex) — AC-1.1 still defined a match by the agent's `_agent_pv_re` signature while AC-1.4 measures that same helper matching ordinary prose 24 times out of 24. The two ACs admitted different candidate sets, and the wider one is the wrong-pane class AC-1.4 exists to forbid; AC-1.1 now names `_agent_tail_re`.
 - v1.15: Impl-plan audit v34 (codex) — Executive Summary grammar corrected ('reading … and resolves' → 'reading …, resolving').
 - v1.16: Impl-plan audit v35 (codex) — AC-1.4 said the grammar is applied 'on top of' `_agent_pv_re` two sentences after calling its patterns independent; the wrapper reading is the prose-unsafe implementation this AC exists to forbid.
+- v1.17: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. AC-1.4 now states the fold as part of the criterion and defers the per-arm continuations to the normative block.

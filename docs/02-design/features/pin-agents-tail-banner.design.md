@@ -75,12 +75,45 @@ exist to exclude.
 and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
 neither is a leading-position grammar: measured across 24 prose probes, the shipped regex declines
 0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
-bounded, independent `_agent_tail_re` literals — the banner must
-consume its whole line, allowing just a version, a `model:` field, an effort word, a `·` and a cwd,
-— the banner must consume its line, allowing only a dotted-numeric version, a DOTTED model id, an
-effort word, a `·` and a cwd, or an effort/version parenthetical, behind a prefix of whitespace or
-box-drawing characters only — declines all 24, with all 12 real banner and status
-lines still matching. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
+bounded, independent `_agent_tail_re` literals — a banner shape must consume its WHOLE line,
+behind a prefix of whitespace or box-drawing characters only — decline all 24, with all 12 real
+banner and status lines still matching.
+
+**The literals are normative; this prose is not.** The grammar's single authoritative statement is
+the `_agent_tail_re` code block in impl-plan §Task 2, and the arbiter of agreement between the two
+is AC-2.12, which runs the doc's own block over the 24/12 corpus. Every other surface — this
+paragraph, the source plan, the spec — **describes** that block and must never re-list its
+continuations: five prose restatements of one flat list existed across three documents, and all
+five were wrong in the same way (below). Describe the shape; cite the block for the shape's
+extent.
+
+**The continuations are PER-ARM, not one list.** Measured 2026-09-02 by running the prescribed
+block verbatim:
+
+| continuation | codex | agy |
+|---|---|---|
+| dotted-numeric version after the product name | yes (optionally parenthesised, `(v0.145.0)`) | yes (bare, `v1.2.3` / `1.1.22`) |
+| a `model:` field carrying a DOTTED gpt id | yes | **no** — `model: gpt-5.6-terra` declines for agy |
+| a bare effort word (`low\|medium\|high\|xhigh`) | yes, after a dotted model id | no |
+| `·` and a cwd | yes, and only in the model-id-plus-effort alternative | **no** — `Gemini 3.1 Pro · /Users/x` declines |
+| an effort/version parenthetical `(High)`, `(1.2.3)` | **no** — `gpt-5.6-terra (high)` declines | yes, after `gemini <version>` |
+
+A flat list implies each agent accepts all five. None does, and the two arms disagree on three of
+the five rows.
+
+**The match is CASE-INSENSITIVE, and that is part of the contract, not an implementation detail.**
+The literals are lowercase (`openai codex`, `antigravity cli`, `gemini [0-9]`) while every real
+banner is capitalised, so the grammar is correct only under a case-folding match. Every call site
+uses `grep -Eiq` (impl-plan T3/T4 and all three wire mutations). Measured 2026-09-02 over the
+doc's own block and the full corpus: under `grep -Ei` 24/24 negatives decline and 12/12 positives
+match — the figure this document has been reporting — while under a case-SENSITIVE `grep -E` the
+negatives still decline 24/24 but **9 of the 12 positives decline too** (`OpenAI Codex`,
+`OpenAI Codex v0.145.0`, `  OpenAI Codex (v0.145.0)`, `OpenAI Codex (v0.145.0)  model:
+gpt-5.6-terra`, `Antigravity CLI v1.2.3`, `  Antigravity CLI v1.2.3`, `Antigravity CLI 1.1.22`,
+`Gemini 3.1 Pro`, `Gemini 3.1 Pro (High)`); only the three all-lowercase controls survive. A
+reader who implements the block and matches with `grep -E` therefore ships a matcher that rejects
+every real banner while every negative still declines — a total false-negative, invisible to any
+check that only counts the corpus's decline half. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
 real agent pane for merely MENTIONING the other agent, the mirror false-negative (impl-plan AC-4.6,
 mutation `rival-re-prose-unsafe`). The
 helper is NOT hardened against prose, and the claim that it was is falsified: measured 2026-09-01,
@@ -484,3 +517,4 @@ resolution, or it merely restates Pass 0.
 - v1.29: Impl-plan audit v33 (codex) — `_agent_tail_re` was required by the matcher rule but absent from Components Changed and from the Implementation Order, whose step 1 shipped only `_orca_tail_sig` while step 2 consumed the missing helper. Added to both, mapped to impl-plan T2, with its 24/12 corpus tested there. Node counts re-derived to 32 / 13 over 45.
 - v1.30: Impl-plan audit v34 (codex) — v1.29's history claimed `_agent_tail_re` had been added to Components, Implementation Order and API; only Components had it. Step 1 now ships both helpers with the matcher's direct 24/12 corpus, the API section lists TWO private functions with the matcher's interface, and the pin note distinguishes AC-2.12 (the helper's own corpus, in the task that defines it) from AC-3.17 (the caller connection, mixed fixture).
 - v1.31: Impl-plan audit v35 (codex) — removed the last phrases implying the tail pass matches 'the agent's existing signature' or layers a grammar over the shared helper; both checks use the independent bounded `_agent_tail_re` literals.
+- v1.32: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it.

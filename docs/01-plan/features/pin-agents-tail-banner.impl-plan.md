@@ -192,9 +192,13 @@ only the call sites.
 # line-LEADING prose; the v1.24 grammar was falsified by prose AFTER a
 # banner-like prefix (`OpenAI Codex v0.145 release notes`,
 # `gpt-5.6-terra high performance notes`, `Gemini 3.1 Pro (release notes)`).
-# A banner shape must consume its WHOLE line, allowing only structured
-# continuations: a version, a `model:` field, an effort word, a `·` and a cwd,
-# or a bounded parenthetical. Measured 2026-09-01 over 24 prose probes and 12
+# A banner shape must consume its WHOLE line. The continuations are PER-ARM,
+# not one list -- `model:` and `·`+cwd are codex-only, the effort/version
+# parenthetical is agy-only; the arms below are normative and no prose restates
+# them (design v1.32 carries the per-arm table). MATCHED CASE-INSENSITIVELY:
+# these literals are lowercase and real banners are capitalised, so every call
+# site uses `grep -Eiq`; under `grep -E` nine of the twelve positives decline.
+# Measured 2026-09-01 over 24 prose probes and 12
 # real banner/status lines: unanchored 0/24 decline, anchored-only 7/24,
 # leading-position 14/24, line-complete 19/24, this grammar 24/24 -- with all
 # 12 positives matching under every revision.
@@ -595,15 +599,25 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       the base Mutation-verification invariant, which asks for verification of the STATE, not of
       a consequence of the state.
 
-- [ ] AC-2.12: `_agent_tail_re` is tested DIRECTLY against the full corpus — all 24 negative
-      probes decline and all 12 positive controls match, per agent. T2 owns the helper, so T2
+- [ ] AC-2.12: `_agent_tail_re` is tested DIRECTLY against the full corpus **under a
+      case-insensitive match (`grep -Ei`, the flag every call site uses)** — all 24 negative
+      probes decline and all 12 positive controls match, per agent. **The fold is load-bearing
+      and was named nowhere until v1.33.** The literals are lowercase and every real banner is
+      capitalised: measured 2026-09-02 by running this plan's own block over this corpus, a
+      case-SENSITIVE `grep -E` still declines 24/24 negatives but declines **9 of the 12
+      positives** as well — only the three all-lowercase controls survive. So the decline half of
+      the corpus cannot detect the error, and an implementer who reads AC-2.11's `grep -E` as the
+      match semantics ships a matcher that rejects every real banner. Design pass 2026-09-02. T2 owns the helper, so T2
       proves its semantics; AC-2.11 only proves the regex is syntactically usable, and an
       always-matching valid ERE would satisfy it. Deferring the corpus to T3 left the helper
       "proven before anything consumes it" by a check that could not see what it matched.
       Impl-plan audit v33.
 - [ ] AC-2.11: `_agent_tail_re codex` and `_agent_tail_re agy` each print a regex that `grep -E`
       ACCEPTS (rc 0 or 1 on any input, never rc 2), and the printed value ends with no trailing
-      literal `\n`. **Executed, not eyeballed.** The v1.26 form of this helper was prescribed with
+      literal `\n`. **`grep -E` here is deliberate and is about SYNTAX only** — pattern
+      acceptance does not depend on the case-folding flag, and this AC says nothing about what
+      the regex matches. The semantics are AC-2.12's, and they are measured under `grep -Ei`;
+      reading this line as the match contract is what hid the fold for eleven cycles. **Executed, not eyeballed.** The v1.26 form of this helper was prescribed with
       `printf '%s\\n'` and doubled `\\(` escapes: run verbatim it appended the literal bytes `\n`
       and `grep -E` rejected the pattern outright with `repetition-operator operand invalid` (rc
       2), so the classifier every measurement in this plan describes had NEVER EXECUTED as
@@ -954,9 +968,11 @@ status is `grep`'s alone.
       **Group B — prose AFTER a banner-like prefix, the shape that broke the leading-position
       grammar.** That grammar required the signature to start the line and then allowed anything
       to follow, so a real version string followed by ordinary words still matched. Audit v28.
-      The rule is now LINE-COMPLETE: a banner must consume its whole line, allowing only
-      structured continuations (a version, a `model:` field, an effort word, a `·` and a cwd, a
-      bounded parenthetical). Three corpus revisions, each adding one shape the previous corpus
+      The rule is now LINE-COMPLETE: a banner must consume its whole line, allowing only the
+      structured continuations its OWN arm permits — see the `_agent_tail_re` block in Task 2,
+      which is normative, and the per-arm table in design §Detailed Design. This AC does not
+      re-list them: a flat list read as shared across both agents and was wrong on three of five
+      rows. Three corpus revisions, each adding one shape the previous corpus
       lacked: mid-sentence, line-leading, banner-prefixed. Measured across all 24 —
       unanchored 0/24, anchored-only 7/24, leading-position 14/24, line-complete 19/24, this grammar 24/24.
 
@@ -2042,3 +2058,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.30: Impl-plan audit v33 (codex) — must 5 -> 4, and the audit independently re-derived the three things this plan most depends on: the prescribed matcher EXECUTES correctly over the 24/12 corpus, the mutation JSON parses at 37 entries, and the module still collects 290. The blocking finding is a RED classification that could not hold, the third of its shape (AC-1.5 at v23, T4's pin at v30): AC-3.17 was `RED: FAIL` and T3's WIRE-PIN while its fixture was prose-ONLY — which does not resolve at T3 RED either, because the pass does not exist yet, so the node passes before any T3 code is written and a pin that passes without its wire proves nothing. Reshaped to a MIXED fixture: one real-banner candidate plus one prose decoy, expecting the banner's handle. That fails before the pass exists AND when the matcher connection is removed (both candidates then match, count is 2, the pass declines on ambiguity). The matcher's own corpus moved to T2 as AC-2.12, where the helper is owned — AC-2.11 only proved the regex was syntactically usable, which an always-matching ERE would satisfy, so the helper was 'proven before anything consumes it' by a check that could not see what it matched. Cross-document: spec AC-1.1 still defined the match in terms of `_agent_pv_re` while AC-1.4 measures that helper matching prose 24/24 — two ACs admitting different candidate sets, one of them the wrong-pane class; the design never listed `_agent_tail_re` in Components, API or Implementation Order despite requiring it at step 2; and the plan's Success Criteria assigned the procedure to 'the twelfth' after saying twelve nodes are mutation-backed, leaving the thirteenth unaccounted. Counts re-derived: 45 nodes, 32 FAIL, 13 PASS, T2 10/1.
 - v1.31: Impl-plan audit v34 (codex) — must 4 -> 3; the RED table, the 37-mutation JSON and the 290-node module all re-derived correctly again. Two mutation-discrimination defects, both introduced by earlier re-anchoring. `entry-gated-on-n-eq-0` had been re-anchored at v1.28 onto the `local` line with `[ "$n" -eq 0 ] || return 1`, which ABORTS `_orca_find` and suppresses the OS-evidence pass behind it — so the mutant could be killed by the forbidden early return rather than by the wrong entry condition, which is the mechanism its own rationale describes. It now neutralises only this pass's matcher and preserves fall-through. And the two per-arm AGY mutants were pinned to `test_tail_pass_prose_mentioning_agent_does_not_resolve`, whose fixture is Codex-only by construction (AC-3.17 uses an OpenAI Codex banner and Codex prose), so an AGY-arm mutation would have SURVIVED its designated test and ALL_CAUGHT been unreachable; all three grammar mutants now target AC-2.12's node, which is where the per-agent corpus lives. Third: design v1.29's history claimed Implementation Order and API had been updated for `_agent_tail_re` and they had not — step 1 still shipped only `_orca_tail_sig` while step 2 consumed the missing matcher, and the API section still said 'One new private shell function'. Both fixed, plus the helper's interface block. That is the fourth instance of a history entry claiming a back-propagation the body did not receive.
 - v1.32: Impl-plan audit v35 (codex) — must 3 -> 2, third consecutive drop, and the RED table (45/32/13), the 37-mutation JSON and the 290-node module re-derived correctly for the third cycle running. Both findings are real defects in code this plan prescribes. `_agent_tail_re "$rival"` expanded an UNBOUND variable: `_orca_find` owns `rival_re`, a regex built for Pass 1, and nothing holds the rival's NAME — under the wrapper's `set -euo pipefail` (line 5, verified) the first candidate carrying the wanted signature would abort `_orca_find` instead of performing rival rejection. Introduced at v1.25 when the rival check moved to the tail grammar and unnoticed for ten cycles. T4 now extends the existing case with `rival=agy` / `rival=codex`, and an empty token falls to the `*)` arm rather than aborting. Second: the launch-line mutants REPLACED their arm wholesale, so the kill came from the node's positive controls failing — an accidental kill that proves nothing about launch-line rejection. Both are additive now (full grammar preserved, `|^<agent> .--dangerously` appended) and pinned to AC-3.2's node, which exercises both agents; the corpus node keeps the three prose mutants. Also: `wire-wanted-matcher-disconnected`'s mechanism still described AC-3.17's old prose-only fixture, and the spec and design still implied the grammar is layered ON TOP of `_agent_pv_re` rather than being independent literals.
+- v1.33: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. AC-2.12 now names `grep -Ei`, AC-2.11 says explicitly that it covers syntax only, the code-block comment carries the per-arm and fold rules, and AC-3.17's Group B stops re-listing the continuations. No mutation anchor targets the comment prose (verified: 0 of 37 finds).
