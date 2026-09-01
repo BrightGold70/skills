@@ -1,0 +1,61 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_handoff_pending_handovers.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "an-unreadable-brief-is-skipped-like-an-absent-one",
+      "_mechanism": "The exact asymmetry this whole feature is about. A brief that cannot be decoded and a store with no handovers produce the same empty list and lead to opposite correct actions -- take it over, or carry on. Skipping is the branch that looks like it worked.",
+      "file": "scripts/handoff_paths.py",
+      "find": "            unreadable.append(path)\n            continue",
+      "replace": "            continue",
+      "test": "tests/test_handoff_pending_handovers.py::TestAnUnreadableBriefIsNotAnAbsence::test_undecodable_bytes_are_reported_not_skipped"
+    },
+    {
+      "name": "unreadable-no-longer-outranks-nothing-found",
+      "_mechanism": "The CLI half of the same defect. Exit 1 means 'nothing pending' and is the answer a caller acts on by moving along; a run that could not read a brief must not be able to say that.",
+      "file": "scripts/handoff_paths.py",
+      "find": "        if unreadable:\n            return 2",
+      "replace": "        if False:\n            return 2",
+      "test": "tests/test_handoff_pending_handovers.py::TestTheCLIContract::test_an_unreadable_brief_exits_2_and_names_the_file"
+    },
+    {
+      "name": "an-already-taken-brief-is-offered-again",
+      "_mechanism": "Without the discriminator every resume in the repo re-adopts briefs it already owns, forever. The failure is loud enough to notice once and then trained away as noise, which is worse than silence: the scan stops being believed.",
+      "file": "scripts/handoff_paths.py",
+      "find": "        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):",
+      "replace": "        if _HANDOVER_FROM_RE.search(text):",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_a_stamped_brief_is_not_pending"
+    },
+    {
+      "name": "a-prose-mention-counts-as-a-handover-field",
+      "_mechanism": "Briefs discuss handovers constantly -- this repo's own do. Drop the line anchor and every retrospective becomes a pending handover, which buries the one real brief in a queue nobody can triage.",
+      "file": "scripts/handoff_paths.py",
+      "find": "_HANDOVER_FROM_RE = re.compile(r\"^\\*\\*Handover-From:\\*\\*\", re.MULTILINE)",
+      "replace": "_HANDOVER_FROM_RE = re.compile(r\"Handover-From:\")",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_the_marker_must_be_the_bolded_field_not_a_mention"
+    },
+    {
+      "name": "the-queue-surfaces-newest-first",
+      "_mechanism": "A dropped handover is by construction an OLD one -- the 15-item backlog that prompted this had been sitting for two days behind eight newer docs. Newest-first puts the brief least likely to be forgotten at the top and the forgotten one at the bottom.",
+      "file": "scripts/handoff_paths.py",
+      "find": "    for path in sorted(p for p in d.glob(\"*.md\") if p.is_file()):",
+      "replace": "    for path in sorted((p for p in d.glob(\"*.md\") if p.is_file()), reverse=True):",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_oldest_first_so_the_longest_dropped_brief_surfaces_first"
+    }
+  ],
+  "_not_mutated": {
+    "pending_handovers is_dir guard": "DEGENERATE, not a gap. `Path.glob` on a missing directory returns [] without raising (verified 2026-09-01), so disabling the `if not d.is_dir()` early return lands on identical behaviour and scores `survived` for a reason that has nothing to do with test coverage. The guard stays -- it states the intent and mirrors `find_latest` -- but claiming mutation coverage for a line with no behavioural effect would be a false green. `test_a_missing_store_is_empty_not_an_error` still pins the contract."
+  }
+}
