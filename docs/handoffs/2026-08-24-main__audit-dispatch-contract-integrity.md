@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/201-grounding-evidence-coverage · session a7f5968f-2f3a-4659-b527-e074a50edeea
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — all three shipped -- D-1 `assemble_audit` step 6.7 emits the output contract at the head; D-2 `_is_none_sentinel` normalises trailing punctuation; D-3 no `.tmp` advice remains and the `result.status` caveat is in SKILL.md and orchestration-mode.md
 
 ## Session Summary
 

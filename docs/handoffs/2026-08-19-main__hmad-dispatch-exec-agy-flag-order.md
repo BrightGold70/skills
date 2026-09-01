@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/71-run-report-seam-restoration · session 679a9622-c2e3-4665-b372-60356ffe889f
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — CLOSED, no fix needed -- the premise was already false when written; sender recorded the closure in HemaSuite `2026-08-19-main__exec-agy-flag-order-closed-no-fix-needed.md`
 
 ## Session Summary
 

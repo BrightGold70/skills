@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** /Users/kimhawk/orca/skills
 **Handover-From:** HemaSuite · feature/196-grounding-shadow-measurement · session d185c497-29e4-4de0-ac43-d3770b39d1d0
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — fixed in `c5f6084` (exec stops laundering its prompt into a verdict, tree delta scoped); guard present in `hmad-dispatch.sh` at HEAD
 
 > **This is a HANDOVER, not a session closeout.** Two `hmad-dispatch` defects were found while
 > running a real Phase-5 dispatch from the HemaSuite worktree. They are skills-repo bugs. The

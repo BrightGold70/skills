@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** /Users/kimhawk/orca/HemaSuite · main · session 676e7f12-45f5-4a38-b13b-557f08a45f5d
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — shipped -- `h-mad/git-hooks/pre-push` runs `--check-anchors` and is symlinked live at `.git/hooks/pre-push`
 
 ## Session Summary
 

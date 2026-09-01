@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/202-guideline-claim-like-visibility · session f419d046-63a7-4e32-bac0-040f9bcabb04
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — the brief records its own closure: `90fce10`, `e87fe24`, merged `2b569da` -- all three verified present in git
 
 ## Session Summary
 

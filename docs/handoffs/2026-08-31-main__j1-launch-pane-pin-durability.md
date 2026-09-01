@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** `/Users/kimhawk/orca/skills` (h-mad)
 **Handover-From:** HemaSuite · feature/41-headless-nlm-auth-gating · session e66079ba-411b-4aae-af8f-97b8516a3654
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — closed and merged as `016120f`; the pane-pin guard is live and the residual lane finished
 
 ## Session Summary
 

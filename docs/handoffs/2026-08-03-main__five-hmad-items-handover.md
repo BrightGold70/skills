@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** /Users/kimhawk/orca/skills
 **Handover-From:** HemaSuite · feature/196-grounding-shadow-measurement · session d185c497-29e4-4de0-ac43-d3770b39d1d0
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — all five worked through the h-mad remediation sequence (waves 1-5, e.g. `5f9ec7c`, `787aecf`); see project_h_mad_remediation_sequence
 
 > **This is a HANDOVER, not a session closeout.** Five items were being tracked in a session
 > working `~/orca/HemaSuite`, which consumes the h-mad skill but does not own it. All five are
