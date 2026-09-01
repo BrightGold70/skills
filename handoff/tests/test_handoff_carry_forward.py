@@ -204,3 +204,108 @@ class TestAStampedBriefIsStillAPredecessor:
             _section("## Gather context before drafting", "## Required template")
         )
         assert "carry-forward-sources" in section
+
+
+class TestSupersedesNamesEverySourceConsumed:
+    """A handoff absorbs MORE than one source, so the field that retires them
+    must hold more than one name.
+
+    Found by running the cold-start triage live on HemaSuite 2026-09-01, not by a
+    test. After four briefs were stamped, `carry_forward_sources` returned all
+    four plus the branch predecessor. A handoff sets `**Supersedes:**` to one doc,
+    so the other three can never be retired and surface on every WRITE forever --
+    three of them fully closed and yielding nothing when read.
+
+    That is the cries-wolf failure the cold-start section warns about, reached
+    from the other end: a queue that only grows is abandoned exactly as fast as
+    one that silently empties, and the abandoned queue is where the next dropped
+    handover hides. So a source leaves the list the same way an item leaves the
+    chain -- by a handoff proving it absorbed it, never by silence.
+    """
+
+    def _brief(self, d: Path, name: str) -> None:
+        (d / name).write_text(
+            "**Handover-From:** x · y · session a\n**Taken-Over-By:** me · session b\n",
+            encoding="utf-8",
+        )
+
+    def test_one_handoff_retires_several_sources(self, tmp_path: Path) -> None:
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        self._brief(d, "2026-08-01-other__a.md")
+        self._brief(d, "2026-08-02-other__b.md")
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Supersedes:** 2026-08-01-other__a.md, 2026-08-02-other__b.md\n",
+            encoding="utf-8",
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-01-feature-41__mine.md"]
+
+    def test_a_source_not_named_is_still_owed(self, tmp_path: Path) -> None:
+        """Naming two of three must not retire the third. Silence is not a claim
+        that it was absorbed."""
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        for n in ("a", "b", "c"):
+            self._brief(d, f"2026-08-0{ord(n)-96}-other__{n}.md")
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Supersedes:** 2026-08-01-other__a.md, 2026-08-02-other__b.md\n",
+            encoding="utf-8",
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert "2026-08-03-other__c.md" in [p.name for p in sources]
+
+    def test_backticks_and_spacing_do_not_defeat_a_name(self, tmp_path: Path) -> None:
+        """Operators write filenames in backticks; the template shows them bare.
+        A parser that only handles one of those retires nothing and the queue
+        grows anyway -- silently, since a name that fails to match looks exactly
+        like a name that was never written."""
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        self._brief(d, "2026-08-01-other__a.md")
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Supersedes:**  `2026-08-01-other__a.md` \n", encoding="utf-8"
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-01-feature-41__mine.md"]
+
+    def test_the_none_sentinel_retires_nothing(self, tmp_path: Path) -> None:
+        """`none — first on this branch` is prose, not a filename. Splitting it
+        into tokens must not accidentally match anything."""
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        self._brief(d, "2026-08-01-other__a.md")
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Supersedes:** none — first on this branch\n", encoding="utf-8"
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert "2026-08-01-other__a.md" in [p.name for p in sources]
+
+    def test_the_skill_requires_naming_every_source(self) -> None:
+        section = _norm(
+            _section(
+                "### Carry the predecessor's open items forward",
+                "## Writing guidance",
+            )
+        )
+        assert "name every source" in section.lower()
+
+    def test_the_template_says_the_field_takes_a_list(self) -> None:
+        template = _norm(_section("## Required template", "## Writing guidance"))
+        assert "comma-separated" in template.lower()

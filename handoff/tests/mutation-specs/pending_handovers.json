@@ -70,9 +70,26 @@
       "find": "        if path.name not in superseded and path not in sources:",
       "replace": "        if path not in sources:",
       "test": "tests/test_handoff_carry_forward.py::TestAStampedBriefIsStillAPredecessor::test_once_a_handoff_supersedes_it_the_chain_owns_it"
+    },
+    {
+      "name": "supersedes-takes-the-whole-line-as-one-name",
+      "_mechanism": "The pre-fix parser. One handoff absorbs the branch predecessor AND every taken-over brief it carried, so a single-name field retires at most one of them and the rest surface on every later WRITE forever. A queue that only grows is abandoned as fast as one that silently empties -- and the abandoned queue is where the next dropped handover hides.",
+      "file": "scripts/handoff_paths.py",
+      "find": "    for token in field.split(\",\"):",
+      "replace": "    for token in [field]:",
+      "test": "tests/test_handoff_carry_forward.py::TestSupersedesNamesEverySourceConsumed::test_one_handoff_retires_several_sources"
+    },
+    {
+      "name": "a-backticked-filename-fails-to-match",
+      "_mechanism": "Operators write filenames in backticks; the template shows them bare. A name that fails to match looks identical to a name that was never written, so the source silently stays in the queue and the operator sees a handoff they already absorbed offered back to them.",
+      "file": "scripts/handoff_paths.py",
+      "find": "        name = token.strip().strip(\"`\").strip()",
+      "replace": "        name = token.strip()",
+      "test": "tests/test_handoff_carry_forward.py::TestSupersedesNamesEverySourceConsumed::test_backticks_and_spacing_do_not_defeat_a_name"
     }
   ],
   "_not_mutated": {
-    "pending_handovers is_dir guard": "DEGENERATE, not a gap. `Path.glob` on a missing directory returns [] without raising (verified 2026-09-01), so disabling the `if not d.is_dir()` early return lands on identical behaviour and scores `survived` for a reason that has nothing to do with test coverage. The guard stays -- it states the intent and mirrors `find_latest` -- but claiming mutation coverage for a line with no behavioural effect would be a false green. `test_a_missing_store_is_empty_not_an_error` still pins the contract."
+    "pending_handovers is_dir guard": "DEGENERATE, not a gap. `Path.glob` on a missing directory returns [] without raising (verified 2026-09-01), so disabling the `if not d.is_dir()` early return lands on identical behaviour and scores `survived` for a reason that has nothing to do with test coverage. The guard stays -- it states the intent and mirrors `find_latest` -- but claiming mutation coverage for a line with no behavioural effect would be a false green. `test_a_missing_store_is_empty_not_an_error` still pins the contract.",
+    "_superseded_names .md filter": "DEGENERATE, not a gap. The store glob is `*.md`, so every discovered filename ends in .md (verified 2026-09-01) and the filter can only ever drop tokens that could not have matched a real name anyway. Removing it leaves behaviour identical, so the mutant scores `survived` for a reason unrelated to coverage. The filter stays because it states the grammar the field accepts, but claiming mutation coverage for a behaviourally inert line would be a false green. The documented `none - first on this branch` sentinel is safe by CONSTRUCTION rather than by this filter, and `test_the_none_sentinel_retires_nothing` pins that."
   }
 }

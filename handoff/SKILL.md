@@ -879,7 +879,7 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 | `**Date:**` | WRITE | Local `date +%F`, matching the filename's date prefix. |
 | `**Branch:**` | WRITE | The branch the work belongs to — under a multi-worktree layout this may differ from the branch you are sitting on. READ Step 4 builds its `[<repo>@<branch>]` todo prefix from this. |
 | `**Project:**` | WRITE | Project slug or root path (§"Project slug derivation"). |
-| `**Supersedes:**` | WRITE | The handoff this one continues. **It is a pointer, not a licence to drop what it holds** — see §"Carry the predecessor's open items forward". |
+| `**Supersedes:**` | WRITE | Every doc this handoff absorbs, comma-separated — the branch predecessor **and** each taken-over brief whose items it carried. **It is a pointer, not a licence to drop what it holds** — see §"Carry the predecessor's open items forward". |
 | `**Handover-From:**` | HANDOVER Step 3 | Present only on a brief whose ownership moved from another lane. Makes the brief addressed to this **repo** rather than to a branch, which is why READ Step 1 scans for it separately. |
 | `**Taken-Over-By:**` | READ Step 3.5 | Stamped when someone picks the brief up. Its **absence** is what makes a brief show up in `pending-handovers`, so an unstamped brief is re-offered on every resume and a stamped one is never re-adopted. |
 
@@ -891,7 +891,7 @@ Use this structure exactly. Every section is required; write "None" (with a one-
 **Date:** YYYY-MM-DD
 **Branch:** <branch-name or "n/a">
 **Project:** <project name or root path>
-**Supersedes:** <filename of the handoff this one continues, or "none — first on this branch">
+**Supersedes:** <filenames this handoff absorbs, comma-separated, or "none — first on this branch">
 
 ## Session Summary
 
@@ -968,6 +968,10 @@ Silence is not a third option. Nothing anywhere checks whether a handoff mention
 **Why this cannot be left to the task tool.** §"Gather context" item 2 reads a **session-scoped** list. A session that did not run READ starts with an empty one, and its WRITE then truthfully reports no pending todos while dropping everything a prior session restored. Measured: a 15-item backlog that had been explicitly taken over decayed **9 → 2 → 4 → 1 → 0 → 0 → 0 → 0** across 8 consecutive handoffs on one branch. No hop deleted 15 items; each dropped a few, so any adjacent pair diffed like ordinary scope change. `TaskList` returned `No tasks found` at the start of the session that finally noticed, while the items were nominally owned there.
 
 **If the predecessor cannot be read** — the command errors, the file is unreadable, the store is missing — say so in Open / Blocked Items as an explicit unverified-carry-forward line, and do **not** write the doc as though the predecessor had no open items. "I could not read it" and "it had none" produce the same empty list and lead to opposite correct actions; this is the same fail-closed rule the WRITE worktree stamp and READ Step 3.6 already apply.
+
+**Name every source you consumed in `**Supersedes:**`.** `carry-forward-sources` retires a doc only when a later handoff names it, so a source you read and absorbed but did not name stays in the list forever, on every future WRITE. Three of HemaSuite's four taken-over briefs did exactly that after the 2026-09-01 triage — closed work, yielding nothing when read, permanently in the queue. **A queue that only grows is abandoned exactly as fast as one that silently empties**, and the abandoned queue is where the next dropped handover hides. So a source leaves the list the same way an item leaves the chain: because a handoff proved it absorbed it, never because nobody mentioned it.
+
+The mirror rule matters just as much: name **only** what you actually consumed. Listing a brief you did not read retires it on a false claim, and it is then invisible to every later WRITE — the original defect, reached through the field built to prevent it.
 
 **Inherited items keep their origin.** An item that arrived from another lane keeps its `**Handover-From:**` attribution and its location block (`repo: … · branch: … · worktree: …`) as it moves down the chain. Stripping the origin makes it unresolvable two hops later, which is the same loss as dropping it, spread over more documents.
 

@@ -170,6 +170,28 @@ def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]
 _SUPERSEDES_RE = re.compile(r"^\*\*Supersedes:\*\*(.*)$", re.MULTILINE)
 
 
+def _superseded_names(field: str) -> set[str]:
+    """Filenames named by one `**Supersedes:**` field. Comma-separated, possibly
+    backticked.
+
+    A handoff absorbs more than one source -- the branch predecessor plus every
+    taken-over brief whose items it carried -- so one name per field cannot retire
+    them all, and the ones it cannot retire surface on every later WRITE forever.
+    A queue that only grows is abandoned exactly as fast as one that silently
+    empties, and the abandoned queue is where the next dropped handover hides.
+
+    Only `.md` tokens count, which is what keeps the documented
+    `none — first on this branch` sentinel from matching anything: it is prose,
+    and prose split on commas must not accidentally retire a source.
+    """
+    names: set[str] = set()
+    for token in field.split(","):
+        name = token.strip().strip("`").strip()
+        if name.endswith(".md"):
+            names.add(name)
+    return names
+
+
 def carry_forward_sources(
     branch: str | None = None, start: Path | None = None
 ) -> tuple[list[Path], list[Path]]:
@@ -208,7 +230,7 @@ def carry_forward_sources(
             unreadable.append(path)
             continue
         for match in _SUPERSEDES_RE.finditer(text):
-            superseded.add(match.group(1).strip().strip("`"))
+            superseded.update(_superseded_names(match.group(1)))
         if _TAKEN_OVER_BY_RE.search(text):
             taken.append(path)
 
