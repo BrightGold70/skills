@@ -80,6 +80,20 @@ commits since are local.
 - **23 local commits, unpushed** — `git push origin HEAD` when ready. `main` is untouched since
   `4d41a7c`.
 - **`.done` marker files for audit reports v16–v35 are untracked** and deliberately not committed.
+- **The automation-scout phase was NOT run — status: deferred, deliberately.** WRITE's
+  `references/automation-scout.md` phase reconciles the open rows in `docs/skill-candidates.md`
+  before appending new ones, and it is the only thing that writes that file. This session hit
+  `CTXBUDGET: HALT` at 81.6% (ceiling 80) immediately after the doc was pushed, so the phase was
+  skipped rather than half-run. **It is owed**, and this session generated at least three
+  candidate-shaped findings worth a row: (a) a mutation `find` orphaned by editing its own code
+  block — three instances, mechanically detectable by resolving every anchor after any block edit;
+  (b) a node classified `RED: FAIL` that the RED state itself makes pass — three instances,
+  detectable by asking what a node asserts when nothing is implemented; (c) a version-history entry
+  claiming a back-propagation the body never received — four instances, detectable by grepping the
+  body for the claimed string. Run the scout next session BEFORE dispatching cycle 36.
+- **Auto-memories: DONE.** `project_pin_agents_tail_banner.md` and its `MEMORY.md` index line were
+  corrected — the stored premise still said the pass "reuses the EXISTING `_agent_pv_re`", which
+  this session falsified 24/24.
 
 ## Context for Next Session
 
