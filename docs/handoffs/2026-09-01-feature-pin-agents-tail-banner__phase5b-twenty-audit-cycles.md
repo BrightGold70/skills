@@ -77,8 +77,9 @@ commits since are local.
   `frame-satisfies-sigpipe` brief, both named in `**Supersedes:**`. The other 16 are historical
   handover briefs from the documented cold-start queue. **I did not read them and make no claim
   about their contents.** They stay in the queue.
-- **23 local commits, unpushed** — `git push origin HEAD` when ready. `main` is untouched since
-  `4d41a7c`.
+- **All commits PUSHED** — branch in sync with `origin/feature/pin-agents-tail-banner` at
+  `244d336`. `main` is untouched since `4d41a7c`. (This line said "23 local commits, unpushed"
+  when first written; the push happened moments later.)
 - **`.done` marker files for audit reports v16–v35 are untracked** and deliberately not committed.
 - **The automation-scout phase was NOT run — status: deferred, deliberately.** WRITE's
   `references/automation-scout.md` phase reconciles the open rows in `docs/skill-candidates.md`
