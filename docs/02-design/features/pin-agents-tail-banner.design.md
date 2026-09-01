@@ -24,7 +24,7 @@ _orca_find <token>
   │            n>1 ─┐                    n==0 ─┐
   ├─ Pass 2  preview via _agent_pv_re  ◄────────┘  (ONLY when n==0)
   │            resolve on 1 ───────────────────────────────────────────► return
-  ├─ Pass 3* tail via _agent_pv_re     ◄──┘  NEW — entered when n != 1, no lsof needed
+  ├─ Pass 3* tail via _agent_tail_re   ◄──┘  NEW — entered when n != 1, no lsof needed
   │            resolve on exactly 1 ───────────────────────────────────► return
   └─ Pass 4  OS evidence (was Pass 3) ....... needs lsof; unchanged ───► return / decline
 ```
@@ -69,7 +69,15 @@ AC-1.2 accordingly; do not "fix" this by widening `_agent_pv_re`, which would al
 rival rejection and Pass 2's preview match and re-admit the false-positive class those patterns
 exist to exclude.
 
-**The tail pass ANCHORS that regex to line start; `_agent_pv_re` itself is unchanged.** The
+**The tail pass uses its OWN line-complete banner grammar, `_agent_tail_re`, for BOTH the wanted
+and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
+neither is a leading-position grammar: measured across 19 prose probes, the shipped regex declines
+0, a line anchor 7, a leading-position grammar 14, and only a LINE-COMPLETE shape — the banner must
+consume its whole line, allowing just a version, a `model:` field, an effort word, a `·` and a cwd,
+or a bounded parenthetical — declines all 19, with all 12 real banner and status lines still
+matching. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
+real agent pane for merely MENTIONING the other agent, the mirror false-negative (impl-plan AC-4.6,
+mutation `rival-re-prose-unsafe`). The
 helper is NOT hardened against prose, and the claim that it was is falsified: measured 2026-09-01,
 `Release notes for OpenAI Codex are available`, `I am comparing model: gpt-5.6-terra with ours`,
 `The Antigravity CLI documentation changed` and `Compare Gemini 3.1 Pro with Claude` all MATCH it,
@@ -327,6 +335,7 @@ separate manual step in Success Criteria.
 | 14 | stale-pane limit documented at the pass | AC-5.2 |
 | 15 | exit-0 `"ok":false` envelope, and a non-array `.terminal.tail`, both decline rather than resolving | AC-4.4 (impl-plan AC-2.9, AC-2.10) |
 | 16 | tail carrying the agent's name only in PROSE declines; real banner and status lines still resolve | AC-1.4 (impl-plan AC-3.17) |
+| 17 | a real banner PLUS rival prose still resolves, both directions; real rival banners still rejected | AC-1.4 (impl-plan AC-4.6) |
 
 Test 7 is the one that can pass vacuously — assert on the STUB's call count, not on the
 resolution, or it merely restates Pass 0.
@@ -338,7 +347,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **30 of 42 nodes fail at RED and 12 pass**, so a blanket
+   Measured on the node enumeration: **31 of 43 nodes fail at RED and 12 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -447,3 +456,4 @@ resolution, or it merely restates Pass 0.
 - v1.21: Impl-plan audit v25 (codex) — same as the plan: the isolated pin file's `mktemp -d` cleanup must be confirmed by re-reading, not assumed from the command's success.
 - v1.22: Impl-plan audit v26 (codex) — records that `_agent_pv_re` is NOT hardened against prose (measured 7/7 matches on ordinary sentences) and that the tail pass therefore anchors its matcher to line start, while Passes 1-2 keep the shared helper unchanged. Also corrects the literal-`null` explanation: with `// empty` and `else empty` in place, `jq -r` on a missing tail emits zero bytes at rc 0, so `-e` closes the RC hole rather than a null-printing one. Node counts re-derived to 29 / 12 over 41.
 - v1.23: Impl-plan audit v27 (codex) — Test Plan gains a row for spec AC-1.4 (prose declines, real banners resolve), Components corrected to 16 ACs, node counts re-derived to 30 / 12 over 42.
+- v1.24: Impl-plan audit v28 (codex) — the design still prescribed the anchor-only rule that audit v27 rejected and diagrammed the pass as `tail via _agent_pv_re`, so the declared source would have reproduced the wrong-pane defect. Architecture, matcher rule, rival rule and Test Plan now carry the line-complete `_agent_tail_re` grammar used for BOTH the wanted and rival checks, with the 19/12 measurement. Node counts re-derived to 31 / 12 over 43.

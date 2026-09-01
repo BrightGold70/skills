@@ -207,7 +207,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **30 of 42 nodes RED, 12 green**, and the
+  legitimately green before any code exists. Measured: **31 of 43 nodes RED, 12 green**, and the
   12 split **11 + 1**: eleven are each tied to a mutation that must be killed by that specific
   node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
@@ -282,3 +282,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.17: Impl-plan audit v25 (codex) — the live check's `mktemp -d` cleanup now requires re-reading the path to confirm the directory is gone. Removing a directory mutates state, so the command is not its own proof; `rm -rf` on a path that was never created succeeds silently.
 - v1.18: Impl-plan audit v26 (codex) — the 'hardened against prose' premise was FALSE and load-bearing. `_agent_pv_re` matches ordinary prose about the agents (7/7 probes), so with `$scoped` covering shell panes and tail evidence being historical, a shell that printed release notes was resolvable as the agent. The tail pass now anchors the matcher to line start (0/7 prose, 7/7 real banners); the shared helper is unchanged. Node counts re-derived to 29 FAIL / 12 PASS over 41.
 - v1.19: Impl-plan audit v27 (codex) — the line anchor alone did not close the prose class: line-LEADING prose still matched, because the v1.18 corpus only contained mid-sentence shapes. The tail pass now applies a banner grammar (14/14 prose declines, 11/11 real banners still match). Counts re-derived to 30 FAIL / 12 PASS over 42, and the AC list gains spec AC-1.4.
+- v1.20: Impl-plan audit v28 (codex) — the prose rule is now LINE-COMPLETE (19/19 decline, 12/12 real banners match) after prose following a banner-like prefix defeated the previous form, and the rival check uses the same tail-only grammar: it had been reusing the shared prose-unsafe matcher, so a real agent pane was suppressed for merely mentioning the other agent. Counts re-derived to 31 FAIL / 12 PASS over 43.
