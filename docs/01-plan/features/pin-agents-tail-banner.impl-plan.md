@@ -910,7 +910,10 @@ status is `grep`'s alone.
 
       ```python
       def test_tail_pass_call_form_is_source_pinned():
-          flat = " ".join(WRAPPER.read_text().split())
+          # COMMENTS ARE STRIPPED FIRST, and that is not tidiness -- see below.
+          code = [ln for ln in WRAPPER.read_text().splitlines()
+                  if not ln.lstrip().startswith("#")]
+          flat = " ".join(" ".join(code).split())
           assert 'if tout="$(_orca_tail_sig "$th")"; then' in flat
           assert "if local tout=" not in flat
       ```
@@ -919,6 +922,18 @@ status is `grep`'s alone.
       and BOTH directions are asserted: the positive alone passes on a file that also contains
       the `local` form somewhere else, and the negative alone passes on a file that dropped the
       call entirely.
+
+      **The comment strip is load-bearing: without it this test fails against a CORRECT
+      implementation.** T3's own prescribed block bans the idiom BY NAME in a comment —
+      `` # `if local tout="$(...)"` returns `local`'s status … `` — so the flattened source
+      always contains the literal `if local tout=` and the negative assertion can never hold.
+      Measured 2026-09-02 by flattening the prescribed block: substring present `True` without
+      the strip, `False` with it. The v1.40 form of this block, added to satisfy audit v40's
+      should-fix, shipped without the strip and was therefore a test that could only fail —
+      impl-plan audit v41 (agy). A source assertion whose forbidden string is something the file
+      is REQUIRED to document has to exclude the documenting surface, or the ban and its
+      rationale cannot coexist. The `local-masks-helper-rc` mutation is still killed: it rewrites
+      the ACTIVE line, which survives the strip.
 
       **Why this one is a source assertion and every other AC here is behavioural.** The
       `local`-masking form is behaviourally *indistinguishable* inside this pass, which impl-plan
@@ -2025,9 +2040,15 @@ false half is recorded so the next reader does not re-derive it.
       variable**, which is how that refusal is normally reached:
 
       ```bash
-      bash -c 'python3 ~/.claude/skills/h-mad/scripts/h_mad_mutation_harness.py \
+      bash -c 'python3 h-mad/scripts/h_mad_mutation_harness.py \
         --check-anchors h-mad/tests/mutation-specs/*.json'
       ```
+
+      The harness path is **repo-relative**, like every other verification command here. It read
+      `~/.claude/skills/h-mad/scripts/…` until v1.42, which resolves on this machine only because
+      `~/.claude/skills` is a symlink INTO this repo — so the command worked while being wrong,
+      and would fail for any checkout that is not the symlink target. Impl-plan audit v41 (agy);
+      same class as the absolute mutation-spec roots AC-6.11 pins.
 
       Run it from the repository root, under `bash` (the explicit `bash -c` is the point), and
       read the `ANCHORS:` token, never `$?` — the new spec's anchors match exactly once each and no sibling spec was broken
@@ -2243,3 +2264,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.39: Impl-plan audit v39 (codex) — must=2 should=2 nit=1 against v1.37. TWO of its four findings (the 18 missing mutation mechanisms, and the hmad-dispatch.sh:513 Codex fallback enumeration) were the SAME defects agy raised in the same cycle and were already applied at v1.38 — independent convergence on both surfaces, which is the strongest evidence either produces. NEW MUST, and it is the wire-pin numbered-label defect recurring: Task 3 declares TWO connections with BARE **WIRE**/**WIRE-PIN** labels, so the gate parses both with suffix None, pairs both wires with the LAST pin, and registers both under the single identity (pin-agents-tail-banner, Task 3) — the _agent_tail_re record upserts the _orca_tail_sig one and the _orca_find -> _orca_tail_sig connection vanishes from .h-mad/wires.jsonl. Measured before the fix: the registry held only Task 3 -> _agent_tail_re (wanted) and Task 4 -> _agent_tail_re (rival), NO _orca_tail_sig row, while the gate printed WIREPIN: PASS ... registration: registered=3 skipped=0. It fails CLOSED: a lost connection and a green verdict are the same output. Labels numbered WIRE 1/WIRE-PIN 1 and WIRE 2/WIRE-PIN 2; after re-registration the registry carries Task 3 (WIRE 1) -> _orca_tail_sig with its own pin, and the stale collapsed record was removed after proving a superseding row with the same caller/callee/pin exists. NEW SHOULD: AC-3.17 said none of the 24 probes matches 'the anchored one' two paragraphs before reporting that the anchor-only revision declines 7 of 24 — rewritten to name the current bounded grammar and point at the normative block. NIT NOT REPRODUCED: the stray closing ** after 'both directions' in AC-4.6 is not present in these bytes (line 943 is clean); it was fixed in an earlier cycle and the report is describing a version that no longer exists. Re-verified: fence parity 36, 38/38 mutations carry _mechanism, WIREPIN PASS, corpus 24/24 + 12/12, test_hmad_dispatch.py 290 passed.
 - v1.40: Impl-plan audit v40 (agy) — must=1 should=1, all three sites applied. MUST: two production edits were DESCRIBED in prose and prescribed nowhere, which breaks the exact-code invariant by leaving the implementer to invent wording an AC then asserts. (a) AC-3.18 mandates correcting _agent_pv_re's own source comment — the claim 'neither occurs in ordinary prose about a model', falsified 24/24 — but gave no replacement text; exact sh block added, replacing only the comment's final line and naming the two prose examples that still decline. (b) T5's SKILL.md:315 amendment existed ONLY inside the test's _CODEX_CLAIM_NEW constant, so the production markdown edit was unprescribed; exact markdown block added and verified to flatten to exactly _CODEX_CLAIM_NEW, since both are read through _SKILL_MD_FLAT. SHOULD: AC-3.14 required a source-pinned call-form assertion with whitespace collapsed but supplied no test block, unlike AC-2.7 and Task 5; exact python added, asserting BOTH directions — the positive alone passes on a file that also carries the local form elsewhere, the negative alone passes on a file that dropped the call. Re-verified: 50 fence markers (even, counting INDENTED blocks — the line-anchored count used in earlier cycles saw only unindented ones and had been reporting on a subset), 38/38 mutations carry _mechanism, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
 - v1.41: Impl-plan audit v40 (codex) — must=1 should=3 nit=2 against v1.39. Its MUST was the same unprescribed-exact-code defect agy raised in the same cycle, already applied at v1.40. CORRECTION: at v1.39 I recorded codex's AC-4.6 stray-marker nit as NOT REPRODUCED and that was WRONG — the stray closing ** sits on the line AFTER the words 'both directions', so a single-line grep for the phrase plus the marker found nothing and I read absence of a match as absence of the defect. The same report raised it twice and was right twice. Fixed by opening the sentence with the matching marker. SHOULD 1: Task 3's wire rationale still said an empty tail_re makes 'a prose-only tail resolve' — true of the prose-ONLY fixture AC-3.17 carried before v1.30, and the sentence outlived the fixture; with the MIXED fixture both candidates match, the count is 2, and the pass declines on AMBIGUITY. The mutation's own _mechanism already said ambiguity; this surface did not. SHOULD 2: AC-3.17 called the prose false positive a violation of FR-2, but FR-2 is only the exactly-one CARDINALITY rule — a single prose pane matching is ONE match, so FR-2 is satisfied while the resolution is still wrong. It is FR-1 / spec AC-1.4, the wrong-pane rule, as v1.25's own history says. Swept by VALUE: the same mislabel sat inside tail-re-unanchored's _mechanism, and 0 stale FR-2 references remain. SHOULD 3: the design's Components inventory omitted both T5 sites the plan now requires (hmad-dispatch.sh:513, SKILL.md:315), so the plan's claim to map all work onto design steps was broader than the declared source; two rows added. NIT: AC-6.5 described a mutation deleting the rival-rejection continue, while drop-rival-rejection keeps the block and replaces its condition with 'if false' — corrected, with the reason recorded (deleting the continue also changes control flow, so the kill could be credited to that instead). Re-verified: 50 fence markers, 38/38 mechanisms, WIREPIN PASS, corpus 24/24 + 12/12.
+- v1.42: Impl-plan audit v41 (agy) — must=2 should=0, and BOTH musts are defects in work from the last two cycles. MUST 1: test_tail_pass_call_form_is_source_pinned, which I ADDED at v1.40 to satisfy audit v40's should-fix, would fail against a CORRECT implementation — it asserts 'if local tout=' not in the flattened wrapper source, but T3's own prescribed block bans that idiom BY NAME in a comment, so the forbidden substring is something the file is REQUIRED to document. Measured by flattening the prescribed block: present True without a comment strip, False with it. The test now strips comment lines first and the reason sits beside it; local-masks-helper-rc is still killed because it rewrites the ACTIVE line, re-checked. The general rule: a source assertion whose forbidden string is something the file must also explain has to exclude the explaining surface, or the ban and its rationale cannot coexist. MUST 2: AC-6.10 prescribed the harness as ~/.claude/skills/h-mad/scripts/h_mad_mutation_harness.py while every other verification command here is repo-relative — it resolves on this machine ONLY because ~/.claude/skills is a symlink INTO this repo, so the command worked while being wrong and would fail for any other checkout. Now relative, and swept as a CLASS: no absolute ~/ or /Users path remains in any prescribed command across spec, plan, impl-plan or design, the spec root is still '../..' and no mutation names an absolute file. Re-verified: both assertions hold against the prescribed block, 38/38 mechanisms, WIREPIN PASS, corpus 24/24 + 12/12.
