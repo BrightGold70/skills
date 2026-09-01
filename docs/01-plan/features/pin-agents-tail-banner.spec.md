@@ -157,7 +157,10 @@ of failure; leaving it undocumented would.
   observation rather than from an Orca guarantee.
 - `orca terminal read --cursor 0` returns the oldest retained lines, and `.result.terminal.tail`
   is the field carrying them — both confirmed live.
-- A pane's launch command line remains visible above the alternate-screen region.
+- The agent's **banner/status line** remains visible above the alternate-screen region.
+  Stated in terms of the banner, not the launch command: v1.5 made the launch line
+  non-evidence (§Measured basis 3), so an assumption about ITS visibility would describe a
+  dependency the feature no longer has — and would quietly re-license a launch-only fixture.
 
 ## Version History
 - v1.0: Initial specification draft.
@@ -176,3 +179,4 @@ of failure; leaving it undocumented would.
   explicitly and states that Passes 1-2 are matchers rather than filters. The plan already
   said `$scoped` for both entry paths, so the spec was the stale surface, not the design.
 - v1.5: Back-propagated from impl-plan audit v5 (codex surface, operator-approved 2026-09-01) — AC-1.1's launch-command-only guarantee was UNSATISFIABLE by the design's unchanged _agent_pv_re; measured with controls, both launch lines are NO MATCH and all four banner controls MATCH. AC-1.1 narrowed to the vendor/model banner, AC-1.2 inverted to state the launch line is NOT a signature, and Measured basis 3 added with the table. AC-5.2 adds the stale-pane limit (an exited agent's banner still resolves below the 2000-line cap) with an FR-5 note on why it is accepted: Pass 1 and Pass 2 are not liveness-gated either, so it is no new failure class.
+- v1.6: Impl-plan audit v13 (codex) — all three must-fixes were mutation-discrimination gaps in this plan's own scaffolding, and the 37/11/26 counts reproduced. resolve-on-ge-0 was a CRASH mutant: with tn=0 the relaxed branch runs tail_h=$(printf … | grep . | head -n 1), grep returns 1 on empty input and set -euo pipefail aborts before anything resolves (reproduced: rc 1, no output), so a kill would be credited to an abort rather than the property. Replaced by signature-check-not-enforced, which lets a readable non-matching candidate into tail_ids and produces an observably wrong resolution; AC-3.5's fixture is pinned to exactly one readable non-matching candidate to make that kill possible. The two long-tail nodes added in v1.8 had NO mutation reverting the here-string to the pipeline, so the guard they exist for was never mutation-tested - two reverting mutations added, one per branch. tail-sig-fabricates-banner-on-failure has a fixture precondition that was unstated: its hardcoded OpenAI Codex output only changes behaviour for exactly one unreadable candidate resolving codex, so AC-3.11's fixture is now pinned. AC-4.2 was still listed as active in Task 4 while marked withdrawn elsewhere. The spec's assumption about launch-command visibility was restated in terms of the banner, which v1.5 made the only evidence.

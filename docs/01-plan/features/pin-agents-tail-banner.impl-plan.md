@@ -520,7 +520,16 @@ status is `grep`'s alone.
       from this pass and does **not** return non-zero from the pass itself; control reaches the
       OS-evidence pass, asserted by the final `resolved to N candidates` diagnostic on stderr.
 - [ ] AC-3.5 (spec AC-2.2): Zero matching candidates → declines the same way: no handle, fall
-      through, same diagnostic.
+      through, same diagnostic. **Fixture: exactly one READABLE, non-matching candidate** — not
+      zero candidates and not an unreadable one. Its proof is
+      `signature-check-not-enforced`, which drops the signature filter so that readable candidate
+      enters `tail_ids`, giving `tn=1` and an observably WRONG resolution.
+
+      That mutation replaced `resolve-on-ge-0`, which was a **crash mutant**: with `tn=0` the
+      relaxed branch runs `tail_h="$(printf … | grep . | head -n 1)"`, `grep` returns 1 on empty
+      input, and the wrapper's `set -euo pipefail` aborts before anything resolves (reproduced:
+      rc 1, no output). A kill credited to an abort proves the code breaks when broken and nothing
+      about the property.
 - [ ] AC-3.6 (spec AC-3.1): When Pass 0 resolves exactly one handle, **no `terminal read` is
       issued at all** — asserted by grepping `HMAD_STUB_CAPTURE` for `terminal read` and
       requiring zero occurrences. It is asserted on the capture, never on the resolution, or the
@@ -542,6 +551,11 @@ status is `grep`'s alone.
       it (asserted on the capture, so "excluded" is not confused with "never read").
 - [ ] AC-3.11 (spec AC-4.2): When every candidate is unreadable, the pass declines by falling
       through — no handle, no stderr marker, and control reaches the OS-evidence pass.
+      **Fixture is fixed by its mutation, not free:** exactly ONE unreadable candidate, resolving
+      the `codex` token. `tail-sig-fabricates-banner-on-failure` emits a hardcoded `OpenAI Codex`
+      on the failure path, so with two unreadable candidates the mutant fabricates two matches and
+      still declines on ambiguity, and with an `agy` fixture it fabricates no wanted match at all —
+      in both shapes the mutant SURVIVES and this node's green-at-RED proof is void.
 - [ ] AC-3.12 (spec AC-5.1): A comment at the pass states the measured 2000-line cap, that agent
       TUIs do not normally reach it, and that a shell-heavy pane is the case that fails to
       UNRESOLVED. Asserted by reading the source section, not by a bare substring search of the
@@ -619,7 +633,10 @@ ambiguity.
       carrying BOTH that signature and the rival's, resolve to the first — the rival-carrying
       pane is rejected pre-count, so it neither wins nor makes the pass ambiguous. The stderr
       marker names the first handle.
-- [ ] AC-4.2: A single candidate carrying only the rival's signature yields no resolution from
+- [ ] AC-4.2: **WITHDRAWN** — see §"Test-name contract". A rival-only tail fails the agent's
+      own signature and never reaches the rejection branch, so no mutation can discriminate it;
+      it is subsumed by `test_tail_pass_zero_matches_declines`. The number is retained so AC-4.1,
+      AC-4.3, AC-4.4 and AC-4.5 do not renumber. **T4 has FOUR nodes, not five.**
       this pass: no handle, no stderr marker, fall through to the OS-evidence pass.
 - [ ] AC-4.3: Rejection is symmetric — the same fixture resolved for `agy` rejects the pane whose
       tail carries the codex banner, and vice versa. Asserted for both tokens so the test cannot
@@ -919,13 +936,6 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "replace": "  tail_re=\"$(_agent_pv_re \"$token\")|^${token} .--dangerously\""
   },
   {
-   "name": "resolve-on-ge-0",
-   "file": "scripts/hmad-dispatch.sh",
-   "test": "tests/test_hmad_dispatch.py::test_tail_pass_zero_matches_declines",
-   "find": "  if [ \"$tn\" -eq 1 ]; then",
-   "replace": "  if [ \"$tn\" -ge 0 ]; then"
-  },
-  {
    "name": "tail-sig-fabricates-banner-on-failure",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_all_unreadable_declines",
@@ -938,6 +948,27 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_skill_md_frontmatter_unchanged",
    "find": "name: h-mad",
    "replace": "name: h-mad-renamed"
+  },
+  {
+   "name": "signature-check-not-enforced",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_zero_matches_declines",
+   "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
+   "replace": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || true"
+  },
+  {
+   "name": "wanted-check-back-to-pipeline",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_signature_resolves",
+   "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
+   "replace": "      printf '%s' \"$tout\" | grep -Eiq \"$tail_re\" || continue"
+  },
+  {
+   "name": "rival-check-back-to-pipeline",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_rival_rejected",
+   "find": "      if [ -n \"$rival_re\" ] && grep -Eiq \"$rival_re\" <<<\"$tout\"; then",
+   "replace": "      if [ -n \"$rival_re\" ] && printf '%s' \"$tout\" | grep -Eiq \"$rival_re\"; then"
   }
  ]
 }
@@ -1007,7 +1038,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
 | AC-3.3 | `test_tail_pass_env_reports_handle` | RED: FAIL | — |
 | AC-3.4 | `test_tail_pass_two_matches_declines` | RED: PASS | mut `resolve-on-ge-1` |
-| AC-3.5 | `test_tail_pass_zero_matches_declines` | RED: PASS | mut `resolve-on-ge-0` |
+| AC-3.5 | `test_tail_pass_zero_matches_declines` | RED: PASS | mut `signature-check-not-enforced` |
 | AC-3.6 | `test_tail_pass_not_run_when_pass0_resolves` | RED: PASS | mut `wire-force-fire-after-pass0` |
 | AC-3.7 | `test_tail_pass_pool_is_scoped` | RED: PASS | mut `pool-whole-listing` |
 | AC-3.8 | `test_tail_pass_runs_on_ambiguous_title` | RED: FAIL | — |
@@ -1102,10 +1133,10 @@ false half is recorded so the next reader does not re-derive it.
       neither the mutation run nor `--check-anchors` rejects an absolute root that happens to
       resolve on this machine, so nothing else can catch the regression. Observe it fail after
       changing ONLY `root` to an absolute path, then restore.
-- [ ] AC-6.12 … AC-6.18: one mutation per node that is green at RED, each named in the
+- [ ] AC-6.12 … AC-6.20: one mutation per node that is green at RED, each named in the
       §"Test-name contract" proof column — `stub-branch-swallows-terminal-list`,
       `stub-branch-ignores-env-var`, `stub-branch-above-capture`,
-      `tail-re-widened-to-launch-line`, `resolve-on-ge-0`, `tail-sig-fabricates-banner-on-failure`,
+      `tail-re-widened-to-launch-line`, `signature-check-not-enforced`, `tail-sig-fabricates-banner-on-failure`,
       `skill-md-frontmatter-renamed`. Each must be `caught`, and its `mechanism:` line must name
       the node the proof column claims — a kill by any other test means the mutation proves
       nothing about that node.
@@ -1175,7 +1206,7 @@ false half is recorded so the next reader does not re-derive it.
    `…zero_matches_declines`; and `…does_not_capture_terminal_list`,
    `…unset_preserves_legacy_behaviour`, `…still_captures_argv`,
    `…launch_command_alone_does_not_resolve` and `…frontmatter_unchanged` had no proof at all.
-   T6 gains one mutation per uncovered node (AC-6.12 … AC-6.18); the mapping is in §"Test-name
+   T6 gains one mutation per uncovered node, plus two that revert the here-string guard (AC-6.12 … AC-6.20); the mapping is in §"Test-name
    contract". Any node marked `RED: PASS` that no mutation names is a coverage hole — check that
    before 5e, not after.
 
@@ -1220,3 +1251,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.7: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.
 - v1.8: Impl-plan audit v11 (codex) — findings dropped 5 to 1, and the one is the sharpest of the run. T3 and T4 both specified printf '%s' "$tout" | grep -Eiq, which under the wrapper's global set -o pipefail returns 141 when grep -q exits early and printf takes SIGPIPE: a candidate whose tail DOES carry the signature is skipped, and a rival-bearing candidate fails its rejection and is COUNTED. Reproduced on a 240,106-byte tail with the signature on line 1 (rc=141), against rc=0 for the same tail short. Every stub fixture in this plan uses a short tail, so all 37 nodes would have gone green over a matcher broken on exactly the long retained tails the 2000-line cap describes. Both matches now use a here-string, which has no pipeline; drop-rival-rejection re-anchored; AC-3.16 and AC-4.5 added as long-tail regression tests (nodes 35 to 37, expect-fail 24 to 26). AC-6.10 gained the exact bash -c sweep command after verifying it returns ANCHORS_OK specs=34 mutations=342 drifted=0 and that the no-paths invocation is the documented refusal.
 - v1.9: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
+- v1.10: Impl-plan audit v13 (codex) — all three must-fixes were mutation-discrimination gaps in this plan's own scaffolding, and the 37/11/26 counts reproduced. resolve-on-ge-0 was a CRASH mutant: with tn=0 the relaxed branch runs tail_h=$(printf … | grep . | head -n 1), grep returns 1 on empty input and set -euo pipefail aborts before anything resolves (reproduced: rc 1, no output), so a kill would be credited to an abort rather than the property. Replaced by signature-check-not-enforced, which lets a readable non-matching candidate into tail_ids and produces an observably wrong resolution; AC-3.5's fixture is pinned to exactly one readable non-matching candidate to make that kill possible. The two long-tail nodes added in v1.8 had NO mutation reverting the here-string to the pipeline, so the guard they exist for was never mutation-tested - two reverting mutations added, one per branch. tail-sig-fabricates-banner-on-failure has a fixture precondition that was unstated: its hardcoded OpenAI Codex output only changes behaviour for exactly one unreadable candidate resolving codex, so AC-3.11's fixture is now pinned. AC-4.2 was still listed as active in Task 4 while marked withdrawn elsewhere. The spec's assumption about launch-command visibility was restated in terms of the banner, which v1.5 made the only evidence.
