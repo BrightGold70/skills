@@ -1545,6 +1545,56 @@ def test_frame_satisfies_large_until_match_is_satisfied(tmp_path):
     ) == 0
 
 
+def _recovered_has_verdict_rc(tmp_path, *, lead, filler_lines):
+    """Call the private recovered-verdict predicate without triggering main."""
+    text = WRAPPER.read_text(encoding="utf-8")
+    assert text.rstrip().endswith('main "$@"'), (
+        "the helper strip depends on the wrapper ending in its dispatch call"
+    )
+    lib = tmp_path / "hmad-dispatch-lib.sh"
+    lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
+    script = f"""source "{lib}"
+resp="$(python3 -c "
+lead = {lead!r}
+print(lead) if lead else None
+print(('z'*79+chr(10))*{filler_lines}, end='')
+")"
+rc=0
+_recovered_has_verdict "$resp" || rc=$?
+printf '%s\\n' "$rc"
+"""
+    proc = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, cwd=str(tmp_path)
+    )
+    assert proc.returncode == 0, proc.stderr
+    return int(proc.stdout.strip())
+
+
+def test_recovered_verdict_survives_a_response_past_the_pipe_buffer(tmp_path):
+    """A ~240 KB agy response carrying a verdict must still be recognised.
+
+    `printf ... | grep -aq` reports a MATCH as 141 under pipefail once the
+    response clears the pipe buffer, so `_cmd_exec` blanked a verdict it had
+    already recovered -- failing closed on exactly the empty-final-message case
+    the recovery path exists to serve. The response is passed through whole and
+    unbounded, so a long audit reply reaches this size in normal use.
+    """
+    assert _recovered_has_verdict_rc(
+        tmp_path, lead="VERDICT: COMPLIANT", filler_lines=3000
+    ) == 0
+
+
+def test_recovered_verdict_predicate_still_declines_a_large_narration(tmp_path):
+    """Control: the guard must keep rejecting a big response with no verdict.
+
+    Without this, a fix that always reports "verdict present" would pass the
+    regression above while promoting partial narration to --out.
+    """
+    assert _recovered_has_verdict_rc(
+        tmp_path, lead="", filler_lines=3000
+    ) == 1
+
+
 def test_wait_not_while_regex_blocks_a_stable_busy_frame(tmp_path):
     """A pane parked on 'Waiting for background terminal' is stable but NOT done.
 

@@ -2285,6 +2285,27 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
   wait "$pid"
 }
 
+# Does a recovered agy response carry a verdict line worth promoting to --out?
+#
+# A here-string, NOT `printf ... | grep -aq`. Under the wrapper's global
+# `set -o pipefail` that pipeline reports a MATCH as 141: `grep -q` exits at the
+# first hit, `printf` takes SIGPIPE, and pipefail surfaces the signal rather than
+# grep's success. The response is the agent's answer passed through whole and
+# unbounded -- a long audit reply clears the ~64 KB pipe buffer easily -- so the
+# predicate inverted exactly when recovery matters most and blanked a verdict it
+# had already found. Measured 2026-09-01: 240 KB carrying `VERDICT: COMPLIANT`
+# was discarded; the same text at 18 B was kept. Same defect class as the wait
+# frame gates (`_frame_satisfies`, commit 282a3a5), whose sweep ruled this site
+# out on the wrong property -- it argued about re-reading the log, not about the
+# size of the response.
+#
+# Extracted from its call site so a mutation can reach it: the predicate was
+# inline, and a test carrying its own copy of the line would pass against a
+# mutated wrapper.
+_recovered_has_verdict() {  # <recovered-response>
+  grep -aqE '^(STATUS|VERDICT|ASSESSMENT):' <<<"$1"
+}
+
 # J29: `--out` is last-writer-wins across concurrent dispatches, silently. Two
 # `exec` runs pointed at one path both exit 0 and the file keeps only the SECOND
 # responder's answer, so a caller who reads `--out` loses a verdict with nothing
@@ -2643,8 +2664,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # Only a verdict-carrying line is worth promoting to --out; a partial
       # narration is not, and writing one would hand the caller a fabricated
       # answer of exactly the kind J23 records.
-      if [ -n "$recovered" ] \
-        && ! printf '%s\n' "$recovered" | grep -aqE '^(STATUS|VERDICT|ASSESSMENT):'; then
+      if [ -n "$recovered" ] && ! _recovered_has_verdict "$recovered"; then
         recovered=""
       fi
       # DEGRADED fallback, kept deliberately. The structured read above assumes
