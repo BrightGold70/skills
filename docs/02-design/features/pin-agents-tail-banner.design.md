@@ -98,8 +98,9 @@ pane with history, as an UNRESOLVED nobody can explain. The matched field is
 `.result.terminal.tail`; `.content`, `.output` and `.preview` are absent and reading them
 returns nothing in a way indistinguishable from an empty pane.
 
-`timeout`/`gtimeout` are forbidden unconditionally by the base invariant and appear nowhere;
-AC-4.3 asserts that mechanically.
+`timeout`/`gtimeout` are forbidden unconditionally by the base invariant and are never
+INVOKED; AC-4.3 asserts that mechanically, on COMMAND POSITION rather than substring presence,
+so the comment above that names them is free.
 
 **Extraction: `jq -re`, never `jq -r`. Measured 2026-09-01:**
 
@@ -194,7 +195,7 @@ None user-facing. One new private shell function:
 ```sh
 _orca_tail_sig <handle>   # stdout: the pane's tail text (possibly empty)
                           # rc 0 = read succeeded; rc 1 = read failed/unreadable
-                          # runs: hmad-dispatch run --timeout <s> --
+                          # runs: _cmd_run --timeout <s> --   (in-process, not the verb)
                           #         orca terminal read --terminal <h> --cursor 0 --limit 4000 --json
                           # extracts: .result.terminal.tail
 ```
@@ -277,7 +278,7 @@ separate manual step in Success Criteria.
 | 9 | ambiguous title (>1) reaches the pass; no `lsof` still reaches it | AC-3.3 |
 | 10 | unreadable candidate excluded, not counted as non-match | AC-4.1 |
 | 11 | all candidates unreadable → decline | AC-4.2 |
-| 12 | `timeout`/`gtimeout` appear nowhere in the implementation | AC-4.3 |
+| 12 | no line INVOKES `timeout`/`gtimeout`; prose and comments naming them are free | AC-4.3 |
 | 13 | retention limit documented at the pass | AC-5.1 |
 | 14 | stale-pane limit documented at the pass | AC-5.2 |
 
@@ -307,11 +308,22 @@ resolution, or it merely restates Pass 0.
 3. **Live check — it must exercise THIS pass, not merely succeed.** `hmad-dispatch env`
    resolving codex is NOT sufficient evidence: Pass 0, the title pass, the preview pass or an
    ambient pin can each satisfy it without a single `terminal read`, so the check would pass
-   with the whole feature reverted. Require all four: pins cleared (`pin-agents --clear`, no
-   `HMAD_ORCA_*_TERMINAL` exported); the earlier passes shown NOT to resolve on their own
-   (`worktree ps` does not name the pane, title and preview do not match); `env 2>&1` carrying
-   the **`bound <handle> by tail evidence`** marker, which this pass alone emits; and, if a pane
-   was created for the check, closing it and **re-listing terminals to confirm the removal**.
+   with the whole feature reverted. Require all four:
+
+   1. `pin-agents --clear`, then **assert the mutation landed by re-reading the file it was
+      supposed to empty**. `hmad-dispatch env` prints that path on its own `pin file:` line, so
+      record it and confirm in a SEPARATE read that the file is absent or names neither agent.
+      Confirming that no `HMAD_ORCA_*_TERMINAL` is exported is necessary but not sufficient: it
+      checks the ENVIRONMENT, a different surface from the pin FILE that `--clear` mutates, and a
+      pin surviving in the file short-circuits `_orca_find` exactly as an exported one would.
+      Verifying a surface other than the one you changed is the mutation-verification failure
+      this project has shipped before.
+   2. The earlier passes shown NOT to resolve on their own — `worktree ps` does not name the
+      pane (Pass 0 blind), title and preview do not match (Passes 1-2 blind).
+   3. `env 2>&1` carrying the **`bound <handle> by tail evidence`** marker, which this pass alone
+      emits, so it is the only output that proves the tail pass produced the resolution.
+   4. If a pane was created for the check, close it and **re-list terminals to confirm the
+      removal**.
 
 ## Invariant Compliance
 
@@ -322,8 +334,10 @@ resolution, or it merely restates Pass 0.
   frontmatter is untouched. Step 6 of the Implementation Order carries the doc edit. The
   `_orca_find` prose in `SKILL.md` DOES describe the pass
   structure and is updated to say four-plus-one passes rather than four.
-- **Portable time bounds** (base): complies. The read is bounded with
-  `hmad-dispatch run --timeout`; `timeout`/`gtimeout` appear nowhere, and AC-4.3 asserts it.
+- **Portable time bounds** (base): complies. The read is bounded with in-process
+  `_cmd_run --timeout` — the function the `hmad-dispatch run` verb dispatches to, never the
+  verb re-exec'd as a subprocess. No line INVOKES `timeout`/`gtimeout`; AC-4.3 asserts that on
+  command position, so prose and comments naming them are free.
 - **Audit-gate signal discipline** (base): not applicable — this pass returns a handle, not
   a verdict token, and emits no gate line.
 - **Test discrimination** (base): complies. Every guard is mutation-tested, and test 7 is
@@ -370,3 +384,4 @@ resolution, or it merely restates Pass 0.
 - v1.11: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.
 - v1.12: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
 - v1.13: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
+- v1.14: Impl-plan audit v16 (codex) — two corrections. The live check still required only that pins be cleared with no `HMAD_ORCA_*_TERMINAL` exported, despite v1.13's own history claiming the pin-FILE re-read had landed here; the body now carries it as step 1, with the reason stated — `--clear` mutates the pin FILE and the environment is a different surface, so a surviving file pin short-circuits `_orca_find` exactly as an exported one would and the check would pass with the feature reverted. History claiming a fix the body lacks is the recurring shape in this document's own record. Second, the API comment, the invariant-compliance bullet and the traceability row still said `hmad-dispatch run --timeout` and "`timeout`/`gtimeout` appear nowhere"; both now say in-process `_cmd_run` and "no line INVOKES", matching impl-plan AC-2.7's command-position predicate.

@@ -82,7 +82,7 @@ paragraph above as licensing a launch-command-only fixture.
 
 **The read command, in full.** Each candidate is read with
 
-    hmad-dispatch run --timeout <s> -- orca terminal read --terminal <handle> --cursor 0 --limit <n> --json
+    _cmd_run --timeout <s> -- orca terminal read --terminal <handle> --cursor 0 --limit <n> --json
 
 and matched against `.result.terminal.tail`. **`--cursor 0` is load-bearing, not decoration**:
 without it the call returns the most recent rows, and the agent's banner sits at the START of
@@ -95,8 +95,11 @@ way that looks identical to an empty pane.
 **The read must be time-bounded with the portable bounder.** `timeout`/`gtimeout` are
 forbidden unconditionally by the base invariant — neither is a macOS system component, so
 the form fails at 127 where coreutils is absent and silently works where someone installed
-it. Use `hmad-dispatch run --timeout <s> -- <cmd…>` (exit 124 at the deadline). If no
-time-bounder is reachable, halt rather than issuing an unbounded read.
+it. Call `_cmd_run --timeout <s> -- <cmd…>` IN-PROCESS (exit 124 at the deadline). `_cmd_run` is
+the function `main` dispatches the `hmad-dispatch run` verb to, so it is the same bounder with
+the same convention; naming the verb instead would, taken literally, re-exec the wrapper by
+name, which is not on the test harness's `PATH` (`_bindir:/usr/bin:/bin`) and costs a process
+per candidate. If no time-bounder is reachable, halt rather than issuing an unbounded read.
 
 Rival rejection is reused from Pass 1 rather than reinvented: a candidate carrying the
 other agent's signature is dropped before counting, so it cannot be selected and cannot
@@ -134,7 +137,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 | Deliverable | Type | Satisfies |
 |---|---|---|
 | Standalone tail-evidence pass between Pass 2 and Pass 3 | shell function change | FR-1, FR-2, FR-3, FR-4 |
-| Time-bounded read via `hmad-dispatch run --timeout` | shell call form | FR-4 |
+| Time-bounded read via in-process `_cmd_run --timeout` | shell call form | FR-4 |
 | Retention-limit comment at the pass | code comment | FR-5 |
 | Tests in `test_hmad_dispatch.py` covering resolve / ambiguous / rival / unreadable / not-reached | tests | all |
 | `tests/mutation-specs/tail_signature_pass.json` | mutation spec | all |
@@ -147,7 +150,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 | The pass fires on a pane an earlier filter deliberately excluded | High | Operate only on `$scoped`, which already excludes the caller's own pane and is the same set Passes 1-2 filter from; never widen it |
 | Running before Pass 3 changes which evidence wins when both are available | Medium | Deliberate: a tail names the agent for a SPECIFIC pane, while OS evidence proves only that a process exists in the worktree and cannot say which pane holds it. Pass 3 still runs when no tail matches, so nothing that resolves today stops resolving |
 | A pane whose agent EXITED still carries its banner below the 2000-line cap, so the pass resolves a dead agent's shell | Medium — a dispatch lands in a plain shell | Accepted and documented at the pass (spec AC-5.2): tail evidence is HISTORICAL. Passes 1 and 2 are not liveness-gated either, so this is no new failure class; a liveness gate would require `lsof` and contradict AC-3.3 |
-| A `terminal read` hangs and stalls every resolution | Medium | Bound it with `hmad-dispatch run --timeout <s> --` (NEVER `timeout`/`gtimeout`, forbidden unconditionally by the base invariant); an unreadable candidate is excluded, and all-unreadable declines |
+| A `terminal read` hangs and stalls every resolution | Medium | Bound it with in-process `_cmd_run --timeout <s> --` (NEVER an INVOCATION of `timeout`/`gtimeout`, forbidden unconditionally by the base invariant; naming them in prose is free); an unreadable candidate is excluded, and all-unreadable declines |
 | Reading tails on every resolution becomes a per-call cost | Low | Conditional on 0 or >1 survivors; a clean Pass 0/1 reads nothing |
 | A rival's banner in scrollback selects the wrong agent | High | Rival rejection before counting (AC-2.3) |
 | The TUI/alt-screen assumption is wrong on some agent | Medium | It is an inference from n=3, stated as an assumption in the spec; if false the pass declines more often, which is safe |
@@ -164,10 +167,20 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 
 ## Success Criteria
 
-- All 14 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-5.1, AC-5.2 — counted from the spec by
-  `grep -o 'AC-[0-9]\.[0-9]' | sort -u`, never carried; **this line has now been stale three
-  times**, the third when spec v1.5 added AC-5.2 and this count was not swept. Re-run the command;
-  do not read the number above.)
+- All 14 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-5.1, AC-5.2 — counted from the spec by the
+  ROW-ANCHORED derivation
+
+      grep -oE '^ *- AC-[0-9]\.[0-9]' <spec> | grep -oE 'AC-[0-9]\.[0-9]' | sort -u | wc -l
+
+  never carried; **this line has now been stale three times**, the third when spec v1.5 added
+  AC-5.2 and this count was not swept. Re-run the command; do not read the number above.
+  **The anchor is load-bearing and the unanchored `grep -o 'AC-[0-9]\.[0-9]' | sort -u` this
+  bullet used to prescribe is wrong**: it counts every AC id the spec *mentions*, including
+  IMPL-PLAN ids quoted in the spec's own version history. Measured 2026-09-01 — unanchored it
+  returned 16 against 14 defined, the two extras being `AC-2.7` and `AC-3.5` in history prose,
+  one of them written by the very entry recording this fix. A derivation that a document's own
+  changelog can inflate is not a derivation. The impl-plan learned this at its v1.7 and anchored
+  both of its RED-count commands; this one was missed.)
 - **Every new test is either observed RED against the unfixed code, or carries a named
   reject-direction proof.** A test that passes against the code it was written to catch is
   decoration, and this feature is especially exposed to it: `cn == 1` already resolves today by
@@ -194,8 +207,6 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   only this pass emits; (d) any pane created for the check closed AND the removal confirmed by
   re-listing terminals.
 - Full suite green, anchors OK
-- A live check: `hmad-dispatch env` resolves codex on this machine without a manual pin,
-  and any pane created for the check is closed
 
 ## Out-of-Scope (confirmed from spec)
 
@@ -233,3 +244,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.7: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
 - v1.8: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
 - v1.9: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
+- v1.10: Impl-plan audit v16 (codex) — two corrections, both on surfaces that contradicted the implementation contract. The read command, the portable-bounder paragraph, the deliverables row and the risk row all still prescribed `hmad-dispatch run --timeout` as a subprocess, which taken literally re-execs the wrapper by name — not on the test harness's PATH and a process per candidate — while T2 and the design require the in-process `_cmd_run`; all four now say `_cmd_run`, naming the verb only to identify which bounder. Separately, a WEAK duplicate live-check criterion sat below the strong four-part one and required only that `env` resolve codex and that a created pane be closed — satisfiable by Pass 0 or an ambient pin with zero `terminal read` calls, i.e. with the whole feature reverted. Deleted rather than strengthened: the strong criterion two bullets above already carries the pin-FILE re-read, and a document that states a gate twice at two strengths is read at the weaker one. Found while sweeping, not by the audit: the AC-count derivation this bullet prescribes was UNANCHORED (`grep -o 'AC-[0-9].[0-9]' | sort -u`) and counts every AC id the spec merely mentions, impl-plan ids in the spec's own version history included — measured 16 against 14 defined, and one of the two extras was written by the history entry recording this very fix. Now row-anchored. The count itself was correct; the command that was supposed to prove it was not, which is the worse of the two failures because it is the one that outlives the sweep.

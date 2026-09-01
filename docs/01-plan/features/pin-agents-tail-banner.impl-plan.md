@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.12)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.6, 14 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.14)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.7, 14 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -111,12 +111,19 @@ def _orca_read_dir(tmp_path, envelopes):
     # previous call's <handle>.json survive, so a handle the caller OMITTED (the
     # UNREADABLE case) would still be served by a stale file and the helper's
     # documented semantics would quietly be false within one tmp_path.
-    d = pathlib.Path(tempfile.mkdtemp(dir=tmp_path, prefix="reads-"))
+    d = Path(tempfile.mkdtemp(dir=tmp_path, prefix="reads-"))
     for handle, text in envelopes.items():
         (d / f"{handle}.json").write_text(text, encoding="utf-8")
     return str(d)
 ```
-`json` is already imported at the top of the module; no new import is needed.
+`json` and `tempfile` are already imported at the top of the module; no new import is needed.
+
+**`Path(...)`, not `pathlib.Path(...)`.** The module's imports are `atexit, json, os, shutil,
+subprocess, tempfile, time, uuid` and `from pathlib import Path` — verified in the live file —
+so the bare name `pathlib` is not bound there and the dotted form raises `NameError` on the
+FIRST call, before AC-1.5 tests anything about the stub. Impl-plan audit v16 caught it. Either
+form is correct Python in isolation, which is exactly why a code block that is meant to be
+followed verbatim has to name the binding the target module actually has.
 
 **Acceptance Criteria**:
 - [ ] AC-1.1: With `HMAD_STUB_ORCA_READ_DIR=<dir>` and `<dir>/term_x.json` present, invoking the
@@ -173,9 +180,10 @@ implementer, because all three are silent when got wrong:
    `// empty` **before** the type branch, so an absent key produces no output and `jq -e` exits
    non-zero (4).
 3. **The time bound is `_cmd_run`, called in-process — not `hmad-dispatch run` as a subprocess.**
-   The design names the verb (`hmad-dispatch run --timeout … --`) to say *which* bounder, since
-   `timeout`/`gtimeout` are forbidden unconditionally by the base invariant. Taken literally it
-   would re-exec the wrapper by name, which is not on `PATH` inside the test harness
+   The design, source plan and spec now all say `_cmd_run` (back-propagated after impl-plan
+   audit v16 found them still prescribing the verb). They name the verb only to identify *which*
+   bounder, since `timeout`/`gtimeout` are forbidden unconditionally by the base invariant.
+   Taken literally the verb form would re-exec the wrapper by name, which is not on `PATH` inside the test harness
    (`_bindir:/usr/bin:/bin`) and costs a process per candidate. `_cmd_run` is the function
    `main` dispatches that verb to, so calling it directly is the same bounder with the same
    exit-124 convention. Function definitions are resolved at call time and `main "$@"` runs at
@@ -247,12 +255,47 @@ def _isolated_env(*, substrate=None, env=None, capture=None, bindir=None):
     """The env `run()` already builds — lifted verbatim, no behaviour change.
 
     Moving this out of run() is a pure extraction: run() keeps its signature and
-    body minus these lines, and calls _isolated_env(...) for the dict it used to
-    assemble inline. Do NOT reimplement the scrubbing.
+    calls _isolated_env(...) for the dict it used to assemble inline. Do NOT
+    reimplement the scrubbing.
+
+    One line is NEW rather than lifted: the HMAD_TAIL_READ_TIMEOUT pop. See the
+    note under this block.
     """
-    # (body: exactly the existing lines of run() from `e = dict(os.environ)`
-    #  through the `e["PATH"] = …` assignment, unchanged)
-    ...
+    e = dict(os.environ)
+    e.pop("HMAD_SUBSTRATE", None)
+    # Session markers checked by _detect_substrate() ABOVE binary presence.
+    e.pop("CMUX", None)
+    e.pop("CMUX_PANE", None)
+    e.pop("ORCA_SESSION", None)
+    e.pop("ORCA_TERMINAL_ID", None)
+    e.pop("ORCA_PANE_KEY", None)
+    # F13: strip every HMAD_ORCA_* pin (coordinator + agent terminal handles).
+    for _k in [k for k in e if k.startswith("HMAD_ORCA_")]:
+        e.pop(_k, None)
+    e.pop("HMAD_PREFLIGHT_RECEIPT_FILE", None)
+    # NEW in this feature: the tail read's own timeout override. Scrubbed for
+    # the same reason as every line above it, and BEFORE the env update so a
+    # test that sets it explicitly still wins.
+    e.pop("HMAD_TAIL_READ_TIMEOUT", None)
+    if substrate:
+        e["HMAD_SUBSTRATE"] = substrate
+    if capture:
+        e["HMAD_STUB_CAPTURE"] = str(capture)
+    if env:
+        e.update({k: v for k, v in env.items() if k != "_BINDIR"})
+    # AFTER the update, so a test that passes its own HMAD_ORCA_PIN_FILE keeps it.
+    e.setdefault("HMAD_ORCA_PIN_FILE", _absent_pin_file())
+    # Only the requested stubs on PATH; the ambient PATH is deliberately excluded.
+    e["PATH"] = f"{bindir}:/usr/bin:/bin" if bindir else os.environ["PATH"]
+    return e
+
+
+def run(args, *, substrate=None, env=None, capture=None, cwd=None):
+    """Invoke the wrapper with only the named stub binaries on PATH."""
+    bindir = Path(env["_BINDIR"]) if env and "_BINDIR" in env else None
+    e = _isolated_env(substrate=substrate, env=env, capture=capture, bindir=bindir)
+    return subprocess.run(["bash", str(WRAPPER), *args], capture_output=True,
+                          text=True, env=e, cwd=cwd)
 
 
 def _run_bash(script, *, env=None, capture=None, cwd=None):
@@ -262,9 +305,19 @@ def _run_bash(script, *, env=None, capture=None, cwd=None):
                           text=True, env=e, cwd=cwd)
 ```
 
-`run()` then becomes `subprocess.run([...], env=_isolated_env(...))` over the same arguments it
-builds today. The extraction is behaviour-preserving by construction, and the existing 284 tests
-are its regression check — run them before and after and require an identical pass count.
+`run()` is shown above in its post-extraction form: same signature, same call, the env dict now
+sourced from `_isolated_env`. The extraction is behaviour-preserving by construction, and the
+existing 284 tests are its regression check — run them before and after and require an identical
+pass count.
+
+**The `HMAD_TAIL_READ_TIMEOUT` pop is load-bearing for AC-2.5, not tidiness.** `_isolated_env`
+copies the ambient environment, and this feature introduces the variable, so on a host that
+exports it the child inherits the host's value. AC-2.5 exercises the `${HMAD_TAIL_READ_TIMEOUT:-2}`
+DEFAULT; with the variable set upstream the test passes without ever reaching the default, and a
+regression that dropped the `:-2` fallback entirely would pass too. That is a Test-discrimination
+breach of the same shape as the equivalent mutants above: green, and proving nothing. Impl-plan
+audit v16 caught it. AC-2.6 then sets the variable explicitly to exercise the override — the
+scrub is what makes those two ACs measure different things.
 
 `re` is **not** currently imported by `test_hmad_dispatch.py` (its imports are `atexit, json, os,
 shutil, subprocess, tempfile, time, uuid, pathlib.Path` — verified), and AC-2.7's predicate needs
@@ -780,12 +833,27 @@ def test_skill_md_names_tail_evidence_pass():
 
 def test_skill_md_frontmatter_unchanged():
     """AC-5.3: manifest integrity — no entry behaviour changes, so the contract
-    fields must not move."""
+    fields must not move.
+
+    Asserted as a WHOLE LINE, not as a substring. `"name: h-mad" in fm` is a
+    prefix test in disguise: `skill-md-frontmatter-renamed` rewrites the field
+    to `name: h-mad-renamed`, which still CONTAINS `name: h-mad`, so the
+    substring form leaves the mutant inside the accepted set. That is a FOURTH
+    equivalent mutant in this plan — the mutation would score `survived`
+    against a guard that holds, `MUTATION: ALL_CAUGHT` would be unreachable,
+    and the green-at-RED reject-direction proof this node exists to supply
+    would be vacuous. Impl-plan audit v16 measured it with the prescribed
+    replacement. Line equality also needs no YAML parser and no new import.
+    """
     head = SKILL_MD_TEXT.split("\n---\n", 2)
     assert head[0].startswith("---"), "SKILL.md must still open with frontmatter"
     fm = head[0]
-    assert "name: h-mad" in fm
-    assert "description:" in fm
+    lines = [ln.strip() for ln in fm.splitlines()]
+    assert "name: h-mad" in lines, (
+        "frontmatter `name` must be exactly `h-mad`; got "
+        f"{[ln for ln in lines if ln.startswith('name:')]!r}"
+    )
+    assert any(ln.startswith("description:") for ln in lines)
 
 
 _CODEX_CLAIM_OLD = ("only on a fresh pane's `gpt-N` banner, which scrolls off once it works")
@@ -1019,8 +1087,10 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
 }
 ```
 
-**The last two are the base invariant's bidirectional connection requirement, and neither is
-covered by the eight above.** T2→T3 is a call-site connection: `_orca_find` calls
+**`wire-disconnect-callee-intact` and `wire-force-fire-after-pass0` are the base invariant's
+bidirectional connection requirement, and neither is covered by any other mutation here.**
+Named rather than placed: they were "the last two" when this paragraph was written and nine
+mutations now follow them, so a positional reference had already gone stale. T2→T3 is a call-site connection: `_orca_find` calls
 `_orca_tail_sig`. `invariants.base.md` §"Connection enforcement" asks for a mutation that
 **disconnects the call site while leaving the callee intact**, and one that **forces the
 connection to fire** where it should not.
@@ -1322,3 +1392,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.10: Impl-plan audit v13 (codex) — all three must-fixes were mutation-discrimination gaps in this plan's own scaffolding, and the 37/11/26 counts reproduced. resolve-on-ge-0 was a CRASH mutant: with tn=0 the relaxed branch runs tail_h=$(printf … | grep . | head -n 1), grep returns 1 on empty input and set -euo pipefail aborts before anything resolves (reproduced: rc 1, no output), so a kill would be credited to an abort rather than the property. Replaced by signature-check-not-enforced, which lets a readable non-matching candidate into tail_ids and produces an observably wrong resolution; AC-3.5's fixture is pinned to exactly one readable non-matching candidate to make that kill possible. The two long-tail nodes added in v1.8 had NO mutation reverting the here-string to the pipeline, so the guard they exist for was never mutation-tested - two reverting mutations added, one per branch. tail-sig-fabricates-banner-on-failure has a fixture precondition that was unstated: its hardcoded OpenAI Codex output only changes behaviour for exactly one unreadable candidate resolving codex, so AC-3.11's fixture is now pinned. AC-4.2 was still listed as active in Task 4 while marked withdrawn elsewhere. The spec's assumption about launch-command visibility was restated in terms of the banner, which v1.5 made the only evidence.
 - v1.11: Impl-plan audit v14 (codex) — the sharpest finding of the run is a SHAPE error 14 cycles old. Task 3 was declared new-behaviour while its deliverable includes the _orca_find -> _orca_tail_sig call site, so the wire-pin gate reported wiring=0 and the task bypassed WIRE/WIRE-PIN, the wire registry and the wire-specific RED failure-mode check - all while this same plan already carried wire-disconnect-callee-intact and wire-force-fire-after-pass0 as connection-direction mutants. The mutations asserted a wire the shape denied. T3 is now wiring with the pin named, and the gate reports wiring=1. The RED counts were derived as an AGGREGATE and called the dispatch inputs, but assemble_tdd cuts ONE task and takes THAT task's counts, so 27/11 would have halted every task on red_not_all_failing; a per-task loop is prescribed, and running it exposed a second defect the audit did not name - two rows still carried combined AC labels (AC-2.7, AC-2.8 and AC-5.2, AC-5.4), so the loop matched 35 of 37 and silently under-counted T2 and T5. SKILL.md:315's claim that Codex's banner scrolls off once it works is precisely what this feature falsifies; AC-5.5 added to amend and pin it (nodes 37->38).
 - v1.12: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
+- v1.13: Impl-plan audit v16 (codex) — SIX must-fixes, three of them defects in this plan's own test scaffolding rather than stale prose. `skill-md-frontmatter-renamed` was a FOURTH equivalent mutant: the test asserted `"name: h-mad" in fm`, and the mutant's `name: h-mad-renamed` still CONTAINS that substring, so the mutation would have scored `survived` against a guard that holds and ALL_CAUGHT would have been unreachable; asserted as a whole line now, verified with the prescribed replacement (substring True/True, whole-line True/False). Task 1's `_orca_read_dir` called `pathlib.Path(...)` while the module binds only `Path` via `from pathlib import Path` (verified in the live file), so following the block verbatim raised NameError before AC-1.5 tested anything. `_isolated_env` was prescribed as "not left to interpretation" while its body was a literal `...`; the extracted body is now spelled out, including `run()` in post-extraction form. That body also gained the `HMAD_TAIL_READ_TIMEOUT` pop AC-2.5 needs: `_isolated_env` copies the ambient environment and this feature INTRODUCES the variable, so on a host exporting it the default `${HMAD_TAIL_READ_TIMEOUT:-2}` is never reached and a regression dropping the fallback passes too. The time-bound contract was swept to `_cmd_run` and "no INVOCATION" across all four documents (nine sites; the nine that remain are descriptive — the ruling itself, one historical CLI measurement, and "which bounder"). Source-design citation corrected v1.12 -> v1.14 and the wire mutations named instead of placed.
