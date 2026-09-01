@@ -1065,15 +1065,36 @@ audit v35. Extend the existing case rather than adding a second one:
     codex) rival_re="$(_agent_pv_re agy)";   rival=agy   ;;
     agy)   rival_re="$(_agent_pv_re codex)"; rival=codex ;;
   esac
+```
+
+**The rival matcher is computed in PASS 3, after T3's `local` line — NOT here.** v1.35 put the
+assignment in this Pass-1 case block and that was a silent, self-inflicted defect, caught by BOTH
+v37 surfaces independently: T3 later executes `local tail_re rival_tail_re …`, and in bash a
+`local` re-declaration RESETS the name, so the value assigned up here is wiped before the tail
+pass ever reads it. `[ -n "$rival_tail_re" ]` is then false for every candidate and rival
+rejection never fires — AC-4.1/4.3/4.4/4.5 cannot pass under the prescribed code, and nothing
+errors. Controlled probe, run twice independently:
+
+```
+f() { rival_tail_re=COMPUTED; echo "[$rival_tail_re]"      # -> [COMPUTED]
+      local tail_re rival_tail_re tail_ids=""; echo "[$rival_tail_re]"; }   # -> []
+```
+
+The v36 (agy) finding this replaces asked only for the assignment to leave the candidate LOOP;
+moving it out of the tail pass entirely was my over-correction. It goes immediately below T3's
+declaration and above the loop, which satisfies the once-per-call point without crossing a
+`local`:
+
+```sh
+  # Pass 3. The first two lines are T3's, shown as context; T4 adds only the third.
+  local tail_re rival_tail_re tail_ids="" th tout tn tail_h
+  tail_re="$(_agent_tail_re "$token")"
   rival_tail_re="$(_agent_tail_re "$rival")"
 ```
 
-`rival_tail_re` is computed HERE, beside `tail_re` and above the candidate loop, not inside it:
-`$rival` is constant across candidates, so a per-candidate assignment spawns one subshell each
-for the same value. `local tail_re rival_tail_re …` (T3) already declares it. Impl-plan audit
-v36 (agy). The two mutations that anchor on this line are re-anchored to its new indentation in
-this same edit — an anchor left pointing at the old two-space-deeper form matches 0 times and the
-harness REFUSES rather than measuring.
+The mutation anchors on `  rival_tail_re="$(_agent_tail_re "$rival")"` are unaffected: the line's
+text and its two-space indentation are unchanged, only its position moved, and the harness
+anchors on the string.
 
 `rival` stays empty for any other token, and `_agent_tail_re ""` falls to the `*)` arm, so the
 guard degrades to the shared helper rather than aborting.
@@ -1099,8 +1120,9 @@ ambiguity.
     if tout="$(_orca_tail_sig "$th")"; then
       grep -Eiq "$tail_re" <<<"$tout" || continue
       # Reject BEFORE counting: a pane demonstrably running the other agent is
-      # neither a match nor a source of ambiguity. Same predicate Pass 2 applies
-      # NOT the shared $rival_re computed above Pass 1: that one is `_agent_pv_re`,
+      # neither a match nor a source of ambiguity. This is the predicate Pass 2
+      # applies, extended to the tail -- but built from _agent_tail_re, NOT from
+      # the shared $rival_re computed above Pass 1: that one is `_agent_pv_re`,
       # which matches prose (24/24 measured), and this input is arbitrary retained
       # scrollback. Same grammar as the wanted check, or a real agent pane is
       # suppressed for merely MENTIONING the other agent -- a false negative in
@@ -1466,6 +1488,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
    "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
    "replace": "  rival_tail_re=\"\""
+  },
+  {
+   "name": "wire-rival-matcher-forced-empty",
+   "_mechanism": "The opposite direction for the rival wire. `wire-rival-matcher-disconnected` and `rival-re-prose-unsafe` both REMOVE the `_agent_tail_re` call from this line, so neither proves the call's RESULT is used. This one keeps the call and discards it, installing a universal matcher: every candidate then matches the rival grammar and is rejected pre-count, so the clean pane AC-4.1's fixture expects to win resolves to nothing. The wanted side has carried this shape since v1.27 as `wire-wanted-matcher-forced-empty`; the rival side had no counterpart until impl-plan audit v37 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress",
+   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "  _agent_tail_re \"$rival\" >/dev/null; rival_tail_re=\".\""
   },
   {
    "name": "rival-re-prose-unsafe",
@@ -2095,3 +2125,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.33: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. AC-2.12 now names `grep -Ei`, AC-2.11 says explicitly that it covers syntax only, the code-block comment carries the per-arm and fold rules, and AC-3.17's Group B stops re-listing the continuations. No mutation anchor targets the comment prose (verified: 0 of 37 finds).
 - v1.34: Impl-plan audit v36 (codex) — all 6 findings applied; both musts independently re-measured before acting. MUST 1: Task 2's normative `_agent_tail_re` block was not a valid fence — `}` and the closing backticks shared one line, so the ```sh fence opened at :173 stayed open to :308 and swallowed the production/test fields and the run_fn Python as shell. Confirmed by parity: 27 fence lines (odd) before, 28 after; the block re-extracts and re-measures 24/24 + 12/12 under grep -Ei. MUST 2: verification prescribed `pytest -k orca_find`, which collects 0 of 290 (pytest exits 5 on an empty selection, so the step measured nothing and looked like a pass) and no planned node name contains orca_find; replaced on BOTH surfaces with `-k orca_identity` (24/290 collected, measured) plus an explicit non-zero-collection assertion. Provenance corrected to design v1.32 / spec v1.17 — the plan already depended on the design pass's case-fold and per-arm rules while citing revisions that predate them. Task 6's boundary promise narrowed to the enumerated table it already narrows to later. AC-3.4 now says N in the fall-through diagnostic is the Pass-1/2 count, NOT tn — under its own fixture it reads 'resolved to 0 candidates' while two panes carried the signature — so the assertion is on the diagnostic's PRESENCE plus the absence of the tail-evidence marker; carrying tn into that pre-existing line is deliberately not prescribed. Nit: the spliced $rival_re sentence in T4 (same edit-collision shape the design pass fixed). Re-verified after: WIREPIN PASS tasks=6 wiring=2, 37 mutation finds intact, test_hmad_dispatch.py 290 passed.
 - v1.35: Impl-plan audit v36 (agy, SECOND surface, dispatch rc=124 at the 1500s bound with no end sentinel — report structurally complete but completeness UNVERIFIED, and it audited v1.33). All 3 findings verified against the document and applied. MUST: T5 named a SECOND renumber site (hmad-dispatch.sh:1046, the cross-reference from _orca_handle_live's neighbourhood) and AC-5.1 asserts it, but the Code structure block prescribed only :574 — renumbering one and not the other leaves the file calling two different passes 'Pass 3'. Exact code for the second site added. SHOULD: rival_tail_re was computed INSIDE the candidate loop although $rival is constant across candidates — hoisted above the loop beside tail_re (the local declaration at T3 already covers it), and the two mutations anchored on that line were re-anchored to its new indentation IN THE SAME EDIT, since an anchor left at the old two-space-deeper form matches 0 times and the harness REFUSES rather than measuring. NIT: 4 regex mutations replaced a 4-space case arm with a 6-space one; indentation normalised, 0 mismatches remain across all 36 find/replace pairs. Re-verified: fence parity 30 (even), the embedded JSON still parses, 37 finds intact, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12 under grep -Ei.
+- v1.36: Impl-plan audit v37, BOTH surfaces on the same bytes (codex must=2 should=1, agy must=1 should=0), both completed runs with end sentinels. The blocking finding is MINE and both surfaces found it independently: v1.35's hoist put rival_tail_re="$(_agent_tail_re "$rival")" in the Pass-1 case block, and T3 later runs `local tail_re rival_tail_re …` — in bash a local re-declaration RESETS the name, so the value was wiped before the tail pass read it, [ -n "$rival_tail_re" ] was false for every candidate, rival rejection NEVER fired, and nothing errored. AC-4.1/4.3/4.4/4.5 could not pass under the prescribed code. Controlled probe run twice: assignment then `local` prints [COMPUTED] then []. The v36 (agy) finding only asked the assignment to leave the LOOP; moving it out of the tail pass entirely was the over-correction. It now sits immediately below T3's local and above the loop — once per call, no local crossed — and the mutation anchors are unaffected because the line's text and indentation are unchanged. Second must (codex): the rival wire had NO force-direction connection mutation — wire-rival-matcher-disconnected and rival-re-prose-unsafe both REMOVE the _agent_tail_re call, so neither proved its result is USED; added wire-rival-matcher-forced-empty on the shared anchor (call kept, result discarded, universal matcher installed -> every candidate rejected pre-count), pinned to test_tail_pass_rival_prose_does_not_suppress, mirroring wire-wanted-matcher-forced-empty. 37 -> 38 mutations; no live count statement in the body needed sweeping. Should: the second Pass-3-to-Pass-4 cross-reference site (:1046) back-propagated to the design's Components table, which named only the pass header. Nit: the ungrammatical 'Same predicate Pass 2 applies NOT the shared' comment fragment. Re-verified: fence parity 34 (even), embedded JSON parses, 38 finds, 0 indent mismatches, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
