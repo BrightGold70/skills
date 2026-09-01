@@ -375,28 +375,59 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 - [ ] AC-2.4: The captured argv for the call contains `terminal read`, `--terminal <h>`,
       `--cursor 0`, `--limit 4000` and `--json`. Asserted against `HMAD_STUB_CAPTURE`, not against
       the return value.
-- [ ] AC-2.5: With `HMAD_TAIL_READ_TIMEOUT` **seeded in the PARENT process environment**
-      (`monkeypatch.setenv(..., "9")`) and never passed through `env=`, the call still completes
-      (rc 0 on a readable handle) rather than aborting the wrapper — the `set -u` default is
-      exercised, not assumed.
+- [ ] AC-2.5: With `HMAD_TAIL_READ_TIMEOUT` **seeded in the PARENT process environment as the
+      string `0`** (`monkeypatch.setenv(..., "0")`) and never passed through `env=`, the call
+      still completes (rc 0 on a readable handle) rather than aborting the wrapper — the `set -u`
+      default is exercised, not assumed.
 
-      **The ambient seed is what makes the harness scrub mutatable.** `_isolated_env` pops
-      `HMAD_TAIL_READ_TIMEOUT` so the child reaches `${HMAD_TAIL_READ_TIMEOUT:-2}`; with nothing
-      seeded in the parent there is nothing for the pop to remove, deleting that line changes no
-      test outcome, and the `harness-ambient-timeout-not-scrubbed` mutation is unkillable. Seeding
-      it here also makes the test true to the failure it guards: this suite is run from inside
-      live h-mad sessions, which is exactly where the variable is exported. Impl-plan audit v17
-      named the gap; the seed rather than a second node is what keeps the 38-node table intact.
+      **The seed must be `0`, and `9` — the v1.14 value — made the mutation EQUIVALENT.**
+      `_isolated_env` pops `HMAD_TAIL_READ_TIMEOUT` so the child reaches
+      `${HMAD_TAIL_READ_TIMEOUT:-2}`. With `9` seeded, BOTH sides of the mutation pass this node:
+      scrubbed the child bounds at 2 and a healthy read completes; unscrubbed it bounds at 9 and
+      the same healthy read completes. The node asserts rc 0, so nothing observable changes and
+      `harness-ambient-timeout-not-scrubbed` is a FIFTH equivalent mutant — introduced by the very
+      cycle that added the mutation to close the gap, and caught by impl-plan audit v18.
+
+      `0` is observable because the bounder REJECTS it. Measured 2026-09-01:
+      `hmad-dispatch run --timeout 0|notanumber|"" -- sleep 3` all exit **rc 2 in ~0.04 s**, never
+      124 and never 0. So unscrubbed, the child inherits `0`, `_cmd_run` returns 2, the helper's
+      `[ "$rc" -eq 0 ] || return 1` fires, and this node's rc-0 assertion fails; scrubbed, the
+      child never sees it, bounds at the default 2, and the read succeeds. One assertion, two
+      outcomes.
+
+      Seeding also makes the test true to the failure it guards: this suite is run from inside
+      live h-mad sessions, which is exactly where the variable is exported. The seed rather than
+      a second AC is what keeps the 38-node table intact.
 - [ ] AC-2.6: With `HMAD_TAIL_READ_TIMEOUT=1` and the stub sleeping longer
       (`HMAD_STUB_ORCA_SLEEP=3`), `_orca_tail_sig` exits **1** (the helper maps the bounder's 124
-      to its own unreadable code) and the call returns in **≥ 0.5 s and < 2.5 s**, measured with
+      to its own unreadable code), the argv capture shows the read was **attempted**
+      (`terminal read`, `--terminal <h>`), and the call returns in **< 1.5 s**, measured with
       `time.monotonic()` around the subprocess.
 
-      Both bounds are assertions, not prose. The **lower** bound is the one that matters: without
-      it the test passes when the bounder never runs at all and the stub returns instantly, which
-      is precisely the "the guard was never exercised" shape. The upper bound must stay below the
-      stub's own 3 s sleep or it cannot distinguish "the timeout fired" from "the sleep finished
-      on its own".
+      **There is NO lower bound, and removing it was a correctness fix, not a relaxation.** The
+      v1.14 form asserted `>= 0.5 s` to prove the bounder had actually run. It rejects the
+      CORRECT implementation: `_cmd_run`'s watchdog is built on bash's integer-valued `SECONDS`,
+      so a `--timeout 1` deadline can expire anywhere inside the current second, and impl-plan
+      audit v17's own controlled run produced a valid rc-124 at **0.376 s**. An AC that a correct
+      build fails is a Test-discrimination breach in the direction nobody notices until 5d halts.
+      The capture assertion does the job the lower bound was reaching for, deterministically: it
+      proves the read was issued rather than short-circuited.
+
+      **`< 1.5 s` is chosen to discriminate the OVERRIDE, not merely to stay under the sleep.**
+      Measured 2026-09-01, `hmad-dispatch run --timeout N -- sleep 3`, all rc 124:
+
+      | `--timeout` | observed elapsed |
+      |---|---|
+      | 1 | 0.376, 0.674, 0.959, 0.961 s (audit v17 + local, max ~1.16) |
+      | 2 | 1.936, 1.987, 1.994, 2.022, 2.232 s |
+
+      1.5 s sits in the gap with ~0.34 s of margin on the low side and ~0.44 s on the high side.
+      That is what kills `timeout-override-ignored`, the mutation that replaces
+      `${HMAD_TAIL_READ_TIMEOUT:-2}` with a hardcoded `2`: under it the override is ignored, the
+      call takes ~2 s and the bound fails. The v1.14 window of `>= 0.5 s and < 2.5 s` contained
+      BOTH columns, so the explicit-override contract was green without ever being enforced —
+      impl-plan audit v18 measured six such runs to show it. The 3 s stub sleep still has to stay
+      above the largest bound or the test cannot tell "the timeout fired" from "the sleep ended".
 
       **0.5, not 1.0 — measured, because `_cmd_run` fires EARLY.** Its watchdog is built on bash's
       integer-valued `SECONDS`, so a `--timeout 1` deadline can elapse anywhere inside the current
@@ -416,7 +447,10 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       # A word boundary that a HYPHEN and an UNDERSCORE both close: that is what
       # separates an invocation from `--timeout`, `--timeout-ms` and `run_timeout`.
       # Deliberately NOT an enumeration of preceding delimiters — see below.
-      _INVOKE = re.compile(r"(?<![-a-zA-Z0-9_])g?timeout\s")
+      # The alternation covers the QUOTED command forms. `"timeout" 2 orca …` is a
+      # real invocation and the bare pattern misses it: it requires whitespace
+      # immediately after `timeout`, and there a closing quote sits instead.
+      _INVOKE = re.compile(r"""(?<![-a-zA-Z0-9_])(?:g?timeout|"g?timeout"|'g?timeout')\s""")
 
       def _norm(line):
           if line.lstrip().startswith("#"):
@@ -444,12 +478,23 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
          writing the single most natural form, `if timeout 2 orca …`, would have passed the guard
          while doing exactly the forbidden thing.
 
+      3. The v1.14 form — the bare `(?<![-a-zA-Z0-9_])g?timeout\s` — missed the QUOTED command
+         forms `"timeout" 2 orca …` and `'gtimeout' 2 orca …`, because it demands whitespace
+         immediately after `timeout` and a closing quote sits there instead. Impl-plan audit v18
+         found it. The obvious repair, making the quotes optional on each side
+         (`["']?g?timeout["']?\s`), is WRONG and repeats mistake 1: measured, it matches **10
+         lines of the current valid file** — `[ "$elapsed" -le "$timeout" ]`, `"$timeout" codex
+         …`, `wargs+=(--timeout "` — because a quoted VARIABLE EXPANSION is not a command. Only
+         the matched-pair alternation distinguishes them.
+
       The predicate above was then run against the file and both probe sets: **0 hits** on the
-      current file; **11 of 11** invocation probes CAUGHT (the five keyword forms above plus
+      current file; **13 of 13** invocation probes CAUGHT (the five keyword forms above plus
       `timeout 2 orca x`, `out="$(timeout 5 orca y)"`, `gtimeout 2 orca x`, `foo && timeout 3
-      bar`, `(timeout 9 orca y)`, `x=1; timeout 4 orca q`); **0 of 6** false positives
-      (`--timeout`, `--timeout-ms "$(( timeout * 1000 ))"`, `local timeout=600`, the
-      `case … --timeout)` arm, `run_timeout` in a message, and a comment naming both binaries).
+      bar`, `(timeout 9 orca y)`, `x=1; timeout 4 orca q`, `"timeout" 2 orca x`,
+      `'gtimeout' 2 orca x`); **0 of 7** false positives (`--timeout`,
+      `--timeout-ms "$(( timeout * 1000 ))"`, `local timeout=600`, the `case … --timeout)` arm,
+      `run_timeout` in a message, a comment naming both binaries, and the helper's own
+      `_cmd_run --timeout "${HMAD_TAIL_READ_TIMEOUT:-2}"` line).
       The `_ARITH` strip is load-bearing for the lookbehind form specifically: without it,
       `$(( timeout * 1000 ))` has whitespace on both sides and matches.
 - [ ] AC-2.8: The test above fails when `  timeout 2 orca terminal list` is inserted into the
@@ -1148,6 +1193,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "replace": "  raw=\"$(_cmd_run --timeout \"$HMAD_TAIL_READ_TIMEOUT\" -- \\"
   },
   {
+   "name": "timeout-override-ignored",
+   "_mechanism": "Hardcode the bound at 2, ignoring the caller's override. The read still succeeds on a healthy pane and still times out on a hung one, so only a bound that separates 1 s from 2 s can see it -- AC-2.6's `< 1.5 s`. Under v1.14's `>= 0.5 s and < 2.5 s` window both values passed and the override contract was green without being enforced.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
+   "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
+   "replace": "  raw=\"$(_cmd_run --timeout 2 -- \\"
+  },
+  {
    "name": "time-bound-removed",
    "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against -- and AC-2.6's upper bound is the only thing that sees it, since the unbounded call still returns the right answer whenever the pane is healthy.",
    "file": "scripts/hmad-dispatch.sh",
@@ -1157,7 +1210,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "harness-ambient-timeout-not-scrubbed",
-   "_mechanism": "Delete the scrub from the TEST harness. On a host exporting HMAD_TAIL_READ_TIMEOUT the child then inherits it, AC-2.5 never reaches the ${:-2} default, and a build that dropped the fallback entirely would pass. Killed only because AC-2.1b seeds an ambient value -- without that seed this mutation is unkillable, which is why the seed is an AC and not a test detail.",
+   "_mechanism": "Delete the scrub from the TEST harness. On a host exporting HMAD_TAIL_READ_TIMEOUT the child inherits it, AC-2.5 never reaches the ${:-2} default, and a build that dropped the fallback entirely would pass. Killed only because AC-2.5 seeds the ambient value 0, which the bounder rejects with rc 2 (measured): unscrubbed the helper returns 1 and the node's rc-0 assertion fails. A seed of 9 leaves both sides completing and makes this mutation EQUIVALENT -- that was the v1.14 form, caught by audit v18.",
    "file": "tests/test_hmad_dispatch.py",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
    "find": "    e.pop(\"HMAD_TAIL_READ_TIMEOUT\", None)",
@@ -1167,12 +1220,17 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
 }
 ```
 
-**Five of the mutations target T2's helper guards, and they are not green-at-RED proofs.** The
+**Six mutations target T2's time-and-extraction controls — five in the helper, one in the
+PYTHON TEST HARNESS — and none of them is a green-at-RED proof.** The
 proof column exists to discriminate nodes that pass before any code is written; these four nodes
 are RED: FAIL and need no such proof. They are mutated anyway because Task 6's own claim is that
 every new guard is stubbed to its PERMISSIVE value, and impl-plan audit v17 found five that were
 not: the array `join("\n")`, the independent `// empty`, the `${HMAD_TAIL_READ_TIMEOUT:-2}`
-default, the `_cmd_run` bound itself, and the harness's ambient-environment scrub. Each is an
+default, the `_cmd_run` bound itself, and the harness's ambient-environment scrub. Audit v18 added
+a sixth, `timeout-override-ignored` — the default and the bound were each mutated, but nothing
+mutated the caller's OVERRIDE being honoured. The harness one is `file:
+tests/test_hmad_dispatch.py`, not the wrapper: the scrub it removes lives in test code, and
+saying "helper guards" of all six was wrong. Each is an
 INDEPENDENT control — removing any one leaves the other four intact and the pass still resolving
 a healthy pane — so a whole-helper revert cannot stand in for them. The rows above name them,
 because the last time a mutation targeted a node whose proof column said `—`, the prose beside it
@@ -1485,3 +1543,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.12: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
 - v1.13: Impl-plan audit v16 (codex) — SIX must-fixes, three of them defects in this plan's own test scaffolding rather than stale prose. `skill-md-frontmatter-renamed` was a FOURTH equivalent mutant: the test asserted `"name: h-mad" in fm`, and the mutant's `name: h-mad-renamed` still CONTAINS that substring, so the mutation would have scored `survived` against a guard that holds and ALL_CAUGHT would have been unreachable; asserted as a whole line now, verified with the prescribed replacement (substring True/True, whole-line True/False). Task 1's `_orca_read_dir` called `pathlib.Path(...)` while the module binds only `Path` via `from pathlib import Path` (verified in the live file), so following the block verbatim raised NameError before AC-1.5 tested anything. `_isolated_env` was prescribed as "not left to interpretation" while its body was a literal `...`; the extracted body is now spelled out, including `run()` in post-extraction form. That body also gained the `HMAD_TAIL_READ_TIMEOUT` pop AC-2.5 needs: `_isolated_env` copies the ambient environment and this feature INTRODUCES the variable, so on a host exporting it the default `${HMAD_TAIL_READ_TIMEOUT:-2}` is never reached and a regression dropping the fallback passes too. The time-bound contract was swept to `_cmd_run` and "no INVOCATION" across all four documents (nine sites; the nine that remain are descriptive — the ruling itself, one historical CLI measurement, and "which bounder"). Source-design citation corrected v1.12 -> v1.14 and the wire mutations named instead of placed.
 - v1.14: Impl-plan audit v17 (codex) — must 6 -> 3, and two of the three were consequences of work done OUTSIDE this feature. AC-3.16 required a >= 3000-LINE stub while Orca hard-caps .terminal.tail at 2000, so the fixture modelled a state production cannot emit; bytes are the SIGPIPE mechanism and lines are the constraint, so the fixture is now >= 200 KB in <= 2000 lines (~1900 x 126 chars) and AC-4.5 takes the same shape. The probe blocks keep their 3000 x 80 form because they were measuring the pipeline, not standing in for Orca. The carried "284 existing tests" was stale on four live sites: a SIGPIPE fix in the same wrapper from an unrelated lane (282a3a5, plus the agy-recovery and cmux-alive gates) added nodes to this module while the plan sat open — re-derived to 290 by collection, with the selector re-checked at 0/290 and 2/290. Five guard mutations were missing despite Task 6 claiming every new guard is stubbed to its permissive value: the array join, the independent // empty, the ${HMAD_TAIL_READ_TIMEOUT:-2} default, the _cmd_run bound, and the harness scrub (24 mutations now). AC-2.1 was too weak to pin the first of those — "contains both on separate lines" is satisfied by the bare `jq -r` the code comment warns against, since pretty-printed JSON prints array elements on separate lines too; asserted by equality on "alpha\nbeta\n" now. AC-2.5 gained an ambient parent-env seed, without which the harness-scrub mutation is unkillable — folded into the existing node rather than added as AC-2.1b, which would have moved every count in the 38-node table. Also: the helper's own comment still said timeout/gtimeout are "absent from this file" — a site the v16 sweep missed — Task 6's first `../..` statement said repository root where the second correctly says the h-mad skill dir, the SIGPIPE rationale described the pre-AC-3.16 state as current, and AC-2.6 said "ten trials" over eight listed timings.
+- v1.15: Impl-plan audit v18 (codex) — must stayed at 3 and ALL THREE were defects in the timeout scaffold this plan had just rewritten. AC-2.6's `>= 0.5 s` lower bound REJECTS the correct implementation: _cmd_run's watchdog rides bash's integer SECONDS, and the audit's own controlled run produced a valid rc-124 at 0.376 s. The lower bound is gone, replaced by an argv-capture assertion that the read was attempted -- deterministic, and it does the job the bound was reaching for. The upper bound moved 2.5 -> 1.5 s to DISCRIMINATE the override: measured, --timeout 1 lands 0.376-1.16 s and --timeout 2 lands 1.936-2.232 s, so the old window contained both and the explicit-override contract was green without being enforced; `timeout-override-ignored` is the mutation that now proves it (25 mutations). `harness-ambient-timeout-not-scrubbed` was a FIFTH equivalent mutant, introduced by v1.14 -- the cycle that added it to CLOSE a coverage gap. Seeded at 9, both sides of the mutation complete a healthy read and the node asserts only rc 0, so nothing observable changes. The seed is 0 now, which the bounder rejects outright: measured, --timeout 0|notanumber|"" all exit rc 2 in ~0.04 s, so unscrubbed the helper returns 1 and the assertion fails. AC-2.7's predicate missed the quoted command forms `"timeout" 2 orca` -- it demands whitespace after `timeout` and a closing quote sits there. The obvious repair (optional quotes each side) repeats the v1.0 mistake: measured, it matches 10 lines of the valid file, because a quoted VARIABLE EXPANSION (`"$timeout"`) is not a command. Matched-pair alternation only: 0 live hits, 13/13 invocations caught, 0/7 false positives. Task 6's prose also called all six of these 'helper guards' when one mutates the Python test harness, and the harness mutation's _mechanism still named AC-2.1b.
