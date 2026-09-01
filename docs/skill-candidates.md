@@ -1168,3 +1168,16 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   branch, as pickup evidence, and rank "the work is visibly done" above "the stamp has the
   expected prefix". Note the sender is *told* to stop watching, so this check is the only thing
   standing between a silent success and a duplicate dispatch — candidate: yes
+  — **LANDED 2026-09-01.** Both prescriptions implemented, plus one the row did not anticipate.
+  The comment signal now ranks visible completion above the expected prefix: a comment that is
+  neither stamp is pickup, an EMPTY one is not, and both stamp tests moved from `startswith` to
+  `in` because HANDOVER Step 4 preserves a human note by APPENDING, so the sender's own stamp
+  legitimately sits mid-string and a prefix test would have read it back as receiver evidence.
+  A third signal reads the target branch (`--repo`/`--branch`, optional so the older invocation
+  still works). What the row did not anticipate: **the branch signal can only ever say `taken`
+  or `unknown`, never `not_yet`.** A merged branch and one created-and-never-committed-to are
+  both level with the default and both listed by `git branch --merged`; refs cannot separate
+  them. Guessing `taken` invents evidence, guessing `not_yet` is the false absence this tool
+  exists to refuse — so an absent branch and a level branch are both `unknown`, and two tests
+  deliberately assert the SAME verdict for the merged and untouched cases because that identity
+  IS the finding. 20 tests, 8 mutants ALL_CAUGHT.
