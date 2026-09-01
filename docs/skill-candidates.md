@@ -1148,3 +1148,23 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   (`pytest ~/.claude/skills/h-mad/tests/`) is unchanged. 1 mutant, ALL_CAUGHT — it restores the exact
   pre-fix `testpaths` line, because a guard that cannot fail on the configuration that caused the bug
   is decoration. Bare `pytest` now collects **2513**, up from 2403.
+
+## 2026-09-01 — pin-agents-tail-banner phase 5 (scout)
+
+- **`handover_landed.py` reads a COMPLETED handover as `NOT_YET`, and the two prescribe opposite
+  actions**: the tool decides pickup from two signals — a claim owned by someone other than the
+  sender, and a worktree comment starting `taken over:`. It models `NOT_YET` versus `UNKNOWN`
+  carefully (the distinction it was built for, row `848`) but not **DONE-and-moved-on**. Measured
+  live this session: an outbound handover of the `_frame_satisfies` SIGPIPE fix was picked up,
+  fixed, tested, mutation-specced and merged to `main` as `282a3a5`, and the check still printed
+  `HANDOVER: NOT_YET — every checkable signal says nobody has taken it`. Both signals failed
+  honestly: the receiver never wrote a claim (it just did the work, and its worktree has its own
+  `docs/.bkit-memory.json` that never existed → `claim: UNKNOWN`), and it had already overwritten
+  the stamp with its own completion note, `Complete: SIGPIPE wait gates fixed; main @ 282a3a5;
+  h-mad 23` → `comment: NOT_YET  comment does not say taken over:`. The prescribed response to
+  `NOT_YET` is to re-deliver, which here would have re-dispatched work already on `main` — two
+  lanes on one feature, the exact outcome the claim protocol exists to prevent. The fix is not a
+  fourth verdict word: treat a comment that names the feature at all, or a `git log` on the target
+  branch, as pickup evidence, and rank "the work is visibly done" above "the stamp has the
+  expected prefix". Note the sender is *told* to stop watching, so this check is the only thing
+  standing between a silent success and a duplicate dispatch — candidate: yes
