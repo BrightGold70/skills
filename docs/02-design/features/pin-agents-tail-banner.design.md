@@ -106,8 +106,11 @@ a real `terminal read --json` carries top-level `ok: true`. Pinned by impl-plan 
 every other non-null type, so a malformed payload that merely CONTAINS a banner became identity
 evidence by the same unsafe route. Pinned by impl-plan AC-2.10 and `non-array-tail-accepted`.
 
-`// empty` stays **before** the type branch so an absent key still exits non-zero (`else tostring`
-on a null yields the string `"null"` at rc 0, re-opening the exact hole `-e` closes).
+`// empty` stays before the type branch as defence in depth, NOT as an independently pinned
+guard: with `else empty` on the type branch a null from an absent key is discarded there anyway
+(measured identical with and without it on four inputs). `-e` is the load-bearing part — `jq -r`
+prints the literal `"null"` at rc 0. Impl-plan audit v21 removed the mutation that claimed to pin
+`// empty` alone, because it was equivalent.
 
 **`--cursor 0` is load-bearing and must not be dropped.** Without it the call returns the
 most RECENT rows, while the agent's banner sits at the START of scrollback. On the panes
@@ -188,7 +191,7 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 | Pass 4 comment | `h-mad/scripts/hmad-dispatch.sh` | modify | "every pass above found nothing" is no longer true |
 | Retention-cap comment at the new pass | `h-mad/scripts/hmad-dispatch.sh` | new | AC-5.1 + AC-5.2: records the measured 2000-line cap, that agent TUIs do not normally reach it, that a shell-heavy pane fails to UNRESOLVED, and that BELOW the cap a stale banner still resolves |
 | `_orca_find` prose | `h-mad/SKILL.md` | modify | line ~320 reads "joins them as **Pass 0**, ahead of the title and preview passes" — incomplete once a tail pass exists between preview and OS evidence |
-| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 14 ACs (count from the spec, never carry it — this cell was stale once) |
+| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 15 ACs (count from the spec, never carry it — this cell was stale once) |
 | mutation spec | `h-mad/tests/mutation-specs/tail_signature_pass.json` | new | guard discrimination |
 
 ## Implementation Order
@@ -300,6 +303,7 @@ separate manual step in Success Criteria.
 | 12 | no line INVOKES `timeout`/`gtimeout`; prose and comments naming them are free | AC-4.3 |
 | 13 | retention limit documented at the pass | AC-5.1 |
 | 14 | stale-pane limit documented at the pass | AC-5.2 |
+| 15 | exit-0 `"ok":false` envelope, and a non-array `.terminal.tail`, both decline rather than resolving | AC-4.4 (impl-plan AC-2.9, AC-2.10) |
 
 Test 7 is the one that can pass vacuously — assert on the STUB's call count, not on the
 resolution, or it merely restates Pass 0.
@@ -406,3 +410,4 @@ resolution, or it merely restates Pass 0.
 - v1.14: Impl-plan audit v16 (codex) — two corrections. The live check still required only that pins be cleared with no `HMAD_ORCA_*_TERMINAL` exported, despite v1.13's own history claiming the pin-FILE re-read had landed here; the body now carries it as step 1, with the reason stated — `--clear` mutates the pin FILE and the environment is a different surface, so a surviving file pin short-circuits `_orca_find` exactly as an exported one would and the check would pass with the feature reverted. History claiming a fix the body lacks is the recurring shape in this document's own record. Second, the API comment, the invariant-compliance bullet and the traceability row still said `hmad-dispatch run --timeout` and "`timeout`/`gtimeout` appear nowhere"; both now say in-process `_cmd_run` and "no line INVOKES", matching impl-plan AC-2.7's command-position predicate.
 - v1.15: Impl-plan audit v19 (codex) — node counts re-derived to 28 FAIL / 11 PASS over 39 after AC-2.9 was added (an exit-0 `ok:false` envelope was being accepted as identity evidence).
 - v1.16: Impl-plan audit v20 (codex) — the error-envelope rule was in the impl-plan and not here, so an implementer following the declared source would have omitted a gate the plan calls load-bearing. The exact extraction now appears in the design body with the `.ok` check first and `else empty` in place of `else tostring`, plus the reason for each. Node counts re-derived to 29 / 11 over 40.
+- v1.17: Impl-plan audit v21 (codex) — the Components table still said 14 ACs and the Test Plan had no row for spec v1.8's AC-4.4, so the design under-reported the contract it is the source for; both corrected. The `// empty` note is rewritten: it is defence in depth, not an independently pinned guard, because `else empty` on the type branch already discards a null.
