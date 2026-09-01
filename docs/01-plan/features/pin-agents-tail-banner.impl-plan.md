@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.11)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.5, 14 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.12)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.6, 14 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -385,7 +385,23 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 
 **Production file**: `h-mad/scripts/hmad-dispatch.sh`
 **Test file**: `h-mad/tests/test_hmad_dispatch.py`
-**Task shape**: `new-behaviour`
+**Task shape**: `wiring`
+**WIRE**: `h-mad/scripts/hmad-dispatch.sh:_orca_find` → `_orca_tail_sig`
+**WIRE-PIN**: `tests/test_hmad_dispatch.py::test_tail_pass_resolves_single_vendor_banner`
+
+**Why `wiring` and not `new-behaviour`.** This task's deliverable includes the call site
+`_orca_find` → `_orca_tail_sig`; T2 ships the callee alone and nothing consumes it until here.
+It was declared `new-behaviour` through v1.10, so the wire-pin gate reported `wiring=0` and the
+task bypassed the `WIRE`/`WIRE-PIN` requirement, the wire registry, and the wire-specific RED
+failure-mode check — while this very plan already carried `wire-disconnect-callee-intact` and
+`wire-force-fire-after-pass0` as connection-direction mutants. The mutations asserted a wire the
+shape denied.
+
+**The WIRE-PIN's RED reason is caller-observable, which is why T2 must land first.** At this
+task's RED `_orca_tail_sig` already EXISTS, so `test_tail_pass_resolves_single_vendor_banner`
+fails because the resolution does not happen — not because a symbol is missing. A `WIRE-PIN`
+whose RED is a missing callee is `step5d:red_wrong_reason`: it would go green the moment the
+callee exists, wired or not.
 
 **Description**: Insert the tail-evidence pass into `_orca_find` between the Pass 2 preview block
 and the OS-evidence pass, implementing design Implementation Order steps 2 and 4 (see §Mapping
@@ -698,7 +714,15 @@ new pass makes false. No behaviour changes.
    leaves the file naming two different passes "Pass 3" — the single-surface sweep failure this
    project has shipped repeatedly. AC-5.1 asserts the string `Pass 3` no longer refers to the
    OS-evidence pass anywhere in the file.
-2. `h-mad/SKILL.md:320` reads "`_orca_find` joins them as **Pass 0**, ahead of the title and
+2. **`h-mad/SKILL.md:315` — the sentence this feature actually falsifies.** It reads
+   "never matches Codex on title — only on a fresh pane's `gpt-N` banner, **which scrolls off
+   once it works**". Resolving after exactly that decay, from the banner retained at the START of
+   tail scrollback, is the feature's whole purpose. Updating only the pass enumeration below
+   would ship a SKILL.md that describes Codex as unresolvable in the case the wrapper now
+   resolves — a user-facing contract contradicting changed entry behaviour, which the
+   manifest-integrity invariant forbids. Amend it to say the preview banner scrolls off while the
+   tail retains it, and pin the amended wording with the same doc-rule test.
+3. `h-mad/SKILL.md:320` reads "`_orca_find` joins them as **Pass 0**, ahead of the title and
    preview passes" — an enumeration that is now incomplete. The design calls this out as the one
    surface no test covers and makes it an ordered step rather than a tidy-up; this task closes
    that gap by adding a doc-rule test so the prose cannot silently go stale again. The test goes
@@ -782,6 +806,10 @@ def test_os_evidence_pass_renumbered_to_four():
       claiming that pass is "Reached only when every pass above found nothing". Pinned by
       `tests/test_hmad_dispatch.py::test_os_evidence_pass_renumbered_to_four`. Both sites are
       asserted: renumbering one leaves the file naming two different passes "Pass 3".
+- [ ] AC-5.5: `h-mad/SKILL.md` no longer claims Codex's banner "scrolls off once it works"
+      without qualification — the amended sentence states that the PREVIEW decays while the TAIL
+      retains the banner. Asserted on the same whitespace-collapsed text as AC-5.2, and pinned by
+      `test_skill_md_codex_banner_claim_qualified`.
 - [ ] AC-5.2: `h-mad/SKILL.md`'s `_orca_find` sentence names the tail-evidence pass alongside the
       title and preview passes. Asserted against the sentence containing `joins them as **Pass
       0**`, located by content rather than by line number, by
@@ -1033,7 +1061,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-2.4 | `test_tail_sig_argv_carries_cursor_and_limit` | RED: FAIL | — |
 | AC-2.5 | `test_tail_sig_timeout_default_when_env_unset` | RED: FAIL | — |
 | AC-2.6 | `test_tail_sig_times_out` | RED: FAIL | — |
-| AC-2.7, AC-2.8 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8: insert `timeout 2 orca …`, observe RED, remove |
+| AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
 | AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | — |
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
 | AC-3.3 | `test_tail_pass_env_reports_handle` | RED: FAIL | — |
@@ -1056,11 +1084,12 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-4.4 | `test_tail_pass_rival_rejected_before_counting` | RED: FAIL | — |
 | AC-4.5 | `test_tail_pass_long_tail_early_rival_rejected` | RED: FAIL | — |
 | AC-5.1 | `test_os_evidence_pass_renumbered_to_four` | RED: FAIL | — |
-| AC-5.2, AC-5.4 | `test_skill_md_names_tail_evidence_pass` | RED: FAIL | — |
+| AC-5.2 | `test_skill_md_names_tail_evidence_pass` | RED: FAIL | — (AC-5.4 is this same node's revert-and-observe procedure, not a second node) |
+| AC-5.5 | `test_skill_md_codex_banner_claim_qualified` | RED: FAIL | — |
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
-**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 37
+**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 38
 nodes, T5's three included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
@@ -1137,7 +1166,9 @@ false half is recorded so the next reader does not re-derive it.
       §"Test-name contract" proof column — `stub-branch-swallows-terminal-list`,
       `stub-branch-ignores-env-var`, `stub-branch-above-capture`,
       `tail-re-widened-to-launch-line`, `signature-check-not-enforced`, `tail-sig-fabricates-banner-on-failure`,
-      `skill-md-frontmatter-renamed`. Each must be `caught`, and its `mechanism:` line must name
+      `skill-md-frontmatter-renamed`, plus the two that revert the here-string guard —
+      `wanted-check-back-to-pipeline` and `rival-check-back-to-pipeline`. Nine mutations for
+      nine AC numbers. Each must be `caught`, and its `mechanism:` line must name
       the node the proof column claims — a kill by any other test means the mutation proves
       nothing about that node.
 
@@ -1173,9 +1204,9 @@ false half is recorded so the next reader does not re-derive it.
    | T2 | 7 | 6 | 1 | `test_tail_no_timeout_binary_invocation` |
    | T3 | 16 | 10 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
    | T4 | 4 | 4 | 0 | — |
-   | T5 | 3 | 2 | 1 | `test_skill_md_frontmatter_unchanged` |
+   | T5 | 4 | 3 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **37** | **26** | **11** | |
+   | **total** | **38** | **27** | **11** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1184,19 +1215,39 @@ false half is recorded so the next reader does not re-derive it.
 
    ```bash
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 37  total nodes
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 38  total nodes
    grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 11  --expect-pass
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 26  --expect-fail
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 27  --expect-fail
    ```
 
-   Those three numbers are the dispatch inputs; a count that disagrees with the enumeration is the
-   enumeration's problem, not the dispatch's.
+   **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
+   `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
+   `--expect-pass`; feeding it 26/11 would guarantee `step5d:red_not_all_failing` on every task
+   (T1 expects 3/3, T2 6/1, …). Derive per task from the same authoritative rows — the AC prefix
+   identifies the task:
+
+   ```bash
+   F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
+   for n in 1 2 3 4 5 6; do
+     row="^\| AC-$n\.[0-9]+ \| \`test_.*\` \| RED:"
+     printf 'T%s  --expect-fail %s  --expect-pass %s\n' "$n" \
+       "$(grep -cE "$row FAIL" "$F")" "$(grep -cE "$row PASS" "$F")"
+   done
+   ```
+
+   Expected: T1 3/3 · T2 6/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 27/11 over 38 —
+   and **every row carries exactly ONE AC label** so the per-task regex sees all 37. Two rows
+   briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
+   under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
+   proof column as the procedure it is —
+   run the loop, do not read those numbers. The aggregate is only how you check the per-task
+   figures add up.
 
    **The v1.6 form of these commands returned 0 and 13.** They were
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 37 / 11 / 26 against this file.
+   anchored to the full row shape above and verified to return 38 / 11 / 27 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1252,3 +1303,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.8: Impl-plan audit v11 (codex) — findings dropped 5 to 1, and the one is the sharpest of the run. T3 and T4 both specified printf '%s' "$tout" | grep -Eiq, which under the wrapper's global set -o pipefail returns 141 when grep -q exits early and printf takes SIGPIPE: a candidate whose tail DOES carry the signature is skipped, and a rival-bearing candidate fails its rejection and is COUNTED. Reproduced on a 240,106-byte tail with the signature on line 1 (rc=141), against rc=0 for the same tail short. Every stub fixture in this plan uses a short tail, so all 37 nodes would have gone green over a matcher broken on exactly the long retained tails the 2000-line cap describes. Both matches now use a here-string, which has no pipeline; drop-rival-rejection re-anchored; AC-3.16 and AC-4.5 added as long-tail regression tests (nodes 35 to 37, expect-fail 24 to 26). AC-6.10 gained the exact bash -c sweep command after verifying it returns ANCHORS_OK specs=34 mutations=342 drifted=0 and that the no-paths invocation is the documented refusal.
 - v1.9: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
 - v1.10: Impl-plan audit v13 (codex) — all three must-fixes were mutation-discrimination gaps in this plan's own scaffolding, and the 37/11/26 counts reproduced. resolve-on-ge-0 was a CRASH mutant: with tn=0 the relaxed branch runs tail_h=$(printf … | grep . | head -n 1), grep returns 1 on empty input and set -euo pipefail aborts before anything resolves (reproduced: rc 1, no output), so a kill would be credited to an abort rather than the property. Replaced by signature-check-not-enforced, which lets a readable non-matching candidate into tail_ids and produces an observably wrong resolution; AC-3.5's fixture is pinned to exactly one readable non-matching candidate to make that kill possible. The two long-tail nodes added in v1.8 had NO mutation reverting the here-string to the pipeline, so the guard they exist for was never mutation-tested - two reverting mutations added, one per branch. tail-sig-fabricates-banner-on-failure has a fixture precondition that was unstated: its hardcoded OpenAI Codex output only changes behaviour for exactly one unreadable candidate resolving codex, so AC-3.11's fixture is now pinned. AC-4.2 was still listed as active in Task 4 while marked withdrawn elsewhere. The spec's assumption about launch-command visibility was restated in terms of the banner, which v1.5 made the only evidence.
+- v1.11: Impl-plan audit v14 (codex) — the sharpest finding of the run is a SHAPE error 14 cycles old. Task 3 was declared new-behaviour while its deliverable includes the _orca_find -> _orca_tail_sig call site, so the wire-pin gate reported wiring=0 and the task bypassed WIRE/WIRE-PIN, the wire registry and the wire-specific RED failure-mode check - all while this same plan already carried wire-disconnect-callee-intact and wire-force-fire-after-pass0 as connection-direction mutants. The mutations asserted a wire the shape denied. T3 is now wiring with the pin named, and the gate reports wiring=1. The RED counts were derived as an AGGREGATE and called the dispatch inputs, but assemble_tdd cuts ONE task and takes THAT task's counts, so 27/11 would have halted every task on red_not_all_failing; a per-task loop is prescribed, and running it exposed a second defect the audit did not name - two rows still carried combined AC labels (AC-2.7, AC-2.8 and AC-5.2, AC-5.4), so the loop matched 35 of 37 and silently under-counted T2 and T5. SKILL.md:315's claim that Codex's banner scrolls off once it works is precisely what this feature falsifies; AC-5.5 added to amend and pin it (nodes 37->38).
