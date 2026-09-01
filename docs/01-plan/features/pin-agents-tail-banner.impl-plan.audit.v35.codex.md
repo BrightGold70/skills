@@ -1,0 +1,13 @@
+## Summary
+The RED table re-derives to 45 nodes (32 FAIL, 13 PASS), the embedded mutation spec parses with 37 unique mutations, and the current test module still collects 290 nodes. The plan remains blocked by an unbound shell variable in T4's prescribed code and by an AGY launch-line mutant whose designated kill is accidental rather than discriminating.
+
+## Must-fix
+- T4 calls `_agent_tail_re "$rival"`, but `$rival` is never declared or assigned — the existing `_orca_find` owns only `rival_re`, its `case` stores regexes rather than the rival token, and T3's new local declaration likewise omits `rival`; under the wrapper's `set -u`, the first wanted-signature candidate aborts at this expansion instead of performing rival rejection. Define the rival token explicitly (for example, map `codex -> agy` and `agy -> codex` in the existing case), include that edit in T4's exact code structure, and keep the rival-wire tests/mutations anchored to the resulting call.
+- `tail-re-widened-to-launch-line-agy` is pinned to `test_tail_matcher_corpus_decides_prose_vs_banner`, but that node's prescribed 24 negatives are prose probes, not the AGY launch line; the mutant is caught only because its replacement discards the entire valid AGY banner grammar, causing the node's positive controls to fail. That kill does not demonstrate the launch-line rejection the mutation claims to prove and violates Test discrimination's mechanism requirement. Make the mutation an additive widening that preserves the original positives and pin it to `test_tail_pass_launch_command_alone_does_not_resolve` (whose AC explicitly exercises both agents), or add a dedicated direct launch-line assertion while preserving the 24/12 corpus behavior.
+
+## Should-fix
+- The paired design still duplicates two different continuation lists in its bounded-grammar paragraph and later says to match the agent's “existing signature,” while spec AC-1.4 first says `_agent_tail_re` is independent and then says the grammar is applied “on top of” `_agent_pv_re` — these stale phrases continue to imply the prose-unsafe wrapper implementation that the current plan forbids. State once, on both surfaces, that both wanted and rival checks use the independent bounded `_agent_tail_re` literals.
+- The `wire-wanted-matcher-disconnected` mechanism says a “prose-only tail resolves,” but AC-3.17 is now a mixed banner-plus-prose fixture and the actual observable is two matches followed by ambiguity. Correct the mechanism text so mutation attribution matches the designated node.
+
+## Nit
+- Remove the stray closing `**` after “both directions” in AC-4.6 and tighten T4's duplicated `$rival_re` explanatory sentence.
