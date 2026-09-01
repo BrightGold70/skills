@@ -213,9 +213,9 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **31 of 44 nodes RED, 13 green**, and the
+  legitimately green before any code exists. Measured: **32 of 45 nodes RED, 13 green**, and the
   13 split **12 + 1**: twelve are each tied to a mutation that must be killed by that specific
-  node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
+  node, and the thirteenth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
   line said "each of the 11" while the count beside it said 12, leaving the twelfth node with no
   stated proof on the surface that is the declared source; impl-plan audit v24. RED observation OR a
@@ -293,3 +293,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.22: Impl-plan audit v30 (codex) — counts re-derived to 31 FAIL / 13 PASS over 44 after AC-4.6 was reclassified green at RED and the tail matcher moved to Task 2; the mutation-coverage claim narrowed to enumerated targets.
 - v1.23: Impl-plan audit v31 (codex) — this document still prescribed the REJECTED matcher: a line-start wrapper around the shared `_agent_pv_re`, and rival rejection 'reused from Pass 1'. Both are the prose-unsafe path; the tail pass uses `_agent_tail_re`, with its own bounded per-agent grammar, for the wanted AND rival checks. Green-at-RED split corrected to 12 + 1 against the count of 13.
 - v1.24: Impl-plan audit v32 (codex) — 'the work is running the EXISTING helper against `.tail`' was still the headline description of a feature that no longer does that; corrected to the tail-only `_agent_tail_re`. Green-at-RED split corrected to 12 + 1 against the count of 13.
+- v1.25: Impl-plan audit v33 (codex) — the green-at-RED proof map assigned the AC-2.8 procedure to 'the twelfth' node immediately after stating twelve are mutation-backed, leaving the thirteenth unaccounted; it is the thirteenth. Counts re-derived to 32 FAIL / 13 PASS over 45.

@@ -92,7 +92,7 @@ That matters only for THIS pass: `$scoped` includes ordinary shell panes and tai
 historical, so a shell that once printed release notes was resolvable AS THE AGENT — the
 wrong-pane class FR-2 forbids. Passes 1 and 2 read short titles and previews rather than arbitrary
 scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
-moves. Measured over the 24-probe corpus: 0 of 24 prose probes match and 12 of 12 real banner and
+moves. `_agent_tail_re` is a NEW helper, not an anchor applied to the old one. Measured over the 24-probe corpus: 0 of 24 prose probes match and 12 of 12 real banner and
 status lines still do. Pinned
 by impl-plan AC-3.17 and mutation `tail-re-unanchored`.
 
@@ -230,6 +230,7 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 | Pass 4 comment | `h-mad/scripts/hmad-dispatch.sh` | modify | "every pass above found nothing" is no longer true |
 | Retention-cap comment at the new pass | `h-mad/scripts/hmad-dispatch.sh` | new | AC-5.1 + AC-5.2: records the measured 2000-line cap, that agent TUIs do not normally reach it, that a shell-heavy pane fails to UNRESOLVED, and that BELOW the cap a stale banner still resolves |
 | `_orca_find` prose | `h-mad/SKILL.md` | modify | line ~320 reads "joins them as **Pass 0**, ahead of the title and preview passes" — incomplete once a tail pass exists between preview and OS evidence |
+| `_agent_tail_re` | `h-mad/scripts/hmad-dispatch.sh` | **add** | new top-level helper: the tail-only, line-complete banner grammar per agent. Ships in impl-plan T2 beside `_orca_tail_sig`, unconsumed until T3. |
 | tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 16 ACs (count from the spec, never carry it — this cell was stale once) |
 | mutation spec | `h-mad/tests/mutation-specs/tail_signature_pass.json` | new | guard discrimination |
 
@@ -356,7 +357,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **31 of 44 nodes fail at RED and 13 pass**, so a blanket
+   Measured on the node enumeration: **32 of 45 nodes fail at RED and 13 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -470,3 +471,4 @@ resolution, or it merely restates Pass 0.
 - v1.26: Impl-plan audit v30 (codex) — the Executive Summary still described the pass as matching `_agent_pv_re`, which is the prose-unsafe helper its own safety rule rejects; corrected to `_agent_tail_re`. Mutation-coverage claim narrowed to enumerated targets, node counts re-derived to 31 / 13 over 44.
 - v1.27: Impl-plan audit v31 (codex) — the bounded-grammar paragraph had spliced two continuation lists together, obscuring which suffixes are actually accepted; reduced to one list matching the regex.
 - v1.28: Impl-plan audit v32 (codex) — the `_agent_pv_re` subsection still said the helper is 'reused unchanged' by this pass and quoted the superseded anchored measurement (0 of 7); both corrected to the 24-probe corpus and the Passes-1-2 scope.
+- v1.29: Impl-plan audit v33 (codex) — `_agent_tail_re` was required by the matcher rule but absent from Components Changed and from the Implementation Order, whose step 1 shipped only `_orca_tail_sig` while step 2 consumed the missing helper. Added to both, mapped to impl-plan T2, with its 24/12 corpus tested there. Node counts re-derived to 32 / 13 over 45.

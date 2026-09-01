@@ -70,8 +70,9 @@ decline. That is the accepted limit of the feature, stated rather than discovere
   `n == 0` condition nor Pass 3's `lsof` precondition, so it covers an ambiguous title and a
   machine with no `lsof` — neither of which any current pass reaches.
 - **Acceptance Criteria**:
-  - AC-1.1: Given a candidate pool of one pane whose tail carries the agent's `_agent_pv_re`
-    signature — its **vendor/model banner** — and no other pane's, `_orca_find <agent>` prints
+  - AC-1.1: Given a candidate pool of one pane whose tail matches the agent's `_agent_tail_re`
+    grammar — its **vendor/model banner**, line-complete; NOT the looser `_agent_pv_re`, which
+    AC-1.4 measures matching ordinary prose 24/24 — and no other pane's, `_orca_find <agent>` prints
     that handle and returns 0.
   - AC-1.4: **Prose naming the agent is not a signature either, and the tail pass uses a
     STRICTER matcher than `_agent_pv_re` to say so — `_agent_tail_re`, whose per-agent patterns are
@@ -213,3 +214,4 @@ of failure; leaving it undocumented would.
 - v1.11: Impl-plan audit v30 (codex) — the Executive Summary and FR-1 still said the tail pass matches the EXISTING `_agent_pv_re` signature, contradicting AC-1.4's stricter rule two paragraphs later; both now name the tail-only `_agent_tail_re` grammar that wraps it.
 - v1.12: Impl-plan audit v31 (codex) — Measured basis 3 and AC-1.4 still implied the tail pass reuses or wraps `_agent_pv_re`; the per-agent patterns in `_agent_tail_re` are independent literals, and the shared helper is unchanged only for Passes 1-2.
 - v1.13: Impl-plan audit v32 (codex) — FR-1 said `_agent_tail_re` WRAPS `_agent_pv_re` while AC-1.4 says its per-agent patterns are independent literals; the two selected different implementations. Measured basis 3 also still said the shared helper is 'reused unchanged' without the Passes-1-2 qualifier.
+- v1.14: Impl-plan audit v33 (codex) — AC-1.1 still defined a match by the agent's `_agent_pv_re` signature while AC-1.4 measures that same helper matching ordinary prose 24 times out of 24. The two ACs admitted different candidate sets, and the wider one is the wrong-pane class AC-1.4 exists to forbid; AC-1.1 now names `_agent_tail_re`.
