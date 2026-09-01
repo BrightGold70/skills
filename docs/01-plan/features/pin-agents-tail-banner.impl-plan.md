@@ -635,10 +635,27 @@ ambiguity.
       counting — the exact placement this AC exists to pin. That was the v1.2 wording and it was
       vacuous.
 
-- [ ] AC-4.5: A **large** candidate (≥ 200 KB) carrying the RIVAL's banner on its first line
-      is still rejected pre-count. Same SIGPIPE mechanism on the rival branch, and the more
-      dangerous direction: under the broken form the rejection silently does not fire and a
-      rival-bearing pane is counted as a match.
+- [ ] AC-4.5: **Two** candidates: a clean one whose tail carries only the agent's banner, and a
+      ≥ 200 KB decoy whose tail carries the **RIVAL's banner FIRST** and the agent's banner **near
+      the end**. `_orca_find` resolves to the clean candidate, with the stderr marker.
+
+      **The layout is the AC.** Measured 2026-09-01 on 240,068-byte tails, comparing the broken
+      pipeline form against the here-string form:
+
+      | decoy layout | broken: wanted-check | broken: rival-check | fixed: both |
+      |---|---|---|---|
+      | rival first, wanted near END | rc 0 | **rc 141** | rc 0 / rc 0 |
+      | both signatures early | **rc 141** | rc 141 | rc 0 / rc 0 |
+
+      Only the first layout discriminates. Under the broken form its rival check returns 141, so
+      rejection silently does not fire, the decoy is counted, and the pass declines on ambiguity —
+      whereas the fixed form rejects the decoy and resolves. The second layout fails the *wanted*
+      check first, so the decline happens for a reason that has nothing to do with rival
+      rejection: the test would pass against a build with rival rejection deleted entirely. That
+      was the v1.8 wording of this AC and it was vacuous.
+
+      A rival-**only** tail is likewise not usable here: it fails `$tail_re` and never reaches the
+      rejection branch, which is why AC-4.2 was withdrawn rather than reused.
 **Dependencies on other tasks**: Task 3 (must complete first)
 
 ---
@@ -1012,7 +1029,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
-**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 35
+**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 37
 nodes, T5's three included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
@@ -1080,7 +1097,8 @@ false half is recorded so the next reader does not re-derive it.
       by this feature's edits.
 - [ ] AC-6.11: The spec's `root` is the relative string `"../.."`, asserted by
       `tests/test_hmad_dispatch.py::test_tail_mutation_spec_root_is_relative`, which loads the
-      JSON and asserts `not os.path.isabs(spec["root"])`. It is a real node, not a description:
+      JSON and asserts `spec["root"] == "../.."` — the exact string, not merely
+      `not os.path.isabs(...)`, which any other relative value would also satisfy. It is a real node, not a description:
       neither the mutation run nor `--check-anchors` rejects an absolute root that happens to
       resolve on this machine, so nothing else can catch the regression. Observe it fail after
       changing ONLY `root` to an absolute path, then restore.
@@ -1147,7 +1165,7 @@ false half is recorded so the next reader does not re-derive it.
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 35 / 11 / 24 against this file.
+   anchored to the full row shape above and verified to return 37 / 11 / 26 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1174,8 +1192,14 @@ false half is recorded so the next reader does not re-derive it.
    can all satisfy it without a single `terminal read`, so the check would pass with the whole
    feature reverted — the exact vacuous-verification shape this feature's ACs were written
    against. Require all four:
-   1. `hmad-dispatch pin-agents --clear` first, and confirm no `HMAD_ORCA_*_TERMINAL` is exported,
-      so no pin can short-circuit resolution.
+   1. `hmad-dispatch pin-agents --clear` first, then **assert the mutation landed by re-reading
+      the file it was supposed to remove** — `hmad-dispatch env` prints the path
+      (`<repo>/.h-mad/orca-pins.env` here), so record that path and check its absence, or that it
+      names neither agent, in a separate read. Also confirm no `HMAD_ORCA_*_TERMINAL` is exported.
+      The env check alone is not sufficient and was the v1.8 wording: `--clear` mutates the pin
+      *file*, and a pin surviving there short-circuits resolution exactly as an exported variable
+      would — verifying a different surface from the one you changed is the mutation-verification
+      failure this project has shipped before.
    2. Confirm the earlier passes do NOT resolve on their own — `worktree ps` does not name the
       pane (Pass 0 blind), and its title/preview do not match (Passes 1-2 blind).
    3. `hmad-dispatch env 2>&1` carries **`bound <handle> by tail evidence`**. That marker is
@@ -1195,3 +1219,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.6: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
 - v1.7: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.
 - v1.8: Impl-plan audit v11 (codex) — findings dropped 5 to 1, and the one is the sharpest of the run. T3 and T4 both specified printf '%s' "$tout" | grep -Eiq, which under the wrapper's global set -o pipefail returns 141 when grep -q exits early and printf takes SIGPIPE: a candidate whose tail DOES carry the signature is skipped, and a rival-bearing candidate fails its rejection and is COUNTED. Reproduced on a 240,106-byte tail with the signature on line 1 (rc=141), against rc=0 for the same tail short. Every stub fixture in this plan uses a short tail, so all 37 nodes would have gone green over a matcher broken on exactly the long retained tails the 2000-line cap describes. Both matches now use a here-string, which has no pipeline; drop-rival-rejection re-anchored; AC-3.16 and AC-4.5 added as long-tail regression tests (nodes 35 to 37, expect-fail 24 to 26). AC-6.10 gained the exact bash -c sweep command after verifying it returns ANCHORS_OK specs=34 mutations=342 drifted=0 and that the no-paths invocation is the documented refusal.
+- v1.9: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
