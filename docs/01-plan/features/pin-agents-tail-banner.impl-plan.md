@@ -461,7 +461,7 @@ AC-3.2 assert on, so a resolution that happened to come from another pass cannot
   while IFS= read -r th; do
     [ -n "$th" ] || continue
     if tout="$(_orca_tail_sig "$th")"; then
-      printf '%s' "$tout" | grep -Eiq "$tail_re" || continue
+      grep -Eiq "$tail_re" <<<"$tout" || continue
       tail_ids="${tail_ids}${th}
 "
     fi
@@ -475,6 +475,25 @@ EOF
     printf '%s\n' "$tail_h"; return 0
   fi
 ```
+
+**Both matches use a here-string, never `printf … | grep -q`. This is not style.**
+Under the wrapper's global `set -o pipefail`, `grep -q` exits the moment it matches, the
+upstream `printf` takes SIGPIPE, and the pipeline returns **141** — so a candidate whose tail
+DOES carry the signature is skipped by `|| continue`, and a candidate carrying the RIVAL's
+signature fails its rejection test and is counted. Measured 2026-09-01 on a 240,106-byte tail
+with the signature on line 1:
+
+```
+printf '%s' "$big" | grep -Eiq "$re"   -> rc=141   (match found, candidate SKIPPED)
+printf '%s' "$big" | grep -Ei  "$re" >/dev/null -> rc=0
+grep -Eiq "$re" <<<"$big"              -> rc=0
+printf '%s' "$small" | grep -Eiq "$re" -> rc=0     (short tail — the defect is invisible)
+```
+
+The last line is why this needs its own tests: **every stub fixture in this plan uses a short
+tail**, so all 37 nodes would go green over a matcher that is broken on exactly the long
+retained tails the 2000-line cap describes. A here-string has no pipeline, so the compound's
+status is `grep`'s alone.
 
 **Acceptance Criteria**:
 - [ ] AC-3.1 (spec AC-1.1): Given a `$scoped` pool of one pane whose stubbed tail carries the
@@ -554,6 +573,10 @@ EOF
       and contradict AC-3.3). Asserted on the same source section as AC-3.12 but by its own test
       (`test_tail_pass_stale_pane_comment_present`), so a failure names which half of the comment
       is missing rather than reporting "the comment is wrong".
+- [ ] AC-3.16: A candidate whose tail is **large** (≥ 200 KB, ≥ 3000 lines) and carries the
+      agent's banner on its FIRST line resolves, with the `bound … by tail evidence` marker.
+      This is the SIGPIPE regression test: with the `printf | grep -q` form it fails at rc 141
+      while every short-tail node stays green.
 **Dependencies on other tasks**: Task 2 (must complete first)
 
 ---
@@ -579,11 +602,11 @@ ambiguity.
 **Code structure**:
 ```sh
     if tout="$(_orca_tail_sig "$th")"; then
-      printf '%s' "$tout" | grep -Eiq "$tail_re" || continue
+      grep -Eiq "$tail_re" <<<"$tout" || continue
       # Reject BEFORE counting: a pane demonstrably running the other agent is
       # neither a match nor a source of ambiguity. Same predicate Pass 2 applies
       # to .preview; $rival_re is computed once above Pass 1.
-      if [ -n "$rival_re" ] && printf '%s' "$tout" | grep -Eiq "$rival_re"; then
+      if [ -n "$rival_re" ] && grep -Eiq "$rival_re" <<<"$tout"; then
         continue
       fi
       tail_ids="${tail_ids}${th}
@@ -612,6 +635,10 @@ ambiguity.
       counting — the exact placement this AC exists to pin. That was the v1.2 wording and it was
       vacuous.
 
+- [ ] AC-4.5: A **large** candidate (≥ 200 KB) carrying the RIVAL's banner on its first line
+      is still rejected pre-count. Same SIGPIPE mechanism on the rival branch, and the more
+      dangerous direction: under the broken form the rejection silently does not fire and a
+      rival-bearing pane is counted as a match.
 **Dependencies on other tasks**: Task 3 (must complete first)
 
 ---
@@ -808,7 +835,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "name": "drop-rival-rejection",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
-   "find": "      if [ -n \"$rival_re\" ] && printf '%s' \"$tout\" | grep -Eiq \"$rival_re\"; then",
+   "find": "      if [ -n \"$rival_re\" ] && grep -Eiq \"$rival_re\" <<<\"$tout\"; then",
    "replace": "      if false; then"
   },
   {
@@ -974,10 +1001,12 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-3.13 | `test_tail_pass_stdout_is_bare_handle` | RED: FAIL | — |
 | AC-3.14 | `test_tail_pass_call_form_is_source_pinned` | RED: FAIL | — |
 | AC-3.15 | `test_tail_pass_stale_pane_comment_present` | RED: FAIL | — |
+| AC-3.16 | `test_tail_pass_long_tail_early_signature_resolves` | RED: FAIL | — |
 | AC-4.1 | `test_tail_pass_rejects_rival_signature` | RED: FAIL | — |
 | AC-4.2 | *withdrawn* | — | subsumed by `test_tail_pass_zero_matches_declines`: a rival-only tail fails the agent's own signature and never reaches the count, so NO mutation on rival rejection can discriminate it. Number retained so AC-4.1/4.3/4.4 do not renumber. |
 | AC-4.3 | `test_tail_pass_rival_rejection_symmetric` | RED: FAIL | — |
 | AC-4.4 | `test_tail_pass_rival_rejected_before_counting` | RED: FAIL | — |
+| AC-4.5 | `test_tail_pass_long_tail_early_rival_rejected` | RED: FAIL | — |
 | AC-5.1 | `test_os_evidence_pass_renumbered_to_four` | RED: FAIL | — |
 | AC-5.2, AC-5.4 | `test_skill_md_names_tail_evidence_pass` | RED: FAIL | — |
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
@@ -1036,8 +1065,18 @@ false half is recorded so the next reader does not re-derive it.
       prints `MUTATION: ALL_CAUGHT` with `survived=0`, and every mutation's `mechanism:` detail
       line names the test the spec pinned rather than an unrelated failure.
 - [ ] AC-6.10: `h_mad_mutation_harness.py --check-anchors` over the whole
-      `h-mad/tests/mutation-specs/` directory, run under bash, prints `ANCHORS: ANCHORS_OK` with
-      `drifted=0` — the new spec's anchors match exactly once each and no sibling spec was broken
+      `h-mad/tests/mutation-specs/` directory prints `ANCHORS: ANCHORS_OK` with `drifted=0`.
+      The exact command — the harness takes one or more positional spec paths and refuses with
+      `ANCHORS_NOTHING_SWEPT` when given none, and **zsh does not word-split an unquoted list
+      variable**, which is how that refusal is normally reached:
+
+      ```bash
+      bash -c 'python3 ~/.claude/skills/h-mad/scripts/h_mad_mutation_harness.py \
+        --check-anchors h-mad/tests/mutation-specs/*.json'
+      ```
+
+      Run it from the repository root, under `bash` (the explicit `bash -c` is the point), and
+      read the `ANCHORS:` token, never `$?` — the new spec's anchors match exactly once each and no sibling spec was broken
       by this feature's edits.
 - [ ] AC-6.11: The spec's `root` is the relative string `"../.."`, asserted by
       `tests/test_hmad_dispatch.py::test_tail_mutation_spec_root_is_relative`, which loads the
@@ -1083,11 +1122,11 @@ false half is recorded so the next reader does not re-derive it.
    |---|---|---|---|---|
    | T1 | 6 | 3 | 3 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv` |
    | T2 | 7 | 6 | 1 | `test_tail_no_timeout_binary_invocation` |
-   | T3 | 15 | 9 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
-   | T4 | 3 | 3 | 0 | — |
+   | T3 | 16 | 10 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
+   | T4 | 4 | 4 | 0 | — |
    | T5 | 3 | 2 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **35** | **24** | **11** | |
+   | **total** | **37** | **26** | **11** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1096,9 +1135,9 @@ false half is recorded so the next reader does not re-derive it.
 
    ```bash
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 35  total nodes
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 37  total nodes
    grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 11  --expect-pass
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 24  --expect-fail
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 26  --expect-fail
    ```
 
    Those three numbers are the dispatch inputs; a count that disagrees with the enumeration is the
@@ -1155,3 +1194,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.5: Impl-plan audit v7 (codex) — two of the four must-fixes were defects in v1.4's own fixes. The run_fn harness description was FACTUALLY WRONG (a sourced file inherits the caller's positional parameters, so the call argv reached main; and main's default arm returns 2, which under the wrapper's set -e exits the shell and loses every definition) - replaced with a measured strip-the-terminal-main-line harness plus an assert that fails loudly if that line moves. The blanket 'every new test is RED' rule was unsatisfiable and would have halted 5d on red_not_all_failing: five ACs are preservation or negative assertions already true today, so a per-task expect-fail/expect-pass table replaces it and each green-at-RED AC is tied to the mutation that proves its reject direction. The jq mutation moved two controls at once and now isolates -re to -r. Header, AC ordering and the AC-3.15 map row corrected.
 - v1.6: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
 - v1.7: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.
+- v1.8: Impl-plan audit v11 (codex) — findings dropped 5 to 1, and the one is the sharpest of the run. T3 and T4 both specified printf '%s' "$tout" | grep -Eiq, which under the wrapper's global set -o pipefail returns 141 when grep -q exits early and printf takes SIGPIPE: a candidate whose tail DOES carry the signature is skipped, and a rival-bearing candidate fails its rejection and is COUNTED. Reproduced on a 240,106-byte tail with the signature on line 1 (rc=141), against rc=0 for the same tail short. Every stub fixture in this plan uses a short tail, so all 37 nodes would have gone green over a matcher broken on exactly the long retained tails the 2000-line cap describes. Both matches now use a here-string, which has no pipeline; drop-rival-rejection re-anchored; AC-3.16 and AC-4.5 added as long-tail regression tests (nodes 35 to 37, expect-fail 24 to 26). AC-6.10 gained the exact bash -c sweep command after verifying it returns ANCHORS_OK specs=34 mutations=342 drifted=0 and that the no-paths invocation is the documented refusal.
