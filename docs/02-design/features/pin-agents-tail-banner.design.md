@@ -52,6 +52,17 @@ identify. Widening does not weaken the safety property: exactly-one still gates 
 resolution, and a wider pool can only turn a resolution into a decline, never into a wrong
 pane.
 
+**What `_agent_pv_re` actually matches — the banner, never the launch command.** The helper is
+reused unchanged, and it matches *program banners* (`openai codex`, `model: *gpt-`, a model id
+paired with a reasoning effort; `antigravity cli`, `gemini [0-9]`) because the bare tokens
+`codex`/`agy` were removed from it after a coordinator pane resolved as Codex. Measured
+2026-09-01 with passing controls: `codex '--dangerously-bypass-approvals-and-sandbox'` and
+`agy '--dangerously-skip-permissions'` are **NO MATCH** for their own agents, while all four
+banner and status-line controls MATCH. Spec v1.5 narrows AC-1.1 to the banner and inverts
+AC-1.2 accordingly; do not "fix" this by widening `_agent_pv_re`, which would also widen Pass 1's
+rival rejection and Pass 2's preview match and re-admit the false-positive class those patterns
+exist to exclude.
+
 **Per-candidate test.** For each candidate handle, read the tail with exactly this command
 and match the agent's existing signature; reject a candidate whose tail matches the RIVAL's
 signature before counting it:
@@ -111,9 +122,16 @@ the Risks table calls the load-bearing unknown.
 **The timeout carries its own default, `${HMAD_TAIL_READ_TIMEOUT:-2}`.** `set -u` is on, so a
 bare `"$HMAD_TAIL_READ_TIMEOUT"` aborts the whole wrapper the first time this pass runs in a
 shell that never exported it — the parameter expansion is not defensive style, it is what
-keeps an unset variable from being a crash. 2 seconds per candidate: a terminal read is a
-local IPC call, and the pass is bounded by the candidate count, so the worst case stays a
-few seconds even on a busy pool.
+keeps an unset variable from being a crash.
+
+**The bound is sequential and stated exactly, not as "a few seconds".** Reads run one after
+another, so the worst case is `candidate_count × HMAD_TAIL_READ_TIMEOUT` plus per-call overhead —
+at the default that is 2 s per candidate in `$scoped`, and nothing in the spec caps
+`candidate_count`. A worktree with 10 panes and every read hanging therefore costs ~20 s, not
+"a few". Two things keep that acceptable rather than needing a cap: a `terminal read` is a local
+IPC call so the timeout is nowhere near reached in practice, and the pass only runs at all when
+Passes 0–2 failed to resolve, which is the path that otherwise ends in `UNRESOLVED` and a manual
+pin. Lower `HMAD_TAIL_READ_TIMEOUT` if a pool is large enough for the product to matter.
 
 **Resolution.** Exactly one surviving match → print it, return 0. Zero or more than one →
 fall through to Pass 4 unchanged. The pass never returns non-zero itself; falling through IS
@@ -130,9 +148,9 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 | `_orca_tail_sig` | `h-mad/scripts/hmad-dispatch.sh` | new | read one pane's tail, bounded; echo it or fail |
 | tail-evidence pass | `h-mad/scripts/hmad-dispatch.sh` | modify `_orca_find` | the pass itself, between Pass 2 and Pass 4 |
 | Pass 4 comment | `h-mad/scripts/hmad-dispatch.sh` | modify | "every pass above found nothing" is no longer true |
-| Retention-cap comment at the new pass | `h-mad/scripts/hmad-dispatch.sh` | new | AC-5.1: records the measured 2000-line cap, that agent TUIs do not normally reach it, and that a shell-heavy pane fails to UNRESOLVED |
+| Retention-cap comment at the new pass | `h-mad/scripts/hmad-dispatch.sh` | new | AC-5.1 + AC-5.2: records the measured 2000-line cap, that agent TUIs do not normally reach it, that a shell-heavy pane fails to UNRESOLVED, and that BELOW the cap a stale banner still resolves |
 | `_orca_find` prose | `h-mad/SKILL.md` | modify | line ~320 reads "joins them as **Pass 0**, ahead of the title and preview passes" — incomplete once a tail pass exists between preview and OS evidence |
-| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 13 ACs |
+| tests | `h-mad/tests/test_hmad_dispatch.py` | modify | 14 ACs (count from the spec, never carry it — this cell was stale once) |
 | mutation spec | `h-mad/tests/mutation-specs/tail_signature_pass.json` | new | guard discrimination |
 
 ## Implementation Order
@@ -230,8 +248,8 @@ separate manual step in Success Criteria.
 
 | # | Scenario | Pins |
 |---|---|---|
-| 1 | one candidate, tail matches launch line | AC-1.1 |
-| 2 | one candidate, tail matches vendor banner only | AC-1.2 |
+| 1 | one candidate, tail carries the vendor/model banner | AC-1.1 |
+| 2 | one candidate, tail carries the launch line ONLY → does NOT resolve | AC-1.2 |
 | 3 | `env` reports the handle rather than UNRESOLVED | AC-1.3 |
 | 4 | two candidates both match → decline | AC-2.1 |
 | 5 | zero matches → decline | AC-2.2 |
@@ -243,22 +261,39 @@ separate manual step in Success Criteria.
 | 11 | all candidates unreadable → decline | AC-4.2 |
 | 12 | `timeout`/`gtimeout` appear nowhere in the implementation | AC-4.3 |
 | 13 | retention limit documented at the pass | AC-5.1 |
+| 14 | stale-pane limit documented at the pass | AC-5.2 |
 
 Test 7 is the one that can pass vacuously — assert on the STUB's call count, not on the
 resolution, or it merely restates Pass 0.
 
 **Verification, in order — all three items the plan's Success Criteria require:**
 
-1. **RED before GREEN.** Every new test is observed FAILING against the unfixed wrapper
-   before implementation, and the 5d dispatch states the expected failing/passing counts so
-   an unexpected pass halts. This is not ceremony here: `cn == 1` with `lsof` present already
-   resolves today, so a carelessly written test passes with the whole feature reverted.
+1. **RED before GREEN — per NODE, not blanket.** The 5d dispatch states expected failing and
+   passing counts so an unexpected pass halts. It must NOT claim every new test fails: this
+   feature's suite contains *preservation* and *negative* nodes that are legitimately green
+   before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
+   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
+   Measured on the node enumeration: **24 of 35 nodes fail at RED and 11 pass**, so a blanket
+   claim would halt a correct dispatch on `step5d:red_not_all_failing`.
+
+   Every node green at RED carries a named reject-direction proof instead — a mutation whose
+   `mechanism:` line must name that node, or, for the `timeout`-invocation invariant, an explicit
+   insert-observe-remove procedure. The impl-plan's §"Test-name contract" is the authoritative
+   table; derive counts from it at dispatch time rather than reading a number from prose.
+
+   This is not ceremony here: `cn == 1` with `lsof` present already resolves today, so a
+   carelessly written test passes with the whole feature reverted.
 2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_find`, then
    the full `pytest`, then `h_mad_mutation_harness.py` on the new spec, then
    `--check-anchors` under bash (never zsh — it does not word-split the candidate list).
-3. **Live check.** `hmad-dispatch env` resolves codex on this machine with no manual pin —
-   the condition that motivated the feature and the one no stub can demonstrate. Any pane
-   created for the check is closed afterwards.
+3. **Live check — it must exercise THIS pass, not merely succeed.** `hmad-dispatch env`
+   resolving codex is NOT sufficient evidence: Pass 0, the title pass, the preview pass or an
+   ambient pin can each satisfy it without a single `terminal read`, so the check would pass
+   with the whole feature reverted. Require all four: pins cleared (`pin-agents --clear`, no
+   `HMAD_ORCA_*_TERMINAL` exported); the earlier passes shown NOT to resolve on their own
+   (`worktree ps` does not name the pane, title and preview do not match); `env 2>&1` carrying
+   the **`bound <handle> by tail evidence`** marker, which this pass alone emits; and, if a pane
+   was created for the check, closing it and **re-listing terminals to confirm the removal**.
 
 ## Invariant Compliance
 
@@ -311,3 +346,7 @@ resolution, or it merely restates Pass 0.
   measurement showing that `if local out="$(…)"` masks the helper's exit status behind
   `local`'s own 0. Third idiom in this pass whose tidy-looking form silently defeats a guard,
   after the bare `if _orca_tail_sig` and `jq -r`.
+- v1.8: Back-propagated from impl-plan audit v5 (codex surface, operator-approved) — a new subsection records that _agent_pv_re matches the BANNER and never the launch command (measured with passing controls: both launch lines NO MATCH), which is what made spec AC-1.1 unsatisfiable while this design reused the helper unchanged; widening the helper is explicitly rejected because it would also widen Pass 1 rival rejection and Pass 2. Test Plan rows 1 and 2 inverted accordingly, row 14 added for the stale-pane limit, and the components row now carries AC-5.2: below the 2000-line cap an exited agent's banner still resolves.
+- v1.9: Impl-plan audit v7 (codex) — the components table's '13 ACs' cell was stale after spec v1.5 added AC-5.2, and the latency claim 'the worst case stays a few seconds even on a busy pool' was unbounded: reads are sequential, so the real bound is candidate_count x HMAD_TAIL_READ_TIMEOUT and nothing caps the candidate count. Both stated exactly.
+- v1.10: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
+- v1.11: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.

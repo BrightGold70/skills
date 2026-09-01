@@ -1,0 +1,17 @@
+AUDIT-pin-agents-tail-banner-impl-plan-v8-BEGIN
+## Summary
+The production code blocks are unusually precise, but the verification contract is not executable as written: its RED accounting mixes ACs with test nodes and its claimed alternate discrimination is incomplete. The paired design still mandates the blanket RED rule that this plan correctly calls unsatisfiable, and the live check can pass without exercising the new pass.
+
+## Must-fix
+- The RED expectation table cannot supply truthful `h_mad_assemble_tdd.py --expect-fail/--expect-pass` counts — AC-2.7 and AC-2.8 are the same `test_tail_no_timeout_binary_invocation` node yet are placed in opposite outcome columns, AC-5.2 and AC-5.4 are the same node but are counted twice as failures, AC-1.3 already passes on the current stub, and AC-3.7 as specified already passes when the tail pass is absent. T6 then labels AC-6.1…AC-6.11 as RED failures although it specifies no corresponding RED test set. Recast every row as exact test-node counts and give each node one expected outcome; otherwise the independent 5d count check will halt a correct dispatch.
+- The assertion that every green-at-RED AC is mutation-discriminated is false — `local-masks-helper-rc` is explicitly retargeted to AC-3.14 and cannot prove AC-3.11, `resolve-on-ge-1` does not change the zero-match behavior in AC-3.5, and no mutation or controlled reject-direction check is specified for AC-1.4, AC-3.2, AC-4.2, or AC-5.3. AC-1.3 is another preservation check that the table misclassifies as RED, while AC-3.7 should be green-at-RED and is correctly killed by `pool-whole-listing`. Add and verify a discriminating mutation/check for every preservation node or remove/reframe redundant nodes; the current plan violates the base Test discrimination invariant.
+- The paired design and upstream plan still say “Every new test is observed FAILING against the unfixed code,” directly contradicting this implementation plan’s per-task preservation-test model — following the source design produces the very `red_not_all_failing` halt the implementation plan warns about. Back-propagate the corrected node-level RED contract to `pin-agents-tail-banner.design.md` and `pin-agents-tail-banner.plan.md` before dispatch.
+- AC-6.11 promises that the mutation spec’s `root` is asserted by reading JSON, but Task 6 provides no test name or code for that assertion, and neither the mutation run nor anchor sweep rejects an absolute root that happens to resolve. Add an exact test node, include it in Task 6’s verification/count contract, and observe it fail after changing only `root` to an absolute path.
+- The live success check only requires `hmad-dispatch env` to resolve codex, so Pass 0, title, preview, or an ambient pin can satisfy it without a single `terminal read`; it therefore neither exercises the new runtime connection nor reliably replays the motivating incident. Require the `bound <handle> by tail evidence` stderr marker with pins absent and earlier passes demonstrably non-resolving; if a pane is created and then closed, re-list terminals to verify the removal as required by Mutation verification.
+
+## Should-fix
+- AC-2.6 says the timeout test completes “within a few seconds” despite the document’s emphasis on exact bounds — specify the `time.monotonic()` assertion threshold and expected rc so the test cannot be implemented with an arbitrary or excessively loose deadline.
+
+## Nit
+None
+AUDIT-pin-agents-tail-banner-impl-plan-v8-END

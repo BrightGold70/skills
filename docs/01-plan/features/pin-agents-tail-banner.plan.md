@@ -55,9 +55,16 @@ here so the next reviewer does not relitigate a settled point.
 
 So the pass is its own step, placed after Pass 2 and before Pass 3, and it runs whenever the
 candidate set is unresolved — **0 or >1 survivors** — over `$scoped`, gated on neither
-`n == 0` nor `lsof`. Before Pass 3 because tail evidence is direct evidence of what a pane
-IS RUNNING, while OS evidence only proves a process exists somewhere in the worktree; the
-stronger signal should be tried first, and Pass 3 remains the fallback when no tail matches.
+`n == 0` nor `lsof`. Before Pass 3 because tail evidence NAMES THE AGENT for a specific pane,
+while OS evidence only proves a process exists somewhere in the worktree and cannot say which
+pane holds it; the pane-specific signal should be tried first, and Pass 3 remains the fallback
+when no tail matches.
+
+**Tail evidence is historical, not a liveness proof** (spec v1.5 AC-5.2). It says what a pane
+ONCE ran; below the 2000-line cap an exited agent's banner survives and still resolves. Accepted
+deliberately — Pass 1 (title) and Pass 2 (preview) are not liveness-gated either, so this adds no
+new failure class, and a liveness gate would need `lsof` and contradict AC-3.3. Only Pass 0 and
+Pass 3 (OS evidence) carry liveness.
 
 **No new signature constants.** `_agent_pv_re` already returns per-agent regexes hardened
 against prose, and both were verified against the REAL panes on 2026-09-01:
@@ -66,6 +73,12 @@ against prose, and both were verified against the REAL panes on 2026-09-01:
 `Gemini 3.1 Pro (High)`). The work is running the EXISTING helper against `.tail` instead
 of `.preview`. An earlier check of this against a hand-written reconstruction reported
 "agy: NO MATCH" and was wrong — the reconstruction is not the production surface.
+
+**What matches is the BANNER line, not the launch line** (spec v1.5 §Measured basis 3). Both
+claims above are about the tail *as a whole*, which on a real pane carries both. Measured
+separately with controls: `codex '--dangerously-bypass-approvals-and-sandbox'` and
+`agy '--dangerously-skip-permissions'` are NO MATCH for their own agents. Do not read the
+paragraph above as licensing a launch-command-only fixture.
 
 **The read command, in full.** Each candidate is read with
 
@@ -132,7 +145,8 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 |---|---|---|
 | A shell-heavy pane exceeds the measured 2000-line retention cap and loses its signature | Medium — reverts to today's behaviour | Accepted and documented; fails to UNRESOLVED, never to a wrong pane |
 | The pass fires on a pane an earlier filter deliberately excluded | High | Operate only on `$scoped`, which already excludes the caller's own pane and is the same set Passes 1-2 filter from; never widen it |
-| Running before Pass 3 changes which evidence wins when both are available | Medium | Deliberate: a tail proves what a pane IS RUNNING, OS evidence only proves a process exists in the worktree. Pass 3 still runs when no tail matches, so nothing that resolves today stops resolving |
+| Running before Pass 3 changes which evidence wins when both are available | Medium | Deliberate: a tail names the agent for a SPECIFIC pane, while OS evidence proves only that a process exists in the worktree and cannot say which pane holds it. Pass 3 still runs when no tail matches, so nothing that resolves today stops resolving |
+| A pane whose agent EXITED still carries its banner below the 2000-line cap, so the pass resolves a dead agent's shell | Medium — a dispatch lands in a plain shell | Accepted and documented at the pass (spec AC-5.2): tail evidence is HISTORICAL. Passes 1 and 2 are not liveness-gated either, so this is no new failure class; a liveness gate would require `lsof` and contradict AC-3.3 |
 | A `terminal read` hangs and stalls every resolution | Medium | Bound it with `hmad-dispatch run --timeout <s> --` (NEVER `timeout`/`gtimeout`, forbidden unconditionally by the base invariant); an unreadable candidate is excluded, and all-unreadable declines |
 | Reading tails on every resolution becomes a per-call cost | Low | Conditional on 0 or >1 survivors; a clean Pass 0/1 reads nothing |
 | A rival's banner in scrollback selects the wrong agent | High | Rival rejection before counting (AC-2.3) |
@@ -150,13 +164,21 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 
 ## Success Criteria
 
-- All 13 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-5.1 — counted from the spec by
-  `grep -o 'AC-[0-9]\.[0-9]' | sort -u`, never carried; this line was already stale twice)
-- **Every new test is observed RED against the unfixed code before it is trusted.** A test
-  that passes against the code it was written to catch is decoration, and this feature is
-  especially exposed to it: `cn == 1` already resolves today by OS evidence, so an AC-1.1
-  style test can pass with the change reverted. The RED observation is what distinguishes
-  new coverage from a restatement of current behaviour
+- All 14 ACs pass automated tests (AC-1.1, AC-1.2, AC-1.3, AC-2.1, AC-2.2, AC-2.3, AC-3.1, AC-3.2, AC-3.3, AC-4.1, AC-4.2, AC-4.3, AC-5.1, AC-5.2 — counted from the spec by
+  `grep -o 'AC-[0-9]\.[0-9]' | sort -u`, never carried; **this line has now been stale three
+  times**, the third when spec v1.5 added AC-5.2 and this count was not swept. Re-run the command;
+  do not read the number above.)
+- **Every new test is either observed RED against the unfixed code, or carries a named
+  reject-direction proof.** A test that passes against the code it was written to catch is
+  decoration, and this feature is especially exposed to it: `cn == 1` already resolves today by
+  OS evidence, so an AC-1.1 style test can pass with the change reverted. But a *blanket* RED
+  requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
+  nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
+  "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
+  legitimately green before any code exists. Measured: **24 of 35 nodes RED, 11 green**, each of
+  the 11 tied to a mutation that must be killed by that specific node. RED observation OR a
+  discriminating mutation is what distinguishes new coverage from a restatement of current
+  behaviour — one or the other, never neither
 - Each guard is mutation-tested to its permissive value, and each mutant is confirmed to
   have LANDED — an anchor matching nothing reports the guard as enforced
 - The mutation spec is ALL_CAUGHT
@@ -196,3 +218,5 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.5: Audit v5 should-fix — the exact read command is named, with `--cursor 0` justified:
   omitting it returns the newest rows while the banner is oldest, and today's panes are short
   enough that the mistake would pass a live check and surface only on a pane with history.
+- v1.6: Back-propagated from impl-plan audit v7 (codex) — the plan was the surface the value sweep missed twice over: its risk table still asserted a tail proves what a pane IS RUNNING, contradicting the stale-pane behaviour spec v1.5 accepted, and its Success Criteria still said 13 ACs after AC-5.2 landed (the THIRD time that line has gone stale, on a line that already told the reader never to carry it). Both corrected, plus a new risk row for the exited-agent pane.
+- v1.7: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.

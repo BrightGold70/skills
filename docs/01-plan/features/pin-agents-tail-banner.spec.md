@@ -4,7 +4,8 @@
 
 Add a standalone tail-evidence pass to `_orca_find`, between Pass 2 and Pass 3, reading a candidate pane's
 `.result.terminal.tail` and resolves an agent when — and only when — exactly one candidate
-carries that agent's launch signature.
+carries that agent's `_agent_pv_re` **banner** signature. The launch command line is not a
+signature (§Measured basis 3).
 
 ## Goal
 
@@ -14,8 +15,8 @@ and forces a manual `pin`.
 
 ## Measured basis
 
-Two measurements taken 2026-09-01 before this spec; both are load-bearing and one falsified
-the brainstorm's stronger claim.
+Three measurements taken 2026-09-01; all are load-bearing, one falsified the brainstorm's
+stronger claim, and the third falsified this spec's own AC-1.1 (see below).
 
 1. **Identity survives on real agent panes.** Three panes alive since 2026-08-31 — one
    codex (the pinned dispatch target) and two agy — each retain 12–18 tail lines carrying
@@ -25,6 +26,30 @@ the brainstorm's stronger claim.
 2. **Tail retention is hard-capped at 2000 lines**, regardless of `--limit`. A disposable
    pane emitting 200 lines retained 203 and kept its first line; one emitting 2000 retained
    exactly 2000 and lost it; one emitting 20000 retained 2000 beginning at line 18001.
+
+3. **Only the banner half of that retained text is a matcher.** The pass reuses
+   `_agent_pv_re` unchanged, and that helper deliberately matches *program banners* rather
+   than command lines — the bare tokens `codex`/`agy` were removed from it precisely because
+   a pane merely discussing an agent matched. Measured 2026-09-01 by extracting both patterns
+   from the wrapper and running them against fixed strings, with controls that must match:
+
+   | line | `codex` re | `agy` re |
+   |---|---|---|
+   | `OpenAI Codex (v0.145.0)  model: gpt-5.6-terra` | MATCH | — |
+   | `gpt-5.6-terra high · ~/repo` | MATCH | — |
+   | `Antigravity CLI` | — | MATCH |
+   | `Gemini 3.1 Pro` | — | MATCH |
+   | `codex '--dangerously-bypass-approvals-and-sandbox'` | **NO MATCH** | — |
+   | `agy '--dangerously-skip-permissions'` | — | **NO MATCH** |
+
+   An earlier revision of this spec (v1.0–v1.4) guaranteed launch-command-only resolution in
+   AC-1.1 while the design reused `_agent_pv_re` unchanged; the two could not both hold, and a
+   faithful implementation would have been permanently red on AC-1.1 — or, worse, made green by
+   adding a banner to the fixture, which tests the path that already worked. Widening the shared
+   helper was considered and rejected: it also widens Pass 1's rival rejection and Pass 2's
+   preview match, re-admitting the false-positive class those patterns were narrowed to exclude.
+   The guarantee was narrowed instead. In practice nothing is lost — §Measured basis 1 found
+   every real agent pane carrying the banner *alongside* the launch line.
 
 These reconcile because agents are full-screen TUIs on the alternate screen buffer, so
 their output never enters normal-buffer scrollback — which is why a pane dispatched to for
@@ -41,10 +66,14 @@ decline. That is the accepted limit of the feature, stated rather than discovere
   `n == 0` condition nor Pass 3's `lsof` precondition, so it covers an ambiguous title and a
   machine with no `lsof` — neither of which any current pass reaches.
 - **Acceptance Criteria**:
-  - AC-1.1: Given a candidate pool of one pane whose tail contains the agent's launch
-    command and no other pane's, `_orca_find <agent>` prints that handle and returns 0.
-  - AC-1.2: Given a pane whose tail carries the vendor banner but not the launch command,
-    resolution still succeeds — both forms are accepted signatures.
+  - AC-1.1: Given a candidate pool of one pane whose tail carries the agent's `_agent_pv_re`
+    signature — its **vendor/model banner** — and no other pane's, `_orca_find <agent>` prints
+    that handle and returns 0.
+  - AC-1.2: **The launch command line is not itself a signature.** A pane whose tail carries
+    only the launch command (`codex '--dangerously-bypass-approvals-and-sandbox'`,
+    `agy '--dangerously-skip-permissions'`) and no banner does NOT resolve. Measured
+    2026-09-01, with controls: both launch lines are NO MATCH against the unchanged
+    `_agent_pv_re`, while all four banner/status-line controls MATCH. See §Measured basis 3.
   - AC-1.3: `hmad-dispatch env` reports the resolved handle rather than `UNRESOLVED` for a
     pane that only the tail pass can identify.
 
@@ -88,6 +117,11 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 - **Acceptance Criteria**:
   - AC-5.1: A comment at the pass states the measured cap, that agent TUIs do not normally
     reach it, and that a shell-heavy pane is the case that fails to UNRESOLVED.
+  - AC-5.2: The same comment states the **stale-pane limit**, which is the OTHER side of the
+    cap and is the more likely one: a pane whose agent has EXITED but which has since emitted
+    fewer than 2000 lines of shell still carries the banner, is still a unique match, and is
+    still resolved — so a dispatch can land in a plain shell. Tail evidence is HISTORICAL; it
+    proves what a pane once ran, never what it is running now.
 
 ## Non-Functional Requirements
 - **Performance**: at most one `terminal read` per surviving candidate, and none at all
@@ -95,6 +129,19 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 - **Security**: N/A. Read-only against panes the earlier passes already considered.
 - **Compatibility**: cmux is unaffected — the pass is inside the orca branch of
   `_orca_find`. Behaviour is unchanged wherever Passes 0–2 already resolve.
+
+### FR-5 note — why the stale-pane limit is accepted rather than closed
+
+Two closures were considered and both cost more than the hole. Gating the pass on process
+liveness (`_agent_procs_in`) reintroduces the `lsof` dependency on the exact path the feature
+exists to cover, contradicting AC-3.3 outright. Downgrading the pass to a diagnostic leaves the
+manual pin in place, which is this spec's Goal.
+
+The decisive argument is that the pass is **no weaker than the two it sits between**: Pass 1
+matches a title and Pass 2 a preview, and neither is liveness-gated either, so a stale pane is
+already resolvable today by both. Only Pass 0 (which names the running program) and Pass 4
+(which requires a live process) carry liveness. Accepting the limit therefore adds no new class
+of failure; leaving it undocumented would.
 
 ## Out-of-Scope
 - An env-overridable signature regex (`HMAD_ORCA_<AGENT>_BANNER_RE`). Considered and
@@ -128,3 +175,4 @@ decline. That is the accepted limit of the feature, stated rather than discovere
   filtering" was the ambiguous phrase behind the cycle-3 pool argument; it now names `$scoped`
   explicitly and states that Passes 1-2 are matchers rather than filters. The plan already
   said `$scoped` for both entry paths, so the spec was the stale surface, not the design.
+- v1.5: Back-propagated from impl-plan audit v5 (codex surface, operator-approved 2026-09-01) — AC-1.1's launch-command-only guarantee was UNSATISFIABLE by the design's unchanged _agent_pv_re; measured with controls, both launch lines are NO MATCH and all four banner controls MATCH. AC-1.1 narrowed to the vendor/model banner, AC-1.2 inverted to state the launch line is NOT a signature, and Measured basis 3 added with the table. AC-5.2 adds the stale-pane limit (an exited agent's banner still resolves below the 2000-line cap) with an FR-5 note on why it is accepted: Pass 1 and Pass 2 are not liveness-gated either, so it is no new failure class.
