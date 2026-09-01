@@ -1,7 +1,7 @@
 # Handoff — `_frame_satisfies` inverts BOTH wait gates on a large frame (SIGPIPE under `pipefail`)
 
 **Date:** 2026-09-01
-**Branch:** `fix/wait-frame-gate-sigpipe` (create it; does not exist yet)
+**Branch:** `BrightGold70/wait-frame-gate-sigpipe` (created 2026-09-01; Orca assigned this name, not the `fix/…` one this brief first predicted)
 **Project:** orca/skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** orca/skills · feature/pin-agents-tail-banner · session 61bd3e31-7519-4b5e-aba0-f616a46e8799
 
@@ -114,7 +114,7 @@ nothing for you to take over — claim it when you start.
 ## Open / Blocked Items
 
 - **The whole item is open; nothing is started.** No branch, no worktree, no claim, no code.
-  - `repo: /Users/kimhawk/orca/skills · branch: fix/wait-frame-gate-sigpipe (create) · worktree: (create)`
+  - `repo: /Users/kimhawk/orca/skills · branch: BrightGold70/wait-frame-gate-sigpipe · worktree: /Users/kimhawk/orca/workspaces/skills/wait-frame-gate-sigpipe`
   - Defect site: `h-mad/scripts/hmad-dispatch.sh:3331-3345` (`_frame_satisfies`)
   - Precedent fix, same class, same repo: commit `87aebed`
 - **Not investigated: whether `wait` has ever actually mis-fired in a real run.** The mechanism is
