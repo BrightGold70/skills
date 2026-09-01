@@ -1,0 +1,36 @@
+{
+  "_why": "Large terminal frames can exceed the pipe buffer. Under the wrapper's global pipefail, grep -q exits on an early match, the upstream printf takes SIGPIPE, and each wait gate reads a match as a non-match. Each mutation restores one pipeline independently and is pinned to the regression node for that gate.",
+  "_sweep": "The 2026-09-01 repo-wide printf/grep-q and head sweep ruled out the remaining sites: the recovered-response predicate re-reads an unchanged completed agy log only after the same extractor returned empty; the pane-slot predicates receive only the newline-separated live-handle list; cmux alive reads the operational surface tree rather than retained terminal content; and the head sites reduce receipt/pin fields or filtered JSON. None accepts the retained 200-320 KB terminal frame that makes these two wait gates unbounded.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "not-while-large-match-uses-pipe",
+      "_mechanism": "Restore printf | grep -q only on the negative gate. A large frame carrying the busy marker then fails open because pipefail reports printf's SIGPIPE instead of grep's match.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ -n \"$not_while_re\" ] && grep -Eq -- \"$not_while_re\" <<<\"$frame\"; then",
+      "replace": "  if [ -n \"$not_while_re\" ] && printf '%s' \"$frame\" | grep -Eq -- \"$not_while_re\"; then",
+      "test": "tests/test_hmad_dispatch.py::test_frame_satisfies_large_not_while_match_remains_blocked"
+    },
+    {
+      "name": "until-large-match-uses-pipe",
+      "_mechanism": "Restore printf | grep -q only on the positive gate. A large frame carrying required evidence then fails closed because pipefail reports printf's SIGPIPE instead of grep's match.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      grep -Eq -- \"$pat\" <<<\"$frame\" || return 1",
+      "replace": "      printf '%s' \"$frame\" | grep -Eq -- \"$pat\" || return 1",
+      "test": "tests/test_hmad_dispatch.py::test_frame_satisfies_large_until_match_is_satisfied"
+    }
+  ]
+}

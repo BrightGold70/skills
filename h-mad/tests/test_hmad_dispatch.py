@@ -1512,6 +1512,39 @@ def _wait_gated(tmp_path, frame, *gate_args, timeout="2"):
                     "HMAD_STUB_ORCA_STDOUT": frame, "HMAD_WAIT_POLL_INTERVAL": "0"})
 
 
+def _frame_satisfies_rc(tmp_path, *, until_re="", not_while_re=""):
+    """Call the private frame gate without triggering the wrapper's main."""
+    text = WRAPPER.read_text(encoding="utf-8")
+    assert text.rstrip().endswith('main "$@"'), (
+        "the helper strip depends on the wrapper ending in its dispatch call"
+    )
+    lib = tmp_path / "hmad-dispatch-lib.sh"
+    lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
+    script = f'''source "{lib}"
+frame="$(python3 -c "print('Waiting for background terminal'); print(('y'*79+chr(10))*3000, end='')")"
+rc=0
+_frame_satisfies "$frame" "{until_re}" "{not_while_re}" || rc=$?
+printf '%s\\n' "$rc"
+'''
+    proc = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, cwd=str(tmp_path)
+    )
+    assert proc.returncode == 0, proc.stderr
+    return int(proc.stdout.strip())
+
+
+def test_frame_satisfies_large_not_while_match_remains_blocked(tmp_path):
+    assert _frame_satisfies_rc(
+        tmp_path, not_while_re="Waiting for background terminal"
+    ) == 1
+
+
+def test_frame_satisfies_large_until_match_is_satisfied(tmp_path):
+    assert _frame_satisfies_rc(
+        tmp_path, until_re="Waiting for background terminal"
+    ) == 0
+
+
 def test_wait_not_while_regex_blocks_a_stable_busy_frame(tmp_path):
     """A pane parked on 'Waiting for background terminal' is stable but NOT done.
 

@@ -3330,13 +3330,13 @@ _snapshot() {   # $1 substrate, $2 target
 # alternation must NOT match. Empty gates are vacuously satisfied.
 _frame_satisfies() {   # $1 frame, $2 until-regex(newline-joined), $3 not-while-regex(|-joined)
   local frame="$1" until_re="$2" not_while_re="$3" pat
-  if [ -n "$not_while_re" ] && printf '%s' "$frame" | grep -Eq -- "$not_while_re"; then
+  if [ -n "$not_while_re" ] && grep -Eq -- "$not_while_re" <<<"$frame"; then
     return 1
   fi
   if [ -n "$until_re" ]; then
     while IFS= read -r pat; do
       [ -z "$pat" ] && continue
-      printf '%s' "$frame" | grep -Eq -- "$pat" || return 1
+      grep -Eq -- "$pat" <<<"$frame" || return 1
     done <<EOF
 $until_re
 EOF
