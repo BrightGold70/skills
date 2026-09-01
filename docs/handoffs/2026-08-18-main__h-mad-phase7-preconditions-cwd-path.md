@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session 18ecfc0f-bc2d-404c-935d-b6fde4aa9faf
+**Taken-Over-By:** skills · main · session 86c6aded-ad23-43ea-befb-7ef3d46139c3 · 2026-09-01 — fixed 2026-09-01 -- `resolve_analysis_path` anchors the default to the state file and `resolve_docs_root`'s own relative fallback was hardened with it; verified on the real tree from three CWDs, one verdict. Left UNSTAMPED by the 2026-09-01 cold-start triage because it still reproduced then -- the brief was 14 days open and a bulk backfill would have buried it
 
 ## Session Summary
 
