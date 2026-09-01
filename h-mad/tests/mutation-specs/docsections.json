@@ -1,0 +1,45 @@
+{
+  "_why": "Every failure of a section bound is SILENT. A truncated section is still a plausible string, and a positive assertion that happens to land before the cut still passes — which is exactly how a fence-blind bound hid 24,270 characters of `## Phase 5 (Implementation) sub-steps` from three live pins without a single test going red. So the mutants here do not break behaviour a normal assertion would notice; each one shortens or lengthens the extract, and only a test that reaches for text on the far side of the boundary can tell.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_docsections.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fence-tracking-removed",
+      "_mechanism": "Never enter a fence, so a `# comment` at column 0 inside a ``` block reads as a heading and ends the section inside its own example. This is the exact pre-fix behaviour of the local helper in `test_h_mad_wire_registry.py`, measured against the real SKILL.md: the section ended at 54555 instead of 78825. The fixture pin catches it, and so does the live-file pin — deliberately both, because a fixture written from the tight case is green on this bug.",
+      "file": "tests/docsections.py",
+      "find": "        if stripped.startswith(\"```\"):",
+      "replace": "        if False:",
+      "_killed_by": "tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section"
+    },
+    {
+      "name": "section-no-longer-owns-its-subsections",
+      "_mechanism": "Bound on ANY heading rather than same-or-higher, so a `##` section is cut at its first `###`. The extract is still non-empty and still starts correctly, so every assertion about the section's opening keeps passing while everything after the first subsection silently leaves the measured range.",
+      "file": "tests/docsections.py",
+      "find": "        elif not in_fence and re.match(rf\"^#{{1,{level}}} \", line):",
+      "replace": "        elif not in_fence and re.match(r\"^#+ \", line):",
+      "_killed_by": "tests/test_docsections.py::test_a_section_owns_its_subsections"
+    },
+    {
+      "name": "offset-anchored-bound-runs-to-end-of-file",
+      "_mechanism": "`section_from` returns the rest of the document. Nothing fails and every positive assertion still passes — it is a byte window with no ceiling, which is strictly worse than the fixed window it replaced, because the pin now measures the whole file and can never distinguish 'documented here' from 'documented anywhere'.",
+      "file": "tests/docsections.py",
+      "find": "    return text[offset:_fence_aware_end(text, offset, level)]",
+      "replace": "    return text[offset:]",
+      "_killed_by": "tests/test_docsections.py::test_section_from_bounds_an_offset_anchored_pin"
+    },
+    {
+      "name": "missing-heading-returns-empty-instead-of-failing",
+      "_mechanism": "A renamed or deleted heading yields '' and every `in` assertion over it becomes False — which reads as a doc regression rather than a broken pin — while every `not in` assertion becomes VACUOUSLY TRUE. The loud assert is what keeps a missing section from being reported as a passing guard.",
+      "file": "tests/docsections.py",
+      "find": "    assert match, f\"missing section {heading!r}\"",
+      "replace": "    if not match: return \"\"",
+      "_killed_by": "tests/test_docsections.py::test_a_missing_heading_fails_loudly"
+    }
+  ]
+}

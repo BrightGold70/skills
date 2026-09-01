@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from docsections import section_from
+
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -188,12 +190,13 @@ class TestDocumented:
         status check would re-create the false no_verdict halt hmad-dispatch avoids."""
         s = self._skill()
         i = s.index("h_mad_review_evidence.py")
-        assert "result.status" in s[i:i + 3000] or "`result.status`" in s[i:i + 3000]
+        block = section_from(s, i)
+        assert "result.status" in block or "`result.status`" in block
 
     def test_says_it_knows_no_tool_names(self):
         s = self._skill()
         i = s.index("h_mad_review_evidence.py")
-        assert "run_command" in s[i:i + 3000]
+        assert "run_command" in section_from(s, i)
 
 
 # --- J49: effort must be visible without opening the NDJSON ------------------

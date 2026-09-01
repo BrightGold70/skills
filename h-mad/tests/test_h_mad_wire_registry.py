@@ -3,6 +3,8 @@
 import json
 import ast
 import re
+
+from docsections import titled_section
 import subprocess
 import sys
 from pathlib import Path
@@ -51,13 +53,16 @@ def _git_repo(tmp_path: Path) -> Path:
 
 
 def _section(text: str, heading: str) -> str:
-    """Return a named Markdown section, bounded by the next same/higher heading."""
-    match = re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$", text)
-    assert match, f"missing section {heading!r}"
-    level = len(match.group("marks"))
-    end = re.search(rf"(?m)^#{{1,{level}}} ", text[match.end():])
-    body_end = match.end() + end.start() if end else len(text)
-    return text[match.end():body_end]
+    """Return a named Markdown section, bounded by the next same/higher heading.
+
+    Delegates to the shared helper: this local copy was fence-BLIND, so a
+    `# comment` at column 0 inside a bash block ended the section inside its own
+    example. Measured 2026-09-01 on `Phase 5 (Implementation) sub-steps` — it
+    stopped at offset 54555 where the section really ends at 78825, hiding 24,270
+    characters from the three pins below. Nothing was vacuous only because every
+    assertion here is positive and landed early.
+    """
+    return titled_section(text, heading)
 
 
 def _skill_text() -> str:

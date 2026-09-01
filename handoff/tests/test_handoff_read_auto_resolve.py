@@ -119,7 +119,12 @@ def test_an_empty_resolved_block_is_still_printed() -> None:
 def test_the_report_template_demonstrates_both_blocks() -> None:
     """The template is what gets copied; guidance it contradicts loses."""
     i = RAW.index("## Session resumed")
-    block = RAW[i:i + 1600]
+    # Bounded on the template's own closing fence, never on a byte count: a fixed
+    # window stops covering the end of its block the moment the template grows,
+    # and it does so SILENTLY when the growth is elsewhere. (Deliberately no
+    # import from the h-mad tests' shared helper — this skill's suite must run
+    # from its install path with nothing beside it.)
+    block = RAW[i:RAW.index("```", i)]
     assert "**Resolved**" in block, "the template must show a resolved block"
     assert "NOT resolved" in block, "and must show the reported-only list beside it"
 

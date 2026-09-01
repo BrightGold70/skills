@@ -1023,6 +1023,19 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   lines and removes a whole class of vacuous doc-rule pin; the same file already grew two same-named
   helpers because the first was not found. Live instance still open in
   `test_handoff_read_auto_resolve.py`, which slices `RAW[i:i + 1600]`.
+  — **LANDED 2026-09-01** as `h-mad/tests/docsections.py` (`titled_section` + `section_from`), and the
+  row understated it: the collision was not the worst part. The other local level-aware helper, in
+  `test_h_mad_wire_registry.py`, was fence-BLIND, so a `# comment` at column 0 inside a bash block
+  ended the section inside its own example — measured against the real `h-mad/SKILL.md`, it bounded
+  `## Phase 5 (Implementation) sub-steps` at offset 54555 where the section ends at 78825, hiding
+  **24,270 characters** from three live pins. Nothing was vacuous only because every assertion there
+  is positive and happened to land early; one `not in` would have passed against text it never saw.
+  Migrated the three provably-defective call sites only (wire-registry, `review_evidence`'s two
+  `s[i:i + 3000]` windows, and handoff's `RAW[i:i + 1600]` — the last bounded on its own closing
+  fence rather than importing, so the handoff suite still runs from its install path with nothing
+  beside it). The other five `_section` helpers take literal start/end bounds, which is a different
+  and legitimate intent; unifying them was not the defect. 6 tests, 4 mutants ALL_CAUGHT, and the
+  live-file pin is deliberate — a fixture written from the tight case is green on this bug.
 
 ## 2026-09-01 — handoff-resume-divergence-fix (scout)
 
