@@ -1003,6 +1003,72 @@ Cheap and mechanical: for each finding, open the file and line it names and conf
 what the finding says it says. Most premises check out in seconds, and the ones that do not are
 where the expensive mistakes live.
 
+## Never gate on one audit pass
+
+**Agreement between two passes is not a stopping signal; it is one observation repeated.** Dispatch
+**two** independent passes on the same assembled prompt and gate on the **union** of their must-fixes,
+falsifying each against source before acting on it.
+
+Prefer two **different** surfaces. Measured across 15 cycles on one feature: a clean verdict was
+falsified **four** times, and seven consecutive `agy`+`agy` cycles produced a false gate that a single
+`codex` pass then broke. The surfaces catch different classes and alternate sides — which is the
+whole reason the union, not the intersection, is the gate. Two passes of one surface mostly re-confirm
+that surface's blind spot.
+
+Two failure modes this replaces, both silent:
+
+- **One pass, clean, shipped.** Nothing distinguishes "there is nothing to find" from "this surface
+  cannot see it", and the artifact is a green you can quote and cannot defend.
+- **Two passes, intersected.** Taking only findings both agree on discards exactly the findings that
+  make a second surface worth paying for.
+
+A pass's **thinking-token count predicts its reliability; its verdict does not.** A short clean report
+has meant a truncated reply, so check the run before believing the token (§"Reading a dispatch
+verdict", and the NDJSON genuineness check on duration and BEGIN/END sentinels).
+
+## An agent's reported numbers are a claim, not a measurement
+
+Never accept a dispatched agent's suite counts, `STATUS`, or its "unrelated / pre-existing"
+diagnosis at face value. **Re-run it yourself with the pinned interpreter and re-derive the numbers.**
+
+Measured repeatedly: Codex labelled a self-caused suite failure "unrelated pre-existing" when it was
+caused by the feature's own docs; it reported a regression guard as `0/0` after misreading
+`tests/test_references/` as `tests/references/`, so the guard never ran at all. Re-running took
+twenty seconds in both cases and disproved the label.
+
+**This includes the agent's refusals, and they are the ones worth taking seriously.** A
+`STATUS: BLOCKED` refusing to make a test pass was once exactly right: the RED held a
+self-contradiction that was invisible until the fix landed, because the unfixed code satisfied both
+readings. A compliant agent would have shipped a guard pinning the defect. Verify a refusal the same
+way you verify a success — by re-deriving it — and give it the benefit of the doubt for as long as
+the evidence does.
+
+Scope matters as much as the count: a per-task subset cannot see architectural guards
+(forbidden-import checks, boundary censuses) because they live in files no feature subset touches.
+**Scoped green is not suite green.**
+
+## Re-measure a carried premise before working it
+
+A backlog item, a filed finding, or a handover brief is a **claim about the world made by a session
+that has stopped**. Reproduce its premise before implementing its prescription.
+
+This is distinct from §"Verifying a review finding before acting on it", which is about a reviewer's
+finding in front of you now; this is about an item that has been sitting. Measured: **four of five**
+items swept in one session had false premises, and **three of four** in another — already shipped,
+root-caused upstream of where they were filed, or with the prescription backwards. Re-running the
+item's own reproduce command is the cheap half; do it first.
+
+Two traps specific to carried items:
+
+- **A carried number is stale by default.** Counts in this project have gone stale within days,
+  repeatedly and in both directions. Re-run the census or the measurement rather than quoting it.
+- **The measurement can be right and its method wrong.** Re-run the *measurement*, not just the
+  claim — and measure through the production entry point rather than whichever helper is convenient
+  to call, or the probe runs correctly on the wrong surface.
+
+A premise that no longer holds is a finding in itself: record it as withdrawn with the evidence,
+rather than quietly dropping the item.
+
 ## Reviewing a skill with agy
 
 A skill is not a feature: there is no impl-plan task and no Codex report, so neither
