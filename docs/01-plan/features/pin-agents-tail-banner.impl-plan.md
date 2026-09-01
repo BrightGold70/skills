@@ -1065,7 +1065,15 @@ audit v35. Extend the existing case rather than adding a second one:
     codex) rival_re="$(_agent_pv_re agy)";   rival=agy   ;;
     agy)   rival_re="$(_agent_pv_re codex)"; rival=codex ;;
   esac
+  rival_tail_re="$(_agent_tail_re "$rival")"
 ```
+
+`rival_tail_re` is computed HERE, beside `tail_re` and above the candidate loop, not inside it:
+`$rival` is constant across candidates, so a per-candidate assignment spawns one subshell each
+for the same value. `local tail_re rival_tail_re …` (T3) already declares it. Impl-plan audit
+v36 (agy). The two mutations that anchor on this line are re-anchored to its new indentation in
+this same edit — an anchor left pointing at the old two-space-deeper form matches 0 times and the
+harness REFUSES rather than measuring.
 
 `rival` stays empty for any other token, and `_agent_tail_re ""` falls to the `*)` arm, so the
 guard degrades to the shared helper rather than aborting.
@@ -1096,8 +1104,9 @@ ambiguity.
       # which matches prose (24/24 measured), and this input is arbitrary retained
       # scrollback. Same grammar as the wanted check, or a real agent pane is
       # suppressed for merely MENTIONING the other agent -- a false negative in
-      # the feature's own goal. Audit v28.
-      rival_tail_re="$(_agent_tail_re "$rival")"
+      # the feature's own goal. Audit v28. HOISTED above the loop beside `tail_re`
+      # (audit v36, agy): `$rival` is constant across candidates, so computing it
+      # per matched candidate spawns one subshell each for the same value.
       if [ -n "$rival_tail_re" ] && grep -Eiq "$rival_tail_re" <<<"$tout"; then
         continue
       fi
@@ -1223,6 +1232,16 @@ invariant is satisfied without a contract edit.
   # tail-evidence pass, which declines on zero matches AND on ambiguity, so
   # "every pass above found nothing" is no longer an accurate description of how
   # control gets here.
+```
+
+**Second site — same edit, exact code.** `hmad-dispatch.sh:1046`, the cross-reference from
+`_orca_handle_live`'s neighbourhood to that same pass. AC-5.1 asserts it and the description names
+it, but it had no prescribed block until v1.35; renumbering one site and not the other leaves the
+file calling two different passes "Pass 3". Impl-plan audit v36 (agy).
+
+```sh
+  # would false-refuse healthy panes, the exact call `_orca_find` Pass 4 already
+  # declines to make; and it protects no state, because there is none to protect.
 ```
 
 ```markdown
@@ -1445,16 +1464,16 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "_mechanism": "Remove the rival-matcher CALL with the callee intact. Rival rejection then never fires, so a pane carrying a real rival BANNER is counted -- AC-4.1 fails. Paired with rival-re-prose-unsafe, which moves the other way: that one over-rejects, this one under-rejects, and only the two together pin the connection AND its matcher.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
-   "find": "      rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
-   "replace": "      rival_tail_re=\"\""
+   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "  rival_tail_re=\"\""
   },
   {
    "name": "rival-re-prose-unsafe",
    "_mechanism": "Restore the SHARED `_agent_pv_re` as the rival matcher over the retained tail. A real agent pane whose scrollback merely MENTIONS the other agent is then rejected as rival-bearing -- the false negative that suppresses exactly the panes this feature exists to resolve.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress",
-   "find": "      rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
-   "replace": "      rival_tail_re=\"$rival_re\""
+   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "  rival_tail_re=\"$rival_re\""
   },
   {
    "name": "drop-rival-rejection",
@@ -1549,7 +1568,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
-   "replace": "      codex) printf '%s\\n' \"$(_agent_pv_re codex)\" ;;"
+   "replace": "    codex) printf '%s\\n' \"$(_agent_pv_re codex)\" ;;"
   },
   {
    "name": "tail-re-unanchored-agy",
@@ -1557,7 +1576,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;",
-   "replace": "      agy)   printf '%s\\n' \"$(_agent_pv_re agy)\" ;;"
+   "replace": "    agy)   printf '%s\\n' \"$(_agent_pv_re agy)\" ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line-agy",
@@ -1565,14 +1584,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;",
-   "replace": "      agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)|^agy .--dangerously' ;;"
+   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)|^agy .--dangerously' ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
-   "replace": "      codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)|^codex .--dangerously' ;;"
+   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)|^codex .--dangerously' ;;"
   },
   {
    "name": "tail-sig-fabricates-banner-on-failure",
@@ -2075,3 +2094,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.32: Impl-plan audit v35 (codex) — must 3 -> 2, third consecutive drop, and the RED table (45/32/13), the 37-mutation JSON and the 290-node module re-derived correctly for the third cycle running. Both findings are real defects in code this plan prescribes. `_agent_tail_re "$rival"` expanded an UNBOUND variable: `_orca_find` owns `rival_re`, a regex built for Pass 1, and nothing holds the rival's NAME — under the wrapper's `set -euo pipefail` (line 5, verified) the first candidate carrying the wanted signature would abort `_orca_find` instead of performing rival rejection. Introduced at v1.25 when the rival check moved to the tail grammar and unnoticed for ten cycles. T4 now extends the existing case with `rival=agy` / `rival=codex`, and an empty token falls to the `*)` arm rather than aborting. Second: the launch-line mutants REPLACED their arm wholesale, so the kill came from the node's positive controls failing — an accidental kill that proves nothing about launch-line rejection. Both are additive now (full grammar preserved, `|^<agent> .--dangerously` appended) and pinned to AC-3.2's node, which exercises both agents; the corpus node keeps the three prose mutants. Also: `wire-wanted-matcher-disconnected`'s mechanism still described AC-3.17's old prose-only fixture, and the spec and design still implied the grammar is layered ON TOP of `_agent_pv_re` rather than being independent literals.
 - v1.33: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. AC-2.12 now names `grep -Ei`, AC-2.11 says explicitly that it covers syntax only, the code-block comment carries the per-arm and fold rules, and AC-3.17's Group B stops re-listing the continuations. No mutation anchor targets the comment prose (verified: 0 of 37 finds).
 - v1.34: Impl-plan audit v36 (codex) — all 6 findings applied; both musts independently re-measured before acting. MUST 1: Task 2's normative `_agent_tail_re` block was not a valid fence — `}` and the closing backticks shared one line, so the ```sh fence opened at :173 stayed open to :308 and swallowed the production/test fields and the run_fn Python as shell. Confirmed by parity: 27 fence lines (odd) before, 28 after; the block re-extracts and re-measures 24/24 + 12/12 under grep -Ei. MUST 2: verification prescribed `pytest -k orca_find`, which collects 0 of 290 (pytest exits 5 on an empty selection, so the step measured nothing and looked like a pass) and no planned node name contains orca_find; replaced on BOTH surfaces with `-k orca_identity` (24/290 collected, measured) plus an explicit non-zero-collection assertion. Provenance corrected to design v1.32 / spec v1.17 — the plan already depended on the design pass's case-fold and per-arm rules while citing revisions that predate them. Task 6's boundary promise narrowed to the enumerated table it already narrows to later. AC-3.4 now says N in the fall-through diagnostic is the Pass-1/2 count, NOT tn — under its own fixture it reads 'resolved to 0 candidates' while two panes carried the signature — so the assertion is on the diagnostic's PRESENCE plus the absence of the tail-evidence marker; carrying tn into that pre-existing line is deliberately not prescribed. Nit: the spliced $rival_re sentence in T4 (same edit-collision shape the design pass fixed). Re-verified after: WIREPIN PASS tasks=6 wiring=2, 37 mutation finds intact, test_hmad_dispatch.py 290 passed.
+- v1.35: Impl-plan audit v36 (agy, SECOND surface, dispatch rc=124 at the 1500s bound with no end sentinel — report structurally complete but completeness UNVERIFIED, and it audited v1.33). All 3 findings verified against the document and applied. MUST: T5 named a SECOND renumber site (hmad-dispatch.sh:1046, the cross-reference from _orca_handle_live's neighbourhood) and AC-5.1 asserts it, but the Code structure block prescribed only :574 — renumbering one and not the other leaves the file calling two different passes 'Pass 3'. Exact code for the second site added. SHOULD: rival_tail_re was computed INSIDE the candidate loop although $rival is constant across candidates — hoisted above the loop beside tail_re (the local declaration at T3 already covers it), and the two mutations anchored on that line were re-anchored to its new indentation IN THE SAME EDIT, since an anchor left at the old two-space-deeper form matches 0 times and the harness REFUSES rather than measuring. NIT: 4 regex mutations replaced a 4-space case arm with a 6-space one; indentation normalised, 0 mismatches remain across all 36 find/replace pairs. Re-verified: fence parity 30 (even), the embedded JSON still parses, 37 finds intact, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12 under grep -Ei.
