@@ -29,7 +29,8 @@ stronger claim, and the third falsified this spec's own AC-1.1 (see below).
    exactly 2000 and lost it; one emitting 20000 retained 2000 beginning at line 18001.
 
 3. **Only the banner half of that retained text is a matcher.** The pass reuses
-   `_agent_pv_re` unchanged, and that helper deliberately matches *program banners* rather
+   `_agent_pv_re` unchanged for Passes 1-2 while the tail pass matches through its own
+   `_agent_tail_re` grammar; the shared helper deliberately matches *program banners* rather
    than command lines — the bare tokens `codex`/`agy` were removed from it precisely because
    a pane merely discussing an agent matched. Measured 2026-09-01 by extracting both patterns
    from the wrapper and running them against fixed strings, with controls that must match:
@@ -72,7 +73,8 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     signature — its **vendor/model banner** — and no other pane's, `_orca_find <agent>` prints
     that handle and returns 0.
   - AC-1.4: **Prose naming the agent is not a signature either, and the tail pass uses a
-    STRICTER matcher than `_agent_pv_re` to say so.** A candidate whose tail carries the agent's
+    STRICTER matcher than `_agent_pv_re` to say so — `_agent_tail_re`, whose per-agent patterns are
+    independent literals, not a wrapper around the shared one.** A candidate whose tail carries the agent's
     product name or model id only inside ordinary sentences — `OpenAI Codex documentation
     changed`, `## Gemini 3.1 Pro release notes`, `I am comparing model: gpt-5.6-terra with ours`
     — does not resolve. `_agent_pv_re` alone does NOT satisfy this: measured 2026-09-01 it
@@ -207,3 +209,4 @@ of failure; leaving it undocumented would.
 - v1.9: Impl-plan audit v27 (codex) — FR-1 gains AC-1.4. The spec still presented `_agent_pv_re` as a program-banner discriminator and carried no prose-rejection criterion, so the load-bearing false-positive rule was absent from the authoritative contract while the impl-plan implemented it. AC-1.4 states the tail-only matcher constraint (the signature must end its line or continue with version/model/effort structure) and the measurement behind it: `_agent_pv_re` alone matches 14 of 14 prose probes; the grammar declines all 14 while 11 real banner and status lines still match.
 - v1.10: Impl-plan audit v29 (codex) — AC-1.4's measurement corrected to the current corpus: `_agent_pv_re` matches 24 of 24 prose probes, the tail grammar declines all 24, and all 12 real banner and status controls still match. The spec had been citing a superseded 14/11 corpus.
 - v1.11: Impl-plan audit v30 (codex) — the Executive Summary and FR-1 still said the tail pass matches the EXISTING `_agent_pv_re` signature, contradicting AC-1.4's stricter rule two paragraphs later; both now name the tail-only `_agent_tail_re` grammar that wraps it.
+- v1.12: Impl-plan audit v31 (codex) — Measured basis 3 and AC-1.4 still implied the tail pass reuses or wraps `_agent_pv_re`; the per-agent patterns in `_agent_tail_re` are independent literals, and the shared helper is unchanged only for Passes 1-2.

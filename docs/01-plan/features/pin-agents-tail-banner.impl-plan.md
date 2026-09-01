@@ -118,6 +118,47 @@ def _orca_read_dir(tmp_path, envelopes):
 ```
 `json` and `tempfile` are already imported at the top of the module; no new import is needed.
 
+**Task 2 also ships `_agent_tail_re`, at top level beside `_orca_tail_sig`.** Both are pure
+helpers, both unit-testable alone, and neither is consumed until T3 — which is what lets T3's two
+wires have a caller-observable RED (audit v30/v31). The definition belongs HERE, once; T3 carries
+only the call sites.
+
+```sh
+# ONE helper, used for BOTH the wanted and the rival matcher. Two reasons, and
+# the second is a defect audit v28 found: duplicating the pattern in two arms
+# lets the wanted and rival rules drift, and Task 4's rival check was still
+# using the SHARED `_agent_pv_re` over the whole retained tail -- so a real
+# codex pane whose scrollback merely said "Compare Gemini 3.1 Pro with Claude"
+# was rejected as rival-bearing. Prose is not a signature in either direction.
+#
+# FOUR revisions; each fell to a shape the previous corpus lacked. v1.25's
+# line-complete form still took `## OpenAI Codex v0.145` (the prefix class
+# allowed '#'), `OpenAI Codex v0.145-release-notes` and
+# `model: gpt-5-migration-notes` (unbounded non-space version/model suffixes),
+# and `Gemini 3.1 Pro (2026 release notes)` (an open numeric parenthetical).
+# Now: the prefix admits only whitespace and box-drawing/quote characters, a
+# version is dotted-numeric, a model id needs a DOTTED release number, and the
+# parenthetical is an effort word or a version. Measured over 24 negatives and
+# 12 positives: 24/24 decline, 12/12 still match.
+#
+# LINE-COMPLETE grammar, not a line anchor. The v1.23 anchor was falsified by
+# line-LEADING prose; the v1.24 grammar was falsified by prose AFTER a
+# banner-like prefix (`OpenAI Codex v0.145 release notes`,
+# `gpt-5.6-terra high performance notes`, `Gemini 3.1 Pro (release notes)`).
+# A banner shape must consume its WHOLE line, allowing only structured
+# continuations: a version, a `model:` field, an effort word, a `·` and a cwd,
+# or a bounded parenthetical. Measured 2026-09-01 over 24 prose probes and 12
+# real banner/status lines: unanchored 0/24 decline, anchored-only 7/24,
+# leading-position 14/24, line-complete 19/24, this grammar 24/24 -- with all
+# 12 positives matching under every revision.
+_agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
+  case "$1" in
+    codex) printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\(?v?[0-9]+(\.[0-9]+)*\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;
+    agy)   printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)*)\))?[[:space:]]*$)' ;;
+    *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
+  esac
+}```
+
 **`Path(...)`, not `pathlib.Path(...)`.** The module's imports are `atexit, json, os, shutil,
 subprocess, tempfile, time, uuid` and `from pathlib import Path` — verified in the live file —
 so the bare name `pathlib` is not bound there and the dotted form raises `NameError` on the
@@ -292,6 +333,10 @@ def _isolated_env(*, substrate=None, env=None, capture=None, bindir=None):
     # the same reason as every line above it, and BEFORE the env update so a
     # test that sets it explicitly still wins.
     e.pop("HMAD_TAIL_READ_TIMEOUT", None)
+    # Same reason, and this one is test-only: an ambient export would opt EVERY
+    # legacy `terminal read` test into the per-handle branch, so the "existing
+    # 290 tests still pass" claim would depend on the developer's environment.
+    e.pop("HMAD_STUB_ORCA_READ_DIR", None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -684,40 +729,9 @@ AC-3.2 assert on, so a resolution that happened to come from another pass cannot
   # `if local tout="$(...)"` returns `local`'s status (always 0) and discards the
   # helper's rc, turning every unreadable pane into a readable empty one.
   local tail_re rival_tail_re tail_ids="" th tout tn tail_h
-  # ONE helper, used for BOTH the wanted and the rival matcher. Two reasons, and
-  # the second is a defect audit v28 found: duplicating the pattern in two arms
-  # lets the wanted and rival rules drift, and Task 4's rival check was still
-  # using the SHARED `_agent_pv_re` over the whole retained tail -- so a real
-  # codex pane whose scrollback merely said "Compare Gemini 3.1 Pro with Claude"
-  # was rejected as rival-bearing. Prose is not a signature in either direction.
-  #
-  # FOUR revisions; each fell to a shape the previous corpus lacked. v1.25's
-  # line-complete form still took `## OpenAI Codex v0.145` (the prefix class
-  # allowed '#'), `OpenAI Codex v0.145-release-notes` and
-  # `model: gpt-5-migration-notes` (unbounded non-space version/model suffixes),
-  # and `Gemini 3.1 Pro (2026 release notes)` (an open numeric parenthetical).
-  # Now: the prefix admits only whitespace and box-drawing/quote characters, a
-  # version is dotted-numeric, a model id needs a DOTTED release number, and the
-  # parenthetical is an effort word or a version. Measured over 24 negatives and
-  # 12 positives: 24/24 decline, 12/12 still match.
-  #
-  # LINE-COMPLETE grammar, not a line anchor. The v1.23 anchor was falsified by
-  # line-LEADING prose; the v1.24 grammar was falsified by prose AFTER a
-  # banner-like prefix (`OpenAI Codex v0.145 release notes`,
-  # `gpt-5.6-terra high performance notes`, `Gemini 3.1 Pro (release notes)`).
-  # A banner shape must consume its WHOLE line, allowing only structured
-  # continuations: a version, a `model:` field, an effort word, a `·` and a cwd,
-  # or a bounded parenthetical. Measured 2026-09-01 over 24 prose probes and 12
-  # real banner/status lines: unanchored 0/24 decline, anchored-only 7/24,
-  # leading-position 14/24, line-complete 19/24, this grammar 24/24 -- with all
-  # 12 positives matching under every revision.
-  _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
-    case "$1" in
-      codex) printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\(?v?[0-9]+(\.[0-9]+)*\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;
-      agy)   printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)*)\))?[[:space:]]*$)' ;;
-      *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
-    esac
-  }
+  # `_agent_tail_re` is defined in TASK 2 (top level, beside `_orca_tail_sig`).
+  # T3 contains only the two CALL SITES, so each wire connects to a callee that
+  # already exists and whose own tests stay green when the connection is removed.
   tail_re="$(_agent_tail_re "$token")"
   while IFS= read -r th; do
     [ -n "$th" ] || continue
@@ -990,7 +1004,7 @@ a false ambiguity that suppresses a real resolution. The shared `$rival_re` comp
 is NOT reused here — it is `_agent_pv_re`, which matches prose 24/24; this pass builds its own
 `rival_tail_re` from `_agent_tail_re`, the same grammar as the wanted check (AC-4.6). The old
 sentence said `$rival_re` was reused unchanged, which contradicted this task's own code block and
-would have reproduced the false-negative. Impl-plan audit v30. For reference, `$rival_re`
+would have reproduced the false-negative. Impl-plan audit v30. For reference, the shared `$rival_re` remains unchanged and is still used by Passes 1-2; only this pass substitutes `rival_tail_re`. `$rival_re`
 in `_orca_find` and is reused unchanged; Pass 2 applies the identical predicate to `.preview`, so
 this is that rule extended to the new evidence surface rather than a new rule.
 
@@ -1257,8 +1271,10 @@ def test_os_evidence_pass_renumbered_to_four():
       reverted to its pre-task wording ("ahead of the title and preview passes"). Verified by
       reverting the sentence, observing the failure, and restoring — not by inspection.
       **Re-read `SKILL.md` after the revert and after the restore** (assert the old phrase present
-      then absent, the new phrase absent then present), and finish with `git diff --stat SKILL.md`
-      empty. Observing the test flip proves the test reacts to something; it does not prove the
+      then absent, the new phrase absent then present), and finish with `git diff --stat h-mad/SKILL.md`
+      empty. **The path matters**: verification runs from the repository root and the mutated file
+      is `h-mad/SKILL.md`; there is no root `SKILL.md`, so the v1.19 wording could report an empty
+      diff while a failed restore sat in the real manifest. Impl-plan audit v31. Observing the test flip proves the test reacts to something; it does not prove the
       file holds what you think, and a failed restore leaves the manifest wrong in a tracked
       file. See AC-2.8.
 
@@ -1457,17 +1473,17 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "tail-re-unanchored",
-   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All seven prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-2 forbids, reachable because $scoped includes shell panes and tail evidence is historical.",
+   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 24 prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-2 forbids, reachable because $scoped includes shell panes and tail evidence is historical.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
-   "find": "      codex) printf '%s\\\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\\\(?v?[0-9]+(\\.[0-9]+)*\\\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
+   "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
    "replace": "      codex) printf '%s\\n' \"$(_agent_pv_re codex)\" ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
-   "find": "      codex) printf '%s\\\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\\\(?v?[0-9]+(\\.[0-9]+)*\\\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
+   "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
    "replace": "      codex) printf '%s\\n' '^codex .--dangerously' ;;"
   },
   {
@@ -1959,3 +1975,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.25: Impl-plan audit v28 (codex) — THIRD revision of the prose rule, and a mirror defect the first two hid. The v1.24 grammar required the signature to lead the line and then allowed anything after it, so `OpenAI Codex v0.145 release notes`, `gpt-5.6-terra high performance notes` and `Gemini 3.1 Pro (release notes)` still matched — prose after a banner-like PREFIX, the third shape this corpus lacked (mid-sentence, then line-leading, now banner-prefixed). The rule is LINE-COMPLETE now: a banner consumes its whole line and only structured continuations are allowed (version, `model:` field, effort word, `·` and cwd, bounded parenthetical). Measured across 19 prose probes and 12 real banner/status lines: unanchored 0/19 decline, anchored-only 7/19, v1.24 grammar 14/19, this one 19/19, all 12 positives matching under every form. The mirror defect: Task 4's rival check still used the SHARED `$rival_re` (`_agent_pv_re`) over the retained tail, so a real codex pane whose scrollback merely said `Compare Gemini 3.1 Pro with Claude` was rejected as rival-bearing — the feature suppressing exactly the panes it exists to resolve. Both checks now go through ONE helper, `_agent_tail_re`, which is also what audit v28's should-fix asked for: the two arms were duplicating a pattern that could drift. AC-4.6 pins both directions and `rival-re-prose-unsafe` restores the unsafe matcher (32 mutations). The design still described the rejected anchor-only rule and diagrammed the pass as `tail via _agent_pv_re`, so an implementer following the declared source would have rebuilt the defect; architecture, matcher rule, rival rule and test plan all back-propagated. AC-3.17's traceability label corrected from FR-2 (cardinality) to spec AC-1.4 under FR-1. Counts re-derived: 43 nodes, 31 FAIL, 12 PASS, T4 5/0.
 - v1.26: Impl-plan audit v29 (codex) — FOURTH revision of the prose rule plus three structural findings. The line-complete form still took a markdown heading (the prefix class allowed `#`), a hyphenated word posing as a version or model id (`OpenAI Codex v0.145-release-notes`, `model: gpt-5-migration-notes` — both suffixes were unbounded non-space runs), and an open numeric parenthetical (`Gemini 3.1 Pro (2026 release notes)`). Tightened: prefix is whitespace and box-drawing/quote only, a version is dotted-numeric, a model id needs a DOTTED release number, a parenthetical is an effort word or a version. Corpus is now 24 negatives / 12 positives, enumerated ONCE and synchronised across spec, design, impl-plan and every comment — the counts had drifted to 19/12 here, 19/12 in the design, 14/11 in the spec and '11 in all' inside the AC that owns the list. Measured: unanchored 0/24, anchored-only 7/24, leading-position 14/24, line-complete 19/24, this grammar 24/24, 12/12 positives under every revision. STRUCTURAL: the two `_agent_tail_re` calls were undeclared wires — the gate saw `wiring=1` where there are two connections, so both matcher edges bypassed the caller-observable RED and the connection-only mutation the invariant requires. T3 now declares a second WIRE/WIRE-PIN for the wanted matcher and T4 is reclassified `wiring` for the rival matcher, each with a disconnect-callee-intact mutation; the gate reports `wiring=2 registered=3`. The two rival mutations are deliberately opposed — `wire-rival-matcher-disconnected` under-rejects and `rival-re-prose-unsafe` over-rejects — so together they pin the connection AND its matcher. AC-3.18's node was named `test_agent_pv_re_...`, which the `-k test_tail_ or test_skill_md or test_os_evidence` selector does NOT match, leaving a named feature test outside the mutation baseline; renamed with the `test_tail_` prefix, and the only names now outside the selector are the two unrelated module tests the plan already documents as excluded. Task 6's 'every guard this feature introduces' narrowed to the enumerated table. 34 mutations.
 - v1.27: Impl-plan audit v30 (codex) — the worst finding of the run, and it is mine: **the prescribed matcher had never executed.** The `_agent_tail_re` arms were written with `printf '%s\\n'` and doubled `\\(` escapes, so run verbatim the helper appended the literal bytes `\n` and `grep -E` rejected the pattern outright — `repetition-operator operand invalid`, rc 2, on every input including the positive controls. Every 24/24 figure this plan reported came from separate probe scripts with different escaping; the doc carried a DIFFERENT, non-functional regex. Fixed, and the corpus is now run through the doc's own block (24/24 negatives decline, 12/12 positives match), with AC-2.11 added so the prescribed source is what gets measured — a regex the plan prints must be one `grep -E` accepts. Three more structural corrections. T4's WIRE-PIN was backwards: disconnecting the rival matcher makes rival prose stop suppressing the wanted pane, which is exactly what `test_tail_pass_rival_prose_does_not_suppress` asserts, so the pin went GREEN with the wire removed; `test_tail_pass_rejects_rival_signature` is the caller-observable direction, and AC-4.6 is now green at RED with `rival-re-prose-unsafe` as its proof. T3's wanted-matcher wire could not meet its own caller-observable rule while callee and call site both landed in T3 — the AC-1.5 shape again — so `_agent_tail_re` ships in TASK 2, and a `wire-wanted-matcher-forced-empty` mutation supplies the opposite direction (one proves the call is made, the other that its result is used). And the normative surfaces still said the tail pass reuses `_agent_pv_re`: T4's description claimed `$rival_re` was reused unchanged while its own code forbids it, and both executive summaries named the shared helper — all now name `_agent_tail_re`. Counts re-derived: 44 nodes, 31 FAIL, 13 PASS, T2 9/1, T4 4/1; 35 mutations; AC-3.17's positive list was one short of the 12 it claimed. Corpus groups are named by SHAPE now, not relative position.
+- v1.28: Impl-plan audit v31 (codex) — every finding is a consequence of v1.27's own fixes, and one repeats a lesson I had written down twice. Correcting the matcher's shell escaping ORPHANED the two JSON anchors that pointed at it: decoded, `tail-re-unanchored` and `tail-re-widened-to-launch-line` matched ZERO times, so both mutants would have mutated nothing while reporting their guards as enforced. Anchors are now GENERATED from the block itself rather than retyped, which is the only form that cannot drift. The T2/T3 split was announced and not performed — v1.27 said `_agent_tail_re` ships in T2 while the definition still sat inside T3's `_orca_find` block, so following the tasks literally either loses the helper or defines it twice (and duplicate arms would make the exact anchors non-unique). The definition now lives once, in T2, and T3 carries only the two call sites. The source plan and spec still prescribed the OLD matcher — a line-start wrapper around the shared helper, and rival rejection 'reused from Pass 1' — which is the prose-unsafe path the impl-plan rejects; both now name `_agent_tail_re` and its bounded grammar. AC-5.4's restore check ran `git diff --stat SKILL.md` from the repository root, where no such file exists: it could report clean while a failed restore sat in `h-mad/SKILL.md`. And the plan's green-at-RED split still read '12 = 11 + 1' beside a count of 13, while `tail-re-unanchored`'s mechanism still cited 'all seven prose probes' against a 24-probe corpus. Should-fixes: `_isolated_env` now scrubs `HMAD_STUB_ORCA_READ_DIR` too — an ambient export would opt every legacy `terminal read` test into the per-handle branch, making the 290-test regression claim environment-dependent — and T4's spliced sentence about `$rival_re` is repaired.

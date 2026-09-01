@@ -66,17 +66,20 @@ deliberately — Pass 1 (title) and Pass 2 (preview) are not liveness-gated eith
 new failure class, and a liveness gate would need `lsof` and contradict AC-3.3. Only Pass 0 and
 Pass 3 (OS evidence) carry liveness.
 
-**No new signature constants, but the tail pass ANCHORS them.** `_agent_pv_re` is reused
-unchanged — it is shipped and shared with Passes 1-2 — and this pass wraps its output in a
-line-start anchor before matching. **The claim that it is "hardened against prose" was FALSE and
+**The tail pass uses its OWN matcher, `_agent_tail_re`, for BOTH the wanted and the rival check.** `_agent_pv_re` is left untouched — it is shipped and shared with Passes 1-2 — and the tail pass
+does NOT wrap it: `_agent_tail_re` carries its own bounded, line-complete grammar per agent
+(a banner must consume its line, allowing only a dotted-numeric version, a `model:` field, an
+effort word, a `·` and a cwd, or an effort/version parenthetical). Rival rejection in this pass
+uses that same helper rather than the `$rival_re` computed for Pass 1, or a real agent pane is
+suppressed for merely mentioning the other agent. **The claim that it is "hardened against prose" was FALSE and
 load-bearing**: impl-plan audit v26 matched `Release notes for OpenAI Codex are available`,
 `I am comparing model: gpt-5.6-terra with ours`, `The Antigravity CLI documentation changed` and
 `Compare Gemini 3.1 Pro with Claude` against it, 4 for 4, and a 7-probe corpus reproduced it.
 Since `$scoped` includes ordinary shell panes and tail evidence is historical, a shell that once
 printed release notes was resolvable AS THE AGENT — the wrong-pane class FR-2 forbids. The regex
 is hardened against the two examples that motivated it, and that was generalised into a safety
-premise it does not support. Anchored, 0 of 7 prose probes match and 7 of 7 real banner/status
-lines still do (impl-plan AC-3.17). Both regexes were verified against the REAL panes on
+premise it does not support. Measured over 24 prose probes and 12 real banner/status lines: the shipped helper declines 0,
+this grammar declines all 24, and all 12 positives still match (impl-plan AC-3.17). Both regexes were verified against the REAL panes on
 2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
@@ -111,7 +114,9 @@ the same convention; naming the verb instead would, taken literally, re-exec the
 name, which is not on the test harness's `PATH` (`_bindir:/usr/bin:/bin`) and costs a process
 per candidate. If no time-bounder is reachable, halt rather than issuing an unbounded read.
 
-Rival rejection is reused from Pass 1 rather than reinvented: a candidate carrying the
+Rival rejection follows Pass 1's SHAPE rather than reinventing the idea, but not its matcher —
+it uses `_agent_tail_re` for the rival too (see above), because Pass 1's `$rival_re` is the
+prose-unsafe shared helper. A candidate carrying the
 other agent's signature is dropped before counting, so it cannot be selected and cannot
 manufacture the ambiguity that would suppress a correct resolution.
 
@@ -285,3 +290,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.20: Impl-plan audit v28 (codex) — the prose rule is now LINE-COMPLETE (19/19 decline, 12/12 real banners match) after prose following a banner-like prefix defeated the previous form, and the rival check uses the same tail-only grammar: it had been reusing the shared prose-unsafe matcher, so a real agent pane was suppressed for merely mentioning the other agent. Counts re-derived to 31 FAIL / 12 PASS over 43.
 - v1.21: Impl-plan audit v29 (codex) — prose corpus re-enumerated at 24 negatives / 12 positives after a fourth shape (markdown headings and hyphenated pseudo-versions) defeated the line-complete form; the counts had drifted apart across four documents and are now derived from one list.
 - v1.22: Impl-plan audit v30 (codex) — counts re-derived to 31 FAIL / 13 PASS over 44 after AC-4.6 was reclassified green at RED and the tail matcher moved to Task 2; the mutation-coverage claim narrowed to enumerated targets.
+- v1.23: Impl-plan audit v31 (codex) — this document still prescribed the REJECTED matcher: a line-start wrapper around the shared `_agent_pv_re`, and rival rejection 'reused from Pass 1'. Both are the prose-unsafe path; the tail pass uses `_agent_tail_re`, with its own bounded per-agent grammar, for the wanted AND rival checks. Green-at-RED split corrected to 12 + 1 against the count of 13.

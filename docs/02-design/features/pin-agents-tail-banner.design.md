@@ -76,8 +76,9 @@ neither is a leading-position grammar: measured across 24 prose probes, the ship
 0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
 bounded grammar — the banner must
 consume its whole line, allowing just a version, a `model:` field, an effort word, a `·` and a cwd,
-— a dotted-numeric version, a DOTTED model id, an effort word or version parenthetical, and a
-prefix of whitespace or box-drawing only — declines all 24, with all 12 real banner and status
+— the banner must consume its line, allowing only a dotted-numeric version, a DOTTED model id, an
+effort word, a `·` and a cwd, or an effort/version parenthetical, behind a prefix of whitespace or
+box-drawing characters only — declines all 24, with all 12 real banner and status
 lines still matching. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
 real agent pane for merely MENTIONING the other agent, the mirror false-negative (impl-plan AC-4.6,
 mutation `rival-re-prose-unsafe`). The
@@ -465,3 +466,4 @@ resolution, or it merely restates Pass 0.
 - v1.24: Impl-plan audit v28 (codex) — the design still prescribed the anchor-only rule that audit v27 rejected and diagrammed the pass as `tail via _agent_pv_re`, so the declared source would have reproduced the wrong-pane defect. Architecture, matcher rule, rival rule and Test Plan now carry the line-complete `_agent_tail_re` grammar used for BOTH the wanted and rival checks, with the 19/12 measurement. Node counts re-derived to 31 / 12 over 43.
 - v1.25: Impl-plan audit v29 (codex) — matcher description updated to the bounded grammar and the 24/12 corpus, and the stale literal-`null` conclusion in the later Extraction subsection scoped explicitly to the simple probe filter, so the design gives ONE explanation for the load-bearing `-e` guard rather than two.
 - v1.26: Impl-plan audit v30 (codex) — the Executive Summary still described the pass as matching `_agent_pv_re`, which is the prose-unsafe helper its own safety rule rejects; corrected to `_agent_tail_re`. Mutation-coverage claim narrowed to enumerated targets, node counts re-derived to 31 / 13 over 44.
+- v1.27: Impl-plan audit v31 (codex) — the bounded-grammar paragraph had spliced two continuation lists together, obscuring which suffixes are actually accepted; reduced to one list matching the regex.
