@@ -138,10 +138,32 @@ Locate on the now-synced tree (Step 0). Check, in order:
 
 1. **Explicit path in the user's message** — if they paste or type a path, use it.
 2. **This branch's newest handoff in the canonical store** — with `HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"`, run `python3 "$HP" latest --branch "$(python3 "$HP" branch-slug)"`. This resolves the shared main-worktree `docs/handoffs/` and prefers a handoff written on the branch you are resuming (exact `<branch>__` match — a `feat` resume never grabs a `feat-ab` sibling), so a parallel Orca session on another branch can't hand you the wrong one.
-3. **Repo-wide newest in the canonical store** — `python3 "$HP" latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work. **Exception: a brief carrying `**Handover-From:**` is addressed to this repo, not to a branch.** A sender names the file for the branch they were told to target, so a handover routinely lands as `…-main__…` while you sit on a feature branch — check 2 then returns nothing and this check finds it under a "different branch" that is not a sibling's work at all. Do not treat that as a suspicious pickup: read it, and go to §"Take over handed-over work". Observed live 2026-08-03 — an inbound five-item handover was invisible to check 2 for exactly this reason.
+3. **Repo-wide newest in the canonical store** — `python3 "$HP" latest` (no `--branch`). Use when this branch has none. If it matches a *different* branch, say so and confirm with the user before resuming — you may be picking up a sibling worktree's work.
 4. **`~/.claude/handoffs/INDEX.md`** — grep for the current project name / path; take the newest matching entry's path.
 
 If no handoff is found after these checks, tell the user ("No handoff found for this project — nothing to resume from") and stop. Don't fabricate a handoff.
+
+**Then, ALWAYS — inbound handovers, in addition to the checks above, never as a fallback to them.**
+Checks 1–4 stop at the first hit, but a brief carrying `**Handover-From:**` is addressed to this repo, not to a branch. A sender names the file for the branch they were told to target, so a handover routinely lands as `…-main__…` while you sit on a feature branch — and on any branch that has a handoff of its own, the common case, it is never looked at.
+
+```bash
+HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
+python3 "$HP" pending-handovers; RC=$?
+```
+
+| `RC` | Meaning | What to do |
+|---|---|---|
+| 0 | one or more briefs are addressed to this repo and nobody has taken them over | Read **each** in full and run §"Take over handed-over work" for it, **in addition to** whatever check 1–4 found. |
+| 1 | none pending | Continue with the doc from checks 1–4. |
+| 2 | at least one brief could not be read | **Not an empty queue.** Report the `UNREADABLE:` paths to the user as a divergence and handle any briefs that did print. |
+
+This was placed in check 3 as an exception once, gated "use when this branch has none" — which put the remedy for an inbound-handover bug in the branch that only runs when the other branch fails. Measured 2026-09-01 on HemaSuite: `latest --branch feature-41-…` and bare `latest` returned the same file while **9** briefs in that store carried `**Handover-From:**`, none of them reachable. One of those was a 15-item backlog that had been explicitly handed over and was never picked up. Fixing a defect in the fallback path leaves the primary path defective.
+
+**Cold start — the first run in a repo over-reports, and that is expected.** `**Taken-Over-By:**` is a newer field than the stores it filters, so on first use *every* historical handover brief shows as pending, including ones that were taken over and finished long ago. Measured on `orca/skills` 2026-09-01: **16** pending, of which the great majority are closed work. Triage them once — for each brief that was already picked up, add the `**Taken-Over-By:**` line (Step 3.5's format, with the session that did the work if you know it, else `unknown · backfilled <YYYY-MM-DD>`) and commit. After that pass the queue is live and short.
+
+Do **not** skip the triage and learn to ignore a long queue instead — an alert that is always wrong is worse than no alert, and this scan exists precisely because a real brief sat unread among ordinary docs. Equally, do not bulk-stamp briefs you have not checked: a brief wrongly marked taken over is invisible again, which is the original defect restored by the tool built to fix it. If the queue is long and you cannot triage it now, say so to the user and record it as an open item.
+
+The scan filters on `**Taken-Over-By:**`, which Step 3.5 stamps into the brief. That marker lives in the doc because the doc store is what this scan reads: the `taken over:` worktree comment is worktree-scoped and the advisory claim lives in a gitignored, machine-local state file, so neither survives into the store and neither can tell a taken-over brief from an abandoned one.
 
 ### Step 2: Read it
 
@@ -257,7 +279,18 @@ A stale claim is takeable by plain `--claim` — reach for `--force` only agains
 
 **3. Restore the todos with their ORIGIN, not yours.** Continue to Step 4, but prefix from the brief's `**Handover-From:**` and location block rather than the branch you are sitting on — the work belongs where the sender said it does.
 
-**4. Acknowledge, so the transfer is visible.** Re-stamp the worktree comment from `handover: …` to something that says it was picked up (`taken over: <slug> · <state> · next: <next-step>`). The sender is not watching; this stamp and your claim are the only records that the handover completed rather than fell on the floor.
+**4. Stamp the BRIEF, so the next resume does not re-adopt it.** Add a `**Taken-Over-By:**` line directly under the brief's `**Handover-From:**` line, in the doc itself:
+
+```markdown
+**Handover-From:** <sender-repo> · <sender-branch> · session <sender-session-id>
+**Taken-Over-By:** <this-repo> · <this-branch> · session <your-session-id> · <YYYY-MM-DD>
+```
+
+This is what Step 1's `pending-handovers` scan filters on, and it is **not optional**: leave it off and every future resume in this repo re-reads a brief you already own, forever. It has to live in the doc because the doc store is the only thing that scan can read — your claim is in a gitignored, machine-local state file and the worktree comment below is worktree-scoped, so neither can distinguish a brief that was picked up from one that fell on the floor. Commit the stamped brief; an uncommitted marker is one `git checkout` from being a dropped handover again.
+
+If the brief is untracked in the store (senders often write it without committing), commit it first — that is the same defect one step earlier.
+
+**5. Acknowledge on the worktree, so the transfer is visible.** Re-stamp the worktree comment from `handover: …` to something that says it was picked up (`taken over: <slug> · <state> · next: <next-step>`). The sender is not watching; this stamp, the brief's `**Taken-Over-By:**` line and your claim are the records that the handover completed rather than fell on the floor.
 
 **Do not** silently work a handed-over item without claiming it. That is the failure this step exists for: the sender let go, you started, and the state file says nobody owns it.
 
@@ -793,7 +826,18 @@ The reason this matters: project-local handoffs are great for versioning and PRs
 Before you write anything, collect these in parallel:
 
 1. **Conversation scan** — walk the current transcript. Note: the task the user brought, decisions made, problems hit, what got fixed, what's still broken, any verification that was skipped.
-2. **In-flight tasks** — if you have a TodoList / task tool, read it. Anything pending or in-progress belongs in Open Items. Anything completed this session feeds Session Summary.
+2. **In-flight tasks** — if you have a TodoList / task tool, read it. Anything pending or in-progress belongs in Open Items. Anything completed this session feeds Session Summary. **This list is session-scoped and is not the backlog** — a session that never ran READ starts empty, so an empty task tool is evidence about *this session*, never about what this branch owes. Item 2b is the part that knows.
+
+2b. **The predecessor handoff** — the doc this one continues, which is where everything owed to this branch actually lives:
+
+   ```bash
+   HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
+   python3 "$HP" carry-forward-sources --branch "$(python3 "$HP" branch-slug)"; RC=$?
+   ```
+
+   Read **every** path it prints, in full — their **Open / Blocked Items** and unfinished **Next Steps** are the inputs to §"Carry the predecessor's open items forward". The branch's newest handoff is this doc's `**Supersedes:**` value; `RC=1` means there is none and `**Supersedes:**` is `none — first on this branch`. `RC=2` means a doc could not be read: report it, and do **not** write the doc as though nothing were owed.
+
+   It prints **two** kinds of source, and the second is not optional. A handover brief is filed under the *sender's* branch slug, so `latest --branch` cannot see it — the same construction as the READ defect. Once READ Step 3.5 has stamped `**Taken-Over-By:**` the brief also stops appearing in `pending-handovers`, so if the taking session ends before it writes a handoff, the next WRITE on this branch would find an empty task list, no branch predecessor, and no re-offer: the whole taken-over backlog leaves the chain in one hop with nothing raised. So a brief this lane stamped, and that no handoff yet names in `**Supersedes:**`, is a predecessor too — until one does.
 3. **Git state** — if the project is a git repo:
    - `git rev-parse --abbrev-ref HEAD` (current branch)
    - `git status --short` (uncommitted / untracked)
@@ -828,12 +872,26 @@ Do **not** run tests, builds, or long-running commands just to populate the hand
 
 Use this structure exactly. Every section is required; write "None" (with a one-line reason) rather than omitting a header.
 
+### The header fields
+
+| Field | Written by | Meaning |
+|---|---|---|
+| `**Date:**` | WRITE | Local `date +%F`, matching the filename's date prefix. |
+| `**Branch:**` | WRITE | The branch the work belongs to — under a multi-worktree layout this may differ from the branch you are sitting on. READ Step 4 builds its `[<repo>@<branch>]` todo prefix from this. |
+| `**Project:**` | WRITE | Project slug or root path (§"Project slug derivation"). |
+| `**Supersedes:**` | WRITE | The handoff this one continues. **It is a pointer, not a licence to drop what it holds** — see §"Carry the predecessor's open items forward". |
+| `**Handover-From:**` | HANDOVER Step 3 | Present only on a brief whose ownership moved from another lane. Makes the brief addressed to this **repo** rather than to a branch, which is why READ Step 1 scans for it separately. |
+| `**Taken-Over-By:**` | READ Step 3.5 | Stamped when someone picks the brief up. Its **absence** is what makes a brief show up in `pending-handovers`, so an unstamped brief is re-offered on every resume and a stamped one is never re-adopted. |
+
+**A field that is read must be defined here.** `**Supersedes:**` was in use across a real handoff chain for weeks while `grep -c -i supersede SKILL.md` returned **0** — the skill neither defined, wrote, nor audited it, and an unspecified convention became the mechanism by which content was dropped: the first doc in that chain to carry it went from 9 backlog mentions to 2, and four hops later to 0. A field nobody specified cannot be relied on, and cannot be checked.
+
 ```markdown
 # Handoff — <Topic>
 
 **Date:** YYYY-MM-DD
 **Branch:** <branch-name or "n/a">
 **Project:** <project name or root path>
+**Supersedes:** <filename of the handoff this one continues, or "none — first on this branch">
 
 ## Session Summary
 
@@ -893,6 +951,25 @@ git checkout <branch>
 **Related docs:**
 - <links to design docs, plan files, or external references the next session will need>
 ```
+
+---
+
+### Carry the predecessor's open items forward
+
+**An item leaves the chain by being finished or by being handed over, never by not being mentioned.**
+
+Before the doc is final, take the predecessor from §"Gather context" item 2b — the doc named in this one's `**Supersedes:**` — and walk **every** entry in its **Open / Blocked Items** plus every **Next Step** it left unfinished. For each one, this handoff must do exactly one of:
+
+1. **Re-emit it** in Open / Blocked Items, with its status updated. Unchanged is a legitimate status — say "unchanged since <date>" rather than dropping it for being boring.
+2. **Record it closed, with a reason** — finished (name the commit or the evidence), withdrawn (say why the premise failed), or handed over (name the receiver, per §"Route foreign-worktree work before closing out").
+
+Silence is not a third option. Nothing anywhere checks whether a handoff mentions what its predecessor did, so an item that goes unmentioned is gone with no error, no diff signal and no one aware.
+
+**Why this cannot be left to the task tool.** §"Gather context" item 2 reads a **session-scoped** list. A session that did not run READ starts with an empty one, and its WRITE then truthfully reports no pending todos while dropping everything a prior session restored. Measured: a 15-item backlog that had been explicitly taken over decayed **9 → 2 → 4 → 1 → 0 → 0 → 0 → 0** across 8 consecutive handoffs on one branch. No hop deleted 15 items; each dropped a few, so any adjacent pair diffed like ordinary scope change. `TaskList` returned `No tasks found` at the start of the session that finally noticed, while the items were nominally owned there.
+
+**If the predecessor cannot be read** — the command errors, the file is unreadable, the store is missing — say so in Open / Blocked Items as an explicit unverified-carry-forward line, and do **not** write the doc as though the predecessor had no open items. "I could not read it" and "it had none" produce the same empty list and lead to opposite correct actions; this is the same fail-closed rule the WRITE worktree stamp and READ Step 3.6 already apply.
+
+**Inherited items keep their origin.** An item that arrived from another lane keeps its `**Handover-From:**` attribution and its location block (`repo: … · branch: … · worktree: …`) as it moves down the chain. Stripping the origin makes it unresolvable two hops later, which is the same loss as dropping it, spread over more documents.
 
 ---
 

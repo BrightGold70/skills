@@ -1881,6 +1881,41 @@ A feature whose artifacts are absent falls back to its stored row values, so a d
 never-archived docs tree cannot silently zero a real recorded number. The `audit_cycles > 3` and
 `iterate_cycles > 3` drift warnings are computed from the displayed values.
 
+### Audit filename grammar — one optional discriminator after the cycle
+
+```
+<feature>.<phase>.audit.v<N>[.<discriminator>].md
+```
+
+`<discriminator>` is a single dot-free token and is **optional**. Two kinds are in use, and a
+file carries at most one of them:
+
+| Token | Written by | Meaning |
+|---|---|---|
+| `p1`, `p2`, … | `audit-cycle` | One pass of a single cycle's output, split across files. |
+| `codex`, `agy`, `claude`, … | whoever ran the audit | The surface that produced this audit. |
+
+Both kinds carry the **same** `v<N>`, so a cycle is one number no matter how many files record
+it. The surface half was an unwritten convention until it was documented here: 98 real audits
+were named that way while `h_mad_cycle_counts._VERSION_RE` matched only the `p<i>` half, so those
+files were invisible to every consumer and nothing raised. **A new surface needs no code change** —
+the token is open by design, because a closed `(codex|agy|claude)` set re-creates that blindness
+on the fourth surface, silently and for the same reason.
+
+The token is equally deliberately **one dot-free token**: `…v26.codex.draft.md` is not an audit
+report, and admitting it hands the Phase-5 gate a file with no `## Must-fix` headings at the
+moment it reports a pass. Too wide is as silent as too narrow.
+
+**Read every audit at a cycle, never one of them.** `latest_audit_path()` returns a single
+deterministic representative and is fine for counting; anything *deciding whether a cycle is
+clean* must use `latest_audit_paths()` (plural) and treat any one dirty or unscoreable report as
+an issue — which is what `h_mad_do_preconditions.py` does. `.p1`/`.p2` are two halves of one
+audit's output, and `.codex`/`.agy` at one cycle are two different auditors that in this project's
+record alternate sides and disagree; scoring whichever the filesystem listed first is
+"gate on one audit pass" wearing a green verdict. Archiving copies rather than moves, so the same
+filename usually exists both live and under `docs/archive/` — that is one audit, and the live copy
+is the one returned.
+
 ## References
 
 - `references/inline-protocols.md` — **Inline protocols for all phases (standalone, no external skills)**

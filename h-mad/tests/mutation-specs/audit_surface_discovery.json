@@ -1,0 +1,82 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_surface_discovery.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-regex-narrows-back-to-pass-indices-only",
+      "_mechanism": "The original defect. A surface-suffixed audit is inside the `*.audit.v*.md` glob but rejected by the regex, so the module reports fewer cycles than were run and a caller reads the shortfall as 'no audits'. Nothing raises.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "_VERSION_RE = re.compile(r\"\\.v(\\d+)(?:\\.[A-Za-z0-9][A-Za-z0-9_-]*)?\\.md$\")",
+      "replace": "_VERSION_RE = re.compile(r\"\\.v(\\d+)(?:\\.p\\d+)?\\.md$\")",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestSurfaceSuffixedAuditsAreDiscovered::test_a_surface_suffixed_audit_is_seen"
+    },
+    {
+      "name": "the-regex-admits-any-tail",
+      "_mechanism": "The mirror direction, and the reason a widening is not automatically an improvement. `.v26.codex.draft.md` is a draft, not an audit report; admitting it hands `_audit_issue` a file with no gate headings at exactly the moment the operator is told the gate passed. A test that only checks the too-narrow direction scores this mutant as survived.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "_VERSION_RE = re.compile(r\"\\.v(\\d+)(?:\\.[A-Za-z0-9][A-Za-z0-9_-]*)?\\.md$\")",
+      "replace": "_VERSION_RE = re.compile(r\"\\.v(\\d+)(?:\\..*)?\\.md$\")",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestTheWideningStopsWhereTheGrammarDoes::test_a_non_audit_shape_is_not_admitted[f.plan.audit.v3.codex.draft.md]"
+    },
+    {
+      "name": "the-cycle-representative-is-picked-from-the-other-end",
+      "_mechanism": "Determinism is the whole claim of the sort, and any single pick looks equally correct on a tree with one file per cycle. Only a cycle holding two surfaces can tell the ends apart -- which is why the pin builds one.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "    return {version: paths[0] for version, paths in groups.items()}",
+      "replace": "    return {version: paths[-1] for version, paths in groups.items()}",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestEveryAuditAtTheLatestCycleIsVisible::test_the_single_path_accessor_is_deterministic_under_glob_order"
+    },
+    {
+      "name": "an-archived-copy-counts-as-a-second-audit",
+      "_mechanism": "Archiving copies rather than moves, so nearly every archived cycle exists twice under one filename. Counted as two, a one-auditor cycle reports every finding twice and reads like a two-auditor cycle -- inflation that looks like extra rigour.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "        by_name.setdefault(path.name, path)",
+      "replace": "        by_name[str(path)] = path",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestAnArchivedCopyIsTheSameAudit::test_the_live_and_archived_copy_collapse_to_one"
+    },
+    {
+      "name": "the-collapse-folds-two-surfaces-into-one",
+      "_mechanism": "The opposite error in the same line: key on something coarser than the filename and `.codex` and `.agy` at one cycle become a single audit. The gate then reads one auditor while reporting that it read the cycle.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "        by_name.setdefault(path.name, path)",
+      "replace": "        by_name.setdefault(path.parent.name, path)",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestAnArchivedCopyIsTheSameAudit::test_two_surfaces_survive_the_collapse"
+    },
+    {
+      "name": "the-gate-scores-only-the-first-audit-of-the-cycle",
+      "_mechanism": "The false PASS this feature exists to close. Two auditors ran the same cycle and disagreed; scoring the first alone clears the gate and names a real, clean file as the evidence. Indistinguishable from a genuinely clean cycle in every output the operator sees.",
+      "file": "scripts/h_mad_do_preconditions.py",
+      "find": "        for audit in audits:",
+      "replace": "        for audit in audits[:1]:",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestThePhaseGateReadsEverySurface::test_a_dirty_second_surface_at_the_same_cycle_fails_the_gate"
+    },
+    {
+      "name": "the-dashed-phase-spelling-goes-back-to-empty",
+      "_mechanism": "`impl-plan` is how every other h-mad surface spells the phase. Answering `{}` for it is not an error but a number -- zero audits -- and zero is a believable answer for a feature that has not been audited yet.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "    segment = PHASE_SEGMENTS.get(phase) or PHASE_SEGMENTS.get(\n        _PHASE_ALIASES.get(phase, \"\")\n    )",
+      "replace": "    segment = PHASE_SEGMENTS.get(phase)",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestThePhaseNameTheRestOfHMadUses::test_the_dashed_spelling_finds_the_same_audits"
+    },
+    {
+      "name": "an-unknown-phase-falls-through-to-plan",
+      "_mechanism": "The alias must widen the accepted spellings without making the lookup total. A typo'd phase would otherwise return the plan phase's audits and gate the wrong document -- a wrong answer, where the old code at least gave an empty one.",
+      "file": "scripts/h_mad_cycle_counts.py",
+      "find": "        _PHASE_ALIASES.get(phase, \"\")",
+      "replace": "        _PHASE_ALIASES.get(phase, \"plan\")",
+      "test": "tests/test_h_mad_audit_surface_discovery.py::TestThePhaseNameTheRestOfHMadUses::test_a_genuinely_unknown_phase_is_still_empty"
+    }
+  ]
+}

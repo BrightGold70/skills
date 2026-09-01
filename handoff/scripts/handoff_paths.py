@@ -18,6 +18,7 @@ No third-party deps (stdlib only), mirroring the rest of the handoff skill.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -121,6 +122,102 @@ def find_latest(branch: str | None = None, start: Path | None = None) -> Path | 
     return files[-1]
 
 
+# The bolded field forms, anchored to line start. Briefs discuss handovers in
+# prose constantly -- matching a bare mention would turn every retrospective into
+# a pending queue.
+_HANDOVER_FROM_RE = re.compile(r"^\*\*Handover-From:\*\*", re.MULTILINE)
+_TAKEN_OVER_BY_RE = re.compile(r"^\*\*Taken-Over-By:\*\*", re.MULTILINE)
+
+
+def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]]:
+    """Briefs addressed to this repo that nobody has taken over yet.
+
+    Returns `(pending, unreadable)`, both oldest-first by filename date. A brief
+    is pending when it carries `**Handover-From:**` and does NOT carry
+    `**Taken-Over-By:**`.
+
+    This exists because READ Step 1's branch-scoped check (check 2) short-circuits
+    the repo-wide check that knows about `**Handover-From:**`, so an inbound brief
+    filed under the sender's branch slug is unreachable from any branch that has a
+    handoff of its own -- the common case. The scan therefore runs IN ADDITION to
+    check 2, never as a fallback to it.
+
+    `**Taken-Over-By:**` is the discriminator because it is the only marker that
+    lives in the store the locator reads. The `taken over:` worktree comment is
+    worktree-scoped and the advisory claim lives in a gitignored, machine-local
+    state file; neither travels with the doc.
+
+    `unreadable` is returned rather than swallowed. A brief that cannot be decoded
+    is the same value as no brief at all and leads to the opposite correct action,
+    which is the exact asymmetry this whole defect is made of.
+    """
+    d = handoffs_dir(start)
+    if not d.is_dir():
+        return ([], [])
+    pending: list[Path] = []
+    unreadable: list[Path] = []
+    for path in sorted(p for p in d.glob("*.md") if p.is_file()):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            unreadable.append(path)
+            continue
+        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):
+            pending.append(path)
+    return (pending, unreadable)
+
+
+_SUPERSEDES_RE = re.compile(r"^\*\*Supersedes:\*\*(.*)$", re.MULTILINE)
+
+
+def carry_forward_sources(
+    branch: str | None = None, start: Path | None = None
+) -> tuple[list[Path], list[Path]]:
+    """Docs a WRITE on this branch owes open items to. `(sources, unreadable)`.
+
+    Two kinds, because a handover is filed under the SENDER's branch slug and so
+    is invisible to a branch-scoped lookup -- the same construction as the READ
+    defect `pending_handovers` exists for:
+
+    1. This branch's newest handoff, the ordinary predecessor.
+    2. Any brief this lane already stamped `**Taken-Over-By:**` that no handoff
+       yet names in its `**Supersedes:**` field.
+
+    Without (2) a taken-over backlog can still evaporate in one hop: the taker
+    stamps the brief, restores the todos into the session-scoped task tool, and
+    the session ends before it writes a handoff. The next session on the branch
+    runs WRITE without READ, finds an empty task list and no branch predecessor,
+    and writes a doc that owes nothing -- while the stamp has already removed the
+    brief from `pending_handovers`, so nothing re-offers it either.
+    """
+    d = handoffs_dir(start)
+    if not d.is_dir():
+        return ([], [])
+    sources: list[Path] = []
+    unreadable: list[Path] = []
+    latest = find_latest(branch, start)
+    if latest is not None:
+        sources.append(latest)
+
+    superseded: set[str] = set()
+    taken: list[Path] = []
+    for path in sorted(p for p in d.glob("*.md") if p.is_file()):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            unreadable.append(path)
+            continue
+        for match in _SUPERSEDES_RE.finditer(text):
+            superseded.add(match.group(1).strip().strip("`"))
+        if _TAKEN_OVER_BY_RE.search(text):
+            taken.append(path)
+
+    for path in taken:
+        if path.name not in superseded and path not in sources:
+            sources.append(path)
+    return (sources, unreadable)
+
+
 def _resolve_start(repo: str | None) -> Path | None:
     """Validate a `--repo` target, or None to resolve from the cwd as before.
 
@@ -159,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("root")          # canonical main-worktree root
     p_latest = sub.add_parser("latest")
     p_latest.add_argument("--branch", default=None)
+    sub.add_parser("pending-handovers")  # inbound briefs nobody has taken over
+    p_cfs = sub.add_parser("carry-forward-sources")  # docs a WRITE owes items to
+    p_cfs.add_argument("--branch", default=None)
     args = ap.parse_args(argv)
     start = _resolve_start(args.repo)
 
@@ -175,6 +275,33 @@ def main(argv: list[str] | None = None) -> int:
         if latest is None:
             return 1
         print(latest)
+    elif args.cmd == "pending-handovers":
+        pending, unreadable = pending_handovers(start)
+        for path in pending:
+            print(path)
+        for path in unreadable:
+            print(f"UNREADABLE:{path}", file=sys.stderr)
+        # Exit 2 outranks "nothing found" on purpose: a brief that could not be
+        # read might be the handover, so the caller must not read this run as an
+        # empty queue. Whatever DID read is still printed -- refusing to answer at
+        # all would hide the briefs that are provably pending.
+        if unreadable:
+            return 2
+        if not pending:
+            return 1
+    elif args.cmd == "carry-forward-sources":
+        sources, unreadable = carry_forward_sources(args.branch, start)
+        for path in sources:
+            print(path)
+        for path in unreadable:
+            print(f"UNREADABLE:{path}", file=sys.stderr)
+        # Same fail-closed ordering as pending-handovers: a doc that could not be
+        # read may be the one holding the open items, so "I could not check" must
+        # not be reported as "there is nothing to carry".
+        if unreadable:
+            return 2
+        if not sources:
+            return 1
     return 0
 
 

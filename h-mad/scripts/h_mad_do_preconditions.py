@@ -4,8 +4,13 @@
 Checks:
   feature.plan.md exists
   feature.design.md exists
-  latest feature.plan.audit.v*.md has must-fix=0 (awk gate)
-  latest feature.design.audit.v*.md has must-fix=0 (awk gate)
+  EVERY feature.plan.audit.v*.md at the latest cycle has must-fix=0 (awk gate)
+  EVERY feature.design.audit.v*.md at the latest cycle has must-fix=0 (awk gate)
+
+"Every", not "the latest one": a cycle routinely carries more than one audit file
+-- `.p1`/`.p2` are two halves of one audit's output, and `.codex`/`.agy` at the
+same cycle are two different auditors. Scoring whichever the filesystem listed
+first is "gate on one audit pass" wearing a green verdict.
 
 Verdicts, printed as a canonical token:
 
@@ -32,7 +37,7 @@ import sys
 from pathlib import Path
 
 from h_mad_audit_gate import classify, has_gate_sections, _acknowledged_from_text
-from h_mad_cycle_counts import latest_audit_path
+from h_mad_cycle_counts import latest_audit_paths
 
 
 def _count_must_fix(path: Path) -> int:
@@ -82,25 +87,25 @@ def check(repo_root: Path, feature: str) -> tuple[int, list[str]]:
     if not design.is_file():
         issues.append(f"MISSING:{design}")
 
-    plan_audit = latest_audit_path(
-        repo_root / "docs", feature, "plan", include_archive=False
-    )
-    if plan_audit is None:
-        issues.append(f"MISSING:{plan_features}/{feature}.plan.audit.v*.md")
-    else:
-        plan_issue = _audit_issue(plan_audit)
-        if plan_issue is not None:
-            issues.append(plan_issue)
-
-    design_audit = latest_audit_path(
-        repo_root / "docs", feature, "design", include_archive=False
-    )
-    if design_audit is None:
-        issues.append(f"MISSING:{design_features}/{feature}.design.audit.v*.md")
-    else:
-        design_issue = _audit_issue(design_audit)
-        if design_issue is not None:
-            issues.append(design_issue)
+    # EVERY audit at the latest cycle, not one of them. A cycle routinely carries
+    # more than one file -- `.p1`/`.p2` are two halves of one audit's output, and
+    # `.codex`/`.agy` are two different auditors that, in this project's record,
+    # alternate sides and disagree. `latest_audit_path` returns whichever sorted
+    # first, so a blocker found by the second auditor cleared the gate while the
+    # verdict named the first one's file. Scoring all of them is the same
+    # fail-closed rule as `_audit_issue`'s INVALID branch: any one dirty or
+    # unscoreable report is an issue.
+    for phase, directory in (("plan", plan_features), ("design", design_features)):
+        audits = latest_audit_paths(
+            repo_root / "docs", feature, phase, include_archive=False
+        )
+        if not audits:
+            issues.append(f"MISSING:{directory}/{feature}.{phase}.audit.v*.md")
+            continue
+        for audit in audits:
+            issue = _audit_issue(audit)
+            if issue is not None:
+                issues.append(issue)
 
     return (1 if issues else 0, issues or ["OK"])
 
