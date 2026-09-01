@@ -4,6 +4,7 @@
 **Branch:** `BrightGold70/j1-residual-probes`
 **Project:** `/Users/kimhawk/orca/skills` (h-mad)
 **Handover-From:** skills · main · session dbb07b5d-3005-4ef1-8bfc-4199894b1e15
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — closed and merged as `016120f` (paneKey-less codex launch handles validated); see project_j1_pane_pin_takeover
 
 ## Session Summary
 

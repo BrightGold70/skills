@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session 603da342-ea2b-40e9-b1a6-9cb1d6d3aae7
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — fixed in `2ce26d3` and `b79b036`; READ Step 4's opt-in + three-rung ladder is present in `handoff/SKILL.md` at HEAD
 
 ## Session Summary
 

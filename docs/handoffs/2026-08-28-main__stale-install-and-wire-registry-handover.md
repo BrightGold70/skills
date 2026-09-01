@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** /Users/kimhawk/orca/skills
 **Handover-From:** HemaSuite · main · session ce0dd6d0-80d3-41f1-9c06-37545cdcd8e1
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — all three closed -- (1) the anchor summary line now carries `unclassifiable=N`, the visible-signal option; (2) multi-pin landed (`pins`/`pin_labels`/`unresolved_pins` in `h_mad_wire_registry.py`), see also `3219bdd`; (3) the stale `gate-blindness-hardening` claim is released (`owner_session_id: null`)
 
 ## Session Summary
 

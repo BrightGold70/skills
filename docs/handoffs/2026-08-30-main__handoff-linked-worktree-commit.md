@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** `/Users/kimhawk/orca/skills` (the `handoff` skill)
 **Handover-From:** HemaSuite · main · session 756df57f-fc81-4d46-b845-01e658cd0bf4
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — fixed and merged as `4a86ed3` (WRITE no longer orphans its own doc)
 
 ## Session Summary
 

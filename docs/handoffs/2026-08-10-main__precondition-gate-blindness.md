@@ -4,6 +4,7 @@
 **Branch:** main
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/78-guideline-seeder-config-plumbing · session f0151733-b79e-406d-93b5-2706576e6b3d
+**Taken-Over-By:** skills · main · session unknown · backfilled 2026-09-01 — fixed and merged as `379b881` gate-blindness-hardening; `_audit_issue` routes through `has_gate_sections` in `h_mad_do_preconditions.py` at HEAD
 
 ## Session Summary
 
