@@ -3,7 +3,8 @@
 ## Executive Summary
 
 Insert a standalone tail-evidence pass into `_orca_find` between Pass 2 and Pass 3, reusing
-`_agent_pv_re` against `.result.terminal.tail`, resolving only on exactly one match.
+the tail-only `_agent_tail_re` banner grammar against `.result.terminal.tail` — NOT the shared
+`_agent_pv_re`, which matches prose 24/24 — resolving only on exactly one match.
 
 ## Overview
 
@@ -352,7 +353,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **31 of 43 nodes fail at RED and 12 pass**, so a blanket
+   Measured on the node enumeration: **31 of 44 nodes fail at RED and 13 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -407,7 +408,7 @@ resolution, or it merely restates Pass 0.
   command position, so prose and comments naming them are free.
 - **Audit-gate signal discipline** (base): not applicable — this pass returns a handle, not
   a verdict token, and emits no gate line.
-- **Test discrimination** (base): complies. Every guard is mutation-tested, and test 7 is
+- **Test discrimination** (base): complies. Every ENUMERATED mutation target is stubbed, and test 7 is
   called out as the vacuous-pass risk with the specific remedy.
 
 ## Version History
@@ -463,3 +464,4 @@ resolution, or it merely restates Pass 0.
 - v1.23: Impl-plan audit v27 (codex) — Test Plan gains a row for spec AC-1.4 (prose declines, real banners resolve), Components corrected to 16 ACs, node counts re-derived to 30 / 12 over 42.
 - v1.24: Impl-plan audit v28 (codex) — the design still prescribed the anchor-only rule that audit v27 rejected and diagrammed the pass as `tail via _agent_pv_re`, so the declared source would have reproduced the wrong-pane defect. Architecture, matcher rule, rival rule and Test Plan now carry the line-complete `_agent_tail_re` grammar used for BOTH the wanted and rival checks, with the 19/12 measurement. Node counts re-derived to 31 / 12 over 43.
 - v1.25: Impl-plan audit v29 (codex) — matcher description updated to the bounded grammar and the 24/12 corpus, and the stale literal-`null` conclusion in the later Extraction subsection scoped explicitly to the simple probe filter, so the design gives ONE explanation for the load-bearing `-e` guard rather than two.
+- v1.26: Impl-plan audit v30 (codex) — the Executive Summary still described the pass as matching `_agent_pv_re`, which is the prose-unsafe helper its own safety rule rejects; corrected to `_agent_tail_re`. Mutation-coverage claim narrowed to enumerated targets, node counts re-derived to 31 / 13 over 44.

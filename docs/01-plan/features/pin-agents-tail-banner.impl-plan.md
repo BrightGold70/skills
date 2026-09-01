@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.23)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.9, 16 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.26)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.11, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -157,7 +157,7 @@ followed verbatim has to name the binding the target module actually has.
 
 ---
 
-## Task 2: orca-tail-sig-helper
+## Task 2: orca-tail-sig-helper + tail matcher
 
 **Production file**: `h-mad/scripts/hmad-dispatch.sh`
 **Test file**: `h-mad/tests/test_hmad_dispatch.py`
@@ -543,6 +543,14 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       the base Mutation-verification invariant, which asks for verification of the STATE, not of
       a consequence of the state.
 
+- [ ] AC-2.11: `_agent_tail_re codex` and `_agent_tail_re agy` each print a regex that `grep -E`
+      ACCEPTS (rc 0 or 1 on any input, never rc 2), and the printed value ends with no trailing
+      literal `\n`. **Executed, not eyeballed.** The v1.26 form of this helper was prescribed with
+      `printf '%s\\n'` and doubled `\\(` escapes: run verbatim it appended the literal bytes `\n`
+      and `grep -E` rejected the pattern outright with `repetition-operator operand invalid` (rc
+      2), so the classifier every measurement in this plan describes had NEVER EXECUTED as
+      written — the numbers came from separate probe scripts with different escaping. Impl-plan
+      audit v30. This AC exists so the prescribed source is what gets measured.
 - [ ] AC-2.9: For an envelope that exits 0 but carries `"ok":false` **together with a plausible
       tail** (`{"ok":false,"error":{"code":"terminal_gone"},"result":{"terminal":{"handle":"h1",
       "tail":["OpenAI Codex v1.2"]}}}`), `_orca_tail_sig` exits 1 and writes nothing — the banner
@@ -576,6 +584,13 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 **WIRE-PIN**: `tests/test_hmad_dispatch.py::test_tail_pass_resolves_single_vendor_banner`
 **WIRE**: `h-mad/scripts/hmad-dispatch.sh:_orca_find` → `_agent_tail_re` (wanted matcher)
 **WIRE-PIN**: `tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve`
+
+**`_agent_tail_re` ships in TASK 2, not here.** Audit v30: with callee and call site both landing
+in T3, the wire's RED could only ever fail on a missing symbol, which is precisely what a
+`wiring` task's caller-observable rule forbids — the same shape AC-1.5 was reclassified for at
+audit v23. T2 now delivers `_orca_tail_sig` AND `_agent_tail_re` (both pure helpers, both
+unit-testable alone, neither consumed until here), so T3's two wires each connect to a callee
+that already exists and whose own tests stay green when the connection is removed.
 
 **Two wires, because this task makes two connections.** Audit v29: the matcher call
 `tail_re="$(_agent_tail_re "$token")"` is a second caller→callee edge and was undeclared, so the
@@ -698,8 +713,8 @@ AC-3.2 assert on, so a resolution that happened to come from another pass cannot
   # 12 positives matching under every revision.
   _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
     case "$1" in
-      codex) printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;
-      agy)   printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)*)\\))?[[:space:]]*$)' ;;
+      codex) printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\(?v?[0-9]+(\.[0-9]+)*\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;
+      agy)   printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)*)\))?[[:space:]]*$)' ;;
       *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
     esac
   }
@@ -887,7 +902,7 @@ status is `grep`'s alone.
       | `Antigravity CLI v1.2.3-release-notes` | agy |
       | `Gemini 3.1 Pro (2026 release notes)` | agy |
 
-      **The last five are the FOURTH shape.** v1.25's line-complete rule still admitted a
+      **Group D — headings, hyphenated pseudo-versions, open parentheticals.** v1.25's line-complete rule still admitted a
       markdown heading (the prefix class allowed `#`), a hyphenated word posing as a
       version or model id (`v0.145-release-notes`, `gpt-5-migration-notes` — the suffixes
       were unbounded non-space runs), and an open numeric parenthetical. Tightened: the
@@ -895,7 +910,7 @@ status is `grep`'s alone.
       dotted-numeric, a model id requires a DOTTED release number, and a parenthetical is
       an effort word or a version. Impl-plan audit v29.
 
-      **The last five are prose AFTER a banner-like prefix — the shape that broke the v1.24
+      **Group B — prose AFTER a banner-like prefix, the shape that broke the leading-position
       grammar.** That grammar required the signature to start the line and then allowed anything
       to follow, so a real version string followed by ordinary words still matched. Audit v28.
       The rule is now LINE-COMPLETE: a banner must consume its whole line, allowing only
@@ -904,7 +919,7 @@ status is `grep`'s alone.
       lacked: mid-sentence, line-leading, banner-prefixed. Measured across all 24 —
       unanchored 0/24, anchored-only 7/24, leading-position 14/24, line-complete 19/24, this grammar 24/24.
 
-      **The last seven are LINE-LEADING, and they are why a bare anchor is not enough.** The
+      **Group C — LINE-LEADING, and why a bare anchor is not enough.** The
       v1.23 fix anchored the shipped regex to line start and this AC claimed prose then declined.
       Audit v27 falsified that: every probe in the original corpus happened to put the token
       mid-sentence, so the anchor separated the corpus without separating the CLASS. Measured
@@ -916,7 +931,8 @@ status is `grep`'s alone.
       gpt-5.6-terra`, `gpt-5.6-terra high · ~/repo`, `  OpenAI Codex (v0.145.0)`,
       `│ model: gpt-5.6-terra`, `OpenAI Codex v0.145.0`, `OpenAI Codex`,
       `Antigravity CLI v1.2.3`, `Gemini 3.1 Pro`, `  Antigravity CLI v1.2.3`,
-      `Gemini 3.1 Pro (High)`, `Antigravity CLI 1.1.22` — **12 in all**, matching under every
+      `gpt-5.6-terra high`, `Gemini 3.1 Pro (High)`, `Antigravity CLI 1.1.22` — **12 in all**,
+      matching under every
       grammar revision, so the tightening costs no true positive.
 
       **This is a wrong-pane class, not a tidiness one.** `$scoped` includes ordinary shell
@@ -950,7 +966,15 @@ status is `grep`'s alone.
 **Test file**: `h-mad/tests/test_hmad_dispatch.py`
 **Task shape**: `wiring`
 **WIRE**: `h-mad/scripts/hmad-dispatch.sh:_orca_find` → `_agent_tail_re` (rival matcher)
-**WIRE-PIN**: `tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress`
+**WIRE-PIN**: `tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature`
+
+**The pin is the REJECTION node, not the prose node — corrected at audit v30.** v1.26 pinned
+`test_tail_pass_rival_prose_does_not_suppress`, which is backwards: removing the rival-matcher
+call makes the rival check match nothing, so prose stops suppressing the wanted pane and that
+node goes GREEN with the wire disconnected. A pin that passes when the connection is gone proves
+nothing. `test_tail_pass_rejects_rival_signature` is caller-observable in the right direction —
+with the wire removed a real rival BANNER is no longer rejected. AC-4.6 is consequently green at
+RED and carries `rival-re-prose-unsafe` as its reject-direction proof instead.
 
 **`wiring`, not `new-behaviour` — corrected at audit v29.** v1.25 gave this task a second call to
 `_agent_tail_re`, for the rival side, and left the shape as `new-behaviour`; the gate therefore
@@ -962,7 +986,11 @@ distinguishes a real disconnect from a widened matcher.
 
 **Description**: Design Implementation Order step 3. A candidate whose tail carries the RIVAL
 agent's signature is rejected **before** it is counted, so it can neither be selected nor create
-a false ambiguity that suppresses a real resolution. `$rival_re` is already computed above Pass 1
+a false ambiguity that suppresses a real resolution. The shared `$rival_re` computed above Pass 1
+is NOT reused here — it is `_agent_pv_re`, which matches prose 24/24; this pass builds its own
+`rival_tail_re` from `_agent_tail_re`, the same grammar as the wanted check (AC-4.6). The old
+sentence said `$rival_re` was reused unchanged, which contradicted this task's own code block and
+would have reproduced the false-negative. Impl-plan audit v30. For reference, `$rival_re`
 in `_orca_find` and is reused unchanged; Pass 2 applies the identical predicate to `.preview`, so
 this is that rule extended to the new evidence surface rather than a new rule.
 
@@ -1000,7 +1028,8 @@ ambiguity.
 - [ ] AC-4.2: **WITHDRAWN** — see §"Test-name contract". A rival-only tail fails the agent's
       own signature and never reaches the rejection branch, so no mutation can discriminate it;
       it is subsumed by `test_tail_pass_zero_matches_declines`. The number is retained so AC-4.1,
-      AC-4.3, AC-4.4 and AC-4.5 do not renumber. **T4 has FOUR nodes, not five.**
+      AC-4.3, AC-4.4 and AC-4.5 do not renumber. **T4 has FIVE nodes** — AC-4.1, AC-4.3, AC-4.4,
+      AC-4.5 and AC-4.6; the count said four until impl-plan audit v30, before AC-4.6 was added.
 - [ ] AC-4.3: Rejection is symmetric — the same fixture resolved for `agy` rejects the pane whose
       tail carries the codex banner, and vice versa. Asserted for both tokens so the test cannot
       pass against a one-sided implementation.
@@ -1041,7 +1070,9 @@ ambiguity.
 
       A rival-**only** tail is likewise not usable here: it fails `$tail_re` and never reaches the
       rejection branch, which is why AC-4.2 was withdrawn rather than reused.
-- [ ] AC-4.6 (spec AC-1.4): **Rival PROSE must not suppress a real resolution — both
+- [ ] AC-4.6 (spec AC-1.4): **Green at RED — the tail pass does not exist yet, so nothing
+      suppresses anything and this node passes before any code is written.** Its reject-direction
+      proof is `rival-re-prose-unsafe`. Rival PROSE must not suppress a real resolution — both
       directions.** A codex pane whose tail carries `OpenAI Codex (v0.145.0)  model: gpt-5.6-terra`
       AND the sentence `Compare Gemini 3.1 Pro with Claude` still resolves as codex; symmetrically,
       an agy pane carrying `Antigravity CLI v1.2.3` AND `OpenAI Codex documentation changed` still
@@ -1312,6 +1343,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
    "replace": "  tail_re=\"\""
+  },
+  {
+   "name": "wire-wanted-matcher-forced-empty",
+   "_mechanism": "Force the wanted-matcher connection to produce a universal matcher instead of removing it: the call still happens, the callee is intact, but its result is discarded. Paired with wire-wanted-matcher-disconnected, this is the opposite direction the connection invariant asks for -- one proves the call is MADE, the other proves its RESULT is used.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
+   "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
+   "replace": "  _agent_tail_re \"$token\" >/dev/null; tail_re=\".\""
   },
   {
    "name": "wire-rival-matcher-disconnected",
@@ -1630,6 +1669,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
 | AC-2.9 | `test_tail_sig_rejects_ok_false_envelope` | RED: FAIL | also kills mut `envelope-ok-false-accepted` |
 | AC-2.10 | `test_tail_sig_rejects_non_array_tail` | RED: FAIL | also kills mut `non-array-tail-accepted` |
+| AC-2.11 | `test_tail_matcher_regex_is_accepted_by_grep` | RED: FAIL | — |
 | AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | also kills mut `marker-content-changed` |
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
 | AC-3.3 | `test_tail_pass_env_reports_handle` | RED: FAIL | — |
@@ -1653,14 +1693,14 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-4.3 | `test_tail_pass_rival_rejection_symmetric` | RED: FAIL | — |
 | AC-4.4 | `test_tail_pass_rival_rejected_before_counting` | RED: FAIL | — |
 | AC-4.5 | `test_tail_pass_long_tail_early_rival_rejected` | RED: FAIL | — |
-| AC-4.6 | `test_tail_pass_rival_prose_does_not_suppress` | RED: FAIL | also kills mut `rival-re-prose-unsafe` |
+| AC-4.6 | `test_tail_pass_rival_prose_does_not_suppress` | RED: PASS | mut `rival-re-prose-unsafe` |
 | AC-5.1 | `test_os_evidence_pass_renumbered_to_four` | RED: FAIL | — |
 | AC-5.2 | `test_skill_md_names_tail_evidence_pass` | RED: FAIL | — (AC-5.4 is this same node's revert-and-observe procedure, not a second node) |
 | AC-5.5 | `test_skill_md_codex_banner_claim_qualified` | RED: FAIL | — |
 | AC-5.3 | `test_skill_md_frontmatter_unchanged` | RED: PASS | mut `skill-md-frontmatter-renamed` |
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
-**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 43
+**The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 44
 nodes, T5's four included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
@@ -1779,12 +1819,12 @@ false half is recorded so the next reader does not re-derive it.
    | task | nodes | FAIL at RED | PASS at RED | the PASS nodes |
    |---|---|---|---|---|
    | T1 | 6 | 2 | 4 | `…does_not_capture_terminal_list`, `…unset_preserves_legacy_behaviour`, `…still_captures_argv`, `…helpers_shape` |
-   | T2 | 9 | 8 | 1 | `test_tail_no_timeout_binary_invocation` |
+   | T2 | 10 | 9 | 1 | `test_tail_no_timeout_binary_invocation` |
    | T3 | 18 | 12 | 6 | `…launch_command_alone_does_not_resolve`, `…two_matches_declines`, `…zero_matches_declines`, `…not_run_when_pass0_resolves`, `…pool_is_scoped`, `…all_unreadable_declines` |
-   | T4 | 5 | 5 | 0 | — |
+   | T4 | 5 | 4 | 1 | `test_tail_pass_rival_prose_does_not_suppress` |
    | T5 | 4 | 3 | 1 | `test_skill_md_frontmatter_unchanged` |
    | T6 | 1 | 1 | 0 | `test_tail_mutation_spec_root_is_relative`; the harness verdicts themselves are read from the `MUTATION:` token, not from pytest counts |
-   | **total** | **43** | **31** | **12** | |
+   | **total** | **44** | **31** | **13** | |
 
    **Derive these counts at dispatch time; do not read them from the table.** The count and the
    enumeration are two surfaces that drift, and this one has drifted once already. The
@@ -1793,15 +1833,15 @@ false half is recorded so the next reader does not re-derive it.
 
    ```bash
    F=docs/01-plan/features/pin-agents-tail-banner.impl-plan.md
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 43  total nodes
-   grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 12  --expect-pass
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: (FAIL|PASS) \|' "$F"   # 44  total nodes
+   grep -cE '^\| AC-.* \| `test_.*` \| RED: PASS \|'        "$F"   # 13  --expect-pass
    grep -cE '^\| AC-.* \| `test_.*` \| RED: FAIL \|'        "$F"   # 31  --expect-fail
    ```
 
    **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
    `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
-   `--expect-pass`; feeding it 31/12 would guarantee `step5d:red_not_all_failing` on every task
-   (T1 expects 2/4, T2 8/1, …). Derive per task from the same authoritative rows — the AC prefix
+   `--expect-pass`; feeding it 31/13 would guarantee `step5d:red_not_all_failing` on every task
+   (T1 expects 2/4, T2 9/1, …). Derive per task from the same authoritative rows — the AC prefix
    identifies the task:
 
    ```bash
@@ -1813,8 +1853,8 @@ false half is recorded so the next reader does not re-derive it.
    done
    ```
 
-   Expected: T1 2/4 · T2 8/1 · T3 12/6 · T4 5/0 · T5 3/1 · T6 1/0, summing to 31/12 over 43 —
-   and **every row carries exactly ONE AC label** so the per-task regex sees all 43. Two rows
+   Expected: T1 2/4 · T2 9/1 · T3 12/6 · T4 4/1 · T5 3/1 · T6 1/0, summing to 31/13 over 44 —
+   and **every row carries exactly ONE AC label** so the per-task regex sees all 44. Two rows
    briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
    under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
    proof column as the procedure it is —
@@ -1825,7 +1865,7 @@ false half is recorded so the next reader does not re-derive it.
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 43 / 12 / 31 against this file.
+   anchored to the full row shape above and verified to return 44 / 13 / 31 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1918,3 +1958,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.24: Impl-plan audit v27 (codex) — the v1.23 anchor fix was INCOMPLETE and the reason is worth keeping: every negative probe in that corpus put the agent token mid-sentence, so a line-start anchor separated the CORPUS without separating the CLASS. Line-LEADING prose — `OpenAI Codex documentation changed`, `## Gemini 3.1 Pro release notes`, `model: gpt-5 migration notes` — still matched, and a shell pane in $scoped still resolved as the agent. A negative corpus is only as strong as the shapes in it, and one shape was doing all the work. Replaced with a BANNER GRAMMAR: the discriminator is what FOLLOWS the signature — a banner ends its line or continues with version/model/effort structure, prose continues with words. Measured over 14 prose probes and 11 real banner/status lines: unanchored 0/14 decline, anchored-only 7/14, grammar 14/14, with all 11 positives matching under every form. Rewriting the matcher moved THREE mutation anchors; re-anchoring them onto the `case` opener produced syntactically broken mutants (orphaned arms, and later arms overwriting the mutated value), so they are anchored on the codex ARM and on the `local` line instead — re-anchoring is not done until the mutant is still valid AND still meaningful. The rule was also missing from the paired SPEC, which still presented `_agent_pv_re` as a banner discriminator: spec AC-1.4 now carries the tail-only matcher constraint and the prose-rejection criterion (16 ACs). AC-3.18 added so Task 3 corrects `_agent_pv_re`'s OWN comment, which still claims its strings cannot occur in ordinary prose — shipping both statements five hundred lines apart would leave the wrapper self-contradictory. Counts re-derived: 42 nodes, 30 FAIL, 12 PASS, T3 12/6; 31 mutations. Citations corrected to design v1.23 and spec v1.9.
 - v1.25: Impl-plan audit v28 (codex) — THIRD revision of the prose rule, and a mirror defect the first two hid. The v1.24 grammar required the signature to lead the line and then allowed anything after it, so `OpenAI Codex v0.145 release notes`, `gpt-5.6-terra high performance notes` and `Gemini 3.1 Pro (release notes)` still matched — prose after a banner-like PREFIX, the third shape this corpus lacked (mid-sentence, then line-leading, now banner-prefixed). The rule is LINE-COMPLETE now: a banner consumes its whole line and only structured continuations are allowed (version, `model:` field, effort word, `·` and cwd, bounded parenthetical). Measured across 19 prose probes and 12 real banner/status lines: unanchored 0/19 decline, anchored-only 7/19, v1.24 grammar 14/19, this one 19/19, all 12 positives matching under every form. The mirror defect: Task 4's rival check still used the SHARED `$rival_re` (`_agent_pv_re`) over the retained tail, so a real codex pane whose scrollback merely said `Compare Gemini 3.1 Pro with Claude` was rejected as rival-bearing — the feature suppressing exactly the panes it exists to resolve. Both checks now go through ONE helper, `_agent_tail_re`, which is also what audit v28's should-fix asked for: the two arms were duplicating a pattern that could drift. AC-4.6 pins both directions and `rival-re-prose-unsafe` restores the unsafe matcher (32 mutations). The design still described the rejected anchor-only rule and diagrammed the pass as `tail via _agent_pv_re`, so an implementer following the declared source would have rebuilt the defect; architecture, matcher rule, rival rule and test plan all back-propagated. AC-3.17's traceability label corrected from FR-2 (cardinality) to spec AC-1.4 under FR-1. Counts re-derived: 43 nodes, 31 FAIL, 12 PASS, T4 5/0.
 - v1.26: Impl-plan audit v29 (codex) — FOURTH revision of the prose rule plus three structural findings. The line-complete form still took a markdown heading (the prefix class allowed `#`), a hyphenated word posing as a version or model id (`OpenAI Codex v0.145-release-notes`, `model: gpt-5-migration-notes` — both suffixes were unbounded non-space runs), and an open numeric parenthetical (`Gemini 3.1 Pro (2026 release notes)`). Tightened: prefix is whitespace and box-drawing/quote only, a version is dotted-numeric, a model id needs a DOTTED release number, a parenthetical is an effort word or a version. Corpus is now 24 negatives / 12 positives, enumerated ONCE and synchronised across spec, design, impl-plan and every comment — the counts had drifted to 19/12 here, 19/12 in the design, 14/11 in the spec and '11 in all' inside the AC that owns the list. Measured: unanchored 0/24, anchored-only 7/24, leading-position 14/24, line-complete 19/24, this grammar 24/24, 12/12 positives under every revision. STRUCTURAL: the two `_agent_tail_re` calls were undeclared wires — the gate saw `wiring=1` where there are two connections, so both matcher edges bypassed the caller-observable RED and the connection-only mutation the invariant requires. T3 now declares a second WIRE/WIRE-PIN for the wanted matcher and T4 is reclassified `wiring` for the rival matcher, each with a disconnect-callee-intact mutation; the gate reports `wiring=2 registered=3`. The two rival mutations are deliberately opposed — `wire-rival-matcher-disconnected` under-rejects and `rival-re-prose-unsafe` over-rejects — so together they pin the connection AND its matcher. AC-3.18's node was named `test_agent_pv_re_...`, which the `-k test_tail_ or test_skill_md or test_os_evidence` selector does NOT match, leaving a named feature test outside the mutation baseline; renamed with the `test_tail_` prefix, and the only names now outside the selector are the two unrelated module tests the plan already documents as excluded. Task 6's 'every guard this feature introduces' narrowed to the enumerated table. 34 mutations.
+- v1.27: Impl-plan audit v30 (codex) — the worst finding of the run, and it is mine: **the prescribed matcher had never executed.** The `_agent_tail_re` arms were written with `printf '%s\\n'` and doubled `\\(` escapes, so run verbatim the helper appended the literal bytes `\n` and `grep -E` rejected the pattern outright — `repetition-operator operand invalid`, rc 2, on every input including the positive controls. Every 24/24 figure this plan reported came from separate probe scripts with different escaping; the doc carried a DIFFERENT, non-functional regex. Fixed, and the corpus is now run through the doc's own block (24/24 negatives decline, 12/12 positives match), with AC-2.11 added so the prescribed source is what gets measured — a regex the plan prints must be one `grep -E` accepts. Three more structural corrections. T4's WIRE-PIN was backwards: disconnecting the rival matcher makes rival prose stop suppressing the wanted pane, which is exactly what `test_tail_pass_rival_prose_does_not_suppress` asserts, so the pin went GREEN with the wire removed; `test_tail_pass_rejects_rival_signature` is the caller-observable direction, and AC-4.6 is now green at RED with `rival-re-prose-unsafe` as its proof. T3's wanted-matcher wire could not meet its own caller-observable rule while callee and call site both landed in T3 — the AC-1.5 shape again — so `_agent_tail_re` ships in TASK 2, and a `wire-wanted-matcher-forced-empty` mutation supplies the opposite direction (one proves the call is made, the other that its result is used). And the normative surfaces still said the tail pass reuses `_agent_pv_re`: T4's description claimed `$rival_re` was reused unchanged while its own code forbids it, and both executive summaries named the shared helper — all now name `_agent_tail_re`. Counts re-derived: 44 nodes, 31 FAIL, 13 PASS, T2 9/1, T4 4/1; 35 mutations; AC-3.17's positive list was one short of the 12 it claimed. Corpus groups are named by SHAPE now, not relative position.

@@ -207,7 +207,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **31 of 43 nodes RED, 12 green**, and the
+  legitimately green before any code exists. Measured: **31 of 44 nodes RED, 13 green**, and the
   12 split **11 + 1**: eleven are each tied to a mutation that must be killed by that specific
   node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
@@ -215,7 +215,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   stated proof on the surface that is the declared source; impl-plan audit v24. RED observation OR a
   discriminating mutation is what distinguishes new coverage from a restatement of current
   behaviour — one or the other, never neither
-- Each guard is mutation-tested to its permissive value, and each mutant is confirmed to
+- Each ENUMERATED mutation target is stubbed to its permissive value, and each mutant is confirmed to
   have LANDED — an anchor matching nothing reports the guard as enforced
 - The mutation spec is ALL_CAUGHT
 - **A live check that provably exercises THIS pass.** `hmad-dispatch env` resolving codex is NOT
@@ -284,3 +284,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.19: Impl-plan audit v27 (codex) — the line anchor alone did not close the prose class: line-LEADING prose still matched, because the v1.18 corpus only contained mid-sentence shapes. The tail pass now applies a banner grammar (14/14 prose declines, 11/11 real banners still match). Counts re-derived to 30 FAIL / 12 PASS over 42, and the AC list gains spec AC-1.4.
 - v1.20: Impl-plan audit v28 (codex) — the prose rule is now LINE-COMPLETE (19/19 decline, 12/12 real banners match) after prose following a banner-like prefix defeated the previous form, and the rival check uses the same tail-only grammar: it had been reusing the shared prose-unsafe matcher, so a real agent pane was suppressed for merely mentioning the other agent. Counts re-derived to 31 FAIL / 12 PASS over 43.
 - v1.21: Impl-plan audit v29 (codex) — prose corpus re-enumerated at 24 negatives / 12 positives after a fourth shape (markdown headings and hyphenated pseudo-versions) defeated the line-complete form; the counts had drifted apart across four documents and are now derived from one list.
+- v1.22: Impl-plan audit v30 (codex) — counts re-derived to 31 FAIL / 13 PASS over 44 after AC-4.6 was reclassified green at RED and the tail matcher moved to Task 2; the mutation-coverage claim narrowed to enumerated targets.

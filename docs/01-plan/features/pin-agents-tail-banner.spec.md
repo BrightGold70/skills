@@ -4,7 +4,8 @@
 
 Add a standalone tail-evidence pass to `_orca_find`, between Pass 2 and Pass 3, reading a candidate pane's
 `.result.terminal.tail` and resolves an agent when — and only when — exactly one candidate
-carries that agent's `_agent_pv_re` **banner** signature. The launch command line is not a
+carries that agent's **banner** signature under the tail-only `_agent_tail_re` grammar (NOT the
+shared `_agent_pv_re`, which matches prose 24/24 — see AC-1.4). The launch command line is not a
 signature (§Measured basis 3).
 
 ## Goal
@@ -62,7 +63,8 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 
 ### FR-1: Tail evidence resolves an otherwise-unresolvable agent
 - **Description**: A pass between Pass 2 and Pass 3 reads each unresolved candidate's tail
-  and matches the EXISTING `_agent_pv_re` signature. It is gated on neither Pass 2's
+  and matches the tail-only `_agent_tail_re` banner grammar, which wraps the EXISTING
+  `_agent_pv_re` signature with a stricter line-complete rule (AC-1.4). It is gated on neither Pass 2's
   `n == 0` condition nor Pass 3's `lsof` precondition, so it covers an ambiguous title and a
   machine with no `lsof` — neither of which any current pass reaches.
 - **Acceptance Criteria**:
@@ -204,3 +206,4 @@ of failure; leaving it undocumented would.
 - v1.8: Impl-plan audit v20 (codex) — FR-4 gained AC-4.4. "Errors" now explicitly includes an envelope that exits 0 carrying `"ok": false`, and a `.terminal.tail` that is not an array. Both were outside the generic wording because neither reads as an error to the checks that catch the rest — the process rc is 0 and the key is present — and both are the only FR-4 directions that would RESOLVE rather than decline.
 - v1.9: Impl-plan audit v27 (codex) — FR-1 gains AC-1.4. The spec still presented `_agent_pv_re` as a program-banner discriminator and carried no prose-rejection criterion, so the load-bearing false-positive rule was absent from the authoritative contract while the impl-plan implemented it. AC-1.4 states the tail-only matcher constraint (the signature must end its line or continue with version/model/effort structure) and the measurement behind it: `_agent_pv_re` alone matches 14 of 14 prose probes; the grammar declines all 14 while 11 real banner and status lines still match.
 - v1.10: Impl-plan audit v29 (codex) — AC-1.4's measurement corrected to the current corpus: `_agent_pv_re` matches 24 of 24 prose probes, the tail grammar declines all 24, and all 12 real banner and status controls still match. The spec had been citing a superseded 14/11 corpus.
+- v1.11: Impl-plan audit v30 (codex) — the Executive Summary and FR-1 still said the tail pass matches the EXISTING `_agent_pv_re` signature, contradicting AC-1.4's stricter rule two paragraphs later; both now name the tail-only `_agent_tail_re` grammar that wraps it.
