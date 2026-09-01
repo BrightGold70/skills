@@ -681,7 +681,11 @@ wire gate saw one wire where there are two and the matcher connection bypassed t
 caller-observable RED and the connection-only mutation the invariant requires.
 `wire-wanted-matcher-disconnected` is that mutation: it removes the call while leaving
 `_agent_tail_re` defined and every T2 unit test green, and only AC-3.17 sees it — an empty
-`$tail_re` matches every pane, so a prose-only tail resolves.
+`$tail_re` matches every pane — so under AC-3.17's MIXED fixture both candidates match, the
+count is 2, and the pass declines on AMBIGUITY. (It does not "resolve a prose-only tail": that
+was true of the prose-ONLY fixture this AC carried before v1.30, and the sentence outlived the
+fixture. The mutation's own `_mechanism` already says ambiguity; this surface did not. Impl-plan
+audit v40.)
 
 **Why `wiring` and not `new-behaviour`.** This task's deliverable includes the call site
 `_orca_find` → `_orca_tail_sig`; T2 ships the callee alone and nothing consumes it until here.
@@ -1040,7 +1044,11 @@ status is `grep`'s alone.
 
       **This is a wrong-pane class, not a tidiness one.** `$scoped` includes ordinary shell
       panes, and tail evidence is explicitly HISTORICAL — so a plain shell that once ran
-      `cat CHANGELOG` or printed release notes was resolvable AS THE AGENT, contradicting FR-2.
+      `cat CHANGELOG` or printed release notes was resolvable AS THE AGENT, contradicting
+      **FR-1 / spec AC-1.4** — the wrong-pane rule. NOT FR-2, which is only the exactly-one
+      CARDINALITY rule: a single prose pane matching is one match, so FR-2 is satisfied while the
+      resolution is still wrong. The plan's own v1.25 history corrected this label once already
+      and the body kept the old one. Impl-plan audit v40.
       The plan claimed `_agent_pv_re` was "hardened against prose"; it is hardened against the
       two examples that motivated it (`comparing gpt-5 output with ours`, `the codex agent is
       running`, both still declining) and that was generalised into a safety premise it does not
@@ -1243,7 +1251,7 @@ ambiguity.
       rejection branch, which is why AC-4.2 was withdrawn rather than reused.
 - [ ] AC-4.6 (spec AC-1.4): **Green at RED — T4 depends on a completed T3, so the pass DOES exist;
       the node passes because RIVAL REJECTION does not exist yet, so nothing suppresses anything.** Its reject-direction
-      proof is `rival-re-prose-unsafe`. Rival PROSE must not suppress a real resolution — both
+      proof is `rival-re-prose-unsafe`. **Rival PROSE must not suppress a real resolution — both
       directions.** A codex pane whose tail carries `OpenAI Codex (v0.145.0)  model: gpt-5.6-terra`
       AND the sentence `Compare Gemini 3.1 Pro with Claude` still resolves as codex; symmetrically,
       an agy pane carrying `Antigravity CLI v1.2.3` AND `OpenAI Codex documentation changed` still
@@ -1688,7 +1696,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "tail-re-unanchored",
-   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 24 prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-2 forbids, reachable because $scoped includes shell panes and tail evidence is historical.",
+   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 24 prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
@@ -1996,7 +2004,11 @@ false half is recorded so the next reader does not re-derive it.
       accidental and the spec is wrong.
 - [ ] AC-6.4: A mutation relaxing `[ "$tn" -eq 1 ]` to `[ "$tn" -ge 1 ]` is killed by AC-3.4
       (two matching candidates must decline).
-- [ ] AC-6.5: A mutation deleting the rival-rejection `continue` is killed by AC-4.1.
+- [ ] AC-6.5: A mutation NEUTRALISING the rival-rejection condition (`drop-rival-rejection`
+      replaces it with `if false`, keeping the block and its `continue` intact) is killed by
+      AC-4.1. It is written that way deliberately: deleting the `continue` would also change the
+      loop's control flow, and the kill could then be credited to that rather than to the
+      missing rejection. Impl-plan audit v40.
 - [ ] AC-6.6: A mutation widening the candidate pool from `$scoped` to the raw listing is killed
       by AC-3.7.
 - [ ] AC-6.7: A mutation redirecting the `[H-MAD] … by tail evidence` line to stdout is killed by
@@ -2230,3 +2242,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.38: Impl-plan audit v39 (agy) — must=1 should=1, and agy's OWN v38 clean broke one cycle later, which is the agreement-is-not-a-stopping-signal rule demonstrated on a single surface rather than across two. MUST: AC-6.12 … AC-6.20 requires each of nine mutations to carry a mechanism line naming the node its proof column claims, and the embedded spec omitted the key entirely for those nine. Measured: 18 of 38 entries had no _mechanism at all. All 18 written, not just the nine the AC names, each naming its pinned test node and what the mutation removes — the AC's nine are covered and the other nine predated the convention. Verified after: 38/38 entries carry _mechanism, and every one of the new 18 names its own test node. SHOULD: hmad-dispatch.sh:513 reads 'Codex therefore skips Pass 1 entirely and relies on the preview signature or, properly, on a pin/launch' — an exhaustive enumeration that this feature adds a term to, since the tail signature is exactly what Codex falls back to once the preview has decayed. Added as T5's THIRD documentation site with exact code, plus positive AND negative assertions in AC-5.1's test block (a deletion satisfies the negative alone). Re-verified: fence parity 36 (even), JSON parses at 38 mutations, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
 - v1.39: Impl-plan audit v39 (codex) — must=2 should=2 nit=1 against v1.37. TWO of its four findings (the 18 missing mutation mechanisms, and the hmad-dispatch.sh:513 Codex fallback enumeration) were the SAME defects agy raised in the same cycle and were already applied at v1.38 — independent convergence on both surfaces, which is the strongest evidence either produces. NEW MUST, and it is the wire-pin numbered-label defect recurring: Task 3 declares TWO connections with BARE **WIRE**/**WIRE-PIN** labels, so the gate parses both with suffix None, pairs both wires with the LAST pin, and registers both under the single identity (pin-agents-tail-banner, Task 3) — the _agent_tail_re record upserts the _orca_tail_sig one and the _orca_find -> _orca_tail_sig connection vanishes from .h-mad/wires.jsonl. Measured before the fix: the registry held only Task 3 -> _agent_tail_re (wanted) and Task 4 -> _agent_tail_re (rival), NO _orca_tail_sig row, while the gate printed WIREPIN: PASS ... registration: registered=3 skipped=0. It fails CLOSED: a lost connection and a green verdict are the same output. Labels numbered WIRE 1/WIRE-PIN 1 and WIRE 2/WIRE-PIN 2; after re-registration the registry carries Task 3 (WIRE 1) -> _orca_tail_sig with its own pin, and the stale collapsed record was removed after proving a superseding row with the same caller/callee/pin exists. NEW SHOULD: AC-3.17 said none of the 24 probes matches 'the anchored one' two paragraphs before reporting that the anchor-only revision declines 7 of 24 — rewritten to name the current bounded grammar and point at the normative block. NIT NOT REPRODUCED: the stray closing ** after 'both directions' in AC-4.6 is not present in these bytes (line 943 is clean); it was fixed in an earlier cycle and the report is describing a version that no longer exists. Re-verified: fence parity 36, 38/38 mutations carry _mechanism, WIREPIN PASS, corpus 24/24 + 12/12, test_hmad_dispatch.py 290 passed.
 - v1.40: Impl-plan audit v40 (agy) — must=1 should=1, all three sites applied. MUST: two production edits were DESCRIBED in prose and prescribed nowhere, which breaks the exact-code invariant by leaving the implementer to invent wording an AC then asserts. (a) AC-3.18 mandates correcting _agent_pv_re's own source comment — the claim 'neither occurs in ordinary prose about a model', falsified 24/24 — but gave no replacement text; exact sh block added, replacing only the comment's final line and naming the two prose examples that still decline. (b) T5's SKILL.md:315 amendment existed ONLY inside the test's _CODEX_CLAIM_NEW constant, so the production markdown edit was unprescribed; exact markdown block added and verified to flatten to exactly _CODEX_CLAIM_NEW, since both are read through _SKILL_MD_FLAT. SHOULD: AC-3.14 required a source-pinned call-form assertion with whitespace collapsed but supplied no test block, unlike AC-2.7 and Task 5; exact python added, asserting BOTH directions — the positive alone passes on a file that also carries the local form elsewhere, the negative alone passes on a file that dropped the call. Re-verified: 50 fence markers (even, counting INDENTED blocks — the line-anchored count used in earlier cycles saw only unindented ones and had been reporting on a subset), 38/38 mutations carry _mechanism, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
+- v1.41: Impl-plan audit v40 (codex) — must=1 should=3 nit=2 against v1.39. Its MUST was the same unprescribed-exact-code defect agy raised in the same cycle, already applied at v1.40. CORRECTION: at v1.39 I recorded codex's AC-4.6 stray-marker nit as NOT REPRODUCED and that was WRONG — the stray closing ** sits on the line AFTER the words 'both directions', so a single-line grep for the phrase plus the marker found nothing and I read absence of a match as absence of the defect. The same report raised it twice and was right twice. Fixed by opening the sentence with the matching marker. SHOULD 1: Task 3's wire rationale still said an empty tail_re makes 'a prose-only tail resolve' — true of the prose-ONLY fixture AC-3.17 carried before v1.30, and the sentence outlived the fixture; with the MIXED fixture both candidates match, the count is 2, and the pass declines on AMBIGUITY. The mutation's own _mechanism already said ambiguity; this surface did not. SHOULD 2: AC-3.17 called the prose false positive a violation of FR-2, but FR-2 is only the exactly-one CARDINALITY rule — a single prose pane matching is ONE match, so FR-2 is satisfied while the resolution is still wrong. It is FR-1 / spec AC-1.4, the wrong-pane rule, as v1.25's own history says. Swept by VALUE: the same mislabel sat inside tail-re-unanchored's _mechanism, and 0 stale FR-2 references remain. SHOULD 3: the design's Components inventory omitted both T5 sites the plan now requires (hmad-dispatch.sh:513, SKILL.md:315), so the plan's claim to map all work onto design steps was broader than the declared source; two rows added. NIT: AC-6.5 described a mutation deleting the rival-rejection continue, while drop-rival-rejection keeps the block and replaces its condition with 'if false' — corrected, with the reason recorded (deleting the continue also changes control flow, so the kill could be credited to that instead). Re-verified: 50 fence markers, 38/38 mechanisms, WIREPIN PASS, corpus 24/24 + 12/12.
