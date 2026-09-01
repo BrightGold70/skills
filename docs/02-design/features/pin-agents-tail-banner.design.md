@@ -92,9 +92,12 @@ That matters only for THIS pass: `$scoped` includes ordinary shell panes and tai
 historical, so a shell that once printed release notes was resolvable AS THE AGENT — the
 wrong-pane class FR-2 forbids. Passes 1 and 2 read short titles and previews rather than arbitrary
 scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
-moves. `_agent_tail_re` is a NEW helper, not an anchor applied to the old one. Measured over the 24-probe corpus: 0 of 24 prose probes match and 12 of 12 real banner and
-status lines still do. Pinned
-by impl-plan AC-3.17 and mutation `tail-re-unanchored`.
+moves. `_agent_tail_re` is a NEW independent helper — not an anchor applied to the old one, and
+not the agent's existing signature. Measured over the 24-probe corpus: 0 of 24 prose probes match and 12 of 12 real banner and
+status lines still do. Pinned in two places, deliberately: impl-plan **AC-2.12** tests the helper's own 24/12 corpus in
+the task that defines it, and **AC-3.17** tests the caller CONNECTION with a mixed
+banner-plus-prose-decoy fixture. Mutations `tail-re-unanchored` and `tail-re-unanchored-agy`
+(one per agent arm) are killed by AC-2.12.
 
 **Per-candidate test.** For each candidate handle, read the tail with exactly this command
 and match the agent's existing signature; reject a candidate whose tail matches the RIVAL's
@@ -236,7 +239,9 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 
 ## Implementation Order
 
-1. `_orca_tail_sig` + its unit tests (no `_orca_find` change yet — proves the helper alone).
+1. `_orca_tail_sig` **and `_agent_tail_re`** + their unit tests, including the matcher's direct
+   24-negative/12-positive corpus (no `_orca_find` change yet — both helpers are proven alone).
+   Both land in impl-plan Task 2; step 2 consumes the matcher, so it cannot be deferred past here.
 2. The pass, entered on `n != 1`, resolving on exactly one.
 3. Rival rejection.
 4. Unreadable-candidate handling.
@@ -252,7 +257,7 @@ None. No state key, no pin-file field, no config.
 
 ## API / Interface Changes
 
-None user-facing. One new private shell function:
+None user-facing. TWO new private shell functions:
 
 ```sh
 _orca_tail_sig <handle>   # stdout: the pane's tail text (possibly empty)
@@ -260,6 +265,11 @@ _orca_tail_sig <handle>   # stdout: the pane's tail text (possibly empty)
                           # runs: _cmd_run --timeout <s> --   (in-process, not the verb)
                           #         orca terminal read --terminal <h> --cursor 0 --limit 4000 --json
                           # extracts: .result.terminal.tail
+
+_agent_tail_re <codex|agy>  # stdout: the TAIL-ONLY banner/status grammar for that agent
+                            # line-complete, bounded; independent literals per agent
+                            # NOT a wrapper around _agent_pv_re, which is left to Passes 1-2
+                            # used by BOTH the wanted and the rival check in the tail pass
 ```
 
 **The ONLY sanctioned call form captures stdout and tests the status in one step:**
@@ -472,3 +482,4 @@ resolution, or it merely restates Pass 0.
 - v1.27: Impl-plan audit v31 (codex) — the bounded-grammar paragraph had spliced two continuation lists together, obscuring which suffixes are actually accepted; reduced to one list matching the regex.
 - v1.28: Impl-plan audit v32 (codex) — the `_agent_pv_re` subsection still said the helper is 'reused unchanged' by this pass and quoted the superseded anchored measurement (0 of 7); both corrected to the 24-probe corpus and the Passes-1-2 scope.
 - v1.29: Impl-plan audit v33 (codex) — `_agent_tail_re` was required by the matcher rule but absent from Components Changed and from the Implementation Order, whose step 1 shipped only `_orca_tail_sig` while step 2 consumed the missing helper. Added to both, mapped to impl-plan T2, with its 24/12 corpus tested there. Node counts re-derived to 32 / 13 over 45.
+- v1.30: Impl-plan audit v34 (codex) — v1.29's history claimed `_agent_tail_re` had been added to Components, Implementation Order and API; only Components had it. Step 1 now ships both helpers with the matcher's direct 24/12 corpus, the API section lists TWO private functions with the matcher's interface, and the pin note distinguishes AC-2.12 (the helper's own corpus, in the task that defines it) from AC-3.17 (the caller connection, mixed fixture).

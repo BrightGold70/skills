@@ -3,7 +3,7 @@
 ## Executive Summary
 
 Add a standalone tail-evidence pass to `_orca_find`, between Pass 2 and Pass 3, reading a candidate pane's
-`.result.terminal.tail` and resolves an agent when — and only when — exactly one candidate
+`.result.terminal.tail`, resolving an agent when — and only when — exactly one candidate
 carries that agent's **banner** signature under the tail-only `_agent_tail_re` grammar (NOT the
 shared `_agent_pv_re`, which matches prose 24/24 — see AC-1.4). The launch command line is not a
 signature (§Measured basis 3).
@@ -215,3 +215,4 @@ of failure; leaving it undocumented would.
 - v1.12: Impl-plan audit v31 (codex) — Measured basis 3 and AC-1.4 still implied the tail pass reuses or wraps `_agent_pv_re`; the per-agent patterns in `_agent_tail_re` are independent literals, and the shared helper is unchanged only for Passes 1-2.
 - v1.13: Impl-plan audit v32 (codex) — FR-1 said `_agent_tail_re` WRAPS `_agent_pv_re` while AC-1.4 says its per-agent patterns are independent literals; the two selected different implementations. Measured basis 3 also still said the shared helper is 'reused unchanged' without the Passes-1-2 qualifier.
 - v1.14: Impl-plan audit v33 (codex) — AC-1.1 still defined a match by the agent's `_agent_pv_re` signature while AC-1.4 measures that same helper matching ordinary prose 24 times out of 24. The two ACs admitted different candidate sets, and the wider one is the wrong-pane class AC-1.4 exists to forbid; AC-1.1 now names `_agent_tail_re`.
+- v1.15: Impl-plan audit v34 (codex) — Executive Summary grammar corrected ('reading … and resolves' → 'reading …, resolving').
