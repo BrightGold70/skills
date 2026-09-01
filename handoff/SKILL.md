@@ -832,10 +832,12 @@ Before you write anything, collect these in parallel:
 
    ```bash
    HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
-   python3 "$HP" latest --branch "$(python3 "$HP" branch-slug)"
+   python3 "$HP" carry-forward-sources --branch "$(python3 "$HP" branch-slug)"; RC=$?
    ```
 
-   Read it in full — its **Open / Blocked Items** and any unfinished **Next Steps** are inputs to §"Carry the predecessor's open items forward", and its filename is this doc's `**Supersedes:**` value. If it returns nothing, this is the first handoff on the branch and `**Supersedes:**` is `none — first on this branch`.
+   Read **every** path it prints, in full — their **Open / Blocked Items** and unfinished **Next Steps** are the inputs to §"Carry the predecessor's open items forward". The branch's newest handoff is this doc's `**Supersedes:**` value; `RC=1` means there is none and `**Supersedes:**` is `none — first on this branch`. `RC=2` means a doc could not be read: report it, and do **not** write the doc as though nothing were owed.
+
+   It prints **two** kinds of source, and the second is not optional. A handover brief is filed under the *sender's* branch slug, so `latest --branch` cannot see it — the same construction as the READ defect. Once READ Step 3.5 has stamped `**Taken-Over-By:**` the brief also stops appearing in `pending-handovers`, so if the taking session ends before it writes a handoff, the next WRITE on this branch would find an empty task list, no branch predecessor, and no re-offer: the whole taken-over backlog leaves the chain in one hop with nothing raised. So a brief this lane stamped, and that no handoff yet names in `**Supersedes:**`, is a predecessor too — until one does.
 3. **Git state** — if the project is a git repo:
    - `git rev-parse --abbrev-ref HEAD` (current branch)
    - `git status --short` (uncommitted / untracked)

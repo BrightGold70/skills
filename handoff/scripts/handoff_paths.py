@@ -167,6 +167,57 @@ def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]
     return (pending, unreadable)
 
 
+_SUPERSEDES_RE = re.compile(r"^\*\*Supersedes:\*\*(.*)$", re.MULTILINE)
+
+
+def carry_forward_sources(
+    branch: str | None = None, start: Path | None = None
+) -> tuple[list[Path], list[Path]]:
+    """Docs a WRITE on this branch owes open items to. `(sources, unreadable)`.
+
+    Two kinds, because a handover is filed under the SENDER's branch slug and so
+    is invisible to a branch-scoped lookup -- the same construction as the READ
+    defect `pending_handovers` exists for:
+
+    1. This branch's newest handoff, the ordinary predecessor.
+    2. Any brief this lane already stamped `**Taken-Over-By:**` that no handoff
+       yet names in its `**Supersedes:**` field.
+
+    Without (2) a taken-over backlog can still evaporate in one hop: the taker
+    stamps the brief, restores the todos into the session-scoped task tool, and
+    the session ends before it writes a handoff. The next session on the branch
+    runs WRITE without READ, finds an empty task list and no branch predecessor,
+    and writes a doc that owes nothing -- while the stamp has already removed the
+    brief from `pending_handovers`, so nothing re-offers it either.
+    """
+    d = handoffs_dir(start)
+    if not d.is_dir():
+        return ([], [])
+    sources: list[Path] = []
+    unreadable: list[Path] = []
+    latest = find_latest(branch, start)
+    if latest is not None:
+        sources.append(latest)
+
+    superseded: set[str] = set()
+    taken: list[Path] = []
+    for path in sorted(p for p in d.glob("*.md") if p.is_file()):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            unreadable.append(path)
+            continue
+        for match in _SUPERSEDES_RE.finditer(text):
+            superseded.add(match.group(1).strip().strip("`"))
+        if _TAKEN_OVER_BY_RE.search(text):
+            taken.append(path)
+
+    for path in taken:
+        if path.name not in superseded and path not in sources:
+            sources.append(path)
+    return (sources, unreadable)
+
+
 def _resolve_start(repo: str | None) -> Path | None:
     """Validate a `--repo` target, or None to resolve from the cwd as before.
 
@@ -206,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
     p_latest = sub.add_parser("latest")
     p_latest.add_argument("--branch", default=None)
     sub.add_parser("pending-handovers")  # inbound briefs nobody has taken over
+    p_cfs = sub.add_parser("carry-forward-sources")  # docs a WRITE owes items to
+    p_cfs.add_argument("--branch", default=None)
     args = ap.parse_args(argv)
     start = _resolve_start(args.repo)
 
@@ -235,6 +288,19 @@ def main(argv: list[str] | None = None) -> int:
         if unreadable:
             return 2
         if not pending:
+            return 1
+    elif args.cmd == "carry-forward-sources":
+        sources, unreadable = carry_forward_sources(args.branch, start)
+        for path in sources:
+            print(path)
+        for path in unreadable:
+            print(f"UNREADABLE:{path}", file=sys.stderr)
+        # Same fail-closed ordering as pending-handovers: a doc that could not be
+        # read may be the one holding the open items, so "I could not check" must
+        # not be reported as "there is nothing to carry".
+        if unreadable:
+            return 2
+        if not sources:
             return 1
     return 0
 

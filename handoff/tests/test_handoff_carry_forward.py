@@ -26,7 +26,12 @@ finished or by being handed over, never by not being mentioned.**
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
 
 SKILL = Path(__file__).resolve().parents[1] / "SKILL.md"
 
@@ -116,3 +121,86 @@ class TestSupersedesIsDefined:
             )
         )
         assert "Supersedes:" in section
+
+
+class TestAStampedBriefIsStillAPredecessor:
+    """The hole D1's stamp opens in D2, scoped to exactly the items this whole
+    task is about.
+
+    A handover brief is filed under the SENDER's branch slug, so WRITE's
+    branch-scoped predecessor lookup cannot see it -- the same construction as
+    the READ defect. Sequence that loses it with no error: the taker stamps
+    `**Taken-Over-By:**` (which removes the brief from `pending-handovers`),
+    restores the todos into the session-scoped task tool, and the session ends
+    before writing a handoff. The next session on the branch runs WRITE without
+    READ: empty task list, no branch predecessor, so it writes a doc that owes
+    nothing -- and nothing re-offers the brief either, because the stamp worked.
+    """
+
+    def test_a_stamped_brief_no_handoff_supersedes_is_a_source(
+        self, tmp_path: Path
+    ) -> None:
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        (d / "2026-08-30-other__inbound.md").write_text(
+            "**Handover-From:** x · y · session a\n**Taken-Over-By:** me · session b\n",
+            encoding="utf-8",
+        )
+
+        sources, unreadable = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-08-30-other__inbound.md"]
+        assert unreadable == []
+
+    def test_once_a_handoff_supersedes_it_the_chain_owns_it(
+        self, tmp_path: Path
+    ) -> None:
+        """The brief stops being a separate source when a handoff on the branch
+        names it -- from then on the ordinary predecessor rule carries it."""
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        (d / "2026-08-30-other__inbound.md").write_text(
+            "**Handover-From:** x · y · session a\n**Taken-Over-By:** me · session b\n",
+            encoding="utf-8",
+        )
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Supersedes:** 2026-08-30-other__inbound.md\n", encoding="utf-8"
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-01-feature-41__mine.md"]
+
+    def test_the_branch_predecessor_is_still_a_source(self, tmp_path: Path) -> None:
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        (d / "2026-09-01-feature-41__mine.md").write_text("**Branch:** x\n", encoding="utf-8")
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-01-feature-41__mine.md"]
+
+    def test_an_unreadable_doc_is_reported_not_treated_as_nothing_owed(
+        self, tmp_path: Path
+    ) -> None:
+        import handoff_paths as hp
+
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        (d / "2026-08-31-other__broken.md").write_bytes(b"\xff\xfe\x00")
+
+        _, unreadable = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in unreadable] == ["2026-08-31-other__broken.md"]
+
+    def test_write_step_2b_uses_the_command(self) -> None:
+        section = _norm(
+            _section("## Gather context before drafting", "## Required template")
+        )
+        assert "carry-forward-sources" in section
