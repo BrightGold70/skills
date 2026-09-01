@@ -56,7 +56,7 @@ that serves a per-handle response file out of a directory named by a new opt-in 
 `HMAD_STUB_ORCA_READ_DIR`. This follows the two existing precedents in the same file
 (`HMAD_STUB_ORCA_WT_PS_STDOUT` for the J16 paneKey join, `HMAD_STUB_ORCA_CREATE_STDOUT` for the
 J1 launch handle), including their rationale comments and their opt-in property: the branch is
-consulted only when the variable is set, so all 284 existing tests keep the shared-stdout
+consulted only when the variable is set, so all 290 existing tests keep the shared-stdout
 behaviour they were written against.
 
 The per-handle file holds a **full JSON envelope**, not raw tail text, because AC-2.3 needs a
@@ -307,8 +307,12 @@ def _run_bash(script, *, env=None, capture=None, cwd=None):
 
 `run()` is shown above in its post-extraction form: same signature, same call, the env dict now
 sourced from `_isolated_env`. The extraction is behaviour-preserving by construction, and the
-existing 284 tests are its regression check — run them before and after and require an identical
-pass count.
+existing 290 tests are its regression check — run them before and after and require an identical
+pass count. **Re-derive that number, never carry it** — `python3.11 -m pytest
+h-mad/tests/test_hmad_dispatch.py -q --collect-only` printed 290 on 2026-09-01, up from the 284
+this plan carried through v1.12: an unrelated SIGPIPE fix in the same wrapper (`282a3a5`, plus
+the agy-recovery and cmux-alive gates) added test nodes to this very module while the plan sat
+open. A module-wide count is a shared surface, so any lane touching it moves this number.
 
 **The `HMAD_TAIL_READ_TIMEOUT` pop is load-bearing for AC-2.5, not tidiness.** `_isolated_env`
 copies the ambient environment, and this feature introduces the variable, so on a host that
@@ -327,7 +331,8 @@ it. Add `import re` in alphabetical position.
 ```sh
 _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, rc 1 = unreadable
   # Bounded via _cmd_run (the `run` verb's own function): `timeout`/`gtimeout` are
-  # forbidden by the base invariant and are absent from this file. The default in
+  # forbidden by the base invariant and are never INVOKED here (AC-2.7's predicate is
+  # command position, so naming them in this comment is legal). The default in
   # ${HMAD_TAIL_READ_TIMEOUT:-2} is load-bearing, not style: `set -u` is on, so a
   # bare "$HMAD_TAIL_READ_TIMEOUT" aborts the whole wrapper the first time this
   # runs in a shell that never exported it.
@@ -352,8 +357,16 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 
 **Acceptance Criteria**:
 - [ ] AC-2.1: For a handle whose stubbed envelope carries `"tail":["alpha","beta"]`,
-      `_orca_tail_sig <h>` exits 0 and its stdout contains both `alpha` and `beta` on separate
-      lines.
+      `_orca_tail_sig <h>` exits 0 and its stdout is **exactly** `"alpha\nbeta\n"` — asserted by
+      equality, not by containment.
+
+      **"Contains both, on separate lines" accepts the wrong extraction.** That was the v1.12
+      wording, and it is satisfied by the very bug the code comment above warns about: a bare
+      `jq -r '.result.terminal.tail'` on a pretty-printed envelope prints `alpha` and `beta` on
+      separate lines too — inside JSON array punctuation — so the AC would pass against an
+      implementation with no `join("\n")` at all. Equality is what discriminates the array-aware
+      join from the accident that looks like it. Impl-plan audit v17.
+
 - [ ] AC-2.2: When the stubbed `orca` exits non-zero for that handle, `_orca_tail_sig` exits 1 and
       writes nothing to stdout.
 - [ ] AC-2.3: For a well-formed envelope with **no** `.result.terminal.tail` key (e.g.
@@ -362,9 +375,18 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 - [ ] AC-2.4: The captured argv for the call contains `terminal read`, `--terminal <h>`,
       `--cursor 0`, `--limit 4000` and `--json`. Asserted against `HMAD_STUB_CAPTURE`, not against
       the return value.
-- [ ] AC-2.5: With `HMAD_TAIL_READ_TIMEOUT` **unset** in the child environment, the call still
-      completes (rc 0 on a readable handle) rather than aborting the wrapper — the `set -u`
-      default is exercised, not assumed.
+- [ ] AC-2.5: With `HMAD_TAIL_READ_TIMEOUT` **seeded in the PARENT process environment**
+      (`monkeypatch.setenv(..., "9")`) and never passed through `env=`, the call still completes
+      (rc 0 on a readable handle) rather than aborting the wrapper — the `set -u` default is
+      exercised, not assumed.
+
+      **The ambient seed is what makes the harness scrub mutatable.** `_isolated_env` pops
+      `HMAD_TAIL_READ_TIMEOUT` so the child reaches `${HMAD_TAIL_READ_TIMEOUT:-2}`; with nothing
+      seeded in the parent there is nothing for the pop to remove, deleting that line changes no
+      test outcome, and the `harness-ambient-timeout-not-scrubbed` mutation is unkillable. Seeding
+      it here also makes the test true to the failure it guards: this suite is run from inside
+      live h-mad sessions, which is exactly where the variable is exported. Impl-plan audit v17
+      named the gap; the seed rather than a second node is what keeps the 38-node table intact.
 - [ ] AC-2.6: With `HMAD_TAIL_READ_TIMEOUT=1` and the stub sleeping longer
       (`HMAD_STUB_ORCA_SLEEP=3`), `_orca_tail_sig` exits **1** (the helper maps the bounder's 124
       to its own unreadable code) and the call returns in **≥ 0.5 s and < 2.5 s**, measured with
@@ -378,8 +400,9 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 
       **0.5, not 1.0 — measured, because `_cmd_run` fires EARLY.** Its watchdog is built on bash's
       integer-valued `SECONDS`, so a `--timeout 1` deadline can elapse anywhere inside the current
-      second. Ten trials of `hmad-dispatch run --timeout 1 -- sleep 3` across two independent
-      probes: **0.89, 0.89, 0.89, 0.90, 0.90, 1.15, 1.16, 1.16** s, every one `rc=124`. A
+      second. Eight timings of `hmad-dispatch run --timeout 1 -- sleep 3` across two independent
+      probes: **0.89, 0.89, 0.89, 0.90, 0.90, 1.15, 1.16, 1.16** s, every one `rc=124`. (This
+      said "ten trials" while listing eight numbers; the count is the listed one.) A
       `>= 1.0` assertion — the v1.6 wording — would have failed on the majority of runs against a
       perfectly correct implementation, and intermittently, which is the worst way for a test to
       be wrong. 0.5 still rejects an instant return, which is the only thing the lower bound is
@@ -562,8 +585,9 @@ grep -Eiq "$re" <<<"$big"              -> rc=0
 printf '%s' "$small" | grep -Eiq "$re" -> rc=0     (short tail — the defect is invisible)
 ```
 
-The last line is why this needs its own tests: **every stub fixture in this plan uses a short
-tail**, so all 38 nodes would go green over a matcher that is broken on exactly the long
+The last line is why this needed its own tests. Before AC-3.16 and AC-4.5 existed, **every stub
+fixture in this plan used a short tail**, so all 38 nodes would have gone green over a matcher
+broken on exactly the long
 retained tails the 2000-line cap describes. A here-string has no pipeline, so the compound's
 status is `grep`'s alone.
 
@@ -659,10 +683,20 @@ status is `grep`'s alone.
       and contradict AC-3.3). Asserted on the same source section as AC-3.12 but by its own test
       (`test_tail_pass_stale_pane_comment_present`), so a failure names which half of the comment
       is missing rather than reporting "the comment is wrong".
-- [ ] AC-3.16: A candidate whose tail is **large** (≥ 200 KB, ≥ 3000 lines) and carries the
-      agent's banner on its FIRST line resolves, with the `bound … by tail evidence` marker.
-      This is the SIGPIPE regression test: with the `printf | grep -q` form it fails at rc 141
-      while every short-tail node stays green.
+- [ ] AC-3.16: A candidate whose tail is **large — ≥ 200 KB delivered in ≤ 2000 LINES** — and
+      carries the agent's banner on its FIRST line resolves, with the `bound … by tail evidence`
+      marker. This is the SIGPIPE regression test: with the `printf | grep -q` form it fails at
+      rc 141 while every short-tail node stays green.
+
+      **BYTES are the mechanism, LINES are the constraint, and the fixture must satisfy both.**
+      SIGPIPE fires on the ~64 KB pipe buffer, which is a byte threshold; Orca hard-caps
+      `.terminal.tail` at 2000 lines (spec AC-5.1, the design, and the comment at the pass all
+      state it), so a stub emitting 3000 lines models a state the real system cannot produce and
+      breaches the base invariant that a stub model what production consumes. The probe blocks
+      above used 3000 x 80 chars because they were measuring the PIPELINE, not standing in for
+      Orca — that shape is fine in a probe and wrong in a fixture. Build the fixture as
+      **1900 lines x ~126 chars ≈ 240 KB**: same byte size, same banner-on-line-1 layout, inside
+      the cap. Impl-plan audit v17 caught the mismatch.
 **Dependencies on other tasks**: Task 2 (must complete first)
 
 ---
@@ -727,7 +761,12 @@ ambiguity.
       ≥ 200 KB decoy whose tail carries the **RIVAL's banner FIRST** and the agent's banner **near
       the end**. `_orca_find` resolves to the clean candidate, with the stderr marker.
 
-      **The layout is the AC.** Measured 2026-09-01 on 240,068-byte tails, comparing the broken
+      **The layout is the AC, and so is the line count.** Build the decoy the same way AC-3.16
+      does — **≥ 200 KB in ≤ 2000 lines** (≈ 1900 x 126 chars), not 3000 short ones: Orca caps
+      `.terminal.tail` at 2000 lines, so a taller stub models a state production cannot emit.
+      The byte size is what drives the SIGPIPE; the line count is only how it is delivered.
+
+      Measured 2026-09-01 on 240,068-byte tails, comparing the broken
       pipeline form against the here-string form:
 
       | decoy layout | broken: wanted-check | broken: rival-check | fixed: both |
@@ -919,7 +958,8 @@ def test_os_evidence_pass_renumbered_to_four():
 **Description**: Design Implementation Order step 7. Every guard this feature introduces gets a
 mutation that stubs it to its permissive value, and each mutation carries a `test` node id so a
 kill is credited to the guard rather than to a crash, a timeout, or an unrelated assertion. The
-spec's `root` is **relative** (`"../.."`, spec-relative, resolving to the repository root), never
+spec's `root` is **relative** (`"../.."`, spec-relative, resolving from
+`h-mad/tests/mutation-specs/` to the `h-mad/` SKILL directory — NOT the repository root), never
 absolute — an absolute root measures whichever checkout it names rather than the one under test,
 and the pre-push anchor hook sweeps every tracked JSON, so a drifted or absolute anchor here
 blocks unrelated pushes.
@@ -1082,10 +1122,61 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_rival_rejected",
    "find": "      if [ -n \"$rival_re\" ] && grep -Eiq \"$rival_re\" <<<\"$tout\"; then",
    "replace": "      if [ -n \"$rival_re\" ] && printf '%s' \"$tout\" | grep -Eiq \"$rival_re\"; then"
+  },
+  {
+   "name": "tail-array-not-joined",
+   "_mechanism": "Drop the array branch so a multi-line tail is stringified instead of joined. The measured live shape IS an array, so this is the extraction T2 exists to pin.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_reads_array_tail",
+   "find": "              | if type == \"array\" then join(\"\\n\") else tostring end'",
+   "replace": "              | tostring'"
+  },
+  {
+   "name": "tail-empty-guard-dropped",
+   "_mechanism": "Remove `// empty`, so an envelope with no tail key yields null, `tostring` prints the literal \"null\", and jq exits 0 — a missing key becomes evidence. This is FR-4's bypass.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_missing_tail_key_returns_1",
+   "find": "    | jq -re '(.result.terminal.tail? // empty)",
+   "replace": "    | jq -re '(.result.terminal.tail?)"
+  },
+  {
+   "name": "timeout-default-dropped",
+   "_mechanism": "Remove the `:-2` fallback. `set -u` is on, so the first call in a shell that never exported the variable aborts the whole wrapper rather than reading a tail.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
+   "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
+   "replace": "  raw=\"$(_cmd_run --timeout \"$HMAD_TAIL_READ_TIMEOUT\" -- \\"
+  },
+  {
+   "name": "time-bound-removed",
+   "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against -- and AC-2.6's upper bound is the only thing that sees it, since the unbounded call still returns the right answer whenever the pane is healthy.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
+   "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
+   "replace": "  raw=\"$( \\"
+  },
+  {
+   "name": "harness-ambient-timeout-not-scrubbed",
+   "_mechanism": "Delete the scrub from the TEST harness. On a host exporting HMAD_TAIL_READ_TIMEOUT the child then inherits it, AC-2.5 never reaches the ${:-2} default, and a build that dropped the fallback entirely would pass. Killed only because AC-2.1b seeds an ambient value -- without that seed this mutation is unkillable, which is why the seed is an AC and not a test detail.",
+   "file": "tests/test_hmad_dispatch.py",
+   "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
+   "find": "    e.pop(\"HMAD_TAIL_READ_TIMEOUT\", None)",
+   "replace": "    pass"
   }
  ]
 }
 ```
+
+**Five of the mutations target T2's helper guards, and they are not green-at-RED proofs.** The
+proof column exists to discriminate nodes that pass before any code is written; these four nodes
+are RED: FAIL and need no such proof. They are mutated anyway because Task 6's own claim is that
+every new guard is stubbed to its PERMISSIVE value, and impl-plan audit v17 found five that were
+not: the array `join("\n")`, the independent `// empty`, the `${HMAD_TAIL_READ_TIMEOUT:-2}`
+default, the `_cmd_run` bound itself, and the harness's ambient-environment scrub. Each is an
+INDEPENDENT control — removing any one leaves the other four intact and the pass still resolving
+a healthy pane — so a whole-helper revert cannot stand in for them. The rows above name them,
+because the last time a mutation targeted a node whose proof column said `—`, the prose beside it
+still claimed no mutation targeted it (v10).
 
 **`wire-disconnect-callee-intact` and `wire-force-fire-after-pass0` are the base invariant's
 bidirectional connection requirement, and neither is covered by any other mutation here.**
@@ -1142,12 +1233,12 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-1.4 | `test_tail_stub_read_unset_preserves_legacy_behaviour` | RED: PASS | mut `stub-branch-ignores-env-var` |
 | AC-1.5 | `test_tail_stub_read_helpers_shape` | RED: FAIL | — |
 | AC-1.6 | `test_tail_stub_read_still_captures_argv` | RED: PASS | mut `stub-branch-above-capture` |
-| AC-2.1 | `test_tail_sig_reads_array_tail` | RED: FAIL | — |
+| AC-2.1 | `test_tail_sig_reads_array_tail` | RED: FAIL | also kills mut `tail-array-not-joined` |
 | AC-2.2 | `test_tail_sig_read_failure_returns_1` | RED: FAIL | — |
-| AC-2.3 | `test_tail_sig_missing_tail_key_returns_1` | RED: FAIL | — |
+| AC-2.3 | `test_tail_sig_missing_tail_key_returns_1` | RED: FAIL | also kills mut `tail-empty-guard-dropped` |
 | AC-2.4 | `test_tail_sig_argv_carries_cursor_and_limit` | RED: FAIL | — |
-| AC-2.5 | `test_tail_sig_timeout_default_when_env_unset` | RED: FAIL | — |
-| AC-2.6 | `test_tail_sig_times_out` | RED: FAIL | — |
+| AC-2.5 | `test_tail_sig_timeout_default_when_env_unset` | RED: FAIL | also kills muts `timeout-default-dropped`, `harness-ambient-timeout-not-scrubbed` |
+| AC-2.6 | `test_tail_sig_times_out` | RED: FAIL | also kills mut `time-bound-removed` |
 | AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
 | AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | — |
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
@@ -1180,13 +1271,13 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 nodes, T5's four included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
-of the module's 284 tests that have nothing to do with this feature
+of the module's 290 tests that have nothing to do with this feature
 (`test_wait_snapshots_the_full_buffer_not_a_tail`,
 `test_no_verdict_remedies_say_from_start_not_a_bigger_tail`), whose failure would be reported
 against this feature's guards. But the narrow `-k 'test_tail_'` was wrong too, and impl-plan audit
 v10 caught it: once `skill-md-frontmatter-renamed` was added, a mutation targeted
 `test_skill_md_frontmatter_unchanged`, and the paragraph here still claimed "no mutation targets
-them". The widened selector collects 0 of 284 today and adds no unrelated test, so it costs
+them". The widened selector collects 0 of 290 today and adds no unrelated test, so it costs
 nothing.
 
 **The audit's stated mechanism was wrong, and the distinction matters for anyone reading this
@@ -1393,3 +1484,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.11: Impl-plan audit v14 (codex) — the sharpest finding of the run is a SHAPE error 14 cycles old. Task 3 was declared new-behaviour while its deliverable includes the _orca_find -> _orca_tail_sig call site, so the wire-pin gate reported wiring=0 and the task bypassed WIRE/WIRE-PIN, the wire registry and the wire-specific RED failure-mode check - all while this same plan already carried wire-disconnect-callee-intact and wire-force-fire-after-pass0 as connection-direction mutants. The mutations asserted a wire the shape denied. T3 is now wiring with the pin named, and the gate reports wiring=1. The RED counts were derived as an AGGREGATE and called the dispatch inputs, but assemble_tdd cuts ONE task and takes THAT task's counts, so 27/11 would have halted every task on red_not_all_failing; a per-task loop is prescribed, and running it exposed a second defect the audit did not name - two rows still carried combined AC labels (AC-2.7, AC-2.8 and AC-5.2, AC-5.4), so the loop matched 35 of 37 and silently under-counted T2 and T5. SKILL.md:315's claim that Codex's banner scrolls off once it works is precisely what this feature falsifies; AC-5.5 added to amend and pin it (nodes 37->38).
 - v1.12: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
 - v1.13: Impl-plan audit v16 (codex) — SIX must-fixes, three of them defects in this plan's own test scaffolding rather than stale prose. `skill-md-frontmatter-renamed` was a FOURTH equivalent mutant: the test asserted `"name: h-mad" in fm`, and the mutant's `name: h-mad-renamed` still CONTAINS that substring, so the mutation would have scored `survived` against a guard that holds and ALL_CAUGHT would have been unreachable; asserted as a whole line now, verified with the prescribed replacement (substring True/True, whole-line True/False). Task 1's `_orca_read_dir` called `pathlib.Path(...)` while the module binds only `Path` via `from pathlib import Path` (verified in the live file), so following the block verbatim raised NameError before AC-1.5 tested anything. `_isolated_env` was prescribed as "not left to interpretation" while its body was a literal `...`; the extracted body is now spelled out, including `run()` in post-extraction form. That body also gained the `HMAD_TAIL_READ_TIMEOUT` pop AC-2.5 needs: `_isolated_env` copies the ambient environment and this feature INTRODUCES the variable, so on a host exporting it the default `${HMAD_TAIL_READ_TIMEOUT:-2}` is never reached and a regression dropping the fallback passes too. The time-bound contract was swept to `_cmd_run` and "no INVOCATION" across all four documents (nine sites; the nine that remain are descriptive — the ruling itself, one historical CLI measurement, and "which bounder"). Source-design citation corrected v1.12 -> v1.14 and the wire mutations named instead of placed.
+- v1.14: Impl-plan audit v17 (codex) — must 6 -> 3, and two of the three were consequences of work done OUTSIDE this feature. AC-3.16 required a >= 3000-LINE stub while Orca hard-caps .terminal.tail at 2000, so the fixture modelled a state production cannot emit; bytes are the SIGPIPE mechanism and lines are the constraint, so the fixture is now >= 200 KB in <= 2000 lines (~1900 x 126 chars) and AC-4.5 takes the same shape. The probe blocks keep their 3000 x 80 form because they were measuring the pipeline, not standing in for Orca. The carried "284 existing tests" was stale on four live sites: a SIGPIPE fix in the same wrapper from an unrelated lane (282a3a5, plus the agy-recovery and cmux-alive gates) added nodes to this module while the plan sat open — re-derived to 290 by collection, with the selector re-checked at 0/290 and 2/290. Five guard mutations were missing despite Task 6 claiming every new guard is stubbed to its permissive value: the array join, the independent // empty, the ${HMAD_TAIL_READ_TIMEOUT:-2} default, the _cmd_run bound, and the harness scrub (24 mutations now). AC-2.1 was too weak to pin the first of those — "contains both on separate lines" is satisfied by the bare `jq -r` the code comment warns against, since pretty-printed JSON prints array elements on separate lines too; asserted by equality on "alpha\nbeta\n" now. AC-2.5 gained an ambient parent-env seed, without which the harness-scrub mutation is unkillable — folded into the existing node rather than added as AC-2.1b, which would have moved every count in the 38-node table. Also: the helper's own comment still said timeout/gtimeout are "absent from this file" — a site the v16 sweep missed — Task 6's first `../..` statement said repository root where the second correctly says the h-mad skill dir, the SIGPIPE rationale described the pre-AC-3.16 state as current, and AC-2.6 said "ten trials" over eight listed timings.
