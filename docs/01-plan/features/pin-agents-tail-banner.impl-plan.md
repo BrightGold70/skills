@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.30)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.15, 16 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.32)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.17, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -208,7 +208,8 @@ _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
     agy)   printf '%s\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)*)\))?[[:space:]]*$)' ;;
     *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
   esac
-}```
+}
+```
 
 **Production file**: `h-mad/scripts/hmad-dispatch.sh`
 **Test file**: `h-mad/tests/test_hmad_dispatch.py`
@@ -821,7 +822,17 @@ status is `grep`'s alone.
       preview).
 - [ ] AC-3.4 (spec AC-2.1): Two candidates whose tails both match → `_orca_find` prints no handle
       from this pass and does **not** return non-zero from the pass itself; control reaches the
-      OS-evidence pass, asserted by the final `resolved to N candidates` diagnostic on stderr.
+      OS-evidence pass, asserted by the final `resolved to N candidates` diagnostic on stderr
+      **and by the ABSENCE of the `bound … by tail evidence` marker**.
+
+      **`N` in that diagnostic is the Pass-1/2 candidate count, NOT `tn`.** The existing message
+      at `hmad-dispatch.sh:620` is untouched by this feature and reports `$n`, so under this AC's
+      own fixture — two tail matches, nothing found by title or preview — it reads `resolved to 0
+      candidates` while two panes carried the signature. Assert the diagnostic's PRESENCE (the
+      fall-through was reached), never its number, or the assertion says something false about
+      which surface declined. Carrying `tn` into that message is deliberately NOT prescribed here:
+      it is the pre-existing pass's line, and changing it would put an unmutated, untested edit in
+      a task whose every guard is mutation-backed. Impl-plan audit v36.
 - [ ] AC-3.5 (spec AC-2.2): Zero matching candidates → declines the same way: no handle, fall
       through, same diagnostic. **Fixture: exactly one READABLE, non-matching candidate** — not
       zero candidates and not an unreadable one. Its proof is
@@ -1065,8 +1076,8 @@ a false ambiguity that suppresses a real resolution. The shared `$rival_re` comp
 is NOT reused here — it is `_agent_pv_re`, which matches prose 24/24; this pass builds its own
 `rival_tail_re` from `_agent_tail_re`, the same grammar as the wanted check (AC-4.6). The old
 sentence said `$rival_re` was reused unchanged, which contradicted this task's own code block and
-would have reproduced the false-negative. Impl-plan audit v30. For reference, the shared `$rival_re` remains unchanged and is still used by Passes 1-2; only this pass substitutes `rival_tail_re`. `$rival_re`
-in `_orca_find` and is unchanged FOR PASSES 1-2; this pass does not use it. Pass 2 applies the identical predicate to `.preview`, so
+would have reproduced the false-negative. Impl-plan audit v30. The shared `$rival_re` computed in `_orca_find` is unchanged and still
+used by Passes 1-2; only this pass substitutes `rival_tail_re`. Pass 2 applies the identical predicate to `.preview`, so
 this is that rule extended to the new evidence surface rather than a new rule.
 
 The rejection is placed after the signature match and before the append, and it must run even
@@ -1349,8 +1360,8 @@ def test_os_evidence_pass_renumbered_to_four():
 **Test file**: `h-mad/tests/test_hmad_dispatch.py` (the tests the spec's mutations must kill)
 **Task shape**: `new-behaviour`
 
-**Description**: Design Implementation Order step 7. Every guard this feature introduces gets a
-mutation that stubs it to its permissive value, and each mutation carries a `test` node id so a
+**Description**: Design Implementation Order step 7. Every guard in the enumerated mutation table
+below gets a mutation that stubs it to its permissive value, and each mutation carries a `test` node id so a
 kill is credited to the guard rather than to a crash, a timeout, or an unrelated assertion. The
 spec's `root` is **relative** (`"../.."`, spec-relative, resolving from
 `h-mad/tests/mutation-specs/` to the `h-mad/` SKILL directory — NOT the repository root), never
@@ -1977,7 +1988,11 @@ false half is recorded so the next reader does not re-derive it.
    `cn == 1` with `lsof` present already resolves today via OS evidence, so a careless positive
    test passes with the whole feature reverted. AC-3.6, AC-3.7, AC-3.9, AC-3.10 and AC-3.13 exist
    to be immune to that.
-2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_find`, then
+2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_identity`
+   (**24 of 290 collected** — assert a non-zero collected count, because pytest exits 5 on an
+   empty selection and a zero-collection step measures nothing while looking like a pass; the
+   selector here was `-k orca_find` until v1.34 and collected 0/290, and no planned node name
+   contains `orca_find`), then
    `pytest h-mad/tests/test_hmad_dispatch.py -q -k test_tail_`, then the full `pytest` (testpaths
    now cover `handoff/scripts`), then `h_mad_mutation_harness.py` on the new spec, then
    `--check-anchors` under bash — never zsh.
@@ -2059,3 +2074,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.31: Impl-plan audit v34 (codex) — must 4 -> 3; the RED table, the 37-mutation JSON and the 290-node module all re-derived correctly again. Two mutation-discrimination defects, both introduced by earlier re-anchoring. `entry-gated-on-n-eq-0` had been re-anchored at v1.28 onto the `local` line with `[ "$n" -eq 0 ] || return 1`, which ABORTS `_orca_find` and suppresses the OS-evidence pass behind it — so the mutant could be killed by the forbidden early return rather than by the wrong entry condition, which is the mechanism its own rationale describes. It now neutralises only this pass's matcher and preserves fall-through. And the two per-arm AGY mutants were pinned to `test_tail_pass_prose_mentioning_agent_does_not_resolve`, whose fixture is Codex-only by construction (AC-3.17 uses an OpenAI Codex banner and Codex prose), so an AGY-arm mutation would have SURVIVED its designated test and ALL_CAUGHT been unreachable; all three grammar mutants now target AC-2.12's node, which is where the per-agent corpus lives. Third: design v1.29's history claimed Implementation Order and API had been updated for `_agent_tail_re` and they had not — step 1 still shipped only `_orca_tail_sig` while step 2 consumed the missing matcher, and the API section still said 'One new private shell function'. Both fixed, plus the helper's interface block. That is the fourth instance of a history entry claiming a back-propagation the body did not receive.
 - v1.32: Impl-plan audit v35 (codex) — must 3 -> 2, third consecutive drop, and the RED table (45/32/13), the 37-mutation JSON and the 290-node module re-derived correctly for the third cycle running. Both findings are real defects in code this plan prescribes. `_agent_tail_re "$rival"` expanded an UNBOUND variable: `_orca_find` owns `rival_re`, a regex built for Pass 1, and nothing holds the rival's NAME — under the wrapper's `set -euo pipefail` (line 5, verified) the first candidate carrying the wanted signature would abort `_orca_find` instead of performing rival rejection. Introduced at v1.25 when the rival check moved to the tail grammar and unnoticed for ten cycles. T4 now extends the existing case with `rival=agy` / `rival=codex`, and an empty token falls to the `*)` arm rather than aborting. Second: the launch-line mutants REPLACED their arm wholesale, so the kill came from the node's positive controls failing — an accidental kill that proves nothing about launch-line rejection. Both are additive now (full grammar preserved, `|^<agent> .--dangerously` appended) and pinned to AC-3.2's node, which exercises both agents; the corpus node keeps the three prose mutants. Also: `wire-wanted-matcher-disconnected`'s mechanism still described AC-3.17's old prose-only fixture, and the spec and design still implied the grammar is layered ON TOP of `_agent_pv_re` rather than being independent literals.
 - v1.33: Design pass 2026-09-02, chosen by the operator over a 36th audit cycle: 20 cycles had never reached must=0 and the residual class was one grammar restated as a flat list on five surfaces across three documents. Two real defects fell out of writing it down once. (1) THE MATCH IS CASE-INSENSITIVE AND NO DOCUMENT SAID SO. The literals are lowercase, every real banner is capitalised, and every call site uses `grep -Eiq`; measured 2026-09-02 by running the plan's own block over the full corpus, a case-sensitive `grep -E` still declines 24/24 negatives but declines 9 of the 12 POSITIVES too — only the three all-lowercase controls survive. The decline half of the corpus cannot see the error, and AC-2.11's `grep -E` (a syntax check) reads as the match contract. (2) THE CONTINUATIONS ARE PER-ARM, and the flat list was wrong on three of five rows: the `model:` field and the `·`-plus-cwd are codex-only, the effort/version parenthetical is agy-only. Durable half: the `_agent_tail_re` block in impl-plan Task 2 is the single normative statement, design carries the one per-arm description, and plan/spec/AC-3.17 now POINT at it instead of restating it. AC-2.12 now names `grep -Ei`, AC-2.11 says explicitly that it covers syntax only, the code-block comment carries the per-arm and fold rules, and AC-3.17's Group B stops re-listing the continuations. No mutation anchor targets the comment prose (verified: 0 of 37 finds).
+- v1.34: Impl-plan audit v36 (codex) — all 6 findings applied; both musts independently re-measured before acting. MUST 1: Task 2's normative `_agent_tail_re` block was not a valid fence — `}` and the closing backticks shared one line, so the ```sh fence opened at :173 stayed open to :308 and swallowed the production/test fields and the run_fn Python as shell. Confirmed by parity: 27 fence lines (odd) before, 28 after; the block re-extracts and re-measures 24/24 + 12/12 under grep -Ei. MUST 2: verification prescribed `pytest -k orca_find`, which collects 0 of 290 (pytest exits 5 on an empty selection, so the step measured nothing and looked like a pass) and no planned node name contains orca_find; replaced on BOTH surfaces with `-k orca_identity` (24/290 collected, measured) plus an explicit non-zero-collection assertion. Provenance corrected to design v1.32 / spec v1.17 — the plan already depended on the design pass's case-fold and per-arm rules while citing revisions that predate them. Task 6's boundary promise narrowed to the enumerated table it already narrows to later. AC-3.4 now says N in the fall-through diagnostic is the Pass-1/2 count, NOT tn — under its own fixture it reads 'resolved to 0 candidates' while two panes carried the signature — so the assertion is on the diagnostic's PRESENCE plus the absence of the tail-evidence marker; carrying tn into that pre-existing line is deliberately not prescribed. Nit: the spliced $rival_re sentence in T4 (same edit-collision shape the design pass fixed). Re-verified after: WIREPIN PASS tasks=6 wiring=2, 37 mutation finds intact, test_hmad_dispatch.py 290 passed.

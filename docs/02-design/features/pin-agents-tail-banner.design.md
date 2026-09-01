@@ -410,7 +410,9 @@ resolution, or it merely restates Pass 0.
 
    This is not ceremony here: `cn == 1` with `lsof` present already resolves today, so a
    carelessly written test passes with the whole feature reverted.
-2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_find`, then
+2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_identity`
+   (24 of 290 collected; assert the count is non-zero — `-k orca_find` collected 0/290 and
+   pytest exits 5 on an empty selection, so the step measured nothing), then
    the full `pytest`, then `h_mad_mutation_harness.py` on the new spec, then
    `--check-anchors` under bash (never zsh — it does not word-split the candidate list).
 3. **Live check — it must exercise THIS pass, not merely succeed.** `hmad-dispatch env`
