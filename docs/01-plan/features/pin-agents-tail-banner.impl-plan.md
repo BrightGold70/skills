@@ -1268,6 +1268,17 @@ invariant is satisfied without a contract edit.
   # control gets here.
 ```
 
+**Third site — the Codex fallback sentence.** `hmad-dispatch.sh:513` reads "Codex therefore
+skips Pass 1 entirely and relies on the preview signature or, properly, on a pin/launch." That
+enumeration is exhaustive by construction and this feature adds a term to it — the tail signature
+is precisely the evidence Codex now falls back to when the preview has decayed, which is the case
+the whole feature exists for. Impl-plan audit v39 (agy).
+
+```sh
+  #     Codex therefore skips Pass 1 entirely and relies on the tail signature
+  #     (Pass 3), on the preview signature, or, properly, on a pin/launch.
+```
+
 **Second site — same edit, exact code.** `hmad-dispatch.sh:1046`, the cross-reference from
 `_orca_handle_live`'s neighbourhood to that same pass. AC-5.1 asserts it and the description names
 it, but it had no prescribed block until v1.35; renumbering one site and not the other leaves the
@@ -1370,6 +1381,11 @@ def test_os_evidence_pass_renumbered_to_four():
     # The second site the design's Components table does not name.
     assert "`_orca_find` Pass 3 already" not in src
     assert "`_orca_find` Pass 4 already" in src
+    # Third site: the Codex fallback enumeration, which this feature adds a term
+    # to. Positive AND negative, for the same reason as the sentence above — a
+    # deletion would satisfy `not in` alone while losing the enumeration.
+    assert "relies on the preview signature" not in src
+    assert "relies on the tail signature" in src
 ```
 
 **Acceptance Criteria**:
@@ -1450,6 +1466,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
  "mutations": [
   {
    "name": "drop-cursor-0",
+   "_mechanism": "Drop `--cursor 0` from the read argv so the request returns the RETAINED VIEWPORT instead of the oldest retained scrollback. The banner this feature exists to find has already scrolled off the viewport, so the pass would read a tail that cannot contain it. Killed by `test_tail_sig_argv_carries_cursor_and_limit`, which asserts on the captured argv rather than on a resolution \u2014 a resolution assertion would pass whenever the banner happened to be in view.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_argv_carries_cursor_and_limit",
    "find": "--cursor 0 --limit 4000 --json",
@@ -1465,6 +1482,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "local-masks-helper-rc",
+   "_mechanism": "Change `if tout=\"$(\u2026)\"` to `if local tout=\"$(\u2026)\"`. In bash `local` returns ITS OWN status, so the helper's non-zero rc is masked and an unreadable pane is treated as readable with an empty tail. Killed by `test_tail_pass_call_form_is_source_pinned`, which pins the call FORM in source rather than a behaviour, because the masked rc is invisible from outside whenever the tail is empty for legitimate reasons too.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_call_form_is_source_pinned",
    "find": "    if tout=\"$(_orca_tail_sig \"$th\")\"; then",
@@ -1472,6 +1490,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "resolve-on-ge-1",
+   "_mechanism": "Relax the uniqueness gate from `-eq 1` to `-ge 1`, so the pass resolves to the FIRST of several matching candidates instead of declining on ambiguity. Killed by `test_tail_pass_two_matches_declines`. This is the wrong-pane direction of FR-2: a wrong-but-live handle passes every liveness check afterwards.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_two_matches_declines",
    "find": "  if [ \"$tn\" -eq 1 ]; then",
@@ -1519,6 +1538,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "drop-rival-rejection",
+   "_mechanism": "Replace the rival-rejection condition with `if false`, so a pane demonstrably running the OTHER agent is counted as a candidate. Killed by `test_tail_pass_rejects_rival_signature`. Distinct from the wire mutations on the assignment line: this one leaves `rival_tail_re` correctly computed and disables only its USE.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
    "find": "      if [ -n \"$rival_tail_re\" ] && grep -Eiq \"$rival_tail_re\" <<<\"$tout\"; then",
@@ -1526,6 +1546,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "pool-whole-listing",
+   "_mechanism": "Iterate the whole `$listing` instead of `$scoped`, so candidates outside the current worktree enter the pool. Killed by `test_tail_pass_pool_is_scoped`. The failure is silent and cross-worktree: a stranger's pane resolves and every later dispatch goes to it.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_pool_is_scoped",
    "find": "$(printf '%s' \"$scoped\" | jq -r '.result.terminals[]?.handle')",
@@ -1541,6 +1562,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "marker-to-stdout",
+   "_mechanism": "Drop the `>&2` from the resolution marker so the human-readable line joins the handle on stdout. Killed by `test_tail_pass_stdout_is_bare_handle`. `_orca_find`'s stdout is a machine contract consumed by `_resolve_target`; a marker there corrupts the handle for every caller.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_stdout_is_bare_handle",
    "find": "    echo \"[H-MAD] $token: bound $tail_h by tail evidence\" >&2",
@@ -1548,6 +1570,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "entry-gated-on-n-eq-0",
+   "_mechanism": "Neutralise the matcher unless the title/preview passes found nothing (`[ \"$n\" -eq 0 ] || tail_re='__IMPOSSIBLE_\u2026'`), which is the entry condition the pass must NOT have \u2014 an AMBIGUOUS title (n>1) is exactly the case this feature exists to resolve. Killed by `test_tail_pass_runs_on_ambiguous_title`. Deliberately neutralises only this pass's matcher and preserves fall-through: an earlier form used `|| return 1`, which aborted `_orca_find` and let the kill be credited to the forbidden early return rather than to the wrong entry condition (impl-plan audit v34).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_runs_on_ambiguous_title",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
@@ -1555,6 +1578,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "wire-disconnect-callee-intact",
+   "_mechanism": "Remove the `_orca_tail_sig` CONNECTION while leaving the callee and its own tests intact (`if tout=\"\"; then`). Killed by `test_tail_pass_resolves_single_vendor_banner`: with no tail read, nothing carries a signature and the resolution the feature exists for never happens. The disconnect direction of the T3 wire; `wire-force-fire-after-pass0` is its force counterpart.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_resolves_single_vendor_banner",
    "find": "    if tout=\"$(_orca_tail_sig \"$th\")\"; then",
@@ -1562,6 +1586,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "wire-force-fire-after-pass0",
+   "_mechanism": "Force the tail pass to run even when Pass 0 already resolved exactly one handle (`if false && by_pane=\u2026`). Killed by `test_tail_pass_not_run_when_pass0_resolves`, which asserts on `HMAD_STUB_CAPTURE` containing zero `terminal read` calls \u2014 asserting on the resolution instead would pass with the whole feature reverted, since Pass 0 resolves the same handle either way.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_not_run_when_pass0_resolves",
    "find": "  if by_pane=\"$(_orca_find_by_pane \"$token\" \"$scoped\" \"$scope_wt\")\" && [ -n \"$by_pane\" ]; then",
@@ -1585,6 +1610,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "stub-branch-swallows-terminal-list",
+   "_mechanism": "Widen the stub's read branch to match on `$1` alone, so `terminal list` is also swallowed by the per-handle read fixture. Killed by `test_tail_stub_read_dir_does_not_capture_terminal_list`. A stub that answers the wrong verb makes every downstream pool assertion measure the fixture instead of the code.",
    "file": "tests/stubs/orca",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_dir_does_not_capture_terminal_list",
    "find": "if [ \"${1:-}\" = \"terminal\" ] && [ \"${2:-}\" = \"read\" ] && [ -n \"${HMAD_STUB_ORCA_READ_DIR:-}\" ]; then",
@@ -1592,6 +1618,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "stub-branch-ignores-env-var",
+   "_mechanism": "Drop the `HMAD_STUB_ORCA_READ_DIR` guard so the new branch fires unconditionally, breaking every existing test that relies on the legacy stub path. Killed by `test_tail_stub_read_unset_preserves_legacy_behaviour` \u2014 the node that proves T1 is additive rather than a replacement.",
    "file": "tests/stubs/orca",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_unset_preserves_legacy_behaviour",
    "find": "&& [ -n \"${HMAD_STUB_ORCA_READ_DIR:-}\" ]; then\n  _h=\"\"",
@@ -1599,6 +1626,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "stub-branch-above-capture",
+   "_mechanism": "Delete the argv capture (`printf 'orca %s' \"$*\" >> $HMAD_STUB_CAPTURE` -> `true`), which is what an implementer does by placing the new branch ABOVE the capture line. Killed by `test_tail_stub_read_still_captures_argv`. Without the capture, every argv-based assertion in this plan silently measures nothing.",
    "file": "tests/stubs/orca",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_still_captures_argv",
    "find": "printf 'orca %s\\n' \"$*\" >> \"${HMAD_STUB_CAPTURE:-/dev/null}\"",
@@ -1630,6 +1658,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "tail-re-widened-to-launch-line",
+   "_mechanism": "ADDITIVELY widen the codex arm with `|^codex .--dangerously`, preserving the whole valid banner grammar, so only the launch-line rejection is lost. Killed by `test_tail_pass_launch_command_alone_does_not_resolve`, whose AC exercises both agents. The pre-v1.32 form replaced the arm wholesale and was killed by the node's POSITIVE controls failing \u2014 an accidental kill that proved nothing about launch-line rejection (impl-plan audit v35).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
@@ -1637,6 +1666,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "tail-sig-fabricates-banner-on-failure",
+   "_mechanism": "Make the helper print a plausible banner and return 0 on a failed read. Killed by `test_tail_pass_all_unreadable_declines`. This is the one FR-4 direction that is UNSAFE: a missing key, a non-zero exit and an unreadable pane all decline, but a FABRICATED tail resolves \u2014 and resolves to whatever handle the failed read happened to name.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_all_unreadable_declines",
    "find": "  [ \"$rc\" -eq 0 ] || return 1",
@@ -1644,6 +1674,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "skill-md-frontmatter-renamed",
+   "_mechanism": "Rename the skill's frontmatter `name:` key, which the T5 documentation edits sit beside. Killed by `test_skill_md_frontmatter_unchanged`. It exists so the doc-surface task cannot silently damage the skill's identity while editing prose in the same file.",
    "file": "SKILL.md",
    "test": "tests/test_hmad_dispatch.py::test_skill_md_frontmatter_unchanged",
    "find": "name: h-mad",
@@ -1651,6 +1682,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "signature-check-not-enforced",
+   "_mechanism": "Turn the wanted-signature filter into a no-op (`|| true` instead of `|| continue`), so a READABLE but non-matching candidate enters `tail_ids`. Killed by `test_tail_pass_zero_matches_declines`, whose fixture is deliberately ONE readable non-matching candidate: with the filter dropped, `tn` becomes 1 and the pass resolves observably WRONG. It replaced `resolve-on-ge-0`, which was a crash mutant \u2014 with `tn=0` the relaxed branch aborts under `set -euo pipefail`, and a kill credited to an abort proves the code breaks when broken and nothing about the property.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_zero_matches_declines",
    "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
@@ -1658,6 +1690,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "wanted-check-back-to-pipeline",
+   "_mechanism": "Revert the wanted check from a here-string to `printf \u2026 | grep -Eiq`. Under the wrapper's global `set -o pipefail` a MATCH exits grep early, the upstream printf takes SIGPIPE, and the pipeline returns 141 \u2014 so a candidate that DOES carry the signature is skipped. Killed by `test_tail_pass_long_tail_early_signature_resolves`, whose fixture puts the signature at line 1 of a long tail, which is the only shape that triggers it. Pinned to AC-3.16, a RED: FAIL node, so it is a long-tail guard discriminator rather than a green-at-RED proof.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_signature_resolves",
    "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
@@ -1665,6 +1698,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "rival-check-back-to-pipeline",
+   "_mechanism": "The mirror of the above on the rival check: a pipeline there returns 141 on a MATCH, so a candidate carrying the RIVAL's signature fails its rejection test and is COUNTED. Killed by `test_tail_pass_long_tail_early_rival_rejected`. Pinned to AC-4.5, also a RED: FAIL node. Both directions are needed because the two checks fail in opposite ways from the same cause.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_rival_rejected",
    "find": "      if [ -n \"$rival_tail_re\" ] && grep -Eiq \"$rival_tail_re\" <<<\"$tout\"; then",
@@ -2139,3 +2173,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.35: Impl-plan audit v36 (agy, SECOND surface, dispatch rc=124 at the 1500s bound with no end sentinel — report structurally complete but completeness UNVERIFIED, and it audited v1.33). All 3 findings verified against the document and applied. MUST: T5 named a SECOND renumber site (hmad-dispatch.sh:1046, the cross-reference from _orca_handle_live's neighbourhood) and AC-5.1 asserts it, but the Code structure block prescribed only :574 — renumbering one and not the other leaves the file calling two different passes 'Pass 3'. Exact code for the second site added. SHOULD: rival_tail_re was computed INSIDE the candidate loop although $rival is constant across candidates — hoisted above the loop beside tail_re (the local declaration at T3 already covers it), and the two mutations anchored on that line were re-anchored to its new indentation IN THE SAME EDIT, since an anchor left at the old two-space-deeper form matches 0 times and the harness REFUSES rather than measuring. NIT: 4 regex mutations replaced a 4-space case arm with a 6-space one; indentation normalised, 0 mismatches remain across all 36 find/replace pairs. Re-verified: fence parity 30 (even), the embedded JSON still parses, 37 finds intact, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12 under grep -Ei.
 - v1.36: Impl-plan audit v37, BOTH surfaces on the same bytes (codex must=2 should=1, agy must=1 should=0), both completed runs with end sentinels. The blocking finding is MINE and both surfaces found it independently: v1.35's hoist put rival_tail_re="$(_agent_tail_re "$rival")" in the Pass-1 case block, and T3 later runs `local tail_re rival_tail_re …` — in bash a local re-declaration RESETS the name, so the value was wiped before the tail pass read it, [ -n "$rival_tail_re" ] was false for every candidate, rival rejection NEVER fired, and nothing errored. AC-4.1/4.3/4.4/4.5 could not pass under the prescribed code. Controlled probe run twice: assignment then `local` prints [COMPUTED] then []. The v36 (agy) finding only asked the assignment to leave the LOOP; moving it out of the tail pass entirely was the over-correction. It now sits immediately below T3's local and above the loop — once per call, no local crossed — and the mutation anchors are unaffected because the line's text and indentation are unchanged. Second must (codex): the rival wire had NO force-direction connection mutation — wire-rival-matcher-disconnected and rival-re-prose-unsafe both REMOVE the _agent_tail_re call, so neither proved its result is USED; added wire-rival-matcher-forced-empty on the shared anchor (call kept, result discarded, universal matcher installed -> every candidate rejected pre-count), pinned to test_tail_pass_rival_prose_does_not_suppress, mirroring wire-wanted-matcher-forced-empty. 37 -> 38 mutations; no live count statement in the body needed sweeping. Should: the second Pass-3-to-Pass-4 cross-reference site (:1046) back-propagated to the design's Components table, which named only the pass header. Nit: the ungrammatical 'Same predicate Pass 2 applies NOT the shared' comment fragment. Re-verified: fence parity 34 (even), embedded JSON parses, 38 finds, 0 indent mismatches, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
 - v1.37: Impl-plan audit v38, both surfaces on the same bytes (v1.36): agy GATE PASS must=0 should=0 — the first clean verdict since the design pass — and codex must=0 should=2. MUST IS NOW 0 ON BOTH SURFACES; the disagreement is entirely shoulds, and codex breaking agy's clean is the fifth time that has happened on this branch, which is why one pass is never the gate. Both shoulds verified true and applied: the header still cited design v1.32 after the v38 back-propagation took the design to v1.33 (my own drift, one cycle old), and plan.md attributed the direct 24/12 matcher corpus to AC-3.17 when v1.30 moved it to AC-2.12 — AC-3.17 is the caller-connection node with a mixed fixture, so the stale pointer sent verification to the wrong test surface. Both nits also closed: T4's context block now reproduces T3's three comment lines verbatim so the context matches the source file (agy), and the misleading node name test_tail_pass_prose_mentioning_agent_does_not_resolve is documented as historical and deliberately NOT renamed (codex) — since v1.30 it asserts a successful resolution over a prose decoy, but the id is referenced by the RED table, four mutation test pins and two WIRE-PINs, so a rename is churn across five surfaces where a miss silently un-pins a mutation. Re-verified: fence parity 34 (even), JSON parses, 38 finds, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
+- v1.38: Impl-plan audit v39 (agy) — must=1 should=1, and agy's OWN v38 clean broke one cycle later, which is the agreement-is-not-a-stopping-signal rule demonstrated on a single surface rather than across two. MUST: AC-6.12 … AC-6.20 requires each of nine mutations to carry a mechanism line naming the node its proof column claims, and the embedded spec omitted the key entirely for those nine. Measured: 18 of 38 entries had no _mechanism at all. All 18 written, not just the nine the AC names, each naming its pinned test node and what the mutation removes — the AC's nine are covered and the other nine predated the convention. Verified after: 38/38 entries carry _mechanism, and every one of the new 18 names its own test node. SHOULD: hmad-dispatch.sh:513 reads 'Codex therefore skips Pass 1 entirely and relies on the preview signature or, properly, on a pin/launch' — an exhaustive enumeration that this feature adds a term to, since the tail signature is exactly what Codex falls back to once the preview has decayed. Added as T5's THIRD documentation site with exact code, plus positive AND negative assertions in AC-5.1's test block (a deletion satisfies the negative alone). Re-verified: fence parity 36 (even), JSON parses at 38 mutations, WIREPIN PASS tasks=6 wiring=2, corpus 24/24 + 12/12.
