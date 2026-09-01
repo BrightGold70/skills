@@ -1,6 +1,6 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.16)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.18)
 > Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.8, 15 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
@@ -1024,6 +1024,10 @@ def test_os_evidence_pass_renumbered_to_four():
     assert "Pass 4 (J18)" in src
     assert "Pass 3 (J18)" not in src
     assert "Reached only when every pass above found nothing" not in src
+    # Positive assertion, not only the negative one: deleting the false sentence
+    # outright also satisfies `not in`, and the task contract is a CORRECTION,
+    # not a removal. Impl-plan audit v22.
+    assert "Reached when no pass above resolved exactly one handle" in src
     # The second site the design's Components table does not name.
     assert "`_orca_find` Pass 3 already" not in src
     assert "`_orca_find` Pass 4 already" in src
@@ -1490,13 +1494,16 @@ false half is recorded so the next reader does not re-derive it.
       `"../.."` after the restore — and finish with `git diff --stat` on the spec empty. A
       hand-edit to a JSON file can also leave it unparseable, which fails the test for a reason
       that has nothing to do with `root`. See AC-2.8.
-- [ ] AC-6.12 … AC-6.20: one mutation per node that is green at RED, each named in the
-      §"Test-name contract" proof column — `stub-branch-swallows-terminal-list`,
-      `stub-branch-ignores-env-var`, `stub-branch-above-capture`,
-      `tail-re-widened-to-launch-line`, `signature-check-not-enforced`, `tail-sig-fabricates-banner-on-failure`,
-      `skill-md-frontmatter-renamed`, plus the two that revert the here-string guard —
-      `wanted-check-back-to-pipeline` and `rival-check-back-to-pipeline`. Nine mutations for
-      nine AC numbers. Each must be `caught`, and its `mechanism:` line must name
+- [ ] AC-6.12 … AC-6.20: nine mutations for nine AC numbers, of TWO kinds — the distinction
+      matters because only the first kind is a green-at-RED proof. **Seven proofs**, one per node
+      that is green at RED, each named in the §"Test-name contract" proof column:
+      `stub-branch-swallows-terminal-list`, `stub-branch-ignores-env-var`,
+      `stub-branch-above-capture`, `tail-re-widened-to-launch-line`, `signature-check-not-enforced`,
+      `tail-sig-fabricates-banner-on-failure`, `skill-md-frontmatter-renamed`. **Plus two
+      independent SIGPIPE guard mutations**, `wanted-check-back-to-pipeline` and
+      `rival-check-back-to-pipeline`, which revert the here-string form and are pinned to
+      AC-3.16 and AC-4.5 — both RED: FAIL nodes, so they are not proofs of anything being
+      legitimately green; they exist because a long-tail guard has no other discriminator. Each must be `caught`, and its `mechanism:` line must name
       the node the proof column claims — a kill by any other test means the mutation proves
       nothing about that node.
 
@@ -1612,10 +1619,15 @@ false half is recorded so the next reader does not re-derive it.
       separate re-read confirming the restore landed — the same rule AC-2.8 applies to tracked
       files.
 
-      Then `hmad-dispatch pin-agents --clear`, and **assert the mutation landed by re-reading
-      the file it was supposed to remove** — `hmad-dispatch env` prints the path, so record it
-      and check its absence, or that it names neither agent, in a separate read. Also confirm no
-      `HMAD_ORCA_*_TERMINAL` is exported.
+      **SEED the isolated file before clearing it.** A fresh `mktemp` path names a file that
+      does not exist, so running `--clear` and then observing absence proves nothing: the same
+      observation holds if the clear path is broken, or never ran at all. That is a verification
+      of a NO-OP dressed as a mutation check — the exact failure this step was rewritten to
+      avoid, reintroduced by the isolation fix itself. Impl-plan audit v22. So: write known dummy
+      pins into the isolated file (both agents, recognisable handles), re-read it and confirm
+      they are THERE, then `hmad-dispatch pin-agents --clear`, then re-read again and confirm
+      those specific handles are GONE. Absence is only evidence when presence was established
+      first. Also confirm no `HMAD_ORCA_*_TERMINAL` is exported.
       The env check alone is not sufficient and was the v1.8 wording: `--clear` mutates the pin
       *file*, and a pin surviving there short-circuits resolution exactly as an exported variable
       would — verifying a different surface from the one you changed is the mutation-verification
@@ -1649,3 +1661,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.16: Impl-plan audit v19 (codex) — must went UP, 3 -> 5, and the first was self-inflicted: v1.15 removed AC-2.6's >= 0.5 s lower bound in the opening and left the trailing paragraph asserting "0.5 still rejects an instant return, which is the only thing the lower bound is for". Two mutually exclusive instructions in one AC; the later one reinstates the bound that the same AC proves rejects correct code. AC-2.6 is rewritten around a FUNCTION SEAM: shadow _cmd_run in the strip-main harness and assert the recorded argv carries --timeout 1 under the override and --timeout 2 unset. That is deterministic where the < 1.5 s threshold was not -- scheduler delay can push a correct --timeout 1 run past it -- and it kills timeout-override-ignored, timeout-default-dropped and time-bound-removed without any timing at all; the loose < 2.5 s bound stays as a second witness of the last. TWO safety gaps closed. _orca_tail_sig accepted an exit-0 `ok:false` envelope: rc and key-presence both read fine, so neither AC-2.2 nor AC-2.3 covered it, and a stale banner inside a FAILED read would have become identity evidence -- the one FR-4 direction that RESOLVES rather than declines. The .ok gate goes in first (verified: a real terminal read --json carries top-level ok:true, and _cmd_worktree_rm already guards this F11 class at :1639), with AC-2.9 and envelope-ok-false-accepted. And test_skill_md_frontmatter_unchanged enforced only half its contract -- `any(startswith("description:"))` accepts an EMPTY description and any rewrite -- now pinned to the exact opening and a length floor, with skill-md-description-reworded to discriminate it. 27 mutations. The three manual mutate-and-restore procedures (AC-2.8, AC-5.4, AC-6.11) now require a re-read of the FILE after the edit and after the restore plus an empty git diff --stat: observing a test flip proves the test reacts to something, not that the file holds what you think, and a silent no-op or a failed restore looks identical to success. Source plan: Convention Prerequisites still said "confirm each new test fails against the unfixed wrapper" -- a blanket RED that would trigger step5d:red_not_all_failing -- while v1.7's history claimed the rule had been back-propagated out. The claim was in the changelog and the instruction was still in the body. AC-2.9 adds a node, so the counts were re-derived from the authoritative rows, not edited: 28 FAIL / 11 PASS over 39, T2 7/1, swept through the per-task list, the derivation comment, the plan and the design.
 - v1.17: Impl-plan audit v20 (codex) — all three must-fixes were consequences of v1.16's own edits. Adding the `.ok` gate changed the filter's opening line, and `jq-r-not-jq-re` and `tail-empty-guard-dropped` still anchored on the OLD prefix: both would have matched ZERO times after implementation, which is silent — an anchor that matches nothing reports its guard as enforced. Re-anchored (the first onto the new `jq -re 'if ...` opening, the second onto the inner `else (...) end`), and a check now exists that resolves every mutation's `find` against the prescribed helper body; it passes 10/10 for the helper anchors, the two misses being the `_orca_find` and Python-harness mutations, which live elsewhere by design. The count sweep was also incomplete: `all 38`, `38 total nodes`, `sees all 38` and `verified to return 38 / 11 / 27` survived three phrasing variants my greps did not cover. Second safety gap of the same family as AC-2.9: `else tostring` accepted every non-null non-array payload, so a malformed tail merely CONTAINING a banner became identity evidence — `else empty` now, with AC-2.10 and `non-array-tail-accepted` (28 mutations). The `.ok` rule and the exact extraction are back-propagated to the design, FR-4 is explicit in the spec as AC-4.4 (neither case reads as an error to the checks that catch the rest: rc is 0 and the key is present), and the source-design citation is corrected. Two stale `_mechanism` strings still described the `< 1.5 s` window the v1.16 seam replaced. Counts re-derived, not edited: 29 FAIL / 11 PASS over 40, T2 8/1, spec 15 ACs.
 - v1.18: Impl-plan audit v21 (codex) — a SIXTH equivalent mutant, and v1.17 created it. Changing the type branch to `else empty` made `tail-empty-guard-dropped` behaviourally identical to the unmutated filter: a null from an absent key is discarded at the type branch whether or not `// empty` catches it first. Verified as a controlled pair on four inputs (missing key, array tail, string tail, ok:false) — byte-identical output and rc 4/0/4/4 both ways. The mutation is removed rather than re-anchored, `// empty` is now documented as defence in depth rather than an independently pinned guard, and the claim that it was one is corrected in the plan and the design (27 mutations). The count sweep missed a FIFTH time — `# 38  total nodes` annotating the very command that returns 40, and a worked example feeding `27/11`. Design was stale on two cross-document surfaces: its Components table still said 14 ACs and its Test Plan had no row for spec v1.8's AC-4.4; both fixed. Two should-fixes taken: the live check now runs against an ISOLATED HMAD_ORCA_PIN_FILE, because clearing the repository's real pin file destroys the operator's live coordinator and agent pins to verify a feature that has nothing to do with them; and AC-3.6's fixture must blind Passes 1 and 2, or `wire-force-fire-after-pass0` survives — with Pass 0 forced to fall through, a matching title or preview resolves before the tail pass and no `terminal read` is ever issued, so the mutant passes the assertion written to catch it.
+- v1.19: Impl-plan audit v22 (codex) — must 3 -> 1, and the one is v1.18's own isolation fix verifying a NO-OP. `HMAD_ORCA_PIN_FILE="$(mktemp -d)/orca-pins.env"` names a file that does not exist, so running `pin-agents --clear` and then observing absence proves nothing: the same observation holds if the clear path is broken or never ran. The step now SEEDS the isolated file with known dummy pins, confirms they are present, clears, and confirms those specific handles are gone — absence is evidence only where presence was established first. That is the seventh consecutive cycle whose finding was created by the previous cycle's fix. The isolation itself had also landed only here, so the plan's Success Criteria and the design still sent an operator at the ambient pin file; both back-propagated. `test_os_evidence_pass_renumbered_to_four` asserted only the ABSENCE of the false sentence, which a deletion satisfies as well as the prescribed correction does; a positive assertion on the replacement wording is added. AC-6.12..AC-6.20 called all nine of its mutations green-at-RED proofs when the last two are pinned to AC-3.16 and AC-4.5, both RED: FAIL — seven proofs plus two independent SIGPIPE guard mutations, now stated that way. Source-design citation corrected. The audit independently re-derived the 290-test baseline, the 40-node table and the 27-mutation count and found all three correct.

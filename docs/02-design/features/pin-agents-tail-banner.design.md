@@ -333,9 +333,13 @@ resolution, or it merely restates Pass 0.
    ambient pin can each satisfy it without a single `terminal read`, so the check would pass
    with the whole feature reverted. Require all four:
 
-   1. `pin-agents --clear`, then **assert the mutation landed by re-reading the file it was
-      supposed to empty**. `hmad-dispatch env` prints that path on its own `pin file:` line, so
-      record it and confirm in a SEPARATE read that the file is absent or names neither agent.
+   1. Run against an **isolated** `HMAD_ORCA_PIN_FILE`, never the repository's real
+      `.h-mad/orca-pins.env` — that file holds the operator's live coordinator and agent pins,
+      and clearing it to verify an unrelated feature destroys state the check has no business
+      touching. **Seed the isolated file with known dummy pins and confirm they are present**,
+      then `pin-agents --clear`, then **re-read and confirm those handles are gone**. On a fresh
+      path the file is absent before and after, so absence alone proves nothing — it holds
+      equally if the clear never ran.
       Confirming that no `HMAD_ORCA_*_TERMINAL` is exported is necessary but not sufficient: it
       checks the ENVIRONMENT, a different surface from the pin FILE that `--clear` mutates, and a
       pin surviving in the file short-circuits `_orca_find` exactly as an exported one would.
@@ -411,3 +415,4 @@ resolution, or it merely restates Pass 0.
 - v1.15: Impl-plan audit v19 (codex) — node counts re-derived to 28 FAIL / 11 PASS over 39 after AC-2.9 was added (an exit-0 `ok:false` envelope was being accepted as identity evidence).
 - v1.16: Impl-plan audit v20 (codex) — the error-envelope rule was in the impl-plan and not here, so an implementer following the declared source would have omitted a gate the plan calls load-bearing. The exact extraction now appears in the design body with the `.ok` check first and `else empty` in place of `else tostring`, plus the reason for each. Node counts re-derived to 29 / 11 over 40.
 - v1.17: Impl-plan audit v21 (codex) — the Components table still said 14 ACs and the Test Plan had no row for spec v1.8's AC-4.4, so the design under-reported the contract it is the source for; both corrected. The `// empty` note is rewritten: it is defence in depth, not an independently pinned guard, because `else empty` on the type branch already discards a null.
+- v1.18: Impl-plan audit v22 (codex) — the live check directed the operator at the ambient pin file, destroying live coordinator and agent pins to verify an unrelated feature. It now runs against an isolated `HMAD_ORCA_PIN_FILE` that is seeded with known dummy pins first, so the clear has something observable to remove.

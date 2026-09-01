@@ -207,9 +207,12 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 - **A live check that provably exercises THIS pass.** `hmad-dispatch env` resolving codex is NOT
   sufficient evidence: Pass 0, the title pass, the preview pass or an ambient pin each satisfy it
   with zero `terminal read` calls, so the check passes with the whole feature reverted. Require
-  all four — (a) `pin-agents --clear`, then **re-read the pin file the clear was meant to empty**
-  (its path is on `env`'s own `pin file:` line) and confirm it names neither agent; verifying that
-  no `HMAD_ORCA_*_TERMINAL` is exported checks a DIFFERENT surface from the one `--clear` mutates,
+  all four — (a) run against an **isolated** `HMAD_ORCA_PIN_FILE` (never the repository's real
+  `.h-mad/orca-pins.env`, which holds the operator's live pins), **seed it with known dummy pins,
+  confirm they are there**, then `pin-agents --clear` and **re-read the file** and confirm those
+  handles are gone. Absence is evidence only where presence was established first — on a fresh
+  path the file is absent whether or not the clear ever ran. Verifying that no
+  `HMAD_ORCA_*_TERMINAL` is exported checks a DIFFERENT surface from the one `--clear` mutates,
   and a surviving file pin short-circuits `_orca_find` exactly as an exported one would; (b) the
   earlier passes shown not to resolve on their own — `worktree ps` does not name the pane, title
   and preview do not match; (c) `env 2>&1` carrying `bound <handle> by tail evidence`, the marker
@@ -257,3 +260,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.11: Impl-plan audit v19 (codex) — node counts re-derived to 28 FAIL / 11 PASS over 39 after AC-2.9 was added (an exit-0 `ok:false` envelope was being accepted as identity evidence). Convention Prerequisites also still carried the blanket-RED instruction that v1.7's history claimed had been back-propagated out; swept to the per-node contract.
 - v1.12: Impl-plan audit v20 (codex) — node counts re-derived to 29 FAIL / 11 PASS over 40 and the AC count to 15, after AC-2.10 rejected non-array tail payloads (a malformed payload containing a banner was becoming identity evidence, the same unsafe direction AC-2.9 closed for `ok:false` envelopes).
 - v1.13: Impl-plan audit v21 (codex) — `// empty` is no longer described as an independently load-bearing guard; since the type branch ends `else empty` it is redundant defence in depth, measured identical with and without it, and the mutation that claimed to pin it was equivalent and has been removed.
+- v1.14: Impl-plan audit v22 (codex) — the live-check criterion now requires an ISOLATED pin file that is SEEDED with known dummy pins before clearing. It previously sent the operator at the repository's real `.h-mad/orca-pins.env`, and the isolation fix that corrected that landed only in the impl-plan; on a fresh path, absence before and after proves nothing about whether the clear ran.
