@@ -68,9 +68,27 @@ and match the agent's existing signature; reject a candidate whose tail matches 
 signature before counting it:
 
 ```sh
-hmad-dispatch run --timeout "${HMAD_TAIL_READ_TIMEOUT:-2}" -- \
+_cmd_run --timeout "${HMAD_TAIL_READ_TIMEOUT:-2}" -- \
   orca terminal read --terminal "$h" --cursor 0 --limit 4000 --json
 ```
+
+**`_cmd_run` in-process, NOT `hmad-dispatch run` as a subprocess.** Naming the verb says *which*
+bounder (`timeout`/`gtimeout` are forbidden outright); taken literally it re-execs the wrapper by
+name, which is not on the test harness's `PATH` (`_bindir:/usr/bin:/bin`) and costs a process per
+candidate. `_cmd_run` is the function `main` dispatches that verb to — same bounder, same exit-124
+convention — and bash resolves it at call time, so `_orca_find` calling a function defined below
+it is fine.
+
+**`.result.terminal.tail` is a JSON ARRAY of line strings, not a string.** Measured live
+2026-09-01 against the pinned codex pane: `type == list`,
+`["codex '--dangerously-bypass-approvals-and-sandbox'", "", "…"]`. The response listing below
+records the key as *present* and did not record its type, and `h-mad/SKILL.md` already spells it
+`.result.terminal.tail[]`. A bare `jq -r '.result.terminal.tail'` on an array prints
+pretty-printed JSON — brackets, quotes, commas — which still substring-matches a signature, so
+the mistake fails no test written from this design and ships a matcher over a shape nobody chose.
+Join it: `(.result.terminal.tail? // empty) | if type == "array" then join("\n") else tostring end`,
+with `// empty` **before** the type branch so an absent key still exits non-zero (`else tostring`
+on a null yields the string `"null"` at rc 0, re-opening the exact hole `-e` closes).
 
 **`--cursor 0` is load-bearing and must not be dropped.** Without it the call returns the
 most RECENT rows, while the agent's banner sits at the START of scrollback. On the panes
@@ -273,7 +291,7 @@ resolution, or it merely restates Pass 0.
    feature's suite contains *preservation* and *negative* nodes that are legitimately green
    before any code exists (the legacy stub path, "a launch-command-only tail does not resolve",
    "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged").
-   Measured on the node enumeration: **26 of 37 nodes fail at RED and 11 pass**, so a blanket
+   Measured on the node enumeration: **27 of 38 nodes fail at RED and 11 pass**, so a blanket
    claim would halt a correct dispatch on `step5d:red_not_all_failing`.
 
    Every node green at RED carries a named reject-direction proof instead — a mutation whose
@@ -351,3 +369,4 @@ resolution, or it merely restates Pass 0.
 - v1.10: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
 - v1.11: Impl-plan audit v9 (codex, high-evidence: it ran five timing probes of its own) plus audit v10 (agy). AC-2.6's elapsed >= 1.0 assertion would have failed on the MAJORITY of correct runs - _cmd_run's watchdog uses bash's integer SECONDS, and ten trials across two independent probes measured 0.89-1.16s at rc=124; bound lowered to 0.5. The prescribed RED-count derivation commands returned 0 and 13 instead of 35 and 11 (one anchored on the wrong column, one unanchored into prose), so their difference would have been passed to --expect-fail as -13; both are now row-anchored and verified. tail-sig-swallows-failure was a THIRD equivalent mutant - return 0 with empty stdout produces the same decline - replaced by tail-sig-fabricates-banner-on-failure, which turns unreadable evidence into a MATCHING candidate. The mutation selector excluded a T5 node one of its own mutations targeted (agy's mechanism for this was wrong: named tests run via target_command + nodeid, never through -k; the selector governs the baseline and the wrong-catcher diagnostic). Design live-check back-propagation was claimed in v1.10's history but absent from the body; applied. _run_bash given a concrete extraction; AC-6.12..6.18 widened to 7 numbers for 7 mutations.
 - v1.12: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
+- v1.13: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.

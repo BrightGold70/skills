@@ -175,13 +175,24 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **26 of 37 nodes RED, 11 green**, each of
+  legitimately green before any code exists. Measured: **27 of 38 nodes RED, 11 green**, each of
   the 11 tied to a mutation that must be killed by that specific node. RED observation OR a
   discriminating mutation is what distinguishes new coverage from a restatement of current
   behaviour — one or the other, never neither
 - Each guard is mutation-tested to its permissive value, and each mutant is confirmed to
   have LANDED — an anchor matching nothing reports the guard as enforced
 - The mutation spec is ALL_CAUGHT
+- **A live check that provably exercises THIS pass.** `hmad-dispatch env` resolving codex is NOT
+  sufficient evidence: Pass 0, the title pass, the preview pass or an ambient pin each satisfy it
+  with zero `terminal read` calls, so the check passes with the whole feature reverted. Require
+  all four — (a) `pin-agents --clear`, then **re-read the pin file the clear was meant to empty**
+  (its path is on `env`'s own `pin file:` line) and confirm it names neither agent; verifying that
+  no `HMAD_ORCA_*_TERMINAL` is exported checks a DIFFERENT surface from the one `--clear` mutates,
+  and a surviving file pin short-circuits `_orca_find` exactly as an exported one would; (b) the
+  earlier passes shown not to resolve on their own — `worktree ps` does not name the pane, title
+  and preview do not match; (c) `env 2>&1` carrying `bound <handle> by tail evidence`, the marker
+  only this pass emits; (d) any pane created for the check closed AND the removal confirmed by
+  re-listing terminals.
 - Full suite green, anchors OK
 - A live check: `hmad-dispatch env` resolves codex on this machine without a manual pin,
   and any pane created for the check is closed
@@ -221,3 +232,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.6: Back-propagated from impl-plan audit v7 (codex) — the plan was the surface the value sweep missed twice over: its risk table still asserted a tail proves what a pane IS RUNNING, contradicting the stale-pane behaviour spec v1.5 accepted, and its Success Criteria still said 13 ACs after AC-5.2 landed (the THIRD time that line has gone stale, on a line that already told the reader never to carry it). Both corrected, plus a new risk row for the exited-agent pane.
 - v1.7: Impl-plan audit v8 (codex) — four of five must-fixes were defects in v1.5's own RED table. It was written at AC granularity while --expect-fail counts TEST NODES: two nodes carried two ACs each, putting one node in both columns and double-counting another, so the counts could never have matched a pytest run. Recast as a 35-node enumeration with one RED outcome each (24 FAIL / 11 PASS). The claim that every green-at-RED node was mutation-discriminated was FALSE - six had no proof and two were named by mutations that cannot kill them; seven mutations added (17 total), AC-4.2 withdrawn as genuinely undiscriminable. AC-6.11 gained a real test node. The live check required only that env resolve codex, which Pass 0 or an ambient pin satisfies with the feature reverted; it now requires the tail-evidence stderr marker with pins cleared and earlier passes proven blind. Blanket-RED rule back-propagated out of the design and plan.
 - v1.8: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
+- v1.9: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.

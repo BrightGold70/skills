@@ -107,8 +107,11 @@ def _orca_read_dir(tmp_path, envelopes):
     the UNREADABLE case (FR-4) — the stub exits non-zero for it — which is not
     the same as a handle mapped to an envelope carrying an empty tail.
     """
-    d = tmp_path / "reads"
-    d.mkdir(exist_ok=True)
+    # A FRESH directory per call: `mkdir(exist_ok=True)` on a shared name lets a
+    # previous call's <handle>.json survive, so a handle the caller OMITTED (the
+    # UNREADABLE case) would still be served by a stale file and the helper's
+    # documented semantics would quietly be false within one tmp_path.
+    d = pathlib.Path(tempfile.mkdtemp(dir=tmp_path, prefix="reads-"))
     for handle, text in envelopes.items():
         (d / f"{handle}.json").write_text(text, encoding="utf-8")
     return str(d)
@@ -507,7 +510,7 @@ printf '%s' "$small" | grep -Eiq "$re" -> rc=0     (short tail — the defect is
 ```
 
 The last line is why this needs its own tests: **every stub fixture in this plan uses a short
-tail**, so all 37 nodes would go green over a matcher that is broken on exactly the long
+tail**, so all 38 nodes would go green over a matcher that is broken on exactly the long
 retained tails the 2000-line cap describes. A here-string has no pipeline, so the compound's
 status is `grep`'s alone.
 
@@ -653,7 +656,6 @@ ambiguity.
       own signature and never reaches the rejection branch, so no mutation can discriminate it;
       it is subsumed by `test_tail_pass_zero_matches_declines`. The number is retained so AC-4.1,
       AC-4.3, AC-4.4 and AC-4.5 do not renumber. **T4 has FOUR nodes, not five.**
-      this pass: no handle, no stderr marker, fall through to the OS-evidence pass.
 - [ ] AC-4.3: Rejection is symmetric — the same fixture resolved for `agy` rejects the pane whose
       tail carries the codex banner, and vice versa. Asserted for both tokens so the test cannot
       pass against a one-sided implementation.
@@ -786,6 +788,19 @@ def test_skill_md_frontmatter_unchanged():
     assert "description:" in fm
 
 
+_CODEX_CLAIM_OLD = ("only on a fresh pane's `gpt-N` banner, which scrolls off once it works")
+_CODEX_CLAIM_NEW = ("only on a fresh pane's `gpt-N` banner, which scrolls out of the PREVIEW once "
+                    "it works — the tail-evidence pass recovers it from retained scrollback")
+
+
+def test_skill_md_codex_banner_claim_qualified():
+    """AC-5.5: SKILL.md must not still say the banner is simply gone once the
+    pane works. It scrolls off the PREVIEW; the tail retains it, which is the
+    whole basis of Pass 3."""
+    assert _CODEX_CLAIM_NEW in _SKILL_MD_FLAT, "codex-detection claim not qualified"
+    assert _CODEX_CLAIM_OLD not in _SKILL_MD_FLAT, "stale unqualified claim still present"
+
+
 def test_os_evidence_pass_renumbered_to_four():
     """AC-5.1: the pass below the tail pass is Pass 4, and no longer claims every
     pass above it 'found nothing' — a pass that declines on AMBIGUITY sits there
@@ -809,7 +824,9 @@ def test_os_evidence_pass_renumbered_to_four():
 - [ ] AC-5.5: `h-mad/SKILL.md` no longer claims Codex's banner "scrolls off once it works"
       without qualification — the amended sentence states that the PREVIEW decays while the TAIL
       retains the banner. Asserted on the same whitespace-collapsed text as AC-5.2, and pinned by
-      `test_skill_md_codex_banner_claim_qualified`.
+      `test_skill_md_codex_banner_claim_qualified` — its own node, separate from AC-5.2's, so a
+      failure names which claim is wrong. Exact old and new phrases are in the Code structure
+      block above, matched whitespace-collapsed like AC-5.2.
 - [ ] AC-5.2: `h-mad/SKILL.md`'s `_orca_find` sentence names the tail-evidence pass alongside the
       title and preview passes. Asserted against the sentence containing `joins them as **Pass
       0**`, located by content rather than by line number, by
@@ -1090,7 +1107,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-6.11 | `test_tail_mutation_spec_root_is_relative` | RED: FAIL | — |
 
 **The selector is `-k 'test_tail_ or test_skill_md or test_os_evidence'`** — it must cover all 38
-nodes, T5's three included.
+nodes, T5's four included.
 
 Two measurements and one correction stand behind that. `-k tail` is wrong: it already collects 2
 of the module's 284 tests that have nothing to do with this feature
@@ -1222,7 +1239,7 @@ false half is recorded so the next reader does not re-derive it.
 
    **Those three numbers are the AGGREGATE CHECK, not the dispatch inputs.**
    `h_mad_assemble_tdd.py` cuts ONE `## Task N` and takes that task's `--expect-fail` /
-   `--expect-pass`; feeding it 26/11 would guarantee `step5d:red_not_all_failing` on every task
+   `--expect-pass`; feeding it 27/11 would guarantee `step5d:red_not_all_failing` on every task
    (T1 expects 3/3, T2 6/1, …). Derive per task from the same authoritative rows — the AC prefix
    identifies the task:
 
@@ -1236,7 +1253,7 @@ false half is recorded so the next reader does not re-derive it.
    ```
 
    Expected: T1 3/3 · T2 6/1 · T3 10/6 · T4 4/0 · T5 3/1 · T6 1/0, summing to 27/11 over 38 —
-   and **every row carries exactly ONE AC label** so the per-task regex sees all 37. Two rows
+   and **every row carries exactly ONE AC label** so the per-task regex sees all 38. Two rows
    briefly carried `AC-2.7, AC-2.8` and `AC-5.2, AC-5.4`; the loop then matched 35 and silently
    under-counted T2 and T5. A shared node takes its PRIMARY AC, with the secondary named in the
    proof column as the procedure it is —
@@ -1304,3 +1321,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.9: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
 - v1.10: Impl-plan audit v13 (codex) — all three must-fixes were mutation-discrimination gaps in this plan's own scaffolding, and the 37/11/26 counts reproduced. resolve-on-ge-0 was a CRASH mutant: with tn=0 the relaxed branch runs tail_h=$(printf … | grep . | head -n 1), grep returns 1 on empty input and set -euo pipefail aborts before anything resolves (reproduced: rc 1, no output), so a kill would be credited to an abort rather than the property. Replaced by signature-check-not-enforced, which lets a readable non-matching candidate into tail_ids and produces an observably wrong resolution; AC-3.5's fixture is pinned to exactly one readable non-matching candidate to make that kill possible. The two long-tail nodes added in v1.8 had NO mutation reverting the here-string to the pipeline, so the guard they exist for was never mutation-tested - two reverting mutations added, one per branch. tail-sig-fabricates-banner-on-failure has a fixture precondition that was unstated: its hardcoded OpenAI Codex output only changes behaviour for exactly one unreadable candidate resolving codex, so AC-3.11's fixture is now pinned. AC-4.2 was still listed as active in Task 4 while marked withdrawn elsewhere. The spec's assumption about launch-command visibility was restated in terms of the banner, which v1.5 made the only evidence.
 - v1.11: Impl-plan audit v14 (codex) — the sharpest finding of the run is a SHAPE error 14 cycles old. Task 3 was declared new-behaviour while its deliverable includes the _orca_find -> _orca_tail_sig call site, so the wire-pin gate reported wiring=0 and the task bypassed WIRE/WIRE-PIN, the wire registry and the wire-specific RED failure-mode check - all while this same plan already carried wire-disconnect-callee-intact and wire-force-fire-after-pass0 as connection-direction mutants. The mutations asserted a wire the shape denied. T3 is now wiring with the pin named, and the gate reports wiring=1. The RED counts were derived as an AGGREGATE and called the dispatch inputs, but assemble_tdd cuts ONE task and takes THAT task's counts, so 27/11 would have halted every task on red_not_all_failing; a per-task loop is prescribed, and running it exposed a second defect the audit did not name - two rows still carried combined AC labels (AC-2.7, AC-2.8 and AC-5.2, AC-5.4), so the loop matched 35 of 37 and silently under-counted T2 and T5. SKILL.md:315's claim that Codex's banner scrolls off once it works is precisely what this feature falsifies; AC-5.5 added to amend and pin it (nodes 37->38).
+- v1.12: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
