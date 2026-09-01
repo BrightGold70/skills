@@ -14,8 +14,20 @@ A fourth vocabulary word was considered and rejected: it would cost a rewrite of
 had already resolved in prose. Instead every `DECLINED` marker names its bucket inline —
 `(triage: useful, not codable)` or `(triage: not useful)` — the three stragglers were qualified, and
 `skill_candidates_census.py` now prints the split with `unqualified` as its own number so a bare
-marker cannot hide inside a bucket it was never sorted into. Current split: **15 useful-not-codable,
-7 not-useful, 0 unqualified**, pinned by a test against this file rather than a fixture.
+marker cannot hide inside a bucket it was never sorted into. Current split: **27 useful-not-codable,
+8 not-useful, 0 unqualified**, pinned by a test against this file rather than a fixture. Re-run the
+census for the live numbers rather than citing this line — it has been stale before.
+
+**Triage of 2026-09-01 — every OPEN row sorted, and the open backlog is now 7.** All 20 rows that
+were `yes`/`maybe` were read in full and put in one of the three buckets. Twelve are useful but not
+codable (the row's own text usually said so: a doctrine line, a one-off git incantation, or a check
+whose mechanical half already runs unconditionally) and one is not useful (the live-e2e verb sweep,
+measured out of existence: 42 of 46 verbs are not unattendedly sweepable and the remaining 4 are one
+shell loop that found no drift). Each carries its bucket and its reason inline. The seven left open
+are the ones with a named, mechanical implementation: `632` frozen-tree guard, `744` resolved-model,
+`773` pane ID by `terminal read`, `848` outbound-handover verify, `860` response-shape census, `914`
+live-run check before merging a shared skill, `925` section-bounded slicing. Nothing was deleted —
+a DECLINED row keeps the reasoning that a deletion would throw away.
 
 **Triage of 2026-08-25 — `DECLINED` here also means "not codable".** Every open row was sorted into
 useful/codable, useful/NOT-codable, or not-useful, and the two non-actionable buckets were closed with
@@ -47,7 +59,7 @@ markers, and counts bumps — it has produced a wrong census of this backlog thr
 
 ## Open, highest recurrence first (reconciled 2026-08-20, again after Phase-5 Tasks 1-4)
 
-**Three `candidate: yes` are open** (census: OPEN yes+maybe = 35 of 104). The newest is
+**Superseded by the 2026-09-01 triage above** (this line read `OPEN yes+maybe = 35 of 104`; it was stale). The newest is
 `h-mad Phase-5 per-task TDD dispatch driver` (rec 8) — see the 2026-08-20 Tasks 1-4 block at the
 end. The other two were re-verified against source in the same pass and neither has shipped:
 no `pane-janitor` exists anywhere and `hmad-dispatch` still has no pane/dispatch cleanup verb;
@@ -152,6 +164,11 @@ before concluding a row is inert — one row sat inert for a day while naming it
   — **DECLINED 2026-08-25 (triage: useful, not codable)** — this is the `/h-mad` + review discipline itself, already a skill. There is no artifact to build; the row records that the loop pays.
 - **live-e2e verb sweep against real orca**: exercise every hmad-dispatch verb + skill mechanism vs the live runtime, matrix report — recurrence: 2 — candidate: maybe
   — **RE-CHECKED 2026-08-26: measured, and the ceiling is why it stays `maybe`.** The wrapper declares **46 verbs**; only **4** (`env`, `worktree-current`, `worktree-ps`, `worktree-list`) are read-only and therefore safely sweepable unattended. All four were run against the live runtime today: rc=0, non-empty, well-formed payloads with the documented containers. The other 42 either mutate state (`worktree-create`/`-rm`/`-comment`, `automation-*`, `gate-*`) or cost a real agent dispatch (`exec`, `agy`, `codex`, `report-wait`), so a "matrix report" over them is not a script — it is a budgeted live session. That is the real reason this has sat at recurrence 2 across sessions, and it is worth recording so the next scout does not re-derive it. A 4-verb read-only sweep is cheap enough to be worth nothing as a tool: it is one shell loop, and it found no drift.
+  — **DECLINED 2026-09-01 (triage: not useful)** — the candidate here is the sweep TOOL, and it was
+  measured out of existence: 42 of the 46 verbs either mutate state or cost a real dispatch, so only
+  4 are unattendedly sweepable, and sweeping those four is one shell loop that found no drift. The
+  measurement is the durable part and it is already in this row; there is nothing left to build. The
+  budgeted live session the other 42 would need is a decision, not a script.
 
 ## 2026-07-22 — orca-agent-resolution-hardening
 
@@ -429,6 +446,11 @@ before concluding a row is inert — one row sat inert for a day while naming it
 
 - **install-path suite verification**: after (re)installing a skill, run its test suite through the *install* path (`pytest ~/.claude/skills/<skill>/tests/`) rather than the repo path, because `diff -rq` between checkout and install dir proves content equality while staying blind to links the skill expects *outside* that dir — recurrence: 1 — candidate: maybe — one observation, and it paid for itself immediately (13 failures on a missing `~/.claude/hooks/h-mad-tdd-gate.sh` that content-diff called IDENTICAL). Too thin for a skill on one sighting; the durable half is already a learning. Revisit if a second skill install repeats it.
   — **RE-CHECKED 2026-08-26: the check was RUN, and it passes.** `pytest` through the install path (`~/.claude/skills/h-mad/tests/`) — **2069 passed, 0 failed**. Both links the row is about are present and correct: `~/.claude/skills/h-mad` → the repo, and `~/.claude/hooks/h-mad-tdd-gate.sh` → `h-mad/hooks/h-mad-tdd-gate.sh`, which is the file whose absence produced the original 13 failures. Worth recording that for a **symlink** install the checkout and the install path are the same inode, so the content-equality blindness the row describes cannot arise here at all — the row's failure mode needs a COPY install. Still recurrence 1, still below the promotion bar, but no longer unverified.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the check is `pytest
+  ~/.claude/skills/<skill>/tests/` — a path, not a tool. The re-check also narrowed it: under a
+  SYMLINK install the checkout and the install path are the same inode, so the content-equality
+  blindness cannot arise at all and the row needs a COPY install to have a subject. Recurrence 1,
+  and the durable half is already a learning.
 - **skill-install repair sequence**: `git rev-list --left-right --count origin/main...HEAD` to rule out the repo half → read the skill's own docs for its canonical install shape → back up outside `skills/` → link → suite through the install path — recurrence: 1 — candidate: no — the shape is entirely driven by what the target skill documents about itself (here: a symlink chain, two links), so a generic wrapper would have nothing to encode beyond "read the SKILL.md first."
 
 ## 2026-08-09 — h-mad-install-followup (same session as h-mad-symlink-install-repair)
@@ -444,6 +466,11 @@ before concluding a row is inert — one row sat inert for a day while naming it
 - **differential guard narrowing**: before shipping a change that makes a guard accept something it used to reject, run a corpus through old and new and account for every softened verdict — recurrence: 1 — candidate: no — now an Axis B invariant (`invariants.base.md` §"Guard narrowing"), which is a stronger home than a skill: it is inlined into every audit prompt and auto-classifies violations as Must-fix.
 - **stale-clone push guard**: before pushing to a long-lived repo, `git fetch` and check divergence; if behind, build the change in a throwaway worktree off `origin/main` rather than rebasing a dirty tree — recurrence: 1 — candidate: maybe — it saved a 1519-commit rebase over uncommitted work and caught a commit message that had gone stale, but one sighting is thin. Revisit if another stale clone turns up.
   — **RE-CHECKED 2026-08-26: no fresh recurrence.** Six pushes this session, each preceded by `git rev-list --left-right --count @{u}...HEAD`; every one read `0\t0` or ahead-only, so the guard never had anything to catch. Stays recurrence 1.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the mechanical half (`git rev-list
+  --left-right --count @{u}...HEAD` before a push) is already run unconditionally every time and
+  needs no tool; the half that saved the 1519-commit rebase was the JUDGEMENT to build in a
+  throwaway worktree off `origin/main` instead of rebasing a dirty tree. No fresh recurrence across
+  six pushes since.
 
 ## 2026-08-09 — j29-out-clobber-guard
 
@@ -645,6 +672,10 @@ threshold of a third vendored patch; untouched this session.
   only reason it did not recur is that the suite was never backgrounded. Stays recurrence 1. Note the
   shape it would need — a `PreToolUse` hook on `Edit`/`Write`, not a script — since nothing the wrapper
   offers can observe an edit as it happens.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** a `PreToolUse` hook comparing the edit
+  path against the paths of any live background `pytest` is mechanical, has a working precedent in
+  `h-mad-tdd-gate.sh`, and the failure it catches is silent, self-inflicted, and produces a green
+  you can quote and cannot defend.
 
 ## 2026-08-25 — timeout-premise-and-audit-cycle-dispatch
 
@@ -667,7 +698,14 @@ threshold of a third vendored patch; untouched this session.
   — **LANDED 2026-08-26 (`e0dd87b`)** — `h_mad_mutation_harness.py --check-anchors <spec>…`. Applies nothing and runs no tests, so it costs file reads instead of a suite per spec. The one-match rule is extracted into `anchor_status()` and shared with `run_spec`, so the cheap check and the expensive one cannot disagree — a precheck carrying its own `count(...) != 1` would be a second copy of the exact rule this harness enforces. First sweep over the 14 committed specs: **7 of 177 anchors had drifted**, and every one of those guards was unverified while its spec still printed a verdict-shaped line; two of the seven were broken by a refactor made minutes earlier in the same session. It then caught a drift caused by my own edit three hours later, before the run could report REFUSED. The subsumption question is answered NO — see the identifier-sweep row.
   — **PUSH BOUNDARY CLOSED 2026-08-27** — the LANDED note above conceded the remaining half: "the *detection* is still 'run the spec and read the refusals'". `git-hooks/pre-push` + `git-hooks/install.sh` make the sweep an obligation of `git push`, which is the boundary an ordinary refactor commit actually crosses — 5e's precheck and `--check-anchors` both require someone to be running a mutation. Specs are **discovered** (`git ls-files -- '*.json'`, classified by the harness) rather than named by a configured directory: measured here, the 19 specs sit in **three** directories, one inside an unrelated skill, so the obvious single-directory parameter would have guarded 16 of 19 and reported success. Only `ANCHORS_DRIFTED` blocks; a missing harness, `ANCHORS_NOTHING_SWEPT`, and a missing verdict line each warn and ALLOW. 14/14 mutants caught; a 15th was removed as **equivalent** and the reason recorded in the spec, since an equivalent mutant reports identically to a real coverage gap.
 - **build mutation-spec anchors FROM the file, never by hand-escaping them**: three separate spec edits this session produced anchors that matched 0 times purely from backslash levels in a heredoc, one of which (`\\bJ\\d+\\b`) produced a mutant that could never match and therefore reported as a survivor — a *broken* mutant is indistinguishable from a real coverage gap — recurrence: 3 — candidate: maybe — it is a technique, not a tool: read the target file, locate the literal line, and use that string as the anchor. Possibly a line in `invariants.base.md` §"Mutation verification" beside the shared-anchor recipe rather than anything executable.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the row says it plainly: read the target
+  file and use the literal line as the anchor. A tool cannot know which line you meant, and the
+  failure it prevents (a mutant that can never match, reported as a survivor) is now covered from
+  the other side by `--check-anchors`, which is executable and already exists.
 - **probe a tool with its simplest invocation before declaring it broken**: two failed `exec agy` dispatches were read as "agy is down" and recorded as such in a commit body and a candidate row; a one-line ping refuted it immediately — recurrence: 1 — candidate: maybe — one occurrence, but it cost five features shipping without review. The durable half is already in the taxonomy as mode 30; a rule would live in `invariants.base.md` §"Assumption verification" beside the controlled-pair line, which is the same discipline pointed at a tool rather than a cause.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — a one-line ping before declaring a tool
+  down is doctrine, not a program — the durable half is already taxonomy mode 30, and its home is
+  `invariants.base.md` §"Assumption verification".
 
 ## 2026-08-26 — loop-drain-five-tools (scout)
 
@@ -690,6 +728,9 @@ threshold of a third vendored patch; untouched this session.
   treat it as a recurrence bump on that row. The specific gap worth naming: `--verify-stamp` is
   documented in `SKILL.md` §Phase-6 step 11 and invoked by nothing, which is a wiring decision left
   open deliberately (the default gate output is byte-identical without `--gated`).
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the row itself says this is a recurrence
+  bump on `dogfood-a-bundled-prompt-live` rather than a new tool. "Run the thing inside a real cycle
+  before closing its row" cannot be automated by the thing being tested.
 - **pin a doc-lint against the real file, not only a fixture**: a `TRIAGE` regex written from the
   tight form (marker immediately followed by the bucket) matched 2 of 22 rows and reported the other 20 as
   unqualified, because the bucket usually sits after the date and the closing bold; a fixture built
@@ -698,6 +739,10 @@ threshold of a third vendored patch; untouched this session.
   mechanical part is one extra test per doc-lint that runs against the committed document; the
   judgement it must not automate is deciding what the correct count IS. Close to
   `corpus-sweep-before-regex-tighten`, which is the same instinct one step earlier. **Self-pollution note:** the first draft of this very row quoted a bolded terminal marker as an example and the census promptly classified the row as terminal — a row that names a vocabulary word in bold IS that word to every reader of this file. Quote it unbolded.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the mechanical part is one extra test per
+  doc-lint, which is a convention each lint applies for itself; the part that would need a tool is
+  deciding what the correct count IS, which the row explicitly rules out automating.
+  `pin_agents_carry` and `read_auto_resolve` both follow it by hand.
 - **6a-prime cycle driver (an `audit-cycle` for the ARCHITECTURAL gate)**: `audit-cycle` exists for
   plan/design/impl-plan, but Phase 6a-prime has no equivalent, so this session hand-assembled the
   same seven-step loop **7 times** — rebuild the prompt from
@@ -725,24 +770,50 @@ threshold of a third vendored patch; untouched this session.
 ## 2026-08-28 — monitoring-backlog-drained (scout)
 
 - **consumer sweep when a verdict token gains a word**: splitting `ANCHORS_UNREADABLE` out of `ANCHORS_DRIFTED` instantly un-guarded the pre-push hook built two hours earlier — it matched only `*ANCHORS_DRIFTED*`, so a deleted target fell to the catch-all and printed "Push ALLOWED" while misreporting a real verdict as broken tooling — recurrence: 1 (severe) — candidate: maybe — a *tool* here would be a grep against a curated consumer list, which is the thing that drifts; the durable half is a doctrine line beside §"Audit-gate signal discipline" saying a new verdict word is a contract change and every matcher on the old one must be swept. The concrete instance is already pinned by a test and a mutation, so this row is about the general rule, not the fix.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the row already reaches this verdict: a
+  grep over a curated consumer list drifts exactly like the matchers it is meant to guard. The
+  durable form is the doctrine line — a new verdict word is a contract change — and the concrete
+  instance is pinned by a test and a mutation already.
 - **re-probe a monitoring row's premise before fixing it**: four of nine carried premises were false this session (J41's `merge-base`, J34's "survivable", J35's "the wrapper needs the fix", a candidate row's "sibling DECLINED"), each false in a way that would have produced the wrong fix — recurrence: 4 — candidate: no — `h-mad/SKILL.md` §"Working a `skill-monitoring` item" step 1 **already prescribes exactly this**, and it is what caught all four. Nothing is missing; the rule worked. Recorded so the next scout does not read a high recurrence count as an unmet need.
 - **structural assertion when a property has no observable trace**: atomicity is invisible from outside — `cp` + `rm` produces the same content and leaves no temp, so a mutation swapping `mv` for it left every behavioural assertion green and the guard had to name the syscall — recurrence: 1 — candidate: maybe — a technique, not a tool, and one that is normally a smell; it belongs as a sentence in `invariants.base.md` §"Test discrimination" qualifying WHEN asserting on source is legitimate (the property lives in the mechanism and racing the writer is the only behavioural alternative), so the exception does not get cited as licence.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — asserting on source is normally a smell,
+  and the exception needs a human to say why the property has no behavioural trace. A tool that
+  applied it would generalise the exception into licence, which is the opposite of the row's point.
+  Belongs in `invariants.base.md` §"Test discrimination".
 
 ## 2026-08-28 — silent-pass-defects (scout)
 
 - **consumer sweep when a verdict token gains a word** (recurrence, not a new row): recurrence 1 → 2 (severe; see 2026-08-28 monitoring-backlog-drained). Second occurrence, and this time the row **prevented** the failure rather than recording it: adding `ANCHORS_UNCLASSIFIABLE` for the unparseable-spec fix would have fallen through the same hook's ordered `case` to the same catch-all `Push ALLOWED` arm. Reading the consumer first turned the fix into a fold onto the existing `ANCHORS_UNREADABLE` (`e9452d2`), needing no coordinated release. A row that changes a decision on its second sighting is worth keeping open on that evidence alone.
 - **a red test can disable a whole mutation spec**: before dismissing a failing test as cosmetic, grep the mutation specs for its file in their baseline `command` — a red baseline makes the harness return `BASELINE_NOT_GREEN`, so every mutation in that spec goes unrun while the spec still looks like coverage. Measured: two `TestAtomicOutWrite` failures had silently disabled `out_wait_atomicity.json` (5 mutations) for as long as they had been red — recurrence: 1 — candidate: maybe — likely a sentence in `h-mad/SKILL.md` §"Mutation verification" rather than a tool; the check is one grep, and the hard part is remembering that a red test is not only a missing assertion.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the cheap form is one grep, and it only
+  helps once you already know a test is red — at which point the suite has told you. The expensive
+  form (re-running every spec's baseline) costs a full suite per spec. The durable half is
+  remembering that a red test is not only a missing assertion.
 - **validate a new checker against the live system, not only its fixtures**: `check_siblings()` passed six unit tests and still reported `INSTALL: PASS` over the real stale copy — the fixture had flattened a two-level layout, making the bug it was written for unreachable. Caught only by pointing the finished checker at the actual install — recurrence: 2 (this; and `--check-anchors` given a directory, where the real invocation shape differed from every test's) — candidate: maybe — adjacent to the DECLINED `fix-the-fixture-not-just-the-assertion`, but distinct: that one is about test DATA hiding a surviving mutation, this is about a fixture whose SHAPE cannot express the production layout. A gate that only ever sees its own fixtures measures its fixtures.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — "point the finished checker at the real
+  system" is the one step a fixture-driven harness cannot take for you; a tool doing it would need
+  the production layout, which is the thing the fixture failed to express.
 
 ## 2026-08-29 — hmad-tooling-defects-closed (scout)
 
 - **split-a-mixed-doc-change-into-atomic-commits**: when one doc (here `h-mad/SKILL.md`) carries hunks belonging to two independent fixes, `git stash push -- <file>` → `git stash show -p` → slice the hunks into two patches by `@@` line offsets → `git apply` each before its own commit. Hand-rolled the whole pipeline; the fiddly part is that later hunks' `+` offsets assume the earlier ones are already applied, so the patches must be applied in order — recurrence: 1 — candidate: maybe (one occurrence, and `git add -p` would cover it if it were not interactive-only in this harness — which is exactly why it was hand-rolled)
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the hunk-slicing pipeline is a one-off git
+  incantation for a situation the durable rule prevents — commit atomically in the first place. A
+  maintained splitter would make mixing two fixes in one file cheaper, which is the wrong direction,
+  and `git add -p` covers it wherever it is interactive.
 - **serialise the mutation harness against any concurrent test run**: the harness edits source in place and reverts per mutation, so a backgrounded `pytest` over the same tree reads half-applied mutants and reports phantom regressions — cost two discarded full-suite runs before the results were recognised as meaningless — recurrence: 2 (both in this session) — candidate: no — **LANDED as guidance, not code**: `docs/learnings.md` 2026-08-29 entry plus the `skills-repo-verification-shape` auto-memory. It is a sequencing rule with no artifact to build; the harness cannot detect a foreign pytest without inspecting other processes.
 
 ## 2026-08-31 — codex-agy-model-inheritance
 
 - **which model did this dispatch actually run?**: after removing the model pin, every check of "what will/did `exec` resolve" was hand-written twice per agent — for codex, `sed -n '1,9p' <log>` to read the session header's `model:`/`reasoning effort:`; for agy, a Python scan of `~/.gemini/antigravity-cli/log/cli-*.log` for `Propagating selected model override to backend: label="…"` (because `ls -t` is dead under rtk and the NDJSON stream carries no model field at all) — recurrence: 5 in one session — candidate: yes — a `hmad-dispatch resolved-model <codex|agy> [--log <f>]` verb, or a line in `env`, would answer it once per agent instead of per invocation. The value is not convenience: with nothing pinned, the resolved model is the ONLY evidence of what a 5d/5e dispatch ran, and a configured `gpt-5.6-luna` returns a well-formed `STATUS: BLOCKED` that looks exactly like a task verdict. Both extractors are one line each and both are already written in `h-mad/SKILL.md` prose, where they cannot be executed.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** both extractors are already written, in
+  prose, where they cannot run; `hmad-dispatch resolved-model <agent>` or a line in `env` is a
+  direct port. Recurrence 5 in one session, and with nothing pinned the resolved model is the only
+  evidence of what a 5d/5e dispatch actually ran.
 - **config-flip propagation probe**: proving "changing the CLI setting moves the dispatch" needs backup → flip → probe → restore → sha256-verify-identical, run once per agent against two different config formats (TOML for codex, JSON for agy) — recurrence: 2 (one session) — candidate: maybe — the shape is general (any inherited-setting claim needs it, and current-state resolution is NOT propagation), but n=2 on one afternoon is thin, and the risky half is the restore, which a script makes no safer than a `trap … EXIT INT TERM` already does. Re-file if a third inherited setting shows up.
+  — **DECLINED 2026-09-01 (triage: useful, not codable)** — the row's own analysis: the risky half is
+  the restore, and a script makes that no safer than the `trap … EXIT INT TERM` already does. n=2 in
+  one afternoon, across two config formats that share no code.
 
 ## 2026-08-31 — j1-launch-pane-pin (takeover probe)
 
@@ -782,6 +853,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   passes the liveness check and silently leaks dispatches into a stranger's shell. Note `.tail` is the
   field name — `.content`/`.output`/`.preview` are all absent, and reading them returns nothing in a way
   that looks exactly like an empty pane.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** a `pin-agents` Pass-N grepping
+  `.result.terminal.tail` for each agent's banner, keeping the exactly-one guard. Confirmed live
+  again on 2026-09-01: `pin-agents` still reports `codex UNRESOLVED` on this repo and the pin
+  survives only because the carry fix now keeps it — auto-detect itself is still blind.
 - **`exec-pane` was the surface with no J1 guard at all**: `_cmd_exec_pane` read
   `.result.terminal.handle` from the create response and used it directly — registering it in the
   pane pool and dispatching to it — while `_cmd_launch` refused that same field as unpinnable. The
@@ -857,6 +932,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   this is the first handover in this repo whose landing was confirmed rather than assumed. Not
   urgent: three read-only commands, and the judgement it must not automate is what to do when the
   answer is no.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** three read-only checks against three
+  surfaces that already exist (`owner_session_id`, the worktree comment prefix,
+  `.result.terminal.tail`). The judgement it must not automate — what to do when the answer is no —
+  is outside the check, not inside it.
 - **response-shape census for an Orca verb**: call `orca terminal create --json` N times across
   varied selectors, tabulate one field's presence against the others, join each response to
   `terminal list`, and close every pane afterwards — hand-rolled 8 times in one session to decide
@@ -867,6 +946,9 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   alternative is reasoning from a doc comment. Note the finding it produced was that **5/5 said one
   thing and the 8th said the opposite** — n<8 here would have shipped the wrong conclusion, so the
   tool's value is in making a larger N cheap, not in the loop itself.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** recurrence 8 in one session, and the half
+  that goes wrong is cleanup, which is exactly what a create/record/close-in-a-trap loop fixes. Its
+  value is making a larger N cheap: 5/5 said one thing and the 8th said the opposite.
 - **create the handover lane LAST, or fast-forward it**: `orca worktree create` snapshots the branch
   at that instant, so two commits pushed afterwards — including a correction to the brief's own
   central premise — never reached the receiver's checkout — recurrence: 1 — candidate: no — this is a
@@ -922,6 +1004,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   block. The judgement it must not automate is whether to hold the merge. Note the *consumer*-side
   rule already exists and is the one that saved this ("re-measure tooling, never cite your own
   earlier finding"); this row is the sender-side mirror, which nothing currently prompts.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** `worktree-ps` comments plus
+  `.h-mad/telemetry.jsonl` are both already readable, and the output is a one-line warning naming
+  the lanes rather than a block. Measured from the receiving side: `3219bdd` landed mid-cycle in
+  another lane and invalidated a decision that had already been recorded as fact.
 - **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
   `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
   covering the end of its own section the moment a paragraph was added — the pin failed for the wrong
@@ -933,6 +1019,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   documents: a bash block's `#` comments end a naive section scan early. Two helpers with the same
   name now sit in one file because I did not check for the first — a shared one would have made that
   collision impossible.
+  — **TRIAGED 2026-09-01: useful and codable — stays open.** a shared `_titled_section` helper is six
+  lines and removes a whole class of vacuous doc-rule pin; the same file already grew two same-named
+  helpers because the first was not found. Live instance still open in
+  `test_handoff_read_auto_resolve.py`, which slices `RAW[i:i + 1600]`.
 
 ## 2026-09-01 — handoff-resume-divergence-fix (scout)
 
