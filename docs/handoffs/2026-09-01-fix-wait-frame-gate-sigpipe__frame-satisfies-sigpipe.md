@@ -4,6 +4,7 @@
 **Branch:** `BrightGold70/wait-frame-gate-sigpipe` (created 2026-09-01; Orca assigned this name, not the `fix/…` one this brief first predicted)
 **Project:** orca/skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** orca/skills · feature/pin-agents-tail-banner · session 61bd3e31-7519-4b5e-aba0-f616a46e8799
+**Taken-Over-By:** orca/skills · BrightGold70/wait-frame-gate-sigpipe · session unknown · backfilled 2026-09-01 (fix merged `282a3a5`, worktree removed)
 
 ## Session Summary
 
