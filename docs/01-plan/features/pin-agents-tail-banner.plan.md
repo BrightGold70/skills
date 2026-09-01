@@ -83,7 +83,8 @@ this grammar declines all 24, and all 12 positives still match (impl-plan AC-3.1
 2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
-`Gemini 3.1 Pro (High)`). The work is running the EXISTING helper against `.tail` instead
+`Gemini 3.1 Pro (High)`). The work is running a TAIL-ONLY matcher, `_agent_tail_re`, against
+`.tail` — not the existing helper, which matches prose 24/24 — instead
 of `.preview`. An earlier check of this against a hand-written reconstruction reported
 "agy: NO MATCH" and was wrong — the reconstruction is not the production surface.
 
@@ -213,7 +214,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
   legitimately green before any code exists. Measured: **31 of 44 nodes RED, 13 green**, and the
-  12 split **11 + 1**: eleven are each tied to a mutation that must be killed by that specific
+  13 split **12 + 1**: twelve are each tied to a mutation that must be killed by that specific
   node, and the twelfth, `test_tail_no_timeout_binary_invocation`, carries a
   procedure instead — insert `timeout 2 orca …`, observe RED, remove (impl-plan AC-2.8). This
   line said "each of the 11" while the count beside it said 12, leaving the twelfth node with no
@@ -291,3 +292,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.21: Impl-plan audit v29 (codex) — prose corpus re-enumerated at 24 negatives / 12 positives after a fourth shape (markdown headings and hyphenated pseudo-versions) defeated the line-complete form; the counts had drifted apart across four documents and are now derived from one list.
 - v1.22: Impl-plan audit v30 (codex) — counts re-derived to 31 FAIL / 13 PASS over 44 after AC-4.6 was reclassified green at RED and the tail matcher moved to Task 2; the mutation-coverage claim narrowed to enumerated targets.
 - v1.23: Impl-plan audit v31 (codex) — this document still prescribed the REJECTED matcher: a line-start wrapper around the shared `_agent_pv_re`, and rival rejection 'reused from Pass 1'. Both are the prose-unsafe path; the tail pass uses `_agent_tail_re`, with its own bounded per-agent grammar, for the wanted AND rival checks. Green-at-RED split corrected to 12 + 1 against the count of 13.
+- v1.24: Impl-plan audit v32 (codex) — 'the work is running the EXISTING helper against `.tail`' was still the headline description of a feature that no longer does that; corrected to the tail-only `_agent_tail_re`. Green-at-RED split corrected to 12 + 1 against the count of 13.

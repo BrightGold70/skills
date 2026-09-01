@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.26)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.11, 16 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.28)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.13, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -118,6 +118,53 @@ def _orca_read_dir(tmp_path, envelopes):
 ```
 `json` and `tempfile` are already imported at the top of the module; no new import is needed.
 
+
+
+**`Path(...)`, not `pathlib.Path(...)`.** The module's imports are `atexit, json, os, shutil,
+subprocess, tempfile, time, uuid` and `from pathlib import Path` — verified in the live file —
+so the bare name `pathlib` is not bound there and the dotted form raises `NameError` on the
+FIRST call, before AC-1.5 tests anything about the stub. Impl-plan audit v16 caught it. Either
+form is correct Python in isolation, which is exactly why a code block that is meant to be
+followed verbatim has to name the binding the target module actually has.
+
+**Acceptance Criteria**:
+- [ ] AC-1.1: With `HMAD_STUB_ORCA_READ_DIR=<dir>` and `<dir>/term_x.json` present, invoking the
+      stub as `orca terminal read --terminal term_x --cursor 0 --limit 4000 --json` writes that
+      file's bytes to stdout and exits 0.
+- [ ] AC-1.2: With the same variable set and `<dir>/term_y.json` **absent**, the same invocation
+      for `term_y` exits non-zero and writes nothing to stdout.
+- [ ] AC-1.3: With the variable set, `orca terminal list --json` still returns
+      `HMAD_STUB_ORCA_STDOUT` verbatim — the new branch does not capture other verbs.
+- [ ] AC-1.4: With `HMAD_STUB_ORCA_READ_DIR` unset, `orca terminal read … --json` behaves exactly
+      as before the change (`HMAD_STUB_ORCA_STDOUT` when set, else `{"ok":true,"result":{}}`).
+- [ ] AC-1.5: `_orca_read_env("a", "b")` produces an envelope whose `.result.terminal.tail` is the
+      JSON array `["a","b"]`, and `_orca_read_dir`, given a **two-handle** mapping
+      (`{"h1": …, "h2": …}`), writes `h1.json` AND `h2.json`, each with its own content.
+
+      **Two handles, not one.** `stub-read-dir-writes-one-file` truncates the loop to the first
+      entry; against a one-entry fixture that mutant is EQUIVALENT and its green-at-RED proof
+      survives — the seventh equivalent mutant this plan would have shipped. Impl-plan audit v32.
+
+      **Green at RED, necessarily — it cannot be observed failing.** Both helpers are TEST-FILE
+      helpers that T1's own RED patch introduces, so the node passes the moment the patch lands;
+      withholding them yields a `NameError`, which is a missing-symbol failure rather than a
+      behavioural one, and would force test implementation during GREEN. Classifying it `RED:
+      FAIL` made T1's 3/3 split and the 29/11 aggregate unsatisfiable — a correct dispatch would
+      have halted on `red_not_all_failing`. Impl-plan audit v23. It therefore carries mutation
+      proof instead: `stub-read-env-not-array` and `stub-read-dir-writes-one-file`, one per
+      asserted property, both pinned to this node.
+- [ ] AC-1.6: The stub still appends its argv line to `HMAD_STUB_CAPTURE` for a `terminal read`
+      call, **including the missing-file case that exits 1** — AC-2.4, AC-3.6, AC-3.7 and AC-3.10
+      all assert on that capture, and AC-3.10 in particular must be able to see that a read WAS
+      attempted for a handle the stub then failed. The new branch must therefore sit below the
+      existing capture line at the top of the file, not above it.
+
+**Dependencies on other tasks**: None
+
+---
+
+## Task 2: orca-tail-sig-helper + tail matcher
+
 **Task 2 also ships `_agent_tail_re`, at top level beside `_orca_tail_sig`.** Both are pure
 helpers, both unit-testable alone, and neither is consumed until T3 — which is what lets T3's two
 wires have a caller-observable RED (audit v30/v31). The definition belongs HERE, once; T3 carries
@@ -159,53 +206,13 @@ _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
   esac
 }```
 
-**`Path(...)`, not `pathlib.Path(...)`.** The module's imports are `atexit, json, os, shutil,
-subprocess, tempfile, time, uuid` and `from pathlib import Path` — verified in the live file —
-so the bare name `pathlib` is not bound there and the dotted form raises `NameError` on the
-FIRST call, before AC-1.5 tests anything about the stub. Impl-plan audit v16 caught it. Either
-form is correct Python in isolation, which is exactly why a code block that is meant to be
-followed verbatim has to name the binding the target module actually has.
-
-**Acceptance Criteria**:
-- [ ] AC-1.1: With `HMAD_STUB_ORCA_READ_DIR=<dir>` and `<dir>/term_x.json` present, invoking the
-      stub as `orca terminal read --terminal term_x --cursor 0 --limit 4000 --json` writes that
-      file's bytes to stdout and exits 0.
-- [ ] AC-1.2: With the same variable set and `<dir>/term_y.json` **absent**, the same invocation
-      for `term_y` exits non-zero and writes nothing to stdout.
-- [ ] AC-1.3: With the variable set, `orca terminal list --json` still returns
-      `HMAD_STUB_ORCA_STDOUT` verbatim — the new branch does not capture other verbs.
-- [ ] AC-1.4: With `HMAD_STUB_ORCA_READ_DIR` unset, `orca terminal read … --json` behaves exactly
-      as before the change (`HMAD_STUB_ORCA_STDOUT` when set, else `{"ok":true,"result":{}}`).
-- [ ] AC-1.5: `_orca_read_env("a", "b")` produces an envelope whose `.result.terminal.tail` is the
-      JSON array `["a","b"]`, and `_orca_read_dir` writes one file per mapping key named
-      `<handle>.json`.
-
-      **Green at RED, necessarily — it cannot be observed failing.** Both helpers are TEST-FILE
-      helpers that T1's own RED patch introduces, so the node passes the moment the patch lands;
-      withholding them yields a `NameError`, which is a missing-symbol failure rather than a
-      behavioural one, and would force test implementation during GREEN. Classifying it `RED:
-      FAIL` made T1's 3/3 split and the 29/11 aggregate unsatisfiable — a correct dispatch would
-      have halted on `red_not_all_failing`. Impl-plan audit v23. It therefore carries mutation
-      proof instead: `stub-read-env-not-array` and `stub-read-dir-writes-one-file`, one per
-      asserted property, both pinned to this node.
-- [ ] AC-1.6: The stub still appends its argv line to `HMAD_STUB_CAPTURE` for a `terminal read`
-      call, **including the missing-file case that exits 1** — AC-2.4, AC-3.6, AC-3.7 and AC-3.10
-      all assert on that capture, and AC-3.10 in particular must be able to see that a read WAS
-      attempted for a handle the stub then failed. The new branch must therefore sit below the
-      existing capture line at the top of the file, not above it.
-
-**Dependencies on other tasks**: None
-
----
-
-## Task 2: orca-tail-sig-helper + tail matcher
-
 **Production file**: `h-mad/scripts/hmad-dispatch.sh`
 **Test file**: `h-mad/tests/test_hmad_dispatch.py`
 **Task shape**: `new-behaviour`
 
 **Description**: Add the private helper `_orca_tail_sig <handle>`, which reads one pane's oldest
-retained scrollback under a time bound and echoes it, or fails. It is added alone, with no
+retained scrollback under a time bound and echoes it, or fails. It and `_agent_tail_re` are added
+together — two pure helpers, neither consumed until T3 — with no
 `_orca_find` change, so the helper is proven before anything consumes it. Placed immediately
 after `_agent_pv_re` (whose signatures it exists to be matched against) and before
 `_agent_proc_name`.
@@ -886,7 +893,7 @@ status is `grep`'s alone.
       **1900 lines x ~126 chars ≈ 240 KB**: same byte size, same banner-on-line-1 layout, inside
       the cap. Impl-plan audit v17 caught the mismatch.
 - [ ] AC-3.17 (spec AC-1.4, FR-1): A candidate whose tail carries the agent's tokens only inside ORDINARY
-      PROSE does **not** resolve. Corpus, measured 2026-09-01 — all seven match the UNANCHORED
+      PROSE does **not** resolve. Corpus, measured 2026-09-01 — all 24 match the UNANCHORED
       regex and none matches the anchored one:
 
       | probe | agent |
@@ -1005,7 +1012,7 @@ is NOT reused here — it is `_agent_pv_re`, which matches prose 24/24; this pas
 `rival_tail_re` from `_agent_tail_re`, the same grammar as the wanted check (AC-4.6). The old
 sentence said `$rival_re` was reused unchanged, which contradicted this task's own code block and
 would have reproduced the false-negative. Impl-plan audit v30. For reference, the shared `$rival_re` remains unchanged and is still used by Passes 1-2; only this pass substitutes `rival_tail_re`. `$rival_re`
-in `_orca_find` and is reused unchanged; Pass 2 applies the identical predicate to `.preview`, so
+in `_orca_find` and is unchanged FOR PASSES 1-2; this pass does not use it. Pass 2 applies the identical predicate to `.preview`, so
 this is that rule extended to the new evidence surface rather than a new rule.
 
 The rejection is placed after the signature match and before the append, and it must run even
@@ -1084,8 +1091,8 @@ ambiguity.
 
       A rival-**only** tail is likewise not usable here: it fails `$tail_re` and never reaches the
       rejection branch, which is why AC-4.2 was withdrawn rather than reused.
-- [ ] AC-4.6 (spec AC-1.4): **Green at RED — the tail pass does not exist yet, so nothing
-      suppresses anything and this node passes before any code is written.** Its reject-direction
+- [ ] AC-4.6 (spec AC-1.4): **Green at RED — T4 depends on a completed T3, so the pass DOES exist;
+      the node passes because RIVAL REJECTION does not exist yet, so nothing suppresses anything.** Its reject-direction
       proof is `rival-re-prose-unsafe`. Rival PROSE must not suppress a real resolution — both
       directions.** A codex pane whose tail carries `OpenAI Codex (v0.145.0)  model: gpt-5.6-terra`
       AND the sentence `Compare Gemini 3.1 Pro with Claude` still resolves as codex; symmetrically,
@@ -1478,6 +1485,22 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
    "replace": "      codex) printf '%s\\n' \"$(_agent_pv_re codex)\" ;;"
+  },
+  {
+   "name": "tail-re-unanchored-agy",
+   "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). All 10 agy prose probes then match.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;",
+   "replace": "      agy)   printf '%s\\n' \"$(_agent_pv_re agy)\" ;;"
+  },
+  {
+   "name": "tail-re-widened-to-launch-line-agy",
+   "_mechanism": "Widen the AGY arm to accept its launch command -- the mirror of the codex mutation. AC-3.2 asserts BOTH agents reject their launch line and only the codex half was discriminated.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;",
+   "replace": "      agy)   printf '%s\\n' '^agy .--dangerously' ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line",
@@ -1976,3 +1999,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.26: Impl-plan audit v29 (codex) — FOURTH revision of the prose rule plus three structural findings. The line-complete form still took a markdown heading (the prefix class allowed `#`), a hyphenated word posing as a version or model id (`OpenAI Codex v0.145-release-notes`, `model: gpt-5-migration-notes` — both suffixes were unbounded non-space runs), and an open numeric parenthetical (`Gemini 3.1 Pro (2026 release notes)`). Tightened: prefix is whitespace and box-drawing/quote only, a version is dotted-numeric, a model id needs a DOTTED release number, a parenthetical is an effort word or a version. Corpus is now 24 negatives / 12 positives, enumerated ONCE and synchronised across spec, design, impl-plan and every comment — the counts had drifted to 19/12 here, 19/12 in the design, 14/11 in the spec and '11 in all' inside the AC that owns the list. Measured: unanchored 0/24, anchored-only 7/24, leading-position 14/24, line-complete 19/24, this grammar 24/24, 12/12 positives under every revision. STRUCTURAL: the two `_agent_tail_re` calls were undeclared wires — the gate saw `wiring=1` where there are two connections, so both matcher edges bypassed the caller-observable RED and the connection-only mutation the invariant requires. T3 now declares a second WIRE/WIRE-PIN for the wanted matcher and T4 is reclassified `wiring` for the rival matcher, each with a disconnect-callee-intact mutation; the gate reports `wiring=2 registered=3`. The two rival mutations are deliberately opposed — `wire-rival-matcher-disconnected` under-rejects and `rival-re-prose-unsafe` over-rejects — so together they pin the connection AND its matcher. AC-3.18's node was named `test_agent_pv_re_...`, which the `-k test_tail_ or test_skill_md or test_os_evidence` selector does NOT match, leaving a named feature test outside the mutation baseline; renamed with the `test_tail_` prefix, and the only names now outside the selector are the two unrelated module tests the plan already documents as excluded. Task 6's 'every guard this feature introduces' narrowed to the enumerated table. 34 mutations.
 - v1.27: Impl-plan audit v30 (codex) — the worst finding of the run, and it is mine: **the prescribed matcher had never executed.** The `_agent_tail_re` arms were written with `printf '%s\\n'` and doubled `\\(` escapes, so run verbatim the helper appended the literal bytes `\n` and `grep -E` rejected the pattern outright — `repetition-operator operand invalid`, rc 2, on every input including the positive controls. Every 24/24 figure this plan reported came from separate probe scripts with different escaping; the doc carried a DIFFERENT, non-functional regex. Fixed, and the corpus is now run through the doc's own block (24/24 negatives decline, 12/12 positives match), with AC-2.11 added so the prescribed source is what gets measured — a regex the plan prints must be one `grep -E` accepts. Three more structural corrections. T4's WIRE-PIN was backwards: disconnecting the rival matcher makes rival prose stop suppressing the wanted pane, which is exactly what `test_tail_pass_rival_prose_does_not_suppress` asserts, so the pin went GREEN with the wire removed; `test_tail_pass_rejects_rival_signature` is the caller-observable direction, and AC-4.6 is now green at RED with `rival-re-prose-unsafe` as its proof. T3's wanted-matcher wire could not meet its own caller-observable rule while callee and call site both landed in T3 — the AC-1.5 shape again — so `_agent_tail_re` ships in TASK 2, and a `wire-wanted-matcher-forced-empty` mutation supplies the opposite direction (one proves the call is made, the other that its result is used). And the normative surfaces still said the tail pass reuses `_agent_pv_re`: T4's description claimed `$rival_re` was reused unchanged while its own code forbids it, and both executive summaries named the shared helper — all now name `_agent_tail_re`. Counts re-derived: 44 nodes, 31 FAIL, 13 PASS, T2 9/1, T4 4/1; 35 mutations; AC-3.17's positive list was one short of the 12 it claimed. Corpus groups are named by SHAPE now, not relative position.
 - v1.28: Impl-plan audit v31 (codex) — every finding is a consequence of v1.27's own fixes, and one repeats a lesson I had written down twice. Correcting the matcher's shell escaping ORPHANED the two JSON anchors that pointed at it: decoded, `tail-re-unanchored` and `tail-re-widened-to-launch-line` matched ZERO times, so both mutants would have mutated nothing while reporting their guards as enforced. Anchors are now GENERATED from the block itself rather than retyped, which is the only form that cannot drift. The T2/T3 split was announced and not performed — v1.27 said `_agent_tail_re` ships in T2 while the definition still sat inside T3's `_orca_find` block, so following the tasks literally either loses the helper or defines it twice (and duplicate arms would make the exact anchors non-unique). The definition now lives once, in T2, and T3 carries only the two call sites. The source plan and spec still prescribed the OLD matcher — a line-start wrapper around the shared helper, and rival rejection 'reused from Pass 1' — which is the prose-unsafe path the impl-plan rejects; both now name `_agent_tail_re` and its bounded grammar. AC-5.4's restore check ran `git diff --stat SKILL.md` from the repository root, where no such file exists: it could report clean while a failed restore sat in `h-mad/SKILL.md`. And the plan's green-at-RED split still read '12 = 11 + 1' beside a count of 13, while `tail-re-unanchored`'s mechanism still cited 'all seven prose probes' against a 24-probe corpus. Should-fixes: `_isolated_env` now scrubs `HMAD_STUB_ORCA_READ_DIR` too — an ambient export would opt every legacy `terminal read` test into the per-handle branch, making the 290-test regression claim environment-dependent — and T4's spliced sentence about `$rival_re` is repaired.
+- v1.29: Impl-plan audit v32 (codex) — the T2 move I reported at v1.28 had landed the matcher inside TASK 1: the block sat between Task 1's helper prose and the `## Task 2` heading, so a Task 1 dispatch would have received code Task 1 declares no production file for, and AC-2.11 would have been green before Task 2's RED. Third instance of announcing a structural change and not performing it — the block is now physically below the Task 2 heading, asserted by index rather than by prose. Two guard gaps: NO mutation had ever touched the AGY arm, so half the classifier was unobserved while AC-3.2 asserts both agents reject their launch line — `tail-re-unanchored-agy` and `tail-re-widened-to-launch-line-agy` added (37 mutations); and `stub-read-dir-writes-one-file` is EQUIVALENT against a one-entry fixture, so AC-1.5 now requires a two-handle mapping with per-handle content assertions — the seventh equivalent mutant this plan would have shipped. The matcher contract was still contradictory in four CURRENT bodies despite histories claiming otherwise: T4 said `$rival_re` is 'reused unchanged', the spec said `_agent_tail_re` WRAPS the shared helper while AC-1.4 says its arms are independent literals, the source plan said the work is 'running the EXISTING helper against .tail', and the design still carried the superseded 0-of-7 anchored account. All four now say the same thing. AC-4.6's green-at-RED reason was wrong (the pass DOES exist at T4; rival rejection does not), and Task 2 still said `_orca_tail_sig` 'is added alone'.

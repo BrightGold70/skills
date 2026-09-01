@@ -60,7 +60,8 @@ resolution, so a second matching pane declines rather than picking. A wider pool
 panes are eligible, never the test each one has to pass.
 
 **What `_agent_pv_re` actually matches — the banner, never the launch command.** The helper is
-reused unchanged, and it matches *program banners* (`openai codex`, `model: *gpt-`, a model id
+left unchanged and continues to serve Passes 1-2; the tail pass does NOT use it (see the
+`_agent_tail_re` rule below). It matches *program banners* (`openai codex`, `model: *gpt-`, a model id
 paired with a reasoning effort; `antigravity cli`, `gemini [0-9]`) because the bare tokens
 `codex`/`agy` were removed from it after a coordinator pane resolved as Codex. Measured
 2026-09-01 with passing controls: `codex '--dangerously-bypass-approvals-and-sandbox'` and
@@ -91,7 +92,8 @@ That matters only for THIS pass: `$scoped` includes ordinary shell panes and tai
 historical, so a shell that once printed release notes was resolvable AS THE AGENT — the
 wrong-pane class FR-2 forbids. Passes 1 and 2 read short titles and previews rather than arbitrary
 scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
-moves. Anchored: 0 of 7 prose probes match, 7 of 7 real banner and status lines still do. Pinned
+moves. Measured over the 24-probe corpus: 0 of 24 prose probes match and 12 of 12 real banner and
+status lines still do. Pinned
 by impl-plan AC-3.17 and mutation `tail-re-unanchored`.
 
 **Per-candidate test.** For each candidate handle, read the tail with exactly this command
@@ -467,3 +469,4 @@ resolution, or it merely restates Pass 0.
 - v1.25: Impl-plan audit v29 (codex) — matcher description updated to the bounded grammar and the 24/12 corpus, and the stale literal-`null` conclusion in the later Extraction subsection scoped explicitly to the simple probe filter, so the design gives ONE explanation for the load-bearing `-e` guard rather than two.
 - v1.26: Impl-plan audit v30 (codex) — the Executive Summary still described the pass as matching `_agent_pv_re`, which is the prose-unsafe helper its own safety rule rejects; corrected to `_agent_tail_re`. Mutation-coverage claim narrowed to enumerated targets, node counts re-derived to 31 / 13 over 44.
 - v1.27: Impl-plan audit v31 (codex) — the bounded-grammar paragraph had spliced two continuation lists together, obscuring which suffixes are actually accepted; reduced to one list matching the regex.
+- v1.28: Impl-plan audit v32 (codex) — the `_agent_pv_re` subsection still said the helper is 'reused unchanged' by this pass and quoted the superseded anchored measurement (0 of 7); both corrected to the 24-probe corpus and the Passes-1-2 scope.

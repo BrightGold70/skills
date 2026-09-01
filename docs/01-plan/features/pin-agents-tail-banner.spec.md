@@ -64,8 +64,9 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 
 ### FR-1: Tail evidence resolves an otherwise-unresolvable agent
 - **Description**: A pass between Pass 2 and Pass 3 reads each unresolved candidate's tail
-  and matches the tail-only `_agent_tail_re` banner grammar, which wraps the EXISTING
-  `_agent_pv_re` signature with a stricter line-complete rule (AC-1.4). It is gated on neither Pass 2's
+  and matches the tail-only `_agent_tail_re` banner grammar. Its per-agent patterns are
+  INDEPENDENT literals, not a wrapper around `_agent_pv_re` — that helper matches prose 24/24 and
+  is left unchanged for Passes 1-2 (AC-1.4). It is gated on neither Pass 2's
   `n == 0` condition nor Pass 3's `lsof` precondition, so it covers an ambiguous title and a
   machine with no `lsof` — neither of which any current pass reaches.
 - **Acceptance Criteria**:
@@ -189,7 +190,8 @@ of failure; leaving it undocumented would.
 ## Version History
 - v1.0: Initial specification draft.
 - v1.1: Back-propagated from plan v1.1 — the feature extends Pass 3 rather than adding a
-  pass; `_agent_pv_re` is reused unchanged (verified against both real panes); AC-4.3 names
+  pass; `_agent_pv_re` is left unchanged FOR PASSES 1-2 and is not the tail matcher (verified
+  against both real panes); AC-4.3 names
   the portable time bounder.
 - v1.2: Placement corrected after source review — a standalone pass between Pass 2 and
   Pass 3 rather than a branch inside Pass 3; AC-3.3 added for the two shapes no current
@@ -210,3 +212,4 @@ of failure; leaving it undocumented would.
 - v1.10: Impl-plan audit v29 (codex) — AC-1.4's measurement corrected to the current corpus: `_agent_pv_re` matches 24 of 24 prose probes, the tail grammar declines all 24, and all 12 real banner and status controls still match. The spec had been citing a superseded 14/11 corpus.
 - v1.11: Impl-plan audit v30 (codex) — the Executive Summary and FR-1 still said the tail pass matches the EXISTING `_agent_pv_re` signature, contradicting AC-1.4's stricter rule two paragraphs later; both now name the tail-only `_agent_tail_re` grammar that wraps it.
 - v1.12: Impl-plan audit v31 (codex) — Measured basis 3 and AC-1.4 still implied the tail pass reuses or wraps `_agent_pv_re`; the per-agent patterns in `_agent_tail_re` are independent literals, and the shared helper is unchanged only for Passes 1-2.
+- v1.13: Impl-plan audit v32 (codex) — FR-1 said `_agent_tail_re` WRAPS `_agent_pv_re` while AC-1.4 says its per-agent patterns are independent literals; the two selected different implementations. Measured basis 3 also still said the shared helper is 'reused unchanged' without the Passes-1-2 qualifier.
