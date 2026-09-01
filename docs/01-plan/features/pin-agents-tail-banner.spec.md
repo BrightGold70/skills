@@ -82,7 +82,7 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     — does not resolve. `_agent_pv_re` alone does NOT satisfy this: measured 2026-09-01 it
     matches 24 of 24 such probes, and it is shared with Passes 1-2, whose inputs are short
     titles and previews rather than arbitrary retained scrollback. The tail pass therefore
-    applies a banner/status grammar on top of it — the signature must end its line or continue
+    uses its own INDEPENDENT bounded literals — the signature must end its line or continue
     with version/model/effort structure — which declines 24/24 while all 12 real banner and
     status-line controls still match. This is a wrong-pane rule, not a precision preference:
     the candidate pool includes ordinary shell panes and tail evidence is historical, so
@@ -216,3 +216,4 @@ of failure; leaving it undocumented would.
 - v1.13: Impl-plan audit v32 (codex) — FR-1 said `_agent_tail_re` WRAPS `_agent_pv_re` while AC-1.4 says its per-agent patterns are independent literals; the two selected different implementations. Measured basis 3 also still said the shared helper is 'reused unchanged' without the Passes-1-2 qualifier.
 - v1.14: Impl-plan audit v33 (codex) — AC-1.1 still defined a match by the agent's `_agent_pv_re` signature while AC-1.4 measures that same helper matching ordinary prose 24 times out of 24. The two ACs admitted different candidate sets, and the wider one is the wrong-pane class AC-1.4 exists to forbid; AC-1.1 now names `_agent_tail_re`.
 - v1.15: Impl-plan audit v34 (codex) — Executive Summary grammar corrected ('reading … and resolves' → 'reading …, resolving').
+- v1.16: Impl-plan audit v35 (codex) — AC-1.4 said the grammar is applied 'on top of' `_agent_pv_re` two sentences after calling its patterns independent; the wrapper reading is the prose-unsafe implementation this AC exists to forbid.

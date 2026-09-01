@@ -1025,6 +1025,24 @@ a pane carrying rival PROSE is no longer suppressed *and* a pane carrying a riva
 longer rejected either — AC-4.6 and AC-4.1 move in opposite directions, which is what
 distinguishes a real disconnect from a widened matcher.
 
+**T4 also adds the rival TOKEN, which `_orca_find` does not have.** The existing function owns
+`rival_re` — a REGEX, built from `_agent_pv_re` for Pass 1 — and nothing holds the rival's name.
+`_agent_tail_re "$rival"` therefore expands an unbound variable, and the wrapper runs under
+`set -euo pipefail` (line 5), so the FIRST candidate carrying the wanted signature aborts
+`_orca_find` instead of performing rival rejection. Introduced at v1.25 and caught by impl-plan
+audit v35. Extend the existing case rather than adding a second one:
+
+```sh
+  local rival_re="" rival=""
+  case "$token" in
+    codex) rival_re="$(_agent_pv_re agy)";   rival=agy   ;;
+    agy)   rival_re="$(_agent_pv_re codex)"; rival=codex ;;
+  esac
+```
+
+`rival` stays empty for any other token, and `_agent_tail_re ""` falls to the `*)` arm, so the
+guard degrades to the shared helper rather than aborting.
+
 **Description**: Design Implementation Order step 3. A candidate whose tail carries the RIVAL
 agent's signature is rejected **before** it is counted, so it can neither be selected nor create
 a false ambiguity that suppresses a real resolution. The shared `$rival_re` computed above Pass 1
@@ -1381,7 +1399,7 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "wire-wanted-matcher-disconnected",
-   "_mechanism": "Remove the wanted-matcher CALL, leaving _agent_tail_re defined and every T2 unit test green. $tail_re is then empty, `grep -Eiq \"\"` matches every pane, and a prose-only tail resolves. Connection-only: the callee is intact, which is what a whole-module revert cannot establish.",
+   "_mechanism": "Remove the wanted-matcher CALL, leaving _agent_tail_re defined and every T2 unit test green. $tail_re is then empty, `grep -Eiq \"\"` matches every pane, so AC-3.17's mixed fixture yields TWO matches and the pass declines on ambiguity instead of returning the banner's handle. Connection-only: the callee is intact, which is what a whole-module revert cannot establish.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
@@ -1516,18 +1534,18 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
   },
   {
    "name": "tail-re-widened-to-launch-line-agy",
-   "_mechanism": "Widen the AGY arm to accept its launch command -- the mirror of the codex mutation. AC-3.2 asserts BOTH agents reject their launch line and only the codex half was discriminated.",
+   "_mechanism": "ADDITIVELY widen the AGY arm: the full banner grammar is preserved and `|^agy .--dangerously` appended, so every positive control still matches and the ONLY behaviour change is that the launch line is now accepted. A wholesale replacement (the v1.31 form) was killed because the node\u0027s positive controls failed -- an accidental kill that proves nothing about launch-line rejection. Audit v35. AC-3.2 exercises both agents.",
    "file": "scripts/hmad-dispatch.sh",
-   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;",
-   "replace": "      agy)   printf '%s\\n' '^agy .--dangerously' ;;"
+   "replace": "      agy)   printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)|^agy .--dangerously' ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;",
-   "replace": "      codex) printf '%s\\n' '^codex .--dangerously' ;;"
+   "replace": "      codex) printf '%s\\n' '^[[:space:]]*([\u2502|\u2503\u254e\u2506:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*\u00b7[[:space:]]*[^[:space:]]*)?[[:space:]]*$)|^codex .--dangerously' ;;"
   },
   {
    "name": "tail-sig-fabricates-banner-on-failure",
@@ -2023,3 +2041,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.29: Impl-plan audit v32 (codex) — the T2 move I reported at v1.28 had landed the matcher inside TASK 1: the block sat between Task 1's helper prose and the `## Task 2` heading, so a Task 1 dispatch would have received code Task 1 declares no production file for, and AC-2.11 would have been green before Task 2's RED. Third instance of announcing a structural change and not performing it — the block is now physically below the Task 2 heading, asserted by index rather than by prose. Two guard gaps: NO mutation had ever touched the AGY arm, so half the classifier was unobserved while AC-3.2 asserts both agents reject their launch line — `tail-re-unanchored-agy` and `tail-re-widened-to-launch-line-agy` added (37 mutations); and `stub-read-dir-writes-one-file` is EQUIVALENT against a one-entry fixture, so AC-1.5 now requires a two-handle mapping with per-handle content assertions — the seventh equivalent mutant this plan would have shipped. The matcher contract was still contradictory in four CURRENT bodies despite histories claiming otherwise: T4 said `$rival_re` is 'reused unchanged', the spec said `_agent_tail_re` WRAPS the shared helper while AC-1.4 says its arms are independent literals, the source plan said the work is 'running the EXISTING helper against .tail', and the design still carried the superseded 0-of-7 anchored account. All four now say the same thing. AC-4.6's green-at-RED reason was wrong (the pass DOES exist at T4; rival rejection does not), and Task 2 still said `_orca_tail_sig` 'is added alone'.
 - v1.30: Impl-plan audit v33 (codex) — must 5 -> 4, and the audit independently re-derived the three things this plan most depends on: the prescribed matcher EXECUTES correctly over the 24/12 corpus, the mutation JSON parses at 37 entries, and the module still collects 290. The blocking finding is a RED classification that could not hold, the third of its shape (AC-1.5 at v23, T4's pin at v30): AC-3.17 was `RED: FAIL` and T3's WIRE-PIN while its fixture was prose-ONLY — which does not resolve at T3 RED either, because the pass does not exist yet, so the node passes before any T3 code is written and a pin that passes without its wire proves nothing. Reshaped to a MIXED fixture: one real-banner candidate plus one prose decoy, expecting the banner's handle. That fails before the pass exists AND when the matcher connection is removed (both candidates then match, count is 2, the pass declines on ambiguity). The matcher's own corpus moved to T2 as AC-2.12, where the helper is owned — AC-2.11 only proved the regex was syntactically usable, which an always-matching ERE would satisfy, so the helper was 'proven before anything consumes it' by a check that could not see what it matched. Cross-document: spec AC-1.1 still defined the match in terms of `_agent_pv_re` while AC-1.4 measures that helper matching prose 24/24 — two ACs admitting different candidate sets, one of them the wrong-pane class; the design never listed `_agent_tail_re` in Components, API or Implementation Order despite requiring it at step 2; and the plan's Success Criteria assigned the procedure to 'the twelfth' after saying twelve nodes are mutation-backed, leaving the thirteenth unaccounted. Counts re-derived: 45 nodes, 32 FAIL, 13 PASS, T2 10/1.
 - v1.31: Impl-plan audit v34 (codex) — must 4 -> 3; the RED table, the 37-mutation JSON and the 290-node module all re-derived correctly again. Two mutation-discrimination defects, both introduced by earlier re-anchoring. `entry-gated-on-n-eq-0` had been re-anchored at v1.28 onto the `local` line with `[ "$n" -eq 0 ] || return 1`, which ABORTS `_orca_find` and suppresses the OS-evidence pass behind it — so the mutant could be killed by the forbidden early return rather than by the wrong entry condition, which is the mechanism its own rationale describes. It now neutralises only this pass's matcher and preserves fall-through. And the two per-arm AGY mutants were pinned to `test_tail_pass_prose_mentioning_agent_does_not_resolve`, whose fixture is Codex-only by construction (AC-3.17 uses an OpenAI Codex banner and Codex prose), so an AGY-arm mutation would have SURVIVED its designated test and ALL_CAUGHT been unreachable; all three grammar mutants now target AC-2.12's node, which is where the per-agent corpus lives. Third: design v1.29's history claimed Implementation Order and API had been updated for `_agent_tail_re` and they had not — step 1 still shipped only `_orca_tail_sig` while step 2 consumed the missing matcher, and the API section still said 'One new private shell function'. Both fixed, plus the helper's interface block. That is the fourth instance of a history entry claiming a back-propagation the body did not receive.
+- v1.32: Impl-plan audit v35 (codex) — must 3 -> 2, third consecutive drop, and the RED table (45/32/13), the 37-mutation JSON and the 290-node module re-derived correctly for the third cycle running. Both findings are real defects in code this plan prescribes. `_agent_tail_re "$rival"` expanded an UNBOUND variable: `_orca_find` owns `rival_re`, a regex built for Pass 1, and nothing holds the rival's NAME — under the wrapper's `set -euo pipefail` (line 5, verified) the first candidate carrying the wanted signature would abort `_orca_find` instead of performing rival rejection. Introduced at v1.25 when the rival check moved to the tail grammar and unnoticed for ten cycles. T4 now extends the existing case with `rival=agy` / `rival=codex`, and an empty token falls to the `*)` arm rather than aborting. Second: the launch-line mutants REPLACED their arm wholesale, so the kill came from the node's positive controls failing — an accidental kill that proves nothing about launch-line rejection. Both are additive now (full grammar preserved, `|^<agent> .--dangerously` appended) and pinned to AC-3.2's node, which exercises both agents; the corpus node keeps the three prose mutants. Also: `wire-wanted-matcher-disconnected`'s mechanism still described AC-3.17's old prose-only fixture, and the spec and design still implied the grammar is layered ON TOP of `_agent_pv_re` rather than being independent literals.

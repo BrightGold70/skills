@@ -75,7 +75,7 @@ exist to exclude.
 and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
 neither is a leading-position grammar: measured across 24 prose probes, the shipped regex declines
 0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
-bounded grammar — the banner must
+bounded, independent `_agent_tail_re` literals — the banner must
 consume its whole line, allowing just a version, a `model:` field, an effort word, a `·` and a cwd,
 — the banner must consume its line, allowing only a dotted-numeric version, a DOTTED model id, an
 effort word, a `·` and a cwd, or an effort/version parenthetical, behind a prefix of whitespace or
@@ -100,7 +100,7 @@ banner-plus-prose-decoy fixture. Mutations `tail-re-unanchored` and `tail-re-una
 (one per agent arm) are killed by AC-2.12.
 
 **Per-candidate test.** For each candidate handle, read the tail with exactly this command
-and match the agent's existing signature; reject a candidate whose tail matches the RIVAL's
+and match the agent's `_agent_tail_re` grammar; reject a candidate whose tail matches the RIVAL's
 signature before counting it:
 
 ```sh
@@ -483,3 +483,4 @@ resolution, or it merely restates Pass 0.
 - v1.28: Impl-plan audit v32 (codex) — the `_agent_pv_re` subsection still said the helper is 'reused unchanged' by this pass and quoted the superseded anchored measurement (0 of 7); both corrected to the 24-probe corpus and the Passes-1-2 scope.
 - v1.29: Impl-plan audit v33 (codex) — `_agent_tail_re` was required by the matcher rule but absent from Components Changed and from the Implementation Order, whose step 1 shipped only `_orca_tail_sig` while step 2 consumed the missing helper. Added to both, mapped to impl-plan T2, with its 24/12 corpus tested there. Node counts re-derived to 32 / 13 over 45.
 - v1.30: Impl-plan audit v34 (codex) — v1.29's history claimed `_agent_tail_re` had been added to Components, Implementation Order and API; only Components had it. Step 1 now ships both helpers with the matcher's direct 24/12 corpus, the API section lists TWO private functions with the matcher's interface, and the pin note distinguishes AC-2.12 (the helper's own corpus, in the task that defines it) from AC-3.17 (the caller connection, mixed fixture).
+- v1.31: Impl-plan audit v35 (codex) — removed the last phrases implying the tail pass matches 'the agent's existing signature' or layers a grammar over the shared helper; both checks use the independent bounded `_agent_tail_re` literals.
