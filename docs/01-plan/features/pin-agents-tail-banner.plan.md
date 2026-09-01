@@ -161,9 +161,18 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
 - The suite is `pytest` at the repo root (`pytest.ini` testpaths, 2538 tests as of `7c6499c`).
 - Anchor sweep must stay `ANCHORS_OK`; the pre-push hook enforces it.
 - Live verification runs against the real Orca runtime — the panes used must be closed.
-- RED-before-GREEN per the base invariant on test discrimination: confirm each new test
-  fails against the unfixed wrapper before implementing, and state the expected
-  failing/passing counts in the 5d dispatch so an unexpected pass halts.
+- RED-before-GREEN per the base invariant on test discrimination — **per node, NOT blanket.**
+  Each new test is either observed to FAIL against the unfixed wrapper, or is a legitimately
+  green-at-RED node tied to a named mutation that must be killed by that specific node. State the
+  expected per-node failing/passing counts in the 5d dispatch so an unexpected result halts.
+  **"Confirm each new test fails" was the wording here until impl-plan audit v19**, and it is
+  unsatisfiable: preservation and negative nodes ("the legacy stub path is unchanged", "zero
+  matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") pass
+  before any code exists. An implementer following it would demand a blanket RED and trigger
+  `step5d:red_not_all_failing` on a correct dispatch. The Success Criteria below and the design
+  and impl-plan all state the per-node contract; v1.7's history claimed this rule had been
+  back-propagated out of the plan, and it had not been — the claim lived in the changelog while
+  the instruction stayed in the body.
 
 ## Success Criteria
 
@@ -188,7 +197,7 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   requirement is unsatisfiable and would halt a correct 5d dispatch: preservation and negative
   nodes ("the legacy stub path is unchanged", "a launch-command-only tail does not resolve",
   "zero matches decline", "no read is issued when Pass 0 resolved", "frontmatter unchanged") are
-  legitimately green before any code exists. Measured: **27 of 38 nodes RED, 11 green**, each of
+  legitimately green before any code exists. Measured: **28 of 39 nodes RED, 11 green**, each of
   the 11 tied to a mutation that must be killed by that specific node. RED observation OR a
   discriminating mutation is what distinguishes new coverage from a restatement of current
   behaviour — one or the other, never neither
@@ -245,3 +254,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.8: Impl-plan audit v12 (codex) — two of three must-fixes were defects in v1.8's own SIGPIPE fix. AC-4.5 was VACUOUS as written: a rival-only tail fails the wanted check first and never reaches rival rejection, and putting both banners early makes the WANTED check return 141, so the expected decline happens for a reason unrelated to the branch under test - it would pass against a build with rival rejection deleted. Measured both layouts on 240,068-byte tails; only rival-first-wanted-last discriminates (broken: wanted rc 0, rival rc 141; fixed: 0/0), and the AC now specifies that exact fixture. The RED counts were stale on FOUR non-history surfaces, not the three the audit named - it missed plan.md:178 - so the sweep found one more than the finding did; all now 37/11/26. The live check ran pin-agents --clear and then verified only the ENVIRONMENT, never re-reading the pin file the clear was meant to empty: it now records the path env prints and asserts on that file. AC-6.11 claimed an exact-string root assertion while prescribing not os.path.isabs, which any relative value satisfies.
 - v1.9: Impl-plan audit v15 (codex) — every must-fix was a correction recorded only where it was FOUND, never on the paired surface. The counts were stale on SIX live sites across three docs (37 where the table now derives 38, 26/11 where it derives 27/11, 'T5's three' where T5 has four). The design still prescribed a subprocess 'hmad-dispatch run' and an untyped .result.terminal.tail, so an implementer following the cited source would have produced exactly the code path T2 rejects - the in-process _cmd_run call and the measured ARRAY shape are now IN the design. The plan's Success Criteria and the design's live check still required only that env resolve codex, which Pass 0 or an ambient file pin satisfies with zero terminal reads; both now carry the pin-FILE re-read (checking the environment is a different surface from the one --clear mutates), earlier-pass blindness, the tail-evidence marker and a cleanup re-list. AC-5.5 gained its exact old/new phrases and test body; _orca_read_dir now makes a fresh directory per call, since mkdir(exist_ok=True) let a previous call's handle file serve a handle the caller deliberately OMITTED. Audit-side note: the reviewer ran the wire-pin gate, which auto-registers and rewrote the wires.jsonl timestamp - it disclosed the mutation rather than reverting it, and the timestamp-only churn was discarded here.
 - v1.10: Impl-plan audit v16 (codex) — two corrections, both on surfaces that contradicted the implementation contract. The read command, the portable-bounder paragraph, the deliverables row and the risk row all still prescribed `hmad-dispatch run --timeout` as a subprocess, which taken literally re-execs the wrapper by name — not on the test harness's PATH and a process per candidate — while T2 and the design require the in-process `_cmd_run`; all four now say `_cmd_run`, naming the verb only to identify which bounder. Separately, a WEAK duplicate live-check criterion sat below the strong four-part one and required only that `env` resolve codex and that a created pane be closed — satisfiable by Pass 0 or an ambient pin with zero `terminal read` calls, i.e. with the whole feature reverted. Deleted rather than strengthened: the strong criterion two bullets above already carries the pin-FILE re-read, and a document that states a gate twice at two strengths is read at the weaker one. Found while sweeping, not by the audit: the AC-count derivation this bullet prescribes was UNANCHORED (`grep -o 'AC-[0-9].[0-9]' | sort -u`) and counts every AC id the spec merely mentions, impl-plan ids in the spec's own version history included — measured 16 against 14 defined, and one of the two extras was written by the history entry recording this very fix. Now row-anchored. The count itself was correct; the command that was supposed to prove it was not, which is the worse of the two failures because it is the one that outlives the sweep.
+- v1.11: Impl-plan audit v19 (codex) — node counts re-derived to 28 FAIL / 11 PASS over 39 after AC-2.9 was added (an exit-0 `ok:false` envelope was being accepted as identity evidence). Convention Prerequisites also still carried the blanket-RED instruction that v1.7's history claimed had been back-propagated out; swept to the per-node contract.
