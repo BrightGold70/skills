@@ -782,7 +782,8 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
   # H4: auto-detect by preview decays once an agent does work. Call this after the
   # Phase-5 substrate check to freeze the resolved handles into the session pin
   # file, so every later dispatch is deterministic. Resolves FRESH (explicit env
-  # pin wins, else auto-detect) — it never reads the pin file it is about to write.
+  # pin wins, else auto-detect); the existing pin file is read ONLY as a fallback,
+  # for an agent that does not re-resolve — see the carry rule in the loop.
   # `--clear` removes the pin file. Precedence at read time stays: env > pin file
   # > auto-detect, so an operator env pin always overrides a stale pinned handle.
   _require_orca pin-agents || return $?
@@ -806,7 +807,37 @@ _cmd_pin_agents() {  # [--clear] — resolve codex+agy ONCE and persist to the p
     fi
     if [ -n "$handle" ]; then
       printf '%s=%s\n' "$a" "$handle" >> "$tmp"; echo "[H-MAD] pinned $a -> $handle" >&2
-    else
+      continue
+    fi
+    # CARRY a prior pin this run could not re-resolve rather than deleting it.
+    # This function used to write a tempfile built purely from fresh resolutions
+    # and mv it over the pin file, which silently DELETED a still-live pin every
+    # time it ran to repair the OTHER agent (observed 2026-09-01: repairing a
+    # stale agy dropped a live codex pin, and `pin` proved that handle live
+    # seconds later). The loss is guaranteed rather than incidental for codex,
+    # because auto-detect cannot re-find it once its banner decays — exactly the
+    # condition a pin exists to survive. Only a READABLE listing that lacks the
+    # handle is evidence of death: `_orca_handle_live` answers 2 for a listing it
+    # could not read, and treating that as dead is the same conflation the helper
+    # was written to prevent.
+    local prior="" lrc=0 why=""
+    [ -f "$pf" ] && prior="$(sed -n "s/^$a=//p" "$pf" | tail -n 1)"
+    if [ -n "$prior" ]; then
+      # `set -e` is on and this helper answers with a NON-ZERO status by design,
+      # so it must be called in a condition context or the script dies where it
+      # meant to branch. The existing `{ _orca_handle_live "$h"; [ $? -eq 1 ]; }`
+      # idiom above exists for the same reason; a bare `cmd; rc=$?` here aborted
+      # pin-agents on the provably-dead case and left the pin file untouched.
+      if _orca_handle_live "$prior"; then lrc=0; else lrc=$?; fi
+      if [ "$lrc" -ne 1 ]; then
+        [ "$lrc" -eq 0 ] && why="still live" || why="liveness unreadable, which is not evidence of death"
+        printf '%s=%s\n' "$a" "$prior" >> "$tmp"
+        echo "[H-MAD] pin-agents: kept the existing $a pin -> $prior ($why)" >&2
+        continue
+      fi
+      echo "[H-MAD] pin-agents: dropped the $a pin -> $prior — no such terminal in the listing" >&2
+    fi
+    if true; then
       unresolved="${unresolved:+$unresolved }$a"
       # Codex especially: title = worktree name and the preview banner decays once
       # the pane works, so auto-detect has no stable signal. The ONLY durable path

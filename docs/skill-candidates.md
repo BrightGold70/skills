@@ -958,6 +958,16 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `pin-agents`, and the hand re-pin afterwards leaves no trace pointing back at it — the same shape
   as the wire-pin gate that blocked correct work and was worked around by rewriting the document.
   A test needs both arms: one live pin + one stale, assert the live one **survives**.
+  — **LANDED 2026-09-01**, the way the row predicted, plus one thing it did not: the carry is
+  **three**-way, not two. `_orca_handle_live` answers 0/1/2, and only a readable listing that lacks
+  the handle (1) drops the pin — an unreadable listing (2) keeps it, because the moment the runtime
+  cannot be queried is exactly the moment a pin is load-bearing. The predicted two arms are there and
+  a third covers the unreadable case. The trap while writing it: `set -euo pipefail` is on and that
+  helper returns non-zero as an **answer**, so the obvious `cmd; rc=$?` killed the script at the very
+  branch it was meant to take — the pin file went unwritten, and the drop test then failed for the
+  wrong reason and would have been 'fixed' by weakening it. The file's existing
+  `{ _orca_handle_live "$h"; [ $? -eq 1 ]; }` idiom exists for exactly this. 4 mutants, ALL_CAUGHT,
+  one of them pinning that idiom.
 - **the "no live agent in that worktree" gate for READ Step 3.6 — proposed, specified, FALSIFIED**:
   carried out of the 2026-09-01 handoff as `[suggested]` "widen the allowlist to the fast-forwardable
   sibling; the gate would need *no live agent in that worktree*, checkable via `orca terminal read`".

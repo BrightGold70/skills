@@ -1,0 +1,47 @@
+{
+  "_why": "The bug was not a wrong value, it was a DELETION: `pin-agents` built a tempfile from fresh resolutions only and mv'd it over the pin file, so a run aimed at repairing one agent silently dropped the other agent's still-live pin (observed live 2026-09-01 — repairing a stale agy dropped a codex handle that `pin` proved live seconds later). Nothing in the output said so; the operator re-pinned by hand and the command that caused it left no trace. The fix is a three-way carry, and every mutant here collapses that third state, because a two-way live/dead read is exactly what a future reader will simplify it back to. The `set -e` mutant is not stylistic: this helper answers with a non-zero status by design, and calling it outside a condition context kills the script at the moment it means to branch — measured while writing this fix, where it left the pin file untouched and the drop test failing for the wrong reason.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch.py",
+    "-q",
+    "-k",
+    "pin_agents"
+  ],
+  "mutations": [
+    {
+      "name": "carry-removed-live-pin-deleted-again",
+      "_mechanism": "Never carry: the branch is dead, so the tempfile again holds only fresh resolutions and the mv deletes a live pin. This is the pre-fix behaviour verbatim, and it is invisible from the command's own output — it prints `pinned agy -> …` and exits, while the other agent's pin is gone.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ \"$lrc\" -ne 1 ]; then",
+      "replace": "      if false; then",
+      "_killed_by": "tests/test_hmad_dispatch.py::test_pin_agents_keeps_a_still_live_pin_it_cannot_re_resolve"
+    },
+    {
+      "name": "unreadable-listing-read-as-dead",
+      "_mechanism": "Carry only on a PROVEN-live handle, dropping the pin when the listing could not be read. This is the conflation `_orca_handle_live`'s three-way answer exists to prevent, and it fails in the worst possible situation: a pin exists precisely so dispatch survives when the runtime cannot be queried, so the moment the listing breaks is the moment the pin is deleted. Kills only the unreadable test — the live and dead cases behave identically under it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ \"$lrc\" -ne 1 ]; then",
+      "replace": "      if [ \"$lrc\" -eq 0 ]; then",
+      "_killed_by": "tests/test_hmad_dispatch.py::test_pin_agents_keeps_a_pin_when_the_listing_cannot_be_read"
+    },
+    {
+      "name": "carry-never-expires",
+      "_mechanism": "Carry unconditionally, so a handle the listing provably lacks is re-frozen forever and the loud rc=1 never fires for it. The failure moves to the first dispatch, which goes nowhere, and the pin file — the thing an operator reads to decide whether the agent is addressable — asserts it is fine.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if [ \"$lrc\" -ne 1 ]; then",
+      "replace": "      if true; then",
+      "_killed_by": "tests/test_hmad_dispatch.py::test_pin_agents_drops_a_pin_the_listing_provably_lacks"
+    },
+    {
+      "name": "liveness-called-outside-a-condition-under-set-e",
+      "_mechanism": "Revert to the obvious `cmd; rc=$?`. With `set -euo pipefail` at the top of the file and a helper whose 1 and 2 are ANSWERS rather than errors, the script exits at the branch instead of taking it — the pin file is never rewritten at all, so the run looks like it merely failed rather than like it skipped its own logic. Measured during this fix; the existing `{ _orca_handle_live \"$h\"; [ $? -eq 1 ]; }` idiom elsewhere in the file exists for the same reason.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      if _orca_handle_live \"$prior\"; then lrc=0; else lrc=$?; fi",
+      "replace": "      _orca_handle_live \"$prior\"; lrc=$?",
+      "_killed_by": "tests/test_hmad_dispatch.py::test_pin_agents_drops_a_pin_the_listing_provably_lacks"
+    }
+  ]
+}

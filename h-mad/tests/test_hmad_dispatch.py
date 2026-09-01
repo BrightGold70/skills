@@ -4536,3 +4536,102 @@ class TestAtomicOutWrite:
             and "_write_out_atomic" not in line
         ]
         assert offenders == [], offenders
+
+
+# --- pin-agents must not DELETE a pin while repairing the other agent ---------
+#
+# Observed live 2026-09-01 on Orca 1.4.192. `env` reported `codex -> term_f483…`
+# plus `agy … STALE (no such terminal)`; one `pin-agents`, run to repair agy,
+# resolved agy, printed `codex UNRESOLVED`, and left the pin file holding exactly
+# one line. The dropped codex handle was NOT stale — re-pinning it by hand
+# succeeded, and `pin` refuses any handle absent from the listing.
+#
+# The cause is two writers of one file with opposite semantics: `_cmd_pin` seeds
+# its tempfile from the existing file and replaces ONE line, while
+# `_cmd_pin_agents` resolved both agents fresh into a tempfile and mv'd it over
+# the top. The design note covered overwriting a STALE pin; it did not cover
+# deleting a LIVE one. For codex the loss is guaranteed rather than incidental:
+# the same function documents that auto-detect cannot re-find codex once its
+# banner decays, so every pin-agents run after that point trades a working codex
+# pin for a rediscovered agy one — and the hand re-pin afterwards leaves no trace
+# pointing back at the command that caused it.
+
+
+def test_pin_agents_keeps_a_still_live_pin_it_cannot_re_resolve(tmp_path):
+    """The regression itself: repairing agy must not delete a live codex pin."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("codex=term_live_codex\n")
+    listing = _orca_terms_full(
+        {"handle": "term_live_codex", "title": "some-worktree", "preview": ""},
+        {"handle": "term_live_agy", "title": "agy", "preview": ""},
+    )
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_AGY_TERMINAL": "term_live_agy",
+                 "HMAD_STUB_ORCA_STDOUT": listing})
+    written = pins.read_text()
+    assert "codex=term_live_codex" in written, (
+        "a live pin was deleted by a run aimed at the other agent: " + written)
+    assert "agy=term_live_agy" in written
+    assert r.returncode == 0, (
+        "codex is addressable via the carried pin, so this is not an unresolved "
+        "run: " + r.stderr)
+
+
+def test_pin_agents_drops_a_pin_the_listing_provably_lacks(tmp_path):
+    """Carrying must not become never-expiring. Only a READABLE listing that
+    lacks the handle is evidence of death — and then the agent really is
+    unresolved, so the loud rc=1 still fires."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("codex=term_dead_codex\n")
+    listing = _orca_terms_full(
+        {"handle": "term_live_agy", "title": "agy", "preview": ""},
+    )
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_AGY_TERMINAL": "term_live_agy",
+                 "HMAD_STUB_ORCA_STDOUT": listing})
+    written = pins.read_text()
+    assert "term_dead_codex" not in written, written
+    assert "agy=term_live_agy" in written
+    assert r.returncode != 0, "a dead pin leaves codex genuinely unresolved"
+    assert "HMAD_ORCA_CODEX_TERMINAL" in r.stderr
+
+
+def test_pin_agents_keeps_a_pin_when_the_listing_cannot_be_read(tmp_path):
+    """Fail closed. `_orca_handle_live` answers 2 for an unreadable listing, and
+    'I could not check' must not take the same branch as 'provably dead' — that
+    conflation is what a pin exists to survive in the first place."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("codex=term_unknown_codex\n")
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_AGY_TERMINAL": "term_agy",
+                 "HMAD_STUB_ORCA_STDOUT": "not-json"})
+    assert "codex=term_unknown_codex" in pins.read_text(), (
+        "an unreadable listing is not evidence of death: " + pins.read_text())
+
+
+def test_pin_agents_still_prefers_a_fresh_resolution_over_the_carried_pin(tmp_path):
+    """Carrying is the fallback, never the winner. A fresh resolve must replace
+    the prior value, or an operator's new env pin would be silently ignored."""
+    b = _bindir(tmp_path, ["orca"])
+    pins = tmp_path / "pins.env"
+    pins.write_text("codex=term_old_codex\nagy=term_old_agy\n")
+    listing = _orca_terms_full(
+        {"handle": "term_old_codex", "title": "some-worktree", "preview": ""},
+        {"handle": "term_new_codex", "title": "some-worktree", "preview": ""},
+        {"handle": "term_new_agy", "title": "agy", "preview": ""},
+    )
+    r = run(["pin-agents"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(pins),
+                 "HMAD_ORCA_CODEX_TERMINAL": "term_new_codex",
+                 "HMAD_ORCA_AGY_TERMINAL": "term_new_agy",
+                 "HMAD_STUB_ORCA_STDOUT": listing})
+    written = pins.read_text()
+    assert r.returncode == 0, r.stderr
+    assert "codex=term_new_codex" in written and "term_old_codex" not in written, written
+    assert "agy=term_new_agy" in written and "term_old_agy" not in written, written
