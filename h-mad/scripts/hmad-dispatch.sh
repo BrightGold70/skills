@@ -3436,10 +3436,23 @@ _cmd_wait() {
 }
 
 _cmd_alive() {
-  local agent="$1" sub target; sub="$(_detect_substrate)" || return 1
+  local agent="$1" sub target tree; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
-    cmux) cmux tree --all | grep -q -- "$target" ;;
+    # Capture, then match with a here-string -- NOT `cmux tree --all | grep -q`.
+    # Under the wrapper's global pipefail that pipeline reports a MATCH as 141:
+    # grep -q exits at the first hit and the producer takes SIGPIPE, so a LIVE
+    # agent reads as dead, which is this predicate's dangerous direction.
+    # Measured 2026-09-01 with a bulk-writing stub: 240 KB tree with the target
+    # on line 1 -> rc 141; the same tree at 110 B -> rc 0. And the buffer is not
+    # the real bound -- unlike the builtin `printf` sites, the producer here is
+    # an external process, so a `tree` that STREAMS its output can be killed at
+    # any size (measured: an incrementally-writing stub inverted at 110 B). The
+    # explicit `|| return 1` keeps a cmux failure reading as not-alive, which is
+    # what pipefail used to provide.
+    cmux)
+      tree="$(cmux tree --all)" || return 1
+      grep -q -- "$target" <<<"$tree" ;;
     orca)
       if orca terminal list --json | jq -e --arg id "$target" '.result.terminals[] | select(.handle == $id)' >/dev/null 2>&1; then
         return 0

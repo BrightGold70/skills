@@ -1,0 +1,29 @@
+{
+  "_why": "`_cmd_alive`'s cmux arm matched with `cmux tree --all | grep -q`. Under the wrapper's global pipefail that reports a MATCH as 141 -- grep -q exits at the first hit, the producer takes SIGPIPE -- so a LIVE agent reads as dead, the dangerous direction for an aliveness predicate. Measured 2026-09-01 with a bulk-writing stub: 240 KB tree with the target on line 1 -> rc 141; the same tree at 110 B -> rc 0.",
+  "_scope_note": "The pipe buffer is NOT the real bound here. Unlike the `printf` sites, this producer is an external process, so a `tree` that streams its output can be SIGPIPEd at any size -- measured: an incrementally-writing stub inverted at 110 B. Any size-based rule-out of an external-producer pipeline is therefore unsound.",
+  "_provenance": "Third site of the class found by the 282a3a5 sweep's re-examination, after the recovered-response predicate (agy_recovery_sigpipe.json). The original sweep ruled this site out as 'operational surface tree rather than retained terminal content' -- a reachability argument that was never measured.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "cmux-alive-uses-pipe",
+      "_mechanism": "Restore the pipeline. A tree past the pipe buffer that DOES contain the surface then reports 141, and `alive` declares a live agent dead.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    cmux)\n      tree=\"$(cmux tree --all)\" || return 1\n      grep -q -- \"$target\" <<<\"$tree\" ;;",
+      "replace": "    cmux) cmux tree --all | grep -q -- \"$target\" ;;",
+      "test": "tests/test_hmad_dispatch.py::test_alive_cmux_true_past_the_pipe_buffer"
+    }
+  ]
+}

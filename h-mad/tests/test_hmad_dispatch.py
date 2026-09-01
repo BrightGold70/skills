@@ -1658,6 +1658,33 @@ def test_alive_cmux_false(tmp_path):
     assert r.returncode == 1
 
 
+# A tree big enough to clear the pipe buffer. `cmux tree --all | grep -q` reports
+# a MATCH as 141 under pipefail -- grep exits at the first hit, the producer takes
+# SIGPIPE -- so a LIVE agent reads as dead, the dangerous direction for `alive`.
+_BIG_CMUX_TREE_TAIL = ("z" * 79 + "\n") * 3000
+
+
+def test_alive_cmux_true_past_the_pipe_buffer(tmp_path):
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["alive", "codex"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5",
+                 "HMAD_STUB_CMUX_STDOUT": "surface:5 codex\n" + _BIG_CMUX_TREE_TAIL})
+    assert r.returncode == 0
+
+
+def test_alive_cmux_false_past_the_pipe_buffer(tmp_path):
+    """Control: a big tree WITHOUT the surface must still report not-alive.
+
+    Without it, a fix that always answered "alive" would pass the regression
+    above while making `alive` useless.
+    """
+    b = _bindir(tmp_path, ["cmux"])
+    r = run(["alive", "codex"], substrate="cmux",
+            env={"_BINDIR": b, "HMAD_CMUX_CODEX_SURFACE": "surface:5",
+                 "HMAD_STUB_CMUX_STDOUT": "surface:2 agy\n" + _BIG_CMUX_TREE_TAIL})
+    assert r.returncode == 1
+
+
 def test_notify_cmux(tmp_path):
     b = _bindir(tmp_path, ["cmux"])
     cap = tmp_path / "cap.txt"
