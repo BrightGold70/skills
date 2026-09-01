@@ -52,9 +52,10 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 - **Description**: Zero or more than one matching candidate declines, leaving the agent
   unresolved.
 - **Acceptance Criteria**:
-  - AC-2.1: Two candidates whose tails both match the agent → the pass declines (rc 1) and
-    prints no handle.
-  - AC-2.2: Zero matching candidates → declines (rc 1), no handle.
+  - AC-2.1: Two candidates whose tails both match the agent → the pass declines: it prints
+    no handle and control falls through to the next pass. It does NOT return non-zero from
+    `_orca_find`, which would short-circuit the OS-evidence pass behind it.
+  - AC-2.2: Zero matching candidates → declines the same way: no handle, fall through.
   - AC-2.3: A candidate whose tail carries the RIVAL agent's signature is rejected before
     counting, so it can neither be selected nor create a false ambiguity.
 
@@ -65,8 +66,12 @@ decline. That is the accepted limit of the feature, stated rather than discovere
   - AC-3.1: When Pass 0 resolves exactly one handle, no `terminal read` is issued.
   - AC-3.3: The pass runs when the candidate set is ambiguous (>1), a shape that never
     reaches Pass 2, and when `lsof` is absent, a shape that never reaches Pass 3.
-  - AC-3.2: The pass considers only handles surviving the earlier passes' filtering; a pane
-    those passes excluded is never selected by this one.
+  - AC-3.2: The candidate pool is `$scoped` — the worktree-scoped terminal set that already
+    excludes the caller's own pane — and nothing wider. A pane `$scoped` excludes is never
+    selected by this pass. Passes 1 and 2 do NOT narrow the pool further: they are matchers
+    that select, not filters that remove, so a pane they failed to match is still a legitimate
+    candidate here. That is the point of the pass — a codex pane whose title is inherited and
+    whose preview has decayed matches neither, and is exactly what the tail identifies.
 
 ### FR-4: Unreadable evidence declines, never guesses
 - **Description**: A tail that cannot be read is not evidence of anything.
@@ -75,8 +80,8 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     excludes that candidate from the match set rather than counting it as a non-match.
   - AC-4.3: The read is time-bounded with `hmad-dispatch run --timeout`; `timeout` and
     `gtimeout` appear nowhere in the implementation.
-  - AC-4.2: If every candidate is unreadable, the pass declines (rc 1) — indistinguishable
-    in effect from no match, and never a resolution.
+  - AC-4.2: If every candidate is unreadable, the pass declines by falling through —
+    indistinguishable in effect from no match, and never a resolution.
 
 ### FR-5: The retention limit is documented where the pass is
 - **Description**: The 2000-line cap and its consequence are recorded in the wrapper.
@@ -115,3 +120,11 @@ decline. That is the accepted limit of the feature, stated rather than discovere
 - v1.2: Placement corrected after source review — a standalone pass between Pass 2 and
   Pass 3 rather than a branch inside Pass 3; AC-3.3 added for the two shapes no current
   pass reaches.
+- v1.3: Back-propagated from design audit v2 — "declines (rc 1)" replaced by fall-through in
+  AC-2.1, AC-2.2 and AC-4.2. The design's narrower reading is the correct one: a non-zero
+  return from `_orca_find` would stop the OS-evidence pass from running at all. The plan
+  states no rc semantics, so no Phase-3 round-trip was required.
+- v1.4: Back-propagated from design audit v7 — AC-3.2's "surviving the earlier passes'
+  filtering" was the ambiguous phrase behind the cycle-3 pool argument; it now names `$scoped`
+  explicitly and states that Passes 1-2 are matchers rather than filters. The plan already
+  said `$scoped` for both entry paths, so the spec was the stale surface, not the design.
