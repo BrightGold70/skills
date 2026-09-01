@@ -357,7 +357,9 @@ resolution, or it merely restates Pass 0.
       emits, so it is the only output that proves the tail pass produced the resolution.
    4. If a pane was created for the check, close it and **re-list terminals to confirm the
       removal**. Remove the isolated pin file's `mktemp -d` directory in the
-      same step, or each run leaves an empty temporary directory behind.
+      same step, or each run leaves an empty temporary directory behind — **and re-read to
+      confirm it is gone**, since deleting a directory mutates state and the command is not its
+      own proof.
 
 ## Invariant Compliance
 
@@ -425,3 +427,4 @@ resolution, or it merely restates Pass 0.
 - v1.18: Impl-plan audit v22 (codex) — the live check directed the operator at the ambient pin file, destroying live coordinator and agent pins to verify an unrelated feature. It now runs against an isolated `HMAD_ORCA_PIN_FILE` that is seeded with known dummy pins first, so the clear has something observable to remove.
 - v1.19: Impl-plan audit v23 (codex) — the `$scoped` justification was backwards. It claimed a wider candidate pool 'can only turn a resolution into a decline, never into a wrong pane', but adding one uniquely banner-matching pane turns a decline INTO a resolution — this feature's intended path. Widening is safe for reasons that hold at any pool size: the scope boundary, the wanted/rival banner predicates, and exactly-one gating. Node counts re-derived to 28 / 12 over 40.
 - v1.20: Impl-plan audit v24 (codex) — the live check now removes the isolated pin file's `mktemp -d` directory, matching the impl-plan; without it each run leaks one empty temporary directory.
+- v1.21: Impl-plan audit v25 (codex) — same as the plan: the isolated pin file's `mktemp -d` cleanup must be confirmed by re-reading, not assumed from the command's success.

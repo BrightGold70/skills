@@ -222,7 +222,8 @@ We deliberately do not touch `pin`, `pin-agents`, the pin file, or Passes 0–2.
   and preview do not match; (c) `env 2>&1` carrying `bound <handle> by tail evidence`, the marker
   only this pass emits; (d) any pane created for the check closed AND the removal confirmed by
   re-listing terminals. The isolated pin file's `mktemp -d`
-  directory is removed in the same step.
+  directory is removed in the same step, **and its absence re-read to confirm the removal
+  landed** — deleting a directory mutates state, so the command is not its own proof.
 - Full suite green, anchors OK
 
 ## Out-of-Scope (confirmed from spec)
@@ -268,3 +269,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.14: Impl-plan audit v22 (codex) — the live-check criterion now requires an ISOLATED pin file that is SEEDED with known dummy pins before clearing. It previously sent the operator at the repository's real `.h-mad/orca-pins.env`, and the isolation fix that corrected that landed only in the impl-plan; on a fresh path, absence before and after proves nothing about whether the clear ran.
 - v1.15: Impl-plan audit v23 (codex) — node counts re-derived to 28 FAIL / 12 PASS over 40 after AC-1.5 was reclassified green at RED: it tests only test-file helpers that T1's own RED patch introduces, so it cannot be observed failing.
 - v1.16: Impl-plan audit v24 (codex) — the green-at-RED accounting said "each of the 11" beside a count of 12, leaving the twelfth node's reject direction unstated on the declared source. It is 11 + 1: eleven mutation-backed nodes, and `test_tail_no_timeout_binary_invocation`, whose proof is impl-plan AC-2.8's insert/observe/remove procedure. The live check also now removes the isolated pin file's `mktemp -d` directory.
+- v1.17: Impl-plan audit v25 (codex) — the live check's `mktemp -d` cleanup now requires re-reading the path to confirm the directory is gone. Removing a directory mutates state, so the command is not its own proof; `rm -rf` on a path that was never created succeeds silently.

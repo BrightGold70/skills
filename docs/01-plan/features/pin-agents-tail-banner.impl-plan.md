@@ -1,6 +1,6 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.18)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.21)
 > Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.8, 15 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
@@ -1160,6 +1160,14 @@ blocks, so an anchor here and the code there cannot drift; `name`, `file` and `t
    "replace": "$(printf '%s' \"$listing\" | jq -r '.result.terminals[]?.handle')"
   },
   {
+   "name": "marker-content-changed",
+   "_mechanism": "Keep `>&2` intact and change the marker TEXT. Routing and content are separable guards on one line: `marker-to-stdout` proves the marker does not pollute stdout, and proves nothing about what it says. AC-3.1 and the live check both consume the exact phrase `bound <handle> by tail evidence` -- it is the only output that distinguishes a tail-pass resolution from any other pass -- so a reworded marker leaves both asserting on a string that no longer exists while stdout stays clean.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_pass_resolves_single_vendor_banner",
+   "find": "    echo \"[H-MAD] $token: bound $tail_h by tail evidence\" >&2",
+   "replace": "    echo \"[H-MAD] $token: bound $tail_h\" >&2"
+  },
+  {
    "name": "marker-to-stdout",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_stdout_is_bare_handle",
@@ -1426,7 +1434,7 @@ The full map, all under `h-mad/tests/test_hmad_dispatch.py`:
 | AC-2.7 | `test_tail_no_timeout_binary_invocation` | RED: PASS | procedure AC-2.8 on this same node: insert `timeout 2 orca …`, observe RED, remove |
 | AC-2.9 | `test_tail_sig_rejects_ok_false_envelope` | RED: FAIL | also kills mut `envelope-ok-false-accepted` |
 | AC-2.10 | `test_tail_sig_rejects_non_array_tail` | RED: FAIL | also kills mut `non-array-tail-accepted` |
-| AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | — |
+| AC-3.1 | `test_tail_pass_resolves_single_vendor_banner` | RED: FAIL | also kills mut `marker-content-changed` |
 | AC-3.2 | `test_tail_pass_launch_command_alone_does_not_resolve` | RED: PASS | mut `tail-re-widened-to-launch-line` |
 | AC-3.3 | `test_tail_pass_env_reports_handle` | RED: FAIL | — |
 | AC-3.4 | `test_tail_pass_two_matches_declines` | RED: PASS | mut `resolve-on-ge-1` |
@@ -1618,7 +1626,7 @@ false half is recorded so the next reader does not re-derive it.
    `grep -c '^| \`test_'` (0 — every row starts with `| AC-…`, not the node) and an unanchored
    `grep -c 'RED: PASS'` (13 — it also matched prose outside the table). Their difference would
    have been passed to `--expect-fail` as **-13**, making the 5d dispatch invalid. Both are
-   anchored to the full row shape above and verified to return 40 / 11 / 29 against this file.
+   anchored to the full row shape above and verified to return 40 / 12 / 28 against this file.
 
    **Every node green at RED needs a discriminating reject-direction proof**, or the base
    Test-discrimination invariant is unmet. The v1.5 claim that "every such AC is named by a
@@ -1676,7 +1684,12 @@ false half is recorded so the next reader does not re-derive it.
    4. If a pane was created for the check, close it and **re-list terminals to confirm the
       removal** — asserting the cleanup landed, on the same rule that makes the mutation harness
       re-read the tree after a restore. Remove the isolated pin file's `mktemp -d`
-      directory in the same step, or each run leaves an empty temporary directory behind.
+      directory in the same step, or each run leaves an empty temporary directory behind —
+      **and re-read to confirm it is gone.** Keep the path in a variable and assert it no longer
+      exists after the removal. Deleting a directory mutates filesystem state, so treating the
+      command as its own proof is the same failure AC-2.8 rejects for a file edit and audit v22
+      rejected for the pin clear: `rm -rf` on a path that was never created, or that a later
+      step recreated, succeeds silently. Impl-plan audit v25.
 
 ## Version History
 - v1.0: Initial implementation plan draft.
@@ -1701,3 +1714,4 @@ false half is recorded so the next reader does not re-derive it.
 - v1.19: Impl-plan audit v22 (codex) — must 3 -> 1, and the one is v1.18's own isolation fix verifying a NO-OP. `HMAD_ORCA_PIN_FILE="$(mktemp -d)/orca-pins.env"` names a file that does not exist, so running `pin-agents --clear` and then observing absence proves nothing: the same observation holds if the clear path is broken or never ran. The step now SEEDS the isolated file with known dummy pins, confirms they are present, clears, and confirms those specific handles are gone — absence is evidence only where presence was established first. That is the seventh consecutive cycle whose finding was created by the previous cycle's fix. The isolation itself had also landed only here, so the plan's Success Criteria and the design still sent an operator at the ambient pin file; both back-propagated. `test_os_evidence_pass_renumbered_to_four` asserted only the ABSENCE of the false sentence, which a deletion satisfies as well as the prescribed correction does; a positive assertion on the replacement wording is added. AC-6.12..AC-6.20 called all nine of its mutations green-at-RED proofs when the last two are pinned to AC-3.16 and AC-4.5, both RED: FAIL — seven proofs plus two independent SIGPIPE guard mutations, now stated that way. Source-design citation corrected. The audit independently re-derived the 290-test baseline, the 40-node table and the 27-mutation count and found all three correct.
 - v1.20: Impl-plan audit v23 (codex) — must 1, and it is a RED CLASSIFICATION that could not hold. AC-1.5 was marked `RED: FAIL` while `test_tail_stub_read_helpers_shape` tests only `_orca_read_env` and `_orca_read_dir`, both TEST-FILE helpers that T1's own RED patch introduces: the node passes the moment the patch lands, and withholding the helpers yields a NameError, which is a missing-symbol failure rather than a behavioural one and would force test implementation during GREEN. T1's 3/3 split and the 29/11 aggregate were therefore unsatisfiable and a correct dispatch would have halted on red_not_all_failing. Reclassified green at RED with two discriminating mutations, one per asserted property — `stub-read-env-not-array` (the measured live shape is an array and production joins it) and `stub-read-dir-writes-one-file` (a handle the caller supplied must not be served as unreadable). Counts re-derived, not edited: 28 FAIL / 12 PASS over 40, T1 2/4, swept through the impl-plan, plan and design. 29 mutations. The design's `$scoped` justification was also backwards — it claimed a wider pool 'can only turn a resolution into a decline', when adding one uniquely banner-matching pane turns a decline INTO a resolution, which is this feature's whole point; the safety is now grounded where it actually lives (the scope boundary, the wanted/rival predicates, and exactly-one), not in a false monotonicity claim. Nit: the live check now removes its `mktemp -d` directory.
 - v1.21: Impl-plan audit v24 (codex) — both must-fixes were stale PROSE left behind by my own earlier edits, not new defects. Task 6's control-family paragraph still said six mutations, five in the helper, and four nodes, after v1.19 deleted the equivalent `// empty` mutation; its own sentence "removing any one leaves the other four" already implied five. Verified against the spec: FIVE mutations, FOUR in the wrapper and one in the Python harness, pinned to THREE nodes (AC-2.1, AC-2.5, AC-2.6). The paragraph now carries a mutation/file/node TABLE, so the count and the enumeration are one surface and cannot drift apart again — the same remedy the RED table already uses. The source plan was also one proof short: it reported 12 green-at-RED nodes and then said "each of the 11" is tied to a mutation, leaving `test_tail_no_timeout_binary_invocation` with no stated proof on the surface that is the declared source. It is 11 + 1 — eleven mutation-backed, and one carrying AC-2.8's insert/observe/remove procedure. The isolated pin file's `mktemp -d` cleanup, added here at v1.20, is back-propagated to the plan and design.
+- v1.22: Impl-plan audit v25 (codex) — a SIXTH sweep miss, and it is the class the v1.21 self-check was written to catch: a LIVE dispatch instruction still said the row commands were 'verified to return 40 / 11 / 29' where the table immediately above it, and the commands themselves, give 40 / 12 / 28. Prose carrying a count it does not enumerate stays the dominant failure here. Second, `marker-to-stdout` mutated only the STREAM ROUTING of the success marker; routing and content are separable guards on one line, and AC-3.1 and the live check both consume the exact phrase `bound <handle> by tail evidence`, so a reworded marker left both asserting on a string that no longer exists while stdout stayed clean. Added `marker-content-changed`, pinned to AC-3.1, and verified as a controlled triple that unmutated / routing / content each produce a DIFFERENT observable (stderr full marker, stdout full marker, stderr truncated marker) — neither mutant is equivalent. 30 mutations. Third, the `mktemp -d` cleanup added at v1.20-v1.21 was itself unverified: removing a directory mutates filesystem state, so the command is not its own proof, and `rm -rf` on a path never created succeeds silently. All three live-check surfaces now retain the path and assert its absence. Source-design citation corrected v1.18 -> v1.21.
