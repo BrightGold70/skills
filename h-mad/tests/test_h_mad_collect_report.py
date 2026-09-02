@@ -1075,3 +1075,94 @@ def test_cli_main_readback_failed_has_marker_only(
     assert collect_contract_lines(captured.out) == [], (
         f"{case} readback mismatch must not print a COLLECT line"
     )
+
+
+MUTATION_SPEC = REPO_ROOT / "h-mad" / "tests" / "mutation-specs" / "collect_report.json"
+
+EXPECTED_MUTATION_NAMES = (
+    "copy-writes-empty",
+    "conflict-becomes-overwrite",
+    "force-still-refuses",
+    "surface-validation-removed",
+    "surface-validation-rejects-all",
+    "collected-path-ignores-surface",
+    "collected-path-forces-surface",
+    "cli-skips-collect",
+    "cli-collects-on-bad-root",
+    "verb-execs-wrong-script",
+    "verb-routes-unknown",
+    "gate-refusal-removed",
+    "gate-refuses-all-reports",
+    "readback-removed",
+    "out-rung-conflict-removed",
+    "transport-re-loosened",
+    "docs-pattern-dedotted",
+    "gate-refusal-drops-marker",
+    "cli-error-drops-marker",
+    "gate-refusal-exit-0",
+    "gate-refusal-wrong-token",
+    "cli-error-exit-0",
+    "cli-error-prints-token",
+)
+
+
+def test_mutation_spec_shape() -> None:
+    """AC-6.3a — the harness treats `test` as optional and never reads
+    `_mechanism`, so nothing else proves the spec's shape. Assert it here:
+    exactly the named mutations, every field populated, every `file` present
+    under `root`, and every `test` resolvable to a real function.
+    """
+    assert MUTATION_SPEC.is_file(), f"missing mutation spec: {MUTATION_SPEC}"
+
+    spec = json.loads(MUTATION_SPEC.read_text(encoding="utf-8"))
+
+    root = (MUTATION_SPEC.parent / spec["root"]).resolve()
+    assert root.is_dir(), f"spec root does not resolve to a directory: {root}"
+    assert not Path(spec["root"]).is_absolute(), (
+        "spec root must be relative so the spec is portable across checkouts "
+        "and correct inside a git worktree"
+    )
+
+    for key in ("command", "target_command"):
+        assert isinstance(spec.get(key), list) and spec[key], (
+            f"spec must carry a non-empty {key} argv list"
+        )
+
+    mutations = spec["mutations"]
+    names = [m["name"] for m in mutations]
+
+    assert len(names) == len(set(names)), f"duplicate mutation names: {names}"
+    assert sorted(names) == sorted(EXPECTED_MUTATION_NAMES), (
+        "spec must carry exactly the impl-plan's 23 mutations; "
+        f"missing={sorted(set(EXPECTED_MUTATION_NAMES) - set(names))} "
+        f"unexpected={sorted(set(names) - set(EXPECTED_MUTATION_NAMES))}"
+    )
+
+    problems: list[str] = []
+    for mutation in mutations:
+        name = mutation.get("name", "<unnamed>")
+
+        for field in ("_mechanism", "file", "find", "replace", "test"):
+            value = mutation.get(field)
+            if not isinstance(value, str) or not value.strip():
+                problems.append(f"{name}: {field} must be a non-empty string")
+
+        target = root / str(mutation.get("file", ""))
+        if not target.is_file():
+            problems.append(f"{name}: file does not exist under root: {target}")
+
+        if mutation.get("find") == mutation.get("replace"):
+            problems.append(f"{name}: find and replace are identical — mutates nothing")
+
+        test_id = str(mutation.get("test", ""))
+        if "::" not in test_id:
+            problems.append(f"{name}: test must be <path>::<func>, got {test_id!r}")
+            continue
+        rel, func = test_id.split("::", 1)
+        test_path = root / rel
+        if not test_path.is_file():
+            problems.append(f"{name}: test file does not exist: {test_path}")
+        elif f"def {func}(" not in test_path.read_text(encoding="utf-8"):
+            problems.append(f"{name}: {rel} has no `def {func}(`")
+
+    assert not problems, "mutation spec shape problems:\n  " + "\n  ".join(problems)
