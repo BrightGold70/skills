@@ -33,6 +33,13 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     `test_h_mad_audit_cycle.py` collect tests pass unchanged).
   - AC-1.5: `grep -rn 'audit\.v' h-mad/scripts/*.py` shows the docs-path string built in
     exactly one function (`_collected_path`); the new CLI imports it rather than re-deriving.
+  - AC-1.6: **Disjoint namespace, enforced at derivation.** `_collected_path` imports
+    `TRANSPORT_RE` from `h_mad_audit_gate` and raises `ValueError` if the basename it is
+    about to return matches it — so `feature="audit_f", surface="report"` (which would
+    derive `audit_f.plan.audit.v8.report.md`) is refused, never produced. With the dot rule
+    in `TRANSPORT_RE` (FR-3) no real feature/surface pair trips this; the assert is the
+    mechanical guarantee that none ever can. Mutations: assert removed (drop) → this test
+    bites; assert refuses every name (force) → AC-1.1 bites.
 
 ### FR-2: `h_mad_collect_report.py` — the codex-leg collector
 - **Description**: A stdlib-only CLI over `collect()`:
@@ -106,9 +113,13 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ### FR-3: The gate refuses a transport file
 - **Description**: `h_mad_audit_gate.py` refuses to score any path whose basename matches
-  the **transport grammar** `TRANSPORT_RE = ^audit_.*\.report\.md$` — prefix `audit_` AND
-  suffix `.report.md` — defined ONCE in `h_mad_audit_gate.py` and imported by
-  `h_mad_collect_report.py` and the tests (base invariant "Single-source contract").
+  the **transport grammar** `TRANSPORT_RE = ^audit_[^.]+\.report\.md$` — prefix `audit_`,
+  a dot-free stem, suffix `.report.md` — defined ONCE in `h_mad_audit_gate.py` and imported
+  by `h_mad_audit_cycle._collected_path` (AC-1.6) and the tests; the CLI does NOT import it
+  (base invariant "Single-source contract"). The dot-free stem is what makes the two
+  grammars disjoint by construction: every docs audit name contains `.audit.v<N>` (dots),
+  every transport name observed in `/tmp` (2026-09-02, 331 files) has no dot before
+  `.report.md`.
   It prints exactly `GATE: INVALID must=0 should=0` and `[H-MAD] <feature> gate INVALID
   (transport file — collect it into docs first: h_mad_collect_report.py)`, exit 2.
   Why prefix+suffix and not a `_cycle<N>` stem: the field stages transport files by hand
@@ -118,7 +129,10 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   (`_VERSION_RE` accepts `[A-Za-z0-9_-]`), which a `[A-Za-z0-9-]` stem would miss. A bare
   `*.report.md` is NOT refused: Phase-7 reports are `<feature>.report.md` with hyphenated
   slugs (`docs/04-report/features/*.report.md`: 7 files, 0 starting `audit_`; this feature's
-  own will be `audit-report-docs-copy.report.md`, hyphen). **Backward compatibility**: the
+  own will be `audit-report-docs-copy.report.md`, hyphen). A docs artifact whose feature
+  happens to start with `audit_` and whose surface is `report`
+  (`audit_f.plan.audit.v8.report.md`) is NOT transport (it has dots) — and AC-1.6 refuses
+  to derive it anyway. **Backward compatibility**: the
   base invariant preserves the PASS verdict of every audit DOC; a transport file is not an
   audit doc, no recipe or test gated one (grep: 0), and the same bytes at their docs path
   keep their verdict — pinned by AC-3.7.
@@ -138,14 +152,16 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   - AC-3.5: The refusal is by **basename grammar**, not directory: `audit_f_plan_cycle3_codex.report.md`
     is refused wherever it sits, including under `docs/`; `f.report.md`,
     `gate-blindness-hardening.report.md`, `audit-report-docs-copy.report.md` (hyphen) and any
-    `.md` under `/tmp` not matching `TRANSPORT_RE` are scored normally (force-refusal
-    mutation: a gate that refuses every `.report.md` breaks this test).
+    `.md` under `/tmp` not matching `TRANSPORT_RE` are scored normally, and so is
+    `audit_f.plan.audit.v8.report.md` (dots in the stem) (force-refusal mutation: a gate
+    that refuses every `.report.md` breaks this test).
   - AC-3.5a: **Shared corpus, both directions** — one fixture list of names with an expected
     `transport: True|False` per name (every staged shape above, every docs shape:
     `.audit.v<N>.md`, `.audit.v<N>.p<i>.md`, `.audit.v<N>.codex.md`, `.audit.v<N>.codex_draft.md`,
-    `<feature>.report.md`) is asserted against `TRANSPORT_RE` **and** against
+    `<feature>.report.md`, and the collision candidates `audit_f.plan.audit.v8.report.md` /
+    `audit_f.plan.audit.v8.codex.md`) is asserted against `TRANSPORT_RE` **and** against
     `h_mad_cycle_counts._VERSION_RE` (an audit-doc name must match `_VERSION_RE` and not
-    `TRANSPORT_RE`; a transport name the reverse). The stem the wrapper stages is pinned by
+    `TRANSPORT_RE`; a transport name the reverse; NO name in the fixture matches both). The stem the wrapper stages is pinned by
     running `audit-cycle` under the existing stub harness and asserting the `--report-file`
     the stub received matches `TRANSPORT_RE`; the SKILL.md 6.6 literal is asserted to match
     it too.
@@ -206,8 +222,9 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     (an unknown verb such as `collect-reportx`) to the script (force) → AC-4.3 bites; (g)
     gate transport refusal removed → AC-3.1 bites; (g′) gate refuses every `.report.md`
     (force) → AC-3.5/3.6 bite; (h) copy readback removed → AC-2.12 bites; (h′) out-rung
-    conflict check removed → AC-2.6a bites. 15 mutations. `h_mad_mutation_harness.py`
-    reports `MUTATION: ALL_CAUGHT`.
+    conflict check removed → AC-2.6a bites; (i) `_collected_path` disjointness assert
+    removed (drop) → AC-1.6 bites; (i′) assert refuses every derived name (force) → AC-1.1
+    bites. 17 mutations. `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
   - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
     `…_name_existing_failure_tests` pass with the new spec present.
   - AC-6.5: Full `h-mad/tests` suite green from this worktree.
@@ -228,11 +245,13 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 - Back-filling the 98 historically surface-named audits or changing `h_mad_cycle_counts`.
 
 ## Assumptions
-- The transport-file basename grammar is `^audit_.*\.report\.md$` (prefix + suffix): every
-  recipe-staged AND hand-staged transport file observed in `/tmp` on 2026-09-02 matches it,
-  and no docs artifact does (`find docs -name 'audit_*'` → 0; Phase-7 reports are
-  `<feature>.report.md` with hyphenated slugs). v1.0 claimed the bare suffix was
-  transport-only (false: Phase 7); v1.1 claimed a `_cycle<N>` stem (false: hand-staged names).
+- The transport-file basename grammar is `^audit_[^.]+\.report\.md$` (prefix, dot-free stem,
+  suffix): every recipe-staged AND hand-staged transport file observed in `/tmp` on
+  2026-09-02 (331) matches it, and no docs audit name can — they all carry `.audit.v<N>`
+  (`find docs -name 'audit_*'` → 0; Phase-7 reports are `<feature>.report.md` with hyphenated
+  slugs). v1.0 claimed the bare suffix was transport-only (false: Phase 7); v1.1 claimed a
+  `_cycle<N>` stem (false: hand-staged names); v1.2's `^audit_.*` overlapped a derivable docs
+  name (`audit_f` + `report`) — hence the dot rule and the AC-1.6 assert.
 - `h_mad_audit_cycle.gate()`'s rc-2 → `INVALID` mapping and `_gate_token`'s regex remain as
   read on 2026-09-02.
 - The live run in the main checkout keeps reading `~/.claude/skills/h-mad` (main checkout);
@@ -240,5 +259,6 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ## Version History
 - v1.0: Initial specification draft.
+- v1.3: Plan-audit v3 fixes (codex): `TRANSPORT_RE` stem is dot-free (`^audit_[^.]+\.report\.md$`) so the grammars are disjoint by construction; `_collected_path` asserts it never derives a transport-shaped name (AC-1.6, mutations i/i′ → 17); the CLI does not import the regex — `_collected_path` and the tests do; collision candidates added to the AC-3.5a corpus.
 - v1.2: Plan-audit v2 fixes (codex): transport grammar is `TRANSPORT_RE = ^audit_.*\.report\.md$`, single-sourced in the gate — hand-staged names in the field carry no `_cycle<N>` and a surface may contain `_`; conflict policy + readback on BOTH rungs (AC-2.6a/2.6b/2.12); force-direction mutants for the CLI and the verb (e′, f′, AC-4.3); shared two-direction corpus (AC-3.5a) and verdict preservation over the repo's audit docs (AC-3.7) for the Backward-compatibility invariant.
 - v1.1: Plan-audit v1 fixes (agy p1 + codex): collector contract (`CollectConflict`, `out_path` optional, `--force`); transport refusal narrowed to the `audit_*_cycle<N>*.report.md` stem — `*.report.md` collides with Phase-7 `<feature>.report.md`; recipe halts on non-`OK` `COLLECT:`; AC-2.9 is an incident replay; AC-2.10/2.11/3.6 added; AC-6.3 is 11 bidirectional mutations; AC-4.1 pinned by a wrapper wiring test.

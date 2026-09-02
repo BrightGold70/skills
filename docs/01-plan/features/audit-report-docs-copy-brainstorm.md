@@ -40,8 +40,9 @@ recovery window was luck.
      `pin-agents-tail-banner` run is already using — `.audit.v16-19.codex.md.done` litter in
      docs/): skip the copy, require non-empty + `.done`, remove the marker.
 3. **Gate teeth.** `h_mad_audit_gate.py` refuses a basename matching the transport grammar
-   `^audit_.*\.report\.md$` (v1.2 — v1.0's "ends `.report.md`" collided with Phase-7
-   `<feature>.report.md`; v1.1's `_cycle<N>` stem missed hand-staged names) — printing exactly `GATE: INVALID must=0 should=0` (the token shape
+   `^audit_[^.]+\.report\.md$` (v1.3 — v1.0's "ends `.report.md`" collided with Phase-7
+   `<feature>.report.md`; v1.1's `_cycle<N>` stem missed hand-staged names; v1.2's `.*` stem
+   overlapped a derivable docs name) — printing exactly `GATE: INVALID must=0 should=0` (the token shape
    `_gate_token` requires) with the reason on the `[H-MAD]` line, exit 2. `audit_cycle.gate()`
    already maps rc 2 → `UNVERIFIED`. No test or doc gates a transport file today.
 4. **Recipe.** SKILL.md gets the codex-leg block it has never had, beside the `audit-cycle`
@@ -101,4 +102,5 @@ by `collect()`), SKILL.md + helper registry, `tests/mutation-specs/`.
 ## Version History
 - v1.0: Initial brainstorm draft.
 - v1.1: Gate rule corrected to the transport stem after plan-audit v1 (codex) showed `*.report.md` is also the Phase-7 report suffix.
+- v1.3: Gate stem is dot-free after plan-audit v3 (codex) derived a docs name matching both grammars.
 - v1.2: Gate rule is prefix+suffix `^audit_.*\.report\.md$` after plan-audit v2 (codex) + a `/tmp` listing showed hand-staged transport names carry no `_cycle<N>`.
