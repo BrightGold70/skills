@@ -435,8 +435,14 @@ resolution, or it merely restates Pass 0.
 2. **Suites and mutation.** `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_identity`
    (24 of 290 collected; assert the count is non-zero — `-k orca_find` collected 0/290 and
    pytest exits 5 on an empty selection, so the step measured nothing), then
-   the full `pytest`, then `h_mad_mutation_harness.py` on the new spec, then
-   `--check-anchors` under bash (never zsh — it does not word-split the candidate list).
+   `pytest h-mad/tests/test_hmad_dispatch.py -q -k test_tail_` (the feature-focused selector —
+   again assert a non-zero collected count), then the full `pytest`, then
+   `h_mad_mutation_harness.py` on the new spec, reading its stdout token `MUTATION: ALL_CAUGHT`
+   with `survived=0` — never `$?` — then `--check-anchors` under bash (never zsh — it does not
+   word-split the candidate list), reading `ANCHORS: ANCHORS_OK` with `drifted=0`. These are the
+   same four steps and two tokens the impl-plan's Verification and AC-6.9/AC-6.10 require; this
+   item used to omit the selector and the tokens, so an implementer following the declared source
+   could skip the targeted run and read exit codes instead (impl-plan audit v49, codex).
 3. **Live check — it must exercise THIS pass, not merely succeed.** `hmad-dispatch env`
    resolving codex is NOT sufficient evidence: Pass 0, the title pass, the preview pass or an
    ambient pin can each satisfy it without a single `terminal read`, so the check would pass
@@ -549,3 +555,4 @@ resolution, or it merely restates Pass 0.
 - v1.37: Impl-plan audit v45 (codex): this document's prefix rule (whitespace or box-drawing only) and its cwd rule (a · AND a cwd) were both stated here and not enforced by the impl-plan's block — the block admitted ASCII |, : and > and an empty cwd. Measured: '> OpenAI Codex', '| model: gpt-5.6-terra', 'gpt-5.6-terra high ·' all matched. Closed in the block; a paragraph here records both boundaries, the corpus figures swept 29 -> 35, and the two revert-mutants are named.
 - v1.38: Impl-plan audit v46 (codex): the v1.37 paragraph credited two codex-only revert-mutants with proving 'each closure', but the agy arm encodes the same prefix and dotted-version boundaries independently and had no mutant isolating them — the claim was broader than what the spec measured. Now states the per-arm rule and names all five revert-mutants (prefix x2, version x2, cwd codex-only).
 - v1.39: Impl-plan audit v47 (codex): the per-arm paragraph named two combined revert-mutants that each reverted several guards at once; they are now five single-field mutants and the paragraph says why (a multi-guard revert proves only that one guard bit). The case-fold paragraph said 'all three wire mutations' — there are four (wanted/rival × disconnect/force). Corpus figures swept 35 -> 36.
+- v1.40: Impl-plan audit v49 (codex) should-fix: Verification item 2 said it lists the same Success Criteria as the impl-plan but omitted the feature-focused 'pytest -k test_tail_' step and named no stdout tokens, so an implementer following the declared source could skip the targeted selector and read exit codes instead of MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK. Aligned with the impl-plan's Verification and AC-6.9/AC-6.10.
