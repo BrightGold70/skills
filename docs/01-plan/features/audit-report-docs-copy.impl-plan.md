@@ -316,7 +316,7 @@ touched (AC-6.4).
    "file": "scripts/h_mad_audit_gate.py",
    "find": "    if is_transport_path(args.audit_file):",
    "replace": "    if False:",
-   "test": "tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names"}
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring"}
  ]}
 ```
 (One entry shown in full; the other 22 follow the table above with the exact `find` line
@@ -327,29 +327,29 @@ copied from the production file at implementation time.)
 
 | # | name | file | anchor intent | test |
 |---|---|---|---|---|
-| a | copy-writes-empty | `scripts/h_mad_audit_cycle.py` | `_finalize_write` writes `b""` instead of `data` | `tests/test_h_mad_collect_report.py::test_cli_ok_copies_byte_identical` |
-| b | conflict-becomes-overwrite | `scripts/h_mad_audit_cycle.py` | `if not overwrite: raise CollectConflict` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_conflict_preserves_docs` |
-| b′ | force-still-refuses | `scripts/h_mad_collect_report.py` | forced retry passes `overwrite=False` | `tests/test_h_mad_collect_report.py::test_cli_force_overwrites` |
-| c | surface-validation-removed | `scripts/h_mad_audit_cycle.py` | `validate_surface` returns token unchecked | `tests/test_h_mad_collect_report.py::test_cli_rejects_pass_index_surface` |
-| c′ | surface-validation-rejects-all | `scripts/h_mad_audit_cycle.py` | `validate_surface` always raises | `tests/test_h_mad_collect_report.py::test_cli_ok_copies_byte_identical` |
-| d | collected-path-ignores-surface | `scripts/h_mad_audit_cycle.py` | token = `f"p{index}"` regardless of surface | `tests/test_h_mad_collect_report.py::test_collected_path_surface_token` |
-| d′ | collected-path-forces-surface | `scripts/h_mad_audit_cycle.py` | token = `str(surface)` even when None | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
-| e | cli-skips-collect | `scripts/h_mad_collect_report.py` | `collect(...)` replaced by `("report-file", docs)` | `tests/test_h_mad_collect_report.py::test_cli_missing_when_no_report` |
-| e′ | cli-collects-on-bad-root | `scripts/h_mad_collect_report.py` | `if not project_root.is_dir(): raise OperationalError(...)` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
+| a | copy-writes-empty | `scripts/h_mad_audit_cycle.py` | `_finalize_write` writes `b""` instead of `data` | `tests/test_h_mad_collect_report.py::test_cli_report_file_done_copies_docs_and_prints_ok_contract` |
+| b | conflict-becomes-overwrite | `scripts/h_mad_audit_cycle.py` | `if not overwrite: raise CollectConflict` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_report_file_conflict_then_force_replaces_docs` |
+| b′ | force-still-refuses | `scripts/h_mad_collect_report.py` | forced retry passes `overwrite=False` | `tests/test_h_mad_collect_report.py::test_cli_report_file_conflict_then_force_replaces_docs` |
+| c | surface-validation-removed | `scripts/h_mad_audit_cycle.py` | `validate_surface` returns token unchecked | `tests/test_h_mad_collect_report.py::test_cli_invalid_surface_tokens_are_operational_errors_without_collect_line` |
+| c′ | surface-validation-rejects-all | `scripts/h_mad_audit_cycle.py` | `validate_surface` always raises | `tests/test_h_mad_collect_report.py::test_cli_report_file_done_copies_docs_and_prints_ok_contract` |
+| d | collected-path-ignores-surface | `scripts/h_mad_audit_cycle.py` | token = `f"p{index}"` regardless of surface | `tests/test_h_mad_collect_report.py::test_collected_path_surface_token_paths_and_single_string_builder` |
+| d′ | collected-path-forces-surface | `scripts/h_mad_audit_cycle.py` | token = `str(surface)` even when None | `tests/test_h_mad_collect_report.py::test_collected_path_surface_none_preserves_pass_index_path` |
+| e | cli-skips-collect | `scripts/h_mad_collect_report.py` | `collect(...)` replaced by `("report-file", docs)` | `tests/test_h_mad_collect_report.py::test_cli_missing_report_without_out_prints_missing_and_writes_nothing` |
+| e′ | cli-collects-on-bad-root | `scripts/h_mad_collect_report.py` | `if not project_root.is_dir(): raise OperationalError(...)` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` |
 | f | verb-execs-wrong-script | `scripts/hmad-dispatch.sh` | `h_mad_collect_report.py` → `h_mad_report_wait.py` in `_cmd_collect_report` | `tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv` |
-| f′ | verb-routes-unknown | `scripts/hmad-dispatch.sh` | `*)` arm calls `_cmd_collect_report "$@"` | `tests/test_hmad_dispatch_collect_report.py::test_unknown_verb_does_not_exec_script` |
-| g | gate-refusal-removed | `scripts/h_mad_audit_gate.py` | `if is_transport_path(...)` → `if False` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
-| g′ | gate-refuses-all-reports | `scripts/h_mad_audit_gate.py` | `TRANSPORT_RE` → `\.report\.md$` | `tests/test_h_mad_audit_gate.py::test_gate_scores_phase7_and_hyphen_report_names` |
-| h | readback-removed | `scripts/h_mad_audit_cycle.py` | `_finalize_write` skips `_readback_equal` | `tests/test_h_mad_collect_report.py::test_out_rung_readback_failure_exits_2` |
-| h′ | out-rung-conflict-removed | `scripts/h_mad_audit_cycle.py` | `_write_collected_report` passes `overwrite=True` | `tests/test_h_mad_collect_report.py::test_cli_out_rung_conflict` |
-| i | transport-re-loosened | `scripts/h_mad_audit_gate.py` | `^audit_[^.]+` → `^audit_.*` | `tests/test_h_mad_audit_gate.py::test_grammars_are_disjoint_property` |
-| i′ | docs-pattern-dedotted | `scripts/h_mad_audit_cycle.py` | `.audit.v` → `_audit_v` in `_collected_path` | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
-| j | gate-refusal-drops-marker | `scripts/h_mad_audit_gate.py` | the `[H-MAD] <stem> gate INVALID (transport file ...)` print removed | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
-| j′ | cli-error-drops-marker | `scripts/h_mad_collect_report.py` | operational-error marker print removed | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
-| k | gate-refusal-exit-0 | `scripts/h_mad_audit_gate.py` | transport branch `return 2` → `return 0` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
-| k′ | gate-refusal-wrong-token | `scripts/h_mad_audit_gate.py` | transport branch prints `GATE: PASS must=0 should=0` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
-| l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
-| l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
+| f′ | verb-routes-unknown | `scripts/hmad-dispatch.sh` | `*)` arm calls `_cmd_collect_report "$@"` | `tests/test_hmad_dispatch_collect_report.py::test_collect_reportx_unknown_verb_does_not_invoke_stub` |
+| g | gate-refusal-removed | `scripts/h_mad_audit_gate.py` | `if is_transport_path(...)` → `if False` | `tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring` |
+| g′ | gate-refuses-all-reports | `scripts/h_mad_audit_gate.py` | `TRANSPORT_RE` → `\.report\.md$` | `tests/test_h_mad_audit_gate.py::test_cli_non_transport_report_like_names_score_normally` |
+| h | readback-removed | `scripts/h_mad_audit_cycle.py` | `_finalize_write` skips `_readback_equal` | `tests/test_h_mad_collect_report.py::test_cli_main_readback_failed_has_marker_only` |
+| h′ | out-rung-conflict-removed | `scripts/h_mad_audit_cycle.py` | `_write_collected_report` passes `overwrite=True` | `tests/test_h_mad_collect_report.py::test_cli_out_conflict_force_and_identical_paths` |
+| i | transport-re-loosened | `scripts/h_mad_audit_gate.py` | `^audit_[^.]+` → `^audit_.*` | `tests/test_h_mad_audit_gate.py::test_transport_regex_corpus_is_disjoint_from_versioned_audit_docs` |
+| i′ | docs-pattern-dedotted | `scripts/h_mad_audit_cycle.py` | `.audit.v` → `_audit_v` in `_collected_path` | `tests/test_h_mad_audit_gate.py::test_collected_path_names_match_audit_doc_grammar_not_transport` |
+| j | gate-refusal-drops-marker | `scripts/h_mad_audit_gate.py` | the `[H-MAD] <stem> gate INVALID (transport file ...)` print removed | `tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring` |
+| j′ | cli-error-drops-marker | `scripts/h_mad_collect_report.py` | operational-error marker print removed | `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` |
+| k | gate-refusal-exit-0 | `scripts/h_mad_audit_gate.py` | transport branch `return 2` → `return 0` | `tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring` |
+| k′ | gate-refusal-wrong-token | `scripts/h_mad_audit_gate.py` | transport branch prints `GATE: PASS must=0 should=0` | `tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring` |
+| l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` |
+| l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback` |
 
 - [ ] AC-6.3: the spec has exactly the 23 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0 unreadable=0` (the harness appends `unreadable=` on every measured verdict — verified 2026-09-02).
 - [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 23 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
@@ -376,3 +376,4 @@ copied from the production file at implementation time.)
 - v1.10: 5b audit v9 fixes (codex + agy p1, 22 tools): stale 22/v1.15 strings; no placeholder ellipses in paths, tokens or the JSON skeleton (one full mutation entry shown); render_verdict dropped, _run named; provenance line unpinned.
 - v1.11: 5b audit v10 fixes (codex; agy v10 clean): AC-6.3 expects the harness's unreadable=0 field; marker AC allows unknown on the argparse path.
 - v1.12: 5e Task 1: AC-1.5 scoped to write-path modules after a correct codex refusal (reader modules build the grammar to find audits).
+- v1.13: Task 6 mutation-table test names corrected against the tree: 15 of the 16 names were aspirational and resolved to nothing (verified by grep for 'def <name>('), so 23 references were repointed at the real tests; row i-prime now names test_collected_path_names_match_audit_doc_grammar_not_transport, which is the test that actually pins the docs grammar. Every name in the table now resolves except test_mutation_spec_shape, which Task 6 creates (AC-6.3a).
