@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-02 · gotcha · [0.7] · `handoff,learnings,worktree,handoff:2026-09-02-feature-pin-agents-tail-banner` — learn.py resolves to the CANONICAL root, so a sibling worktree's learnings land in the main checkout's docs/learnings.md and only the main checkout can ever commit them. Staging that file absorbs another lane's entries.
+- 2026-09-02 · gotcha · [0.7] · `h-mad,test-isolation,preflight,handoff:2026-09-02-feature-pin-agents-tail-banner` — h-mad test_send_unresolved_agents... reads the REAL .h-mad preflight receipt, not a per-test one: passes/fails on ambient state from earlier tests or any hmad-dispatch run. Reproduced on origin/main in a clean worktree.
 - 2026-09-02 · pattern · [0.7] · `h-mad,audit-gate,grammar,handoff:2026-09-02-phase5-tasks-1-4-green` — h-mad transport grammar: /tmp audit reports are ^audit_[^.]+\.report\.md$ (dot-free stem); docs audit names always carry .audit.v<N>. Bare *.report.md collides with Phase-7 <feature>.report.md
 - 2026-09-02 · gotcha · [0.5] · `git,tdd,revert-test,handoff:2026-09-02-phase5-tasks-1-4-green` — git stash push -- <path> refuses an intent-to-add (git add -N) file: 'not uptodate. Cannot merge', and the revert test silently does not land. For a brand-new prod file, mv it aside instead
 - 2026-09-02 · gotcha · [0.7] · `h-mad,mutation-harness,worktree,handoff:2026-09-02-phase5-tasks-1-4-green` — Mutation-spec root must be spec-relative (../..): an absolute root makes --check-anchors read the MAIN checkout from a worktree, so anchors report OK while the worktree file has drifted
