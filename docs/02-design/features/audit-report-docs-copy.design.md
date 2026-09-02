@@ -112,21 +112,28 @@ def _write_collected_report(report_text, collected_path, *, overwrite=True) -> P
 
 def collect(spec, *, grace, project_root, feature, phase, cycle,
             surface=None, overwrite=True) -> tuple[str, Path | None]:
+    # The WHOLE body runs under the guard, so `_has_complete_report` (stat/size),
+    # `_run_report_wait` (subprocess + stat) and every read below convert an OSError
+    # into OperationalError; the CLI's outer try is the backstop, not the only line.
+    with _fs_errors(f"collect {feature} {phase} v{cycle}"):
+        return _collect_unguarded(spec, grace=grace, project_root=project_root,
+                                  feature=feature, phase=phase, cycle=cycle,
+                                  surface=surface, overwrite=overwrite)
+
+def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surface, overwrite):
     collected_path = _collected_path(..., index=spec.index, surface=surface)
     # AC-2.8 FIRST: $RP IS the docs path. The marker is the completion signal and is
     # removed; a byte-identity short-circuit here would trivially match (same file)
     # and skip the marker path, so it is ordered after this block.
-    with _fs_errors(f"collect {collected_path}"):
-        same = spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve()
+    same = spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve()
     if same:
         if _has_complete_report(spec.report_path) or _run_report_wait(spec.report_path, grace):
             return "report-file", _copy_collected_report(spec.report_path, collected_path, overwrite=overwrite)
         return "none", None                       # no marker → MISSING (AC-2.8 "otherwise")
-    # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical.
-    # Under the guard: an unreadable docs file here must be exit 2 + marker, not a traceback.
-    with _fs_errors(f"collect {collected_path}"):
-        already = (collected_path.is_file() and spec.report_path.is_file()
-                   and collected_path.read_bytes() == spec.report_path.read_bytes())
+    # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical
+    # (under the enclosing guard like everything else in this function).
+    already = (collected_path.is_file() and spec.report_path.is_file()
+               and collected_path.read_bytes() == spec.report_path.read_bytes())
     if already:
         return "report-file", collected_path
     if _has_complete_report(spec.report_path):
@@ -171,7 +178,13 @@ usage: h_mad_collect_report.py --feature F --phase {plan,design,impl-plan} --cyc
                                [--grace SECONDS=5] [--force]
 ```
 
-Algorithm (`main(argv) -> int`):
+Algorithm (`main(argv) -> int`). **Everything after argparse — steps 1 (semantic checks)
+through 6 — runs inside ONE outer `try` whose handler is `except (OperationalError, OSError)
+as e:` → `ERROR: <e>` on stderr, `[H-MAD] <feature> collect <operational_error|readback_failed>`
+on stdout, return 2.** So `Path.resolve()` in step 3, `mkdir` in step 1, `is_dir()` probes,
+and any `OSError` the library did not already convert all take the same exit path; no
+traceback can escape `main()`. Step 4's nested `CollectConflict` handler sits inside that
+outer try.
 1. Parse with `argparse`, every flag except `--out`, `--grace`, `--force` declared
    `required=True`. A missing required flag (or an unknown one, or `--phase` outside its
    `choices`) makes argparse print usage to stderr and raise `SystemExit(2)`; `main()`
@@ -186,16 +199,18 @@ Algorithm (`main(argv) -> int`):
 4. Nested handlers, so a failure inside the forced retry is still caught:
    ```python
    forced = False
-   try:
+   try:                                   # the ONE outer try (opened before step 1)
+       ... semantic checks, mkdir, spec, same = ... .resolve() ...
        try:
            delivered, path = collect(spec, grace=grace, ..., surface=S, overwrite=False)
        except CollectConflict as c:
            if not args.force:
                print(f"COLLECT: CONFLICT path={c.collected} delivered={c.delivered}")
                print(f"[H-MAD] {F} collect CONFLICT"); return 0
-           delivered, path = collect(spec, ..., surface=S, overwrite=True)   # inside the OUTER try
+           delivered, path = collect(spec, ..., surface=S, overwrite=True)   # still inside the outer try
            forced = True
-   except OperationalError as e:          # CollectConflict cannot reach here (handled above)
+       ... steps 5–6 (token line, detail lines, marker) ...
+   except (OperationalError, OSError) as e:   # CollectConflict cannot reach here (handled above)
        print(f"ERROR: {e}", file=sys.stderr)
        reason = "readback_failed" if str(e).startswith("readback") else "operational_error"
        print(f"[H-MAD] {F} collect {reason}"); return 2                      # AC-2.12
@@ -260,8 +275,13 @@ An unknown verb keeps hitting the existing `*)` arm (`unknown verb`, return 2) �
 
 ### D5. Docs (FR-5)
 
-SKILL.md, inside `## Audit prompt assembly`, directly after the `audit-cycle` paragraph
-block (before "**Read the `Effort:` block…**"), a new sub-block:
+SKILL.md gains a NEW top-level section `## Second surface — the codex leg`, placed
+immediately after `## Putting \`hmad-dispatch\` on PATH` (SKILL.md:1791) and before
+`## Helper scripts …` — i.e. OUTSIDE the `## Audit prompt assembly` → `## Putting …` slice
+that `test_h_mad_audit_cycle_docs.py` pins, as the spec (FR-5) and plan require. Inside the
+slice, the `audit-cycle` paragraph gains ONE pointer sentence: "`audit-cycle` dispatches agy
+only; the codex pass is dispatched and collected by hand — see §"Second surface — the codex
+leg"." The new section's body:
 
 ```markdown
 **Second surface — the codex leg, collected by the same copier.** `audit-cycle` dispatches agy;
@@ -294,7 +314,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | CLI | `h-mad/scripts/h_mad_collect_report.py` | new | `COLLECT:` contract over `collect()` |
 | gate | `h-mad/scripts/h_mad_audit_gate.py` | modify | `TRANSPORT_RE`, `is_transport_path`, refusal |
 | verb | `h-mad/scripts/hmad-dispatch.sh` | modify | `_cmd_collect_report` + case + header |
-| recipe | `h-mad/SKILL.md` | modify | codex-leg block, step-9 sentence, registry entry |
+| recipe | `h-mad/SKILL.md` | modify | new `## Second surface — the codex leg` section (after `## Putting …`), one pointer sentence in the audit-cycle paragraph, step-9 sentence, registry entry |
 | verb table | `h-mad/references/orchestration-mode.md` | modify | `collect-report` row |
 | tests | `h-mad/tests/test_h_mad_collect_report.py` | new | AC-1.1–1.6, AC-2.1–2.12 |
 | tests | `h-mad/tests/test_h_mad_audit_gate.py` | modify | AC-3.1, 3.2, 3.5–3.7 incl. corpus + sweep |
@@ -437,6 +457,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.7: Design-audit v5 fixes (codex): `collect()` runs its WHOLE body under `_fs_errors` (the probes `_has_complete_report`/`_run_report_wait` included); the SKILL.md block is a new top-level section after `## Putting …`, outside the pinned slice, per spec/plan — one pointer sentence inside.
+- v1.6: Design-audit v5 fix (agy p1): one outer `try … except (OperationalError, OSError)` encloses every step after argparse, so `resolve()`, `mkdir` and the directory probes cannot leak a traceback either.
 - v1.5: Design-audit v4 fix (agy p1, 10 tool calls; codex v4 clean): the PermissionError test chmods the parent DIRECTORY, not the file — `unlink` on a read-only file succeeds under a writable parent and the scenario would have exited 0.
 - v1.4: Design-audit v3 fix (agy p1; codex v3 clean): the `collect()` same-file and already-collected checks run under `_fs_errors` too — the code block now matches the prose.
 - v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
