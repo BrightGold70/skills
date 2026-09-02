@@ -376,3 +376,63 @@ def test_gate_block_does_not_exit_the_operators_shell() -> None:
         "the gate block must not `exit` — it would kill an interactive shell; "
         f"offending lines: {offenders}"
     )
+
+
+def test_second_surface_documents_the_out_fallback_rung() -> None:
+    """6a-prime cycle 2: the `--out` fallback is the recipe's recovery path.
+
+    The whole feature exists because report-file delivery sometimes fails —
+    measured 1 of 18 passes — and `collect-report` arms an `--out` rung for
+    exactly that case. A recipe that never mentions it leaves an operator with
+    no documented recovery when the marker never arrives.
+    """
+    section = _second_surface()
+
+    collect_line = next(
+        (line for line in section.splitlines() if "collect-report" in line and "--report" in line),
+        "",
+    )
+    assert collect_line or "--out" in section, "section must invoke collect-report"
+    assert "--out" in section, (
+        "the Second surface recipe must document collect-report's `--out` "
+        "fallback rung; without it the documented flow has no recovery when "
+        "report-file delivery fails"
+    )
+
+
+def test_exec_codex_dispatch_carries_out_log_and_timeout() -> None:
+    """6a-prime cycle 2: SKILL.md's own rule is 'pass --log on every exec dispatch'.
+
+    A bare `exec codex` is the blind-dispatch failure this skill documents at
+    length: no transcript to poll, no captured response, no watchdog bound.
+    """
+    section = _second_surface()
+
+    exec_block = next(
+        (b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b),
+        "",
+    )
+    assert exec_block, "Second surface must dispatch the codex leg via exec"
+
+    for flag in ("--out", "--log", "--timeout"):
+        assert flag in exec_block, (
+            f"the exec codex dispatch must carry `{flag}` — SKILL.md requires "
+            "--log on every exec dispatch, and a verdict needs a captured --out"
+        )
+
+
+def test_codex_prompt_path_does_not_collide_with_the_agy_leg() -> None:
+    """6a-prime cycle 2: the two legs must not share one staged prompt file.
+
+    Step 7 stages the agy prompt at `/tmp/audit_<feature>_<phase>_cycle<N>.txt`,
+    which is also `h_mad_assemble_audit.py`'s default `--out`. A codex leg that
+    reads or writes that same path races the agy leg of the same cycle.
+    """
+    section = _second_surface()
+
+    agy_path = "/tmp/audit_<feature>_<phase>_cycle<N>.txt"
+    offenders = [line for line in section.splitlines() if agy_path in line]
+    assert not offenders, (
+        "the codex leg must use its own staged prompt path (the `_codex` form), "
+        f"not the agy leg's; offending lines: {offenders}"
+    )

@@ -1197,6 +1197,44 @@ def test_empty_report_is_never_delivered_as_a_collected_audit(tmp_path: Path) ->
     )
 
 
+def test_empty_matching_pair_still_waits_out_grace(tmp_path: Path) -> None:
+    """6a-prime cycle 2: an empty report is never 'already collected'.
+
+    Design: `already = bool(data) and collected_path.is_file() and
+    collected_path.read_bytes() == data` — an empty report makes `already`
+    False, so control falls through to `_has_complete_report` and
+    `_run_report_wait`. Returning `("none", None)` when both files are empty and
+    equal skips the grace wait entirely, and an empty-then-populated report file
+    is exactly what a dispatch in flight looks like.
+    """
+    docs = docs_path(tmp_path)
+    docs.parent.mkdir(parents=True, exist_ok=True)
+    docs.write_bytes(b"")
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_bytes(b"")
+
+    import threading
+
+    def deliver() -> None:
+        report.write_text(HOSTILE_REPORT, encoding="utf-8")
+        Path(str(report) + ".done").write_text("", encoding="utf-8")
+
+    timer = threading.Timer(1.0, deliver)
+    timer.start()
+    try:
+        result = run_collect_cli(collect_args(tmp_path, report, grace=10))
+    finally:
+        timer.cancel()
+
+    assert collect_contract_lines(result.stdout) == [
+        f"COLLECT: OK path={docs} delivered=report-file"
+    ], (
+        "an empty report/docs pair must fall through to the grace wait, not "
+        f"short-circuit to MISSING; stdout={result.stdout!r}"
+    )
+
+
 MUTATION_SPEC = REPO_ROOT / "h-mad" / "tests" / "mutation-specs" / "collect_report.json"
 
 EXPECTED_MUTATION_NAMES = (
