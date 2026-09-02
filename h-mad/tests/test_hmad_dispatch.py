@@ -43,20 +43,38 @@ def _absent_pin_file() -> str:
     invocation, that same mistake can only affect the one call that made it, so
     it surfaces as a local failure instead of spooky action at a distance.
     (6a-prime architectural review.)
+
+    The uuid is in the DIRECTORY, not just the filename, because the pin file is
+    not the only thing derived from this path: `_receipt_file()` is
+    `dirname(_pin_file)/preflight.receipt`, and so are the await cache and the
+    pane slot dir. Varying only the basename left every unpinned invocation in
+    the suite sharing ONE `$TMPDIR/preflight.receipt` — a `verdict=PASS` written
+    by one test satisfied a later test's dispatch gate, so
+    test_send_unresolved_agents_is_not_refused_as_a_conflict passed in the suite
+    and failed when run alone. Isolating the filename isolated the wrong noun.
     """
-    return str(_NO_PIN_BASE / f"{_NO_PIN_STEM}-{uuid.uuid4().hex}.env")
+    return str(_NO_PIN_BASE / f"{_NO_PIN_STEM}-{uuid.uuid4().hex}" / "orca-pins.env")
 
 
 @atexit.register
 def _remove_stray_pin_file() -> None:
     """Defensive only: every pin-writing test passes its own HMAD_ORCA_PIN_FILE,
     so nothing should create this path. If a future test forgets, `pin` would
-    mkdir -p and write here, contaminating later tests and leaving a file behind."""
+    mkdir -p and write here, contaminating later tests and leaving a file behind.
+
+    Two shapes are swept because `_absent_pin_file()` now returns a per-invocation
+    DIRECTORY: the legacy flat `<stem>-<uuid>.env` files, and the directories,
+    which may also hold a `preflight.receipt`, an `await-cache/` or a `panes/`
+    that the same invocation derived from dirname(). Unlinking only the pin file
+    would leave those behind."""
     for stray in [_NO_PIN_FILE, *_NO_PIN_BASE.glob(f"{_NO_PIN_STEM}-*.env")]:
         try:
             stray.unlink()
         except FileNotFoundError:
             pass
+    for strays in _NO_PIN_BASE.glob(f"{_NO_PIN_STEM}-*"):
+        if strays.is_dir():
+            shutil.rmtree(strays, ignore_errors=True)
 
 # --- Real Orca response envelopes ------------------------------------------
 #
@@ -3011,10 +3029,31 @@ def test_await_defaults_timeout_and_requires_coordinator(tmp_path):
     assert r.returncode == 1
     assert r.stdout == ""
     assert "timed out" in r.stderr
+    # J46: exactly the default, not "about" it. This used to be load-sensitive:
+    # `remaining` was `deadline - SECONDS` on the first pass too, so a clock tick
+    # between the two turned 600000 into 599000 and the assertion failed under a
+    # concurrent suite while passing alone. The first check now takes `timeout`
+    # verbatim; later iterations still track the absolute deadline.
     assert "--timeout-ms 600000 --json" in cap.read_text()
     no_pin = run(["await", "task_1"], substrate="orca", env={"_BINDIR": b})
     assert no_pin.returncode == 1
     assert "HMAD_ORCA_COORDINATOR_TERMINAL" in no_pin.stderr
+
+
+def test_await_first_check_spends_the_whole_requested_timeout(tmp_path):
+    """J46: an EXPLICIT --timeout reaches the runtime undiminished.
+
+    Pins the same rule at a second value, so a fix that special-cases the 600s
+    default rather than the first iteration cannot pass. 7s is short enough that
+    an off-by-one-second is 14% of the budget, not a rounding artefact.
+    """
+    b = _bindir(tmp_path, ["orca"])
+    cap = tmp_path / "cap.txt"
+    r = run(["await", "task_1", "--timeout", "7"], substrate="orca",
+            env={"_BINDIR": b, "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+                 "HMAD_STUB_ORCA_STDOUT": '{"messages":[]}'}, capture=cap)
+    assert r.returncode == 1
+    assert "--timeout-ms 7000 --json" in cap.read_text(), cap.read_text()
 
 
 def test_await_empty_delivery_makes_exactly_one_check(tmp_path):
@@ -4327,15 +4366,51 @@ def test_send_allows_distinct_agent_resolutions(tmp_path):
     assert "terminal send --terminal term_codex" in cap.read_text()
 
 
+def test_absent_pin_file_isolates_the_DIRECTORY_not_just_the_filename():
+    """Harness guard: unpinned invocations must not share derived state.
+
+    `_pin_file()` is the root of four paths, not one — `_receipt_file()`,
+    `_await_cache_dir()` and the pane slot dir are all `dirname(_pin_file)/…`.
+    While this helper varied only the basename, every unpinned `run()` in the
+    suite derived the SAME `$TMPDIR/preflight.receipt`, and a `verdict=PASS`
+    written by one test satisfied another test's dispatch gate. Asserting on the
+    parent is what pins the fix: comparing the returned paths alone passes either
+    way, because the basename was already unique.
+    """
+    a, b = Path(_absent_pin_file()), Path(_absent_pin_file())
+    assert a != b
+    assert a.parent != b.parent, (
+        f"unpinned invocations share {a.parent} — dirname-derived state "
+        "(preflight.receipt, await-cache, panes) leaks between tests"
+    )
+    assert not a.parent.exists(), "the absent pin path must never be created"
+
+
 def test_send_unresolved_agents_is_not_refused_as_a_conflict(tmp_path):
-    """AC-7.4: two unresolved agents do not establish a shared pane."""
+    """AC-7.4: two unresolved agents do not establish a shared pane.
+
+    The receipt path must be per-test. `send` gates on the preflight receipt
+    BEFORE it resolves the agent, so without one this test never reaches the
+    resolution error it asserts on — it gets `preflight_not_run` instead. The
+    default receipt path derives from dirname(HMAD_ORCA_PIN_FILE), and
+    `_absent_pin_file()` varies only the FILENAME, so every unpinned invocation
+    in the suite shares one `$TMPDIR/preflight.receipt`. This test used to pass
+    on a `verdict=PASS` receipt left there by an earlier test, and failed when
+    run alone or first. Minting its own is what makes the outcome its own.
+    """
     b = _bindir(tmp_path, ["orca"])
     prompt = tmp_path / "prompt.txt"; prompt.write_text("do the thing")
+    receipt = tmp_path / "receipt"
+    env = {"_BINDIR": b, "HMAD_PREFLIGHT_RECEIPT_FILE": str(receipt),
+           "HMAD_STUB_ORCA_STDOUT": _preflight_listing()}
 
-    r = run(["send", "codex", str(prompt)], substrate="orca",
-            env={"_BINDIR": b, "HMAD_STUB_ORCA_STDOUT": _preflight_listing()})
+    preflight = run(["env"], substrate="orca", env=env)
+    assert "PREFLIGHT: PASS" in preflight.stdout, preflight.stdout
+
+    r = run(["send", "codex", str(prompt)], substrate="orca", env=env)
 
     assert r.returncode != 0
+    assert "preflight_not_run" not in r.stderr
     assert "preflight_agent_conflict" not in r.stderr
     assert "orca terminal for 'codex' resolved" in r.stderr
 

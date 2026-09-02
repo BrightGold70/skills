@@ -1319,9 +1319,19 @@ _cmd_await() {  # $1 task_id, [--timeout <s>]
     _await_report_rejection "$task" "$our_rejection"
     rejection_reported=1
   fi
-  local ack="" checked match count remaining
+  # J46: the FIRST check gets the full requested budget, not `deadline - SECONDS`.
+  # Both are computed from bash's integer `SECONDS`, so if the clock ticks between
+  # the deadline assignment above and the first pass here -- everything in between
+  # is I/O: an await-cache read, and under load a scheduler slice is enough -- the
+  # first check asks for `timeout - 1`. `--timeout 600` then dispatched
+  # `--timeout-ms 599000`, silently short-changing the caller's stated budget and
+  # making the guard on it load-sensitive (it failed under a concurrent suite and
+  # passed alone). Later iterations must keep using the absolute deadline: that is
+  # what stops the total wait from growing past `timeout`.
+  local ack="" checked match count remaining first_check=1
   while :; do
-    remaining=$(( deadline - SECONDS ))
+    if [ "$first_check" = 1 ]; then remaining="$timeout"; first_check=0
+    else remaining=$(( deadline - SECONDS )); fi
     [ "$remaining" -gt 0 ] || break
     local args=(orchestration check --terminal "$coord")
     # `check --ack <id> --wait` acknowledges, checks, and waits in one call, so
