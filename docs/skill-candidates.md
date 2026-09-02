@@ -1257,3 +1257,8 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   checks that what an entry claims is true of the document it sits in. Natural home is
   `h_mad_version_history.py` as a `--verify` mode, beside the writer that already parses these
   entries.
+
+## 2026-09-02 — phase5b-gated-task1-green (scout)
+
+- **AC bodies must name their test node (or the 5d assembler must carry the contract table)**: `h_mad_assemble_tdd.py` cuts §Task N only; 39 of 45 AC bodies named no node, so the first RED dispatch invented all six T1 names and would have orphaned every T1 mutation pin. Fixed by hand this session (`**Node:**` on every AC). Mechanical: the assembler appends the task's rows from the Test-name contract table, or the audit gate refuses an AC whose body lacks its node — recurrence: 1 (systemic: every task would have hit it) — candidate: yes
+- **run prescribed test-helper blocks against the live module's guards before RED**: the impl-plan prescribed `tempfile.mkdtemp(` inside `test_hmad_dispatch.py`, whose own guard asserts that literal is absent; 53 audit cycles could not see it because the block was never executed in situ. Mechanical: extract every prescribed python block whose `file` is an existing test module, append it to a scratch copy, run the module's `*_guard` tests — recurrence: 1 — candidate: yes
