@@ -1,0 +1,7 @@
+ASSESSMENT: WITH_FIXES
+
+- File: `h-mad/scripts/h_mad_audit_cycle.py`, lines 315-316
+- What's wrong: In `_collect_unguarded()`, when an empty-matching pair is encountered (both report and collected docs path exist and are empty), the code implements a short-circuit: `if grace <= 0: return "none", None`.
+- Why it matters: This short-circuit entirely skips the designed `--out` fallback extraction rung (lines 331-338). If `grace <= 0` (e.g., when the CLI is explicitly run with `--grace 0`), an empty report will instantly return `MISSING` rather than attempting to recover a valid report from the `--out` capture. The `--out` fallback is the primary recovery path of this feature. The design simply set `already = False` and allowed control to fall through. (Concrete input: `h_mad_collect_report.py --grace 0 --out <populated_file>` with empty report/docs. Concrete behaviour: outputs `MISSING delivered=none` instead of `OK delivered=out`).
+- How to fix: Remove the `if grace <= 0: return "none", None` block (lines 315-316). Let the function naturally fall through; `_has_complete_report` and `_run_report_wait` will handle the `grace <= 0` case properly (timing out) and then proceed to the `--out` rung. If avoiding a 1-second minimum wait inside `_run_report_wait` is desired for `grace <= 0`, add a `grace > 0` guard to the `_run_report_wait` call at line 326 instead of returning early.
+- Operator override reasonable: No. It breaks the documented recovery path under `--grace 0`.
