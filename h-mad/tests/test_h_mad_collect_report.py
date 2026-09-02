@@ -1235,6 +1235,40 @@ def test_empty_matching_pair_still_waits_out_grace(tmp_path: Path) -> None:
     )
 
 
+def test_empty_pair_at_zero_grace_still_reaches_the_out_rung(tmp_path: Path) -> None:
+    """6a-prime cycle 3: the empty-pair case must not skip the `--out` fallback.
+
+    The design sets `already = False` for an empty report and falls through, so
+    `--out` is still consulted. A short-circuit that returns MISSING whenever
+    grace is zero disables the feature's primary recovery path in exactly the
+    configuration a caller uses when it does not want to wait: the report file
+    never arrived, and `--out` is the capture that holds the answer.
+
+    The control is the same call with no empty docs placeholder, which already
+    recovers `delivered=out`; the placeholder must not change that.
+    """
+    docs = docs_path(tmp_path)
+    docs.parent.mkdir(parents=True, exist_ok=True)
+    docs.write_bytes(b"")
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_bytes(b"")
+
+    out_path = tmp_path / "dispatch" / "codex.out"
+    out_path.write_text(
+        "===HMAD-DISPATCH-BOUNDARY===\n" + HOSTILE_OUT_REPORT, encoding="utf-8"
+    )
+
+    result = run_collect_cli(collect_args(tmp_path, report, out=out_path, grace=0))
+
+    assert collect_contract_lines(result.stdout) == [
+        f"COLLECT: OK path={docs} delivered=out"
+    ], (
+        "an empty docs placeholder must not block the --out rung at grace 0; "
+        f"stdout={result.stdout!r}"
+    )
+
+
 MUTATION_SPEC = REPO_ROOT / "h-mad" / "tests" / "mutation-specs" / "collect_report.json"
 
 EXPECTED_MUTATION_NAMES = (
