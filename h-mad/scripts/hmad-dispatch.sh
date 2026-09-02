@@ -319,6 +319,35 @@ _agent_pv_re() {
   esac
 }
 
+_agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
+  case "$1" in
+    codex) printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;
+    agy)   printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*$)' ;;
+    *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
+  esac
+}
+
+_orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, rc 1 = unreadable
+  # Bounded via _cmd_run (the `run` verb's own function): `timeout`/`gtimeout` are
+  # forbidden by the base invariant and are never invoked here. The default in
+  # ${HMAD_TAIL_READ_TIMEOUT:-2} is load-bearing under set -u.
+  #
+  # --cursor 0 is load-bearing: without it the call returns recent rows, while
+  # the launch banner sits at the start of scrollback.
+  local h="$1" raw rc=0
+  raw="$(_cmd_run --timeout "${HMAD_TAIL_READ_TIMEOUT:-2}" -- \
+           orca terminal read --terminal "$h" --cursor 0 --limit 4000 --json 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  # Accept only ok:true envelopes whose terminal tail has the measured array
+  # shape. Missing keys, ok:false envelopes, and unexpected scalar/object tails
+  # are not identity evidence.
+  printf '%s' "$raw" \
+    | jq -re 'if (.ok? // false) != true then empty
+              else (.result.terminal.tail? // empty) end
+              | if type == "array" then join("\n") else empty end' 2>/dev/null \
+    || return 1
+}
+
 _agent_proc_name() {
   # h-mad agent token -> the executable name the OS reports for that agent.
   # Kept separate from _orca_agent_type (Orca's `agentType`, "antigravity") and

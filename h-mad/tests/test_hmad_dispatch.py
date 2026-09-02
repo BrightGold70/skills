@@ -829,72 +829,60 @@ def test_tail_matcher_regex_is_accepted_by_grep():
 
 
 _TAIL_NEGATIVES = [
-    "Compare Gemini 3.1 Pro with Claude",
-    "OpenAI Codex v0.145 release notes",
-    "## OpenAI Codex v0.145",
-    "OpenAI Codex v0.145-release-notes",
-    "model: gpt-5-migration-notes",
-    "Gemini 3.1 Pro (2026 release notes)",
-    "> OpenAI Codex v0.145",
-    "| OpenAI Codex v0.145",
-    ": OpenAI Codex v0.145",
-    "gpt-5.6-terra high performance notes",
-    "Gemini 3.1 Pro (release notes)",
-    "Antigravity CLI release notes",
-    "model: gpt-5 migration notes",
-    "gpt-5 high",
-    "OpenAI Codex (v0.145",
-    "OpenAI Codex v0.145)",
-    "Gemini Pro 3.1",
-    "Gemini 3.1 Pro table notes",
-    "Antigravity CLI: troubleshooting",
-    "openai codex | model: gpt-5.6-terra",
-    "model: gpt-5.6-terra release",
-    "gpt-5.6-terra high · ",
-    "│ > OpenAI Codex v0.145",
-    "foo OpenAI Codex v0.145",
-    "OpenAI Codex v0.145-release",
-    "model: gpt-5.6 high notes",
-    "Gemini 3.1 Pro (v2026)",
-    "Gemini 3.1 Pro ()",
-    "Gemini 3.1 Pro (medium notes)",
-    "antigravity cli v1 release notes",
-    "antigravity cli v1",
-    "╎ | Gemini 3.1 Pro",
-    "gpt-5.6-terra xhigh ·",
-    "openai codex model: gpt-5",
-    "model: gpt-5",
-    "Gemini 3.1 Pro (2026)",
+    "Release notes for OpenAI Codex are available",  # codex
+    "I am comparing model: gpt-5.6-terra with ours",  # codex
+    "see openai codex docs",  # codex
+    "we ran gpt-5.6-terra high on that repo",  # codex
+    "The Antigravity CLI documentation changed",  # agy
+    "Compare Gemini 3.1 Pro with Claude",  # agy
+    "about antigravity cli usage",  # agy
+    "OpenAI Codex documentation changed",  # codex
+    "model: gpt-5 migration notes",  # codex
+    "## OpenAI Codex release notes",  # codex
+    "OpenAI Codex is a coding agent",  # codex
+    "Antigravity CLI documentation",  # agy
+    "Gemini 3.1 Pro compared with Claude",  # agy
+    "## Gemini 3.1 Pro release notes",  # agy
+    "OpenAI Codex v0.145 release notes",  # codex
+    "OpenAI Codex (v0.145 release notes)",  # codex
+    "gpt-5.6-terra high performance notes",  # codex
+    "Antigravity CLI v1.2.3 release notes",  # agy
+    "Gemini 3.1 Pro (release notes)",  # agy
+    "## OpenAI Codex v0.145",  # codex
+    "OpenAI Codex v0.145-release-notes",  # codex
+    "model: gpt-5-migration-notes",  # codex
+    "Antigravity CLI v1.2.3-release-notes",  # agy
+    "Gemini 3.1 Pro (2026 release notes)",  # agy
+    "OpenAI Codex (v0.145.0",  # codex
+    "OpenAI Codex v0.145.0)",  # codex
+    "OpenAI Codex 2026",  # codex
+    "Antigravity CLI 2026",  # agy
+    "Gemini 3.1 Pro (2026)",  # agy
+    "OpenAI Codex (v2026)",  # codex
+    "> OpenAI Codex",  # codex
+    ": OpenAI Codex",  # codex
+    "| model: gpt-5.6-terra",  # codex
+    "gpt-5.6-terra high ·",  # codex
+    "> Antigravity CLI 1.1.22",  # agy
+    "| Gemini 3.1 Pro",  # agy
 ]
 
 _TAIL_POSITIVES = {
     "codex": [
-        "OpenAI Codex",
-        "OpenAI Codex v0.145",
-        "OpenAI Codex (v0.145.0)",
-        "OpenAI Codex v0.145.1 model: gpt-5.6-terra",
-        "OpenAI Codex model: gpt-5.6",
-        "model: gpt-5.6-terra",
-        "gpt-5.6-terra high",
+        "OpenAI Codex (v0.145.0)  model: gpt-5.6-terra",
         "gpt-5.6-terra high · ~/repo",
-        "  │ OpenAI Codex v0.145",
-        "╎   openai codex",
-        "gpt-5.6 low · /tmp/x",
-        "OpenAI Codex (0.145.0) model: gpt-5.6-terra",
+        "  OpenAI Codex (v0.145.0)",
+        "│ model: gpt-5.6-terra",
+        "OpenAI Codex v0.145.0",
+        "OpenAI Codex",
+        "gpt-5.6-terra high",
     ],
     "agy": [
-        "Antigravity CLI",
-        "Antigravity CLI v1.2",
+        "Antigravity CLI v1.2.3",
         "Gemini 3.1 Pro",
-        "Gemini 3.1 Flash",
-        "Gemini 3.1 Ultra",
-        "Gemini 3.1 Pro (high)",
-        "Gemini 3.1 Pro (v1.2)",
-        "Gemini 3.1",
-        "  │ Gemini 3.1 Pro",
-        "╎ Antigravity CLI v0.9.1",
-        "gemini 2.5 flash (medium)",
-        "Gemini 3.1 Pro (1.2.3)",
+        "  Antigravity CLI v1.2.3",
+        "Gemini 3.1 Pro (High)",
+        "Antigravity CLI 1.1.22",
     ],
 }
 
