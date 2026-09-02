@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -94,10 +95,11 @@ _ENV_CHECK_WAIT = (
     '],"count":2}}'
 )
 
+_MAIN_LINE = 'main "$@"'
 
-def run(args, *, substrate=None, env=None, capture=None, cwd=None):
-    """Invoke the wrapper with only the named stub binaries on PATH."""
-    bindir = Path(env["_BINDIR"]) if env and "_BINDIR" in env else None
+
+def _isolated_env(*, substrate=None, env=None, capture=None, bindir=None):
+    """The env `run()` already builds, shared with private-function tests."""
     e = dict(os.environ)
     e.pop("HMAD_SUBSTRATE", None)
     # Session-marker env vars checked by _detect_substrate() ABOVE binary
@@ -119,6 +121,11 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     # The receipt override is likewise caller state: lifecycle tests must start
     # from the pin-file-derived default unless they explicitly set an override.
     e.pop("HMAD_PREFLIGHT_RECEIPT_FILE", None)
+    # The tail-read helper has its own timeout override; scrub ambient sessions
+    # before applying explicit test env so default-vs-override tests discriminate.
+    e.pop("HMAD_TAIL_READ_TIMEOUT", None)
+    # Test-only per-handle read routing must also be opt-in per call.
+    e.pop("HMAD_STUB_ORCA_READ_DIR", None)
     if substrate:
         e["HMAD_SUBSTRATE"] = substrate
     if capture:
@@ -134,8 +141,34 @@ def run(args, *, substrate=None, env=None, capture=None, cwd=None):
     # leak into `command -v` lookups and defeat the bindir-only isolation this
     # helper exists to provide.
     e["PATH"] = f"{bindir}:/usr/bin:/bin" if bindir else os.environ["PATH"]
+    return e
+
+
+def run(args, *, substrate=None, env=None, capture=None, cwd=None):
+    """Invoke the wrapper with only the named stub binaries on PATH."""
+    bindir = Path(env["_BINDIR"]) if env and "_BINDIR" in env else None
+    e = _isolated_env(substrate=substrate, env=env, capture=capture, bindir=bindir)
     return subprocess.run(["bash", str(WRAPPER), *args], capture_output=True,
                           text=True, env=e, cwd=cwd)
+
+
+def _run_bash(script, *, env=None, capture=None, cwd=None):
+    e = _isolated_env(substrate="orca", env=env, capture=capture,
+                      bindir=(env or {}).get("_BINDIR"))
+    return subprocess.run(["bash", "-c", script], capture_output=True,
+                          text=True, env=e, cwd=cwd)
+
+
+def run_fn(script, *, env=None, capture=None, cwd=None):
+    """Invoke a PRIVATE wrapper function directly, with `main` never running."""
+    src = WRAPPER.read_text(encoding="utf-8")
+    lines = src.splitlines()
+    assert lines[-1] == _MAIN_LINE, (
+        f"wrapper no longer ends with {_MAIN_LINE!r} (last line: {lines[-1]!r}); "
+        "this harness strips that line and would otherwise run main"
+    )
+    body = "\n".join(lines[:-1])
+    return _run_bash(f"{body}\n{script}\n", env=env, capture=capture, cwd=cwd)
 
 
 def _bindir(tmp_path, names):
@@ -547,6 +580,350 @@ def test_tail_stub_read_still_captures_argv(tmp_path):
     assert capture.read_text(encoding="utf-8") == (
         "orca terminal read --terminal term_missing --cursor 0 --limit 4000 --json\n"
     )
+
+
+def test_tail_sig_reads_array_tail(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    read_dir = _orca_read_dir(tmp_path, {"term_h": _orca_read_env("alpha", "beta")})
+
+    r = run_fn("_orca_tail_sig term_h",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"})
+
+    assert r.returncode == 0, (
+        "_orca_tail_sig must exit 0 for a readable array tail; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "alpha\nbeta\n", (
+        "_orca_tail_sig must join array tail lines exactly, without JSON punctuation"
+    )
+
+
+def test_tail_sig_read_failure_returns_1(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    read_dir = _orca_read_dir(tmp_path, {})
+
+    r = run_fn("_orca_tail_sig term_missing",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"})
+
+    assert r.returncode == 1, (
+        "_orca_tail_sig must map a non-zero orca read to rc 1; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "", "_orca_tail_sig must write no stdout for an unreadable pane"
+
+
+def test_tail_sig_missing_tail_key_returns_1(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    envelope = json.dumps({"ok": True, "result": {"terminal": {"handle": "term_h"}}})
+    read_dir = _orca_read_dir(tmp_path, {"term_h": envelope})
+
+    r = run_fn("_orca_tail_sig term_h",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"})
+
+    assert r.returncode == 1, (
+        "_orca_tail_sig must reject an ok envelope with no terminal.tail key; "
+        f"rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "", "_orca_tail_sig must not emit null for a missing tail key"
+
+
+def test_tail_sig_argv_carries_cursor_and_limit(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    read_dir = _orca_read_dir(tmp_path, {"term_h": _orca_read_env("tail")})
+    capture = tmp_path / "orca.argv"
+
+    r = run_fn("_orca_tail_sig term_h",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"},
+               capture=capture)
+
+    assert r.returncode == 0, (
+        "_orca_tail_sig must complete so its terminal-read argv can be inspected; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert capture.read_text(encoding="utf-8") == (
+        "orca terminal read --terminal term_h --cursor 0 --limit 4000 --json\n"
+    ), "_orca_tail_sig must read the oldest retained tail with cursor 0, limit 4000, json"
+
+
+def test_tail_sig_timeout_default_when_env_unset(tmp_path, monkeypatch):
+    monkeypatch.setenv("HMAD_TAIL_READ_TIMEOUT", "0")
+    b = _bindir(tmp_path, ["orca"])
+    read_dir = _orca_read_dir(tmp_path, {"term_h": _orca_read_env("tail")})
+
+    r = run_fn("_orca_tail_sig term_h",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"})
+
+    assert r.returncode == 0, (
+        "_isolated_env must scrub ambient HMAD_TAIL_READ_TIMEOUT so "
+        "_orca_tail_sig exercises its default; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+
+
+def test_tail_sig_times_out(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    seam_script = """
+_cmd_run() {
+  printf '%s\\n' "$*" >> "$HMAD_CMD_RUN_CAPTURE"
+  printf '%s' '{"ok":true,"result":{"terminal":{"tail":["tail"]}}}'
+}
+_orca_tail_sig term_h
+"""
+    override_capture = tmp_path / "override.argv"
+    r_override = run_fn(seam_script,
+                        env={"_BINDIR": b, "HMAD_CMD_RUN_CAPTURE": str(override_capture),
+                             "HMAD_TAIL_READ_TIMEOUT": "1", "HMAD_STUB_HOSTILE": "all"})
+    assert r_override.returncode == 0, (
+        "_orca_tail_sig must call the _cmd_run seam when a timeout override is set; "
+        f"rc={r_override.returncode}, stderr={r_override.stderr!r}"
+    )
+    assert "--timeout 1 -- orca terminal read --terminal term_h --cursor 0" in (
+        override_capture.read_text(encoding="utf-8")
+    ), "_orca_tail_sig must pass HMAD_TAIL_READ_TIMEOUT through to _cmd_run"
+
+    default_capture = tmp_path / "default.argv"
+    r_default = run_fn(seam_script,
+                       env={"_BINDIR": b, "HMAD_CMD_RUN_CAPTURE": str(default_capture),
+                            "HMAD_STUB_HOSTILE": "all"})
+    assert r_default.returncode == 0, (
+        "_orca_tail_sig must call the _cmd_run seam when the timeout env is unset; "
+        f"rc={r_default.returncode}, stderr={r_default.stderr!r}"
+    )
+    assert "--timeout 2 -- orca terminal read --terminal term_h --cursor 0" in (
+        default_capture.read_text(encoding="utf-8")
+    ), "_orca_tail_sig must pass the default 2 second timeout to _cmd_run"
+
+    read_dir = _orca_read_dir(tmp_path, {"term_h": _orca_read_env("slow")})
+    started = time.monotonic()
+    r_slow = run_fn("_orca_tail_sig term_h",
+                    env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                         "HMAD_STUB_ORCA_SLEEP": "3",
+                         "HMAD_TAIL_READ_TIMEOUT": "1", "HMAD_STUB_HOSTILE": "all"})
+    elapsed = time.monotonic() - started
+    assert r_slow.returncode == 1, (
+        "_orca_tail_sig must map the real _cmd_run timeout to unreadable rc 1; "
+        f"rc={r_slow.returncode}, elapsed={elapsed:.3f}, stderr={r_slow.stderr!r}"
+    )
+    assert elapsed < 2.5, "_orca_tail_sig must return before the slow read completes"
+
+
+_ARITH = re.compile(r"\$\(\(.*?\)\)")
+_INVOKE = re.compile(r"""(?<![-a-zA-Z0-9_])(?:g?timeout|"g?timeout"|'g?timeout')\s""")
+
+
+def _norm_timeout_probe(line):
+    if line.lstrip().startswith("#"):
+        return ""
+    return _ARITH.sub(" ", line)
+
+
+def test_tail_no_timeout_binary_invocation():
+    invocation_probes = [
+        "  timeout 2 orca terminal list",
+        "if timeout 2 orca z; then",
+        "then timeout 2 orca z",
+        "! timeout 2 orca z",
+        "{ timeout 2 orca z; }",
+        "do timeout 2 orca z",
+        'out="$(timeout 5 orca y)"',
+        "gtimeout 2 orca z",
+        "foo && timeout 3 bar",
+        "(timeout 9 orca y)",
+        "x=1; timeout 4 orca q",
+        '"timeout" 2 orca x',
+        "'gtimeout' 2 orca x",
+    ]
+    missed = [line for line in invocation_probes
+              if not _INVOKE.search(_norm_timeout_probe(line))]
+    assert missed == [], f"timeout/gtimeout invocation predicate missed {missed}"
+
+    false_positive_probes = [
+        "_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- orca terminal read",
+        'wargs+=(--timeout "$timeout")',
+        'wargs+=(--timeout-ms "$(( timeout * 1000 ))")',
+        "local timeout=600",
+        "case \"$1\" in --timeout) shift ;; esac",
+        "echo run_timeout in a diagnostic",
+        "# timeout and gtimeout are named in comments",
+    ]
+    false_hits = [line for line in false_positive_probes
+                  if _INVOKE.search(_norm_timeout_probe(line))]
+    assert false_hits == [], f"timeout/gtimeout invocation predicate false-hit {false_hits}"
+
+    src = WRAPPER.read_text(encoding="utf-8").splitlines()
+    hits = [(i + 1, line) for i, line in enumerate(src)
+            if _INVOKE.search(_norm_timeout_probe(line))]
+    assert hits == [], f"timeout/gtimeout invoked at {hits}"
+
+
+def test_tail_sig_rejects_ok_false_envelope(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    envelope = json.dumps({
+        "ok": False,
+        "error": {"code": "terminal_gone"},
+        "result": {"terminal": {"handle": "term_h", "tail": ["OpenAI Codex v1.2"]}},
+    })
+    read_dir = _orca_read_dir(tmp_path, {"term_h": envelope})
+
+    r = run_fn("_orca_tail_sig term_h",
+               env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                    "HMAD_STUB_HOSTILE": "all"})
+
+    assert r.returncode == 1, (
+        "_orca_tail_sig must reject ok:false envelopes even when they carry banner text; "
+        f"rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "", "_orca_tail_sig must not emit tail text from an ok:false envelope"
+
+
+def test_tail_sig_rejects_non_array_tail(tmp_path):
+    b = _bindir(tmp_path, ["orca"])
+    cases = {
+        "string": "OpenAI Codex v1.2",
+        "object": {"0": "OpenAI Codex v1.2"},
+    }
+    for label, tail in cases.items():
+        envelope = json.dumps({"ok": True, "result": {"terminal": {
+            "handle": f"term_{label}", "tail": tail}}})
+        read_dir = _orca_read_dir(tmp_path, {f"term_{label}": envelope})
+
+        r = run_fn(f"_orca_tail_sig term_{label}",
+                   env={"_BINDIR": b, "HMAD_STUB_ORCA_READ_DIR": read_dir,
+                        "HMAD_STUB_HOSTILE": "all"})
+
+        assert r.returncode == 1, (
+            f"_orca_tail_sig must reject non-array tail shape {label}; "
+            f"rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+        )
+        assert r.stdout == "", f"_orca_tail_sig must write no stdout for {label} tail"
+
+
+def _agent_tail_regex(agent):
+    r = run_fn(f"_agent_tail_re {agent}")
+    assert r.returncode == 0, (
+        f"_agent_tail_re must print a regex for {agent}; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout.endswith("\n"), f"_agent_tail_re {agent} must print one newline"
+    regex = r.stdout[:-1]
+    assert not regex.endswith(r"\n"), (
+        f"_agent_tail_re {agent} must not append a trailing literal \\\\n"
+    )
+    return regex
+
+
+def test_tail_matcher_regex_is_accepted_by_grep():
+    for agent in ["codex", "agy"]:
+        regex = _agent_tail_regex(agent)
+        grep = subprocess.run(["grep", "-E", regex], input="probe\n",
+                              capture_output=True, text=True)
+        assert grep.returncode in (0, 1), (
+            f"_agent_tail_re {agent} must emit grep -E syntax; "
+            f"grep rc={grep.returncode}, stderr={grep.stderr!r}, regex={regex!r}"
+        )
+
+
+_TAIL_NEGATIVES = [
+    "Compare Gemini 3.1 Pro with Claude",
+    "OpenAI Codex v0.145 release notes",
+    "## OpenAI Codex v0.145",
+    "OpenAI Codex v0.145-release-notes",
+    "model: gpt-5-migration-notes",
+    "Gemini 3.1 Pro (2026 release notes)",
+    "> OpenAI Codex v0.145",
+    "| OpenAI Codex v0.145",
+    ": OpenAI Codex v0.145",
+    "gpt-5.6-terra high performance notes",
+    "Gemini 3.1 Pro (release notes)",
+    "Antigravity CLI release notes",
+    "model: gpt-5 migration notes",
+    "gpt-5 high",
+    "OpenAI Codex (v0.145",
+    "OpenAI Codex v0.145)",
+    "Gemini Pro 3.1",
+    "Gemini 3.1 Pro table notes",
+    "Antigravity CLI: troubleshooting",
+    "openai codex | model: gpt-5.6-terra",
+    "model: gpt-5.6-terra release",
+    "gpt-5.6-terra high · ",
+    "│ > OpenAI Codex v0.145",
+    "foo OpenAI Codex v0.145",
+    "OpenAI Codex v0.145-release",
+    "model: gpt-5.6 high notes",
+    "Gemini 3.1 Pro (v2026)",
+    "Gemini 3.1 Pro ()",
+    "Gemini 3.1 Pro (medium notes)",
+    "antigravity cli v1 release notes",
+    "antigravity cli v1",
+    "╎ | Gemini 3.1 Pro",
+    "gpt-5.6-terra xhigh ·",
+    "openai codex model: gpt-5",
+    "model: gpt-5",
+    "Gemini 3.1 Pro (2026)",
+]
+
+_TAIL_POSITIVES = {
+    "codex": [
+        "OpenAI Codex",
+        "OpenAI Codex v0.145",
+        "OpenAI Codex (v0.145.0)",
+        "OpenAI Codex v0.145.1 model: gpt-5.6-terra",
+        "OpenAI Codex model: gpt-5.6",
+        "model: gpt-5.6-terra",
+        "gpt-5.6-terra high",
+        "gpt-5.6-terra high · ~/repo",
+        "  │ OpenAI Codex v0.145",
+        "╎   openai codex",
+        "gpt-5.6 low · /tmp/x",
+        "OpenAI Codex (0.145.0) model: gpt-5.6-terra",
+    ],
+    "agy": [
+        "Antigravity CLI",
+        "Antigravity CLI v1.2",
+        "Gemini 3.1 Pro",
+        "Gemini 3.1 Flash",
+        "Gemini 3.1 Ultra",
+        "Gemini 3.1 Pro (high)",
+        "Gemini 3.1 Pro (v1.2)",
+        "Gemini 3.1",
+        "  │ Gemini 3.1 Pro",
+        "╎ Antigravity CLI v0.9.1",
+        "gemini 2.5 flash (medium)",
+        "Gemini 3.1 Pro (1.2.3)",
+    ],
+}
+
+
+def _grep_ei_matches(regex, line):
+    r = subprocess.run(["grep", "-Eiq", regex], input=f"{line}\n",
+                       capture_output=True, text=True)
+    assert r.returncode in (0, 1), (
+        f"_agent_tail_re emitted invalid grep -Ei syntax: rc={r.returncode}, "
+        f"stderr={r.stderr!r}, regex={regex!r}"
+    )
+    return r.returncode == 0
+
+
+def test_tail_matcher_corpus_decides_prose_vs_banner():
+    for agent in ["codex", "agy"]:
+        regex = _agent_tail_regex(agent)
+        matched_negatives = [line for line in _TAIL_NEGATIVES if _grep_ei_matches(regex, line)]
+        assert matched_negatives == [], (
+            f"_agent_tail_re {agent} must decline prose/non-banner tails; "
+            f"matched={matched_negatives!r}"
+        )
+
+        missed_positives = [line for line in _TAIL_POSITIVES[agent]
+                            if not _grep_ei_matches(regex, line)]
+        assert missed_positives == [], (
+            f"_agent_tail_re {agent} must match real banner/status tails under grep -Ei; "
+            f"missed={missed_positives!r}"
+        )
 
 
 # The live listing: note term_agy's title says "Codex", and both previews are
