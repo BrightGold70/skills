@@ -43,6 +43,14 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   exits 0 on every verdict and 2 on an operational error (unreadable project root, bad
   `--surface`, unwritable docs directory, missing required flag). `--out` is optional; when
   omitted the `--out` fallback rung is skipped and a missing report is `MISSING`.
+  **Internal contract** (compatible with every existing caller): `PassSpec.out_path` may be
+  `None`, in which case `collect()` skips `_run_extract_report`; `_copy_collected_report`
+  gains a keyword `overwrite: bool = True` and, when `False` and the target exists with
+  different bytes, raises `CollectConflict(OperationalError)` without writing.
+  `audit-cycle` keeps `overwrite=True` (a re-dispatched cycle replaces its own collected
+  file); the CLI passes `overwrite=False` unless `--force` is given and renders the
+  exception as `COLLECT: CONFLICT`. `collect()`'s `(delivered, collected_path)` return is
+  unchanged.
 - **Acceptance Criteria**:
   - AC-2.1: With `<RP>` present, non-empty, `<RP>.done` present, and no existing docs file:
     prints `COLLECT: OK path=<AC-1.2 path> delivered=report-file`, exit 0, and the docs file's
@@ -56,7 +64,8 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     delivered=report-file`, exit 0, and the docs file's mtime is unchanged (no write).
   - AC-2.5: With the docs file already present and DIFFERENT from `<RP>`: `COLLECT: CONFLICT
     path=… delivered=report-file`, exit 0, and the docs file's bytes are unchanged (never
-    clobbered). `_copy_collected_report` no longer unlinks-then-writes over differing content.
+    clobbered). With `--force` the same input prints `COLLECT: OK … forced=1` and the docs
+    file now equals `<RP>`.
   - AC-2.6: With `<RP>` absent and `--out <out>` present containing a sentinel-wrapped report
     for `(feature, phase, cycle)`: `COLLECT: OK … delivered=out`, exit 0, docs file holds the
     extracted text (byte-identity to `<RP>` is NOT asserted for `delivered=out`).
@@ -66,40 +75,56 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     no copy is attempted; verdict `OK` iff the file is non-empty and `<path>.done` exists;
     the `.done` marker is removed and a detail line `marker: removed <path>.done` is printed;
     otherwise `MISSING`.
-  - AC-2.9: Tracer against the live corpus: `h_mad_collect_report.py --feature
-    nlm-cli-version-pin --phase plan --cycle 8 --surface codex --report
-    /tmp/audit_nlmpin_plan_cycle8_codex.report.md --project-root
-    /Users/kimhawk/orca/HemaSuite/hematology-paper-writer` prints `COLLECT: OK path=…/
-    nlm-cli-version-pin.plan.audit.v8.codex.md delivered=report-file` and `git status --short`
-    in that repo is unchanged (existing-identical → no write). Recorded in the plan, not
-    asserted by the suite (the corpus is machine-local).
+  - AC-2.9: **Incident replay** (suite test, synthetic bytes) — in an isolated project root
+    with NO docs copy: (i) `h_mad_audit_gate.py <RP>` → `GATE: INVALID`, exit 2 (cannot gate
+    before collection); (ii) `collect-report --surface codex` → `COLLECT: OK … delivered=
+    report-file`, docs file created, `filecmp.cmp(<RP>, docs, shallow=False)` True;
+    (iii) `h_mad_audit_gate.py <docs path>` → `GATE: PASS|FAIL …`, exit 0. The same three
+    steps are run once by hand against a real survivor (`/tmp/audit_nlmpin_plan_cycle8_codex.report.md`
+    copied into a scratch project root, never HemaSuite's live tree) and the transcript is
+    recorded in the plan's Version History.
+  - AC-2.10: Operational errors exit 2 and print **no** `COLLECT:` line: `--project-root`
+    that is not a directory; a docs directory that cannot be created or written (e.g. a
+    file at `docs/01-plan/features`); a missing required flag (`--surface`, `--report`).
+  - AC-2.11: Existing-identical docs file with `--surface` given and `<RP>.done` absent →
+    `COLLECT: OK … delivered=report-file` (the docs copy already IS the collected report; the
+    marker is only required when a copy must be made).
 
 ### FR-3: The gate refuses a transport file
-- **Description**: `h_mad_audit_gate.py` refuses to score any path whose basename ends
-  `.report.md`, printing exactly `GATE: INVALID must=0 should=0` and
+- **Description**: `h_mad_audit_gate.py` refuses to score any path whose basename matches
+  the **transport stem** `^audit_.+_cycle\d+(?:_[A-Za-z0-9-]+)?\.report\.md$` (the name
+  step 6.6 and `audit-cycle` stage), printing exactly `GATE: INVALID must=0 should=0` and
   `[H-MAD] <feature> gate INVALID (transport file — collect it into docs first:
-  h_mad_collect_report.py)`, exit 2. All other behaviour unchanged.
+  h_mad_collect_report.py)`, exit 2. A bare `*.report.md` is NOT refused: Phase-7 reports
+  are named `<feature>.report.md` (e.g. `docs/04-report/features/gate-blindness-hardening.report.md`)
+  and share the suffix. All other behaviour unchanged.
 - **Acceptance Criteria**:
   - AC-3.1: `h_mad_audit_gate.py /tmp/audit_f_plan_cycle3_codex.report.md` on a well-formed
     report (has `## Must-fix`/`## Should-fix`) prints `GATE: INVALID must=0 should=0`, the
     `[H-MAD]` line contains `transport file`, exit 2.
   - AC-3.2: The same bytes at `docs/01-plan/features/f.plan.audit.v3.codex.md` gate normally
     (`GATE: PASS|FAIL …`, exit 0).
-  - AC-3.3: `h_mad_audit_cycle.gate()` handed a `.report.md` path returns
+  - AC-3.3: `h_mad_audit_cycle.gate()` handed a transport-stem path returns
     `("INVALID", 0, 0, [])` (rc 2 is already mapped) and `combine()` renders `UNVERIFIED`
     with reason `no_gate_sections:p<i>` — no new verdict word.
   - AC-3.4: `h_mad_do_preconditions.py` is unaffected: it reads docs paths only (existing
     tests pass).
-  - AC-3.5: The refusal is by **basename grammar**, not directory: a `.report.md` inside
-    `docs/` is refused too; a `.md` under `/tmp` that is not `.report.md` is not refused by
-    this rule.
+  - AC-3.5: The refusal is by **basename grammar**, not directory: `audit_f_plan_cycle3_codex.report.md`
+    is refused wherever it sits, including under `docs/`; `f.report.md`,
+    `gate-blindness-hardening.report.md` and any `.md` under `/tmp` not matching the stem
+    are scored normally (force-refusal mutation: a gate that refuses every `.report.md`
+    breaks this test).
+  - AC-3.6: A Phase-7 report path (`docs/04-report/features/x.report.md` with gate sections)
+    gates normally (`GATE: PASS|FAIL`, exit 0).
 
 ### FR-4: `hmad-dispatch collect-report` wrapper verb
 - **Description**: A thin verb delegating to the script, exactly as `report-wait` delegates to
   `h_mad_report_wait.py`, so the SKILL.md recipe stays in `hmad-dispatch` vocabulary.
 - **Acceptance Criteria**:
   - AC-4.1: `hmad-dispatch collect-report <args…>` execs `python3 <here>/h_mad_collect_report.py
-    <args…>` and propagates its exit code and stdout unchanged.
+    <args…>` and propagates its exit code and stdout unchanged — pinned by a wrapper test
+    that runs the verb against a stub script dir (`HMAD_AUDIT_CYCLE_SCRIPT_DIR`, the same
+    hook the audit-cycle tests use) and fails when the route is severed.
   - AC-4.2: The verb is listed in the wrapper's header verb list (line 3) and in
     `references/orchestration-mode.md`'s verb table beside `report-wait`.
 
@@ -107,14 +132,17 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 - **Description**: SKILL.md gains a block (beside the `audit-cycle` documentation, outside the
   slices `test_h_mad_audit_cycle_docs.py` pins) documenting the second-surface leg:
   assemble with `--report-file "$RP"` → `exec codex … --out --log` → `hmad-dispatch
-  collect-report --surface codex …` → gate the **printed** docs path, never `$RP`. The helper
-  registry gains an `h_mad_collect_report.py` entry. Step 9 gains one sentence: the gate
-  refuses `*.report.md`.
+  collect-report --surface codex …` → **read the `COLLECT:` token**: anything but `OK` halts
+  `<phase>:report_not_collected` with an `[H-MAD]` marker and the gate is NOT run → on `OK`,
+  gate the **printed** docs path, never `$RP`. The helper registry gains an
+  `h_mad_collect_report.py` entry. Step 9 gains one sentence: the gate refuses the transport
+  stem.
 - **Acceptance Criteria**:
   - AC-5.1: `grep -c 'collect-report' h-mad/SKILL.md` ≥ 2 (recipe block + registry).
   - AC-5.2: `test_h_mad_audit_cycle_docs.py` passes unchanged (anchors intact).
   - AC-5.3: A docs test asserts the recipe block orders `exec codex` before `collect-report`
-    before `h_mad_audit_gate.py`, and that the gate line in the block does not contain `$RP`.
+    before a `COLLECT:`-token read that names `report_not_collected` before
+    `h_mad_audit_gate.py`, and that the gate line in the block does not contain `$RP`.
   - AC-5.4: The registry entry names the token set `COLLECT: OK|MISSING|CONFLICT` and the
     exit contract (0 on verdict / 2 on operational error).
 
@@ -123,11 +151,18 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 - **Acceptance Criteria**:
   - AC-6.1: `tests/test_h_mad_collect_report.py` covers AC-2.1–2.8 and AC-1.1–1.4.
   - AC-6.2: `tests/test_h_mad_audit_gate.py` (or a new file) covers AC-3.1, 3.2, 3.5.
-  - AC-6.3: `tests/mutation-specs/collect_report.json` has ≥ 4 mutations, each with a named
-    `test`: (a) the copy writes an empty file → AC-2.1 test bites; (b) CONFLICT branch
-    replaced by overwrite → AC-2.5 bites; (c) surface validation removed → AC-2.7 bites;
-    (d) gate transport refusal removed → AC-3.1 bites. `h_mad_mutation_harness.py` reports
-    `MUTATION: ALL_CAUGHT`.
+  - AC-6.3: `tests/mutation-specs/collect_report.json` has ≥ 8 mutations, each with a named
+    `test`, pairing every new connection in BOTH directions (base invariant "Connection
+    enforcement"): (a) the copy writes an empty file → AC-2.1 bites; (b) CONFLICT branch
+    replaced by overwrite → AC-2.5 bites; (b′) overwrite forced to refuse even with `--force`
+    → AC-2.5 force case bites; (c) surface validation removed → AC-2.7 bites; (c′) surface
+    validation forced to reject every token → AC-2.1 bites; (d) `_collected_path` ignores
+    `surface` (drop) → AC-1.2 bites; (d′) `_collected_path` emits `.<surface>` even when
+    `surface=None` (force) → AC-1.1 bites; (e) CLI no longer calls `collect()` (delegation
+    severed: returns a hard-coded `OK`) → AC-2.2 bites; (f) `hmad-dispatch collect-report`
+    route severed (execs nothing / wrong script) → AC-4.1 bites; (g) gate transport refusal
+    removed → AC-3.1 bites; (g′) gate refuses every `.report.md` (force) → AC-3.5/3.6 bite.
+    `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
   - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
     `…_name_existing_failure_tests` pass with the new spec present.
   - AC-6.5: Full `h-mad/tests` suite green from this worktree.
@@ -148,8 +183,10 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 - Back-filling the 98 historically surface-named audits or changing `h_mad_cycle_counts`.
 
 ## Assumptions
-- The transport-file basename grammar is exactly `*.report.md` and no docs artifact uses it
-  (corpus: 1120 audit files, all `.audit.v<N>[.tok].md`).
+- The transport-file basename grammar is exactly `audit_<feature>_<phase>_cycle<N>[_<tok>].report.md`
+  (SKILL.md 6.6; `audit-cycle` stem) and no docs artifact uses THAT stem. The bare suffix
+  `.report.md` is shared with Phase-7 `<feature>.report.md` reports, which is why the rule is
+  the stem (corrected in v1.1; the v1.0 claim was false).
 - `h_mad_audit_cycle.gate()`'s rc-2 → `INVALID` mapping and `_gate_token`'s regex remain as
   read on 2026-09-02.
 - The live run in the main checkout keeps reading `~/.claude/skills/h-mad` (main checkout);
@@ -157,3 +194,4 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ## Version History
 - v1.0: Initial specification draft.
+- v1.1: Plan-audit v1 fixes (agy p1 + codex): collector contract (`CollectConflict`, `out_path` optional, `--force`); transport refusal narrowed to the `audit_*_cycle<N>*.report.md` stem — `*.report.md` collides with Phase-7 `<feature>.report.md`; recipe halts on non-`OK` `COLLECT:`; AC-2.9 is an incident replay; AC-2.10/2.11/3.6 added; AC-6.3 is 11 bidirectional mutations; AC-4.1 pinned by a wrapper wiring test.

@@ -39,10 +39,11 @@ recovery window was luck.
    - handles `--report` resolving to the derived docs path itself (the workaround the live
      `pin-agents-tail-banner` run is already using — `.audit.v16-19.codex.md.done` litter in
      docs/): skip the copy, require non-empty + `.done`, remove the marker.
-3. **Gate teeth.** `h_mad_audit_gate.py` refuses a basename ending `.report.md` — the
-   transport-file grammar — printing exactly `GATE: INVALID must=0 should=0` (the token shape
+3. **Gate teeth.** `h_mad_audit_gate.py` refuses a basename matching the transport STEM
+   `audit_<feature>_<phase>_cycle<N>[_<tok>].report.md` (v1.1 — the v1.0 "ends `.report.md`"
+   rule collided with Phase-7 `<feature>.report.md` reports) — printing exactly `GATE: INVALID must=0 should=0` (the token shape
    `_gate_token` requires) with the reason on the `[H-MAD]` line, exit 2. `audit_cycle.gate()`
-   already maps rc 2 → `UNVERIFIED`. No test or doc gates a `.report.md` today.
+   already maps rc 2 → `UNVERIFIED`. No test or doc gates a transport file today.
 4. **Recipe.** SKILL.md gets the codex-leg block it has never had, beside the `audit-cycle`
    docs: assemble `--report-file` → `exec codex` → `collect-report --surface codex` → gate the
    PRINTED docs path, never `$RP`. Helper-registry entry; `test_h_mad_audit_cycle_docs.py`
@@ -80,7 +81,7 @@ on `exec` cannot work because `exec` has no `--report-file` and knows no tuple.
 |---|---|---|
 | The live run in the main checkout reads `~/.claude/skills/h-mad` → OLD recipe; this run's own codex passes are exposed to the defect | H | For every codex pass in this run, run the collect step by hand and verify the docs copy before reading any GATE line; edit only in this worktree |
 | `_collected_path` signature change breaks an existing caller | L | `surface=None` default; every existing 5-kwarg call unchanged; suite run |
-| Gate refusal by basename catches a legitimate docs file named `*.report.md` | L | corpus scan of 1120 audit files shows the docs grammar is `.audit.v<N>[.tok].md`; `.report.md` is only ever the staged transport name |
+| Gate refusal by basename catches a legitimate docs file | M | v1.0 assumed no docs artifact ends `.report.md` — FALSE (Phase-7 reports do); v1.1 refuses the transport STEM only, pinned both directions (AC-3.5/3.6) |
 | `test_h_mad_audit_cycle_docs.py` slices SKILL.md by exact headings and `6.6.`→`\n7.` | M | insert the codex-leg block outside those slices; run that test after every SKILL.md edit |
 | Mutation-spec tests refuse a new guard without a spec row + named failure test | M | add the row and the test in the same task |
 | `--out` extract text is by construction not byte-identical to any `/tmp` file | certain | byte-identity asserted only for `delivered=report-file`; token carries `delivered=` so tests know which case they assert |
@@ -99,3 +100,4 @@ by `collect()`), SKILL.md + helper registry, `tests/mutation-specs/`.
 
 ## Version History
 - v1.0: Initial brainstorm draft.
+- v1.1: Gate rule corrected to the transport stem after plan-audit v1 (codex) showed `*.report.md` is also the Phase-7 report suffix.
