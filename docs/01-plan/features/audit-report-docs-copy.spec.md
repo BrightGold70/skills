@@ -229,7 +229,9 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     (force) → AC-3.5/3.6 bite; (h) copy readback removed → AC-2.12 bites; (h′) out-rung
     conflict check removed → AC-2.6a bites; (i) `TRANSPORT_RE` loosened to the v1.2 `.*`
     stem → AC-1.6 property bites; (i′) `_collected_path` docs pattern loses its `.audit.v`
-    dots (force toward transport shape) → AC-1.1/1.2 bite. 17 mutations.
+    dots (force toward transport shape) → AC-1.1/1.2 bite; (j) gate refusal keeps exit 2 +
+    token but drops its `[H-MAD]` marker → AC-3.1 bites; (j′) CLI operational-error path
+    drops its marker → AC-2.10 bites. 19 mutations.
     `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
   - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
     `…_name_existing_failure_tests` pass with the new spec present.
@@ -265,6 +267,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ## Version History
 - v1.0: Initial specification draft.
+- v1.5: Design-audit v8 sweep: marker-stripping mutants (j)/(j′) → 19 mutations (Mutation verification: one mutant per separable output part).
 - v1.4: Plan-audit v6 fix (codex): the AC-1.6 production assert was unreachable under the dot-free grammar (a check that can never fire cannot be mutation-tested) — replaced by a property test over adversarial `(feature, surface)` pairs; `TRANSPORT_RE` is imported only by the gate and the tests; mutation (i) loosens the regex instead of removing an assert.
 - v1.3: Plan-audit v3 fixes (codex): `TRANSPORT_RE` stem is dot-free (`^audit_[^.]+\.report\.md$`) so the grammars are disjoint by construction; `_collected_path` asserts it never derives a transport-shaped name (AC-1.6, mutations i/i′ → 17); the CLI does not import the regex — `_collected_path` and the tests do; collision candidates added to the AC-3.5a corpus.
 - v1.2: Plan-audit v2 fixes (codex): transport grammar is `TRANSPORT_RE = ^audit_.*\.report\.md$`, single-sourced in the gate — hand-staged names in the field carry no `_cycle<N>` and a surface may contain `_`; conflict policy + readback on BOTH rungs (AC-2.6a/2.6b/2.12); force-direction mutants for the CLI and the verb (e′, f′, AC-4.3); shared two-direction corpus (AC-3.5a) and verdict preservation over the repo's audit docs (AC-3.7) for the Backward-compatibility invariant.

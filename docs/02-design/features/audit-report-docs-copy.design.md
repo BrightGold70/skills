@@ -135,8 +135,9 @@ def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surf
         return "none", None                       # no marker → MISSING (AC-2.8 "otherwise")
     # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical
     # (under the enclosing guard like everything else in this function).
-    already = (collected_path.is_file() and spec.report_path.is_file()
-               and collected_path.read_bytes() == spec.report_path.read_bytes())
+    data = spec.report_path.read_bytes() if spec.report_path.is_file() else b""
+    already = (bool(data) and collected_path.is_file()            # empty is never "collected"
+               and collected_path.read_bytes() == data)
     if already:
         return "report-file", collected_path
     if _has_complete_report(spec.report_path):
@@ -160,6 +161,8 @@ the existing `test_h_mad_audit_cycle.py` collect tests are the pin).
 Edge cases:
 - `report_path` present but empty with `.done` → `_has_complete_report` is False (size > 0
   required) → `report_wait` times out → MISSING (never copies an empty file; mutation (a)).
+  An empty `report_path` beside an empty docs file is NOT "already collected" — the AC-2.11
+  short-circuit requires non-empty bytes — so it also ends MISSING (pinned by a test).
 - `collected_path` exists but unreadable, unwritable, or its parent cannot be created →
   `OSError` inside `_fs_errors` → `OperationalError` → CLI exit 2 with the
   `operational_error` marker (never a traceback). A test makes the docs file's PARENT
@@ -245,6 +248,11 @@ In `main()`, immediately after the `--verify-stamp` branch and BEFORE `read_text
 transport path is refused by name whether or not it exists):
 ```python
     feature = args.audit_file.name.split(".")[0] or "unknown"     # moved up
+    # For a transport name this yields the whole dot-free stem (`audit_f_plan_cycle3_codex`,
+    # or a hand-staged `audit_hnag_c28_agy`) — deliberately: a transport stem has NO
+    # reliable feature grammar (hand-staged names differ), so the marker's feature slot
+    # carries the stem verbatim rather than a guessed feature. AC-3.1 asserts the marker
+    # contains `transport file`, not a feature name.
     if is_transport_path(args.audit_file):
         print("GATE: INVALID must=0 should=0")
         print(f"[H-MAD] {feature} gate INVALID (transport file — collect it into docs first: "
@@ -325,7 +333,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | tests | `h-mad/tests/test_h_mad_audit_cycle.py` | modify | AC-3.3 (`gate()`/`combine()` on a transport name), AC-2.8 branch order, compatibility pins |
 | tests | `h-mad/tests/test_hmad_dispatch_collect_report.py` | new | AC-4.1, AC-4.3 |
 | tests | `h-mad/tests/test_h_mad_collect_report_docs.py` | new | AC-4.2, AC-5.1–5.4 |
-| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 17 mutations |
+| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 19 mutations (17 connection/branch + 2 marker-stripping for separable output parts) |
 
 ## Implementation Order
 1. Task 1 — collector (`h_mad_audit_cycle.py`): `validate_surface`, `_collected_path(surface)`,
@@ -343,7 +351,9 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
    AC-4.1, AC-4.3.
 5. Task 5 — docs. RED: AC-4.2, AC-5.1–5.4 (docs tests), `test_h_mad_audit_cycle_docs.py`
    still green.
-6. Task 6 — mutation spec (17 mutations, every one naming a test from tasks 1–5) →
+6. Task 6 — mutation spec (19 mutations, every one naming a test from tasks 1–5; the two
+   marker-stripping mutants (j) gate refusal without its `[H-MAD]` line, (j′) CLI
+   operational error without its marker, pin the separable output parts) →
    `MUTATION: ALL_CAUGHT`; `--check-anchors` clean; full suite green.
 
 ## Data Model / Schema Changes
@@ -401,7 +411,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - Docs: SKILL.md block order (`exec codex` < `collect-report` < `report_not_collected` <
   `h_mad_audit_gate.py`), gate line has no `$RP`, registry entry names the token set and exit
   contract, orchestration-mode verb row, step-9 sentence.
-- Mutation: 17 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest`.
+- Mutation: 19 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
+  spec's 17 plus (j)/(j′) marker-stripping mutants so the marker assertions are load-bearing.
 
 ## Test Plan
 | Test file | Scenarios | Command |
@@ -412,7 +423,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 | `tests/test_hmad_dispatch_collect_report.py` | AC-4.1, AC-4.3, staged-name grammar | `python3.11 -m pytest h-mad/tests/test_hmad_dispatch_collect_report.py -q` |
 | `tests/test_h_mad_collect_report_docs.py` | AC-4.2, AC-5.1–5.4 | `python3.11 -m pytest h-mad/tests/test_h_mad_collect_report_docs.py -q` |
 | existing `test_h_mad_audit_cycle*.py`, `test_hmad_dispatch_audit_cycle.py` | compatibility, spec-registry tests | `python3.11 -m pytest h-mad/tests -q` |
-| `tests/mutation-specs/collect_report.json` | 17 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
+| `tests/mutation-specs/collect_report.json` | 19 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
 
 ## Invariant Compliance
 - **Audit-gate signal discipline** — complies: `COLLECT:` verdicts exit 0; exit 2 reserved for
@@ -431,7 +442,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - **Marker discipline** — complies: `[H-MAD]` on every `COLLECT:` outcome, on readback
   failure, on the gate refusal, and the recipe's halt line.
 - **Mutation verification** — complies: both writers read back; the marker removal re-checks;
-  17 mutations each with a named test.
+  19 mutations each with a named test, including one per separable output part (exit code,
+  token, marker) of the gate refusal and the CLI error path.
 - **Test discrimination** — complies: each mutation names the one test that must bite.
 - **Guard narrowing** — complies: the transport regex was widened from a stem to prefix+suffix
   and then narrowed by the dot rule, each step with executed evidence in the plan.
@@ -461,6 +473,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.11: Design-audit v8 fixes (agy p1): the transport-refusal marker's feature slot is the stem verbatim (a transport name has no reliable feature grammar) — stated, not left to inference; marker-stripping mutants (j)/(j′) added → 19, swept into spec/plan counts.
+- v1.10: Design-audit v8 fix (codex): the already-collected short-circuit requires non-empty bytes, so an empty-identical docs/RP pair is MISSING, not OK.
 - v1.9: Design-audit v7 fix (agy p1): the same-file test is existence-blind so a missing docs-path `--report` ends MISSING instead of reaching the `--out` rung.
 - v1.8: Design-audit v7 fix (codex; agy v6 clean): the outer handler also catches `ValueError` so a bad `--surface` cannot leak as a traceback.
 - v1.7: Design-audit v5 fixes (codex): `collect()` runs its WHOLE body under `_fs_errors` (the probes `_has_complete_report`/`_run_report_wait` included); the SKILL.md block is a new top-level section after `## Putting …`, outside the pinned slice, per spec/plan — one pointer sentence inside.
