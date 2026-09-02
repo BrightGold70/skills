@@ -545,8 +545,8 @@ _orca_find() {
   #     "Codex - skills repo" matched "^codex" and would have been handed Codex's
   #     work. Both agents produce a well-formed sentinel report, so the
   #     mis-dispatch is silent: the wrong model answers and the gate scores it.
-  #     Codex therefore skips Pass 1 entirely and relies on the preview signature
-  #     or, properly, on a pin/launch.
+  #     Codex therefore skips Pass 1 entirely and relies on the tail signature
+  #     (Pass 3), on the preview signature, or, properly, on a pin/launch.
   #   * agy DOES set an OSC title ("agy --dangerously-skip-permissions"), so its
   #     title is real identity -- except when inherited. A title shared by two or
   #     more leaves of the SAME tab is provably the tab's, so reject it.
@@ -678,12 +678,12 @@ EOF
     echo "[H-MAD] $token: bound $tail_h by tail evidence" >&2
     printf '%s\n' "$tail_h"; return 0
   fi
-  # Pass 3 (J18) -- OS evidence for panes Orca did not spawn.
+  # Pass 4 (J18) -- OS evidence for panes Orca did not spawn.
   #
-  # Reached only when every pass above found nothing, which is the measured state
-  # for a pane that survived an Orca restart: absent from agents[] (Pass 0 blind),
-  # tab-inherited or skipped title (Pass 1), empty renderer buffer (Pass 2). The
-  # agent may nonetheless be very much alive -- two were, for 9 hours.
+  # Reached when no pass above resolved exactly one handle. That now includes the
+  # tail-evidence pass, which declines on zero matches AND on ambiguity, so
+  # "every pass above found nothing" is no longer an accurate description of how
+  # control gets here.
   #
   # The OS can prove the agent is RUNNING here; it cannot say which PANE holds it
   # (Orca exposes no tty/pid/ptyId -- orca#9870 -- and macOS blocks `ps e`). So
@@ -1150,7 +1150,7 @@ _cmd_dispatch() {  # $1 agent, $2 task_id
   # signals separately proven unreliable -- `terminal read` yields 0 lines for an
   # idle restart-surviving pane (docs/orca-bug-terminal-read-empty-after-restart.md)
   # and hand-started panes are absent from `worktree ps`'s `agents[]` -- so it
-  # would false-refuse healthy panes, the exact call `_orca_find` Pass 3 already
+  # would false-refuse healthy panes, the exact call `_orca_find` Pass 4 already
   # declines to make; and it protects no state, because there is none to protect.
   #
   # The readiness failure that DOES bite is a different one a pre-flight cannot
