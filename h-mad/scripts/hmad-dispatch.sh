@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | collect-report | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -1421,6 +1421,12 @@ _cmd_report_wait() {  # <report-path> [--timeout <s>] [--interval <s>]
   # can't die on a transient syntax error. Both paths share one implementation.
   local here; here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   python3 "$here/h_mad_report_wait.py" "$@"
+}
+
+_cmd_collect_report() {  # <args passed verbatim to h_mad_collect_report.py>
+  local here
+  here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
+  python3 "$here/h_mad_collect_report.py" "$@"
 }
 
 _cmd_worktree_comment() {  # [<selector>] <text>
@@ -3516,6 +3522,7 @@ main() {
     gate-resolve) _cmd_gate_resolve "$@" ;;
     gate-wait) _cmd_gate_wait "$@" ;;
     report-wait) _cmd_report_wait "$@" ;;
+    collect-report) _cmd_collect_report "$@" ;;
     worktree-comment) _cmd_worktree_comment "$@" ;;
     worktree-create) _cmd_worktree_create "$@" ;;
     worktree-current) _cmd_worktree_current "$@" ;;

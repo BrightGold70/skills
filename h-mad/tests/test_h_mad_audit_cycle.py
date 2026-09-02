@@ -640,6 +640,31 @@ def test_combine_distinguishes_missing_report_from_invalid_gate_sections() -> No
     )
 
 
+def test_gate_transport_named_report_returns_invalid_and_combines_unverified(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    monkeypatch.delenv("HMAD_AUDIT_CYCLE_SCRIPT_DIR", raising=False)
+    report_path = tmp_path / "audit_f_plan_cycle3_codex.report.md"
+    report_path.write_text(HOSTILE_PASS_REPORT, encoding="utf-8")
+
+    assert ac.gate(report_path, ack_file=None) == ("INVALID", 0, 0, [])
+    assert ac.combine(
+        [
+            ac.PassResult(
+                index=1,
+                delivered="report-file",
+                collected_path=report_path,
+                verdict="INVALID",
+                must=0,
+                should=0,
+                findings=[],
+                effort=None,
+            )
+        ]
+    ) == ("UNVERIFIED", "no_gate_sections:p1")
+
+
 def test_combine_raises_when_delivered_pass_has_no_gate_token() -> None:
     ac = audit_cycle()
 

@@ -1,5 +1,6 @@
 import ast
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,10 @@ MODULE_PATH = SCRIPT_DIR / "h_mad_audit_gate.py"
 
 sys.path.insert(0, str(SCRIPT_DIR))
 
+import h_mad_audit_gate as audit_gate  # noqa: E402
+import h_mad_cycle_counts as cycle_counts  # noqa: E402
 from h_mad_audit_gate import classify, stamp_path  # noqa: E402
+from h_mad_audit_cycle import _collected_path  # noqa: E402
 
 
 def run_gate(audit_file: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -23,6 +27,196 @@ def run_gate(audit_file: Path, *args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+HOSTILE_CLEAN_AUDIT = """# Audit body with hostile reviewer payload
+
+## Must-fix
+None
+
+## Should-fix
+None
+
+## Notes
+human-origin marker text: {{INLINE_MARKER}} [link](target) **bold**
+second line with AUDITCYCLE: fake marker
+"""
+
+
+TRANSPORT_NAMES = [
+    "audit_f_plan_cycle3_codex.report.md",
+    "audit_hnag_c28_agy.report.md",
+    "audit_hnag_implplan_c11.report.md",
+    "audit_f_plan_cycle8_codex_draft.report.md",
+    "audit_f_plan_cycle8_agy_p2.report.md",
+]
+
+
+def transport_re() -> re.Pattern[str]:
+    pattern = getattr(audit_gate, "TRANSPORT_RE", None)
+    assert pattern is not None, "TRANSPORT_RE must define the single transport grammar"
+    return pattern
+
+
+def is_transport(path: Path) -> bool:
+    predicate = getattr(audit_gate, "is_transport_path", None)
+    assert predicate is not None, "is_transport_path() must expose the transport-name predicate"
+    return bool(predicate(path))
+
+
+@pytest.mark.parametrize("name", TRANSPORT_NAMES)
+def test_cli_transport_named_report_is_invalid_before_scoring(
+    tmp_path: Path, name: str
+) -> None:
+    audit_file = tmp_path / name
+    audit_file.write_text(HOSTILE_CLEAN_AUDIT, encoding="utf-8")
+
+    result = run_gate(audit_file)
+    lines = result.stdout.splitlines()
+
+    assert result.returncode == 2, "transport report names must be refused before scoring"
+    assert lines[0] == "GATE: INVALID must=0 should=0"
+    assert (
+        lines[1]
+        == f"[H-MAD] {audit_file.name.split('.')[0]} gate INVALID "
+        "(transport file — collect it into docs first: h_mad_collect_report.py)"
+    )
+    assert result.stderr == ""
+
+
+def test_is_transport_path_uses_transport_filename_grammar(tmp_path: Path) -> None:
+    assert is_transport(tmp_path / "audit_f_plan_cycle3_codex.report.md")
+    assert not is_transport(tmp_path / "audit_f.plan.audit.v8.report.md")
+    assert not is_transport(tmp_path / "f.report.md")
+
+
+def test_cli_collected_audit_doc_with_transport_bytes_scores_normally(tmp_path: Path) -> None:
+    audit_file = tmp_path / "docs" / "01-plan" / "features" / "f.plan.audit.v3.codex.md"
+    audit_file.parent.mkdir(parents=True)
+    audit_file.write_text(HOSTILE_CLEAN_AUDIT, encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0
+    assert re.search(r"^GATE: (?:PASS|FAIL) must=\d+ should=\d+$", result.stdout, re.MULTILINE)
+    assert "GATE: INVALID" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "f.report.md",
+        "gate-blindness-hardening.report.md",
+        "audit-report-docs-copy.report.md",
+        "audit_f.plan.audit.v8.report.md",
+        "x.md",
+    ],
+)
+def test_cli_non_transport_report_like_names_score_normally(
+    tmp_path: Path, relative: str
+) -> None:
+    audit_file = tmp_path / relative
+    audit_file.write_text(HOSTILE_CLEAN_AUDIT, encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0
+    assert re.search(r"^GATE: (?:PASS|FAIL) must=\d+ should=\d+$", result.stdout, re.MULTILINE)
+    assert "GATE: INVALID" not in result.stdout
+
+
+def test_cli_report_phase_doc_scores_normally(tmp_path: Path) -> None:
+    audit_file = tmp_path / "docs" / "04-report" / "features" / "x.report.md"
+    audit_file.parent.mkdir(parents=True)
+    audit_file.write_text(HOSTILE_CLEAN_AUDIT, encoding="utf-8")
+
+    result = run_gate(audit_file)
+
+    assert result.returncode == 0
+    assert re.search(r"^GATE: (?:PASS|FAIL) must=\d+ should=\d+$", result.stdout, re.MULTILINE)
+
+
+def test_transport_regex_corpus_is_disjoint_from_versioned_audit_docs() -> None:
+    corpus = [
+        *[(name, "transport") for name in TRANSPORT_NAMES],
+        ("f.plan.audit.v3.md", "audit_doc"),
+        ("f.plan.audit.v3.p1.md", "audit_doc"),
+        ("f.plan.audit.v3.p2.md", "audit_doc"),
+        ("f.plan.audit.v3.codex.md", "audit_doc"),
+        ("f.plan.audit.v3.agy.md", "audit_doc"),
+        ("f.plan.audit.v3.codex_draft.md", "audit_doc"),
+        ("audit_f.plan.audit.v8.report.md", "audit_doc"),
+        ("audit_f.plan.audit.v8.codex.md", "audit_doc"),
+        ("f.report.md", "other"),
+        ("gate-blindness-hardening.report.md", "other"),
+        ("audit-report-docs-copy.report.md", "other"),
+        ("x.md", "other"),
+    ]
+
+    for name, kind in corpus:
+        matches_transport = bool(transport_re().match(name))
+        matches_audit_doc = bool(cycle_counts._VERSION_RE.search(name))
+
+        assert (
+            (kind == "transport") == matches_transport
+        ), f"TRANSPORT_RE must classify {name!r} as {kind}"
+        if kind == "audit_doc":
+            assert matches_audit_doc, f"_VERSION_RE must accept audit doc name {name!r}"
+        if kind == "other":
+            assert not matches_transport, f"other name {name!r} must not be transport"
+        assert not (
+            matches_transport and matches_audit_doc
+        ), f"{name!r} must not match both transport and audit-doc grammars"
+
+
+def test_live_docs_audit_artifacts_are_not_transport_paths() -> None:
+    artifacts = sorted(REPO_ROOT.glob("docs/**/*.audit.v*.md"))
+
+    assert len(artifacts) >= 100, "live/archive audit corpus must be non-vacuous"
+    offenders = [path for path in artifacts if is_transport(path)]
+    assert offenders == [], "versioned docs audit artifacts must not be transport paths"
+
+
+def test_collected_path_names_match_audit_doc_grammar_not_transport(
+    tmp_path: Path,
+) -> None:
+    examples = [
+        (feature, surface, phase)
+        for feature, surface in [
+            ("audit_f", "report"),
+            ("audit_x", "report_md"),
+            ("audit_", "p"),
+            ("f", "codex"),
+            ("nlm-cli-version-pin", "agy"),
+        ]
+        for phase in ["plan", "design", "impl-plan"]
+    ]
+
+    for feature, surface, phase in examples:
+        path = _collected_path(
+            project_root=tmp_path,
+            feature=feature,
+            phase=phase,
+            cycle=8,
+            index=1,
+            surface=surface,
+        )
+
+        assert cycle_counts._VERSION_RE.search(
+            path.name
+        ), f"_collected_path() must emit audit-doc names, got {path.name!r}"
+        assert not transport_re().match(
+            path.name
+        ), f"_collected_path() name {path.name!r} must not match transport grammar"
+
+
+def test_verify_stamp_transport_name_remains_unstamped(tmp_path: Path) -> None:
+    audit_file = tmp_path / "audit_f_plan_cycle3_codex.report.md"
+
+    result = run_gate(audit_file, "--verify-stamp")
+
+    assert result.returncode == 2
+    assert "GATESTAMP: UNSTAMPED checked=0 changed=0" in result.stdout
 
 
 def test_classify_bare_none_sections_pass() -> None:

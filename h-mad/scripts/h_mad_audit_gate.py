@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from pathlib import Path
 # the audit rather than in orchestrator state because the pairing IS the claim:
 # this verdict was about this content, and the two must travel together.
 STAMP_SUFFIX = ".gated.json"
+
+
+TRANSPORT_RE = re.compile(r"^audit_[^.]+\.report\.md$")
+
+
+def is_transport_path(path: Path) -> bool:
+    """True iff path.name matches TRANSPORT_RE."""
+    return bool(TRANSPORT_RE.match(path.name))
 
 
 BLOCKING_SECTIONS = {
@@ -266,6 +275,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[H-MAD] {args.audit_file.name.split('.')[0] or 'unknown'} gatestamp {verdict}")
         return 0 if verdict == "CURRENT" else 2
 
+    feature = args.audit_file.name.split(".")[0] or "unknown"
+    if is_transport_path(args.audit_file):
+        print("GATE: INVALID must=0 should=0")
+        print(
+            f"[H-MAD] {feature} gate INVALID "
+            "(transport file — collect it into docs first: h_mad_collect_report.py)"
+        )
+        return 2
+
     try:
         text = args.audit_file.read_text(encoding="utf-8")
         acknowledged = _acknowledged_from_text(text)
@@ -274,10 +292,6 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-
-    # Feature name derived from the audit filename (project-agnostic):
-    # "<feature>.<phase>.audit.v<N>.md" -> "<feature>".
-    feature = args.audit_file.name.split(".")[0] or "unknown"
 
     # An input lacking the mandatory `## Must-fix`/`## Should-fix` sections is not
     # a clean audit — it is an empty or garbled scrape (e.g. the reviewer emitted

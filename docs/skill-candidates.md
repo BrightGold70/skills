@@ -806,7 +806,8 @@ threshold of a third vendored patch; untouched this session.
 ## 2026-08-31 — codex-agy-model-inheritance
 
 - **which model did this dispatch actually run?**: after removing the model pin, every check of "what will/did `exec` resolve" was hand-written twice per agent — for codex, `sed -n '1,9p' <log>` to read the session header's `model:`/`reasoning effort:`; for agy, a Python scan of `~/.gemini/antigravity-cli/log/cli-*.log` for `Propagating selected model override to backend: label="…"` (because `ls -t` is dead under rtk and the NDJSON stream carries no model field at all) — recurrence: 5 in one session — candidate: yes — a `hmad-dispatch resolved-model <codex|agy> [--log <f>]` verb, or a line in `env`, would answer it once per agent instead of per invocation. The value is not convenience: with nothing pinned, the resolved model is the ONLY evidence of what a 5d/5e dispatch ran, and a configured `gpt-5.6-luna` returns a well-formed `STATUS: BLOCKED` that looks exactly like a task verdict. Both extractors are one line each and both are already written in `h-mad/SKILL.md` prose, where they cannot be executed.
-  — **TRIAGED 2026-09-01: useful and codable — stays open.** both extractors are already written, in
+  — **LANDED 2026-09-01 (`7541628`)** as `h-mad/scripts/h_mad_resolved_model.py` and the `hmad-dispatch resolved-model <agent> [--log <f>]` verb; SKILL.md's helper registry documents it. (Flipped 2026-09-02 by the automation scout: the row still read TRIAGED/open while the script had shipped the same day.)
+  — earlier: TRIAGED 2026-09-01: useful and codable — stays open. both extractors are already written, in
   prose, where they cannot run; `hmad-dispatch resolved-model <agent>` or a line in `env` is a
   direct port. Recurrence 5 in one session, and with nothing pinned the resolved model is the only
   evidence of what a 5d/5e dispatch actually ran.
@@ -1148,3 +1149,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   (`pytest ~/.claude/skills/h-mad/tests/`) is unchanged. 1 mutant, ALL_CAUGHT — it restores the exact
   pre-fix `testpaths` line, because a guard that cannot fail on the configuration that caused the bug
   is decoration. Bare `pytest` now collects **2513**, up from 2403.
+
+## 2026-09-02 — audit-report-docs-copy-phase7
+
+- **6a-prime prompt template: worktree citation + no-mutation rules**: three of four archreview cycles either cited files through `~/.claude/skills/h-mad` (a different checkout) or wrote probe files / ran the mutation harness inside the repo despite a per-cycle addendum forbidding it — recurrence: 3 — candidate: no (an upgrade to `references/agy-architectural-reviewer-prompt.md`, not a new skill; insertion point is the template's "How to inspect" block)
+- **archreview scorer tree-diff**: `h_mad_archreview_cycle.py score` could snapshot `git status --short` before the dispatch and report any delta as a finding, closing the "audit mutated what it measured" check mechanically instead of by eye every cycle — recurrence: 2 — candidate: maybe
+- **execute a doc's fenced bash block as a test**: the Task 5 recipe's four review-cycle defects were only visible by EXTRACTING the fenced block and RUNNING it against fixtures (phase-hardcoded path, unimplemented halt, whitespace truncation, shell-killing exit); the extract+substitute+run harness was hand-written in the test — recurrence: 4 — candidate: maybe (a `h_mad_doc_block_exec.py` helper: extract the Nth `bash` fence under a heading, substitute `<placeholders>` from a map, run under `bash -euo pipefail` in a tmp cwd, return rc+stdout+stderr)
+- **probe the rungs below a changed branch**: after a fix on one rung of a fall-through ladder, the rung below regressed and only the next review cycle caught it; a checklist-style "enumerate every later rung and run one input through each" was done by hand — recurrence: 2 — candidate: no (discipline, captured in learnings; not a script)

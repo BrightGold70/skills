@@ -1,0 +1,206 @@
+{
+ "root": "../..",
+ "command": [
+  "/opt/anaconda3/bin/python3.11",
+  "-m",
+  "pytest",
+  "tests/test_h_mad_collect_report.py",
+  "tests/test_h_mad_audit_gate.py",
+  "tests/test_h_mad_audit_cycle.py",
+  "tests/test_hmad_dispatch_collect_report.py",
+  "tests/test_h_mad_collect_report_docs.py",
+  "-q"
+ ],
+ "target_command": [
+  "/opt/anaconda3/bin/python3.11",
+  "-m",
+  "pytest",
+  "-q"
+ ],
+ "mutations": [
+  {
+   "name": "copy-writes-empty",
+   "_mechanism": "This destroys the byte-for-byte report copy by writing an empty collected file even though a complete report-file exists. The named CLI OK-contract test must notice because it compares the delivered report with the docs copy.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "    collected_path.write_bytes(data)",
+   "replace": "    collected_path.write_bytes(b\"\")",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_report_file_done_copies_docs_and_prints_ok_contract"
+  },
+  {
+   "name": "conflict-becomes-overwrite",
+   "_mechanism": "This removes the report-file conflict guard, so an unforced collect overwrites differing docs instead of reporting CONFLICT. The named force test starts with an unforced conflict and must catch both the wrong first token and the changed file bytes.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "            if not overwrite:\n                raise CollectConflict(collected_path, \"report-file\")",
+   "replace": "            if False:\n                raise CollectConflict(collected_path, \"report-file\")",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_report_file_conflict_then_force_replaces_docs"
+  },
+  {
+   "name": "force-still-refuses",
+   "_mechanism": "This breaks the forced retry path by passing overwrite=False after the user asked for --force. The named conflict-then-force test must notice because its second invocation depends on replacing the differing docs copy.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "            overwrite=True,",
+   "replace": "            overwrite=False,",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_report_file_conflict_then_force_replaces_docs"
+  },
+  {
+   "name": "surface-validation-removed",
+   "_mechanism": "This lets invalid surface tokens flow into collected paths unchecked, including path-shaped or pass-index tokens that the CLI must reject as operational errors. The named invalid-surface test is the direct contract for rejecting those tokens without emitting a COLLECT line.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "def validate_surface(surface: str) -> str:\n    \"\"\"Return a validated audit surface token.\"\"\"\n    if not SURFACE_RE.match(surface) or PASS_INDEX_RE.match(surface):\n        raise ValueError(f\"invalid surface token: {surface!r}\")\n    return surface",
+   "replace": "def validate_surface(surface: str) -> str:\n    \"\"\"Return a validated audit surface token.\"\"\"\n    return surface",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_invalid_surface_tokens_are_operational_errors_without_collect_line"
+  },
+  {
+   "name": "surface-validation-rejects-all",
+   "_mechanism": "This turns valid audit surface tokens into operational errors, so a normal codex collection can no longer land. The named happy-path CLI test must catch it because it uses a valid surface and expects a successful docs copy.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "    return surface",
+   "replace": "    raise ValueError(f\"invalid surface token: {surface!r}\")",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_report_file_done_copies_docs_and_prints_ok_contract"
+  },
+  {
+   "name": "collected-path-ignores-surface",
+   "_mechanism": "This discards the caller's surface token and always emits the old pass-index suffix. The named path-builder test must notice because it asserts surface-token paths and that all callers share the same filename builder.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "    suffix = f\"p{index}\" if surface is None else validate_surface(surface)",
+   "replace": "    suffix = f\"p{index}\"",
+   "test": "tests/test_h_mad_collect_report.py::test_collected_path_surface_token_paths_and_single_string_builder"
+  },
+  {
+   "name": "collected-path-forces-surface",
+   "_mechanism": "This treats a missing surface as the literal string None instead of preserving the pass-index path. The named None-surface test must catch it because it verifies backward-compatible pN filenames when no surface is supplied.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "    suffix = f\"p{index}\" if surface is None else validate_surface(surface)",
+   "replace": "    suffix = str(surface)",
+   "test": "tests/test_h_mad_collect_report.py::test_collected_path_surface_none_preserves_pass_index_path"
+  },
+  {
+   "name": "cli-skips-collect",
+   "_mechanism": "This bypasses collection and pretends a report-file was delivered at the docs path even when no report exists. The named missing-report CLI test must notice because it expects MISSING and no docs audit file.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "        delivered, path = collect(\n            spec,\n            grace=args.grace,\n            project_root=project_root,\n            feature=args.feature,\n            phase=args.phase,\n            cycle=args.cycle,\n            surface=args.surface,\n            overwrite=False,\n        )",
+   "replace": "        docs = collected_path\n        delivered, path = (\"report-file\", docs)",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_missing_report_without_out_prints_missing_and_writes_nothing"
+  },
+  {
+   "name": "cli-collects-on-bad-root",
+   "_mechanism": "Removes the project-root directory guard. The discriminating input is a root that does not EXIST: the later mkdir(parents=True) then succeeds, so the CLI walks on to print COLLECT: MISSING and exit 0 where an operational error and exit 2 are required, while silently creating a docs tree under a mistyped path. A root that is a FILE cannot discriminate \u2014 there the mkdir raises anyway and the exit code and marker are unchanged.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "    if not project_root.is_dir():\n        raise OperationalError(f\"project root is not a directory: {project_root}\")",
+   "replace": "    if False:\n        raise OperationalError(f\"project root is not a directory: {project_root}\")",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_absent_project_root_refuses_and_creates_nothing"
+  },
+  {
+   "name": "verb-execs-wrong-script",
+   "_mechanism": "This routes the collect-report verb to report-wait instead of the collector script, so argv passthrough reaches the wrong program. The dispatch test installs a collector stub and must notice that the stub is not invoked with the verb's argv.",
+   "file": "scripts/hmad-dispatch.sh",
+   "find": "  python3 \"$here/h_mad_collect_report.py\" \"$@\"",
+   "replace": "  python3 \"$here/h_mad_report_wait.py\" \"$@\"",
+   "test": "tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv"
+  },
+  {
+   "name": "verb-routes-unknown",
+   "_mechanism": "This makes unknown verbs fall through to collect-report, so a typo can invoke the collector instead of refusing. The collect-reportx test must notice because it proves the nearby unknown verb exits 2 and never calls the collector stub.",
+   "file": "scripts/hmad-dispatch.sh",
+   "find": "    *)      echo \"hmad-dispatch: unknown verb '$verb'\" >&2; return 2 ;;",
+   "replace": "    *)      _cmd_collect_report \"$@\" ;;",
+   "test": "tests/test_hmad_dispatch_collect_report.py::test_collect_reportx_unknown_verb_does_not_invoke_stub"
+  },
+  {
+   "name": "gate-refusal-removed",
+   "_mechanism": "This removes the transport-name refusal, so raw transport reports are scored as if they were collected docs artifacts. The named gate test must notice because it requires INVALID before scoring for transport filenames.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "    if is_transport_path(args.audit_file):",
+   "replace": "    if False:",
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring"
+  },
+  {
+   "name": "gate-refuses-all-reports",
+   "_mechanism": "This broadens the transport regex until ordinary .report.md documents are refused as transport files. The named non-transport report-like test must notice because those report docs still need to score normally.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "TRANSPORT_RE = re.compile(r\"^audit_[^.]+\\.report\\.md$\")",
+   "replace": "TRANSPORT_RE = re.compile(r\".*\\.report\\.md$\")",
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_non_transport_report_like_names_score_normally"
+  },
+  {
+   "name": "readback-removed",
+   "_mechanism": "This disables the post-write readback check, so a failed or corrupted write can still be reported as collected. The named readback-failure test must notice because it monkeypatches readback to fail and expects only the readback_failed marker.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "    if not _readback_equal(collected_path, data):\n        raise OperationalError(f\"readback mismatch after write: {collected_path}\")",
+   "replace": "    if False:\n        raise OperationalError(f\"readback mismatch after write: {collected_path}\")",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_main_readback_failed_has_marker_only"
+  },
+  {
+   "name": "out-rung-conflict-removed",
+   "_mechanism": "This forces --out collection to overwrite differing docs even during the unforced first attempt. The named --out conflict test must notice because it expects CONFLICT first, unchanged docs, and replacement only under --force.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "                report_text, collected_path, overwrite=overwrite",
+   "replace": "                report_text, collected_path, overwrite=True",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_out_conflict_force_and_identical_paths"
+  },
+  {
+   "name": "transport-re-loosened",
+   "_mechanism": "This loosens the transport regex so versioned docs audit names beginning with audit_ can collide with raw transport names. The regex corpus test must notice because it asserts the transport grammar is disjoint from collected audit-doc names.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "TRANSPORT_RE = re.compile(r\"^audit_[^.]+\\.report\\.md$\")",
+   "replace": "TRANSPORT_RE = re.compile(r\"^audit_.*\\.report\\.md$\")",
+   "test": "tests/test_h_mad_audit_gate.py::test_transport_regex_corpus_is_disjoint_from_versioned_audit_docs"
+  },
+  {
+   "name": "docs-pattern-dedotted",
+   "_mechanism": "This changes collected audit filenames from the documented .audit.v grammar to an underscored variant. The named gate grammar test must notice because collected paths must match the versioned audit-doc pattern and remain non-transport.",
+   "file": "scripts/h_mad_audit_cycle.py",
+   "find": "        / f\"{feature}.{phase}.audit.v{cycle}.{suffix}.md\"",
+   "replace": "        / f\"{feature}.{phase}_audit_v{cycle}.{suffix}.md\"",
+   "test": "tests/test_h_mad_audit_gate.py::test_collected_path_names_match_audit_doc_grammar_not_transport"
+  },
+  {
+   "name": "gate-refusal-drops-marker",
+   "_mechanism": "This keeps the INVALID token but removes the H-MAD marker explaining that the file was refused as transport. The named transport-refusal test must notice because marker discipline is part of the refusal contract.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        print(\n            f\"[H-MAD] {feature} gate INVALID \"\n            \"(transport file \u2014 collect it into docs first: h_mad_collect_report.py)\"\n        )",
+   "replace": "        pass",
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring"
+  },
+  {
+   "name": "cli-error-drops-marker",
+   "_mechanism": "This drops the H-MAD marker from collect operational errors while still writing stderr and returning non-zero. The named error-discipline test must notice because operational failures need the marker and must not emit a COLLECT verdict.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "        print(f\"[H-MAD] {args.feature} collect {reason}\")",
+   "replace": "        pass",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback"
+  },
+  {
+   "name": "gate-refusal-exit-0",
+   "_mechanism": "This leaves the transport INVALID output intact but returns success for a cannot-score input. The named transport-refusal test must notice because the refusal contract includes a non-zero operational exit.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        print(\n            f\"[H-MAD] {feature} gate INVALID \"\n            \"(transport file \u2014 collect it into docs first: h_mad_collect_report.py)\"\n        )\n        return 2",
+   "replace": "        print(\n            f\"[H-MAD] {feature} gate INVALID \"\n            \"(transport file \u2014 collect it into docs first: h_mad_collect_report.py)\"\n        )\n        return 0",
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring"
+  },
+  {
+   "name": "gate-refusal-wrong-token",
+   "_mechanism": "This preserves the transport marker and exit code but prints a passing gate token for a refused transport file. The named transport-refusal test must notice because callers read the first GATE line as the machine contract.",
+   "file": "scripts/h_mad_audit_gate.py",
+   "find": "        print(\"GATE: INVALID must=0 should=0\")\n        print(\n            f\"[H-MAD] {feature} gate INVALID \"\n            \"(transport file \u2014 collect it into docs first: h_mad_collect_report.py)\"\n        )\n        return 2",
+   "replace": "        print(\"GATE: PASS must=0 should=0\")\n        print(\n            f\"[H-MAD] {feature} gate INVALID \"\n            \"(transport file \u2014 collect it into docs first: h_mad_collect_report.py)\"\n        )\n        return 2",
+   "test": "tests/test_h_mad_audit_gate.py::test_cli_transport_named_report_is_invalid_before_scoring"
+  },
+  {
+   "name": "cli-error-exit-0",
+   "_mechanism": "This keeps collect operational-error output but returns success, making a failed collection look usable to shell callers. The named error-discipline test must notice because usage and operational errors reserve exit 2.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "    except (OperationalError, OSError, ValueError) as exc:\n        print(f\"ERROR: {exc}\", file=sys.stderr)\n        reason = \"readback_failed\" if str(exc).startswith(\"readback\") else \"operational_error\"\n        print(f\"[H-MAD] {args.feature} collect {reason}\")\n        return 2",
+   "replace": "    except (OperationalError, OSError, ValueError) as exc:\n        print(f\"ERROR: {exc}\", file=sys.stderr)\n        reason = \"readback_failed\" if str(exc).startswith(\"readback\") else \"operational_error\"\n        print(f\"[H-MAD] {args.feature} collect {reason}\")\n        return 0",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback"
+  },
+  {
+   "name": "cli-error-prints-token",
+   "_mechanism": "This adds a COLLECT verdict line to an operational-error path, which makes a refused collection look like a measured missing-report verdict. The named error-discipline test must notice because operational errors must have markers but no COLLECT contract line.",
+   "file": "scripts/h_mad_collect_report.py",
+   "find": "    except (OperationalError, OSError, ValueError) as exc:\n        print(f\"ERROR: {exc}\", file=sys.stderr)\n        reason = \"readback_failed\" if str(exc).startswith(\"readback\") else \"operational_error\"\n        print(f\"[H-MAD] {args.feature} collect {reason}\")\n        return 2",
+   "replace": "    except (OperationalError, OSError, ValueError) as exc:\n        print(f\"ERROR: {exc}\", file=sys.stderr)\n        reason = \"readback_failed\" if str(exc).startswith(\"readback\") else \"operational_error\"\n        print(\"COLLECT: MISSING path=- delivered=none\")\n        print(f\"[H-MAD] {args.feature} collect {reason}\")\n        return 2",
+   "test": "tests/test_h_mad_collect_report.py::test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback"
+  }
+ ]
+}

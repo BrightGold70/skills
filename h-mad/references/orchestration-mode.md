@@ -93,6 +93,7 @@ Use these additive `hmad-dispatch` verbs:
 - `gate-resolve <gate_id> <resolution>` — resolves a gate with the selected decision.
 - `gate-wait <gate_id> [--timeout <s>] [--interval <s>]` — blocks until the gate is resolved (by a human in the Orca UI or by `gate-resolve`) and echoes its resolution. Polls `orchestration gate-list`. This is the half `gate-create` lacked: without it a "blocking" gate could be opened but never waited on.
 - `report-wait <report-path> [--timeout <s>] [--interval <s>]` — blocks until a dispatched agent drops `<report-path>` + a `<report-path>.done` marker, then emits the file. The reliable replacement for `wait`+`read`+`extract_report` (see "Report-file transport" above). Substrate-agnostic — no coordinator pin needed.
+- `collect-report <args>` — copies a delivered report-file or `--out` fallback into the docs audit path and prints `COLLECT: OK|MISSING|CONFLICT`; use it for named secondary surfaces before gating the collected docs path.
 - `worktree-create <name> [--agent <id>] [--base <ref>] [--prompt-file <path>]` — creates an Orca worktree and returns its selector.
 - `worktree-comment [<selector>] <text>` — sets a worktree's free-text comment (a durable, mobile-visible checkpoint), defaulting to the `active` worktree. Captures the response and fails non-zero on an `ok:false` envelope, so a swallowed error cannot read as success.
 - `worktree-current` — returns the active worktree's JSON payload (read-only; used by the `handoff` READ reconcile).
