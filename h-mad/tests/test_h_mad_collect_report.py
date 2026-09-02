@@ -1,7 +1,9 @@
 import ast
+import filecmp
 import importlib
 import json
 import os
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -11,6 +13,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO_ROOT / "h-mad" / "scripts"
+COLLECT_CLI = SCRIPT_DIR / "h_mad_collect_report.py"
+GATE_CLI = SCRIPT_DIR / "h_mad_audit_gate.py"
 
 HOSTILE_REPORT = """# Audit body with {{INLINE_MARKER}}
 
@@ -164,6 +168,80 @@ def calls(path: Path) -> list[list[str]]:
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def docs_path(
+    project_root: Path,
+    *,
+    feature: str = "f",
+    phase: str = "plan",
+    cycle: int = 8,
+    surface: str = "codex",
+) -> Path:
+    folders = {
+        "plan": Path("docs/01-plan/features"),
+        "design": Path("docs/02-design/features"),
+        "impl-plan": Path("docs/01-plan/features"),
+    }
+    return project_root / folders[phase] / f"{feature}.{phase}.audit.v{cycle}.{surface}.md"
+
+
+def collect_args(
+    project_root: Path,
+    report: Path,
+    *,
+    feature: str = "f",
+    phase: str = "plan",
+    cycle: int = 8,
+    surface: str = "codex",
+    out: Path | None = None,
+    grace: float = 0,
+    force: bool = False,
+) -> list[str]:
+    args = [
+        "--feature",
+        feature,
+        "--phase",
+        phase,
+        "--cycle",
+        str(cycle),
+        "--surface",
+        surface,
+        "--report",
+        str(report),
+        "--project-root",
+        str(project_root),
+        "--grace",
+        str(grace),
+    ]
+    if out is not None:
+        args.extend(["--out", str(out)])
+    if force:
+        args.append("--force")
+    return args
+
+
+def run_collect_cli(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(COLLECT_CLI), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def hmad_collect_lines(stdout: str) -> list[str]:
+    return [line for line in stdout.splitlines() if line.startswith("[H-MAD] ")]
+
+
+def collect_contract_lines(stdout: str) -> list[str]:
+    return [line for line in stdout.splitlines() if line.startswith("COLLECT: ")]
+
+
+def assert_single_collect_marker(stdout: str, expected: str) -> None:
+    assert hmad_collect_lines(stdout) == [expected], (
+        "collect CLI must print exactly one [H-MAD] marker"
+    )
 
 
 def collected_kwargs(tmp_path: Path, *, phase: str = "plan", index: int = 1) -> dict:
@@ -550,3 +628,450 @@ def test_collect_missing_report_with_no_out_skips_extractor(
     assert (delivered, collected) == ("none", None)
     assert calls(wait_calls) == [[str(tmp_path / "missing.report.md"), "--timeout", "1"]]
     assert calls(extract_calls) == []
+
+
+def test_cli_report_file_done_copies_docs_and_prints_ok_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=True)
+    expected_docs = docs_path(tmp_path)
+
+    result = run_collect_cli(collect_args(tmp_path, report))
+
+    lines = result.stdout.splitlines()
+    assert result.returncode == 0, "report-file collection must exit 0 on OK"
+    assert lines and lines[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=report-file"
+    ), "report-file collection must print the OK COLLECT contract first"
+    assert lines[-1] == "[H-MAD] f collect OK", (
+        "report-file collection must finish with the OK marker"
+    )
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect OK")
+    assert filecmp.cmp(report, expected_docs, shallow=False), (
+        "report-file collection must byte-copy the report into docs"
+    )
+
+
+def test_cli_missing_report_without_out_prints_missing_and_writes_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "missing.report.md"
+    expected_docs = docs_path(tmp_path)
+
+    result = run_collect_cli(collect_args(tmp_path, report))
+
+    assert result.returncode == 0, "missing report verdict must exit 0"
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: MISSING path={expected_docs} delivered=none"
+    ), "missing report without --out must print the MISSING COLLECT contract"
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect MISSING")
+    assert not expected_docs.exists(), (
+        "missing report without --out must not create the docs audit file"
+    )
+
+
+def test_cli_unmarked_report_with_zero_grace_is_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=False)
+    expected_docs = docs_path(tmp_path)
+
+    result = run_collect_cli(collect_args(tmp_path, report, grace=0))
+
+    assert result.returncode == 0, "unmarked report with --grace 0 must exit 0"
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: MISSING path={expected_docs} delivered=none"
+    ), "unmarked report with --grace 0 must print MISSING"
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect MISSING")
+    assert not expected_docs.exists(), (
+        "unmarked report with --grace 0 must not copy an incomplete report"
+    )
+
+
+def test_cli_identical_existing_docs_is_ok_and_preserves_mtime_without_marker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    expected_docs = docs_path(tmp_path)
+    write_report(report, HOSTILE_REPORT, done=False)
+    write_report(expected_docs, HOSTILE_REPORT, done=False)
+    old_ns = 1_700_000_000_000_000_000
+    os.utime(expected_docs, ns=(old_ns, old_ns))
+
+    result = run_collect_cli(collect_args(tmp_path, report))
+
+    assert result.returncode == 0, "identical existing docs must exit 0"
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=report-file"
+    ), "identical existing docs must print OK for the report-file rung"
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect OK")
+    assert expected_docs.stat().st_mtime_ns == old_ns, (
+        "identical existing docs must not be rewritten"
+    )
+
+
+def test_cli_report_file_conflict_then_force_replaces_docs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    expected_docs = docs_path(tmp_path)
+    write_report(report, HOSTILE_REPORT, done=True)
+    write_report(expected_docs, HOSTILE_OUT_REPORT, done=False)
+
+    result = run_collect_cli(collect_args(tmp_path, report))
+
+    assert result.returncode == 0, "report-file conflict verdict must exit 0"
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: CONFLICT path={expected_docs} delivered=report-file"
+    ), "differing docs must print a report-file CONFLICT contract"
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect CONFLICT")
+    assert expected_docs.read_text(encoding="utf-8") == HOSTILE_OUT_REPORT, (
+        "report-file conflict without --force must leave docs unchanged"
+    )
+
+    forced = run_collect_cli(collect_args(tmp_path, report, force=True))
+
+    assert forced.returncode == 0, "forced report-file replacement must exit 0"
+    assert forced.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=report-file forced=1"
+    ), "forced report-file conflict must print OK with forced=1"
+    assert_single_collect_marker(forced.stdout, "[H-MAD] f collect OK")
+    assert filecmp.cmp(report, expected_docs, shallow=False), (
+        "--force must replace differing docs with the report-file bytes"
+    )
+
+
+def test_cli_out_rung_extracts_report_when_report_file_is_absent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    wait_calls = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    out_path = tmp_path / "dispatch" / "surface.out"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        "prefix\n===HMAD-DISPATCH-BOUNDARY===\n" + HOSTILE_OUT_REPORT,
+        encoding="utf-8",
+    )
+    install_extract_report_stub(wait_calls.parent, stdout_text=HOSTILE_OUT_REPORT)
+    report = tmp_path / "dispatch" / "missing.report.md"
+    expected_docs = docs_path(tmp_path)
+
+    result = run_collect_cli(collect_args(tmp_path, report, out=out_path))
+
+    assert result.returncode == 0, "--out extraction collection must exit 0"
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=out"
+    ), "--out extraction must print OK with delivered=out"
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect OK")
+    assert expected_docs.read_text(encoding="utf-8") == HOSTILE_OUT_REPORT, (
+        "--out extraction must write the extracted audit text into docs"
+    )
+
+
+def test_cli_out_conflict_force_and_identical_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    wait_calls = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    install_extract_report_stub(wait_calls.parent, stdout_text=HOSTILE_OUT_REPORT)
+    report = tmp_path / "dispatch" / "missing.report.md"
+    out_path = tmp_path / "dispatch" / "surface.out"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("hostile human terminal transcript", encoding="utf-8")
+    expected_docs = docs_path(tmp_path)
+    write_report(expected_docs, HOSTILE_REPORT, done=False)
+
+    conflict = run_collect_cli(collect_args(tmp_path, report, out=out_path))
+
+    assert conflict.returncode == 0, "--out conflict verdict must exit 0"
+    assert conflict.stdout.splitlines()[0] == (
+        f"COLLECT: CONFLICT path={expected_docs} delivered=out"
+    ), "differing docs must print an --out CONFLICT contract"
+    assert_single_collect_marker(conflict.stdout, "[H-MAD] f collect CONFLICT")
+    assert expected_docs.read_text(encoding="utf-8") == HOSTILE_REPORT, (
+        "--out conflict without --force must leave docs unchanged"
+    )
+
+    forced = run_collect_cli(collect_args(tmp_path, report, out=out_path, force=True))
+
+    assert forced.returncode == 0, "forced --out replacement must exit 0"
+    assert forced.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=out forced=1"
+    ), "forced --out conflict must print OK with forced=1"
+    assert_single_collect_marker(forced.stdout, "[H-MAD] f collect OK")
+    assert expected_docs.read_text(encoding="utf-8") == HOSTILE_OUT_REPORT, (
+        "--force must replace differing docs with the extracted audit text"
+    )
+
+    old_ns = 1_700_000_100_000_000_000
+    os.utime(expected_docs, ns=(old_ns, old_ns))
+    identical = run_collect_cli(collect_args(tmp_path, report, out=out_path))
+
+    assert identical.returncode == 0, "identical --out docs must exit 0"
+    assert identical.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=out"
+    ), "identical --out docs must print OK"
+    assert_single_collect_marker(identical.stdout, "[H-MAD] f collect OK")
+    assert expected_docs.stat().st_mtime_ns == old_ns, (
+        "identical --out docs must not be rewritten"
+    )
+
+
+def test_cli_invalid_surface_tokens_are_operational_errors_without_collect_line(
+    tmp_path: Path,
+) -> None:
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8.report.md"
+    write_report(report, HOSTILE_REPORT, done=True)
+    failures: list[str] = []
+
+    for surface in ("p2", "codex.draft"):
+        result = run_collect_cli(collect_args(tmp_path, report, surface=surface))
+        if result.returncode != 2:
+            failures.append(f"{surface}: expected rc 2 got {result.returncode}")
+        if surface not in result.stderr:
+            failures.append(f"{surface}: stderr must name invalid surface token")
+        if collect_contract_lines(result.stdout):
+            failures.append(f"{surface}: operational error must not print COLLECT")
+        if hmad_collect_lines(result.stdout) != ["[H-MAD] f collect operational_error"]:
+            failures.append(f"{surface}: must print exactly one operational_error marker")
+
+    assert not failures, (
+        "invalid --surface tokens must be reported by _collected_path as operational errors: "
+        + "; ".join(failures)
+    )
+
+
+def test_cli_report_path_already_in_docs_marker_cases_and_out_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    wait_calls = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    install_extract_report_stub(wait_calls.parent, stdout_text=HOSTILE_OUT_REPORT)
+    expected_docs = docs_path(tmp_path)
+    write_report(expected_docs, HOSTILE_REPORT, done=True)
+    marker = Path(str(expected_docs) + ".done")
+
+    result = run_collect_cli(collect_args(tmp_path, expected_docs))
+
+    lines = result.stdout.splitlines()
+    assert result.returncode == 0, "docs-path report with marker must exit 0"
+    assert lines[0] == f"COLLECT: OK path={expected_docs} delivered=report-file", (
+        "docs-path report with marker must print OK"
+    )
+    assert f"marker: removed {expected_docs}.done" in lines, (
+        "docs-path report with marker must print the marker removal detail"
+    )
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect OK")
+    assert not marker.exists(), "docs-path report with marker must remove the marker"
+
+    missing_marker = run_collect_cli(collect_args(tmp_path, expected_docs))
+    assert missing_marker.returncode == 0, "docs-path report without marker must exit 0"
+    assert missing_marker.stdout.splitlines()[0] == (
+        f"COLLECT: MISSING path={expected_docs} delivered=none"
+    ), "docs-path report without marker must print MISSING"
+    assert_single_collect_marker(missing_marker.stdout, "[H-MAD] f collect MISSING")
+
+    expected_docs.unlink()
+    nonexistent = run_collect_cli(
+        collect_args(tmp_path, expected_docs, out=tmp_path / "dispatch" / "surface.out")
+    )
+    assert nonexistent.returncode == 0, "nonexistent docs-path report must exit 0"
+    assert nonexistent.stdout.splitlines()[0] == (
+        f"COLLECT: MISSING path={expected_docs} delivered=none"
+    ), "nonexistent docs-path report must ignore --out and print MISSING"
+    assert_single_collect_marker(nonexistent.stdout, "[H-MAD] f collect MISSING")
+    assert not expected_docs.exists(), (
+        "nonexistent docs-path report with --out must not write extracted text"
+    )
+
+
+def test_cli_incident_replay_refuses_transport_then_collects_then_gate_accepts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    root = tmp_path / "replay"
+    (root / "docs/01-plan/features").mkdir(parents=True)
+    report = root / "audit_nlmpin_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=True)
+    expected_docs = docs_path(
+        root, feature="nlm-cli-version-pin", phase="plan", cycle=8, surface="codex"
+    )
+
+    gate_transport = subprocess.run(
+        [sys.executable, str(GATE_CLI), str(report)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    collect = run_collect_cli(
+        collect_args(
+            root,
+            report,
+            feature="nlm-cli-version-pin",
+            phase="plan",
+            cycle=8,
+            surface="codex",
+        )
+    )
+    gate_docs = subprocess.run(
+        [sys.executable, str(GATE_CLI), str(expected_docs)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert gate_transport.returncode == 2, (
+        "incident replay gate on the transport report must exit 2"
+    )
+    assert "GATE: INVALID" in gate_transport.stdout, (
+        "incident replay gate on the transport report must print GATE: INVALID"
+    )
+    assert collect.returncode == 0, "incident replay collect step must exit 0"
+    assert collect.stdout.splitlines()[0] == (
+        f"COLLECT: OK path={expected_docs} delivered=report-file"
+    ), "incident replay collect step must print OK for the docs copy"
+    assert filecmp.cmp(report, expected_docs, shallow=False), (
+        "incident replay collect step must byte-copy the survivor into docs"
+    )
+    assert gate_docs.returncode == 0, "incident replay gate on docs copy must exit 0"
+    assert "GATE: PASS" in gate_docs.stdout or "GATE: FAIL" in gate_docs.stdout, (
+        "incident replay gate on docs copy must emit a scoring verdict"
+    )
+
+
+def test_cli_usage_and_operational_errors_have_markers_no_collect_or_traceback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=True)
+
+    usage_cases = [
+        ["--phase", "plan", "--cycle", "8", "--surface", "codex", "--report", str(report), "--project-root", str(tmp_path)],
+        ["--feature", "f", "--cycle", "8", "--surface", "codex", "--report", str(report), "--project-root", str(tmp_path)],
+        ["--feature", "f", "--phase", "plan", "--surface", "codex", "--report", str(report), "--project-root", str(tmp_path)],
+        ["--feature", "f", "--phase", "plan", "--cycle", "8", "--report", str(report), "--project-root", str(tmp_path)],
+        ["--feature", "f", "--phase", "plan", "--cycle", "8", "--surface", "codex", "--project-root", str(tmp_path)],
+        ["--feature", "f", "--phase", "plan", "--cycle", "8", "--surface", "codex", "--report", str(report)],
+        collect_args(tmp_path, report, phase="bogus"),
+    ]
+    failures: list[str] = []
+    for args in usage_cases:
+        result = run_collect_cli(args)
+        if result.returncode != 2:
+            failures.append(f"usage case {args!r}: expected rc 2 got {result.returncode}")
+        if collect_contract_lines(result.stdout):
+            failures.append(f"usage case {args!r}: must not print COLLECT")
+        if hmad_collect_lines(result.stdout) != ["[H-MAD] unknown collect usage_error"]:
+            failures.append(f"usage case {args!r}: must print unknown usage_error marker")
+
+    file_root = tmp_path / "not-a-directory"
+    file_root.write_text("hostile root file", encoding="utf-8")
+    file_parent_root = tmp_path / "file-parent-root"
+    (file_parent_root / "docs/01-plan").mkdir(parents=True)
+    (file_parent_root / "docs/01-plan/features").write_text(
+        "hostile file where features directory should be", encoding="utf-8"
+    )
+
+    operational_cases = [
+        (collect_args(file_root, report), "project-root file"),
+        (collect_args(file_parent_root, report), "features path file"),
+    ]
+    for args, label in operational_cases:
+        result = run_collect_cli(args)
+        if result.returncode != 2:
+            failures.append(f"{label}: expected rc 2 got {result.returncode}")
+        if collect_contract_lines(result.stdout):
+            failures.append(f"{label}: must not print COLLECT")
+        if hmad_collect_lines(result.stdout) != ["[H-MAD] f collect operational_error"]:
+            failures.append(f"{label}: must print operational_error marker")
+        if "Traceback" in result.stderr:
+            failures.append(f"{label}: stderr must not contain a traceback")
+
+    readonly_root = tmp_path / "readonly-root"
+    readonly_docs = docs_path(readonly_root)
+    write_report(readonly_docs, HOSTILE_OUT_REPORT, done=False)
+    write_report(readonly_root / "dispatch" / "audit_f_plan_cycle8_codex.report.md", HOSTILE_REPORT, done=True)
+    readonly_docs.parent.chmod(0o555)
+    try:
+        forced = run_collect_cli(
+            collect_args(
+                readonly_root,
+                readonly_root / "dispatch" / "audit_f_plan_cycle8_codex.report.md",
+                force=True,
+            )
+        )
+    finally:
+        readonly_docs.parent.chmod(0o755)
+
+    if forced.returncode != 2:
+        failures.append(f"readonly force: expected rc 2 got {forced.returncode}")
+    if collect_contract_lines(forced.stdout):
+        failures.append("readonly force: must not print COLLECT")
+    if hmad_collect_lines(forced.stdout) != ["[H-MAD] f collect operational_error"]:
+        failures.append("readonly force: must print operational_error marker")
+    if "Traceback" in forced.stderr:
+        failures.append("readonly force: stderr must not contain a traceback")
+
+    assert not failures, (
+        "usage and operational errors must use the specified marker discipline: "
+        + "; ".join(failures)
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["report-file", "out", "force-retry"],
+)
+def test_cli_main_readback_failed_has_marker_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    case: str,
+) -> None:
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    try:
+        h_mad_collect_report = importlib.import_module("h_mad_collect_report")
+    except ModuleNotFoundError as exc:
+        pytest.fail(
+            f"{case} readback mismatch must be handled by h_mad_collect_report.main: {exc}"
+        )
+    h_mad_audit_cycle = importlib.import_module("h_mad_audit_cycle")
+    monkeypatch.setattr(h_mad_audit_cycle, "_readback_equal", lambda path, data: False)
+
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    out_path = tmp_path / "dispatch" / "surface.out"
+    expected_docs = docs_path(tmp_path)
+    args = collect_args(tmp_path, report)
+    if case == "report-file":
+        write_report(report, HOSTILE_REPORT, done=True)
+    elif case == "out":
+        monkeypatch.setattr(h_mad_audit_cycle, "_run_report_wait", lambda path, grace: False)
+        monkeypatch.setattr(
+            h_mad_audit_cycle,
+            "_run_extract_report",
+            lambda path, *, feature, phase, cycle: HOSTILE_OUT_REPORT,
+        )
+        args = collect_args(tmp_path, report, out=out_path)
+    elif case == "force-retry":
+        write_report(report, HOSTILE_REPORT, done=True)
+        write_report(expected_docs, HOSTILE_OUT_REPORT, done=False)
+        args = collect_args(tmp_path, report, force=True)
+    else:
+        raise AssertionError(f"unhandled readback case {case}")
+
+    rc = h_mad_collect_report.main(args)
+    captured = capsys.readouterr()
+
+    assert rc == 2, f"{case} readback mismatch must return 2"
+    assert captured.stdout == "[H-MAD] f collect readback_failed\n", (
+        f"{case} readback mismatch stdout must be exactly the readback_failed marker"
+    )
+    assert collect_contract_lines(captured.stdout) == [], (
+        f"{case} readback mismatch must not print a COLLECT line"
+    )
