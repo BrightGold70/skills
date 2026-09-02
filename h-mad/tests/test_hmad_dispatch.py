@@ -914,6 +914,390 @@ def test_tail_matcher_corpus_decides_prose_vs_banner():
         )
 
 
+# --- Task 3: tail-evidence pass inside _orca_find ---------------------------
+
+_TAIL_CODEX_BANNER = "OpenAI Codex (v0.145.0)  model: gpt-5.6-terra"
+_TAIL_AGY_BANNER = "Antigravity CLI v1.2.3"
+_TAIL_COORD = ("term_coord", "tab1", "leaf_coord", "Claude Code", "", "/wt/skills")
+_TAIL_EMPTY_PS = '{"ok":true,"result":{"worktrees":[],"truncated":false}}'
+
+
+def _tail_find(tmp_path, agent, terms, reads, *, capture=None, extra_env=None, bins=None):
+    b = _bindir(tmp_path, list(bins or ["orca"]))
+    env = {
+        "_BINDIR": b,
+        "HMAD_STUB_ORCA_STDOUT": _orca_terms_paned(*terms),
+        "HMAD_STUB_ORCA_WT_PS_STDOUT": _TAIL_EMPTY_PS,
+        "HMAD_STUB_ORCA_READ_DIR": _orca_read_dir(tmp_path, reads),
+        "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+        "HMAD_STUB_HOSTILE": "all",
+    }
+    if extra_env:
+        env.update(extra_env)
+    return run_fn(f"_orca_find {agent}", env=env, capture=capture)
+
+
+def _tail_env(tmp_path, terms, reads, *, extra_env=None, bins=None):
+    b = _bindir(tmp_path, list(bins or ["orca"]))
+    env = {
+        "_BINDIR": b,
+        "HMAD_STUB_ORCA_STDOUT": _orca_terms_paned(*terms),
+        "HMAD_STUB_ORCA_WT_PS_STDOUT": _TAIL_EMPTY_PS,
+        "HMAD_STUB_ORCA_READ_DIR": _orca_read_dir(tmp_path, reads),
+        "HMAD_ORCA_COORDINATOR_TERMINAL": "term_coord",
+        "HMAD_STUB_HOSTILE": "all",
+    }
+    if extra_env:
+        env.update(extra_env)
+    return run(["env"], substrate="orca", env=env)
+
+
+def _cap_text(path):
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _tail_pass_source_section():
+    src = WRAPPER.read_text(encoding="utf-8")
+    start = src.find("# Pass 3 -- TAIL evidence")
+    if start == -1:
+        return ""
+    end = src.find("# Pass 3 (J18) -- OS evidence", start)
+    if end == -1:
+        end = src.find("# Pass 4", start)
+    return src[start:end if end != -1 else len(src)]
+
+
+def _agent_pv_re_comment_section():
+    src = WRAPPER.read_text(encoding="utf-8")
+    start = src.find("_agent_pv_re()")
+    end = src.find("  case \"$1\" in", start)
+    return src[start:end]
+
+
+def test_tail_pass_resolves_single_vendor_banner(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_tail", "tab1", "leaf_tail", "zsh", "", "/wt/skills")],
+        {"term_tail": _orca_read_env(_TAIL_CODEX_BANNER, "h-mad: data is not a stamp")},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must resolve through the tail-evidence pass when exactly one "
+        f"candidate tail carries the codex banner; rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_tail\n", "_orca_find stdout must be the resolved tail handle"
+    assert "[H-MAD] codex: bound term_tail by tail evidence" in r.stderr, (
+        "_orca_find must name tail evidence on stderr for a tail-pass resolution"
+    )
+
+
+def test_tail_pass_launch_command_alone_does_not_resolve(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_launch", "tab1", "leaf_launch", "zsh", "", "/wt/skills")],
+        {"term_launch": _orca_read_env(
+            "codex '--dangerously-bypass-approvals-and-sandbox'",
+            "h-mad: hostile fixture marker ===HMAD-DISPATCH-BOUNDARY===",
+        )},
+    )
+
+    assert r.stdout == "", "launch-command-only tail must not resolve to a handle"
+    assert "by tail evidence" not in r.stderr, "launch-command-only tail must not emit marker"
+    assert "resolved to " in r.stderr and " candidates" in r.stderr, (
+        "launch-command-only tail must fall through unresolved"
+    )
+
+
+def test_tail_pass_env_reports_handle(tmp_path):
+    r = _tail_env(
+        tmp_path,
+        [_TAIL_COORD, ("term_tail", "tab1", "leaf_tail", "zsh", "", "/wt/skills")],
+        {"term_tail": _orca_read_env(_TAIL_CODEX_BANNER)},
+    )
+
+    assert "codex -> term_tail" in r.stdout, (
+        "hmad-dispatch env must report the handle found only by _orca_find tail evidence; "
+        f"stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert "[H-MAD] codex: bound term_tail by tail evidence" in r.stderr, (
+        "env must replay the tail-evidence marker from _orca_find"
+    )
+
+
+def test_tail_pass_two_matches_declines(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_a", "tab1", "leaf_a", "zsh", "", "/wt/skills"),
+         ("term_b", "tab1", "leaf_b", "zsh", "", "/wt/skills")],
+        {"term_a": _orca_read_env(_TAIL_CODEX_BANNER),
+         "term_b": _orca_read_env("  OpenAI Codex (v0.145.0)")},
+    )
+
+    assert r.stdout == "", "two matching tails must not produce a handle"
+    assert "by tail evidence" not in r.stderr, "two matching tails must not emit marker"
+    assert "resolved to " in r.stderr and " candidates" in r.stderr, (
+        "two matching tails must fall through to the existing OS/final diagnostic"
+    )
+
+
+def test_tail_pass_zero_matches_declines(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_plain", "tab1", "leaf_plain", "zsh", "", "/wt/skills")],
+        {"term_plain": _orca_read_env("Release notes for OpenAI Codex are available")},
+    )
+
+    assert r.stdout == "", "zero matching tails must not produce a handle"
+    assert "by tail evidence" not in r.stderr, "zero matching tails must not emit marker"
+    assert "resolved to " in r.stderr and " candidates" in r.stderr, (
+        "zero matching tails must reach the existing final diagnostic"
+    )
+
+
+def test_tail_pass_not_run_when_pass0_resolves(tmp_path):
+    capture = tmp_path / "orca.argv"
+    ps = _orca_wt_ps(("/wt/skills", [("tab1:leaf_coord", "claude"),
+                                     ("tab1:leaf_codex", "codex")]))
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_codex", "tab1", "leaf_codex", "zsh", "", "/wt/skills")],
+        {"term_codex": _orca_read_env(_TAIL_CODEX_BANNER)},
+        capture=capture,
+        extra_env={"HMAD_STUB_ORCA_WT_PS_STDOUT": ps},
+    )
+
+    assert r.returncode == 0 and r.stdout == "term_codex\n", (
+        "_orca_find Pass 0 fixture must resolve via paneKey before the tail pass"
+    )
+    assert "terminal read" not in _cap_text(capture), (
+        "_orca_find must not issue terminal read when Pass 0 already resolved"
+    )
+
+
+def test_tail_pass_pool_is_scoped(tmp_path):
+    capture = tmp_path / "orca.argv"
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_in", "tab1", "leaf_in", "zsh", "", "/wt/skills"),
+         ("term_other", "tab2", "leaf_other", "zsh", "", "/wt/other")],
+        {"term_in": _orca_read_env("plain shell output"),
+         "term_other": _orca_read_env(_TAIL_CODEX_BANNER)},
+        capture=capture,
+    )
+
+    cap = _cap_text(capture)
+    assert "orca terminal read --terminal term_other" not in cap, (
+        "_orca_find tail pass must not read a pane outside the coordinator worktree"
+    )
+    assert r.stdout == "", "out-of-scope tail banner must not resolve"
+    assert "by tail evidence" not in r.stderr
+
+
+def test_tail_pass_runs_on_ambiguous_title(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "agy",
+        [_TAIL_COORD,
+         ("term_agy_a", "tab1", "leaf_a", "agy one", "", "/wt/skills"),
+         ("term_agy_b", "tab1", "leaf_b", "agy two", "", "/wt/skills")],
+        {"term_agy_a": _orca_read_env("plain shell output"),
+         "term_agy_b": _orca_read_env(_TAIL_AGY_BANNER)},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must run the tail pass even when Pass 1 has ambiguous title "
+        f"matches; rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_agy_b\n"
+    assert "[H-MAD] agy: bound term_agy_b by tail evidence" in r.stderr
+
+
+def test_tail_pass_runs_without_lsof(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_tail", "tab1", "leaf_tail", "zsh", "", "/wt/skills")],
+        {"term_tail": _orca_read_env(_TAIL_CODEX_BANNER)},
+        bins=["orca"],  # no lsof stub; isolated PATH is _bindir:/usr/bin:/bin
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find tail evidence must resolve before any lsof-dependent OS pass; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_tail\n"
+    assert "[H-MAD] codex: bound term_tail by tail evidence" in r.stderr
+
+
+def test_tail_pass_unreadable_candidate_excluded(tmp_path):
+    capture = tmp_path / "orca.argv"
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_readable", "tab1", "leaf_readable", "zsh", "", "/wt/skills"),
+         ("term_unreadable", "tab1", "leaf_unreadable", "zsh", "", "/wt/skills")],
+        {"term_readable": _orca_read_env(_TAIL_CODEX_BANNER)},
+        capture=capture,
+    )
+
+    cap = _cap_text(capture)
+    assert "orca terminal read --terminal term_readable" in cap
+    assert "orca terminal read --terminal term_unreadable" in cap, (
+        "_orca_find must attempt to read unreadable candidates before excluding them"
+    )
+    assert r.returncode == 0, (
+        "_orca_find must exclude an unreadable candidate and resolve the single "
+        f"readable matching tail; rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_readable\n"
+    assert "[H-MAD] codex: bound term_readable by tail evidence" in r.stderr
+
+
+def test_tail_pass_all_unreadable_declines(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_unreadable", "tab1", "leaf_unreadable", "zsh", "", "/wt/skills")],
+        {},
+    )
+
+    assert r.stdout == "", "all unreadable candidates must not produce a handle"
+    assert "by tail evidence" not in r.stderr
+    assert "resolved to " in r.stderr and " candidates" in r.stderr
+
+
+def test_tail_pass_retention_comment_present():
+    section = _tail_pass_source_section()
+
+    assert "RETENTION (AC-5.1)" in section, (
+        "_orca_find tail pass source section must carry the AC-5.1 retention comment"
+    )
+    assert "2000" in section and "retained tail" in section, (
+        "retention comment must state Orca's measured 2000-line retained-tail cap"
+    )
+    assert "full-screen TUIs" in section and "do not normally reach the cap" in section, (
+        "retention comment must state agent TUIs normally do not reach the cap"
+    )
+    assert "shell" in section and "UNRESOLVED" in section, (
+        "retention comment must state shell-heavy panes can lose the signature and decline"
+    )
+
+
+def test_tail_pass_stdout_is_bare_handle(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_tail", "tab1", "leaf_tail", "zsh", "", "/wt/skills")],
+        {"term_tail": _orca_read_env(_TAIL_CODEX_BANNER, "second retained line")},
+    )
+
+    assert r.stdout == "term_tail\n", (
+        "_orca_find stdout on tail resolution must be the bare handle and newline only; "
+        f"stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert "[H-MAD]" not in r.stdout and _TAIL_CODEX_BANNER not in r.stdout, (
+        "_orca_find must not stream diagnostics or tail text to stdout"
+    )
+
+
+def test_tail_pass_call_form_is_source_pinned():
+    # COMMENTS ARE STRIPPED FIRST, and that is not tidiness: the required comment
+    # documents the forbidden local-masking form by name.
+    code = [ln for ln in WRAPPER.read_text().splitlines()
+            if not ln.lstrip().startswith("#")]
+    flat = " ".join(" ".join(code).split())
+    assert 'if tout="$(_orca_tail_sig "$th")"; then' in flat
+    assert "if local tout=" not in flat
+
+
+def test_tail_pass_stale_pane_comment_present():
+    section = _tail_pass_source_section()
+
+    assert "STALE PANE (AC-5.2)" in section, (
+        "_orca_find tail pass source section must carry the AC-5.2 stale-pane comment"
+    )
+    assert "Tail text is HISTORICAL" in section, (
+        "stale-pane comment must state tail text is historical evidence"
+    )
+    assert "agent EXITED" in section and "still resolved here" in section, (
+        "stale-pane comment must state an exited agent banner below the cap can still resolve"
+    )
+    assert "Pass 1" in section and "Pass 2" in section and "not liveness-gated" in section, (
+        "stale-pane comment must explain the accepted consistency with Passes 1 and 2"
+    )
+    assert "lsof" in section and "AC-3.3" in section, (
+        "stale-pane comment must state a liveness gate would need lsof and contradict AC-3.3"
+    )
+
+
+def test_tail_pass_long_tail_early_signature_resolves(tmp_path):
+    pad = "x" * 126
+    lines = [_TAIL_CODEX_BANNER] + [f"{i:04d} {pad}" for i in range(1899)]
+    assert len("\n".join(lines).encode("utf-8")) >= 200_000
+    assert len(lines) <= 2000
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD, ("term_long", "tab1", "leaf_long", "zsh", "", "/wt/skills")],
+        {"term_long": _orca_read_env(*lines)},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must resolve a >=200KB retained tail with the banner on line 1; "
+        f"rc={r.returncode}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_long\n"
+    assert "[H-MAD] codex: bound term_long by tail evidence" in r.stderr
+
+
+def test_tail_pass_prose_mentioning_agent_does_not_resolve(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_real", "tab1", "leaf_real", "zsh", "", "/wt/skills"),
+         ("term_prose", "tab1", "leaf_prose", "zsh", "", "/wt/skills")],
+        {"term_real": _orca_read_env(_TAIL_CODEX_BANNER),
+         "term_prose": _orca_read_env("OpenAI Codex documentation changed")},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find tail pass must resolve the real banner over an ordinary prose "
+        f"decoy; rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_real\n"
+    assert "[H-MAD] codex: bound term_real by tail evidence" in r.stderr
+    assert "term_prose" not in r.stdout
+
+
+def test_tail_agent_pv_re_comment_matches_measurement():
+    comment = _agent_pv_re_comment_section()
+    expected = """# Both are structured. They exclude the BARE-TOKEN and bare-model-id prose that
+  # motivated them ("comparing gpt-5 output with ours", "the codex agent is running",
+  # both still declining) and NOT prose naming the product: measured 2026-09-01,
+  # `Release notes for OpenAI Codex are available` and `The Antigravity CLI
+  # documentation changed` MATCH, 36 of 36 such probes. That is safe for Passes 1-2,
+  # whose inputs are short titles and previews; the tail pass reads arbitrary retained
+  # scrollback and therefore uses its own line-complete grammar, `_agent_tail_re`."""
+
+    assert expected in comment, (
+        "_agent_pv_re source comment must match the measured prose/product-name "
+        "behaviour and point tail evidence at _agent_tail_re"
+    )
+    assert "neither occurs in ordinary prose about a model" not in comment, (
+        "_agent_pv_re source comment must not claim product-name prose is excluded"
+    )
+
+
 # The live listing: note term_agy's title says "Codex", and both previews are
 # empty (buffers reset). Nothing but the join can tell these two apart.
 _J16_TERMS = _orca_terms_paned(
