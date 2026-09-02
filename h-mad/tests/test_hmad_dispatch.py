@@ -5526,6 +5526,64 @@ def test_skill_readiness_check_uses_a_full_buffer_read():
     )
 
 
+_ENUM_OLD = "ahead of the title and preview passes"
+_ENUM_NEW = "ahead of the title, preview and tail-evidence passes"
+_CODEX_CLAIM_OLD = (
+    "only on a fresh pane's `gpt-N` banner, which scrolls off once it works"
+)
+_CODEX_CLAIM_NEW = (
+    "only on a fresh pane's `gpt-N` banner, which scrolls out of the PREVIEW once "
+    "it works — the tail-evidence pass recovers it from retained scrollback"
+)
+_SKILL_MD_FLAT = " ".join(SKILL_MD_TEXT.split())
+
+
+def test_skill_md_names_tail_evidence_pass():
+    """AC-5.2: the Pass 0 enumeration must name every later evidence pass."""
+    assert _ENUM_NEW in _SKILL_MD_FLAT, "pass enumeration omits the tail-evidence pass"
+    assert _ENUM_OLD not in _SKILL_MD_FLAT, "stale two-pass enumeration still present"
+
+
+def test_skill_md_frontmatter_unchanged():
+    """AC-5.3: doc-only changes must not move the skill contract fields."""
+    head = SKILL_MD_TEXT.split("\n---\n", 2)
+    assert head[0].startswith("---"), "SKILL.md must still open with frontmatter"
+    fm = head[0]
+    lines = [ln.strip() for ln in fm.splitlines()]
+    assert "name: h-mad" in lines, (
+        "frontmatter `name` must be exactly `h-mad`; got "
+        f"{[ln for ln in lines if ln.startswith('name:')]!r}"
+    )
+    desc = [ln for ln in lines if ln.startswith("description:")]
+    assert len(desc) == 1, f"expected one description line, got {len(desc)}"
+    value = desc[0][len("description:"):].strip()
+    assert value.startswith("Orchestrate the 7-phase H-MAD"), (
+        f"description reworded: {value[:60]!r}"
+    )
+    assert len(value) > 200, f"description truncated to {len(value)} chars"
+
+
+def test_skill_md_codex_banner_claim_qualified():
+    """AC-5.5: Codex's banner decays from preview but remains tail evidence."""
+    assert _CODEX_CLAIM_NEW in _SKILL_MD_FLAT, "codex-detection claim not qualified"
+    assert _CODEX_CLAIM_OLD not in _SKILL_MD_FLAT, (
+        "stale unqualified claim still present"
+    )
+
+
+def test_os_evidence_pass_renumbered_to_four():
+    """AC-5.1: the OS-evidence pass is now below the tail pass as Pass 4."""
+    src = WRAPPER.read_text(encoding="utf-8")
+    assert "Pass 4 (J18)" in src
+    assert "Pass 3 (J18)" not in src
+    assert "Reached only when every pass above found nothing" not in src
+    assert "Reached when no pass above resolved exactly one handle" in src
+    assert "`_orca_find` Pass 3 already" not in src
+    assert "`_orca_find` Pass 4 already" in src
+    assert "relies on the preview signature" not in src
+    assert "relies on the tail signature" in src
+
+
 def test_no_verdict_remedies_say_from_start_not_a_bigger_tail():
     # "Re-read with a larger --lines" appeared as the remedy in four places. A
     # larger tail does not escape an overdrawn frame region; cursor 0 does.
