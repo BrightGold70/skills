@@ -47,6 +47,9 @@ def _collected_path(*, project_root: Path, feature: str, phase: str, cycle: int,
                     index: int, surface: str | None = None) -> Path: ...
 
 def _readback_equal(path: Path, data: bytes) -> bool: ...
+def _finalize_write(collected_path: Path, data: bytes) -> Path:
+    """unlink → write_bytes → _readback_equal or raise OperationalError('readback …').
+    The ONE write+readback used by BOTH writers, so the readback is one separable part."""
 
 def _copy_collected_report(report_path: Path, collected_path: Path, *,
                            overwrite: bool = True) -> Path: ...
@@ -67,7 +70,7 @@ def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surf
 - [ ] AC-1.5: exactly one function in `h-mad/scripts/*.py` builds the `.audit.v` docs-path string (`_collected_path`).
 - [ ] AC-2.4 (writer): `_copy_collected_report` onto an identical existing file does not write (mtime unchanged) and returns the path.
 - [ ] AC-2.5 (writer): onto a differing existing file with `overwrite=False` raises `CollectConflict(delivered="report-file")` and leaves bytes unchanged; with `overwrite=True` replaces them; `_write_collected_report` behaves the same with `delivered="out"` (AC-2.6a/2.6b).
-- [ ] AC-2.12 (writer): with `Path.write_bytes` monkeypatched to write wrong bytes, `_copy_collected_report` raises `OperationalError` whose message starts with `readback`; with `Path.unlink` monkeypatched to a no-op, the same-file marker removal raises `OperationalError` starting with `readback`.
+- [ ] AC-2.12 (writers): with `_readback_equal` monkeypatched to return False, `_copy_collected_report` raises `OperationalError` whose message starts with `readback` AND `_write_collected_report` raises the same (both go through `_finalize_write`); with `Path.unlink` monkeypatched to a no-op, the same-file marker removal raises `OperationalError` starting with `readback`.
 - [ ] AC-2.8 (collect order): `spec.report_path` == docs path with a `.done` marker → `("report-file", path)` and the marker is gone; without a marker (grace 0) → `("none", None)` even when `--out` holds a valid report; a docs-path `report_path` that does not exist → `("none", None)`.
 - [ ] AC-2.11 (collect): distinct `report_path` with NO marker, docs file present and byte-identical → `("report-file", docs)`; both files empty → `("none", None)`.
 - [ ] `PassSpec(out_path=None)`: `collect()` skips `_run_extract_report` (a fake `_script` dir with a failing extractor proves it was not called).
@@ -158,7 +161,18 @@ def main(argv: list[str] | None = None) -> int: ...
 - [ ] AC-2.9 (incident replay, suite): isolated root, no docs copy: (i) `h_mad_audit_gate.py <RP>` → `GATE: INVALID`, exit 2; (ii) CLI → `COLLECT: OK … delivered=report-file`, `filecmp` True; (iii) gate on the printed path → exit 0.
 - [ ] AC-2.10: `--project-root` not a directory; a FILE at `docs/01-plan/features`; each missing required flag; `--phase bogus` → exit 2, no `COLLECT:` line, stdout marker `usage_error` (argparse cases) or `operational_error`; a `0o555` docs parent with differing docs + `--force` → exit 2, `operational_error`, no traceback on stderr (skipped as root).
 - [ ] AC-2.11: docs identical, RP present, no marker → `OK … delivered=report-file`.
-- [ ] AC-2.12: readback patched to fail (via a sitecustomize-free seam: env `HMAD_COLLECT_TEST_BREAK_READBACK=1` honoured ONLY in `h_mad_audit_cycle._readback_equal`) → exit 2, `[H-MAD] f collect readback_failed`, no `COLLECT:` line; the same inside a `--force` retry.
+- [ ] AC-2.12: the CLI is exercised IN-PROCESS for this case — `h_mad_collect_report.main([...])` with `h_mad_audit_cycle._readback_equal` monkeypatched to return False (no production seam, no env var) — → returns 2, captured stdout is exactly the `[H-MAD] f collect readback_failed` line (no `COLLECT:` line), for the report-file rung, the `--out` rung, and inside a `--force` retry.
+- [ ] AC-2.9 (hand replay, executable checkpoint — run once after this task's GREEN, before Task 4): 
+  ```bash
+  S=/tmp/audit_nlmpin_plan_cycle8_codex.report.md   # real survivor; if absent after a reboot, use any /tmp/audit_*_codex.report.md and record which
+  R=$(mktemp -d)/replay && mkdir -p "$R/docs/01-plan/features" && cp "$S" "$R/rp.report.md" && : > "$R/rp.report.md.done"
+  mv "$R/rp.report.md" "$R/audit_nlmpin_plan_cycle8_codex.report.md"; mv "$R/rp.report.md.done" "$R/audit_nlmpin_plan_cycle8_codex.report.md.done"
+  python3 h-mad/scripts/h_mad_audit_gate.py "$R/audit_nlmpin_plan_cycle8_codex.report.md"; echo "rc=$?"          # expect GATE: INVALID, rc=2
+  python3 h-mad/scripts/h_mad_collect_report.py --feature nlm-cli-version-pin --phase plan --cycle 8 --surface codex --report "$R/audit_nlmpin_plan_cycle8_codex.report.md" --project-root "$R"   # expect COLLECT: OK … delivered=report-file
+  cmp -s "$S" "$R/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md" && echo identical
+  python3 h-mad/scripts/h_mad_audit_gate.py "$R/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md"; echo "rc=$?"   # expect GATE: PASS|FAIL, rc=0
+  ```
+  The four outputs are pasted verbatim into `audit-report-docs-copy.plan.md`'s Version History (a new `v1.7` line) — that paste is the checkpoint's evidence, and Task 4 does not start until it exists.
 - [ ] Every exit path prints exactly one `[H-MAD] … collect …` line.
 
 **Dependencies on other tasks**: Task 1, Task 2 (AC-2.9 step i needs the refusal)
@@ -173,7 +187,9 @@ def main(argv: list[str] | None = None) -> int: ...
 **WIRE**: `h-mad/scripts/hmad-dispatch.sh:_cmd_collect_report` → `python3 "$here/h_mad_collect_report.py" "$@"` (with `here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-…}"`), plus the `collect-report)` arm in `main()` and the name in the line-3 verb list
 **WIRE-PIN**: `h-mad/tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv`
 
-**Description**: Delegate exactly as `report-wait` does. No logic in bash: argv passes through
+**Description**: The same pure-delegation shape as `report-wait` (not byte-identical: this
+verb resolves `here` through the `HMAD_AUDIT_CYCLE_SCRIPT_DIR` override so the stub seam the
+audit-cycle tests already use applies). No logic in bash: argv passes through
 verbatim, exit code and stdout propagate unchanged. The stub seam is the existing
 `HMAD_AUDIT_CYCLE_SCRIPT_DIR` override (audit-cycle's tests already use it).
 
@@ -266,9 +282,34 @@ its `[H-MAD]` line; (j′) CLI operational-error path drops its marker. The exis
 ```
 
 **Acceptance Criteria**:
-- [ ] AC-6.3: the spec has 19 mutations, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=19 caught=19 survived=0 refused=0`.
+**Mutation table** (the implementer fills `find`/`replace` with the exact production lines; the anchor intent and the named test are fixed here):
+
+| # | name | file | anchor intent | test |
+|---|---|---|---|---|
+| a | copy-writes-empty | `scripts/h_mad_audit_cycle.py` | `_finalize_write` writes `b""` instead of `data` | `tests/test_h_mad_collect_report.py::test_cli_ok_copies_byte_identical` |
+| b | conflict-becomes-overwrite | `scripts/h_mad_audit_cycle.py` | `if not overwrite: raise CollectConflict` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_conflict_preserves_docs` |
+| b′ | force-still-refuses | `scripts/h_mad_collect_report.py` | forced retry passes `overwrite=False` | `tests/test_h_mad_collect_report.py::test_cli_force_overwrites` |
+| c | surface-validation-removed | `scripts/h_mad_audit_cycle.py` | `validate_surface` returns token unchecked | `tests/test_h_mad_collect_report.py::test_cli_rejects_pass_index_surface` |
+| c′ | surface-validation-rejects-all | `scripts/h_mad_audit_cycle.py` | `validate_surface` always raises | `tests/test_h_mad_collect_report.py::test_cli_ok_copies_byte_identical` |
+| d | collected-path-ignores-surface | `scripts/h_mad_audit_cycle.py` | token = `f"p{index}"` regardless of surface | `tests/test_h_mad_collect_report.py::test_collected_path_surface_token` |
+| d′ | collected-path-forces-surface | `scripts/h_mad_audit_cycle.py` | token = `str(surface)` even when None | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
+| e | cli-skips-collect | `scripts/h_mad_collect_report.py` | `collect(...)` replaced by `("report-file", docs)` | `tests/test_h_mad_collect_report.py::test_cli_missing_when_no_report` |
+| e′ | cli-collects-on-fallthrough | `scripts/h_mad_collect_report.py` | bad surface no longer returns before `collect()` | `tests/test_h_mad_collect_report.py::test_cli_rejects_pass_index_surface` |
+| f | verb-execs-wrong-script | `scripts/hmad-dispatch.sh` | `h_mad_collect_report.py` → `h_mad_report_wait.py` in `_cmd_collect_report` | `tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv` |
+| f′ | verb-routes-unknown | `scripts/hmad-dispatch.sh` | `*)` arm calls `_cmd_collect_report "$@"` | `tests/test_hmad_dispatch_collect_report.py::test_unknown_verb_does_not_exec_script` |
+| g | gate-refusal-removed | `scripts/h_mad_audit_gate.py` | `if is_transport_path(...)` → `if False` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
+| g′ | gate-refuses-all-reports | `scripts/h_mad_audit_gate.py` | `TRANSPORT_RE` → `\.report\.md$` | `tests/test_h_mad_audit_gate.py::test_gate_scores_phase7_and_hyphen_report_names` |
+| h | readback-removed | `scripts/h_mad_audit_cycle.py` | `_finalize_write` skips `_readback_equal` | `tests/test_h_mad_collect_report.py::test_out_rung_readback_failure_exits_2` |
+| h′ | out-rung-conflict-removed | `scripts/h_mad_audit_cycle.py` | `_write_collected_report` passes `overwrite=True` | `tests/test_h_mad_collect_report.py::test_cli_out_rung_conflict` |
+| i | transport-re-loosened | `scripts/h_mad_audit_gate.py` | `^audit_[^.]+` → `^audit_.*` | `tests/test_h_mad_audit_gate.py::test_grammars_are_disjoint_property` |
+| i′ | docs-pattern-dedotted | `scripts/h_mad_audit_cycle.py` | `.audit.v` → `_audit_v` in `_collected_path` | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
+| j | gate-refusal-drops-marker | `scripts/h_mad_audit_gate.py` | the `[H-MAD] … transport file` print removed | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
+| j′ | cli-error-drops-marker | `scripts/h_mad_collect_report.py` | operational-error marker print removed | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
+
+**Acceptance Criteria**:
+- [ ] AC-6.3: the spec has exactly the 19 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=19 caught=19 survived=0 refused=0`.
 - [ ] `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/collect_report.json` prints `ANCHORS: ANCHORS_OK …`.
-- [ ] AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_exist_and_match_harness_schema` and `::test_audit_cycle_mutation_specs_name_existing_failure_tests` pass with the new spec present.
+- [ ] AC-6.4: the existing `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` tests load ONLY the two audit-cycle specs under `h-mad/tests/specs/` (verified 2026-09-02: `GATING_MUTATION_SPEC`, `CONNECTIONS_MUTATION_SPEC`) and are NOT extended; they stay green. The new spec's shape and named-test existence are proven by the two harness commands above, which is what those tests prove for their own specs.
 - [ ] AC-6.5: `python3.11 -m pytest h-mad/tests -q` is green from this worktree.
 
 **Dependencies on other tasks**: Task 5
@@ -277,3 +318,4 @@ its `[H-MAD]` line; (j′) CLI operational-error path drops its marker. The exis
 
 ## Version History
 - v1.0: Initial implementation plan draft.
+- v1.1: 5b audit v1 fixes (agy p1 + codex): no env seam — the CLI readback case runs `main()` in-process with `_readback_equal` monkeypatched; both writers share `_finalize_write` so the readback is one separable part and the `--out` rung is pinned too; the AC-2.9 hand replay is an executable checkpoint with exact commands and a required Version-History paste; 19-row mutation table with fixed names/files/tests; AC-6.4 states the existing spec tests are not extended; verb wording.
