@@ -20,7 +20,7 @@ The design lists seven ordered steps. This plan carries all seven and adds one p
 | design step | task | note |
 |---|---|---|
 | — (design §Test Strategy: "the stub must serve BOTH `terminal list` and `terminal read`") | T1 | prerequisite; no production behaviour |
-| 1. `_orca_tail_sig` **and `_agent_tail_re`** + unit tests, incl. the matcher's direct 36/12 corpus | T2 | both helpers land together; step 2 consumes the matcher |
+| 1. `_orca_tail_sig` **and `_agent_tail_re`** + unit tests, incl. the matcher's direct 36/15 corpus | T2 | both helpers land together; step 2 consumes the matcher |
 | 2. The pass, entered on `n != 1`, resolving on exactly one | T3 | |
 | 4. Unreadable-candidate handling | T3 | **folded — see below** |
 | 3. Rival rejection | T4 | |
@@ -189,18 +189,17 @@ only the call sites.
 # codex pane whose scrollback merely said "Compare Gemini 3.1 Pro with Claude"
 # was rejected as rival-bearing. Prose is not a signature in either direction.
 #
-# FOUR revisions; each fell to a shape the previous corpus lacked. v1.25's
+# FIVE revisions; each fell to a shape the previous corpus lacked. v1.25's
 # line-complete form still took `## OpenAI Codex v0.145` (the prefix class
 # allowed '#'), `OpenAI Codex v0.145-release-notes` and
 # `model: gpt-5-migration-notes` (unbounded non-space version/model suffixes),
 # and `Gemini 3.1 Pro (2026 release notes)` (an open numeric parenthetical).
-# Now: the prefix admits ONLY whitespace and box-drawing characters -- no ASCII
-# pipe, colon or `>` (audit v45: the `>` a v29 revision admitted as a 'quote'
-# character is a Markdown blockquote, and a table cell is prose); a version is
-# dotted-numeric with its parens PAIRED (audit v42); a model id needs a DOTTED
-# release number; and the parenthetical is an effort word or a dotted version.
-# Measured over 36 negatives and 12
-# positives: 36/36 decline, 12/12 still match.
+# Now: a banner may be DECORATED -- framed by box-drawing, preceded by block
+# art, or preceded by the Codex `>_` prompt glyph -- and may close with a frame
+# character. A bare Markdown `>` is still NOT prefix evidence; `>_` is a unit.
+# What still discriminates banner from prose is what follows the signature:
+# the same per-arm version/model/effort structure, or end of line. Measured
+# over 36 negatives and 15 positives: 36/36 decline, 15/15 still match.
 #
 # LINE-COMPLETE grammar, not a line anchor. The v1.23 anchor was falsified by
 # line-LEADING prose; the v1.24 grammar was falsified by prose AFTER a
@@ -211,17 +210,17 @@ only the call sites.
 # parenthetical is agy-only; the arms below are normative and no prose restates
 # them (design v1.32 carries the per-arm table). MATCHED CASE-INSENSITIVELY:
 # these literals are lowercase and real banners are capitalised, so every call
-# site uses `grep -Eiq`; under `grep -E` nine of the twelve positives decline.
-# Measured over the corpus, which grew 24 -> 29 (v42) -> 35 (v45) -> 36 (v47). On the
+# site uses `grep -Eiq`; under `grep -E` 12 of the 15 positives decline.
+# Measured over the corpus, which grew 24 -> 29 (v42) -> 35 (v45) -> 36 negatives /
+# 15 positives after the Phase 5 live-banner check. On the
 # THEN-24: unanchored 0/24 decline, anchored-only 7/24, leading-position 14/24,
 # line-complete 19/24, that grammar 24/24. On the CURRENT 36, which adds the
 # unbalanced-paren, non-dotted-version, Markdown-prefix and bare-separator
-# shapes: this grammar 36/36 -- with all
-# 12 positives matching under every revision.
+# shapes: this grammar 36/36 -- with all 15 positives matching.
 _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
   case "$1" in
-    codex) printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;
-    agy)   printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*$)' ;;
+    codex) printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
+    agy)   printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
     *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
   esac
 }
@@ -625,10 +624,10 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 - [ ] AC-2.12: `_agent_tail_re` is tested DIRECTLY against the full corpus **under a
       **Node:** `test_tail_matcher_corpus_decides_prose_vs_banner`.
       case-insensitive match (`grep -Ei`, the flag every call site uses)** — all 36 negative
-      probes decline and all 12 positive controls match, per agent. **The fold is load-bearing
+      probes decline and all 15 positive controls match, per agent. **The fold is load-bearing
       and was named nowhere until v1.33.** The literals are lowercase and every real banner is
       capitalised: measured 2026-09-02 by running this plan's own block over this corpus, a
-      case-SENSITIVE `grep -E` still declines 36/36 negatives but declines **9 of the 12
+      case-SENSITIVE `grep -E` still declines 36/36 negatives but declines **12 of the 15
       positives** as well — only the three all-lowercase controls survive. So the decline half of
       the corpus cannot detect the error, and an implementer who reads AC-2.11's `grep -E` as the
       match semantics ships a matcher that rejects every real banner. Design pass 2026-09-02. T2 owns the helper, so T2
@@ -1026,7 +1025,7 @@ status is `grep`'s alone.
       not the name. Impl-plan audit v38 (codex) nit, decided rather than deferred.
       The mixed fixture fails in both directions that matter: before the pass exists nothing
       resolves, and with the matcher connection removed both candidates match, the count is 2, and
-      the pass declines on ambiguity. The matcher's own 36/12 corpus is tested directly in T2
+      the pass declines on ambiguity. The matcher's own 36/15 corpus is tested directly in T2
       (AC-2.12), so this node tests the CONNECTION and the pass-level selection, not the grammar.
 
       A candidate whose tail carries the agent's tokens only inside ORDINARY
@@ -1620,7 +1619,7 @@ the distinction matters because only the first is pinned by this document:
    measures nothing while the spec still prints a verdict-shaped line.
 
    The check that covers both classes, and the one this plan actually ran at v1.46: resolve every
-   `find` against the union of the prescribed blocks AND the live target file, and require 46/46.
+   `find` against the union of the prescribed blocks AND the live target file, and require 49/49.
    Impl-plan audit v45 (agy) — the previous wording claimed class 1 covered everything, which
    would have left these three unwatched.
 
@@ -1647,7 +1646,7 @@ the distinction matters because only the first is pinned by this document:
  "mutations": [
   {
    "name": "drop-cursor-0",
-   "_mechanism": "Drop `--cursor 0` from the read argv so the request returns the RETAINED VIEWPORT instead of the oldest retained scrollback. The banner this feature exists to find has already scrolled off the viewport, so the pass would read a tail that cannot contain it. Killed by `test_tail_sig_argv_carries_cursor_and_limit`, which asserts on the captured argv rather than on a resolution \u2014 a resolution assertion would pass whenever the banner happened to be in view.",
+   "_mechanism": "Drop `--cursor 0` from the read argv so the request returns the RETAINED VIEWPORT instead of the oldest retained scrollback. The banner this feature exists to find has already scrolled off the viewport, so the pass would read a tail that cannot contain it. Killed by `test_tail_sig_argv_carries_cursor_and_limit`, which asserts on the captured argv rather than on a resolution — a resolution assertion would pass whenever the banner happened to be in view.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_argv_carries_cursor_and_limit",
    "find": "--cursor 0 --limit 4000 --json",
@@ -1663,7 +1662,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "local-masks-helper-rc",
-   "_mechanism": "Change `if tout=\"$(\u2026)\"` to `if local tout=\"$(\u2026)\"`. In bash `local` returns ITS OWN status, so the helper's non-zero rc is masked and an unreadable pane is treated as readable with an empty tail. Killed by `test_tail_pass_call_form_is_source_pinned`, which pins the call FORM in source rather than a behaviour, because the masked rc is invisible from outside whenever the tail is empty for legitimate reasons too.",
+   "_mechanism": "Change `if tout=\"$(…)\"` to `if local tout=\"$(…)\"`. In bash `local` returns ITS OWN status, so the helper's non-zero rc is masked and an unreadable pane is treated as readable with an empty tail. Killed by `test_tail_pass_call_form_is_source_pinned`, which pins the call FORM in source rather than a behaviour, because the masked rc is invisible from outside whenever the tail is empty for legitimate reasons too.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_call_form_is_source_pinned",
    "find": "    if tout=\"$(_orca_tail_sig \"$th\")\"; then",
@@ -1751,7 +1750,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "entry-gated-on-n-eq-0",
-   "_mechanism": "Neutralise the matcher unless the title/preview passes found nothing (`[ \"$n\" -eq 0 ] || tail_re='__IMPOSSIBLE_\u2026'`), which is the entry condition the pass must NOT have \u2014 an AMBIGUOUS title (n>1) is exactly the case this feature exists to resolve. Killed by `test_tail_pass_runs_on_ambiguous_title`. Deliberately neutralises only this pass's matcher and preserves fall-through: an earlier form used `|| return 1`, which aborted `_orca_find` and let the kill be credited to the forbidden early return rather than to the wrong entry condition (impl-plan audit v34).",
+   "_mechanism": "Neutralise the matcher unless the title/preview passes found nothing (`[ \"$n\" -eq 0 ] || tail_re='__IMPOSSIBLE_…'`), which is the entry condition the pass must NOT have — an AMBIGUOUS title (n>1) is exactly the case this feature exists to resolve. Killed by `test_tail_pass_runs_on_ambiguous_title`. Deliberately neutralises only this pass's matcher and preserves fall-through: an earlier form used `|| return 1`, which aborted `_orca_find` and let the kill be credited to the forbidden early return rather than to the wrong entry condition (impl-plan audit v34).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_runs_on_ambiguous_title",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
@@ -1767,7 +1766,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "wire-force-fire-after-pass0",
-   "_mechanism": "Force the tail pass to run even when Pass 0 already resolved exactly one handle (`if false && by_pane=\u2026`). Killed by `test_tail_pass_not_run_when_pass0_resolves`, which asserts on `HMAD_STUB_CAPTURE` containing zero `terminal read` calls \u2014 asserting on the resolution instead would pass with the whole feature reverted, since Pass 0 resolves the same handle either way.",
+   "_mechanism": "Force the tail pass to run even when Pass 0 already resolved exactly one handle (`if false && by_pane=…`). Killed by `test_tail_pass_not_run_when_pass0_resolves`, which asserts on `HMAD_STUB_CAPTURE` containing zero `terminal read` calls — asserting on the resolution instead would pass with the whole feature reverted, since Pass 0 resolves the same handle either way.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_not_run_when_pass0_resolves",
    "find": "  if by_pane=\"$(_orca_find_by_pane \"$token\" \"$scoped\" \"$scope_wt\")\" && [ -n \"$by_pane\" ]; then",
@@ -1799,7 +1798,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "stub-branch-ignores-env-var",
-   "_mechanism": "Drop the `HMAD_STUB_ORCA_READ_DIR` guard so the new branch fires unconditionally, breaking every existing test that relies on the legacy stub path. Killed by `test_tail_stub_read_unset_preserves_legacy_behaviour` \u2014 the node that proves T1 is additive rather than a replacement.",
+   "_mechanism": "Drop the `HMAD_STUB_ORCA_READ_DIR` guard so the new branch fires unconditionally, breaking every existing test that relies on the legacy stub path. Killed by `test_tail_stub_read_unset_preserves_legacy_behaviour` — the node that proves T1 is additive rather than a replacement.",
    "file": "tests/stubs/orca",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_unset_preserves_legacy_behaviour",
    "find": "&& [ -n \"${HMAD_STUB_ORCA_READ_DIR:-}\" ]; then\n  _h=\"\"",
@@ -1815,74 +1814,98 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-cx-parens-unpaired",
-   "_mechanism": "Codex arm, ONE field: make the version's parentheses independently optional again (`\\(?…\\)?`), keeping every version position dotted and everything else intact. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` on exactly `OpenAI Codex (v0.145.0` and `OpenAI Codex v0.145.0)`; all 12 positives still match, including the paired `(v0.145.0)` controls. Replaces the pre-v52 `tail-re-version-loosened`, which reverted this AND both dot rules at once and so could only prove that at least one of three guards bit — impl-plan audit v47 (codex).",
+   "_mechanism": "Codex arm, ONE field: make the version's parentheses independently optional again (`\\(?…\\)?`), keeping every version position dotted and everything else intact. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` on exactly `OpenAI Codex (v0.145.0` and `OpenAI Codex v0.145.0)`; all 15 positives still match, including the paired `(v0.145.0)` controls. Replaces the pre-v52 `tail-re-version-loosened`, which reverted this AND both dot rules at once and so could only prove that at least one of three guards bit — impl-plan audit v47 (codex).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)+\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)+\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-cx-bare-version-undotted",
    "_mechanism": "Codex arm, ONE field: allow a bare (unparenthesised) version with zero dots again, parens still paired and the parenthesised form still dotted. Killed on exactly `OpenAI Codex 2026`; `OpenAI Codex v0.145.0` and `OpenAI Codex` still match. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)*))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)*))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-cx-paren-version-undotted",
    "_mechanism": "Codex arm, ONE field: allow a PARENTHESISED version with zero dots again, bare form still dotted. Killed on exactly `OpenAI Codex (v2026)` — a probe added at v1.52 because no earlier negative exercised this occurrence on its own; `OpenAI Codex (v0.145.0)` and `  OpenAI Codex (v0.145.0)` still match. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)*\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)*\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-agy-cli-version-undotted",
    "_mechanism": "Agy arm, ONE field: allow the Antigravity CLI version with zero dots again, the Gemini parenthetical still dotted. Killed on exactly `Antigravity CLI 2026`; `Antigravity CLI v1.2.3` and `Antigravity CLI 1.1.22` still match. Replaces the pre-v52 `tail-re-version-loosened-agy`, which loosened both agy positions together and so could not attribute a kill to either — impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
-   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
+   "find": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-agy-paren-version-undotted",
    "_mechanism": "Agy arm, ONE field: allow the Gemini parenthetical version with zero dots again, the CLI version still dotted. Killed on exactly `Gemini 3.1 Pro (2026)`; `Gemini 3.1 Pro (High)` still matches because the effort alternative is untouched. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
-   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;"
+   "find": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-prefix-box-only",
+   "_mechanism": "Revert BOTH arms to the old prefix shape: whitespace plus box-drawing only, no block art and no `>_` prompt unit. The suffix grammar and closing-frame rule stay intact, so the kill is from real decorated banner positives only: the live Codex `│ >_ OpenAI Codex ... │` line and the two live Antigravity block-art lines stop matching. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-closing-frame-dropped",
+   "_mechanism": "Revert BOTH arms to the old line ending `[[:space:]]*$`, leaving the decorated prefix unchanged. That makes framed banner tails fail when a closing box-drawing character follows the padded product line; killed by the live Codex positive `│ >_ OpenAI Codex (v0.149.1)                          │`. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-bare-gt-prefix",
+   "_mechanism": "Admit a bare `>` in BOTH arms' prefix class while keeping the real `>_` prompt unit valid. This is the guard on the guard: Markdown blockquotes are `> `, while the Codex TUI prompt glyph is `>_`; killed by the `> OpenAI Codex` negative before a bare quote can become identity evidence. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓>[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;\n    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓>[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-prefix-widened",
-   "_mechanism": "Restore the pre-v49 prefix class on the codex arm alone -- ASCII pipe, colon and `>` admitted again beside the box-drawing characters. Everything else is preserved, so all 12 positives still match (the one prefixed positive uses U+2502, not ASCII) and the kill can only come from the prefix shapes: a Markdown blockquote `> OpenAI Codex` or table cell `| model: gpt-5.6-terra` in historical shell output becomes identity evidence, the FR-1 wrong-pane class. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` (AC-2.12), whose corpus carries those lines since impl-plan audit v45 (codex). Anchored on the whole arm so the anchor stays unique beside the prefix-only anchors the other regex mutants use.",
+   "_mechanism": "Codex arm, ONE boundary: restore ASCII pipe and colon to the prefix class while preserving the decorated-banner prefix and the `>_` prompt unit. Everything else is preserved, so all 15 positives still match and the kill can only come from prefix-shaped prose: `: OpenAI Codex` or `| model: gpt-5.6-terra` in historical shell output becomes identity evidence, the FR-1 wrong-pane class. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` (AC-2.12), whose corpus carries those lines since impl-plan audit v45 (codex). Anchored on the whole arm so the anchor stays unique beside the prefix-only anchors the other regex mutants use. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│|┃╎┆▄▀▐▌░▒▓:[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-cwd-optional",
    "_mechanism": "Make the cwd after `·` optional again (`[^[:space:]]*` for `+`) on the codex status-line alternative, preserving everything else. `gpt-5.6-terra high ·` -- an effort word and a bare separator, the shape a wrapped or truncated log line produces -- then matches. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` (AC-2.12); the design requires `·` PLUS a cwd, and the positive `gpt-5.6-terra high · ~/repo` matches under both forms, so the kill is from the negative alone. Impl-plan audit v45 (codex).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-prefix-widened-agy",
-   "_mechanism": "The AGY counterpart of `tail-re-prefix-widened`: restore ASCII pipe, colon and `>` to the agy arm's prefix class alone, everything else preserved. All five agy positives still match, so the kill can only come from `> Antigravity CLI 1.1.22` and `| Gemini 3.1 Pro` in AC-2.12's corpus. Without this mutant the agy arm's prefix guard was encoded independently but never isolated — `tail-re-unanchored-agy` replaces the whole arm and cannot attribute a kill to one boundary. Impl-plan audit v46 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
+   "_mechanism": "The AGY counterpart of `tail-re-prefix-widened`: restore ASCII pipe and colon to the agy arm's prefix class while preserving block-art decoration and the `>_` prompt unit, everything else preserved. All seven agy positives still match, so the kill can only come from `| Gemini 3.1 Pro` in AC-2.12's corpus. Bare `>` is pinned separately by `tail-re-bare-gt-prefix`, because `>_` is a unit and a Markdown blockquote must stay prose. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
-   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
+   "find": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[│|┃╎┆▄▀▐▌░▒▓:[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-unanchored",
    "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 22 CODEX-arm negatives then match (this mutant touches only the codex arm, so the 14 agy negatives are unaffected; measured 2026-09-02) and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
    "replace": "    codex) printf '%s\\n' \"$(_agent_pv_re codex)\" ;;"
   },
   {
@@ -1890,7 +1913,7 @@ the distinction matters because only the first is pinned by this document:
    "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). all 14 AGY-arm negatives then match (measured 2026-09-02; the codex negatives are unaffected). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
+   "find": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
    "replace": "    agy)   printf '%s\\n' \"$(_agent_pv_re agy)\" ;;"
   },
   {
@@ -1898,20 +1921,20 @@ the distinction matters because only the first is pinned by this document:
    "_mechanism": "ADDITIVELY widen the AGY arm: the full banner grammar is preserved and `|^agy .--dangerously` appended, so every positive control still matches and the ONLY behaviour change is that the launch line is now accepted. A wholesale replacement (the v1.31 form) was killed because the node's positive controls failed -- an accidental kill that proves nothing about launch-line rejection. Audit v35. AC-3.2 exercises both agents. Pinned node: `test_tail_pass_launch_command_alone_does_not_resolve`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
-   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)|^agy .--dangerously' ;;"
+   "find": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)|^agy .--dangerously' ;;"
   },
   {
    "name": "tail-re-widened-to-launch-line",
-   "_mechanism": "ADDITIVELY widen the codex arm with `|^codex .--dangerously`, preserving the whole valid banner grammar, so only the launch-line rejection is lost. Killed by `test_tail_pass_launch_command_alone_does_not_resolve`, whose AC exercises both agents. The pre-v1.32 form replaced the arm wholesale and was killed by the node's POSITIVE controls failing \u2014 an accidental kill that proved nothing about launch-line rejection (impl-plan audit v35).",
+   "_mechanism": "ADDITIVELY widen the codex arm with `|^codex .--dangerously`, preserving the whole valid banner grammar, so only the launch-line rejection is lost. Killed by `test_tail_pass_launch_command_alone_does_not_resolve`, whose AC exercises both agents. The pre-v1.32 form replaced the arm wholesale and was killed by the node's POSITIVE controls failing — an accidental kill that proved nothing about launch-line rejection (impl-plan audit v35).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)|^codex .--dangerously' ;;"
+   "find": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)|^codex .--dangerously' ;;"
   },
   {
    "name": "tail-sig-fabricates-banner-on-failure",
-   "_mechanism": "Make the helper print a plausible banner and return 0 on a failed read. Killed by `test_tail_pass_all_unreadable_declines`. This is the one FR-4 direction that is UNSAFE: a missing key, a non-zero exit and an unreadable pane all decline, but a FABRICATED tail resolves \u2014 and resolves to whatever handle the failed read happened to name.",
+   "_mechanism": "Make the helper print a plausible banner and return 0 on a failed read. Killed by `test_tail_pass_all_unreadable_declines`. This is the one FR-4 direction that is UNSAFE: a missing key, a non-zero exit and an unreadable pane all decline, but a FABRICATED tail resolves — and resolves to whatever handle the failed read happened to name.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_all_unreadable_declines",
    "find": "  [ \"$rc\" -eq 0 ] || return 1",
@@ -1927,7 +1950,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "signature-check-not-enforced",
-   "_mechanism": "Turn the wanted-signature filter into a no-op (`|| true` instead of `|| continue`), so a READABLE but non-matching candidate enters `tail_ids`. Killed by `test_tail_pass_zero_matches_declines`, whose fixture is deliberately ONE readable non-matching candidate: with the filter dropped, `tn` becomes 1 and the pass resolves observably WRONG. It replaced `resolve-on-ge-0`, which was a crash mutant \u2014 with `tn=0` the relaxed branch aborts under `set -euo pipefail`, and a kill credited to an abort proves the code breaks when broken and nothing about the property.",
+   "_mechanism": "Turn the wanted-signature filter into a no-op (`|| true` instead of `|| continue`), so a READABLE but non-matching candidate enters `tail_ids`. Killed by `test_tail_pass_zero_matches_declines`, whose fixture is deliberately ONE readable non-matching candidate: with the filter dropped, `tn` becomes 1 and the pass resolves observably WRONG. It replaced `resolve-on-ge-0`, which was a crash mutant — with `tn=0` the relaxed branch aborts under `set -euo pipefail`, and a kill credited to an abort proves the code breaks when broken and nothing about the property.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_zero_matches_declines",
    "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
@@ -1935,7 +1958,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "wanted-check-back-to-pipeline",
-   "_mechanism": "Revert the wanted check from a here-string to `printf \u2026 | grep -Eiq`. Under the wrapper's global `set -o pipefail` a MATCH exits grep early, the upstream printf takes SIGPIPE, and the pipeline returns 141 \u2014 so a candidate that DOES carry the signature is skipped. Killed by `test_tail_pass_long_tail_early_signature_resolves`, whose fixture puts the signature at line 1 of a long tail, which is the only shape that triggers it. Pinned to AC-3.16, a RED: FAIL node, so it is a long-tail guard discriminator rather than a green-at-RED proof.",
+   "_mechanism": "Revert the wanted check from a here-string to `printf … | grep -Eiq`. Under the wrapper's global `set -o pipefail` a MATCH exits grep early, the upstream printf takes SIGPIPE, and the pipeline returns 141 — so a candidate that DOES carry the signature is skipped. Killed by `test_tail_pass_long_tail_early_signature_resolves`, whose fixture puts the signature at line 1 of a long tail, which is the only shape that triggers it. Pinned to AC-3.16, a RED: FAIL node, so it is a long-tail guard discriminator rather than a green-at-RED proof.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_long_tail_early_signature_resolves",
    "find": "      grep -Eiq \"$tail_re\" <<<\"$tout\" || continue",
@@ -2015,6 +2038,7 @@ the distinction matters because only the first is pinned by this document:
   }
  ]
 }
+
 ```
 
 **FIVE mutations target T2's time-and-extraction controls — four in the wrapper, one in the
@@ -2233,8 +2257,8 @@ false half is recorded so the next reader does not re-derive it.
       hand-edit to a JSON file can also leave it unparseable, which fails the test for a reason
       that has nothing to do with `root`. See AC-2.8.
 **What the proof column is, and is not.** It names the mutation(s) that make a GREEN-AT-RED node
-discriminating — 13 rows. It is NOT an index of the 46 mutations (re-derived from the embedded JSON, not carried — it read
-38, 39, 41, 43, then 46 as v1.45/v1.49/v1.50 added revert-mutants and v1.52 split two of them): a `RED: FAIL` node needs no
+discriminating — 13 rows. It is NOT an index of the 49 mutations (re-derived from the embedded JSON, not carried — it read
+38, 39, 41, 43, 46, then 49 as v1.45/v1.49/v1.50 added revert-mutants, v1.52 split two of them, and the Phase 5 live-banner check added three): a `RED: FAIL` node needs no
 proof (it already fails without the feature) and carries `—`, and every mutation is pinned by its
 own `test` field regardless. Impl-plan audit v42 read the column as an index and filed the 16
 uncited mutations as an omission; that part does not hold. What DID hold is narrower and is fixed:
@@ -2474,3 +2498,4 @@ in the one table that is supposed to account for them.
 - v1.57: Impl-plan audit v51 — agy GATE PASS (sixth clean, second consecutive), codex must=1 should=1 nit=1, both on v1.56. MUST: AC-6.9 and AC-6.12…AC-6.20 require each mutation's mechanism line to name its pinned node, and 24 of 46 _mechanism strings did not carry the exact node id from their own test field — the 18 I wrote at v1.38 did, the 20 that predate the convention and 6 later ones did not. Amended mechanically from each entry's test field (the truth), appending 'Pinned node: <id>'; 46/46 now carry it, re-derived. SHOULD: the design said 'no config' and 'None user-facing' while telling operators to lower HMAD_TAIL_READ_TIMEOUT; classified in the design as an operator override of the HMAD_SNAPSHOT_LINES kind (code comment + design, NOT SKILL.md) — and my first wording of that claimed 'none of the sibling knobs appear in SKILL.md', which was FALSE: HMAD_CONTEXT_WINDOW appears three times, HMAD_SNAPSHOT_LINES zero; the classification now states the split and which side this knob is on. NIT: 'All all 14 AGY-arm negatives' — a duplicate word my v52 count sweep produced. Provenance re-derived to design v1.41. Re-verified: 46/46 anchors, corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.58: Impl-plan audit v52 — agy GATE PASS (seventh clean, third consecutive), codex must=1 nit=1, both on v1.57. MUST: three verification sites invoked h_mad_mutation_harness.py by BASENAME (AC-6.9, the AC-6.10 prose head, Verification item 2) and one in the paired design; the script is not on PATH and not executable (mode rw-r--r--), so the bare form exits 127 and can never print MUTATION: ALL_CAUGHT — the mutation-verdict step was unexecutable as written, and it contradicted AC-6.10's own repo-relative rule one paragraph below. All four now 'python3 h-mad/scripts/h_mad_mutation_harness.py'; verified the repo-relative form runs (--help prints usage). The :606 source reference is a citation, not a command, and stays. NIT: Task 2's comment stated the prefix rule twice in one sentence after the v45/v47 edits appended to it instead of rewriting it; consolidated into one ordered list of the four constraints. Provenance re-derived to design v1.42. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.59: Phase 5d, Task 1 RED, first dispatch — STATUS: BLOCKED, and both causes are defects in THIS document that 53 audit cycles could not see because the tests did not exist yet (the tracer-bullet class). (1) T1's _orca_read_dir helper prescribed tempfile.mkdtemp(dir=tmp_path, prefix='reads-') inside the test module, and the module's own guard test_no_mkdtemp_and_no_pin_file_leak_guard asserts that literal is ABSENT from the source — the scoped run gave 3 failed / 293 passed instead of the expected 2, the third being that guard; verified by re-running myself. The fresh-directory-per-call property is kept with tmp_path / f'reads-{uuid.uuid4().hex[:8]}' (uuid already imported), and the helper's comment names the guard. (2) Codex named all six T1 tests differently from the Test-name contract table (test_orca_stub_terminal_read_dir_serves_handle_file for test_tail_stub_read_dir_serves_per_handle, etc.), which would have orphaned every T1 mutation pin and WIRE-PIN — because the 5d assembler cuts §Task N only and 39 of 45 AC bodies did not name their node; the names lived solely in a table outside every task section. Every AC body now carries **Node:** <name>, derived mechanically from the table (36 added; 6 already named theirs), so a task-scoped dispatch carries its contract. The dispatched test file was reverted (git checkout) rather than kept under invented names. Re-verified: both stub-read mutation anchors still resolve in the T1 helper block, corpus 36/36 + 12/12, WIREPIN PASS.
+- v1.60: Phase 5 live-banner check: added the three real retained-tail lines to the corpus and updated the normative _agent_tail_re block. A banner may be DECORATED -- framed by box-drawing, preceded by block art, or preceded by the ">_" prompt glyph -- and may close with a frame character; what still separates banner from prose is the per-arm version/model/effort structure, or end of line. Corpus is now 36 negatives / 15 positives; mutation spec is now 49 mutations with new prefix-box-only, closing-frame-dropped, and bare-gt-prefix guards.

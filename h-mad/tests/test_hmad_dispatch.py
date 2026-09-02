@@ -871,6 +871,7 @@ _TAIL_NEGATIVES = [
 _TAIL_POSITIVES = {
     "codex": [
         "OpenAI Codex (v0.145.0)  model: gpt-5.6-terra",
+        "│ >_ OpenAI Codex (v0.149.1)                          │",
         "gpt-5.6-terra high · ~/repo",
         "  OpenAI Codex (v0.145.0)",
         "│ model: gpt-5.6-terra",
@@ -880,9 +881,11 @@ _TAIL_POSITIVES = {
     ],
     "agy": [
         "Antigravity CLI v1.2.3",
+        "      ▄▀▀▄        Antigravity CLI 1.1.22",
         "Gemini 3.1 Pro",
         "  Antigravity CLI v1.2.3",
         "Gemini 3.1 Pro (High)",
+        "    ▀▀▀▀▀▀▀▀      Gemini 3.1 Pro (High)",
         "Antigravity CLI 1.1.22",
     ],
 }

@@ -82,13 +82,15 @@ decline. That is the accepted limit of the feature, stated rather than discovere
     — does not resolve. `_agent_pv_re` alone does NOT satisfy this: measured 2026-09-01 it
     matches 36 of 36 such probes, and it is shared with Passes 1-2, whose inputs are short
     titles and previews rather than arbitrary retained scrollback. The tail pass therefore
-    uses its own INDEPENDENT bounded literals — the signature must end its line or continue
-    with the version/model/effort structure ITS OWN AGENT ARM permits (per-arm, not one shared
-    list; the arms are normative in the impl-plan's `_agent_tail_re` block) — matched
-    **case-insensitively**, which declines 36/36 while all 12 real banner and status-line
-    controls still match. The fold is part of the criterion, not an implementation choice:
+    uses its own INDEPENDENT bounded literals. A banner may be DECORATED — framed by
+    box-drawing, preceded by block art, or preceded by the `>_` prompt glyph — and may close
+    with a frame character; what still discriminates banner from prose is what follows the
+    signature: the version/model/effort structure ITS OWN AGENT ARM permits (per-arm, not one
+    shared list; the arms are normative in the impl-plan's `_agent_tail_re` block), or end of
+    line. It is matched **case-insensitively**, which declines 36/36 while all 15 real banner
+    and status-line controls still match. The fold is part of the criterion, not an implementation choice:
     the literals are lowercase and real banners are capitalised, so measured 2026-09-02 a
-    case-sensitive match declines 9 of those 12 positives while still declining all 36
+    case-sensitive match declines 12 of those 15 positives while still declining all 36
     negatives — passing the half of the corpus that cannot see the error. This is a wrong-pane rule, not a precision preference:
     the candidate pool includes ordinary shell panes and tail evidence is historical, so
     without it a shell that once printed release notes resolves as the agent.
@@ -226,3 +228,4 @@ of failure; leaving it undocumented would.
 - v1.18: Impl-plan audit v42 (codex): corpus grown 24 -> 29 after the matcher was measured accepting unbalanced parentheses and non-dotted pseudo-versions. AC-1.4's figures swept; the _agent_pv_re prose-match number was re-measured over the extended corpus (29/29) rather than renumbered.
 - v1.19: Impl-plan audit v45 (codex): corpus 29 -> 35 after the matcher was measured accepting Markdown-prefixed lines and a bare separator with no cwd. AC-1.4's figures swept; the _agent_pv_re number was re-measured over the extended corpus (35/35).
 - v1.20: Impl-plan audit v47 (codex): corpus 35 -> 36; AC-1.4's figures swept and the _agent_pv_re number re-measured (36/36).
+- v1.21: Phase 5 live-banner check: the real retained tails are decorated, so the old whitespace/box-only prefix made the feature inert. AC-1.4 now states the corrected rule once: a banner may be DECORATED -- framed by box-drawing, preceded by block art, or preceded by the ">_" prompt glyph -- and may close with a frame character; prose is still rejected by what follows the signature (per-arm version/model/effort structure, or end of line). Corpus is now 36 negatives / 15 positives.

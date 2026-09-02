@@ -75,13 +75,15 @@ exist to exclude.
 and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
 neither is a leading-position grammar: measured across the corpus (24 probes at first, 29 after audit v42, 35 after v45, 36 after v47), the shipped regex declines
 0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
-bounded, independent `_agent_tail_re` literals — a banner shape must consume its WHOLE line,
-behind a prefix of whitespace or box-drawing characters only — decline all 36, with all 12 real
-banner and status lines still matching.
+bounded, independent `_agent_tail_re` literals — a banner shape must consume its WHOLE line.
+A banner may be DECORATED, framed by box-drawing, preceded by block art, or preceded by the
+`>_` prompt glyph, and may close with a frame character. What still discriminates banner from
+prose is what follows the signature: the per-arm version/model/effort structure, or end of line.
+That grammar declines all 36 negatives, with all 15 real banner and status lines still matching.
 
 **The literals are normative; this prose is not.** The grammar's single authoritative statement is
 the `_agent_tail_re` code block in impl-plan §Task 2, and the arbiter of agreement between the two
-is AC-2.12, which runs the doc's own block over the 36/12 corpus. Every other surface — this
+is AC-2.12, which runs the doc's own block over the 36/15 corpus. Every other surface — this
 paragraph, the source plan, the spec — **describes** that block and must never re-list its
 continuations: five prose restatements of one flat list existed across three documents, and all
 five were wrong in the same way (below). Describe the shape; cite the block for the shape's
@@ -101,33 +103,37 @@ block verbatim:
 A flat list implies each agent accepts all five. None does, and the two arms disagree on three of
 the five rows.
 
-**Two boundaries that were stated here and not enforced by the block until audit v45.** The
-prefix rule above says whitespace or box-drawing only, but the block's class also admitted ASCII
-`|`, `:` and `>` (a v29 revision called them "quote" characters); measured 2026-09-02,
-`> OpenAI Codex`, `: OpenAI Codex` and `| model: gpt-5.6-terra` — a Markdown blockquote and a
-table cell, exactly what a shell that printed a README carries — all matched. And "a `·` and a
-cwd" was enforced as `[^[:space:]]*`, so `gpt-5.6-terra high ·` with nothing after the separator
-matched too. Both closed in the block; the corpus carries all six shapes. **Each closure is proved PER ARM,
+**Boundaries that were stated here and not enforced until measured against the corpus.** Audit
+v45 closed ASCII `|` and `:` as prefix evidence; a later Phase 5 live check widened the valid
+prefix in the other direction, to real decorations only: box frames, block art, and the Codex
+`>_` prompt glyph. A bare Markdown `>` stays prose. Measured 2026-09-02, `> OpenAI Codex`,
+`: OpenAI Codex` and `| model: gpt-5.6-terra` — a Markdown blockquote and table/prose shapes,
+exactly what a shell that printed a README carries — decline, while the live decorated banners
+match. And "a `·` and a cwd" was enforced as `[^[:space:]]*`, so `gpt-5.6-terra high ·` with
+nothing after the separator matched too; that remains closed. **Each closure is proved PER ARM,
 because each arm encodes it independently**: `tail-re-prefix-widened` / `-agy` restore the
-punctuation on one arm at a time; the dotted-version and paired-paren rules are reverted ONE FIELD
+punctuation on one arm at a time; `tail-re-prefix-box-only` proves the live decorations are
+load-bearing; `tail-re-closing-frame-dropped` proves the closing frame is load-bearing; and
+`tail-re-bare-gt-prefix` proves `>_` must stay a unit. The dotted-version and paired-paren rules are reverted ONE FIELD
 at a time (`tail-re-cx-parens-unpaired`, `tail-re-cx-bare-version-undotted`,
 `tail-re-cx-paren-version-undotted`, `tail-re-agy-cli-version-undotted`,
 `tail-re-agy-paren-version-undotted`), because a mutant that reverts several guards at once proves
 only that one of them bit; and `tail-re-cwd-optional` is codex-only because only the codex arm has
 a cwd. A codex-only mutant proves nothing about the agy arm's copy of the same boundary — impl-plan
 audit v46 measured the corpus's agy negatives with no mutant able to attribute a kill to them.
-The one prefixed positive control uses U+2502 `│`, which is still admitted.
+The positive controls now include U+2502 `│`, `>_`, and block-art prefixes.
 
 **The match is CASE-INSENSITIVE, and that is part of the contract, not an implementation detail.**
 The literals are lowercase (`openai codex`, `antigravity cli`, `gemini [0-9]`) while every real
 banner is capitalised, so the grammar is correct only under a case-folding match. Every call site
 uses `grep -Eiq` (impl-plan T3/T4 and all four matcher-wire mutations — wanted/rival × disconnect/force). Measured 2026-09-02 over the
-doc's own block and the full corpus: under `grep -Ei` 36/36 negatives decline and 12/12 positives
+doc's own block and the full corpus: under `grep -Ei` 36/36 negatives decline and 15/15 positives
 match — the figure this document has been reporting — while under a case-SENSITIVE `grep -E` the
-negatives still decline 36/36 but **9 of the 12 positives decline too** (`OpenAI Codex`,
+negatives still decline 36/36 but **12 of the 15 positives decline too** (`OpenAI Codex`,
 `OpenAI Codex v0.145.0`, `  OpenAI Codex (v0.145.0)`, `OpenAI Codex (v0.145.0)  model:
 gpt-5.6-terra`, `Antigravity CLI v1.2.3`, `  Antigravity CLI v1.2.3`, `Antigravity CLI 1.1.22`,
-`Gemini 3.1 Pro`, `Gemini 3.1 Pro (High)`); only the three all-lowercase controls survive. A
+`Gemini 3.1 Pro`, `Gemini 3.1 Pro (High)`, plus the three decorated live captures); only the
+three all-lowercase controls survive. A
 reader who implements the block and matches with `grep -E` therefore ships a matcher that rejects
 every real banner while every negative still declines — a total false-negative, invisible to any
 check that only counts the corpus's decline half. The rival check uses the same helper: applying the shared `_agent_pv_re` there rejected a
@@ -145,8 +151,8 @@ rule, and a single prose pane matching is one match, so FR-2 holds while the ans
 (impl-plan audit v41). Passes 1 and 2 read short titles and previews rather than arbitrary
 scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
 moves. `_agent_tail_re` is a NEW independent helper — not an anchor applied to the old one, and
-not the agent's existing signature. Measured over the 36-probe corpus: 0 of 36 prose probes match and 12 of 12 real banner and
-status lines still do. Pinned in two places, deliberately: impl-plan **AC-2.12** tests the helper's own 36/12 corpus in
+not the agent's existing signature. Measured over the 36-negative / 15-positive corpus: 0 of 36 prose probes match and 15 of 15 real banner and
+status lines still do. Pinned in two places, deliberately: impl-plan **AC-2.12** tests the helper's own 36/15 corpus in
 the task that defines it, and **AC-3.17** tests the caller CONNECTION with a mixed
 banner-plus-prose-decoy fixture. Mutations `tail-re-unanchored` and `tail-re-unanchored-agy`
 (one per agent arm) are killed by AC-2.12.
@@ -571,3 +577,4 @@ resolution, or it merely restates Pass 0.
 - v1.40: Impl-plan audit v49 (codex) should-fix: Verification item 2 said it lists the same Success Criteria as the impl-plan but omitted the feature-focused 'pytest -k test_tail_' step and named no stdout tokens, so an implementer following the declared source could skip the targeted selector and read exit codes instead of MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK. Aligned with the impl-plan's Verification and AC-6.9/AC-6.10.
 - v1.41: Impl-plan audit v51 (codex) should-fix: Data Model said 'no config' and API said 'None user-facing' while Error Handling told operators to lower HMAD_TAIL_READ_TIMEOUT. Classified explicitly as an operator override of the HMAD_SNAPSHOT_LINES kind — a bound-tuning variable documented at the read site and here, not in SKILL.md. The wrapper's knobs are split on SKILL.md exposure (HMAD_CONTEXT_WINDOW x3, HMAD_SNAPSHOT_LINES x0, measured), and the paragraph says which side this one is on rather than claiming a convention that does not exist.
 - v1.42: Impl-plan audit v52 (codex): Verification item 2 invoked h_mad_mutation_harness.py by basename; it is not on PATH and not executable, so that exits 127. Now python3 h-mad/scripts/h_mad_mutation_harness.py, matching the impl-plan.
+- v1.43: Phase 5 live-banner check: the design's whitespace/box-only prefix rule excluded real retained Codex and Antigravity banners. The matcher rule now says a banner may be DECORATED -- framed by box-drawing, preceded by block art, or preceded by the ">_" prompt glyph -- and may close with a frame character; the discriminant remains the structured suffix/end-of-line rule. Corpus is now 36 negatives / 15 positives, and the mutation inventory names the prefix, closing-frame, and bare-gt-prefix guards.

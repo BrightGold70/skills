@@ -63,3 +63,34 @@ discriminators, both preserving the existing rejections:
 Whichever is chosen must be added to the corpus as POSITIVES with the real strings, and the
 existing blockquote/table negatives must be re-measured, since the prefix and line-end rules
 are what reject them.
+
+---
+
+## RE-RUN 2026-09-02 after the grammar fix — PASS
+
+Same protocol: isolated pin file, dummy handles seeded and their PRESENCE proven (2), cleared,
+ABSENCE proven (0), no ambient `HMAD_ORCA_*_TERMINAL` exported.
+
+    codex -> term_f483657a-92e4-46a0-ac3a-d440034232f9
+    agy   -> term_a3b4c1dd-f30b-48da-87d9-69bda517844d
+    PREFLIGHT: PASS
+    bound term_f483657a-92e4-46a0-ac3a-d440034232f9 by tail evidence
+
+The marker is emitted by this pass and by nothing else, so it is the only output that proves
+the tail-evidence pass produced the resolution. Both agents resolved to their correct panes:
+`term_f483657a` is the pane whose tail carries `OpenAI Codex (v0.149.1)`, `term_a3b4c1dd` the
+one carrying `Antigravity CLI 1.1.22`. No cross-assignment.
+
+Isolated pin directory removed and confirmed gone; the operator's real `.h-mad/orca-pins.env`
+was never written (mtime unchanged, 1 Sep). No pane was created for either run.
+
+### The fix
+
+Prefix `[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?` and line end
+`[[:space:]]*[│┃╎┆]?[[:space:]]*$` on both arms. `>_` is a UNIT, not a bare `>` added to the
+class: bare `>` matches the negatives `> OpenAI Codex` and `> Antigravity CLI 1.1.22`
+(measured), and `tail-re-bare-gt-prefix` now pins that decision.
+
+Corpus 36 negatives / 15 positives — the three real strings added as positives. Suite 335;
+mutations 49/49 ALL_CAUGHT with all 49 anchors resolving. The "what follows the signature"
+rule that separates banner from prose is unchanged; only the decoration rules moved.

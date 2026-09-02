@@ -327,8 +327,8 @@ _agent_pv_re() {
 
 _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
   case "$1" in
-    codex) printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;
-    agy)   printf '%s\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*$)' ;;
+    codex) printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
+    agy)   printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
     *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
   esac
 }
