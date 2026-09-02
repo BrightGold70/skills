@@ -137,6 +137,19 @@ def _copy_collected_report(
 ) -> Path:
     with _fs_errors("copy collected report"):
         data = report_path.read_bytes()
+        if not data:
+            raise OperationalError(
+                f"report is empty: {report_path}; "
+                f"collected report was empty after copy: {collected_path}"
+            )
+        if report_path.resolve() == collected_path.resolve():
+            marker = _done_path(report_path)
+            marker.unlink(missing_ok=True)
+            if marker.exists():
+                raise OperationalError(
+                    f"readback mismatch after marker removal: {marker}"
+                )
+            return collected_path
         collected_path.parent.mkdir(parents=True, exist_ok=True)
         if collected_path.exists():
             existing = collected_path.read_bytes()
@@ -282,14 +295,14 @@ def _collect_unguarded(
         surface=surface,
     )
 
-    if spec.report_path == collected_path:
-        marker = _done_path(spec.report_path)
-        if not marker.exists():
-            return "none", None
-        marker.unlink(missing_ok=True)
-        if marker.exists():
-            raise OperationalError(f"readback mismatch after marker removal: {marker}")
-        return "report-file", collected_path
+    if spec.report_path.resolve() == collected_path.resolve():
+        if _has_complete_report(spec.report_path) or (
+            grace > 0 and _run_report_wait(spec.report_path, grace)
+        ):
+            return "report-file", _copy_collected_report(
+                spec.report_path, collected_path, overwrite=overwrite
+            )
+        return "none", None
 
     if spec.report_path.exists() and collected_path.exists():
         report_bytes = spec.report_path.read_bytes()
