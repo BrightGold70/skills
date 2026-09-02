@@ -31,8 +31,12 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   - AC-1.4: `collect(spec, ..., surface="codex")` writes its collected file at the AC-1.2 path;
     `collect(spec, ...)` with no `surface` keyword writes at the AC-1.1 path (existing
     `test_h_mad_audit_cycle.py` collect tests pass unchanged).
-  - AC-1.5: `grep -rn 'audit\.v' h-mad/scripts/*.py` shows the docs-path string built in
-    exactly one function (`_collected_path`); the new CLI imports it rather than re-deriving.
+  - AC-1.5: among the WRITE-path modules (`h_mad_audit_cycle.py`, `h_mad_collect_report.py`)
+    exactly one function builds a `.audit.v` docs-path string (`_collected_path`); the CLI
+    imports it rather than re-deriving. Reader modules (`h_mad_cycle_counts.py`,
+    `h_mad_do_preconditions.py`) build the same grammar to FIND audits and are out of scope
+    (v1.10: the v1.0 wording said all of `h-mad/scripts/*.py`, which was false — 5e Task 1
+    codex refusal upheld).
   - AC-1.6: **Disjoint namespace, proven by property, not by a production assert.** A
     derived docs basename always contains `.audit.v<N>` (dots) and `TRANSPORT_RE` requires a
     dot-free stem, so the two grammars are disjoint by construction and no runtime check is
@@ -270,6 +274,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   this worktree's edits are invisible to it until merge.
 
 ## Version History
+- v1.10: AC-1.5 scoped to the write-path modules (5e Task 1: codex refused a GREEN that would have required editing reader modules; the AC premise was wrong).
 - v1.9: 5b-audit v8 sweep: e′ restored on the bad-project-root path → 23 mutations.
 - v1.0: Initial specification draft.
 - v1.8: 5b-audit v5 sweep: AC-3.5a's `_VERSION_RE` assertion scoped to docs audit-artifact names.

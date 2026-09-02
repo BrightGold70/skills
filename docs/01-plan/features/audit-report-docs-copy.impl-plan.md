@@ -67,7 +67,7 @@ def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surf
 - [ ] AC-1.2: `surface="codex"` → `docs/01-plan/features/f.plan.audit.v8.codex.md`; `phase="design"` → `docs/02-design/features/f.design.audit.v8.codex.md`; `phase="impl-plan"` → `docs/01-plan/features/f.impl-plan.audit.v8.codex.md`.
 - [ ] AC-1.3: `surface="p2"`, `"codex.draft"`, `".x"`, `""` each raise `ValueError` whose message contains the token.
 - [ ] AC-1.4: `collect(spec, ..., surface="codex")` writes at the AC-1.2 path; `collect(spec, ...)` (no `surface`) writes at the AC-1.1 path; the existing `test_h_mad_audit_cycle.py` collect tests pass unchanged.
-- [ ] AC-1.5: exactly one function in `h-mad/scripts/*.py` builds the `.audit.v` docs-path string (`_collected_path`).
+- [ ] AC-1.5: among the write-path modules `h_mad_audit_cycle.py` and `h_mad_collect_report.py`, exactly one function builds the `.audit.v` docs-path string (`_collected_path`); reader modules are out of scope.
 - [ ] AC-2.4 (writer): `_copy_collected_report` onto an identical existing file does not write (mtime unchanged) and returns the path.
 - [ ] AC-2.5 (writer): onto a differing existing file with `overwrite=False` raises `CollectConflict(delivered="report-file")` and leaves bytes unchanged; with `overwrite=True` replaces them; `_write_collected_report` behaves the same with `delivered="out"` (AC-2.6a/2.6b).
 - [ ] AC-2.12 (writers): with `_readback_equal` monkeypatched to return False, `_copy_collected_report` raises `OperationalError` whose message starts with `readback` AND `_write_collected_report` raises the same (both go through `_finalize_write`); with `Path.unlink` monkeypatched to a no-op, the same-file marker removal raises `OperationalError` starting with `readback`.
@@ -375,3 +375,4 @@ copied from the production file at implementation time.)
 - v1.9: 5b audit v8 fix (agy p1): explicit try/except SystemExit around parse_args in the Task 3 code structure.
 - v1.10: 5b audit v9 fixes (codex + agy p1, 22 tools): stale 22/v1.15 strings; no placeholder ellipses in paths, tokens or the JSON skeleton (one full mutation entry shown); render_verdict dropped, _run named; provenance line unpinned.
 - v1.11: 5b audit v10 fixes (codex; agy v10 clean): AC-6.3 expects the harness's unreadable=0 field; marker AC allows unknown on the argparse path.
+- v1.12: 5e Task 1: AC-1.5 scoped to write-path modules after a correct codex refusal (reader modules build the grammar to find audits).

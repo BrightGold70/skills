@@ -201,8 +201,14 @@ def test_collected_path_surface_token_paths_and_single_string_builder(tmp_path: 
         ac, **collected_kwargs(tmp_path, phase="impl-plan"), surface="codex"
     ) == tmp_path / "docs/01-plan/features/f.impl-plan.audit.v8.codex.md"
 
+    # AC-1.5 is about the WRITE path: one derivation of a collected docs path. Reader
+    # modules (h_mad_cycle_counts, h_mad_do_preconditions) legitimately build the same
+    # grammar to FIND audits; they are out of scope here (5e, codex refusal upheld).
+    writer_modules = ("h_mad_audit_cycle.py", "h_mad_collect_report.py")
     builders: list[str] = []
-    for script in (REPO_ROOT / "h-mad" / "scripts").glob("*.py"):
+    for script in sorted((REPO_ROOT / "h-mad" / "scripts").glob("*.py")):
+        if script.name not in writer_modules:
+            continue
         tree = ast.parse(script.read_text(encoding="utf-8"), filename=str(script))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -366,14 +372,14 @@ def test_writers_convert_fs_errors_and_share_readback_check(
         )
 
     with monkeypatch.context() as m:
-        original_write_text = Path.write_text
+        original_write_bytes = Path.write_bytes
 
-        def deny_write_text(self: Path, *args, **kwargs):
+        def deny_write_bytes(self: Path, *args, **kwargs):
             if self == collected:
                 raise PermissionError("denied hostile collected write")
-            return original_write_text(self, *args, **kwargs)
+            return original_write_bytes(self, *args, **kwargs)
 
-        m.setattr(Path, "write_text", deny_write_text)
+        m.setattr(Path, "write_bytes", deny_write_bytes)
         assert_operational_fs_error(
             lambda: ac._write_collected_report(HOSTILE_REPORT, collected),
             "_write_collected_report",
@@ -386,6 +392,10 @@ def test_writers_convert_fs_errors_and_share_readback_check(
         "_copy_collected_report",
         ac,
     )
+    # The copy above wrote `collected` before its readback was rejected, so the
+    # write rung would now see identical bytes and return early (AC-2.6b). Give it
+    # a fresh target so the readback path is actually exercised.
+    collected.unlink(missing_ok=True)
     assert_operational_readback(
         lambda: ac._write_collected_report(HOSTILE_REPORT, collected),
         "_write_collected_report",

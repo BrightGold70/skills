@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import math
 import os
 import re
@@ -40,10 +41,37 @@ DELIVERY_FLOOR = 2
 # dispatch in it, so this is the rc a pass that ran out of wall-clock carries.
 TIMEOUT_RC = 124
 GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$")
+SURFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+PASS_INDEX_RE = re.compile(r"^p\d+$")
 
 
 class OperationalError(Exception):
     """The audit cycle could not form a trustworthy verdict."""
+
+
+class CollectConflict(OperationalError):
+    """A collected audit report exists with different bytes."""
+
+    def __init__(self, collected: Path, delivered: str) -> None:
+        super().__init__(f"collected report conflict for {delivered}: {collected}")
+        self.collected = collected
+        self.delivered = delivered
+
+
+def validate_surface(surface: str) -> str:
+    """Return a validated audit surface token."""
+    if not SURFACE_RE.match(surface) or PASS_INDEX_RE.match(surface):
+        raise ValueError(f"invalid surface token: {surface!r}")
+    return surface
+
+
+@contextlib.contextmanager
+def _fs_errors(what: str):
+    """Convert filesystem failures into collector operational failures."""
+    try:
+        yield
+    except OSError as exc:
+        raise OperationalError(f"{what}: {exc}") from exc
 
 
 def _script(name: str) -> Path:
@@ -61,6 +89,7 @@ def _collected_path(
     phase: str,
     cycle: int,
     index: int,
+    surface: str | None = None,
 ) -> Path:
     """Return the collected audit report path for one audit pass."""
     audit_dirs = {
@@ -68,10 +97,11 @@ def _collected_path(
         "design": Path("docs/02-design/features"),
         "impl-plan": Path("docs/01-plan/features"),
     }
+    suffix = f"p{index}" if surface is None else validate_surface(surface)
     return (
         project_root
         / audit_dirs[phase]
-        / f"{feature}.{phase}.audit.v{cycle}.p{index}.md"
+        / f"{feature}.{phase}.audit.v{cycle}.{suffix}.md"
     )
 
 
@@ -87,13 +117,41 @@ def _has_complete_report(report_path: Path) -> bool:
     )
 
 
-def _copy_collected_report(report_path: Path, collected_path: Path) -> Path:
-    collected_path.parent.mkdir(parents=True, exist_ok=True)
+def _readback_equal(path: Path, data: bytes) -> bool:
+    try:
+        return path.read_bytes() == data
+    except OSError:
+        return False
+
+
+def _finalize_write(collected_path: Path, data: bytes) -> Path:
     collected_path.unlink(missing_ok=True)
-    collected_path.write_bytes(report_path.read_bytes())
-    if not collected_path.exists() or collected_path.stat().st_size <= 0:
-        raise OperationalError(f"collected report was empty after copy: {collected_path}")
+    collected_path.write_bytes(data)
+    if not _readback_equal(collected_path, data):
+        raise OperationalError(f"readback mismatch after write: {collected_path}")
     return collected_path
+
+
+def _copy_collected_report(
+    report_path: Path, collected_path: Path, *, overwrite: bool = True
+) -> Path:
+    with _fs_errors("copy collected report"):
+        data = report_path.read_bytes()
+        collected_path.parent.mkdir(parents=True, exist_ok=True)
+        if collected_path.exists():
+            existing = collected_path.read_bytes()
+            if existing == data:
+                return collected_path
+            if not overwrite:
+                raise CollectConflict(collected_path, "report-file")
+        try:
+            return _finalize_write(collected_path, data)
+        except OperationalError:
+            if not collected_path.exists() or collected_path.stat().st_size <= 0:
+                raise OperationalError(
+                    f"collected report was empty after copy: {collected_path}"
+                )
+            raise
 
 
 def _run_report_wait(report_path: Path, grace: float) -> bool:
@@ -164,13 +222,19 @@ def _run_extract_report(
     raise OperationalError(f"extract_report exited {result.returncode} for {out_path}")
 
 
-def _write_collected_report(report_text: str, collected_path: Path) -> Path:
-    collected_path.parent.mkdir(parents=True, exist_ok=True)
-    collected_path.unlink(missing_ok=True)
-    collected_path.write_text(report_text, encoding="utf-8")
-    if not collected_path.exists() or not collected_path.read_text(encoding="utf-8"):
-        raise OperationalError(f"collected report was empty after write: {collected_path}")
-    return collected_path
+def _write_collected_report(
+    report_text: str, collected_path: Path, *, overwrite: bool = True
+) -> Path:
+    with _fs_errors("write collected report"):
+        data = report_text.encode("utf-8")
+        collected_path.parent.mkdir(parents=True, exist_ok=True)
+        if collected_path.exists():
+            existing = collected_path.read_bytes()
+            if existing == data:
+                return collected_path
+            if not overwrite:
+                raise CollectConflict(collected_path, "out")
+        return _finalize_write(collected_path, data)
 
 
 def collect(
@@ -181,27 +245,78 @@ def collect(
     feature: str,
     phase: str,
     cycle: int,
+    surface: str | None = None,
+    overwrite: bool = True,
 ) -> tuple[str, Path | None]:
     """Return ('report-file'|'none', collected_path|None) for one audit pass."""
+    with _fs_errors("collect"):
+        return _collect_unguarded(
+            spec,
+            grace=grace,
+            project_root=project_root,
+            feature=feature,
+            phase=phase,
+            cycle=cycle,
+            surface=surface,
+            overwrite=overwrite,
+        )
+
+
+def _collect_unguarded(
+    spec: PassSpec,
+    *,
+    grace: float,
+    project_root: Path,
+    feature: str,
+    phase: str,
+    cycle: int,
+    surface: str | None,
+    overwrite: bool,
+) -> tuple[str, Path | None]:
     collected_path = _collected_path(
         project_root=project_root,
         feature=feature,
         phase=phase,
         cycle=cycle,
         index=spec.index,
+        surface=surface,
     )
+
+    if spec.report_path == collected_path:
+        marker = _done_path(spec.report_path)
+        if not marker.exists():
+            return "none", None
+        marker.unlink(missing_ok=True)
+        if marker.exists():
+            raise OperationalError(f"readback mismatch after marker removal: {marker}")
+        return "report-file", collected_path
+
+    if spec.report_path.exists() and collected_path.exists():
+        report_bytes = spec.report_path.read_bytes()
+        collected_bytes = collected_path.read_bytes()
+        if report_bytes == collected_bytes:
+            if report_bytes:
+                return "report-file", collected_path
+            return "none", None
 
     if _has_complete_report(spec.report_path):
-        return "report-file", _copy_collected_report(spec.report_path, collected_path)
+        return "report-file", _copy_collected_report(
+            spec.report_path, collected_path, overwrite=overwrite
+        )
 
     if _run_report_wait(spec.report_path, grace):
-        return "report-file", _copy_collected_report(spec.report_path, collected_path)
+        return "report-file", _copy_collected_report(
+            spec.report_path, collected_path, overwrite=overwrite
+        )
 
-    report_text = _run_extract_report(
-        spec.out_path, feature=feature, phase=phase, cycle=cycle
-    )
-    if report_text:
-        return "out", _write_collected_report(report_text, collected_path)
+    if spec.out_path is not None:
+        report_text = _run_extract_report(
+            spec.out_path, feature=feature, phase=phase, cycle=cycle
+        )
+        if report_text:
+            return "out", _write_collected_report(
+                report_text, collected_path, overwrite=overwrite
+            )
 
     return "none", None
 
