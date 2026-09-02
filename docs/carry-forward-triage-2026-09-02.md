@@ -396,8 +396,11 @@ Who may name each brief, from its own `Taken-Over-By` value:
 This repo's own store re-measured the same day: **8 open (6 yes, 2 maybe) of 155**. The predecessor
 recorded "0 yes, 3 open of 150" on 2026-09-01, so it has grown; do not carry either number.
 
-The remaining 6 still-open items belong to `2026-09-02-main__audit-report-docs-copy.md` and are the
-live sibling lane's to finish. They are recorded here for visibility only.
+The remaining 5 still-open items belong to `2026-09-02-main__audit-report-docs-copy.md` and are the
+live sibling lane's to finish. They are recorded here for visibility only. 14 still-open in total:
+9 here, 5 there. (Commit `6f9b479` and an earlier draft of this section said 15 and 6; those came
+from a pre-revision draft of the table above and are wrong. Re-derived by counting the
+`**STILL-OPEN**` rows in sections 1-17, which sums to 14 and matches the summary table.)
 
 **Verification of the ledger itself.** Five CLOSED verdicts were spot-checked against the tree and all
 five held: `_verdict_after_boundary` at `h-mad/scripts/hmad-dispatch.sh:2677`; the `-- .` pathspec at
