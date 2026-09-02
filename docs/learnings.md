@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-02 · gotcha · [0.7] · `git,measurement,verification,handoff:2026-09-02-feature-pin-agents-tail-banner` — `git log --all -1 <hash>` unions ALL refs with the rev, so -1 returns the newest commit across refs, not that hash's commit — every hash 'resolves' to the same tip. Use `git log -1 <hash>` or `git show -s`. Keep --all only with -S/--grep.
 - 2026-09-02 · pattern · [0.7] · `h-mad,tdd,audit,handoff:2026-09-02-phase5b-gated-task1-green` — When 20 audit cycles keep re-finding one grammar restated on N surfaces, stop auditing and state it ONCE (design pass): the single statement exposed an undocumented case-fold (9/12 positives decline under grep -E) that 20 audits missed.
 - 2026-09-02 · gotcha · [0.7] · `h-mad,tdd,audit,handoff:2026-09-02-phase5b-gated-task1-green` — A plan can prescribe an idiom the target module's own guard forbids (tempfile.mkdtemp vs a no-mkdtemp guard); 53 doc audits cannot see it. Run the prescribed helper block against the live module's guards before RED.
 - 2026-09-02 · gotcha · [0.7] · `h-mad,tdd,audit,handoff:2026-09-02-phase5b-gated-task1-green` — H-MAD 5d assembler cuts §Task N only: a test node named solely in the impl-plan's contract table never reaches the implementer, who invents names and orphans every mutation pin. Every AC body must carry its Node.
