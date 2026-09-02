@@ -1285,6 +1285,156 @@ def test_tail_pass_prose_mentioning_agent_does_not_resolve(tmp_path):
     assert "term_prose" not in r.stdout
 
 
+# --- Task 4: tail-pass rival rejection inside _orca_find ---------------------
+
+_TAIL_HOSTILE_LINE = "h-mad: [a](b) **bold** * [ ===HMAD-DISPATCH-BOUNDARY==="
+
+
+def _tail_banner(agent):
+    return {"codex": _TAIL_CODEX_BANNER, "agy": _TAIL_AGY_BANNER}[agent]
+
+
+def _rival_agent(agent):
+    return {"codex": "agy", "agy": "codex"}[agent]
+
+
+def _tail_with_banners(agent, *extra_agents):
+    return [_tail_banner(a) for a in (agent, *extra_agents)] + [_TAIL_HOSTILE_LINE]
+
+
+def test_tail_pass_rejects_rival_signature(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_clean", "tab1", "leaf_clean", "zsh", "", "/wt/skills"),
+         ("term_both", "tab1", "leaf_both", "zsh", "", "/wt/skills")],
+        {"term_clean": _orca_read_env(*_tail_with_banners("codex")),
+         "term_both": _orca_read_env(*_tail_with_banners("codex", "agy"))},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must reject a tail candidate carrying the rival signature "
+        f"before counting it; rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_clean\n", (
+        "_orca_find must resolve to the clean codex tail when a second candidate "
+        "carries both codex and rival banners"
+    )
+    assert "[H-MAD] codex: bound term_clean by tail evidence" in r.stderr, (
+        "_orca_find must name the clean handle in the tail-evidence marker after "
+        "rival-signature rejection"
+    )
+
+
+def test_tail_pass_rival_rejection_symmetric(tmp_path):
+    for agent in ["codex", "agy"]:
+        case_tmp = tmp_path / agent
+        case_tmp.mkdir()
+        rival = _rival_agent(agent)
+        r = _tail_find(
+            case_tmp,
+            agent,
+            [_TAIL_COORD,
+             (f"term_{agent}_clean", "tab1", f"leaf_{agent}_clean", "zsh", "", "/wt/skills"),
+             (f"term_{agent}_both", "tab1", f"leaf_{agent}_both", "zsh", "", "/wt/skills")],
+            {f"term_{agent}_clean": _orca_read_env(*_tail_with_banners(agent)),
+             f"term_{agent}_both": _orca_read_env(*_tail_with_banners(agent, rival))},
+        )
+
+        assert r.returncode == 0, (
+            f"_orca_find must reject the {rival} rival tail signature while "
+            f"resolving {agent}; rc={r.returncode}, stdout={r.stdout!r}, "
+            f"stderr={r.stderr!r}"
+        )
+        assert r.stdout == f"term_{agent}_clean\n", (
+            f"_orca_find must resolve {agent} to the clean tail and ignore the "
+            "candidate carrying both agent and rival banners"
+        )
+        assert f"[H-MAD] {agent}: bound term_{agent}_clean by tail evidence" in r.stderr
+
+
+def test_tail_pass_rival_rejected_before_counting(tmp_path):
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_clean", "tab1", "leaf_clean", "zsh", "", "/wt/skills"),
+         ("term_decoy_a", "tab1", "leaf_decoy_a", "zsh", "", "/wt/skills"),
+         ("term_decoy_b", "tab1", "leaf_decoy_b", "zsh", "", "/wt/skills")],
+        {"term_clean": _orca_read_env(*_tail_with_banners("codex")),
+         "term_decoy_a": _orca_read_env(*_tail_with_banners("codex", "agy")),
+         "term_decoy_b": _orca_read_env(*_tail_with_banners("codex", "agy"))},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must reject rival-bearing tail decoys before counting matches; "
+        f"rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_clean\n", (
+        "_orca_find must count only the clean codex tail, not the two candidates "
+        "that carry both codex and rival banners"
+    )
+    assert "[H-MAD] codex: bound term_clean by tail evidence" in r.stderr
+
+
+def test_tail_pass_long_tail_early_rival_rejected(tmp_path):
+    pad = "x" * 126
+    decoy_lines = (
+        [_TAIL_AGY_BANNER]
+        + [f"{i:04d} {pad}" for i in range(1898)]
+        + [_TAIL_CODEX_BANNER]
+    )
+    decoy = "\n".join(decoy_lines)
+    assert len(decoy.encode("utf-8")) >= 200_000
+    assert len(decoy_lines) <= 2000
+
+    r = _tail_find(
+        tmp_path,
+        "codex",
+        [_TAIL_COORD,
+         ("term_clean", "tab1", "leaf_clean", "zsh", "", "/wt/skills"),
+         ("term_long_decoy", "tab1", "leaf_long_decoy", "zsh", "", "/wt/skills")],
+        {"term_clean": _orca_read_env(*_tail_with_banners("codex")),
+         "term_long_decoy": _orca_read_env(*decoy_lines)},
+    )
+
+    assert r.returncode == 0, (
+        "_orca_find must reject a >=200KB tail whose rival banner appears before "
+        f"the wanted banner; rc={r.returncode}, stdout={r.stdout!r}, stderr={r.stderr!r}"
+    )
+    assert r.stdout == "term_clean\n", (
+        "_orca_find must resolve the clean codex tail after rejecting the long "
+        "rival-bearing decoy before counting"
+    )
+    assert "[H-MAD] codex: bound term_clean by tail evidence" in r.stderr
+
+
+def test_tail_pass_rival_prose_does_not_suppress(tmp_path):
+    cases = [
+        ("codex", _TAIL_CODEX_BANNER, "Compare Gemini 3.1 Pro with Claude"),
+        ("agy", _TAIL_AGY_BANNER, "OpenAI Codex documentation changed"),
+    ]
+    for agent, banner, prose in cases:
+        case_tmp = tmp_path / agent
+        case_tmp.mkdir()
+        r = _tail_find(
+            case_tmp,
+            agent,
+            [_TAIL_COORD,
+             (f"term_{agent}", "tab1", f"leaf_{agent}", "zsh", "", "/wt/skills")],
+            {f"term_{agent}": _orca_read_env(banner, prose, _TAIL_HOSTILE_LINE)},
+        )
+
+        assert r.returncode == 0, (
+            f"_orca_find must not suppress a real {agent} tail banner merely "
+            f"because retained prose mentions the rival; rc={r.returncode}, "
+            f"stdout={r.stdout!r}, stderr={r.stderr!r}"
+        )
+        assert r.stdout == f"term_{agent}\n"
+        assert f"[H-MAD] {agent}: bound term_{agent} by tail evidence" in r.stderr
+
+
 def test_tail_agent_pv_re_comment_matches_measurement():
     comment = _agent_pv_re_comment_section()
     expected = """# Both are structured. They exclude the BARE-TOKEN and bare-model-id prose that
