@@ -1279,7 +1279,39 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
 ## 2026-09-03 — post-merge sweep and handover
 
 - **census-script-needs-a-`__main__`-guard-and-an-import-API**: `handoff/scripts/skill_candidates_census.py` runs `main` at import, so reusing its `rows()`/`ROW`/`TERM`/`CAND` — the correct way to parse that store — requires setting `sys.argv` and redirecting stdout before the import, and exits with a usage error otherwise. That friction is why sessions keep writing ad-hoc parsers, and every one has been wrong: mine returned 270 rows / 101 open against the census's 316 / 125 (the store's rows wrap and do not all use a colon), and two more miscounted on 2026-08-28. — recurrence: 3 — candidate: yes — mechanical: wrap the CLI in `if __name__ == "__main__":` and document the three symbols a caller needs.
+  — **LANDED 2026-09-03** — `handoff/scripts/skill_candidates_census.py` (`6bcdd72`): the CLI is now `main(argv=None)` behind an `if __name__ == "__main__":` guard at `:230`, so a bare import runs nothing and raises nothing. `rows()`/`ROW`/`TERM`/`CAND`/`main` are documented as the import API in `handoff/references/automation-scout.md` — beside the census invocation a session actually reads, not only in a docstring. Output on the real store is byte-identical; 4 tests added and 3 mutations; this scout pass used the import API rather than a hand parser. Two pre-existing defects surfaced while verifying: the spec's `test` keys were repo-relative against a `handoff/`-rooted command so the gate reported REFUSED for all 18 and measured NOTHING (now ALL_CAUGHT 21/21), and two anchors were indentation-sensitive.
 - **pair-every-hand-rolled-probe-with-a-known-answer-control**: four probes returned false results this session and all four were caught by a control whose answer was known in advance — BSD `head -n -1` (rejected, read as an empty result), a truth table run under zsh (no word-splitting, every row took the same branch and looked consistent), the ad-hoc store parser above, and `grep -Fqx "$l"` where `$l` began with `-` (parsed as an option, every line reported ABSENT). — recurrence: 4 — candidate: **DECLINED** (triage: useful, not codable) — a discipline with no mechanical enforcement; it belongs beside the existing hand-rolled-checks guidance, not in a script. Reopen if a lint could plausibly catch the shell-dialect half.
 - **monitor-change-key-must-exclude-monotonic-fields**: a poller that includes an age/elapsed/counter in its change-detection key emits on every interval, because the field moves every interval; written twice in one session (`heartbeat_age_min`, then `commit_age_min` in the replacement gate) and each would have flooded until the harness auto-stopped the monitor, taking the delivery gate down with it. Print the field, decide on it, key on the stable ones. — recurrence: 2 — candidate: maybe — a dry-run-and-count-lines step before arming is the cheap enforcement; a lint would have to understand the loop.
 - **gate-on-two-independent-clocks**: a single liveness/completion signal is a proxy and is routinely wrong in one direction — `phase7_report=YES` fired ~25 min before Phase 7 finished (the artifact is written partway through), and `owner_heartbeat_ts` sat 92–153 min cold while the lane shipped three tasks and a phase transition. Neither `last_completed_phase` alone (a known laggard) nor the heartbeat alone is usable; artifacts-plus-quiescence and heartbeat-or-commits both worked. — recurrence: 2 — candidate: maybe — the general rule is judgement, but an `h_mad` helper answering "is this lane quiet?" from both clocks is codable.
 - **triage-must-re-probe-its-OPEN-rows-not-its-CLOSED-ones**: a 17-brief carry-forward triage spot-checked five CLOSED verdicts, all five held, and two false OPEN rows survived a month as "operator decisions" — both had been adjudicated on 2026-08-03, and the row's own cited grep returns the adjudication as its first hit. Verifying closures cannot detect a wrongly-open row, and a false OPEN costs a session while a false CLOSED merely hides a finding. — recurrence: 1 — candidate: maybe — mechanical half: for each OPEN row carrying a cited command, re-run it and diff the result against the row's claim.
+
+## 2026-09-03 — doc-block-exec-phase4-and-inbound-handover (scout)
+
+- **`audit-cycle` needs a second-surface mode**: `hmad-dispatch audit-cycle --passes N` dispatches
+  `exec agy` for every pass (`hmad-dispatch.sh:2970`), so its default IS the agy+agy configuration
+  this repo records as producing false gates. The codex leg — assemble with a `_codex` report path,
+  `exec codex`, `collect-report --surface codex`, gate — was retyped by hand **16 times** this
+  session, once per cycle, and gating on the union caught a real must-fix in three consecutive
+  cycles where agy returned clean. — recurrence: 3 — candidate: yes (a `--surfaces agy,codex` flag
+  on `audit-cycle` that dispatches both and reports the union; the pieces all exist, the verb just
+  never composes them)
+- **an AC count in a paired doc goes stale every time an AC is inserted**: the plan's Success
+  Criteria asserted "All N ACs pass" and drifted **three times** in one feature (38→39→40→43), each
+  time caught by an auditor rather than by a check, and twice the insertion also broke contiguous
+  numbering (`AC-3.8b` before `AC-3.7`). Both are mechanical: re-derive with
+  `grep -cE '^  - AC-[0-9]+\.[0-9]+:'` and assert per-FR contiguity. — recurrence: 3 — candidate:
+  yes (a `h_mad_ac_census.py` reporting `ACS: OK count=N frs=6` or `ACS: DRIFT`, consumed by the
+  audit gate the way `--verify-stamp` is)
+- **a doc edit and its version-history bump are not atomic**: an edit heredoc's `assert` failed
+  while the two following `h_mad_version_history.py` calls ran anyway, so two documents briefly
+  carried `v1.15`/`v1.9` entries describing changes that had not landed. The helper refused
+  correctly (`VERSION-HISTORY: UNREADABLE`); the sequencing is what failed. — recurrence: 2 —
+  candidate: maybe (an `--after-edit <path> --expect <literal>` guard that refuses the bump unless
+  the edit is present, or simply always bumping in the same process as the edit)
+- **`set -- $var` / `$CMD args` silently misfire under zsh**: zsh does not word-split an unquoted
+  variable, so a loop passing `"path version text"` gets the whole string as `$1`, and
+  `L="python3 script.py"; $L add …` is one command name. Broke three constructs in one session —
+  a three-way version bump, a two-way report collector, and a six-call learn loop. Each failed
+  loudly here, but the version-bump case wrote nothing while the *next* command still ran. —
+  recurrence: 3 — candidate: no (practice, not an artefact: quote the expansion or use an array;
+  captured in `docs/learnings.md` and the auto-memory store)
