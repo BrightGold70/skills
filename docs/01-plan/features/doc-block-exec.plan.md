@@ -103,7 +103,25 @@ the existing toggle stops early inside an unbalanced four-backtick fence, which 
 new scanner from doing. So `docsections.py` imports the authoritative bounder instead — `tests/`
 depending on `scripts/` is the correct direction, it removes the duplicate rather than testing
 around it, and it fixes a latent bug there. Its public signatures are unchanged and no existing
-test pins the old behaviour.
+test pins the old behaviour (two files import it — `test_docsections.py` and
+`test_h_mad_review_evidence.py` — and both use only `titled_section`/`section_from`).
+
+**The cross-directory import is specified, not implied.** `docsections.py` is imported as a
+top-level module by test files that never touch `sys.path` for `scripts/`, so a bare
+`from h_mad_doc_block_exec import …` inside it fails at collection. The arrangement is the one
+every test in `h-mad/tests/` already uses for `SCRIPT_DIR`
+(`test_h_mad_collect_report_docs.py:22`): `docsections.py` itself does
+`sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` immediately before
+the import, so it is self-contained and never relies on another module having inserted the path
+first. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
+repo root (collected **alone**), and an isolated `python3 -c "import docsections"` with the tests
+directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves with the code:**
+`h-mad/tests/mutation-specs/docsections.json` anchors three of its four mutations
+(`fence-tracking-removed`, `section-no-longer-owns-its-subsections`,
+`offset-anchored-bound-runs-to-end-of-file`) on lines that leave `tests/docsections.py`; the
+first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py`, the third
+stays (it mutates `section_from`'s call, which remains), and the harness's exact-once anchor
+rule makes a missed re-point a refusal rather than a silent survivor.
 
 **FR-6 is a wiring task, not a new-behaviour task, and is planned as one.** Its deliverable is a
 *connection* — the migrated call sites reaching `h_mad_doc_block_exec` — and the Connection
@@ -116,6 +134,39 @@ site, helper untouched) must fail a named test in the caller while the helper's 
 passes, and making the call site unconditional — resolving a block regardless of the tag — must
 also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
 and neither is visible to a whole-module revert, which removes both sides at once.
+
+**Task-level API, and how the caller changes.** The importable surface is four functions and two
+frozen dataclasses (the design carries the full signatures; this is the contract the wire is
+planned against):
+
+| symbol | signature | returns / raises |
+|---|---|---|
+| `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
+| `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
+| `substitute` | `(text: str, subs: Mapping[str, str]) -> tuple[str, dict[str, int]]` | raises `MissingSubstitution`, `OverlappingSubstitution` |
+| `run_block` | `(block, *, subs=None, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)`; raises `BlockTimeout`, `CleanupFailed` |
+
+`h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points. `_gate_bash_block`
+becomes `select(extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
+`run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
+`RunResult`, calling `run_block(block, subs={"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
+shlex.quote(str(gate))}, preamble=<the COLLECT_OUT line it builds today>)`. Its four assertions
+migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
+nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
+moves; `:412` keeps `re.findall` on purpose.
+
+**FR-6 wire tests and the mutations each kills** — `h-mad/tests/mutation-specs/doc_block_exec_wire.json`:
+
+| mutation | mechanism | killed by |
+|---|---|---|
+| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `extract`/`select` (the pre-migration shape, helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — a spy on `h_mad_doc_block_exec.extract` must be called (AC-6.5) |
+| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and a spy on `run_block` fires (AC-6.5) |
+| `wire-unconditional` | the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences | `test_gate_block_refuses_an_untagged_recipe` — a fixture section whose gating block lacks the tag must raise `BlockNotFound` (AC-6.6) |
+| (no mutation) | — | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned) |
+
+Under `wire-revert-extract` and `wire-revert-run` the helper's own suite
+(`test_h_mad_doc_block_exec.py`) still passes — that is the half that proves the failing test pins
+the wire and not the callee, and the mutation harness records both runs.
 
 The ordering constraint that shapes the work: the tag and the migration must land together.
 Tagging the gate fence makes `:270`'s `re.findall` — which requires `\n` immediately after
@@ -168,6 +219,7 @@ by decision rather than by omission.
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
 | Migrated `h-mad/tests/test_h_mad_collect_report_docs.py` (executing path only) | tests | FR-6 |
 | `h-mad/tests/docsections.py` — drop its duplicate bounder, import the authoritative one | tests | FR-1 (AC-1.8) |
+| `h-mad/tests/mutation-specs/docsections.json` — re-point the two bounder mutations at the authoritative module | mutation spec | FR-1 (AC-1.8) |
 
 ## Risks and Mitigation
 
@@ -178,7 +230,8 @@ by decision rather than by omission.
 | A substitution anchor drifts and the replace silently no-ops | High | An absent key is a refusal naming the key; this is the single most load-bearing guard and gets its own mutation |
 | A recipe's side effects reach the working tree | Medium | Every run in a fresh `tempfile.mkdtemp()` cwd, removed afterwards; pinned by asserting the tree is byte-identical across a run that writes files |
 | "Run under `mktemp -d`" is read as the shell utility, acquiring an external dependency | Medium | The phrase came verbatim from the candidate row and is a stdlib call here: AC-3.13 asserts `tempfile.mkdtemp()`, mode `0o700`, and no `mktemp` invocation in the source |
-| A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver |
+| A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver. Two races on that path are handled, not hoped away (AC-5.5): `killpg` on a group that already emptied raises `ProcessLookupError` (measured) and is read as "already reaped"; a drain `communicate` that an escapee keeps open is itself bounded, after which the pipes are closed and the leader reaped |
+| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` measurably raises and `ignore_errors=True` measurably retains the tree |
 | The strict default hides the very defect class that motivated the feature | Medium | `shell=plain` is declarable per fence, and the shell-killing `exit` case is pinned as an explicit acceptance criterion |
 | An unknown info-string key silently falls back to a default mode | Medium | Unknown keys refuse rather than default |
 | The carried "68 fences" figure is stale | Low | Re-measured this session; command and output cited below under Measurements |
@@ -227,6 +280,54 @@ consumer reads `SKILL.md` and was checked directly rather than inferred — `h-m
 bounds fences with `stripped.startswith("```")`, a **prefix** match, so an info-string tag does not
 disturb it.
 
+**The process-group reap (AC-5.2), both legs and a control.** The claim the timeout design rests
+on is that `killpg(proc.pid, SIGKILL)` reaches every descendant still in the launched group, and
+that a descendant which leaves the group escapes it — so AC-5.2 is scoped to the group. Both
+halves were measured with the script below, which also proves the descendant existed before the
+kill (the control that stops "gone" from meaning "never started") and refuses with
+`PROBE VACUOUS` rather than reading a null as a negative. The last two lines are the two facts the
+design's race handling (AC-5.5) depends on: macOS ships no `setsid` binary, so a binary-based
+escape probe measures nothing, and `killpg` on a group that has already emptied raises
+`ProcessLookupError`:
+
+```
+$ python3 -u - <<'PY'
+import os, signal, subprocess, sys, tempfile, time
+def alive(pid):
+    try: os.kill(pid, 0); return True
+    except ProcessLookupError: return False
+def leg(escape):
+    d = tempfile.mkdtemp(); pidf = os.path.join(d, "pid"); child = os.path.join(d, "child.py")
+    open(child, "w").write("import os,time\n" + ("os.setsid()\n" if escape else "")
+                           + f"open({pidf!r},'w').write(str(os.getpid()))\ntime.sleep(300)\n")
+    p = subprocess.Popen(["bash", "-c", f"{sys.executable} {child} & sleep 300"],
+                         start_new_session=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    for _ in range(200):
+        if os.path.exists(pidf) and open(pidf).read().strip(): break
+        time.sleep(0.05)
+    else: raise SystemExit("PROBE VACUOUS: descendant never wrote its pid")
+    gc = int(open(pidf).read()); assert alive(gc), "control: descendant alive before the kill"
+    try: p.communicate(timeout=0.5)
+    except subprocess.TimeoutExpired: os.killpg(p.pid, signal.SIGKILL)
+    time.sleep(0.3); survived = alive(gc)
+    if survived: os.kill(gc, signal.SIGKILL)
+    return gc, survived
+p = subprocess.Popen(["sleep", "5"], start_new_session=True)
+print("pgid == pid under start_new_session:", os.getpgid(p.pid) == p.pid); p.kill(); p.wait()
+print("in-group descendant %d: survived killpg? %s   (want False)" % leg(False))
+print("os.setsid() descendant %d: survived killpg? %s   (want True: escapes the group)" % leg(True))
+print("setsid binary on PATH:", subprocess.run(["which", "setsid"], capture_output=True, text=True).stdout.strip() or "NONE")
+p = subprocess.Popen(["true"], start_new_session=True); p.wait()
+try: os.killpg(p.pid, signal.SIGKILL); print("killpg on an already-reaped group: no error")
+except ProcessLookupError: print("killpg on an already-reaped group: ProcessLookupError")
+PY
+pgid == pid under start_new_session: True
+in-group descendant 51254: survived killpg? False   (want False)
+os.setsid() descendant 51694: survived killpg? True   (want True: escapes the group)
+setsid binary on PATH: NONE
+killpg on an already-reaped group: ProcessLookupError
+```
+
 **That measurement stands and is no longer the whole story:** a later design cycle found the same
 toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which is why
 `docsections.py` now appears under Deliverables and Implementation Strategy — it drops its
@@ -258,7 +359,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **43 as of spec v1.12**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **46 as of spec v1.13**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
@@ -305,3 +406,4 @@ design begins.
 - v1.13: Plan re-audit v9: track the AC count to 43 after the duplicate-heading refusal.
 - v1.14: Plan re-audit v10: state why the portable-time-bounds prescription does not transfer to a stdlib module (its premise about this helper does not hold); name the full launch/reap/cleanup sequence; correct the preamble causal claim on its seventh surface.
 - v1.15: Plan re-audit v10 (agy): reconcile the docsections measurement with the later decision to change that file — the tag was never the reason, the duplicate bounder is.
+- v1.16: Plan re-audit v11: specify the tests/->scripts/ import (self-contained sys.path insert, collect-alone test, docsections.json re-point); cite the AC-5.2 in-group/escape/ProcessLookupError probe with its command and output; add the task-level API and caller map; name the FR-6 wire tests and the mutation each kills; track the AC count to 46 (spec v1.13); add the cleanup-verification risk row.

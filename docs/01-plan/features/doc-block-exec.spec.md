@@ -59,6 +59,17 @@ not opted in.
     the bounder, and `h-mad/tests/docsections.py` imports it — `tests/` depending on `scripts/` is
     the correct direction. The test asserts `docsections` delegates (no second implementation
     remains) and that the shared bounder handles the four-backtick case both ways round.
+    **The import is self-contained**: `docsections.py` reaches the module the way every test in
+    `h-mad/tests/` already reaches `h-mad/scripts/` — a `sys.path.insert(0, …/scripts)` of its
+    own, immediately before the import — so the delegation holds when `test_docsections.py` is
+    collected alone and when `docsections` is imported from an unrelated cwd, never through
+    another module's `sys.path` side effect. A test collects it alone to prove that.
+  - AC-1.9: **An ordinal below 1 refuses.** `--index 0` and `--index -1` print
+    `DOCBLOCK: BAD_INDEX index=<n>` and exit 2, executing nothing; `select(blocks, 0)` raises
+    `BadIndex(0)`. Left to a conventional `blocks[index - 1]`, `0` silently addresses the *last*
+    tagged block and a negative value some other one — a wrong block run without a word, the
+    shape the explicit address exists to prevent. Past-the-end stays `NOT_FOUND` (AC-1.4): that
+    ordinal names a block that does not exist; this one is not an ordinal at all.
 
 ### FR-2: Substitute an explicit map, and refuse a substitution that would not apply
 
@@ -150,6 +161,15 @@ not opted in.
     (`stat.S_IMODE(os.stat(d).st_mode) == 0o700`), observed from inside the running block. The
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
+  - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
+    exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
+    `CleanupFailed(path)` and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2 —
+    no `rc=`, because a run that left state behind is not the disposable measurement this FR
+    promises. The fixture is a block that leaves an unreadable subdirectory
+    (`mkdir keep && chmod 000 keep`); measured on this machine, `shutil.rmtree` raises
+    `PermissionError` on it and `ignore_errors=True` retains the whole tree with no signal. A
+    cleanup failure outranks a timeout on the same run: a retained directory is state the
+    operator must act on, and both exit 2 anyway.
 
 ### FR-4: Verdict-token CLI following the established gate contract
 
@@ -163,8 +183,8 @@ not opted in.
   - AC-4.1: A successful run prints `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict|plain>` and exits
     **0**, including when the block's own `rc` is non-zero — the block's rc is data, not the tool's
     verdict.
-  - AC-4.2: `NOT_FOUND`, `AMBIGUOUS`, `SUBST_MISSING`, `BAD_INFO`, `TIMEOUT` and `UNREADABLE` each
-    exit 2.
+  - AC-4.2: `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `SUBST_MISSING`,
+    `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `CLEANUP_FAILED` and `UNREADABLE` each exit 2.
   - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
     non-measurement as a measured zero.
   - AC-4.4: `AMBIGUOUS` carries `blocks=<n>`; no other cannot-judge carries `blocks=`.
@@ -187,6 +207,16 @@ not opted in.
     no escape and was **vacuous**: that binary is absent on macOS, so it measured nothing.
   - AC-5.3: The source contains no invocation of `timeout` or `gtimeout`.
   - AC-5.4: The temp cwd is removed after a timeout, exactly as after a normal run.
+  - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
+    tested: (a) the group has already emptied by the time `killpg` runs — `ProcessLookupError`,
+    reproduced on a reaped leader — is treated as "already reaped", never a traceback; (b) the
+    post-kill drain `communicate` itself times out because an out-of-group descendant (AC-5.2's
+    escapee) still holds the pipes — the helper closes both pipes, reaps the leader, and reports
+    `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 2, and the cwd is gone. Total
+    wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
+    bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
+    its test injects the fault by monkeypatching `os.killpg` — the one permitted mock in this
+    suite, named as such; (b) is driven by a real `os.setsid()` descendant.
 
 ### FR-6: Migrate the existing inline harness onto the helper
 
@@ -290,3 +320,4 @@ not opted in.
 - v1.10: Renumber FR-3 acceptance criteria contiguously after inserting the aliased-stream refusal (3.8b becomes 3.9); 40 ACs.
 - v1.11: Plan re-audit v8: add the fixture preamble boundary (AC-3.11/AC-3.12) — without it the gate block's COLLECT_OUT is unbound under strict bash and the FR-6 migration cannot reach GATE: PASS.
 - v1.12: Plan re-audit v9: refuse duplicate headings (AC-1.7) — invariants.example.md has two; cite the controlled preamble pair, which also narrows the earlier 'aborts on unbound variable' claim to 'cannot reach GATE: PASS'.
+- v1.13: Plan audit v11 + design audit v5 (codex must 2+4, agy must 9): AC-1.9 ordinal-below-1 refusal (BAD_INDEX), AC-3.14 verified cleanup (CLEANUP_FAILED), AC-5.5 timeout races (killpg ProcessLookupError, bounded drain against an escapee); AC-1.8 names the self-contained sys.path import and its collect-alone test; AC-4.2 lists every exit-2 verdict. 46 ACs.
