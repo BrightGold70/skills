@@ -1077,6 +1077,39 @@ def test_cli_main_readback_failed_has_marker_only(
     )
 
 
+def test_cli_absent_project_root_refuses_and_creates_nothing(tmp_path: Path) -> None:
+    """The project-root guard's discriminating case is a root that does not
+    EXIST, not one that is a file.
+
+    Under a root that is a file, removing the guard still fails: the later
+    `mkdir(parents=True)` raises NotADirectoryError, which surfaces as the same
+    exit code and the same marker, so that input cannot tell the guard from its
+    absence. Under an ABSENT root the mkdir succeeds, and the CLI walks on to
+    print `COLLECT: MISSING` and exit 0 — while silently creating a docs tree
+    under a path the operator most likely mistyped.
+    """
+    absent_root = tmp_path / "not-created"
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+
+    result = run_collect_cli(collect_args(absent_root, report))
+
+    assert result.returncode == 2, (
+        "an absent project root is an operational error, not a MISSING verdict; "
+        f"stdout={result.stdout!r}"
+    )
+    assert collect_contract_lines(result.stdout) == [], (
+        "an absent project root must not print a COLLECT verdict line; "
+        f"stdout={result.stdout!r}"
+    )
+    assert_single_collect_marker(result.stdout, "[H-MAD] f collect operational_error")
+    assert "Traceback" not in result.stderr
+
+    assert not absent_root.exists(), (
+        "refusing an absent project root must not create anything under it — "
+        "without the guard the CLI mkdir -p's a docs tree under the mistyped path"
+    )
+
+
 MUTATION_SPEC = REPO_ROOT / "h-mad" / "tests" / "mutation-specs" / "collect_report.json"
 
 EXPECTED_MUTATION_NAMES = (
