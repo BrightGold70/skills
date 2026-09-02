@@ -71,9 +71,12 @@ Deliberately not touched: `h_mad_report_wait.py`, `h_mad_extract_report.py`, `ex
 `audit-cycle`'s dispatch loop, `h_mad_cycle_counts.py` (its grammar is read, not changed).
 
 Order of work (each a RED→GREEN task in the impl-plan): (1) `_collected_path` + `collect()`
-surface threading, with the clobber fix; (2) the CLI; (3) the gate refusal; (4) the wrapper
-verb; (5) docs + docs-tests; (6) mutation spec. The tracer (AC-2.9) runs after (2) against
-the live HemaSuite corpus before any later task starts.
+surface threading, with the clobber fix and the AC-1.6 derivation assert; (2) the gate
+refusal (`TRANSPORT_RE`, which (1)'s assert imports — so (2)'s regex constant lands in (1) as
+a stub the gate then consumes, or (1) and (2) ship as one RED); (3) the CLI; **then the
+AC-2.9 tracer** — it needs (2)'s refusal for its step (i) and (3)'s CLI for step (ii), so it
+cannot run earlier — against a real `/tmp` survivor copied into a scratch project root;
+(4) the wrapper verb; (5) docs + docs-tests; (6) mutation spec.
 
 ## Architecture Considerations
 - **One copier.** `audit-cycle` already calls `collect()`; the CLI calls the same function.
@@ -162,6 +165,7 @@ the live HemaSuite corpus before any later task starts.
 | `_collected_path` signature change breaks a caller | suite red | keyword-only `surface=None`; grep every caller (`audit_cycle.py` only) |
 | `test_h_mad_audit_cycle_docs.py` slices SKILL.md by exact anchors | docs test red | insert outside `## Audit prompt assembly`→`## Putting …` and `6.6.`→`\n7.`; run that test after each edit |
 | Mutation-spec tests refuse a spec without named failure tests | test red | each task's RED names the tests its mutations will cite; task 6 assembles the spec from them and runs `--check-anchors` |
+| Tracer scheduled before the code it exercises exists | replay cannot pass at its scheduled point | tracer is ordered after tasks (1)–(3); the impl-plan carries it as its own checkpoint between task 3 and task 4 |
 | Transport grammar drifts from what gets staged (a future naming change silently un-guards) | transport files score again | one grammar (`TRANSPORT_RE`), one corpus fixture in both directions, the wrapper's staged `--report-file` asserted against it under the stub harness, the 6.6 literal asserted too (AC-3.5a) |
 | `CONFLICT` followed by a hand-run gate scores stale bytes | wrong verdict on a preserved old report | recipe halt on non-`OK` (AC-5.3 docs test); `--force` is the only overwrite path |
 | `--out` extract is not byte-identical to any `/tmp` file | a byte-identity test would fail | assert identity only for `delivered=report-file`; token carries `delivered=` |
@@ -202,3 +206,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 - v1.1: Audit v1 fixes from audit-report-docs-copy.plan.audit.v1.p1.md (agy) + .v1.codex.md — verb wiring test in Deliverables; transport refusal is the audit_*_cycle<N> STEM, not *.report.md (Phase-7 reports share the suffix — corpus claim corrected); recipe halts on non-OK COLLECT; 11 bidirectional mutations; incident-replay tracer; collector contract (CollectConflict, optional out_path, --force).
 - v1.2: Audit v2 fixes from audit-report-docs-copy.plan.audit.v2.codex.md (agy v2 clean) — transport grammar single-sourced as TRANSPORT_RE (prefix+suffix; hand-staged field names have no _cycle<N>, surfaces may carry _); conflict policy + readback on both rungs; force mutants for CLI/verb fall-through; two-direction corpus + verdict-preservation sweep for Backward compatibility; Assumption rows now cite executed probe output; AC census by command.
 - v1.3: Audit v3 fixes from .plan.audit.v3.p1.md (agy: [H-MAD] markers named in Requirements) + .v3.codex.md (TRANSPORT_RE stem is dot-free so the grammars are disjoint by construction; _collected_path asserts it, AC-1.6, 17 mutations; the CLI does not import the regex).
+- v1.4: Audit v4 fixes from .plan.audit.v4.codex.md (agy v4 clean, low-evidence) — work order reordered so the gate refusal (task 2) precedes the CLI (task 3) and the AC-2.9 tracer runs after task 3, the first point at which both its steps can pass.
