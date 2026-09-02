@@ -116,13 +116,18 @@ def collect(spec, *, grace, project_root, feature, phase, cycle,
     # AC-2.8 FIRST: $RP IS the docs path. The marker is the completion signal and is
     # removed; a byte-identity short-circuit here would trivially match (same file)
     # and skip the marker path, so it is ordered after this block.
-    if spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve():
+    with _fs_errors(f"collect {collected_path}"):
+        same = spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve()
+    if same:
         if _has_complete_report(spec.report_path) or _run_report_wait(spec.report_path, grace):
             return "report-file", _copy_collected_report(spec.report_path, collected_path, overwrite=overwrite)
         return "none", None                       # no marker → MISSING (AC-2.8 "otherwise")
-    # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical
-    if collected_path.is_file() and spec.report_path.is_file() \
-       and collected_path.read_bytes() == spec.report_path.read_bytes():
+    # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical.
+    # Under the guard: an unreadable docs file here must be exit 2 + marker, not a traceback.
+    with _fs_errors(f"collect {collected_path}"):
+        already = (collected_path.is_file() and spec.report_path.is_file()
+                   and collected_path.read_bytes() == spec.report_path.read_bytes())
+    if already:
         return "report-file", collected_path
     if _has_complete_report(spec.report_path):
         return "report-file", _copy_collected_report(spec.report_path, collected_path, overwrite=overwrite)
@@ -427,6 +432,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.4: Design-audit v3 fix (agy p1; codex v3 clean): the `collect()` same-file and already-collected checks run under `_fs_errors` too — the code block now matches the prose.
 - v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
 - v1.2: Design-audit v2 fixes (codex): missing-required-flag path designed explicitly (argparse `required=True`, `SystemExit` caught → `usage_error` marker, exit 2, no token); marker contract made exact — one `[H-MAD]` marker on every exit path including operational errors.
 - v1.1: Design-audit v1 fixes (codex + agy p1, same finding on the short-circuit): the AC-2.8 same-file branch is ordered BEFORE the AC-2.11 byte-identity short-circuit (which would trivially match the same file and skip the marker path); AC-3.3's `gate()` tuple and `combine()` reason are pinned by tests in `test_h_mad_audit_cycle.py`, not inferred from `_gate_token`'s regex.
