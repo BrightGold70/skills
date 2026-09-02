@@ -1,0 +1,7 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "audit-report-docs-copy.impl-plan.md": "3d43188edc2318fa1d361afc32ad6ca23b218c9846aabeeb1ed09cfdb983d4d9",
+  "../../02-design/features/audit-report-docs-copy.design.md": "af7d56c2423b5dba5c69fa911d806ffa7e69f1b104c52e3eeddc703541ad602b"
+ }
+}
