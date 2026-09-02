@@ -29,6 +29,20 @@ are the ones with a named, mechanical implementation: `632` frozen-tree guard, `
 live-run check before merging a shared skill, `925` section-bounded slicing. Nothing was deleted —
 a DECLINED row keeps the reasoning that a deletion would throw away.
 
+**Reconcile of 2026-09-02 — the open backlog was 3 at reconcile time, not the 7 the line above names; this same scout then appended 3 new rows, so the live count is 6.** Four of that
+seven closed between the triage and this scout; the census is the number that moved, not this prose,
+which is why the count is re-run rather than cited. `skill_candidates_census.py` reads
+`candidates=150 OPEN(yes+maybe)=3  LANDED=71  DECLINED=35  no=33  SUPERSEDED=7` (+5 bump rows
+excluded, coverage 155/155). The three still open, each **re-verified against source in this pass**
+rather than against its own label: `frozen-tree guard` (no `PreToolUse` hook exists —
+`h-mad/hooks/` holds only `h-mad-advisor-warn.sh` and `h-mad-tdd-gate.sh`), `positive pane ID via
+terminal read` (prerequisite still holds — `_resolve_target` at `hmad-dispatch.sh:281-303` accepts
+only `codex|agy` and returns 2 on anything else, so no verb addresses a raw handle; and
+`_agent_tail_re` is absent from the wrapper, i.e. the feature that would close this row is
+`pin-agents-tail-banner`, still at Phase 5 on `feature/pin-agents-tail-banner`), and
+`check for a live run before merging a shared skill change` (nothing reads `worktree-ps` comments
+against `.h-mad/telemetry.jsonl`; `h_mad_telemetry.py` is the only consumer and it writes).
+
 **Triage of 2026-08-25 — `DECLINED` here also means "not codable".** Every open row was sorted into
 useful/codable, useful/NOT-codable, or not-useful, and the two non-actionable buckets were closed with
 `DECLINED`, each note naming its bucket and its reason. Read those carefully: for a useful/not-codable
@@ -676,6 +690,10 @@ threshold of a third vendored patch; untouched this session.
   path against the paths of any live background `pytest` is mechanical, has a working precedent in
   `h-mad-tdd-gate.sh`, and the failure it catches is silent, self-inflicted, and produces a green
   you can quote and cannot defend.
+  — **RE-CHECKED 2026-09-02 (scout): still open, no fresh recurrence.** Verified against source, not
+  the label: `h-mad/hooks/` holds `h-mad-advisor-warn.sh` and `h-mad-tdd-gate.sh` and nothing else,
+  and no hook compares an edit path against a live background `pytest`. Stays recurrence 1 — the
+  2026-09-01 session ran its suites in the foreground, so again the guard had nothing to catch.
 
 ## 2026-08-25 — timeout-premise-and-audit-cycle-dispatch
 
@@ -880,6 +898,14 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   handoff skill's own "never call orca directly" guard then flags. That guard was RED from
   2026-08-31 for exactly this reason and nobody saw it (see the suite-collection row). Whatever
   shape this Pass-N takes, a handle-addressed read verb is its first half.
+  — **RE-CHECKED 2026-09-02 (scout): still open; the prerequisite re-measured, not assumed.**
+  `_resolve_target` (`h-mad/scripts/hmad-dispatch.sh:281-303`) switches on `"$sub:$agent"` with arms
+  for `codex` and `agy` only and a `*)` arm that prints `unknown agent` and returns 2 — so
+  `_cmd_read` (`:3303`), which calls it before ever reaching `orca terminal read`, still cannot be
+  handed a raw handle. `_agent_tail_re` does not exist in the wrapper: the feature that would close
+  this row is `pin-agents-tail-banner`, live on `feature/pin-agents-tail-banner`, whose Phase 5b has
+  spent 20 audit cycles without gating. **Do not build this row's Pass-N separately** — it is the
+  same mechanism, and a second implementation would race the one under design.
 - **`exec-pane` was the surface with no J1 guard at all**: `_cmd_exec_pane` read
   `.result.terminal.handle` from the create response and used it directly — registering it in the
   pane pool and dispatching to it — while `_cmd_launch` refused that same field as unpinnable. The
@@ -1054,6 +1080,12 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `.h-mad/telemetry.jsonl` are both already readable, and the output is a one-line warning naming
   the lanes rather than a block. Measured from the receiving side: `3219bdd` landed mid-cycle in
   another lane and invalidated a decision that had already been recorded as fact. **Recurrence 2, 2026-09-01**: the handoff/h-mad defect batch merged to `main` while a HemaSuite lane sat mid-Phase-5 on `feature/41`. The check was done BY HAND and it was the right call — `h_mad_do_preconditions` had been widened to score every audit at the latest cycle, so an A/B of old vs new across all 79 HemaSuite features was run before merging (0 verdict flips; probe proven sensitive by 9 pairs holding >1 live audit at the latest cycle). Doing it by hand is the evidence it is not yet mechanical.
+  — **RE-CHECKED 2026-09-02 (scout): still open, still hand-run.** No consumer exists:
+  `h_mad_telemetry.py` is the only file touching `.h-mad/telemetry.jsonl` and it is the writer, and
+  no script joins it against `hmad-dispatch worktree-ps` comments. Measured while re-checking:
+  `worktree-ps` on this machine lists 4 worktrees, and one `main` carries a live sibling stamp
+  (`nlm-pin-phase3-fifteen-audit-cycles · Phase 3 OPEN · next: audit cycle 16`) — i.e. the exact
+  signal the warning would print was sitting there, readable, unread by anything.
 - **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
   `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
   covering the end of its own section the moment a paragraph was added — the pin failed for the wrong
@@ -1156,3 +1188,90 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
 - **archreview scorer tree-diff**: `h_mad_archreview_cycle.py score` could snapshot `git status --short` before the dispatch and report any delta as a finding, closing the "audit mutated what it measured" check mechanically instead of by eye every cycle — recurrence: 2 — candidate: maybe
 - **execute a doc's fenced bash block as a test**: the Task 5 recipe's four review-cycle defects were only visible by EXTRACTING the fenced block and RUNNING it against fixtures (phase-hardcoded path, unimplemented halt, whitespace truncation, shell-killing exit); the extract+substitute+run harness was hand-written in the test — recurrence: 4 — candidate: maybe (a `h_mad_doc_block_exec.py` helper: extract the Nth `bash` fence under a heading, substitute `<placeholders>` from a map, run under `bash -euo pipefail` in a tmp cwd, return rc+stdout+stderr)
 - **probe the rungs below a changed branch**: after a fix on one rung of a fall-through ladder, the rung below regressed and only the next review cycle caught it; a checklist-style "enumerate every later rung and run one input through each" was done by hand — recurrence: 2 — candidate: no (discipline, captured in learnings; not a script)
+## 2026-09-01 — pin-agents-tail-banner phase 5 (scout)
+
+- **`handover_landed.py` reads a COMPLETED handover as `NOT_YET`, and the two prescribe opposite
+  actions**: the tool decides pickup from two signals — a claim owned by someone other than the
+  sender, and a worktree comment starting `taken over:`. It models `NOT_YET` versus `UNKNOWN`
+  carefully (the distinction it was built for, row `848`) but not **DONE-and-moved-on**. Measured
+  live this session: an outbound handover of the `_frame_satisfies` SIGPIPE fix was picked up,
+  fixed, tested, mutation-specced and merged to `main` as `282a3a5`, and the check still printed
+  `HANDOVER: NOT_YET — every checkable signal says nobody has taken it`. Both signals failed
+  honestly: the receiver never wrote a claim (it just did the work, and its worktree has its own
+  `docs/.bkit-memory.json` that never existed → `claim: UNKNOWN`), and it had already overwritten
+  the stamp with its own completion note, `Complete: SIGPIPE wait gates fixed; main @ 282a3a5;
+  h-mad 23` → `comment: NOT_YET  comment does not say taken over:`. The prescribed response to
+  `NOT_YET` is to re-deliver, which here would have re-dispatched work already on `main` — two
+  lanes on one feature, the exact outcome the claim protocol exists to prevent. The fix is not a
+  fourth verdict word: treat a comment that names the feature at all, or a `git log` on the target
+  branch, as pickup evidence, and rank "the work is visibly done" above "the stamp has the
+  expected prefix". Note the sender is *told* to stop watching, so this check is the only thing
+  standing between a silent success and a duplicate dispatch — candidate: yes
+  — **LANDED 2026-09-01.** Both prescriptions implemented, plus one the row did not anticipate.
+  The comment signal now ranks visible completion above the expected prefix: a comment that is
+  neither stamp is pickup, an EMPTY one is not, and both stamp tests moved from `startswith` to
+  `in` because HANDOVER Step 4 preserves a human note by APPENDING, so the sender's own stamp
+  legitimately sits mid-string and a prefix test would have read it back as receiver evidence.
+  A third signal reads the target branch (`--repo`/`--branch`, optional so the older invocation
+  still works). What the row did not anticipate: **the branch signal can only ever say `taken`
+  or `unknown`, never `not_yet`.** A merged branch and one created-and-never-committed-to are
+  both level with the default and both listed by `git branch --merged`; refs cannot separate
+  them. Guessing `taken` invents evidence, guessing `not_yet` is the false absence this tool
+  exists to refuse — so an absent branch and a level branch are both `unknown`, and two tests
+  deliberately assert the SAME verdict for the merged and untouched cases because that identity
+  IS the finding. 20 tests, 8 mutants ALL_CAUGHT.
+
+## 2026-09-01 — phase5b-twenty-audit-cycles (scout, deferred; run 2026-09-02)
+
+The 2026-09-01 closeout hit `CTXBUDGET: HALT` at 81.6% immediately after pushing its handoff and
+skipped this phase rather than half-running it. Run here on resume, before dispatching audit cycle
+36. Source session: 20 impl-plan audit cycles (v16–v35) on the codex surface; every finding applied.
+
+- **resolve a doc-embedded mutation anchor after editing the code block it points into**: the
+  impl-plan carries its mutation spec *inline* — 37 `"find"` strings in
+  `docs/01-plan/features/pin-agents-tail-banner.impl-plan.md` anchored to code blocks in the same
+  document — and editing a block silently orphans every anchor into it. Three instances this
+  session, each *after* the check had been written down in prose — recurrence: 3 — candidate: yes —
+  **not covered by the existing push-boundary sweep**, and that is the whole point of a separate
+  row: `h_mad_mutation_harness.py --check-anchors` plus `git-hooks/pre-push` discover specs with
+  `git ls-files -- '*.json'`, so a spec living in markdown is invisible to both (verified
+  2026-09-02: the 37 anchors are in a `.md` and the hook greps no markdown). Mechanical shape:
+  extract every `"find"` from the plan's fenced blocks, resolve each against the block it names, and
+  report the orphans — the same one-match rule `anchor_status()` already enforces, pointed at the
+  other store. The session's own mitigation was to *generate* the anchors from the block, which
+  removes the authoring error but not the drift that a later edit causes.
+  See the LANDED `re-anchor a mutation spec after editing the code it mutates` row above for the
+  JSON half; this is the markdown half it does not reach.
+
+- **ask what a node asserts when NOTHING is implemented**: three nodes were classified `RED: FAIL`
+  that the RED state itself makes pass (AC-1.5, T4's WIRE-PIN, AC-3.17) — a negative-only fixture
+  almost never fails, so a node that only asserts an absence is green before the feature exists and
+  its `FAIL` classification is fiction — recurrence: 3 — candidate: yes — mechanical half: for every
+  authoritative row classified `RED: FAIL`, require the node to name at least one POSITIVE assertion
+  (a match that only the implemented behaviour produces), or a mixed positive-plus-decoy fixture.
+  Cheaper still and fully mechanical: run the RED suite against the *unmodified* tree and diff the
+  actually-failing set against the rows classified `FAIL` — any row in the second set and not the
+  first is this defect. That diff is exactly the 5d/5e gate's own input, so this is a check inside a
+  step that already runs, not a new tool.
+
+- **grep the body for a version-history entry's claim**: four times this session a `## Version
+  History` entry announced a back-propagation the body never received (design live check v1.13, plan
+  Convention Prerequisites v1.7, the T2 move v1.28/v1.29, design Order+API v1.29) — and the entry
+  claiming a back-propagation turned out to be **the single best predictor of the next audit
+  finding** — recurrence: 4 — candidate: yes — mechanical: for each version-history entry naming a
+  string or section it says it propagated, grep the body for it and report the misses. Distinct from
+  the LANDED `doc-version-history-append` row, which makes *writing* an entry anchored and loud; this
+  checks that what an entry claims is true of the document it sits in. Natural home is
+  `h_mad_version_history.py` as a `--verify` mode, beside the writer that already parses these
+  entries.
+
+## 2026-09-02 — phase5b-gated-task1-green (scout)
+
+- **AC bodies must name their test node (or the 5d assembler must carry the contract table)**: `h_mad_assemble_tdd.py` cuts §Task N only; 39 of 45 AC bodies named no node, so the first RED dispatch invented all six T1 names and would have orphaned every T1 mutation pin. Fixed by hand this session (`**Node:**` on every AC). Mechanical: the assembler appends the task's rows from the Test-name contract table, or the audit gate refuses an AC whose body lacks its node — recurrence: 1 (systemic: every task would have hit it) — candidate: yes
+- **run prescribed test-helper blocks against the live module's guards before RED**: the impl-plan prescribed `tempfile.mkdtemp(` inside `test_hmad_dispatch.py`, whose own guard asserts that literal is absent; 53 audit cycles could not see it because the block was never executed in situ. Mechanical: extract every prescribed python block whose `file` is an existing test module, append it to a scratch copy, run the module's `*_guard` tests — recurrence: 1 — candidate: yes
+
+## 2026-09-02 — pin-agents-tail-banner phase7
+
+- **live-shape-probe-before-the-gate**: a feature whose contract is "recognise X" must be shown a REAL X, captured from the running system, before any gate scores it clean — recurrence: 1 — candidate: yes — evidence: `pin-agents-tail-banner` passed 2663 tests, 49 mutations, 53 impl-plan audit cycles and two clean audit surfaces while `_agent_tail_re` matched 0 of 5 real agent banner lines; the 12 corpus positives were all idealised. Only the Phase-5f live check found it. The plan records four earlier revisions of the same rule, each falsified by a shape the corpus lacked.
+- **anchored-derivation-breaks-on-an-edited-key-column** (recurrence, not a new row): recurrence 1 → 2 — adding a citation after the AC id broke the per-task `^\| AC-N\.M \|` loop (T2 8/1 instead of 10/1) while the `.*` aggregate still read 45. Same shape as the two rows that briefly carried two AC labels. Cite in the proof column; re-run BOTH derivations after any table edit.
+- **concurrent-suite-runs-manufacture-phantom-failures**: two pytest runs over one working tree produced 6 failures and 3 failures in DIFFERENT sets, and 0 when the file ran alone — recurrence: 1 — candidate: maybe — the failures look like regressions and are not; run the repo suite alone before believing any of it.

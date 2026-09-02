@@ -1,0 +1,18 @@
+AUDIT-pin-agents-tail-banner-impl-plan-v16-BEGIN
+## Summary
+The 38-node RED table re-derives correctly as 27 failures and 11 passes, and the tail-pass algorithm is unusually well specified. The plan is not dispatch-ready, however: its test scaffolding contains two executable defects and an unfinished harness, while the paired documents still contradict the implementation contract and retain a mutation-verification gap.
+
+## Must-fix
+- The `skill-md-frontmatter-renamed` mutant is equivalent to the test's accepted string — it changes `name: h-mad` to `name: h-mad-renamed`, but `assert "name: h-mad" in fm` remains true (confirmed with the prescribed replacement). The claimed green-at-RED reject-direction proof therefore survives, making `MUTATION: ALL_CAUGHT` impossible and violating Test discrimination; assert the parsed/exact field value or otherwise make the mutant leave the accepted set.
+- Task 1's exact `_orca_read_dir` body calls `pathlib.Path(...)`, but the real module imports only `Path` via `from pathlib import Path`, and the plan adds only `import re` — following the code block raises `NameError` in AC-1.5 before testing the stub. Use the already imported `Path(...)` or explicitly require `import pathlib`.
+- Task 2 says `_isolated_env` is “not left to interpretation” but leaves its load-bearing body as a literal `...` placeholder — this is the environment-isolation refactor every private-helper test depends on, so the task does not provide executable implementation instructions despite the impl-plan requirement of no placeholders. Spell out the extracted body and the corresponding `run()` call exactly.
+- AC-2.5 does not ensure `HMAD_TAIL_READ_TIMEOUT` is unset in the child — the prescribed `_isolated_env` copies the ambient environment and never removes this new variable before applying test overrides. On a host that exports it, the test passes without exercising `${HMAD_TAIL_READ_TIMEOUT:-2}` (and a bare-variable regression can pass too), so scrub it before the test env update and add the explicit override afterward as AC-2.6 requires; otherwise the default guard violates Test discrimination.
+- The time-bound contract is still contradictory across authoritative surfaces — T2 and design Detailed Design require in-process `_cmd_run`, while the source plan's “read command, in full,” spec AC-4.3, design API block, and design Invariant Compliance still prescribe `hmad-dispatch run`; the spec/design also still say `timeout`/`gtimeout` “appear nowhere,” while AC-2.7 deliberately permits prose and checks command position. These exact call and guard descriptions can dispatch mutually inconsistent implementations, so sweep all source/spec/design surfaces to `_cmd_run` and “no invocation.”
+- The paired design's live check still verifies only `pin-agents --clear` plus exported variables and never re-reads the pin file that `--clear` mutates, despite its v1.13 history claiming the file re-read landed. A surviving file pin can short-circuit `_orca_find` and satisfy the marker-free resolution path with no tail read, violating Mutation verification; carry the impl-plan/source-plan pin-file re-read into the design body and remove the source plan's later duplicate weak “env resolves codex” criterion.
+
+## Should-fix
+- The impl-plan header cites the source design as post-audit v1.12, but the paired design's current history ends at v1.13 — update the version citation so dispatchers can tell which audited source the plan implements.
+
+## Nit
+- Task 6 calls the wire mutations “the last two” even though nine later mutations now follow them; name the two mutations directly to avoid stale positional prose.
+AUDIT-pin-agents-tail-banner-impl-plan-v16-END

@@ -1,0 +1,14 @@
+## Summary
+The 42-node 30/12 RED split and 31-mutation inventory reconcile, but the proposed banner classifier still violates the prose-rejection contract and the paired design remains on the rejected anchor-only rule. Rival rejection also applies the known prose-unsafe shared matcher to arbitrary scrollback, so a valid agent pane can be suppressed merely for mentioning the other agent.
+
+## Must-fix
+- The new banner grammar still accepts ordinary prose after a banner-like prefix — the exact prescribed EREs matched `OpenAI Codex v0.145 release notes`, `OpenAI Codex (v0.145 release notes)`, `gpt-5.6-terra high performance notes`, `Antigravity CLI v1.2.3 release notes`, and `Gemini 3.1 Pro (release notes)`, while the stated real-banner controls also matched. This breaks spec AC-1.4 and the wrong-pane safety premise; extend the negative corpus across version, effort, and parenthetical continuations, tighten the grammar to discriminate complete banner/status shapes, and replay the corrected boundary against the real pane artifacts before dispatch.
+- Task 4 reuses unanchored `$rival_re` over the whole retained tail even though the plan has established that `_agent_pv_re` matches prose — a tail containing `OpenAI Codex v0.145.0` plus `Compare Gemini 3.1 Pro with Claude` is rejected as rival-bearing, and the symmetric Antigravity tail plus `OpenAI Codex documentation changed` is rejected too. Prose is not a signature under spec AC-1.4, so this creates a hard false-negative gap in the feature goal; use a tail-specific rival banner grammar and add symmetric wanted-banner-plus-rival-prose controls alongside real-rival-banner rejection, with a mutation that restores the prose-unsafe matcher.
+- The cited source design v1.23 still says the tail pass merely “ANCHORS” `_agent_pv_re`, reports anchor-only measurements, and diagrams the pass as `tail via _agent_pv_re`; that is precisely the implementation audit v27 rejected, while the impl-plan and spec now require a stricter banner grammar. An implementer following the declared source can faithfully recreate the known wrong-pane defect, so update the design architecture, detailed matcher rule, rival rule, and test plan to the same measured contract before dispatch.
+
+## Should-fix
+- AC-3.17 is labeled `(spec FR-2)`, but prose rejection is spec AC-1.4 under FR-1; correct the traceability label so the safety test is not mapped to the unrelated exactly-one requirement.
+- Task 3 says the pass “wraps” `_agent_pv_re` and later says “the anchor is applied,” but its codex/agy arms actually duplicate bespoke regexes rather than invoking that helper. State the intended source of truth explicitly (or introduce one tail-matcher helper) so later signature changes do not silently diverge across passes and mutation anchors.
+
+## Nit
+None

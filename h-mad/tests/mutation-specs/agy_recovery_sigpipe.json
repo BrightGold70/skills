@@ -1,0 +1,28 @@
+{
+  "_why": "The recovered agy response is the agent's answer passed through whole and unbounded. Under the wrapper's global pipefail, `printf ... | grep -aq` reported a MATCH as 141 once the response cleared the ~64 KB pipe buffer, so _cmd_exec blanked a verdict it had already recovered -- failing closed on exactly the empty-final-message case the recovery path exists to serve. Measured 2026-09-01: 240 KB carrying `VERDICT: COMPLIANT` discarded, the same text at 18 B kept.",
+  "_provenance": "Same defect class as the wait frame gates (commit 282a3a5). That fix's sweep recorded this site as ruled out; the rule-out argued about re-reading the log rather than about the size of the response, and a controlled probe falsified it.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "recovered-verdict-uses-pipe",
+      "_mechanism": "Restore printf | grep -aq inside the extracted predicate. A large response carrying a verdict is then read as carrying none, and _cmd_exec blanks it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  grep -aqE '^(STATUS|VERDICT|ASSESSMENT):' <<<\"$1\"",
+      "replace": "  printf '%s\\n' \"$1\" | grep -aqE '^(STATUS|VERDICT|ASSESSMENT):'",
+      "test": "tests/test_hmad_dispatch.py::test_recovered_verdict_survives_a_response_past_the_pipe_buffer"
+    }
+  ]
+}

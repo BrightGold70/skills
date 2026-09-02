@@ -1,5 +1,5 @@
 {
-  "_why": "The sender has already released the claim and stopped watching, so this tool is consulted precisely when nobody is looking at the receiving lane. Every mutant here makes it answer confidently in the direction that costs something: a false NOT_YET sends the sender to re-deliver work already in progress (two sessions, one feature, one branch, contradictory conclusions), and a false LANDED closes the loop on a handover that fell on the floor. None of them change the tool's shape — it still prints two signal lines and one verdict.",
+  "_why": "The sender has already released the claim and stopped watching, so this tool is consulted precisely when nobody is looking at the receiving lane. Every mutant here makes it answer confidently in the direction that costs something: a false NOT_YET sends the sender to re-deliver work already in progress (two sessions, one feature, one branch, contradictory conclusions), and a false LANDED closes the loop on a handover that fell on the floor. None of them change the tool's shape \u2014 it still prints two signal lines and one verdict.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -19,7 +19,7 @@
     },
     {
       "name": "missing-worktrees-container-reads-as-no-such-worktree",
-      "_mechanism": "Restore the `.get(\"worktrees\", [])` shape. A payload whose container moved (a raw `orca` response nests it under `.result`) then scans an empty list and reports 'no worktree at <path>' — a wrong key and an empty list are the same value and opposite answers, and the tool picks the wrong one silently.",
+      "_mechanism": "Restore the `.get(\"worktrees\", [])` shape. A payload whose container moved (a raw `orca` response nests it under `.result`) then scans an empty list and reports 'no worktree at <path>' \u2014 a wrong key and an empty list are the same value and opposite answers, and the tool picks the wrong one silently.",
       "file": "scripts/handover_landed.py",
       "find": "    if \"worktrees\" not in payload:",
       "replace": "    if False:",
@@ -27,7 +27,7 @@
     },
     {
       "name": "both-signals-required-instead-of-one",
-      "_mechanism": "Demand that BOTH signals say taken. Off Orca the comment signal is permanently `unknown`, so a genuine pickup proven by the claim reads as NOT_YET on every machine without a runtime — the tool becomes useless exactly where it is most needed, and does it by being stricter, which looks like rigour.",
+      "_mechanism": "Demand that BOTH signals say taken. Off Orca the comment signal is permanently `unknown`, so a genuine pickup proven by the claim reads as NOT_YET on every machine without a runtime \u2014 the tool becomes useless exactly where it is most needed, and does it by being stricter, which looks like rigour.",
       "file": "scripts/handover_landed.py",
       "find": "    if \"taken\" in signals:",
       "replace": "    if all(s == \"taken\" for s in signals):",
@@ -37,9 +37,41 @@
       "name": "the-senders-own-stamp-counts-as-pickup",
       "_mechanism": "Accept either prefix, so the `handover:` stamp the SENDER wrote in Step 4 is read as proof the receiver acted. The whole tool exists because only receiver-produced signals count; this makes it echo the sender back at themselves and report LANDED on a handover nobody touched.",
       "file": "scripts/handover_landed.py",
-      "find": "            if comment.startswith(TAKEN):",
-      "replace": "            if comment.startswith(TAKEN) or comment.startswith(HANDED):",
+      "find": "            if TAKEN in comment:",
+      "replace": "            if TAKEN in comment or HANDED in comment:",
       "_killed_by": "scripts/test_handover_landed.py::test_the_senders_own_handover_stamp_is_not_pickup"
+    },
+    {
+      "name": "a-rewritten-stamp-reads-as-absence",
+      "_mechanism": "Restore the original ranking, where only the literal words `taken over:` count. A receiver who replaced Step 4's stamp with its own completion note then reads as NOT_YET -- measured live on a handover already merged as 282a3a5 -- and NOT_YET prescribes re-delivery of work that is on main.",
+      "file": "scripts/handover_landed.py",
+      "find": "            if comment.strip():",
+      "replace": "            if False:",
+      "_killed_by": "scripts/test_handover_landed.py::test_a_stamp_the_receiver_overwrote_is_pickup"
+    },
+    {
+      "name": "prefix-test-misses-an-appended-handover-stamp",
+      "_mechanism": "Revert the sender-stamp test to `startswith`. Step 4 preserves a human note by APPENDING, so the sender's own stamp sits mid-string; a prefix test misses it, falls through to the rewritten-stamp rule, and reports the sender's own words back as proof the receiver acted.",
+      "file": "scripts/handover_landed.py",
+      "find": "            if HANDED in comment:",
+      "replace": "            if comment.startswith(HANDED):",
+      "_killed_by": "scripts/test_handover_landed.py::test_a_handover_stamp_appended_after_a_human_note_is_not_pickup"
+    },
+    {
+      "name": "an-absent-branch-reads-as-absence",
+      "_mechanism": "Turn a missing branch into NOT_YET. The commonest reason a handover branch is gone is that it merged and was deleted, so the tool would answer 'nobody took it' at exactly the moment the work is most finished.",
+      "file": "scripts/handover_landed.py",
+      "find": "        return \"unknown\", (f\"branch {branch!r} does not exist -- it may have merged \"",
+      "replace": "        return \"not_yet\", (f\"branch {branch!r} does not exist -- it may have merged \"",
+      "_killed_by": "scripts/test_handover_landed.py::test_an_absent_target_branch_is_unknown_not_not_yet"
+    },
+    {
+      "name": "a-branch-level-with-default-reads-as-pickup",
+      "_mechanism": "Resolve the merged/untouched tie in the optimistic direction. A branch created for a handover and never committed to is level with the default exactly like one that merged, so this reports LANDED for a handover that fell on the floor -- closing the loop on work nobody started.",
+      "file": "scripts/handover_landed.py",
+      "find": "    return \"unknown\", (f\"{branch} is level with {default}: that is what a merged-and-\"",
+      "replace": "    return \"taken\", (f\"{branch} is level with {default}: that is what a merged-and-\"",
+      "_killed_by": "scripts/test_handover_landed.py::test_a_merged_target_branch_is_unknown_because_it_is_indistinguishable"
     }
   ]
 }

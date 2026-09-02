@@ -1,0 +1,14 @@
+## Summary
+The RED table re-derives to 45 nodes (32 FAIL, 13 PASS), the embedded mutation spec parses with 37 unique mutations, the wire-pin gate passes with two wiring tasks, and the current test module still collects 290 nodes. The plan remains blocked by a malformed normative code fence and by a required verification selector that collects no tests; the remaining findings are provenance, scope, diagnostic, and clarity drift.
+
+## Must-fix
+- Task 2's normative `_agent_tail_re` block is not a valid fenced code block: line 211 ends with `}` followed immediately by the closing backticks, so the ` ```sh ` fence opened at line 173 actually remains open until line 308 and swallows the production/test/task-shape fields, explanatory prose, and the intended `run_fn` Python block as shell code — this breaks the plan's single authoritative grammar surface and the writing-plans requirement that prescribed code blocks match the referenced functions. Put `}` and the closing ` ``` ` on separate lines, then re-check the document's fence structure and execute the extracted helper block again.
+- Verification requires `pytest h-mad/tests/test_hmad_dispatch.py -q -k orca_find`, but the exact selector currently reports `no tests collected (290 deselected)` and none of the 45 planned node names contains `orca_find`; it will remain an exit-5, zero-measurement check after implementation. This violates Test discrimination, and the paired design repeats the same dead command; replace it on both surfaces with a selector that actually collects the intended existing resolver regressions (the current `-k orca_identity` collects 24) and verify a non-zero collected count.
+
+## Should-fix
+- The header still identifies the source design as v1.30 and the paired spec as v1.15, while their current version histories end at v1.32 and v1.17 respectively — the plan already depends on those later design-pass changes (case-insensitive matching and per-arm continuations), so its provenance points to revisions that do not contain its normative contract.
+- Task 6 opens with the broad promise that "Every guard this feature introduces gets a mutation," but later narrows the claim to every enumerated guard and explicitly acknowledges unmutated controls — use the narrowed wording at the task boundary so the dispatch is not given two different mutation-coverage scopes.
+- The new pass counts tail matches in `tn`, but the final unresolved diagnostic remains `resolved to $n candidates`, where `n` is the older title/preview count — a two-tail-match ambiguity can therefore fall through and report zero candidates. Either make the diagnostic identify its evidence surface or carry the tail count without discarding the earlier-pass context.
+
+## Nit
+- Remove the stray closing `**` after “both directions” in AC-4.6 and collapse T4's duplicated `$rival_re` explanation at lines 1068–1070 into one grammatical sentence.

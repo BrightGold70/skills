@@ -101,6 +101,121 @@ def test_a_taken_over_stamp_is_pickup(tmp_path) -> None:
     assert "LANDED" in r.stdout, "one receiver-produced signal is proof"
 
 
+def test_a_stamp_the_receiver_overwrote_is_pickup(tmp_path) -> None:
+    """The measured regression. A handover that was picked up, fixed and merged
+    as 282a3a5 read NOT_YET because the receiver replaced Step 4's stamp with its
+    own completion note instead of the words `taken over:`. NOT_YET prescribes
+    re-delivery, so the tool asked for work already on main to be dispatched
+    again. Visible completion outranks the expected prefix."""
+    d = fake_dispatch(tmp_path, ps("/wt/x", "Complete: SIGPIPE wait gates fixed; main @ 282a3a5"))
+    r = run("--state", state(tmp_path, {"owner_session_id": "sender-1"}), "--feature", "feat",
+            "--sender-session", "sender-1", "--worktree-path", "/wt/x", "--hmad-dispatch", d)
+    assert r.returncode == 0, r.stdout
+    assert "LANDED" in r.stdout
+
+
+def test_an_empty_comment_is_not_pickup(tmp_path) -> None:
+    """Control for the rule above: 'the stamp is gone' must not become 'anything
+    non-empty counts', or an empty comment would read as a receiver signal."""
+    d = fake_dispatch(tmp_path, ps("/wt/x", ""))
+    r = run("--state", state(tmp_path, {"owner_session_id": "sender-1"}), "--feature", "feat",
+            "--sender-session", "sender-1", "--worktree-path", "/wt/x", "--hmad-dispatch", d)
+    assert r.returncode == 1 and "NOT_YET" in r.stdout
+
+
+def test_a_handover_stamp_appended_after_a_human_note_is_not_pickup(tmp_path) -> None:
+    """Step 4 PRESERVES a human note by appending, so the sender's own stamp
+    legitimately sits mid-string. Under a prefix test that comment matches
+    neither stamp and would now read as a receiver rewrite -- the sender echoed
+    back at themselves as proof of pickup."""
+    d = fake_dispatch(tmp_path, ps("/wt/x", "do not kill this pane - handover: feat - next: fix it"))
+    r = run("--state", state(tmp_path, {"owner_session_id": "sender-1"}), "--feature", "feat",
+            "--sender-session", "sender-1", "--worktree-path", "/wt/x", "--hmad-dispatch", d)
+    assert r.returncode == 1 and "NOT_YET" in r.stdout
+
+
+# --- the branch signal ------------------------------------------------------
+
+
+def _repo(tmp_path: Path, *, branch: str | None, commit_on_branch: bool = False,
+          merge: bool = False) -> str:
+    r = tmp_path / "repo"
+    r.mkdir()
+    def g(*a): subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True)
+    subprocess.run(["git", "init", "-q", str(r)], check=True, capture_output=True)
+    g("config", "user.email", "t@e.com"); g("config", "user.name", "T")
+    (r / "a.txt").write_text("1\n"); g("add", "a.txt"); g("commit", "-qm", "base")
+    g("branch", "-M", "main")
+    if branch:
+        g("checkout", "-q", "-b", branch)
+        if commit_on_branch:
+            (r / "b.txt").write_text("2\n"); g("add", "b.txt"); g("commit", "-qm", "work")
+        g("checkout", "-q", "main")
+        if merge:
+            g("merge", "-q", "--no-ff", "-m", "merge", branch)
+    return str(r)
+
+
+def _branch_run(tmp_path, repo, branch):
+    """Point --state at a MISSING file so the claim signal is `unknown`.
+
+    Isolating the branch signal needs the other two silent, and `unknown` is the
+    only silence there is: a readable state file with the sender still owning is
+    a real `not_yet`, which would decide the verdict before the branch signal was
+    consulted and make every assertion below measure the wrong thing.
+    """
+    return run("--state", str(tmp_path / "no-such-state.json"), "--feature", "feat",
+               "--sender-session", "sender-1", "--repo", repo, "--branch", branch)
+
+
+def test_commits_on_the_target_branch_are_pickup(tmp_path) -> None:
+    """The receiver who claims nothing and stamps nothing, and just does the
+    work. Both other signals read negative there, honestly."""
+    r = _branch_run(tmp_path, _repo(tmp_path, branch="recv", commit_on_branch=True), "recv")
+    assert r.returncode == 0, r.stdout
+    assert "LANDED" in r.stdout
+
+
+def test_a_merged_target_branch_is_unknown_because_it_is_indistinguishable(tmp_path) -> None:
+    """The limitation, pinned rather than papered over.
+
+    A branch that merged and one that never committed are BOTH level with the
+    default and both listed by `git branch --merged`, so refs alone cannot tell
+    them apart. This test and the level-with-default one below deliberately
+    assert the SAME verdict: that identity is the evidence that the tie is real,
+    and it is why this signal only ever adds pickup evidence. The merged case is
+    recovered by the claim or comment signal, or not at all.
+    """
+    r = _branch_run(tmp_path, _repo(tmp_path, branch="recv", commit_on_branch=True, merge=True), "recv")
+    assert r.returncode == 2, r.stdout
+    assert "UNKNOWN" in r.stdout
+
+
+def test_an_absent_target_branch_is_unknown_not_not_yet(tmp_path) -> None:
+    """The commonest reason a handover branch is gone is that it merged and was
+    deleted -- pickup, not absence. Rendering that as NOT_YET is the same
+    conflation the UNKNOWN verdict exists to refuse, on a new surface."""
+    r = _branch_run(tmp_path, _repo(tmp_path, branch=None), "recv")
+    assert r.returncode == 2, r.stdout
+    assert "UNKNOWN" in r.stdout
+
+
+def test_a_target_branch_level_with_default_is_unknown_not_a_verdict(tmp_path) -> None:
+    """`git branch --merged` lists a merged branch and an untouched one alike,
+    so zero-ahead cannot be resolved either way. Guessing `taken` invents
+    evidence; guessing `not_yet` is the false-absence failure this tool exists
+    to refuse."""
+    r = _branch_run(tmp_path, _repo(tmp_path, branch="recv"), "recv")
+    assert r.returncode == 2, r.stdout
+    assert "UNKNOWN" in r.stdout
+
+
+def test_a_non_repo_path_is_unknown_not_not_yet(tmp_path) -> None:
+    d = tmp_path / "notarepo"; d.mkdir()
+    r = _branch_run(tmp_path, str(d), "recv")
+    assert r.returncode == 2 and "UNKNOWN" in r.stdout
+
+
 def test_the_senders_own_handover_stamp_is_not_pickup(tmp_path) -> None:
     s = state(tmp_path, {"owner_session_id": None})
     d = fake_dispatch(tmp_path, ps("/repo/wt", "handover: feat · delivered · next: pick up"))

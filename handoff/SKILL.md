@@ -727,20 +727,42 @@ Drop the item from your own todo list — and if Step 4's sink was durable (`.om
 ### Step 7 (optional, later): check ONCE that it landed
 
 Not a walk-back of Step 6. *Watching* a receiver is supervision and belongs to the
-`orchestration` skill; *asking once, later, whether they took it* is three read-only
-lookups and a different question — and Step 5 has already established that the delivery
-receipt answers neither. Run it when you next think of that lane, not on a timer:
+`orchestration` skill; *asking once, later, whether they took it* is a handful of
+read-only lookups and a different question — and Step 5 has already established that the
+delivery receipt answers neither. Run it when you next think of that lane, not on a timer:
 
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handover_landed.py" \
   --state "<target-repo>/docs/.bkit-memory.json" --feature "<feature>" \
-  --sender-session "<your-session-id>" --worktree-path "<target-worktree-path>"
+  --sender-session "<your-session-id>" --worktree-path "<target-worktree-path>" \
+  --repo "<target-repo>" --branch "<target-branch>"
 ```
 
-It reports only what the RECEIVER produced: the claim moved to a session that is not
-you, or the worktree comment flipped from `handover:` to `taken over:`. One of the two
-is proof; the other being unavailable is the normal case off Orca, so it does not
-demand both.
+It reports only what the RECEIVER produced, on three signals: the claim moved to a
+session that is not you; the worktree comment is no longer the `handover:` stamp you
+left; the target branch carries commits of its own. Any ONE is proof — the others being
+unavailable is the normal case (no Orca runtime, no branch given), so it never demands
+all three.
+
+**Pass `--repo`/`--branch` when you have them.** They are optional only so the older
+invocation keeps working; without them the third signal is permanently `unknown`, and it
+is the one that survives a receiver who claims nothing and stamps nothing and simply does
+the work. Measured 2026-09-01: a handover picked up, fixed, tested and merged as
+`282a3a5` reported `NOT_YET` on the other two — the receiver's worktree had its own
+`docs/.bkit-memory.json` so no claim ever appeared, and it had replaced the stamp with
+its own completion note. Both signals failed honestly and the verdict still prescribed
+re-delivering work that was already on `main`.
+
+Two consequences of that fix worth knowing before you read the output:
+
+- **A comment that is neither stamp counts as pickup.** You left `handover:` on that
+  worktree in Step 4; if it is gone and something else is there, the receiver wrote it.
+  Visible completion outranks the expected prefix. An EMPTY comment does not count.
+- **The branch signal can only ever say `taken` or `unknown`, never `not_yet`.** A branch
+  that merged and one that was created and never committed to are both level with the
+  default and both listed by `git branch --merged`; refs cannot tell them apart. So it
+  adds pickup evidence and never manufactures absence — and an ABSENT branch is
+  `unknown`, because merged-and-deleted is the commonest reason for it.
 
 **`UNKNOWN` (rc 2) is not `NOT_YET` (rc 1), and the difference is the point.** You have
 already released the claim and stopped watching, so being told "nobody took it" because

@@ -311,12 +311,47 @@ _agent_pv_re() {
   # "comparing gpt-5 output with ours" matched. What Codex actually prints is a
   # product line ("OpenAI Codex (v0.145.0)  model: gpt-5.6-terra") or a status line
   # pairing the model id with a reasoning effort ("gpt-5.6-terra high · ~/repo").
-  # Both are structured; neither occurs in ordinary prose about a model.
+  # Both are structured. They exclude the BARE-TOKEN and bare-model-id prose that
+  # motivated them ("comparing gpt-5 output with ours", "the codex agent is running",
+  # both still declining) and NOT prose naming the product: measured 2026-09-01,
+  # `Release notes for OpenAI Codex are available` and `The Antigravity CLI
+  # documentation changed` MATCH, 36 of 36 such probes. That is safe for Passes 1-2,
+  # whose inputs are short titles and previews; the tail pass reads arbitrary retained
+  # scrollback and therefore uses its own line-complete grammar, `_agent_tail_re`.
   case "$1" in
     codex) printf '%s\n' 'openai codex|model: *gpt-|gpt-[0-9][^ ]* +(low|medium|high|xhigh)([^a-z]|$)' ;;
     agy)   printf '%s\n' 'antigravity cli|gemini [0-9]' ;;
     *)     printf '%s\n' "$1" ;;
   esac
+}
+
+_agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
+  case "$1" in
+    codex) printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(openai codex([[:space:]]+(\(v?[0-9]+(\.[0-9]+)+\)|v?[0-9]+(\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]*[│┃╎┆]?[[:space:]]*$|gpt-[0-9]+(\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
+    agy)   printf '%s\n' '^[│┃╎┆▄▀▐▌░▒▓[:space:]]{0,24}(>_[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\.[0-9]+)+)?[[:space:]]*[│┃╎┆]?[[:space:]]*$|gemini [0-9]+(\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\((low|medium|high|xhigh|v?[0-9]+(\.[0-9]+)+)\))?[[:space:]]*[│┃╎┆]?[[:space:]]*$)' ;;
+    *)     printf '%s\n' "^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?($(_agent_pv_re "$1"))" ;;
+  esac
+}
+
+_orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, rc 1 = unreadable
+  # Bounded via _cmd_run (the `run` verb's own function): `timeout`/`gtimeout` are
+  # forbidden by the base invariant and are never invoked here. The default in
+  # ${HMAD_TAIL_READ_TIMEOUT:-2} is load-bearing under set -u.
+  #
+  # --cursor 0 is load-bearing: without it the call returns recent rows, while
+  # the launch banner sits at the start of scrollback.
+  local h="$1" raw rc=0
+  raw="$(_cmd_run --timeout "${HMAD_TAIL_READ_TIMEOUT:-2}" -- \
+           orca terminal read --terminal "$h" --cursor 0 --limit 4000 --json 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  # Accept only ok:true envelopes whose terminal tail has the measured array
+  # shape. Missing keys, ok:false envelopes, and unexpected scalar/object tails
+  # are not identity evidence.
+  printf '%s' "$raw" \
+    | jq -re 'if (.ok? // false) != true then empty
+              else (.result.terminal.tail? // empty) end
+              | if type == "array" then join("\n") else empty end' 2>/dev/null \
+    || return 1
 }
 
 _agent_proc_name() {
@@ -510,8 +545,8 @@ _orca_find() {
   #     "Codex - skills repo" matched "^codex" and would have been handed Codex's
   #     work. Both agents produce a well-formed sentinel report, so the
   #     mis-dispatch is silent: the wrong model answers and the gate scores it.
-  #     Codex therefore skips Pass 1 entirely and relies on the preview signature
-  #     or, properly, on a pin/launch.
+  #     Codex therefore skips Pass 1 entirely and relies on the tail signature
+  #     (Pass 3), on the preview signature, or, properly, on a pin/launch.
   #   * agy DOES set an OSC title ("agy --dangerously-skip-permissions"), so its
   #     title is real identity -- except when inherited. A title shared by two or
   #     more leaves of the SAME tab is provably the tab's, so reject it.
@@ -528,10 +563,10 @@ _orca_find() {
   #      candidate whose preview carries the other agent's banner is rejected,
   #      which closes (a)'s single-leaf hole: the Codex pane in the "agy - worker"
   #      tab is printing "gpt-5.6-terra high", so it cannot be agy.
-  local rival_re=""
+  local rival_re="" rival=""
   case "$token" in
-    codex) rival_re="$(_agent_pv_re agy)" ;;
-    agy)   rival_re="$(_agent_pv_re codex)" ;;
+    codex) rival_re="$(_agent_pv_re agy)";   rival=agy   ;;
+    agy)   rival_re="$(_agent_pv_re codex)"; rival=codex ;;
   esac
   ids=""
   if [ "$token" != "codex" ]; then
@@ -571,12 +606,84 @@ _orca_find() {
     n="$(printf '%s' "$ids" | grep -c . || true)"
     if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
   fi
-  # Pass 3 (J18) -- OS evidence for panes Orca did not spawn.
+  # Pass 3 -- TAIL evidence (feature: pin-agents-tail-banner).
   #
-  # Reached only when every pass above found nothing, which is the measured state
-  # for a pane that survived an Orca restart: absent from agents[] (Pass 0 blind),
-  # tab-inherited or skipped title (Pass 1), empty renderer buffer (Pass 2). The
-  # agent may nonetheless be very much alive -- two were, for 9 hours.
+  # Reached whenever control falls past Pass 2, i.e. $n != 1. Deliberately gated
+  # on NEITHER Pass 2's n==0 condition NOR Pass 4's lsof precondition: an
+  # ambiguous title (n>1) never reaches Pass 2, and a machine without lsof never
+  # reaches Pass 4, so both shapes are invisible to every other pass. Pool is
+  # $scoped unconditionally -- Passes 1 and 2 SELECT, they do not remove, so a
+  # pane they failed to match is still a candidate here.
+  #
+  # RETENTION (AC-5.1). Orca caps a pane's retained tail at 2000 lines regardless
+  # of --limit. Measured 2026-09-01: a pane emitting 200 lines kept its first, one
+  # emitting 2000 lost it, one emitting 20000 began at line 18001. Agent panes are
+  # full-screen TUIs and do not normally reach the cap -- they use the alternate
+  # screen, so their output never enters normal-buffer scrollback, and a codex
+  # pane dispatched to for two days still held 18 lines. The case that DOES reach
+  # it is a pane where the agent exited and the operator then ran >2000 lines of
+  # shell; there the signature is gone and this pass declines to UNRESOLVED. That
+  # is the accepted limit of the pass, not a bug in it.
+  #
+  # STALE PANE (AC-5.2) -- the other side of the cap, and the likelier one.
+  # Tail text is HISTORICAL: it proves what a pane once ran, never what it is
+  # running now. A pane whose agent EXITED but which has since emitted fewer than
+  # 2000 lines of shell still carries the banner, is still a unique match, and is
+  # still resolved here -- so a dispatch can land in a plain shell. Accepted
+  # deliberately: Pass 1 (title) and Pass 2 (preview) are not liveness-gated
+  # either, so this adds no new failure class; only Pass 0 (which names the
+  # running program) and Pass 4 (which requires a live process) carry liveness.
+  # Gating this pass on liveness would need lsof and would contradict AC-3.3,
+  # whose whole point is the machine that has none.
+  #
+  # The call form below is mandatory. `if _orca_tail_sig "$h"` streams the pane's
+  # scrollback into _orca_find's OWN stdout and corrupts the handle it returns;
+  # `if local tout="$(...)"` returns `local`'s status (always 0) and discards the
+  # helper's rc, turning every unreadable pane into a readable empty one.
+  local tail_re rival_tail_re tail_ids="" th tout tn tail_h
+  # `_agent_tail_re` is defined in TASK 2 (top level, beside `_orca_tail_sig`).
+  # T3 contains only the two CALL SITES, so each wire connects to a callee that
+  # already exists and whose own tests stay green when the connection is removed.
+  tail_re="$(_agent_tail_re "$token")"
+  rival_tail_re=""
+  if [ -n "$rival" ]; then
+    rival_tail_re="$(_agent_tail_re "$rival")"
+  fi
+  while IFS= read -r th; do
+    [ -n "$th" ] || continue
+    if tout="$(_orca_tail_sig "$th")"; then
+      grep -Eiq "$tail_re" <<<"$tout" || continue
+      # Reject BEFORE counting: a pane demonstrably running the other agent is
+      # neither a match nor a source of ambiguity. This is the predicate Pass 2
+      # applies, extended to the tail -- but built from _agent_tail_re, NOT from
+      # the shared $rival_re computed above Pass 1: that one is `_agent_pv_re`,
+      # which matches prose (36/36 measured), and this input is arbitrary retained
+      # scrollback. Same grammar as the wanted check, or a real agent pane is
+      # suppressed for merely MENTIONING the other agent -- a false negative in
+      # the feature's own goal. Audit v28. HOISTED above the loop beside `tail_re`
+      # (audit v36, agy): `$rival` is constant across candidates, so computing it
+      # per matched candidate spawns one subshell each for the same value.
+      if [ -n "$rival_tail_re" ] && grep -Eiq "$rival_tail_re" <<<"$tout"; then
+        continue
+      fi
+      tail_ids="${tail_ids}${th}
+"
+    fi
+  done <<EOF
+$(printf '%s' "$scoped" | jq -r '.result.terminals[]?.handle')
+EOF
+  tn="$(printf '%s' "$tail_ids" | grep -c . || true)"
+  if [ "$tn" -eq 1 ]; then
+    tail_h="$(printf '%s' "$tail_ids" | grep . | head -n 1)"
+    echo "[H-MAD] $token: bound $tail_h by tail evidence" >&2
+    printf '%s\n' "$tail_h"; return 0
+  fi
+  # Pass 4 (J18) -- OS evidence for panes Orca did not spawn.
+  #
+  # Reached when no pass above resolved exactly one handle. That now includes the
+  # tail-evidence pass, which declines on zero matches AND on ambiguity, so
+  # "every pass above found nothing" is no longer an accurate description of how
+  # control gets here.
   #
   # The OS can prove the agent is RUNNING here; it cannot say which PANE holds it
   # (Orca exposes no tty/pid/ptyId -- orca#9870 -- and macOS blocks `ps e`). So
@@ -1043,7 +1150,7 @@ _cmd_dispatch() {  # $1 agent, $2 task_id
   # signals separately proven unreliable -- `terminal read` yields 0 lines for an
   # idle restart-surviving pane (docs/orca-bug-terminal-read-empty-after-restart.md)
   # and hand-started panes are absent from `worktree ps`'s `agents[]` -- so it
-  # would false-refuse healthy panes, the exact call `_orca_find` Pass 3 already
+  # would false-refuse healthy panes, the exact call `_orca_find` Pass 4 already
   # declines to make; and it protects no state, because there is none to protect.
   #
   # The readiness failure that DOES bite is a different one a pre-flight cannot
@@ -2291,6 +2398,27 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
   wait "$pid"
 }
 
+# Does a recovered agy response carry a verdict line worth promoting to --out?
+#
+# A here-string, NOT `printf ... | grep -aq`. Under the wrapper's global
+# `set -o pipefail` that pipeline reports a MATCH as 141: `grep -q` exits at the
+# first hit, `printf` takes SIGPIPE, and pipefail surfaces the signal rather than
+# grep's success. The response is the agent's answer passed through whole and
+# unbounded -- a long audit reply clears the ~64 KB pipe buffer easily -- so the
+# predicate inverted exactly when recovery matters most and blanked a verdict it
+# had already found. Measured 2026-09-01: 240 KB carrying `VERDICT: COMPLIANT`
+# was discarded; the same text at 18 B was kept. Same defect class as the wait
+# frame gates (`_frame_satisfies`, commit 282a3a5), whose sweep ruled this site
+# out on the wrong property -- it argued about re-reading the log, not about the
+# size of the response.
+#
+# Extracted from its call site so a mutation can reach it: the predicate was
+# inline, and a test carrying its own copy of the line would pass against a
+# mutated wrapper.
+_recovered_has_verdict() {  # <recovered-response>
+  grep -aqE '^(STATUS|VERDICT|ASSESSMENT):' <<<"$1"
+}
+
 # J29: `--out` is last-writer-wins across concurrent dispatches, silently. Two
 # `exec` runs pointed at one path both exit 0 and the file keeps only the SECOND
 # responder's answer, so a caller who reads `--out` loses a verdict with nothing
@@ -2649,8 +2777,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # Only a verdict-carrying line is worth promoting to --out; a partial
       # narration is not, and writing one would hand the caller a fabricated
       # answer of exactly the kind J23 records.
-      if [ -n "$recovered" ] \
-        && ! printf '%s\n' "$recovered" | grep -aqE '^(STATUS|VERDICT|ASSESSMENT):'; then
+      if [ -n "$recovered" ] && ! _recovered_has_verdict "$recovered"; then
         recovered=""
       fi
       # DEGRADED fallback, kept deliberately. The structured read above assumes
@@ -3422,10 +3549,23 @@ _cmd_wait() {
 }
 
 _cmd_alive() {
-  local agent="$1" sub target; sub="$(_detect_substrate)" || return 1
+  local agent="$1" sub target tree; sub="$(_detect_substrate)" || return 1
   target="$(_resolve_target "$agent")" || return 1
   case "$sub" in
-    cmux) cmux tree --all | grep -q -- "$target" ;;
+    # Capture, then match with a here-string -- NOT `cmux tree --all | grep -q`.
+    # Under the wrapper's global pipefail that pipeline reports a MATCH as 141:
+    # grep -q exits at the first hit and the producer takes SIGPIPE, so a LIVE
+    # agent reads as dead, which is this predicate's dangerous direction.
+    # Measured 2026-09-01 with a bulk-writing stub: 240 KB tree with the target
+    # on line 1 -> rc 141; the same tree at 110 B -> rc 0. And the buffer is not
+    # the real bound -- unlike the builtin `printf` sites, the producer here is
+    # an external process, so a `tree` that STREAMS its output can be killed at
+    # any size (measured: an incrementally-writing stub inverted at 110 B). The
+    # explicit `|| return 1` keeps a cmux failure reading as not-alive, which is
+    # what pipefail used to provide.
+    cmux)
+      tree="$(cmux tree --all)" || return 1
+      grep -q -- "$target" <<<"$tree" ;;
     orca)
       if orca terminal list --json | jq -e --arg id "$target" '.result.terminals[] | select(.handle == $id)' >/dev/null 2>&1; then
         return 0

@@ -312,13 +312,13 @@ title, so any `.title` matching `codex` was inherited and says nothing about wha
 runs in that pane. Observed live 2026-07-22: an **agy** pane sitting in a tab named
 `Codex - skills repo` matched `^codex`; both agents return a well-formed sentinel
 report, so handing Codex's work to agy would have been silent. Auto-detect therefore
-never matches Codex on title — only on a fresh pane's `gpt-N` banner, which scrolls
-off once it works.
+never matches Codex on title — only on a fresh pane's `gpt-N` banner, which scrolls out of
+the PREVIEW once it works — the tail-evidence pass recovers it from retained scrollback.
 
 **Identity does exist — in a different call (J16, shipped 2026-07-23).** `orca worktree ps`
 returns `agents[].agentType` keyed by a `paneKey` of `<tabId>:<leafId>`, and `terminal
 list` returns `.tabId`/`.leafId`. `_orca_find` joins them as **Pass 0**, ahead of the
-title and preview passes, which resolves the case above exactly: measured live with pins
+title, preview and tail-evidence passes, which resolves the case above exactly: measured live with pins
 bypassed, both agents went from `UNRESOLVED` to correct. `agentType` is `antigravity`,
 not `agy`. This does not retire pinning — handles still rotate, and `launch` still owns
 identity best — but an un-owned pane is now recoverable. (stablyai/orca#9870, which asked
