@@ -238,8 +238,9 @@ The token line is the FIRST stdout line on a verdict; detail lines follow; the `
 marker is last (same layout as `h_mad_audit_gate.py`). On an operational error there is no
 token line and the marker is the only stdout line — `usage_error`, `operational_error` or
 `readback_failed` — so every exit path carries exactly one `[H-MAD]` marker. The CLI imports `collect`, `PassSpec`,
-`_collected_path`, `validate_surface`, `CollectConflict`, `OperationalError` from
-`h_mad_audit_cycle` and nothing from the gate. Stdlib only.
+`_collected_path`, `CollectConflict`, `OperationalError` from `h_mad_audit_cycle` — NOT
+`validate_surface` (no pre-check; `_collected_path` is the single validator) — and nothing
+from the gate. Stdlib only.
 
 ### D3. `h_mad_audit_gate.py` — transport refusal (FR-3)
 
@@ -453,7 +454,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - **Test discrimination** — complies: each mutation names the one test that must bite.
 - **Guard narrowing** — complies: the transport regex was widened from a stem to prefix+suffix
   and then narrowed by the dot rule, each step with executed evidence in the plan.
-- **Connection enforcement** — complies: CLI→`collect()` (e/e′), verb→script (f/f′),
+- **Connection enforcement** — complies: CLI→`collect()` (e; the force direction has no
+  observable consequence and is documented as withdrawn), verb→script (f/f′),
   gate refusal (g/g′), grammar disjointness (i/i′) all dropped AND forced.
 - **Incident replay** — complies: AC-2.9 replays absent-docs → collected → gateable, in the
   suite and once by hand on a real survivor.
@@ -479,6 +481,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.15: 5b-audit v5 sweep (codex): CLI import list and Connection-enforcement line match the impl-plan (no `validate_surface` import; no e′).
 - v1.14: 5b-audit v4 sweep (codex): mutation-count prose no longer derives 22 from stale sub-counts; the impl-plan table is the list.
 - v1.13: 5b-audit v3 sweep (agy): D1's copy writer delegates to `_finalize_write` as Task 1 states; the CLI performs no `--surface` pre-check (single validator in `_collected_path`); mutation count 22 (e′ unkillable, dropped).
 - v1.12: 5b-audit v2 sweep (codex): D5's nested code fence escaped with a four-backtick outer fence; mutation count 23 (exit-only/token-only mutants per guard).

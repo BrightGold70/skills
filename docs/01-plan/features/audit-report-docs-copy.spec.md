@@ -165,8 +165,11 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     `.audit.v<N>.md`, `.audit.v<N>.p<i>.md`, `.audit.v<N>.codex.md`, `.audit.v<N>.codex_draft.md`,
     `<feature>.report.md`, and the collision candidates `audit_f.plan.audit.v8.report.md` /
     `audit_f.plan.audit.v8.codex.md`) is asserted against `TRANSPORT_RE` **and** against
-    `h_mad_cycle_counts._VERSION_RE` (an audit-doc name must match `_VERSION_RE` and not
-    `TRANSPORT_RE`; a transport name the reverse; NO name in the fixture matches both). The stem the wrapper stages is pinned by
+    `h_mad_cycle_counts._VERSION_RE` (every fixture entry tagged as a docs AUDIT artifact —
+    the `*.audit.v<N>[.tok].md` shapes — must match `_VERSION_RE` and not `TRANSPORT_RE`;
+    every entry tagged transport the reverse; other non-transport names such as
+    `<feature>.report.md` and `x.md` are only asserted NOT to match `TRANSPORT_RE`; NO name
+    in the fixture matches both). The stem the wrapper stages is pinned by
     running `audit-cycle` under the existing stub harness and asserting the `--report-file`
     the stub received matches `TRANSPORT_RE`; the SKILL.md 6.6 literal is asserted to match
     it too.
@@ -270,6 +273,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ## Version History
 - v1.0: Initial specification draft.
+- v1.8: 5b-audit v5 sweep: AC-3.5a's `_VERSION_RE` assertion scoped to docs audit-artifact names.
 - v1.7: 5b-audit v3 sweep: e′ withdrawn as unkillable → 22 mutations.
 - v1.6: 5b-audit v2 sweep: exit-only/token-only mutants (k, k′, l, l′) → 23.
 - v1.5: Design-audit v8 sweep: marker-stripping mutants (j)/(j′) → 19 mutations (Mutation verification: one mutant per separable output part).

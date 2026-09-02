@@ -1,6 +1,6 @@
 # Implementation Plan: audit-report-docs-copy
 
-> Source: docs/02-design/features/audit-report-docs-copy.design.md (post-audit v1.13 — gated at cycles 9+10 as v1.11; v1.12/v1.13 are the 5b-audit count/snippet sweeps, no design decision changed)
+> Source: docs/02-design/features/audit-report-docs-copy.design.md (post-audit — gated at cycles 9+10 as v1.11; every later design entry is a 5b-audit sweep with no design decision changed; the impl-plan tracks the design's NEWEST Version History entry, currently v1.15)
 > Branch target: BrightGold70/audit-report-docs-copy (the Orca-assigned feature branch; already checked out in worktree `/Users/kimhawk/orca/workspaces/skills/audit-report-docs-copy`)
 
 ## Executive Summary
@@ -127,6 +127,7 @@ def is_transport_path(path: Path) -> bool:
 **Production file**: `h-mad/scripts/h_mad_collect_report.py`
 **Test file**: `h-mad/tests/test_h_mad_collect_report.py`
 **Task shape**: `new-behaviour`
+**Checkpoint artifact**: `docs/01-plan/features/audit-report-docs-copy.plan.md` (Version History entry written by the AC-2.9 hand replay, via the helper)
 
 **Description**: Stdlib-only CLI over `collect()` implementing design D2 (with one
 simplification from 5b audit v3: the CLI does NOT pre-validate `--surface`; `_collected_path`
@@ -333,6 +334,7 @@ tests load only their own two specs and are not touched (AC-6.4).
 
 ## Version History
 - v1.0: Initial implementation plan draft.
+- v1.5: 5b audit v5 sweep (codex): Task 3 lists its checkpoint artifact (the plan's Version History entry); design pointer tracks the newest entry.
 - v1.4: 5b audit v4 fixes (codex): AC-6.3a executable spec-shape test (the harness does not enforce `test`/`_mechanism`); `validate_surface` dropped from the CLI import list.
 - v1.3: 5b audit v3 fixes (agy p1 + codex): replay evidence recorded via the version-history helper at the next unused version (no hard-coded `v1.7`); Task 6 prose matches AC-6.4; Task 5 metadata names orchestration-mode.md; design pointer v1.13; mutant e′ dropped as unkillable (the surface is validated in `_collected_path`; the CLI no longer pre-checks it) → 22; Task 6 JSON lists all five test files.
 - v1.2: 5b audit v2 fixes (codex; agy v2 clean): exit-code-only and token-only mutants for the gate refusal and the CLI error path (k, k′, l, l′ → 23); Task 6's test surface made explicit (five test files in `command`; `test_hmad_dispatch_audit_cycle.py` not edited).
