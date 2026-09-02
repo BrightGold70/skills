@@ -1566,7 +1566,8 @@ hmad-dispatch audit-cycle --feature <feature> --phase plan|design|impl-plan \
 
 `audit-cycle` runs exactly one cycle: assemble, dispatch, collect, gate, and print one
 `AUDITCYCLE:` verdict. It is not the revision loop; re-auditing until
-`must=0 should=0` remains the orchestrator's job.
+`must=0 should=0` remains the orchestrator's job. For the codex second surface
+used by the exec leg, see §"Second surface — the codex leg".
 
 **Read the `Effort:` block before you trust a clean cycle.** The verb hands each pass's
 NDJSON log to the combiner, which reports `tools=/ok=/failed=/thinking=` per pass and marks
@@ -1736,6 +1737,7 @@ assembling by hand because the script is unavailable:
    hmad-dispatch report-wait "$RP" --timeout 600 \
      > docs/01-plan/features/<feature>.<phase>.audit.v<N>.md
    ```
+   The gate refuses a path named like a transport file (`audit_*.report.md`) — gate the docs path, never `$RP`.
    This has no sentinel-extraction step (the file is already the report), no `wait`, and no dedent/`•`-normalize (the file is clean markdown, not a TUI render). On timeout, the agent did not honour the contract — fall back to the scrape path below.
 
    **Never gate an audit on the dispatch's `result.status`.** The report file and its `.done` marker are the delivery contract; `status` is not. ANY failed or refused tool call yields `status: ERROR` beside a complete, correct answer, and the cause is usually incidental to the audit — measured three times with three unrelated causes: a refused `.tmp` write (`grounding-evidence-coverage` impl-plan cycle 22 pass B, on a report carrying two independently-verified real findings), a `find_by_name` timeout plus a `view_file` on a nonexistent path (2026-08-24, 31 tool calls / 29 ok, schema-correct report), and a `write_to_file` rejected for a missing argument that the agent immediately retried successfully (2026-08-24). This is the same rule `h_mad_review_evidence.py` follows for 6a-prime (step 6a-prime above): report `result.status`, never gate on it. Read the file and the marker.
@@ -1799,10 +1801,56 @@ checkout):
 export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
 ```
 
+## Second surface — the codex leg
+
+When an audit cycle needs a codex leg beside the primary reviewer, assemble a
+separate transport file for that surface and keep the staged report distinct:
+
+```bash
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex.report.md
+rm -f "$RP" "$RP.done"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
+  --feature <feature> --phase plan|design|impl-plan --cycle <N> \
+  --project-root <PROJECT_ROOT> \
+  --report-file "$RP"
+```
+
+Dispatch it through the exec path so the codex process reads the assembled
+prompt directly and writes the contracted report file:
+
+```bash
+hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>.txt
+```
+
+After `exec codex` returns, collect the surface report into the docs audit path
+before running any gate:
+
+```bash
+COLLECT_OUT=$(hmad-dispatch collect-report --surface codex \
+  --feature <feature> --phase <phase> --cycle <N> \
+  --report "$RP" --project-root <PROJECT_ROOT>)
+printf '%s\n' "$COLLECT_OUT"
+```
+
+Read the `COLLECT:` token. Anything except `COLLECT: OK` is a delivery failure:
+halt `<phase>:report_not_collected` and print `[H-MAD] <feature> <phase> halted reason=report_not_collected`.
+Only the path printed on the `COLLECT: OK` line is gateable; the transport file
+is never the audit document.
+
+```bash
+if ! printf '%s\n' "$COLLECT_OUT" | grep -q '^COLLECT: OK '; then
+  printf '%s\n' '[H-MAD] <feature> <phase> halted reason=report_not_collected'
+else
+  DOCS=$(printf '%s\n' "$COLLECT_OUT" | sed -n 's/^COLLECT: OK path=\(.*\) delivered=.*/\1/p')
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py "$DOCS"
+fi
+```
+
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
 - `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
+- `h_mad_collect_report.py` — collect-report surface collector: copies a delivered report-file or `--out` fallback into the docs audit path, prints `COLLECT: OK|MISSING|CONFLICT` plus the collected path/delivery source, and performs readback before reporting success. `OK`/`MISSING`/`CONFLICT` exit 0 because they are measured outcomes; operational errors and readback failures exit 2. `--force` overwrites an existing collected report after a conflict.
 - `h_mad_offcontract_scan.py` — **where did the report actually go?** Locates an audit artifact written off-contract: `scan()` + CLI printing `OFFCONTRACT: NONE|FOUND|UNREADABLE`, exit 0 on `NONE` **and on `FOUND`** / 2 on `UNREADABLE reason=no_workspace`. `FOUND` exits 0 deliberately — this reports, it never decides. Reach for it when `h_mad_extract_report.py` exits 2: that exit is *correct* (silence must never score as a clean gate), but its remedy — `clear` and re-dispatch — is wrong when the audit already ran, and on a large prompt you pay a full cycle to reproduce a drop. **The defect it addresses is unfindability, not absence.** `exec agy` can honour neither the `--report-file` slot nor the sentinel pair while still doing the work and writing a real report at a path of its own choosing; two were observed eleven days apart — a workspace **dotfile** (`.design.audit.v14.md`, invisible to the `*audit.v14*` glob the orchestrator searches, which is exactly how one cycle concluded "no file was written" and re-dispatched over completed work) and `audit_report.md` in agy's own scratch directory while the run narrated "the current workspace". It therefore assumes **no** `audit.vN` stem — the whole failure is that the agent chose the name — and searches dotfiles too; `--cd <workspace>` plus agy's scratch dir by default, `--extra-dir` to widen, `--minutes`/`--since` to bound by mtime, `--expected` to exclude the path that was contracted for. **Its output does not feed the gate.** A report recovered this way has had NO schema enforcement applied, so it prints candidates with an explicit not-validated caution for a human to transcribe by hand, falsifying every premise against the source first; teaching `h_mad_extract_report.py` to glob these paths would score an unvalidated file as a clean gate, which is the opposite of the fix. `NONE` means nothing matched the search, **not** that the work was never done — it narrows a re-dispatch decision rather than making one. Closes J30. Stdlib-only.
 - `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report or no gateable sections. `--pass` takes an optional 5th field, `i:<report>:<out>:<rc>[:<log>]`; when a log is given the render carries an **`Effort:`** block — per pass `tools=/ok=/failed=/thinking=`, and `low-evidence` when `ok` is at or below the 2 successful calls the report-file contract itself costs, i.e. the pass cannot have read anything (J49). **It reports; it never decides.** `combine()` cannot see it, the `AUDITCYCLE:` line is unchanged, and a named-but-unreadable log renders as `unreadable` rather than as zeros — `tools=0` is exactly what a genuinely hollow pass looks like.
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
