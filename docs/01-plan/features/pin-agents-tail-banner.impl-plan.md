@@ -1188,15 +1188,27 @@ declaration and above the loop, which satisfies the once-per-call point without 
   # T3 contains only the two CALL SITES, so each wire connects to a callee that
   # already exists and whose own tests stay green when the connection is removed.
   tail_re="$(_agent_tail_re "$token")"
-  rival_tail_re="$(_agent_tail_re "$rival")"
+  rival_tail_re=""
+  if [ -n "$rival" ]; then
+    rival_tail_re="$(_agent_tail_re "$rival")"
+  fi
 ```
 
 The mutation anchors on `  rival_tail_re="$(_agent_tail_re "$rival")"` are unaffected: the line's
 text and its two-space indentation are unchanged, only its position moved, and the harness
 anchors on the string.
 
-`rival` stays empty for any other token, and `_agent_tail_re ""` falls to the `*)` arm, so the
-guard degrades to the shared helper rather than aborting.
+`rival` stays empty for any other token — and that empty token must NOT reach `_agent_tail_re`.
+The pre-v54 text said the `*)` arm "degrades to the shared helper"; measured 2026-09-02 it does
+the opposite: `_agent_pv_re ""` prints an empty string, the arm wraps it as
+`^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?()`, which matches EVERY line, `[ -n "$rival_tail_re" ]`
+is then true, and every candidate is rejected as a rival. The assignment is therefore guarded on
+the TOKEN (`if [ -n "$rival" ]`), with an explicit `rival_tail_re=""` first — `local` alone leaves
+the name UNSET, and `[ -n "$rival_tail_re" ]` on an unset name aborts under the wrapper's `set -u`.
+Reachability is narrow (`_resolve_target` only ever passes `codex`/`agy`), which is why this went
+unnoticed for nineteen cycles; it is fixed because the document claimed the opposite of what the
+code does. Impl-plan audit v49 (agy). The rejection guard itself stays `[ -n "$rival_tail_re" ]`,
+so an empty matcher still means "no rejection" and every rival-wire mutation keeps its meaning.
 
 **Description**: Design Implementation Order step 3. A candidate whose tail carries the RIVAL
 agent's signature is rejected **before** it is counted, so it can neither be selected nor create
@@ -1643,24 +1655,24 @@ the distinction matters because only the first is pinned by this document:
    "_mechanism": "Remove the rival-matcher CALL with the callee intact. Rival rejection then never fires, so a pane carrying a real rival BANNER is counted -- AC-4.1 fails. Paired with rival-re-prose-unsafe, which moves the other way: that one over-rejects, this one under-rejects, and only the two together pin the connection AND its matcher.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
-   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
-   "replace": "  rival_tail_re=\"\""
+   "find": "    rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "    rival_tail_re=\"\""
   },
   {
    "name": "wire-rival-matcher-forced-empty",
    "_mechanism": "The opposite direction for the rival wire. `wire-rival-matcher-disconnected` and `rival-re-prose-unsafe` both REMOVE the `_agent_tail_re` call from this line, so neither proves the call's RESULT is used. This one keeps the call and discards it, installing a universal matcher: every candidate then matches the rival grammar and is rejected pre-count, so the clean pane its pinned node (AC-4.6's `test_tail_pass_rival_prose_does_not_suppress`) expects to win resolves to nothing. The wanted side has carried this shape since v1.27 as `wire-wanted-matcher-forced-empty`; the rival side had no counterpart until impl-plan audit v37 (codex).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress",
-   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
-   "replace": "  _agent_tail_re \"$rival\" >/dev/null; rival_tail_re=\".\""
+   "find": "    rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "    _agent_tail_re \"$rival\" >/dev/null; rival_tail_re=\".\""
   },
   {
    "name": "rival-re-prose-unsafe",
    "_mechanism": "Restore the SHARED `_agent_pv_re` as the rival matcher over the retained tail. A real agent pane whose scrollback merely MENTIONS the other agent is then rejected as rival-bearing -- the false negative that suppresses exactly the panes this feature exists to resolve.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress",
-   "find": "  rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
-   "replace": "  rival_tail_re=\"$rival_re\""
+   "find": "    rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
+   "replace": "    rival_tail_re=\"$rival_re\""
   },
   {
    "name": "drop-rival-rejection",
@@ -2411,3 +2423,4 @@ in the one table that is supposed to account for them.
 - v1.51: Impl-plan audit v47 (agy) — must=2 should=0, and agy's own v46 clean broke one cycle later for the THIRD time (v38->39, v44->45, v46->47). One real, one not reproduced. MUST (real): T6's class-2 list — mutations anchoring into LIVE files rather than prescribed blocks — said 'exactly three' and omitted skill-md-frontmatter-renamed. Its anchor 'name: h-mad' does appear in this plan, but only inside a TEST ASSERTION in AC-5.3's block, which is why the blocks-or-live check I ran at v1.48 counted it as class 1; an assertion is not a prescribed edit, and the live SKILL.md frontmatter is what the mutation rewrites. Re-derived by classifying each anchor's python block as prescribed helper vs test: three others (stub-read-env-not-array, stub-read-dir-writes-one-file, harness-ambient-timeout-not-scrubbed) sit in T1's prescribed _orca_read_env / _isolated_env helpers and are class 1; only the frontmatter one is class 2. Now 'exactly four', with the reason the naive check misclassifies it. NOT REPRODUCED: 'Task 1 states its insertion point is IMMEDIATELY AFTER _hostile_comment (before [ "$1" = "worktree" ])' — that text does not exist in this plan. T1's actual landmark is 'after the terminal create branch and before the default --json success envelope', verified against the live stub: terminal create at :103, the default envelope at :112. Re-verified: corpus 35/35 + 12/12, WIREPIN PASS.
 - v1.52: Impl-plan audit v47 (codex) — must=2 should=1 nit=1, all four traceable to my v49/v50 edits. MUST 1 (fair): the two version revert-mutants changed several independently-encoded guards at once — tail-re-version-loosened unpaired the codex parens AND loosened both dot rules, tail-re-version-loosened-agy loosened both agy positions — so a corpus kill proved only that at least one guard bit, against the plan's own one-control-per-mutation rule. Split into FIVE single-field mutants on the shared arm anchors (cx-parens-unpaired, cx-bare-version-undotted, cx-paren-version-undotted, agy-cli-version-undotted, agy-paren-version-undotted), each measured to kill on exactly its own negative(s) with 0 wrong positives. The codex parenthesised-version field had no negative exercising it alone, so 'OpenAI Codex (v2026)' was added: corpus 35 -> 36, swept across four documents, _agent_pv_re re-measured 36/36. 43 -> 46 mutations, 46/46 anchors, 46/46 mechanisms. MUST 2: the unanchored mechanisms carried false counts — codex claimed all 35 negatives although it touches only the codex arm; agy said 10 from a corpus that has grown since. Measured by applying each: codex 22/22 of its arm's negatives, agy 14/14, 0 cross-arm, 0 positives. SHOULD: provenance design v1.37 -> v1.38. NIT: the design's case-fold paragraph said 'all three wire mutations'; there are four (wanted/rival × disconnect/force). The design's per-arm paragraph now names the five single-field mutants. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS tasks=6 wiring=2.
 - v1.53: Impl-plan audit v48 — agy GATE PASS must=0 should=0 nit=0 (fourth clean: v38, v44, v46, v48) and codex must=0 should=2 nit=1, BOTH on v1.52: must=0 on both surfaces for the second time (v38 was the first). The codex run took three attempts — the first two died on 'Selected model is at capacity' with no report and were not scored. SHOULD 1: provenance one revision behind again (design v1.38 -> v1.39, spec v1.19 -> v1.20); the header lags every time a paired document is bumped in the same commit, and it is re-derived from the two version-history tails here. SHOULD 2: the AC-6.12…AC-6.20 paragraph said 'NINE proofs across seven nodes' and read as a competing inventory against the Test-name contract table (13 green-at-RED rows, 16 mutations pinned to them); it now states that the table is the ONLY inventory, that this range enumerates a SUBSET, and names the seven other green-at-RED proofs and the ACs that own them. NIT: AC-3.2's rationale said the old form asserted 'banner-only also resolves' — banner-only is SUPPOSED to resolve; the old assertion was about a LAUNCH-COMMAND-only tail. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
+- v1.54: Impl-plan audit v49 (agy) — must=1, a real logic defect in the prescribed code that survived nineteen cycles because it is unreachable through _resolve_target. T4's text claimed that for a token other than codex/agy, rival stays empty and '_agent_tail_re "" falls to the *) arm, so the guard degrades to the shared helper'. Measured 2026-09-02: _agent_pv_re "" prints an EMPTY string, the *) arm wraps it as ^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?() which matches EVERY line, [ -n "$rival_tail_re" ] is then true, and every candidate is rejected as a rival — the opposite of the claim. Fix: the assignment is guarded on the TOKEN (if [ -n "$rival" ]) with an explicit rival_tail_re="" first, because local alone leaves the name UNSET and the guard would abort under set -u. The rejection guard itself stays [ -n "$rival_tail_re" ], so an empty matcher still means 'no rejection' and wire-rival-matcher-disconnected keeps its meaning. The three mutations anchored on the assignment line were re-anchored to its new 4-space indentation in the same edit; 46/46 anchors resolve, each rival anchor exactly once. Proven: under set -u, empty rival -> guard false, candidate kept, no abort. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
