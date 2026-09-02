@@ -21,7 +21,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "    if is_monitoring(text):",
    "replace": "    if False:",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_a_pipe_table_registry_is_no_longer_read_as_three_candidates"
+   "test": "tests/test_skill_candidates_census.py::test_a_pipe_table_registry_is_no_longer_read_as_three_candidates"
   },
   {
    "name": "routing-ignores-the-title",
@@ -29,7 +29,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
    "replace": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:0] or [\"Skill Monitoring\"])",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_routing_needs_both_the_title_and_a_j_row"
+   "test": "tests/test_skill_candidates_census.py::test_routing_needs_both_the_title_and_a_j_row"
   },
   {
    "name": "planned-is-not-counted-as-open",
@@ -37,7 +37,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "JOPEN = (\"MONITORING\", \"PLANNED\")",
    "replace": "JOPEN = (\"MONITORING\",)",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_monitoring_is_the_word_that_means_open"
+   "test": "tests/test_skill_candidates_census.py::test_monitoring_is_the_word_that_means_open"
   },
   {
    "name": "take-the-first-status-in-an-entry",
@@ -45,7 +45,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "        out.append((jid, found[0] if len(found) == 1 else None))",
    "replace": "        out.append((jid, found[0] if found else None))",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_prose_containing_a_status_word_does_not_decide_an_entry"
+   "test": "tests/test_skill_candidates_census.py::test_prose_containing_a_status_word_does_not_decide_an_entry"
   },
   {
    "name": "drop-the-vocabulary-diff",
@@ -53,23 +53,23 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "        if used-documented:",
    "replace": "        if False:",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_an_undocumented_status_word_is_flagged"
+   "test": "tests/test_skill_candidates_census.py::test_an_undocumented_status_word_is_flagged"
   },
   {
    "name": "drop-the-coverage-flag",
    "_mechanism": "The generalisable guard. Without it an unsupported row shape reads as an empty backlog, which is exactly how this bug survived. Re-anchored 2026-08-26 after the flag gained its `{why}` explanation; the drift was caught by `--check-anchors` before the run could report REFUSED.",
    "file": "scripts/skill_candidates_census.py",
-   "find": "    flag = \"\" if parsed >= present else (\n        f\"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}\")",
-   "replace": "    flag = \"\"",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_flags_an_entry_shape_the_reader_missed"
+   "find": "        flag = \"\" if parsed >= present else (\n            f\"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}\")",
+   "replace": "        flag = \"\"",
+   "test": "tests/test_skill_candidates_census.py::test_coverage_flags_an_entry_shape_the_reader_missed"
   },
   {
    "name": "measure-coverage-against-ids-mentioned-anywhere",
    "_mechanism": "The FALSE-POSITIVE direction. Counting ids mentioned ANYWHERE puts the header's own discussion of the deliberate J31-J33 gaps into the denominator, so the guard cries wolf on the header. Coverage must be measured against a looser ROW shape, never against id mentions.",
    "file": "scripts/skill_candidates_census.py",
-   "find": "        loose=sum(1 for ln in text.split(\"\\n\")\n                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))\n",
-   "replace": "        loose=len(set(re.findall(r'\\b[A-Z]+\\d+\\b', text)))\n",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_does_not_cry_wolf_on_the_deliberate_numbering_gaps"
+   "find": "            loose=sum(1 for ln in text.split(\"\\n\")\n                      if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))\n",
+   "replace": "            loose=len(set(re.findall(r'\\b[A-Z]+\\d+\\b', text)))\n",
+   "test": "tests/test_skill_candidates_census.py::test_coverage_does_not_cry_wolf_on_the_deliberate_numbering_gaps"
   },
   {
    "name": "print-a-candidates-total-for-a-j-registry",
@@ -77,7 +77,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "if n or bumps_all:",
    "replace": "if True:",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_a_monitoring_only_run_prints_no_candidates_total"
+   "test": "tests/test_skill_candidates_census.py::test_a_monitoring_only_run_prints_no_candidates_total"
   },
   {
    "name": "severity-emoji-decides-the-status",
@@ -85,7 +85,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "        c=collections.Counter(s or \"<none>\" for _, s in entries)",
    "replace": "        c=collections.Counter(\"MONITORING\" for _, s in entries)",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_the_status_is_read_not_inferred_from_severity"
+   "test": "tests/test_skill_candidates_census.py::test_the_status_is_read_not_inferred_from_severity"
   },
   {
    "name": "reject-a-bold-closed-id",
@@ -93,7 +93,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)(?:\\*\\*)?\\s*[\\u2014\\u2013-]')",
    "replace": "JROW = re.compile(r'^-\\s*\\S*\\s*\\*\\*(J\\d+[a-z]?)\\s*[\\u2014\\u2013-]')",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_a_bold_closed_id_is_still_an_entry"
+   "test": "tests/test_skill_candidates_census.py::test_a_bold_closed_id_is_still_an_entry"
   },
   {
    "name": "hardcode-j-in-the-coverage-denominator",
@@ -101,7 +101,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
    "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_coverage_counts_entries_of_any_prefix_not_just_j"
+   "test": "tests/test_skill_candidates_census.py::test_coverage_counts_entries_of_any_prefix_not_just_j"
   },
   {
    "name": "pin-the-title-to-line-zero",
@@ -109,7 +109,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "    return any(\"Skill Monitoring\" in ln for ln in text.split(\"\\n\")[:5])",
    "replace": "    return \"Skill Monitoring\" in text.split(\"\\n\")[0]",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_routing_survives_a_blank_first_line"
+   "test": "tests/test_skill_candidates_census.py::test_routing_survives_a_blank_first_line"
   },
   {
    "name": "the-declined-split-is-not-reported",
@@ -117,7 +117,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "    if c.get(\"DECLINED\"):",
    "replace": "    if False:",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
+   "test": "tests/test_skill_candidates_census.py::test_declined_split_is_counted"
   },
   {
    "name": "an-unqualified-declined-is-absorbed-into-a-bucket",
@@ -125,7 +125,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "                if not bucket: declined[\"unqualified\"]+=1",
    "replace": "                if not bucket: declined[\"not-useful\"]+=1",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_an_unqualified_declined_is_reported_not_absorbed"
+   "test": "tests/test_skill_candidates_census.py::test_an_unqualified_declined_is_reported_not_absorbed"
   },
   {
    "name": "every-declined-is-called-not-useful",
@@ -133,7 +133,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "                elif \"not codable\" in bucket.group(1): declined[\"useful-not-codable\"]+=1",
    "replace": "                elif False: declined[\"useful-not-codable\"]+=1",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_declined_split_is_counted"
+   "test": "tests/test_skill_candidates_census.py::test_declined_split_is_counted"
   },
   {
    "name": "the-triage-regex-forgets-the-date",
@@ -141,7 +141,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "TRIAGE = re.compile(r'DECLINED[^(\\n]{0,40}\\(triage:\\s*([^)]*)\\)')",
    "replace": "TRIAGE = re.compile(r'DECLINED\\**\\s*\\(triage:\\s*([^)]*)\\)')",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_the_live_backlog_has_no_unqualified_declined"
+   "test": "tests/test_skill_candidates_census.py::test_the_live_backlog_has_no_unqualified_declined"
   },
   {
    "name": "the-coverage-gap-is-unexplained",
@@ -149,7 +149,7 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "           if \"monitoring\" in tag else \"\")",
    "replace": "           if False else \"\")",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_the_coverage_gap_names_what_it_is"
+   "test": "tests/test_skill_candidates_census.py::test_the_coverage_gap_names_what_it_is"
   },
   {
    "name": "the-non-j-rows-are-absorbed-as-entries",
@@ -157,7 +157,31 @@
    "file": "scripts/skill_candidates_census.py",
    "find": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*[A-Z]+\\d+', ln))",
    "replace": "                  if ln.strip().startswith(\"- \") and re.search(r'\\*\\*J\\d+', ln))",
-   "test": "handoff/tests/test_skill_candidates_census.py::test_the_non_j_rows_are_reported_but_never_parsed_as_entries"
+   "test": "tests/test_skill_candidates_census.py::test_the_non_j_rows_are_reported_but_never_parsed_as_entries"
+  },
+  {
+   "name": "drop-the-main-guard",
+   "_mechanism": "The row's whole point. Without the guard, module top level IS the CLI: importing to reuse rows()/ROW/TERM/CAND prints a census and sys.exits with a usage error. That friction is why three sessions wrote their own parser and all three miscounted (270/101 vs 316/125).",
+   "file": "scripts/skill_candidates_census.py",
+   "find": "if __name__ == \"__main__\":\n    sys.exit(main())",
+   "replace": "sys.exit(main())",
+   "test": "tests/test_skill_candidates_census.py::test_importing_the_module_runs_nothing"
+  },
+  {
+   "name": "empty-argv-returns-clean",
+   "_mechanism": "The false-clean direction, on the NEW in-process surface. The CLI's refusal was already pinned; main([]) returning 0 would let a caller read 'no stores' as 'nothing open' -- the same TOTAL candidates=0 shape this whole file guards against.",
+   "file": "scripts/skill_candidates_census.py",
+   "find": "        print(\"usage: skill_candidates_census.py <skill-candidates.md> [more...]\", file=sys.stderr)\n        return 1",
+   "replace": "        return 0",
+   "test": "tests/test_skill_candidates_census.py::test_no_arguments_still_refuses_after_the_guard"
+  },
+  {
+   "name": "rename-the-documented-import-symbol",
+   "_mechanism": "Documenting an import API in a docstring is worthless if the symbols can move without anything failing. automation-scout.md now tells sessions to import rows() instead of writing a parser; that instruction must break loudly, not silently.",
+   "file": "scripts/skill_candidates_census.py",
+   "find": "def rows(p):",
+   "replace": "def _rows(p):",
+   "test": "tests/test_skill_candidates_census.py::test_the_documented_import_api_is_actually_importable"
   }
  ]
 }

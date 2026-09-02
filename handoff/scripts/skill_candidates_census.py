@@ -105,113 +105,127 @@ def is_monitoring(text):
     return any("Skill Monitoring" in ln for ln in text.split("\n")[:5])
 
 
-paths = sys.argv[1:]
-if not paths:
-    sys.exit("usage: skill_candidates_census.py <skill-candidates.md> [more...]")
+def main(argv=None):
+    """Run the census over the store paths in `argv` (default `sys.argv[1:]`).
 
-grand=collections.Counter(); bumps_all=[]; coverage=[]
-for f in paths:
-    tag=_label(f)
-    text=open(f).read()
+    Returns a process exit code. Importing this module runs nothing, so a
+    caller that only wants to PARSE a store can do so without setting
+    `sys.argv` or redirecting stdout first.
+    """
+    paths = list(sys.argv[1:] if argv is None else argv)
+    if not paths:
+        print("usage: skill_candidates_census.py <skill-candidates.md> [more...]", file=sys.stderr)
+        return 1
 
-    if is_monitoring(text):
-        entries=jrows(text)
-        c=collections.Counter(s or "<none>" for _, s in entries)
-        n=len(entries); op=sum(v for k,v in c.items() if k in JOPEN)
-        print(f"{tag:8s} J-entries={n:5d} OPEN({'+'.join(JOPEN)})={op:4d}  "
-              + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1])))
-        documented={m.group(1) for ln in text.split("\n") if (m:=JVOCAB.match(ln.strip()))}
-        used={s for _, s in entries if s}
-        if used-documented:
-            print(f"  ! status words used but NOT documented in this file's own table: "
-                  f"{', '.join(sorted(used-documented))}")
-        if documented-used:
-            print(f"  ~ documented but unused: {', '.join(sorted(documented-used))}")
-        # Coverage compares the strict reader against a deliberately LOOSER
-        # entry shape, so a row written slightly differently is visible. It must
-        # NOT be measured against J-ids appearing anywhere: this file's own
-        # header discusses the deliberate J31-J33 numbering gaps, so that metric
-        # reports three phantom misses -- the self-pollution failure in reverse,
-        # and a guard that cries wolf on the header is worse than none.
-        # ANY id-shaped entry bullet, not just `J`. Hardcoding the prefix here
-        # filters the rows the reader missed out of its own denominator, so
-        # coverage reports clean while dropping them -- the guard rigged to
-        # cover the gap it exists to expose. This file also carries F/G/H/A/V/P
-        # entries (33 of them, measured 2026-08-25); they are per-review finding
-        # rows rather than the standing registry, and they carry no `Status:`
-        # line, so they are not counted as open work -- but they ARE reported.
-        loose=sum(1 for ln in text.split("\n")
-                  if ln.strip().startswith("- ") and re.search(r'\*\*[A-Z]+\d+', ln))
-        seen={j for j, _ in entries}
-        referenced={m for m in re.findall(r'\bJ\d+\b', text)}
-        dangling=sorted(referenced - seen, key=lambda x: int(x[1:]))
-        no_status=[j for j, s in entries if s is None]
-        coverage.append((Path(f).name, n, loose, no_status))
-        if dangling:
-            print(f"  ~ referenced with no entry of their own (cross-links or "
-                  f"deliberate gaps): {', '.join(dangling)}")
-        continue
+    grand=collections.Counter(); bumps_all=[]; coverage=[]
+    for f in paths:
+        tag=_label(f)
+        text=open(f).read()
 
-    c=collections.Counter(); bumps=[]; declined=collections.Counter()
-    for ln,body in rows(f):
-        m0=ROW.match(body[0])
-        name=m0.group(1)
-        tail=body[0][m0.end():]                     # text AFTER the closing ** of the name
-        blob="\n".join(body)
-        if BUMP.search(tail):
-            bumps.append(f"{tag}:{ln} {name}"); continue
-        t=TERM.search(blob)
-        if t:
-            c[t.group(1)]+=1
-            if t.group(1)=="DECLINED":
-                bucket=TRIAGE.search(blob)
-                if not bucket: declined["unqualified"]+=1
-                elif "not codable" in bucket.group(1): declined["useful-not-codable"]+=1
-                else: declined["not-useful"]+=1
+        if is_monitoring(text):
+            entries=jrows(text)
+            c=collections.Counter(s or "<none>" for _, s in entries)
+            n=len(entries); op=sum(v for k,v in c.items() if k in JOPEN)
+            print(f"{tag:8s} J-entries={n:5d} OPEN({'+'.join(JOPEN)})={op:4d}  "
+                  + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1])))
+            documented={m.group(1) for ln in text.split("\n") if (m:=JVOCAB.match(ln.strip()))}
+            used={s for _, s in entries if s}
+            if used-documented:
+                print(f"  ! status words used but NOT documented in this file's own table: "
+                      f"{', '.join(sorted(used-documented))}")
+            if documented-used:
+                print(f"  ~ documented but unused: {', '.join(sorted(documented-used))}")
+            # Coverage compares the strict reader against a deliberately LOOSER
+            # entry shape, so a row written slightly differently is visible. It must
+            # NOT be measured against J-ids appearing anywhere: this file's own
+            # header discusses the deliberate J31-J33 numbering gaps, so that metric
+            # reports three phantom misses -- the self-pollution failure in reverse,
+            # and a guard that cries wolf on the header is worse than none.
+            # ANY id-shaped entry bullet, not just `J`. Hardcoding the prefix here
+            # filters the rows the reader missed out of its own denominator, so
+            # coverage reports clean while dropping them -- the guard rigged to
+            # cover the gap it exists to expose. This file also carries F/G/H/A/V/P
+            # entries (33 of them, measured 2026-08-25); they are per-review finding
+            # rows rather than the standing registry, and they carry no `Status:`
+            # line, so they are not counted as open work -- but they ARE reported.
+            loose=sum(1 for ln in text.split("\n")
+                      if ln.strip().startswith("- ") and re.search(r'\*\*[A-Z]+\d+', ln))
+            seen={j for j, _ in entries}
+            referenced={m for m in re.findall(r'\bJ\d+\b', text)}
+            dangling=sorted(referenced - seen, key=lambda x: int(x[1:]))
+            no_status=[j for j, s in entries if s is None]
+            coverage.append((Path(f).name, n, loose, no_status))
+            if dangling:
+                print(f"  ~ referenced with no entry of their own (cross-links or "
+                      f"deliberate gaps): {', '.join(dangling)}")
             continue
-        m=CAND.search(blob)
-        c[m.group(1).lower() if m else "<none>"]+=1
-    n=sum(c.values()); op=sum(v for k,v in c.items() if k in OPEN)
-    print(f"{tag:8s} candidates={n:4d} OPEN(yes+maybe)={op:4d}  "
-          + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1]))
-          + f"   [+{len(bumps)} bump rows excluded]")
-    if c.get("DECLINED"):
-        # Printed unconditionally when there are any, `unqualified` included, so
-        # a bare marker cannot hide behind a bucket it was never sorted into.
-        print(f"  ~ DECLINED split: "
-              f"useful-not-codable={declined['useful-not-codable']}  "
-              f"not-useful={declined['not-useful']}  "
-              f"unqualified={declined['unqualified']}")
-    grand.update(c); bumps_all+=bumps
-    # Same coverage question for a candidate store: `- **` lines the reader did
-    # not turn into a row are lines it did not understand.
-    rowish=sum(1 for ln in open(f).read().split("\n") if ROW.match(ln))
-    coverage.append((Path(f).name, n+len(bumps), rowish, []))
-print()
-n=sum(grand.values()); op=sum(v for k,v in grand.items() if k in OPEN)
-# A monitoring-only run has no candidates, and printing `TOTAL candidates=0`
-# for it is the same false-clean shape this file now guards against.
-if n or bumps_all:
-    print(f"TOTAL candidates={n}  OPEN(yes+maybe)={op}  no={grand.get('no',0)}  "
-      f"terminal={sum(v for k,v in grand.items() if k in ('LANDED','SUPERSEDED','DECLINED'))}  "
-      f"verdict-less={grand.get('<none>',0)}")
-    print(dict(grand))
-    print(f"\nBUMP ROWS EXCLUDED ({len(bumps_all)}) -- notes on an existing row, not candidates:")
-    for b in bumps_all: print("  " + b)
 
-# The line that would have caught this script reading a 1946-line registry as
-# three candidates. A count is only trustworthy next to what it did NOT read.
-print("\nCOVERAGE -- entries parsed vs row-shaped lines present:")
-for tag, parsed, present, no_status in coverage:
-    # Named, not merely counted. An unexplained "NOT PARSED" reads as a defect
-    # in the reader and invites widening it -- which would reclassify 33 closed
-    # historical rows as open work in one commit. All 33 were read on
-    # 2026-08-26 and none is live; see skill-monitoring.md's own header.
-    why = (" (historical F/G/H/A/V/P findings log, pre-dates the `Status:` "
-           "lifecycle -- NOT open work; promote to a J entry to track one)"
-           if "monitoring" in tag else "")
-    flag = "" if parsed >= present else (
-        f"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}")
-    print(f"  {tag}: parsed={parsed} row-shaped={present}{flag}")
-    if no_status:
-        print(f"    ! entries with no single machine-readable status: {', '.join(no_status)}")
+        c=collections.Counter(); bumps=[]; declined=collections.Counter()
+        for ln,body in rows(f):
+            m0=ROW.match(body[0])
+            name=m0.group(1)
+            tail=body[0][m0.end():]                     # text AFTER the closing ** of the name
+            blob="\n".join(body)
+            if BUMP.search(tail):
+                bumps.append(f"{tag}:{ln} {name}"); continue
+            t=TERM.search(blob)
+            if t:
+                c[t.group(1)]+=1
+                if t.group(1)=="DECLINED":
+                    bucket=TRIAGE.search(blob)
+                    if not bucket: declined["unqualified"]+=1
+                    elif "not codable" in bucket.group(1): declined["useful-not-codable"]+=1
+                    else: declined["not-useful"]+=1
+                continue
+            m=CAND.search(blob)
+            c[m.group(1).lower() if m else "<none>"]+=1
+        n=sum(c.values()); op=sum(v for k,v in c.items() if k in OPEN)
+        print(f"{tag:8s} candidates={n:4d} OPEN(yes+maybe)={op:4d}  "
+              + "  ".join(f"{k}={v}" for k,v in sorted(c.items(),key=lambda x:-x[1]))
+              + f"   [+{len(bumps)} bump rows excluded]")
+        if c.get("DECLINED"):
+            # Printed unconditionally when there are any, `unqualified` included, so
+            # a bare marker cannot hide behind a bucket it was never sorted into.
+            print(f"  ~ DECLINED split: "
+                  f"useful-not-codable={declined['useful-not-codable']}  "
+                  f"not-useful={declined['not-useful']}  "
+                  f"unqualified={declined['unqualified']}")
+        grand.update(c); bumps_all+=bumps
+        # Same coverage question for a candidate store: `- **` lines the reader did
+        # not turn into a row are lines it did not understand.
+        rowish=sum(1 for ln in open(f).read().split("\n") if ROW.match(ln))
+        coverage.append((Path(f).name, n+len(bumps), rowish, []))
+    print()
+    n=sum(grand.values()); op=sum(v for k,v in grand.items() if k in OPEN)
+    # A monitoring-only run has no candidates, and printing `TOTAL candidates=0`
+    # for it is the same false-clean shape this file now guards against.
+    if n or bumps_all:
+        print(f"TOTAL candidates={n}  OPEN(yes+maybe)={op}  no={grand.get('no',0)}  "
+          f"terminal={sum(v for k,v in grand.items() if k in ('LANDED','SUPERSEDED','DECLINED'))}  "
+          f"verdict-less={grand.get('<none>',0)}")
+        print(dict(grand))
+        print(f"\nBUMP ROWS EXCLUDED ({len(bumps_all)}) -- notes on an existing row, not candidates:")
+        for b in bumps_all: print("  " + b)
+
+    # The line that would have caught this script reading a 1946-line registry as
+    # three candidates. A count is only trustworthy next to what it did NOT read.
+    print("\nCOVERAGE -- entries parsed vs row-shaped lines present:")
+    for tag, parsed, present, no_status in coverage:
+        # Named, not merely counted. An unexplained "NOT PARSED" reads as a defect
+        # in the reader and invites widening it -- which would reclassify 33 closed
+        # historical rows as open work in one commit. All 33 were read on
+        # 2026-08-26 and none is live; see skill-monitoring.md's own header.
+        why = (" (historical F/G/H/A/V/P findings log, pre-dates the `Status:` "
+               "lifecycle -- NOT open work; promote to a J entry to track one)"
+               if "monitoring" in tag else "")
+        flag = "" if parsed >= present else (
+            f"   <-- {present - parsed} ROW-SHAPED LINES NOT PARSED{why}")
+        print(f"  {tag}: parsed={parsed} row-shaped={present}{flag}")
+        if no_status:
+            print(f"    ! entries with no single machine-readable status: {', '.join(no_status)}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

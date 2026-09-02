@@ -429,3 +429,78 @@ def test_the_coverage_gap_names_what_it_is(tmp_path) -> None:
     out = run(SCRIPT.resolve().parents[2] / "docs" / "skill-monitoring.md")
 
     assert "historical" in out.lower(), out
+
+
+def test_importing_the_module_runs_nothing() -> None:
+    """The friction that keeps producing ad-hoc parsers, pinned.
+
+    Before the `__main__` guard, module top level WAS the CLI: importing to
+    reuse `rows()`/`ROW`/`TERM`/`CAND` — the only reader with tests — printed a
+    census to stdout and then `sys.exit`ed with a usage error unless the caller
+    set `sys.argv` first. Three sessions wrote their own parser instead and all
+    three miscounted (270/101 against 316/125; two more on 2026-08-28). A bare
+    import must be silent and must not raise.
+    """
+    r = subprocess.run(
+        [sys.executable, "-c", "import skill_candidates_census"],
+        cwd=SCRIPT.parent, capture_output=True, text=True,
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "", f"import printed to stdout: {r.stdout!r}"
+    assert r.stderr == "", f"import printed to stderr: {r.stderr!r}"
+
+
+def test_the_documented_import_api_is_actually_importable() -> None:
+    """Naming the symbols in a docstring is worthless if they move. A caller
+    following the scout's instruction needs exactly these."""
+    probe = (
+        "import skill_candidates_census as m;"
+        "assert callable(m.rows) and callable(m.main);"
+        "assert m.ROW.pattern and m.TERM.pattern and m.CAND.pattern;"
+        "assert m.OPEN == ('yes', 'maybe');"
+        "print('ok')"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=SCRIPT.parent, capture_output=True, text=True,
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "ok"
+
+
+def test_main_is_callable_in_process_and_returns_an_exit_code(tmp_path) -> None:
+    """`main(argv)` is the half that makes the guard useful — without it the
+    only way to run a census is to shell out, which is what a caller wanting
+    the numbers in-process was avoiding."""
+    store = write(tmp_path, "- **a**: row — candidate: yes\n")
+    probe = (
+        "import sys, io, skill_candidates_census as m;"
+        "buf = io.StringIO(); old = sys.stdout; sys.stdout = buf;"
+        f"rc = m.main([{str(store)!r}]);"
+        "sys.stdout = old;"
+        "print(rc, 'OPEN(yes+maybe)=' in buf.getvalue())"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=SCRIPT.parent, capture_output=True, text=True,
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "0 True", r.stdout
+
+
+def test_no_arguments_still_refuses_after_the_guard() -> None:
+    """The pre-existing refusal must survive the refactor in BOTH surfaces:
+    the CLI (already pinned above) and the in-process entry point, which is new
+    and could easily have been written to return 0 on an empty argv."""
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import skill_candidates_census as m; print(m.main([]))"],
+        cwd=SCRIPT.parent, capture_output=True, text=True,
+    )
+
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "1", r.stdout
+    assert "usage:" in r.stderr

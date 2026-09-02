@@ -24,6 +24,15 @@ row's terminal marker is written on the *continuation* line beneath it (`  — *
 python3 handoff/scripts/skill_candidates_census.py docs/skill-candidates.md   # OPEN(yes+maybe)=N
 ```
 
+**Need the rows in code rather than a printed count? Import it — do not write a parser.**
+The module is import-safe (nothing runs at import), and four symbols are the whole API:
+`rows(path)` → `[(lineno, [lines])]` per row, `ROW`/`TERM`/`CAND` for the row, terminal-marker
+and verdict patterns, and `main(argv)` if you want the printed census in-process. Every
+hand-written substitute has been wrong — one returned 270 rows / 101 open where the census read
+316 / 125, because rows **wrap** and not all of them use a colon; two more miscounted on
+2026-08-28. Writing your own is not the cheap option, it is the one that produces the number
+nobody re-checks.
+
 Measured 2026-08-26: the old line-scoped grep below returned **7 rows, all 7 already terminal** —
 a 100% false-positive rate against a file the census correctly read as zero open `yes`. It is kept
 only as a fallback for a store the census cannot parse, and its output must be re-checked against
