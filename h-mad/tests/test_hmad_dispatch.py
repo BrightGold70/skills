@@ -14,6 +14,7 @@ WRAPPER = SKILL / "scripts" / "hmad-dispatch.sh"
 STUBS = SKILL / "tests" / "stubs"
 SKILL_MD = SKILL / "SKILL.md"
 RECOVERY_MD = SKILL / "references" / "failure-recovery.md"
+TAIL_SIGNATURE_PASS_SPEC = SKILL / "tests" / "mutation-specs" / "tail_signature_pass.json"
 SKILL_MD_TEXT = SKILL_MD.read_text(encoding="utf-8")
 
 # J7: the pin file is the second leak channel into this harness. F13 stripped the
@@ -5568,6 +5569,19 @@ def test_skill_md_codex_banner_claim_qualified():
     assert _CODEX_CLAIM_NEW in _SKILL_MD_FLAT, "codex-detection claim not qualified"
     assert _CODEX_CLAIM_OLD not in _SKILL_MD_FLAT, (
         "stale unqualified claim still present"
+    )
+
+
+def test_tail_mutation_spec_root_is_relative():
+    """AC-6.11: the tail mutation spec root must stay spec-relative."""
+    assert TAIL_SIGNATURE_PASS_SPEC.exists(), (
+        "tail mutation spec root contract is missing tail_signature_pass.json"
+    )
+    with TAIL_SIGNATURE_PASS_SPEC.open(encoding="utf-8") as fh:
+        spec = json.load(fh)
+    assert spec["root"] == "../..", (
+        "tail mutation spec root must be exactly '../..' so anchors resolve "
+        f"from the spec to the h-mad skill directory; got {spec['root']!r}"
     )
 
 
