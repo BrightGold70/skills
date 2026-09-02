@@ -5,7 +5,7 @@ Source list: `handoff_paths.py carry-forward-sources --branch feature-pin-agents
 
 Read-only pass. No repo file was created, edited, or committed.
 
-**Method note on hashes.** `git log --all --oneline -1 <hash>` returns the newest commit across all refs, not the named one — every hash appears to resolve to the same commit. Every hash below was resolved with `git log --oneline --no-walk <hash>`. Two hashes cited in the briefs (`58a81732`, `024bec25`) are HemaSuite commits and do not resolve in this repo; they are 8-char and are flagged where cited.
+**Method note on hashes.** `git log --all --oneline -1 <hash>` unions all refs with the revision, so `-1` returns the newest commit across that union rather than the named one — every hash appears to resolve to the same tip. This is plain git semantics, not a wrapper intercepting the call; bare `git` is correct here. Every hash below was resolved with `git log --oneline --no-walk <hash>`, which is unaffected. Two hashes cited in the briefs (`58a81732`, `024bec25`) are HemaSuite commits and do not resolve in this repo; they are 8-char and are flagged where cited.
 
 ## Summary table
 
@@ -27,11 +27,13 @@ Read-only pass. No repo file was created, edited, or committed.
 | 2026-08-31-BrightGold70-j1-residual-probes__split-and-surface-probes.md | FULLY-ABSORBED | 5 | 0 |
 | 2026-08-31-main__j1-launch-pane-pin-durability.md | FULLY-ABSORBED | 5 | 0 |
 | 2026-09-01-main__handoff-restore-chain-and-audit-version-discovery.md | OWES | 9 | 1 |
-| 2026-09-02-main__audit-report-docs-copy.md | OWES | 7 | 5 |
+| 2026-09-02-main__audit-report-docs-copy.md | HANDED-ELSEWHERE | 7 | 0 |
 
-**Totals:** 17 briefs · 111 open items · 14 STILL-OPEN · 12 FULLY-ABSORBED, 5 OWE.
+**Totals:** 17 briefs · 111 open items · 9 STILL-OPEN owed to this lane · **11 FULLY-ABSORBED, 5 OWE, 1 HANDED-ELSEWHERE** (11+5+1 = 17, verified against the table above rather than carried).
 
-Of the 14 STILL-OPEN, **4 are decisions an operator can settle in minutes** (brief 2's `#68` and `#86`, brief 3's issue filing, brief 7's summary tables) and **10 are work sessions**.
+Of the 9 STILL-OPEN, **4 are decisions an operator can settle in minutes** (brief 2's `#68` and `#86`, brief 3's issue filing, brief 7's summary tables) and **5 are work sessions**.
+
+The 17th brief carries 5 open items that are **not this lane's to work** — the `BrightGold70/audit-report-docs-copy` lane is committing right now (its tip moved `5b6c7b6` → `b551ca0` inside a minute). Its items are reported below and excluded from the still-open count.
 
 ---
 
@@ -154,7 +156,7 @@ Of the 14 STILL-OPEN, **4 are decisions an operator can settle in minutes** (bri
 |---|---|---|---|
 | 1 | Re-measure the four stores before anything else | CLOSED | census re-run this triage: `skill_candidates_census.py docs/skill-candidates.md` → 155 candidates, OPEN=8; HemaSuite main store → 314 candidates, OPEN=125 |
 | 2 | Follow the automation-scout reconcile protocol | CLOSED | `handoff/references/automation-scout.md` §"Reconcile the open rows FIRST" is the standing contract; applied in items 3 and 4 |
-| 3 | Start with this repo's own ~97 rows | CLOSED | `docs/skill-candidates.md` census: 155 candidates, 113 terminal, **8 open**, 0 open `yes`-only-unreviewed; effectively done |
+| 3 | Start with this repo's own ~97 rows | CLOSED | `docs/skill-candidates.md` census: 155 candidates, 113 terminal, **8 open**. Note the divergence: the `Taken-Over-By` stamp recorded "3 open of 150" on 2026-09-01, so 8 does **not** confirm 3 — either the scout appended rows since, or one of the two runs counted differently. Open either way, and small either way |
 | 4 | Then the three HemaSuite stores (~245 rows) | **STILL-OPEN** | census on `/Users/kimhawk/orca/HemaSuite/docs/skill-candidates.md` → **125 open of 314** (85 maybe, 40 yes). The store grew rather than drained |
 | 5 | Update the summary table at the top of each file in the same pass | **STILL-OPEN** | tied to item 4; cannot be complete while 125 rows are unreconciled |
 | 6 | (OI) The 245 HemaSuite rows — open, needs judgement | **STILL-OPEN** | same measurement as item 4 |
@@ -250,9 +252,9 @@ Of the 14 STILL-OPEN, **4 are decisions an operator can settle in minutes** (bri
 | 2 | Sweep for sibling re-filings before flipping any row | CLOSED | discharged inside the 2026-09-01 pass — rows were re-derived by name, not by the stale line numbers, which is the stronger form of the sweep |
 | 3 | Write the flips into HemaSuite's file and commit there | CLOSED (partial by design) | 20 of 36 carry terminal verdicts in that file today; the remainder is item 1, not a separate write |
 | 4 | (OI) 36 h-mad-domain rows — handed over, parked | **STILL-OPEN** | the 16: `h-mad-phase-state-bump`, `h-mad-post-compile-port`, `staged audit-prompt assembler with size guard`, `audit-report-must-be-gate-legible`, `two-pass-review-with-disjoint-angles`, `atomic-state-write-refuses-on-one-bad-key`, `mutation-spec-per-module`, `wire-scoped-revert-via-harness`, `realpath-before-routing-a-todo`, `five-surface-correction-sweep`, `mutual-discrimination-mutation-run`, `read-the-diff-after-a-dispatch-timeout`, `mutation-anchor-preverify`, `shell-probe-failure-must-not-look-like-absence`, `contract-tests-must-track-tool-output-shapes`, `derive-dispatch-counts-only-where-the-plan-fixes-them` |
-| 5 | (OI) Two rows overlap the `hmad-tooling-defects` brief; may close off its back | HANDED-ELSEWHERE / partial | `wire-registry-invocation-needs-four-flags` is now `**DECLINED**` (closed off `e87fe24`); `atomic-state-write-refuses-on-one-bad-key` is still `maybe` and is counted in item 4 |
+| 5 | (OI) Two rows overlap the `hmad-tooling-defects` brief; may close off its back | CLOSED | this item asked only whether the two rows could close off that brief. One did: `wire-registry-invocation-needs-four-flags` is now `**DECLINED**` off `e87fe24`. The other, `atomic-state-write-refuses-on-one-bad-key`, could not and stays `maybe` — it is already one of the 16 counted in item 4, so it is not a separate still-open item here |
 
-**verdict:** OWES — 16 of the 36 rows remain open in HemaSuite's store.
+**verdict:** OWES — 16 of the 36 rows remain open in HemaSuite's store (items 1 and 4, the same set counted once).
 
 ---
 
@@ -336,25 +338,27 @@ Of the 14 STILL-OPEN, **4 are decisions an operator can settle in minutes** (bri
 - **handover_from:** HemaSuite · main · session f15c716a-…
 - **taken_over_by:** skills · BrightGold70/audit-report-docs-copy · session session_01K1d48W2pVLpA3yJ8V6LjrB · 2026-09-02
 
-This is the newest brief and the only one whose work is actively in flight rather than landed. The receiving branch exists and is checked out in a linked worktree, but has reached only Phase 5b (impl-plan under audit); no production code has shipped.
+**This brief belongs to a LIVE foreign lane. Do not adopt its items and do not read them as abandoned.** The receiving branch `BrightGold70/audit-report-docs-copy` is checked out in the linked worktree `/Users/kimhawk/orca/workspaces/skills/audit-report-docs-copy` and is committing as this triage runs — its tip moved from `5b6c7b6` to `b551ca0` inside a minute, both `docs(audit-report-docs-copy): impl-plan … 5b audit cycle`. The lane has reached Phase 5b (impl-plan under audit); no production code has shipped yet, which is the expected state at 5b, not a stall.
+
+Items below are reported for visibility and are excluded from this triage's still-open count.
 
 | # | open item (≤20w) | status | evidence |
 |---|---|---|---|
-| 1 | Reproduce the `/tmp`-vs-docs gap on the live `nlm-cli-version-pin` corpus | **STILL-OPEN** | branch `BrightGold70/audit-report-docs-copy` tip `b551ca0` is "impl-plan v1.3 after 5b audit cycle 3" — planning only, no reproduce artefact committed |
-| 2 | Read the recipe surfaces: SKILL step 6.6/step 9, `h_mad_report_wait.py`, `h_mad_extract_report.py` | **STILL-OPEN** | preparatory; no evidence of a landed change on any of them |
-| 3 | Choose the fix: step 9 copies before gating, or `--persist-to`, or `report_wait` blocks on the copy | **STILL-OPEN** | `grep -rn 'persist-to\|persist_to' h-mad/scripts/hmad-dispatch.sh h-mad/SKILL.md` → **no hits**; none of the three candidates is implemented |
-| 4 | Pin it both directions: a `/tmp`-only report must not gate; the copy must be byte-identical | **STILL-OPEN** | no test or mutation spec for this exists — `ls h-mad/tests/mutation-specs/` shows no report-persistence spec |
-| 5 | Consumer-side reference guard in HemaSuite | HANDED-ELSEWHERE | HemaSuite `d1e73d53` (guard) and `9e855dfa` (restore) — both 8-char HemaSuite hashes, outside this repo, and the brief marks the consumer half as already fixed there |
-| 6 | (OI) Recipe half of HemaSuite task #33 — not started | **STILL-OPEN** | branch carries only `docs/` planning commits `d12ec34` → `b551ca0`; nothing under `h-mad/scripts/` |
-| 7 | (OI) Do not touch `/Users/kimhawk/orca/skills` on `feature/pin-agents-tail-banner` | CLOSED (honoured) | work is confined to the linked worktree `/Users/kimhawk/orca/workspaces/skills/audit-report-docs-copy` |
+| 1 | Reproduce the `/tmp`-vs-docs gap on the live `nlm-cli-version-pin` corpus | HANDED-ELSEWHERE | live lane, tip `b551ca0` "impl-plan v1.3 after 5b audit cycle 3" — planning stage, no reproduce artefact committed yet |
+| 2 | Read the recipe surfaces: SKILL step 6.6/step 9, `h_mad_report_wait.py`, `h_mad_extract_report.py` | HANDED-ELSEWHERE | preparatory; no landed change on any of them, consistent with 5b |
+| 3 | Choose the fix: step 9 copies before gating, or `--persist-to`, or `report_wait` blocks on the copy | HANDED-ELSEWHERE | `grep -rn 'persist-to\|persist_to' h-mad/scripts/hmad-dispatch.sh h-mad/SKILL.md` → **no hits**; the choice is the lane's to make at 5c/5d |
+| 4 | Pin it both directions: a `/tmp`-only report must not gate; the copy must be byte-identical | HANDED-ELSEWHERE | no report-persistence spec under `h-mad/tests/mutation-specs/` yet; that lands at 5d/5e in this lane |
+| 5 | Consumer-side reference guard in HemaSuite | CLOSED | not work this repo owed — a pointer. The brief records the consumer half as already fixed: HemaSuite `d1e73d53` (guard) and `9e855dfa` (restore). Both are 8-char HemaSuite hashes and do not resolve here, as expected |
+| 6 | (OI) Recipe half of HemaSuite task #33 — not started | HANDED-ELSEWHERE | branch carries `docs/` planning commits `d12ec34` → `b551ca0`; the lane owns it and is active |
+| 7 | (OI) Do not touch `/Users/kimhawk/orca/skills` on `feature/pin-agents-tail-banner` | CLOSED (honoured) | work is confined to the linked worktree; this triage made no repo edits |
 
-**verdict:** OWES — the whole recipe fix, in progress at Phase 5b.
+**verdict:** HANDED-ELSEWHERE — foreign lane, live and progressing. Nothing here is owed by this lane; re-check at that branch's next handoff rather than re-triaging it.
 
 ---
 
 ## Cross-cutting observations
 
-- **12 of 17 briefs are fully discharged.** The 2026-09-01 cold-start triage that backfilled the `Taken-Over-By:` stamps was accurate on every claim spot-checked here: every hash it cited resolves, and every code claim it made holds at HEAD.
+- **12 of 17 briefs need nothing from this lane** — 11 fully absorbed, plus the live foreign lane. The 2026-09-01 cold-start triage that backfilled the `Taken-Over-By:` stamps was accurate on every claim spot-checked here: every hash it cited resolves, and every code claim it made holds at HEAD.
 - **The two skill-candidate briefs are the largest residue.** Between them, 125 open rows in HemaSuite's main store and 16 of the 36 handed-over h-mad-domain rows. Both are judgement work in another repo, not code owed here.
 - **Nothing in the 17 briefs holds a live claim.** `docs/.bkit-memory.json` carries 31 features and exactly one live `owner_session_id` — `pin-agents-tail-banner`, held by the current session.
 - **Two stale claims the briefs flagged are both released**: `gate-blindness-hardening` and `handoff-linked-worktree-commit` are `owner_session_id: None`.
@@ -375,35 +379,47 @@ Who may name each brief, from its own `Taken-Over-By` value:
 | `skills · BrightGold70/handoff-restore-chain` | 1 | **Yes** — lane is dead (branch deleted, merged `c3cc0dc`, contained in `main`, absent from `worktree-ps`). Orphaned: nobody else will ever retire it. |
 | `skills · BrightGold70/audit-report-docs-copy` | 1 | **No, never.** Lane is LIVE and committing (`b551ca0`, 5b audit cycle 3). Naming it retires it repo-wide and evaporates their backlog. Leaving it listed is correct. |
 
-**Still-open items this branch owes** (re-emit in the next WRITE's Open / Blocked Items; do not drop):
+**The 9 still-open items this branch owes** — re-emit every one in the next WRITE's Open / Blocked
+Items. Four are operator decisions; five are work sessions.
 
 1. `#68` — decide whether to amend the shipped `tdd-dispatch-verification-discipline` spec with the
-   size-ceiling finding, or close it as covered. No decision recorded anywhere.
+   prompt-size-ceiling finding, or close it as covered. No decision recorded anywhere. *Decision.*
 2. `#86` — close as a duplicate of `#67`/`#66`/`#68`. The `#NN` numbers were HemaSuite TodoList ids
-   and that list is gone, so this needs a judgement call, not a lookup.
+   and that list is gone, so this needs a judgement call, not a lookup. *Decision.*
 3. gate-blindness — never filed as a GitHub issue; absolute paths need sanitising first. Explicitly
-   deferred to the operator by the brief; the fix itself shipped.
+   deferred to the operator by the brief; the code fix itself shipped. *Decision.*
 4. Cross-repo sweep of `~/.claude/handoffs/INDEX.md` to see whether the handoff-drop mechanism hit
-   repos other than HemaSuite. The probe the brief suggested was never run. (Orphaned restore-chain
-   brief — this lane is the only one that can carry it.)
+   repos other than HemaSuite. The probe the brief suggested was never run. (This is the orphaned
+   restore-chain brief's residue — this lane is the only one that can carry it.)
 5. HemaSuite `docs/skill-candidates.md` reconcile — **re-measured 2026-09-02 with
-   `handoff/scripts/skill_candidates_census.py`: 125 open (85 maybe, 40 yes) of 314**, plus the
-   per-file summary tables in the same pass. `repo: /Users/kimhawk/orca/HemaSuite · branch: main ·
-   worktree: /Users/kimhawk/orca/HemaSuite`. Foreign repo — a HANDOVER candidate, not code owed here.
-6. The 16 still-open h-mad-domain rows of the 36 handed over (20 are now terminal). Same HemaSuite
-   location as item 5. Names are listed in section 12 of this ledger.
+   `handoff/scripts/skill_candidates_census.py`: 125 open (85 maybe, 40 yes) of 314.**
+6. The per-file summary tables, in the same pass as item 5. *Decision, once the rows are done.*
+7. The same HemaSuite reconcile restated as that brief's own Open Item.
+8. The 16 still-open h-mad-domain rows of the 36 handed over (20 are now terminal). Named in
+   section 12 of this ledger.
+9. The same 36-row set restated as that brief's Open Item.
+
+Items 5-9 live in `repo: /Users/kimhawk/orca/HemaSuite · branch: main · worktree:
+/Users/kimhawk/orca/HemaSuite`. Foreign repo — a HANDOVER candidate, not code owed in this tree.
 
 This repo's own store re-measured the same day: **8 open (6 yes, 2 maybe) of 155**. The predecessor
-recorded "0 yes, 3 open of 150" on 2026-09-01, so it has grown; do not carry either number.
+recorded "0 yes, 3 open of 150" on 2026-09-01, so it has grown; do not carry either number. The
+census script lives at `handoff/scripts/skill_candidates_census.py`, not under `h-mad/scripts/`, and
+the store is a bullet list rather than a table — an ad-hoc pipe-row parser returns 0 and reads as an
+empty file.
 
-The remaining 5 still-open items belong to `2026-09-02-main__audit-report-docs-copy.md` and are the
-live sibling lane's to finish. They are recorded here for visibility only. 14 still-open in total:
-9 here, 5 there. (Commit `6f9b479` and an earlier draft of this section said 15 and 6; those came
-from a pre-revision draft of the table above and are wrong. Re-derived by counting the
-`**STILL-OPEN**` rows in sections 1-17, which sums to 14 and matches the summary table.)
+The 17th brief's 5 open items belong to the live sibling lane and are reported in section 17 for
+visibility only. They are excluded from the 9 above.
 
-**Verification of the ledger itself.** Five CLOSED verdicts were spot-checked against the tree and all
-five held: `_verdict_after_boundary` at `h-mad/scripts/hmad-dispatch.sh:2677`; the `-- .` pathspec at
+**Verification of the ledger.** Five CLOSED verdicts were spot-checked against the tree and all five
+held: `_verdict_after_boundary` at `h-mad/scripts/hmad-dispatch.sh:2677`; the `-- .` pathspec at
 `:2696`; the corrected prompt-echo sentence at `h-mad/SKILL.md:781`; the multi-pin keys in
-`h_mad_wire_registry.py`; `--check-anchors` in `h-mad/git-hooks/pre-push`. The `#68` still-open verdict
-was confirmed by re-running its grep (0 hits).
+`h_mad_wire_registry.py`; `--check-anchors` in `h-mad/git-hooks/pre-push`. The `#68` still-open
+verdict was confirmed by re-running its grep (0 hits).
+
+**Count history, because two commit messages carry superseded figures.** `6f9b479` says 15 still-open
+and 12 fully-absorbed; `a29c1d6` corrects the first to 14 but leaves the verdict split wrong. Both
+were derived by hand from drafts of the table that the triage agent revised while this session was
+reading it. The verified figures are the ones in the Totals line above — 9 still-open owed here,
+11 fully-absorbed, 5 owing, 1 handed elsewhere — and they are checkable by counting the table's own
+rows rather than trusting any prose, including this paragraph.
