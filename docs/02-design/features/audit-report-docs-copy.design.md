@@ -99,7 +99,14 @@ def _write_collected_report(report_text, collected_path, *, overwrite=True) -> P
 def collect(spec, *, grace, project_root, feature, phase, cycle,
             surface=None, overwrite=True) -> tuple[str, Path | None]:
     collected_path = _collected_path(..., index=spec.index, surface=surface)
-    # AC-2.11: already collected — report present, marker or not, bytes identical
+    # AC-2.8 FIRST: $RP IS the docs path. The marker is the completion signal and is
+    # removed; a byte-identity short-circuit here would trivially match (same file)
+    # and skip the marker path, so it is ordered after this block.
+    if spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve():
+        if _has_complete_report(spec.report_path) or _run_report_wait(spec.report_path, grace):
+            return "report-file", _copy_collected_report(spec.report_path, collected_path, overwrite=overwrite)
+        return "none", None                       # no marker → MISSING (AC-2.8 "otherwise")
+    # AC-2.11: already collected — a DISTINCT report file, marker or not, bytes identical
     if collected_path.is_file() and spec.report_path.is_file() \
        and collected_path.read_bytes() == spec.report_path.read_bytes():
         return "report-file", collected_path
@@ -126,7 +133,9 @@ Edge cases:
   required) → `report_wait` times out → MISSING (never copies an empty file; mutation (a)).
 - `collected_path` exists but unreadable → `OSError` → `OperationalError` (exit 2).
 - Same-file case with a missing marker → `_has_complete_report` False → `report_wait` waits
-  `grace` then MISSING (AC-2.8 requires the marker).
+  `grace` then MISSING (AC-2.8 requires the marker); the same-file branch returns before the
+  AC-2.11 short-circuit, so an existing marker is always removed on OK (a same-file with a
+  marker never reaches the `--out` rung either — it returned already).
 
 ### D2. `h_mad_collect_report.py` — the CLI (FR-2)
 
@@ -177,8 +186,16 @@ transport path is refused by name whether or not it exists):
               "h_mad_collect_report.py)")
         return 2
 ```
-`_gate_token`'s regex keeps matching (AC-3.3); `h_mad_do_preconditions.py` never passes a
-transport name (AC-3.4). `--verify-stamp` on a transport path is unaffected (it reads a stamp
+**Downstream contract (AC-3.3), pinned in `h_mad_audit_cycle.py`, not inferred from the
+regex:** `h_mad_audit_cycle.gate(collected)` runs the gate CLI as a subprocess; on a transport
+name the CLI prints `GATE: INVALID must=0 should=0` and exits 2; `gate()` accepts rc ∈ {0, 2},
+`_gate_token` parses `("INVALID", 0, 0)`, and `gate()` returns `("INVALID", 0, 0, [])`
+before the in-process read (existing early return). `combine()` then renders `UNVERIFIED`
+with `reason=no_gate_sections:p<i>` — the existing word, no new one. A test in
+`test_h_mad_audit_cycle.py` calls `gate(Path("…/audit_f_plan_cycle3_codex.report.md"))` on a
+well-formed report and asserts exactly that tuple, and a `combine()` test asserts the reason,
+so the consumer path cannot drift while the CLI tests stay green.
+`h_mad_do_preconditions.py` never passes a transport name (AC-3.4). `--verify-stamp` on a transport path is unaffected (it reads a stamp
 sidecar, never scores).
 
 ### D4. `hmad-dispatch.sh` — `collect-report` verb (FR-4)
@@ -234,7 +251,8 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | recipe | `h-mad/SKILL.md` | modify | codex-leg block, step-9 sentence, registry entry |
 | verb table | `h-mad/references/orchestration-mode.md` | modify | `collect-report` row |
 | tests | `h-mad/tests/test_h_mad_collect_report.py` | new | AC-1.1–1.6, AC-2.1–2.12 |
-| tests | `h-mad/tests/test_h_mad_audit_gate.py` | modify | AC-3.1–3.7 incl. corpus + sweep |
+| tests | `h-mad/tests/test_h_mad_audit_gate.py` | modify | AC-3.1, 3.2, 3.5–3.7 incl. corpus + sweep |
+| tests | `h-mad/tests/test_h_mad_audit_cycle.py` | modify | AC-3.3 (`gate()`/`combine()` on a transport name), AC-2.8 branch order, compatibility pins |
 | tests | `h-mad/tests/test_hmad_dispatch_collect_report.py` | new | AC-4.1, AC-4.3 |
 | tests | `h-mad/tests/test_h_mad_collect_report_docs.py` | new | AC-4.2, AC-5.1–5.4 |
 | mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 17 mutations |
@@ -309,7 +327,8 @@ marker (Marker discipline). The recipe halts on any non-`OK` token before the ga
 | Test file | Scenarios | Command |
 |---|---|---|
 | `tests/test_h_mad_collect_report.py` | AC-1.1–1.6, AC-2.1–2.12 | `python3.11 -m pytest h-mad/tests/test_h_mad_collect_report.py -q` |
-| `tests/test_h_mad_audit_gate.py` (+) | AC-3.1–3.7 | `python3.11 -m pytest h-mad/tests/test_h_mad_audit_gate.py -q` |
+| `tests/test_h_mad_audit_gate.py` (+) | AC-3.1, 3.2, 3.5, 3.5a, 3.6, 3.7 | `python3.11 -m pytest h-mad/tests/test_h_mad_audit_gate.py -q` |
+| `tests/test_h_mad_audit_cycle.py` (+) | AC-3.3: `gate()` on a transport name → `("INVALID",0,0,[])`; `combine()` → `UNVERIFIED reason=no_gate_sections:p1`; AC-2.8 ordering (same-file with marker → OK + marker removed; without marker → none) | `python3.11 -m pytest h-mad/tests/test_h_mad_audit_cycle.py -q` |
 | `tests/test_hmad_dispatch_collect_report.py` | AC-4.1, AC-4.3, staged-name grammar | `python3.11 -m pytest h-mad/tests/test_hmad_dispatch_collect_report.py -q` |
 | `tests/test_h_mad_collect_report_docs.py` | AC-4.2, AC-5.1–5.4 | `python3.11 -m pytest h-mad/tests/test_h_mad_collect_report_docs.py -q` |
 | existing `test_h_mad_audit_cycle*.py`, `test_hmad_dispatch_audit_cycle.py` | compatibility, spec-registry tests | `python3.11 -m pytest h-mad/tests -q` |
@@ -362,3 +381,4 @@ marker (Marker discipline). The recipe halts on any non-`OK` token before the ga
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.1: Design-audit v1 fixes (codex + agy p1, same finding on the short-circuit): the AC-2.8 same-file branch is ordered BEFORE the AC-2.11 byte-identity short-circuit (which would trivially match the same file and skip the marker path); AC-3.3's `gate()` tuple and `combine()` reason are pinned by tests in `test_h_mad_audit_cycle.py`, not inferred from `_gate_token`'s regex.
