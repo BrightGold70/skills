@@ -125,7 +125,10 @@ def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surf
     # AC-2.8 FIRST: $RP IS the docs path. The marker is the completion signal and is
     # removed; a byte-identity short-circuit here would trivially match (same file)
     # and skip the marker path, so it is ordered after this block.
-    same = spec.report_path.exists() and spec.report_path.resolve() == collected_path.resolve()
+    # Existence-blind on purpose (Path.resolve() is strict=False): a docs-path --report
+    # that does not exist yet must still take THIS branch and end MISSING, never fall
+    # through to the --out rung and be written by it (AC-2.8 "no copy is attempted").
+    same = spec.report_path.resolve() == collected_path.resolve()
     if same:
         if _has_complete_report(spec.report_path) or _run_report_wait(spec.report_path, grace):
             return "report-file", _copy_collected_report(spec.report_path, collected_path, overwrite=overwrite)
@@ -179,8 +182,8 @@ usage: h_mad_collect_report.py --feature F --phase {plan,design,impl-plan} --cyc
 ```
 
 Algorithm (`main(argv) -> int`). **Everything after argparse — steps 1 (semantic checks)
-through 6 — runs inside ONE outer `try` whose handler is `except (OperationalError, OSError)
-as e:` → `ERROR: <e>` on stderr, `[H-MAD] <feature> collect <operational_error|readback_failed>`
+through 6 — runs inside ONE outer `try` whose handler is `except (OperationalError, OSError,
+ValueError) as e:` (`ValueError` is what `validate_surface` and `int()` raise) → `ERROR: <e>` on stderr, `[H-MAD] <feature> collect <operational_error|readback_failed>`
 on stdout, return 2.** So `Path.resolve()` in step 3, `mkdir` in step 1, `is_dir()` probes,
 and any `OSError` the library did not already convert all take the same exit path; no
 traceback can escape `main()`. Step 4's nested `CollectConflict` handler sits inside that
@@ -192,7 +195,8 @@ outer try.
    line (AC-2.10 "missing required flag"). Then the semantic operational checks, each →
    `ERROR: …` on stderr, `[H-MAD] <feature> collect operational_error` on stdout, exit 2,
    **no** `COLLECT:` line (AC-2.10): `--project-root` not a directory; `--cycle` < 1;
-   `--surface` fails `validate_surface` (AC-2.7; the ValueError message is echoed); docs dir
+   `--surface` fails `validate_surface` (AC-2.7; its `ValueError` propagates to the outer
+   handler, which echoes the message and exits 2 with the `operational_error` marker); docs dir
    cannot be created (`mkdir` raises) or is not a directory.
 2. Build `spec = PassSpec(index=1, report_path=Path(RP), out_path=Path(OUT) if OUT else None, rc=0)`.
 3. `same = Path(RP).resolve() == _collected_path(...).resolve()` (for the AC-2.8 detail line).
@@ -210,7 +214,7 @@ outer try.
            delivered, path = collect(spec, ..., surface=S, overwrite=True)   # still inside the outer try
            forced = True
        ... steps 5–6 (token line, detail lines, marker) ...
-   except (OperationalError, OSError) as e:   # CollectConflict cannot reach here (handled above)
+   except (OperationalError, OSError, ValueError) as e:   # CollectConflict handled above
        print(f"ERROR: {e}", file=sys.stderr)
        reason = "readback_failed" if str(e).startswith("readback") else "operational_error"
        print(f"[H-MAD] {F} collect {reason}"); return 2                      # AC-2.12
@@ -457,6 +461,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.9: Design-audit v7 fix (agy p1): the same-file test is existence-blind so a missing docs-path `--report` ends MISSING instead of reaching the `--out` rung.
+- v1.8: Design-audit v7 fix (codex; agy v6 clean): the outer handler also catches `ValueError` so a bad `--surface` cannot leak as a traceback.
 - v1.7: Design-audit v5 fixes (codex): `collect()` runs its WHOLE body under `_fs_errors` (the probes `_has_complete_report`/`_run_report_wait` included); the SKILL.md block is a new top-level section after `## Putting …`, outside the pinned slice, per spec/plan — one pointer sentence inside.
 - v1.6: Design-audit v5 fix (agy p1): one outer `try … except (OperationalError, OSError)` encloses every step after argparse, so `resolve()`, `mkdir` and the directory probes cannot leak a traceback either.
 - v1.5: Design-audit v4 fix (agy p1, 10 tool calls; codex v4 clean): the PermissionError test chmods the parent DIRECTORY, not the file — `unlink` on a read-only file succeeds under a writable parent and the scenario would have exited 0.
