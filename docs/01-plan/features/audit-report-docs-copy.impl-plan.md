@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int: ...
 - [ ] AC-2.10: `--project-root` not a directory; a FILE at `docs/01-plan/features`; each missing required flag; `--phase bogus` → exit 2, no `COLLECT:` line, stdout marker `usage_error` (argparse cases) or `operational_error`; a `0o555` docs parent with differing docs + `--force` → exit 2, `operational_error`, no traceback on stderr (skipped as root).
 - [ ] AC-2.11: docs identical, RP present, no marker → `OK … delivered=report-file`.
 - [ ] AC-2.12: the CLI is exercised IN-PROCESS for this case — `h_mad_collect_report.main([...])` with `h_mad_audit_cycle._readback_equal` monkeypatched to return False (no production seam, no env var) — → returns 2, captured stdout is exactly the `[H-MAD] f collect readback_failed` line (no `COLLECT:` line), for the report-file rung, the `--out` rung, and inside a `--force` retry.
-- [ ] AC-2.9 (hand replay, executable checkpoint — run once after this task's GREEN, before Task 4): 
+- [ ] AC-2.9h (hand replay, executable checkpoint — run once after this task's GREEN, before Task 4; distinct from the suite half AC-2.9 above): 
   ```bash
   S=/tmp/audit_nlmpin_plan_cycle8_codex.report.md   # real survivor; if absent after a reboot, use any /tmp/audit_*_codex.report.md and record which
   R=$(mktemp -d)/replay && mkdir -p "$R/docs/01-plan/features" && cp "$S" "$R/rp.report.md" && : > "$R/rp.report.md.done"
@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int: ...
   cmp -s "$S" "$R/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md" && echo identical
   python3 h-mad/scripts/h_mad_audit_gate.py "$R/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md"; echo "rc=$?"   # expect GATE: PASS|FAIL, rc=0
   ```
-  The four outputs are recorded verbatim in `audit-report-docs-copy.plan.md`'s Version History via `h_mad_version_history.py <plan> --version v1.<next-unused> --text "AC-2.9 hand replay: <the four lines>"` (the helper refuses a duplicate version, so read the current newest entry first and use the next number) — that entry is the checkpoint's evidence, and Task 4 does not start until it exists.
+  The four outputs are recorded in `audit-report-docs-copy.plan.md`'s Version History via `h_mad_version_history.py <plan> --version v1.<next-unused> --text "AC-2.9h hand replay <date> survivor=<S>: gate(RP)=<GATE line> rc=<n> · collect=<COLLECT line> · cmp=<identical|DIFFER> · gate(docs)=<GATE line> rc=<n>"` — ONE line, the four results joined by ` · `, because the helper refuses newline-bearing text (`multiline_text`, verified by dry-run 2026-09-02) and a duplicate version (read the newest entry first and use the next number). That entry is the checkpoint's evidence, and Task 4 does not start until it exists.
 - [ ] Every exit path prints exactly one `[H-MAD] … collect …` line.
 
 **Dependencies on other tasks**: Task 1, Task 2 (AC-2.9 step i needs the refusal)
@@ -188,7 +188,7 @@ def main(argv: list[str] | None = None) -> int: ...
 **Production file**: `h-mad/scripts/hmad-dispatch.sh`
 **Test file**: `h-mad/tests/test_hmad_dispatch_collect_report.py`
 **Task shape**: `wiring`
-**WIRE**: `h-mad/scripts/hmad-dispatch.sh:_cmd_collect_report` → `python3 "$here/h_mad_collect_report.py" "$@"` (with `here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-…}"`), plus the `collect-report)` arm in `main()` and the name in the line-3 verb list
+**WIRE**: `h-mad/scripts/hmad-dispatch.sh:_cmd_collect_report` → `python3 "$here/h_mad_collect_report.py" "$@"` (with `here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-…}"`), plus the `collect-report)` arm in `main()` and the name in the `# Verbs:` header line
 **WIRE-PIN**: `h-mad/tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv`
 
 **Description**: The same pure-delegation shape as `report-wait` (not byte-identical: this
@@ -210,7 +210,7 @@ _cmd_collect_report() {  # <args passed verbatim to h_mad_collect_report.py>
 **Acceptance Criteria**:
 - [ ] AC-4.1 (WIRE-PIN): with `HMAD_AUDIT_CYCLE_SCRIPT_DIR` pointing at a stub dir whose `h_mad_collect_report.py` records `sys.argv[1:]` to a file, prints `STUB-OUT`, and exits 7: `hmad-dispatch collect-report --feature f --phase plan --cycle 1 --surface codex --report /x --project-root /y` exits 7, stdout is `STUB-OUT`, and the recorded argv equals the six flag/value pairs in order.
 - [ ] AC-4.3: `hmad-dispatch collect-reportx …` prints `unknown verb` on stderr, exits 2, and the stub recorded nothing.
-- [ ] AC-4.2 (half): the line-3 verb list of `hmad-dispatch.sh` contains `collect-report`.
+- [ ] AC-4.2 (half): the `# Verbs:` header line of `hmad-dispatch.sh` (located by its `# Verbs:` prefix, not by line number) contains `collect-report`.
 - [ ] AC-3.5a (wrapper half): under the existing audit-cycle stub harness (`install_audit_cycle_stubs`), the `--report-file` value the assembler stub receives matches `h_mad_audit_gate.TRANSPORT_RE`.
 
 **Dependencies on other tasks**: Task 3
@@ -249,7 +249,7 @@ def _second_surface() -> str: ...   # "## Second surface — the codex leg" → 
 - [ ] AC-5.3: within the new section, the indices of `exec codex` < `collect-report` < `report_not_collected` < `h_mad_audit_gate.py`; the line containing `h_mad_audit_gate.py` does not contain `$RP`.
 - [ ] AC-5.4: the helper-registry entry for `h_mad_collect_report.py` contains `COLLECT: OK|MISSING|CONFLICT`, `exit 0`, `2`, `--force`, `readback`.
 - [ ] AC-4.2 (other half): `references/orchestration-mode.md` verb table has a `collect-report` row adjacent (within 2 lines) to the `report-wait` row.
-- [ ] AC-3.5a (docs half): the 6.6 literal `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` read from SKILL.md, instantiated with `f`/`plan`/`3` and with the `_codex` suffix form from the new section, matches `TRANSPORT_RE`.
+- [ ] AC-3.5a (docs half): the 6.6 literal `RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md` read from SKILL.md, instantiated with `f`/`plan`/`3` and with the `_codex` suffix form from the new section, satisfies `is_transport_path(Path(instantiated))` (the grammar applies to `Path.name`; the full `/tmp/…` string would not match `^audit_`).
 - [ ] Step 9 contains the sentence naming `audit_*.report.md` and "never `$RP`".
 - [ ] The `## Audit prompt assembly` section contains the pointer sentence naming `Second surface`.
 
@@ -336,9 +336,10 @@ touched (AC-6.4).
 
 ## Version History
 - v1.0: Initial implementation plan draft.
-- v1.6: 5b audit v6 sweep (codex; agy v6 clean): AC-3.5a fixture kinds (`transport|audit_doc|other`) match the spec's scoping; Task 6 names `test_mutation_spec_shape` as the shape verifier; duplicate AC label removed.
-- v1.5: 5b audit v5 sweep (codex): Task 3 lists its checkpoint artifact (the plan's Version History entry); design pointer tracks the newest entry.
-- v1.4: 5b audit v4 fixes (codex): AC-6.3a executable spec-shape test (the harness does not enforce `test`/`_mechanism`); `validate_surface` dropped from the CLI import list.
-- v1.3: 5b audit v3 fixes (agy p1 + codex): replay evidence recorded via the version-history helper at the next unused version (no hard-coded `v1.7`); Task 6 prose matches AC-6.4; Task 5 metadata names orchestration-mode.md; design pointer v1.13; mutant e′ dropped as unkillable (the surface is validated in `_collected_path`; the CLI no longer pre-checks it) → 22; Task 6 JSON lists all five test files.
-- v1.2: 5b audit v2 fixes (codex; agy v2 clean): exit-code-only and token-only mutants for the gate refusal and the CLI error path (k, k′, l, l′ → 23); Task 6's test surface made explicit (five test files in `command`; `test_hmad_dispatch_audit_cycle.py` not edited).
 - v1.1: 5b audit v1 fixes (agy p1 + codex): no env seam — the CLI readback case runs `main()` in-process with `_readback_equal` monkeypatched; both writers share `_finalize_write` so the readback is one separable part and the `--out` rung is pinned too; the AC-2.9 hand replay is an executable checkpoint with exact commands and a required Version-History paste; 19-row mutation table with fixed names/files/tests; AC-6.4 states the existing spec tests are not extended; verb wording.
+- v1.2: 5b audit v2 fixes (codex; agy v2 clean): exit-code-only and token-only mutants for the gate refusal and the CLI error path (k, k′, l, l′ → 23); Task 6's test surface made explicit (five test files in `command`; `test_hmad_dispatch_audit_cycle.py` not edited).
+- v1.3: 5b audit v3 fixes (agy p1 + codex): replay evidence recorded via the version-history helper at the next unused version (no hard-coded `v1.7`); Task 6 prose matches AC-6.4; Task 5 metadata names orchestration-mode.md; design pointer v1.13; mutant e′ dropped as unkillable (the surface is validated in `_collected_path`; the CLI no longer pre-checks it) → 22; Task 6 JSON lists all five test files.
+- v1.4: 5b audit v4 fixes (codex): AC-6.3a executable spec-shape test (the harness does not enforce `test`/`_mechanism`); `validate_surface` dropped from the CLI import list.
+- v1.5: 5b audit v5 sweep (codex): Task 3 lists its checkpoint artifact (the plan's Version History entry); design pointer tracks the newest entry.
+- v1.6: 5b audit v6 sweep (codex; agy v6 clean): AC-3.5a fixture kinds (`transport|audit_doc|other`) match the spec's scoping; Task 6 names `test_mutation_spec_shape` as the shape verifier; duplicate AC label removed.
+- v1.7: 5b audit v7 fixes (codex; agy v7 clean): AC-2.9h evidence is one `·`-joined line (the version-history helper refuses multiline text); docs-half grammar test uses `is_transport_path(Path(...))`; hand replay renumbered AC-2.9h; Version History reordered ascending; `# Verbs:` header located by prefix.
