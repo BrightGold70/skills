@@ -4,7 +4,7 @@
 
 Insert a standalone tail-evidence pass into `_orca_find` between Pass 2 and Pass 3, reusing
 the tail-only `_agent_tail_re` banner grammar against `.result.terminal.tail` — NOT the shared
-`_agent_pv_re`, which matches prose 29/29 — resolving only on exactly one match.
+`_agent_pv_re`, which matches prose 35/35 — resolving only on exactly one match.
 
 ## Overview
 
@@ -73,15 +73,15 @@ exist to exclude.
 
 **The tail pass uses its OWN line-complete banner grammar, `_agent_tail_re`, for BOTH the wanted
 and the rival check; `_agent_pv_re` itself is unchanged.** A line anchor alone is not enough and
-neither is a leading-position grammar: measured across the corpus (24 probes then, 29 since audit v42), the shipped regex declines
+neither is a leading-position grammar: measured across the corpus (24 probes at first, 29 after audit v42, 35 after audit v45), the shipped regex declines
 0, a line anchor 7, a leading-position grammar 14, a line-complete shape 19, and only the
 bounded, independent `_agent_tail_re` literals — a banner shape must consume its WHOLE line,
-behind a prefix of whitespace or box-drawing characters only — decline all 29, with all 12 real
+behind a prefix of whitespace or box-drawing characters only — decline all 35, with all 12 real
 banner and status lines still matching.
 
 **The literals are normative; this prose is not.** The grammar's single authoritative statement is
 the `_agent_tail_re` code block in impl-plan §Task 2, and the arbiter of agreement between the two
-is AC-2.12, which runs the doc's own block over the 29/12 corpus. Every other surface — this
+is AC-2.12, which runs the doc's own block over the 35/12 corpus. Every other surface — this
 paragraph, the source plan, the spec — **describes** that block and must never re-list its
 continuations: five prose restatements of one flat list existed across three documents, and all
 five were wrong in the same way (below). Describe the shape; cite the block for the shape's
@@ -101,13 +101,23 @@ block verbatim:
 A flat list implies each agent accepts all five. None does, and the two arms disagree on three of
 the five rows.
 
+**Two boundaries that were stated here and not enforced by the block until audit v45.** The
+prefix rule above says whitespace or box-drawing only, but the block's class also admitted ASCII
+`|`, `:` and `>` (a v29 revision called them "quote" characters); measured 2026-09-02,
+`> OpenAI Codex`, `: OpenAI Codex` and `| model: gpt-5.6-terra` — a Markdown blockquote and a
+table cell, exactly what a shell that printed a README carries — all matched. And "a `·` and a
+cwd" was enforced as `[^[:space:]]*`, so `gpt-5.6-terra high ·` with nothing after the separator
+matched too. Both closed in the block; the corpus carries all six shapes; two revert-mutants
+(`tail-re-prefix-widened`, `tail-re-cwd-optional`) prove each closure is what the corpus
+discriminates. The one prefixed positive control uses U+2502 `│`, which is still admitted.
+
 **The match is CASE-INSENSITIVE, and that is part of the contract, not an implementation detail.**
 The literals are lowercase (`openai codex`, `antigravity cli`, `gemini [0-9]`) while every real
 banner is capitalised, so the grammar is correct only under a case-folding match. Every call site
 uses `grep -Eiq` (impl-plan T3/T4 and all three wire mutations). Measured 2026-09-02 over the
-doc's own block and the full corpus: under `grep -Ei` 29/29 negatives decline and 12/12 positives
+doc's own block and the full corpus: under `grep -Ei` 35/35 negatives decline and 12/12 positives
 match — the figure this document has been reporting — while under a case-SENSITIVE `grep -E` the
-negatives still decline 29/29 but **9 of the 12 positives decline too** (`OpenAI Codex`,
+negatives still decline 35/35 but **9 of the 12 positives decline too** (`OpenAI Codex`,
 `OpenAI Codex v0.145.0`, `  OpenAI Codex (v0.145.0)`, `OpenAI Codex (v0.145.0)  model:
 gpt-5.6-terra`, `Antigravity CLI v1.2.3`, `  Antigravity CLI v1.2.3`, `Antigravity CLI 1.1.22`,
 `Gemini 3.1 Pro`, `Gemini 3.1 Pro (High)`); only the three all-lowercase controls survive. A
@@ -128,8 +138,8 @@ rule, and a single prose pane matching is one match, so FR-2 holds while the ans
 (impl-plan audit v41). Passes 1 and 2 read short titles and previews rather than arbitrary
 scrollback, so the anchor is applied where the tail pass builds its matcher and nothing shared
 moves. `_agent_tail_re` is a NEW independent helper — not an anchor applied to the old one, and
-not the agent's existing signature. Measured over the 29-probe corpus: 0 of 29 prose probes match and 12 of 12 real banner and
-status lines still do. Pinned in two places, deliberately: impl-plan **AC-2.12** tests the helper's own 29/12 corpus in
+not the agent's existing signature. Measured over the 35-probe corpus: 0 of 35 prose probes match and 12 of 12 real banner and
+status lines still do. Pinned in two places, deliberately: impl-plan **AC-2.12** tests the helper's own 35/12 corpus in
 the task that defines it, and **AC-3.17** tests the caller CONNECTION with a mixed
 banner-plus-prose-decoy fixture. Mutations `tail-re-unanchored` and `tail-re-unanchored-agy`
 (one per agent arm) are killed by AC-2.12.
@@ -278,7 +288,7 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 ## Implementation Order
 
 1. `_orca_tail_sig` **and `_agent_tail_re`** + their unit tests, including the matcher's direct
-   29-negative/12-positive corpus (no `_orca_find` change yet — both helpers are proven alone).
+   35-negative/12-positive corpus (no `_orca_find` change yet — both helpers are proven alone).
    Both land in impl-plan Task 2; step 2 consumes the matcher, so it cannot be deferred past here.
 2. The pass, entered on `n != 1`, resolving on exactly one.
 3. Rival rejection.
@@ -529,3 +539,4 @@ resolution, or it merely restates Pass 0.
 - v1.34: Impl-plan audit v40 (codex) should-fix: the Components Changed inventory omitted two edits Task 5 now requires — the Codex fallback enumeration at hmad-dispatch.sh:513 and the banner-decay claim at SKILL.md:315 — so the impl-plan's claim to map all its work onto this design's steps was broader than the declared source. Both rows added with the reason each edit is load-bearing rather than cosmetic.
 - v1.35: Impl-plan audit v41 (codex) should-fix: the same FR mislabel the impl-plan corrected at v1.41 and swept only within itself — this document still called the prose false positive 'the wrong-pane class FR-2 forbids'. Corrected to FR-1 / spec AC-1.4, with the reason: a single prose pane matching is exactly one match, so FR-2's cardinality rule holds while the answer is wrong.
 - v1.36: Impl-plan audit v42 (codex): the normative grammar this document describes was measured accepting 'OpenAI Codex (v0.145.0', 'OpenAI Codex v0.145.0)', 'OpenAI Codex 2026', 'Antigravity CLI 2026' and 'Gemini 3.1 Pro (2026)' — outside the paired-parenthesis, dotted-numeric rule stated here. Arms tightened in the impl-plan block; this document's corpus figures swept 24 -> 29, with the superseded-grammar comparisons labelled 'then-24' rather than renumbered.
+- v1.37: Impl-plan audit v45 (codex): this document's prefix rule (whitespace or box-drawing only) and its cwd rule (a · AND a cwd) were both stated here and not enforced by the impl-plan's block — the block admitted ASCII |, : and > and an empty cwd. Measured: '> OpenAI Codex', '| model: gpt-5.6-terra', 'gpt-5.6-terra high ·' all matched. Closed in the block; a paragraph here records both boundaries, the corpus figures swept 29 -> 35, and the two revert-mutants are named.

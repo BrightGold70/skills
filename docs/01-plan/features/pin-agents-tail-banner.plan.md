@@ -87,16 +87,16 @@ printed release notes was resolvable AS THE AGENT — the wrong-pane class **FR-
 forbids, NOT FR-2: one prose pane matching is exactly ONE match, so FR-2's cardinality rule is
 satisfied while the resolution is still wrong (impl-plan audit v41). The regex
 is hardened against the two examples that motivated it, and that was generalised into a safety
-premise it does not support. Measured over 29 prose probes and 12 real banner/status lines: the shipped helper declines 0,
-this grammar declines all 29, and all 12 positives still match (impl-plan **AC-2.12**, which
-owns the helper's own 29/12 corpus in the task that defines it; AC-3.17 is the CALLER-connection
+premise it does not support. Measured over 35 prose probes and 12 real banner/status lines: the shipped helper declines 0,
+this grammar declines all 35, and all 12 positives still match (impl-plan **AC-2.12**, which
+owns the helper's own 35/12 corpus in the task that defines it; AC-3.17 is the CALLER-connection
 node and uses a mixed banner-plus-prose-decoy fixture, so pointing the corpus at it sends
 verification to the wrong test surface — impl-plan audit v38). Both regexes were verified against the REAL panes on
 2026-09-01:
 `openai codex|model: *gpt-|…` matches the codex tail (`OpenAI Codex`), and
 `antigravity cli|gemini [0-9]` matches the agy tail (`Antigravity CLI 1.1.22`,
 `Gemini 3.1 Pro (High)`). The work is running a TAIL-ONLY matcher, `_agent_tail_re`, against
-`.tail` — not the existing helper, which matches prose 29/29 — instead
+`.tail` — not the existing helper, which matches prose 35/35 — instead
 of `.preview`. An earlier check of this against a hand-written reconstruction reported
 "agy: NO MATCH" and was wrong — the reconstruction is not the production surface.
 
@@ -310,3 +310,4 @@ Audit this plan (Phase 3 gate), then design (Phase 4).
 - v1.27: Impl-plan audit v38 (codex) should-fix: this document pointed the direct 24-negative/12-positive matcher corpus at impl-plan AC-3.17, but v1.30 moved that corpus to AC-2.12, in the task that OWNS the helper; AC-3.17 is the caller-connection node and uses a mixed banner-plus-prose-decoy fixture. The stale pointer sent verification to the wrong test surface.
 - v1.28: Impl-plan audit v41 (codex) should-fix: this document still called the prose false positive 'the wrong-pane class FR-2 forbids', and its goals list mapped 'never resolve to the wrong pane' to FR-2 alone. FR-2 is the exactly-one CARDINALITY rule — one prose pane matching is one match, so FR-2 is satisfied while the resolution is wrong. It is FR-1 / spec AC-1.4. The impl-plan corrected this at v1.41 and the sweep stopped at that document; this is the paired surface it missed.
 - v1.29: Impl-plan audit v42 (codex): the tail matcher accepted unbalanced parentheses and non-dotted pseudo-versions that the stated grammar excludes. Corpus grown 24 -> 29 with those shapes and this document's figures swept to match; _agent_pv_re's prose-match figure was re-measured over the new corpus (29/29), not edited.
+- v1.30: Impl-plan audit v45 (codex): the tail matcher's prefix class admitted ASCII pipe, colon and > (Markdown blockquote and table-cell shapes) and its cwd was optional after the separator, both outside the stated grammar. Closed in the normative block; corpus 29 -> 35 and this document's figures swept, with _agent_pv_re re-measured over the new corpus (35/35).
