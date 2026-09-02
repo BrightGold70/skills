@@ -449,7 +449,8 @@ resolution, or it merely restates Pass 0.
    pytest exits 5 on an empty selection, so the step measured nothing), then
    `pytest h-mad/tests/test_hmad_dispatch.py -q -k test_tail_` (the feature-focused selector —
    again assert a non-zero collected count), then the full `pytest`, then
-   `h_mad_mutation_harness.py` on the new spec, reading its stdout token `MUTATION: ALL_CAUGHT`
+   `python3 h-mad/scripts/h_mad_mutation_harness.py` on the new spec (repo-relative, via
+   `python3` — the bare basename is not on `PATH` and exits 127), reading its stdout token `MUTATION: ALL_CAUGHT`
    with `survived=0` — never `$?` — then `--check-anchors` under bash (never zsh — it does not
    word-split the candidate list), reading `ANCHORS: ANCHORS_OK` with `drifted=0`. These are the
    same four steps and two tokens the impl-plan's Verification and AC-6.9/AC-6.10 require; this
@@ -569,3 +570,4 @@ resolution, or it merely restates Pass 0.
 - v1.39: Impl-plan audit v47 (codex): the per-arm paragraph named two combined revert-mutants that each reverted several guards at once; they are now five single-field mutants and the paragraph says why (a multi-guard revert proves only that one guard bit). The case-fold paragraph said 'all three wire mutations' — there are four (wanted/rival × disconnect/force). Corpus figures swept 35 -> 36.
 - v1.40: Impl-plan audit v49 (codex) should-fix: Verification item 2 said it lists the same Success Criteria as the impl-plan but omitted the feature-focused 'pytest -k test_tail_' step and named no stdout tokens, so an implementer following the declared source could skip the targeted selector and read exit codes instead of MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK. Aligned with the impl-plan's Verification and AC-6.9/AC-6.10.
 - v1.41: Impl-plan audit v51 (codex) should-fix: Data Model said 'no config' and API said 'None user-facing' while Error Handling told operators to lower HMAD_TAIL_READ_TIMEOUT. Classified explicitly as an operator override of the HMAD_SNAPSHOT_LINES kind — a bound-tuning variable documented at the read site and here, not in SKILL.md. The wrapper's knobs are split on SKILL.md exposure (HMAD_CONTEXT_WINDOW x3, HMAD_SNAPSHOT_LINES x0, measured), and the paragraph says which side this one is on rather than claiming a convention that does not exist.
+- v1.42: Impl-plan audit v52 (codex): Verification item 2 invoked h_mad_mutation_harness.py by basename; it is not on PATH and not executable, so that exits 127. Now python3 h-mad/scripts/h_mad_mutation_harness.py, matching the impl-plan.

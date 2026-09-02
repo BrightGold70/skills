@@ -1,6 +1,6 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.41)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.42)
 > Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.20, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
@@ -183,13 +183,12 @@ only the call sites.
 # allowed '#'), `OpenAI Codex v0.145-release-notes` and
 # `model: gpt-5-migration-notes` (unbounded non-space version/model suffixes),
 # and `Gemini 3.1 Pro (2026 release notes)` (an open numeric parenthetical).
-# Now: the prefix admits only whitespace and box-drawing characters (the `>` a
-# v29 revision admitted as a 'quote' character is a Markdown blockquote, audit v45), a
-# version is dotted-numeric, a model id needs a DOTTED release number, and the
-# parenthetical is an effort word or a version, and a version is DOTTED with its
-# parens PAIRED (audit v42), and the prefix admits ONLY whitespace and box-drawing
-# characters -- no ASCII pipe, colon or `>` (audit v45: a Markdown blockquote or
-# table cell in shell output is prose). Measured over 36 negatives and 12
+# Now: the prefix admits ONLY whitespace and box-drawing characters -- no ASCII
+# pipe, colon or `>` (audit v45: the `>` a v29 revision admitted as a 'quote'
+# character is a Markdown blockquote, and a table cell is prose); a version is
+# dotted-numeric with its parens PAIRED (audit v42); a model id needs a DOTTED
+# release number; and the parenthetical is an effort word or a dotted version.
+# Measured over 36 negatives and 12
 # positives: 36/36 decline, 12/12 still match.
 #
 # LINE-COMPLETE grammar, not a line anchor. The v1.23 anchor was falsified by
@@ -2158,10 +2157,10 @@ false half is recorded so the next reader does not re-derive it.
       AC-3.13 (stdout must equal the bare handle).
 - [ ] AC-6.8: A mutation gating the pass on `[ "$n" -eq 0 ]` instead of running it whenever
       control falls past Pass 2 is killed by AC-3.8 (the ambiguous-title shape).
-- [ ] AC-6.9: `h_mad_mutation_harness.py h-mad/tests/mutation-specs/tail_signature_pass.json`
+- [ ] AC-6.9: `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/tail_signature_pass.json`
       prints `MUTATION: ALL_CAUGHT` with `survived=0`, and every mutation's `mechanism:` detail
       line names the test the spec pinned rather than an unrelated failure.
-- [ ] AC-6.10: `h_mad_mutation_harness.py --check-anchors` over the whole
+- [ ] AC-6.10: `python3 h-mad/scripts/h_mad_mutation_harness.py --check-anchors` over the whole
       `h-mad/tests/mutation-specs/` directory prints `ANCHORS: ANCHORS_OK` with `drifted=0`.
       The exact command — the harness takes one or more positional spec paths and refuses with
       `ANCHORS_NOTHING_SWEPT` when given none, and **zsh does not word-split an unquoted list
@@ -2326,7 +2325,9 @@ in the one table that is supposed to account for them.
    selector here was `-k orca_find` until v1.34 and collected 0/290, and no planned node name
    contains `orca_find`), then
    `pytest h-mad/tests/test_hmad_dispatch.py -q -k test_tail_`, then the full `pytest` (testpaths
-   now cover `handoff/scripts`), then `h_mad_mutation_harness.py` on the new spec, then
+   now cover `handoff/scripts`), then `python3 h-mad/scripts/h_mad_mutation_harness.py` on the new spec
+   (repo-relative and via `python3` — the script is not executable and not on `PATH`, so the
+   bare basename exits 127 and can never print `MUTATION: ALL_CAUGHT`; audit v52), then
    `--check-anchors` under bash — never zsh.
 3. **Live check — it must exercise THIS pass, not merely succeed.** `hmad-dispatch env` resolving
    codex is NOT sufficient evidence: Pass 0, the title pass, the preview pass or an ambient pin
@@ -2430,3 +2431,4 @@ in the one table that is supposed to account for them.
 - v1.55: Impl-plan audit v49 (codex) — must=0 should=1 on v1.53 (agy v49 must=1 on the same bytes, applied at v1.54). Both surfaces at must=0 or the single v1.54 fix on v1.53. SHOULD: the paired design's Verification item 2 omitted the '-k test_tail_' selector and the MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK stdout-token checks that this plan's Verification and AC-6.9/AC-6.10 require, while claiming to list the same Success Criteria; aligned in the design (v1.40). Provenance here re-derived: design v1.40.
 - v1.56: Impl-plan audit v50 — agy GATE PASS must=0 should=0 nit=0 (fifth clean), codex must=0 should=1, both on v1.55. SHOULD: T4's anchor paragraph still said the rival-assignment anchors are 'unaffected … two-space indentation' — written at v1.37 and true then, false since v1.54 moved the assignment inside the if [ -n "$rival" ] guard and re-anchored the three mutations to four spaces. The spec was already correct; the explanation was the stale surface, and it is the re-anchor discipline it describes applied to itself late. Corrected. Re-verified: all three rival anchors are the four-space form, corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.57: Impl-plan audit v51 — agy GATE PASS (sixth clean, second consecutive), codex must=1 should=1 nit=1, both on v1.56. MUST: AC-6.9 and AC-6.12…AC-6.20 require each mutation's mechanism line to name its pinned node, and 24 of 46 _mechanism strings did not carry the exact node id from their own test field — the 18 I wrote at v1.38 did, the 20 that predate the convention and 6 later ones did not. Amended mechanically from each entry's test field (the truth), appending 'Pinned node: <id>'; 46/46 now carry it, re-derived. SHOULD: the design said 'no config' and 'None user-facing' while telling operators to lower HMAD_TAIL_READ_TIMEOUT; classified in the design as an operator override of the HMAD_SNAPSHOT_LINES kind (code comment + design, NOT SKILL.md) — and my first wording of that claimed 'none of the sibling knobs appear in SKILL.md', which was FALSE: HMAD_CONTEXT_WINDOW appears three times, HMAD_SNAPSHOT_LINES zero; the classification now states the split and which side this knob is on. NIT: 'All all 14 AGY-arm negatives' — a duplicate word my v52 count sweep produced. Provenance re-derived to design v1.41. Re-verified: 46/46 anchors, corpus 36/36 + 12/12, WIREPIN PASS.
+- v1.58: Impl-plan audit v52 — agy GATE PASS (seventh clean, third consecutive), codex must=1 nit=1, both on v1.57. MUST: three verification sites invoked h_mad_mutation_harness.py by BASENAME (AC-6.9, the AC-6.10 prose head, Verification item 2) and one in the paired design; the script is not on PATH and not executable (mode rw-r--r--), so the bare form exits 127 and can never print MUTATION: ALL_CAUGHT — the mutation-verdict step was unexecutable as written, and it contradicted AC-6.10's own repo-relative rule one paragraph below. All four now 'python3 h-mad/scripts/h_mad_mutation_harness.py'; verified the repo-relative form runs (--help prints usage). The :606 source reference is a citation, not a command, and stays. NIT: Task 2's comment stated the prefix rule twice in one sentence after the v45/v47 edits appended to it instead of rewriting it; consolidated into one ordered list of the four constraints. Provenance re-derived to design v1.42. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
