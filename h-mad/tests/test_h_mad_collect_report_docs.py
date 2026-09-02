@@ -213,3 +213,51 @@ def test_audit_cycle_paragraph_points_to_second_surface() -> None:
     assert "Second surface" in paragraph, (
         "audit-cycle paragraph must point readers to the Second surface codex leg"
     )
+
+
+def test_second_surface_gate_path_is_not_phase_hardcoded() -> None:
+    """The section advertises `--phase plan|design|impl-plan`, so no example may
+    hardcode one phase's audit directory: `collect-report` writes a design audit
+    to `docs/02-design/features/`, and an operator following a `01-plan` literal
+    for a design cycle would gate a path that does not exist.
+    """
+    section = _second_surface()
+
+    assert "--phase plan|design|impl-plan" in section or "plan|design|impl-plan" in section, (
+        "Second surface must keep advertising every phase it supports"
+    )
+
+    offenders = [
+        line
+        for line in section.splitlines()
+        if "<phase>" in line
+        and ("docs/01-plan/features" in line or "docs/02-design/features" in line)
+    ]
+    assert not offenders, (
+        "Second surface must not pair a `<phase>` placeholder with a hardcoded "
+        "phase directory — collect-report chooses the directory from --phase. "
+        f"Offending lines: {offenders}"
+    )
+
+
+def test_second_surface_gates_the_path_printed_by_collect_report() -> None:
+    """`COLLECT: OK` prints `path=<the collected docs path>`; the recipe must
+    take the gate target from that line rather than reconstructing it.
+    """
+    section = _second_surface()
+
+    assert "path=" in section, (
+        "Second surface must show that `COLLECT: OK` prints the collected path"
+    )
+
+    gate_line = next(
+        (line for line in section.splitlines() if "h_mad_audit_gate.py" in line),
+        "",
+    )
+    assert gate_line, "Second surface must include an h_mad_audit_gate.py gate line"
+
+    gated = gate_line.split("h_mad_audit_gate.py", 1)[1].strip()
+    assert gated.startswith('"$') or gated.startswith("$"), (
+        "the gate must run on a shell variable holding the path collect-report "
+        f"printed, not on a reconstructed literal; got: {gate_line!r}"
+    )
