@@ -78,7 +78,7 @@ def test_cli_transport_named_report_is_invalid_before_scoring(
     assert lines[0] == "GATE: INVALID must=0 should=0"
     assert (
         lines[1]
-        == f"[H-MAD] {audit_file.stem} gate INVALID "
+        == f"[H-MAD] {audit_file.name.split('.')[0]} gate INVALID "
         "(transport file — collect it into docs first: h_mad_collect_report.py)"
     )
     assert result.stderr == ""
