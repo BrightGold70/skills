@@ -1535,8 +1535,25 @@ Verification for this task is the harness's own verdict, read from the `MUTATION
 never `$?`, plus `--check-anchors` under **bash** (zsh does not word-split the candidate list and
 reports `ANCHORS_NOTHING_SWEPT`).
 
-**Code structure**: `find`/`replace` values are the exact strings pinned in T2/T3/T4's code
-blocks, so an anchor here and the code there cannot drift; `name`, `file` and `test` are literal.
+**Code structure**: every `find`/`replace` value is an exact string from ONE of two sources, and
+the distinction matters because only the first is pinned by this document:
+
+1. **This plan's prescribed blocks** (T1, T2, T3, T4, T5) — the majority. An anchor here and the
+   code there cannot drift, because both are the same bytes in one file.
+2. **The LIVE file, for a mutation that targets code this feature does not prescribe** — exactly
+   three: `wire-force-fire-after-pass0` (Pass 0's `_orca_find_by_pane` entry),
+   `stub-branch-above-capture` (the stub's pre-existing argv capture line) and
+   `skill-md-description-reworded` (SKILL.md's description field). These are NOT pinned by any
+   block here, so an unrelated edit to `hmad-dispatch.sh`, the stub or `SKILL.md` can orphan them
+   silently — the harness REFUSES on a non-matching anchor rather than failing, so the guard
+   measures nothing while the spec still prints a verdict-shaped line.
+
+   The check that covers both classes, and the one this plan actually ran at v1.46: resolve every
+   `find` against the union of the prescribed blocks AND the live target file, and require 39/39.
+   Impl-plan audit v45 (agy) — the previous wording claimed class 1 covered everything, which
+   would have left these three unwatched.
+
+`name`, `file` and `test` are literal.
 
 ```json
 {
@@ -2100,8 +2117,11 @@ three mutations pin to green-at-RED nodes while their rows named only one proof 
 in the one table that is supposed to account for them.
 
 - [ ] AC-6.12 … AC-6.20: nine mutations for nine AC numbers, of TWO kinds — the distinction
-      matters because only the first kind is a green-at-RED proof. **Seven proofs**, one per node
-      that is green at RED, each named in the §"Test-name contract" proof column:
+      matters because only the first kind is a green-at-RED proof. **NINE proofs across seven nodes** —
+      AC-3.2 and AC-5.3 each carry a SECOND proof (`tail-re-widened-to-launch-line-agy` for the
+      agy arm, added at v1.32; `skill-md-description-reworded` for SKILL.md's other field), both
+      named in the §"Test-name contract" proof column since v1.44 and enumerated here since v1.48.
+      The seven primary proofs, each named in that same column:
       `stub-branch-swallows-terminal-list`, `stub-branch-ignores-env-var`,
       `stub-branch-above-capture`, `tail-re-widened-to-launch-line`, `signature-check-not-enforced`,
       `tail-sig-fabricates-banner-on-failure`, `skill-md-frontmatter-renamed`. **Plus two
@@ -2133,7 +2153,7 @@ in the one table that is supposed to account for them.
    **The unit is a TEST NODE, not an AC** — that distinction is why the v1.5 form of this table
    was unusable. Two nodes carry two ACs each, and the AC-level table put
    `test_tail_no_timeout_binary_invocation` in the FAIL column (as AC-2.8) *and* the PASS column
-   (as AC-2.7), and counted `test_tail_pass_names_tail_evidence` twice as a failure (AC-5.2 and
+   (as AC-2.7), and counted `test_skill_md_names_tail_evidence_pass` twice as a failure (AC-5.2 and
    AC-5.4). Counts derived from it could not have matched an actual pytest run, so the independent
    5d count check would have halted a correct dispatch. AC-2.8, AC-4.2 and AC-5.4 are therefore
    reframed below as **procedures**, not nodes.
@@ -2305,3 +2325,4 @@ in the one table that is supposed to account for them.
 - v1.45: Impl-plan audit v42 (codex) — must=1 should=1, and the must is a real semantic widening of the normative grammar. Executed the prescribed block: 'OpenAI Codex (v0.145.0', 'OpenAI Codex v0.145.0)', 'OpenAI Codex 2026', 'Antigravity CLI 2026' and 'Gemini 3.1 Pro (2026)' ALL MATCHED, although the design states a version is dotted-numeric with paired parens. The codex arm made ( and ) independently optional and used (dot-digits)* ; both agy version positions allowed zero dots. A release-notes heading was therefore identity evidence — the FR-1 / spec AC-1.4 wrong-pane class, and the fifth demonstration that this corpus is only as strong as the shapes in it. Both arms tightened (paired forms as alternatives; every version position requires at least one dot); measured after, the 5 shapes decline and all 12 positives still match. DELIBERATELY NOT tightened: bare 'gemini <N>' with no dot — requiring one would decline a future 'Gemini 4 Pro' banner, a false negative on a real banner, and the dotted rule governs VERSION continuations rather than the product's own model number. Corpus 24 -> 29, swept by VALUE across all four documents, and only one of the two distinct 24s moved: _agent_pv_re's prose-match figure was RE-MEASURED over the new corpus (29/29) rather than edited, the superseded-grammar comparisons are labelled 'then-24' instead of silently renumbered, and the unrelated '24 of 290 collected' selector count was left alone. New mutation tail-re-version-loosened reverts the tightening on the codex arm ALONE so the 12 positives survive and the kill can only come from the closed shapes — proven discriminating: applied, the corpus reports exactly 3 wrong negatives and 0 wrong positives. 38 -> 39 mutations, 39/39 with _mechanism. SHOULD: provenance cited design v1.34 (actual v1.35), and the design-step mapping row described step 1 as '_orca_tail_sig + unit tests' while the design ships both helpers there — the design was correct and the mapping row was the stale surface.
 - v1.46: Impl-plan audit v43 (agy) — must=3, two real and both mine. The paired codex v43 run FAILED on infrastructure (RUN_RC=1, 'ERROR: Selected model is at capacity', no report), so there is no codex verdict for v1.45 and none is inferred from its absence; re-dispatched. MUST 1: the v42 tightening moved both arms of the normative block and ORPHANED the four mutation anchors pointing into them — tail-re-unanchored, tail-re-unanchored-agy, tail-re-widened-to-launch-line and tail-re-widened-to-launch-line-agy still carried the pre-v42 (dot-digits)* form. The harness REFUSES on a non-matching anchor rather than failing, so those four guards would have measured nothing while the spec still printed a verdict-shaped line. This is the exact class filed as a scout candidate two days ago ('editing a code block orphans the anchors pointing into it'), committed one cycle after writing it down. Re-anchored and then resolved every anchor MECHANICALLY against both the doc's code blocks and the live target files: 39/39 resolve, 0 nowhere. tail-re-version-loosened deliberately still carries the OLD form as its REPLACE and its find still resolves — checked separately so the re-anchoring could not silently neuter the mutant that proves the tightening. MUST 2: WIRE-PIN declarations named tests/test_hmad_dispatch.py while every WIRE beside them is repo-relative; now h-mad/tests/..., registry re-registered with repo-relative pins on all three rows. NOT REPRODUCED: 'stub-branch-ignores-env-var's find is missing ; _prev=""' — the find is a partial-line anchor ending at _h="" and the block reads _h=""; _prev="", so it matches as a substring; verified resolving. Re-verified: 39/39 anchors, WIREPIN PASS, corpus 29/29 + 12/12.
 - v1.47: Impl-plan audit v44 — agy GATE PASS must=0 should=0 nit=0, codex must=1 should=1, both on v1.46. codex breaking an agy clean is the SIXTH time on this branch, and both of its findings are carried counts of mine rather than new defects. MUST: the proof-column explanation added at v1.44 said 'not an index of the 38 mutations' and v1.45 then added tail-re-version-loosened, making it 39 — a live count carried across a change I made myself one cycle earlier, which is the invariant this project has broken most often. Re-derived from the embedded JSON (39) rather than edited to match the report, and the sentence now names the transition so the historical 38 references stay readable. SHOULD: the provenance header cited design v1.35 and spec v1.17 while both had moved to v1.36 and v1.18 in the same v42 commit that this plan's matcher tightening depends on. Re-derived after: 39 mutations, 45 nodes (32 FAIL / 13 PASS), WIREPIN PASS tasks=6 wiring=2, corpus 29/29 + 12/12. The only surviving live '38' is the parenthetical recording the transition.
+- v1.48: Impl-plan audit v45 (agy) — must=1 should=1 nit=1, and agy's own v44 clean broke one cycle later for the second time (v38 -> v39 was the first). All three trace to my recent edits. MUST: T6 claimed every find/replace value is 'the exact strings pinned in T2/T3/T4's code blocks, so an anchor here and the code there cannot drift'. False for three mutations that target code this feature does NOT prescribe — wire-force-fire-after-pass0 (Pass 0's _orca_find_by_pane entry), stub-branch-above-capture (the stub's pre-existing argv capture) and skill-md-description-reworded (SKILL.md's description field). Those anchor into LIVE files, so an unrelated edit orphans them silently and the harness REFUSES rather than failing. The claim now names both classes, names the three, and cites the check that actually covers them — resolve every find against the union of the prescribed blocks AND the live target file, requiring 39/39, which is what v1.46 ran. SHOULD: AC-6.12…AC-6.20 said 'Seven proofs, one per node' while AC-3.2 and AC-5.3 have carried a SECOND proof each since v1.32/v1.44 (tail-re-widened-to-launch-line-agy, skill-md-description-reworded) — required by the JSON and by the Test-name contract table but missing from the task's own enumeration. Now nine proofs across seven nodes. NIT: the Verification section named test_tail_pass_names_tail_evidence, a node that has never existed; the real one is test_skill_md_names_tail_evidence_pass. Re-verified: 39/39 anchors resolve against blocks-or-live, 0 references to the phantom node name, WIREPIN PASS tasks=6 wiring=2, corpus 29/29 + 12/12.
