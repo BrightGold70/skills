@@ -304,13 +304,19 @@ def _collect_unguarded(
             )
         return "none", None
 
+    empty_matching_pair = False
     if spec.report_path.exists() and collected_path.exists():
         report_bytes = spec.report_path.read_bytes()
         collected_bytes = collected_path.read_bytes()
         if report_bytes == collected_bytes:
             if report_bytes:
                 return "report-file", collected_path
-            return "none", None
+            empty_matching_pair = True
+            if grace <= 0:
+                return "none", None
+
+    if empty_matching_pair:
+        overwrite = True
 
     if _has_complete_report(spec.report_path):
         return "report-file", _copy_collected_report(

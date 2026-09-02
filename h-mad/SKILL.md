@@ -1812,14 +1812,18 @@ rm -f "$RP" "$RP.done"
 python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
   --feature <feature> --phase plan|design|impl-plan --cycle <N> \
   --project-root <PROJECT_ROOT> \
-  --report-file "$RP"
+  --report-file "$RP" \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt
 ```
 
 Dispatch it through the exec path so the codex process reads the assembled
 prompt directly and writes the contracted report file:
 
 ```bash
-hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>.txt
+hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt \
+  --cd <PROJECT_ROOT> \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
+  --log /tmp/audit_<feature>_<phase>_cycle<N>_codex.log --timeout 1800
 ```
 
 After `exec codex` returns, collect the surface report into the docs audit path
@@ -1828,7 +1832,8 @@ before running any gate:
 ```bash
 COLLECT_OUT=$(hmad-dispatch collect-report --surface codex \
   --feature <feature> --phase <phase> --cycle <N> \
-  --report "$RP" --project-root <PROJECT_ROOT>)
+  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
+  --project-root <PROJECT_ROOT>)
 printf '%s\n' "$COLLECT_OUT"
 ```
 
