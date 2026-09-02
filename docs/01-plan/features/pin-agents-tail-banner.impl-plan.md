@@ -111,12 +111,17 @@ def _orca_read_dir(tmp_path, envelopes):
     # previous call's <handle>.json survive, so a handle the caller OMITTED (the
     # UNREADABLE case) would still be served by a stale file and the helper's
     # documented semantics would quietly be false within one tmp_path.
-    d = Path(tempfile.mkdtemp(dir=tmp_path, prefix="reads-"))
+    # NOT `tempfile.mkdtemp`: this module's own guard
+    # `test_no_mkdtemp_and_no_pin_file_leak_guard` asserts that literal is absent
+    # from the source (measured at the first RED dispatch, 2026-09-02: 3 failed
+    # instead of 2, the third being that guard). `uuid` is already imported.
+    d = tmp_path / f"reads-{uuid.uuid4().hex[:8]}"
+    d.mkdir()
     for handle, text in envelopes.items():
         (d / f"{handle}.json").write_text(text, encoding="utf-8")
     return str(d)
 ```
-`json` and `tempfile` are already imported at the top of the module; no new import is needed.
+`json` and `uuid` are already imported at the top of the module; no new import is needed. (`tempfile` is imported too, but its `mkdtemp` is BANNED here by a live guard — see the helper's comment.)
 
 
 
@@ -129,15 +134,20 @@ followed verbatim has to name the binding the target module actually has.
 
 **Acceptance Criteria**:
 - [ ] AC-1.1: With `HMAD_STUB_ORCA_READ_DIR=<dir>` and `<dir>/term_x.json` present, invoking the
+      **Node:** `test_tail_stub_read_dir_serves_per_handle`.
       stub as `orca terminal read --terminal term_x --cursor 0 --limit 4000 --json` writes that
       file's bytes to stdout and exits 0.
 - [ ] AC-1.2: With the same variable set and `<dir>/term_y.json` **absent**, the same invocation
+      **Node:** `test_tail_stub_read_dir_missing_handle_fails`.
       for `term_y` exits non-zero and writes nothing to stdout.
 - [ ] AC-1.3: With the variable set, `orca terminal list --json` still returns
+      **Node:** `test_tail_stub_read_dir_does_not_capture_terminal_list`.
       `HMAD_STUB_ORCA_STDOUT` verbatim — the new branch does not capture other verbs.
 - [ ] AC-1.4: With `HMAD_STUB_ORCA_READ_DIR` unset, `orca terminal read … --json` behaves exactly
+      **Node:** `test_tail_stub_read_unset_preserves_legacy_behaviour`.
       as before the change (`HMAD_STUB_ORCA_STDOUT` when set, else `{"ok":true,"result":{}}`).
 - [ ] AC-1.5: `_orca_read_env("a", "b")` produces an envelope whose `.result.terminal.tail` is the
+      **Node:** `test_tail_stub_read_helpers_shape`.
       JSON array `["a","b"]`, and `_orca_read_dir`, given a **two-handle** mapping
       (`{"h1": …, "h2": …}`), writes `h1.json` AND `h2.json`, each with its own content.
 
@@ -154,6 +164,7 @@ followed verbatim has to name the binding the target module actually has.
       proof instead: `stub-read-env-not-array` and `stub-read-dir-writes-one-file`, one per
       asserted property, both pinned to this node.
 - [ ] AC-1.6: The stub still appends its argv line to `HMAD_STUB_CAPTURE` for a `terminal read`
+      **Node:** `test_tail_stub_read_still_captures_argv`.
       call, **including the missing-file case that exits 1** — AC-2.4, AC-3.6, AC-3.7 and AC-3.10
       all assert on that capture, and AC-3.10 in particular must be able to see that a read WAS
       attempted for a handle the stub then failed. The new branch must therefore sit below the
@@ -456,6 +467,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
 
 **Acceptance Criteria**:
 - [ ] AC-2.1: For a handle whose stubbed envelope carries `"tail":["alpha","beta"]`,
+      **Node:** `test_tail_sig_reads_array_tail`.
       `_orca_tail_sig <h>` exits 0 and its stdout is **exactly** `"alpha\nbeta\n"` — asserted by
       equality, not by containment.
 
@@ -467,14 +479,18 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       join from the accident that looks like it. Impl-plan audit v17.
 
 - [ ] AC-2.2: When the stubbed `orca` exits non-zero for that handle, `_orca_tail_sig` exits 1 and
+      **Node:** `test_tail_sig_read_failure_returns_1`.
       writes nothing to stdout.
 - [ ] AC-2.3: For a well-formed envelope with **no** `.result.terminal.tail` key (e.g.
+      **Node:** `test_tail_sig_missing_tail_key_returns_1`.
       `{"ok":true,"result":{"terminal":{"handle":"h1"}}}`), `_orca_tail_sig` exits 1 and writes
       nothing to stdout — it does not emit the string `null`.
 - [ ] AC-2.4: The captured argv for the call contains `terminal read`, `--terminal <h>`,
+      **Node:** `test_tail_sig_argv_carries_cursor_and_limit`.
       `--cursor 0`, `--limit 4000` and `--json`. Asserted against `HMAD_STUB_CAPTURE`, not against
       the return value.
 - [ ] AC-2.5: With `HMAD_TAIL_READ_TIMEOUT` **seeded in the PARENT process environment as the
+      **Node:** `test_tail_sig_timeout_default_when_env_unset`.
       string `0`** (`monkeypatch.setenv(..., "0")`) and never passed through `env=`, the call
       still completes (rc 0 on a readable handle) rather than aborting the wrapper — the `set -u`
       default is exercised, not assumed.
@@ -498,6 +514,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       live h-mad sessions, which is exactly where the variable is exported. The seed rather than
       a second AC is what kept the node table intact at the time; it is 40 now, after AC-2.9 and AC-2.10.
 - [ ] AC-2.6: Assert the timeout VALUE at a function seam, not on the wall clock. Using the
+      **Node:** `test_tail_sig_times_out`.
       strip-`main` harness (below), shadow `_cmd_run` with a stub that appends its argv to a file
       and returns a canned readable envelope, then call `_orca_tail_sig`:
 
@@ -606,6 +623,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       a consequence of the state.
 
 - [ ] AC-2.12: `_agent_tail_re` is tested DIRECTLY against the full corpus **under a
+      **Node:** `test_tail_matcher_corpus_decides_prose_vs_banner`.
       case-insensitive match (`grep -Ei`, the flag every call site uses)** — all 36 negative
       probes decline and all 12 positive controls match, per agent. **The fold is load-bearing
       and was named nowhere until v1.33.** The literals are lowercase and every real banner is
@@ -619,6 +637,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       "proven before anything consumes it" by a check that could not see what it matched.
       Impl-plan audit v33.
 - [ ] AC-2.11: `_agent_tail_re codex` and `_agent_tail_re agy` each print a regex that `grep -E`
+      **Node:** `test_tail_matcher_regex_is_accepted_by_grep`.
       ACCEPTS (rc 0 or 1 on any input, never rc 2), and the printed value ends with no trailing
       literal `\n`. **`grep -E` here is deliberate and is about SYNTAX only** — pattern
       acceptance does not depend on the case-folding flag, and this AC says nothing about what
@@ -630,6 +649,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       written — the numbers came from separate probe scripts with different escaping. Impl-plan
       audit v30. This AC exists so the prescribed source is what gets measured.
 - [ ] AC-2.9: For an envelope that exits 0 but carries `"ok":false` **together with a plausible
+      **Node:** `test_tail_sig_rejects_ok_false_envelope`.
       tail** (`{"ok":false,"error":{"code":"terminal_gone"},"result":{"terminal":{"handle":"h1",
       "tail":["OpenAI Codex v1.2"]}}}`), `_orca_tail_sig` exits 1 and writes nothing — the banner
       inside a failed envelope must never become identity evidence.
@@ -640,6 +660,7 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       "fine" here, which is why neither AC-2.2 nor AC-2.3 covers it. Impl-plan audit v19.
 
 - [ ] AC-2.10: For an `ok:true` envelope whose `.result.terminal.tail` is **not an array**
+      **Node:** `test_tail_sig_rejects_non_array_tail`.
       (`"tail": "OpenAI Codex v1.2"`, and separately `"tail": {"0":"OpenAI Codex v1.2"}`),
       `_orca_tail_sig` exits 1 and writes nothing.
 
@@ -820,12 +841,14 @@ status is `grep`'s alone.
 
 **Acceptance Criteria**:
 - [ ] AC-3.1 (spec AC-1.1): Given a `$scoped` pool of one pane whose stubbed tail carries the
+      **Node:** `test_tail_pass_resolves_single_vendor_banner`.
       agent's **vendor/model banner** (`OpenAI Codex (v0.145.0)  model: gpt-5.6-terra` /
       `Antigravity CLI`) and no other pane's, `_orca_find <agent>` prints that handle on stdout
       and returns 0, **and** stderr carries `bound <handle> by tail evidence`. Both halves are
       asserted: the stderr marker is what proves the resolution came from this pass rather than
       from a neighbour.
 - [ ] AC-3.2 (spec AC-1.2): A pane whose tail carries **only the launch command**
+      **Node:** `test_tail_pass_launch_command_alone_does_not_resolve`.
       (`codex '--dangerously-bypass-approvals-and-sandbox'` /
       `agy '--dangerously-skip-permissions'`) and no banner does **NOT** resolve — no handle, no
       stderr marker, fall through.
@@ -837,9 +860,11 @@ status is `grep`'s alone.
       controls do. Spec v1.5 and design v1.8 carry the correction; asserting the negative here is
       what stops a later reader from "fixing" the regex back.
 - [ ] AC-3.3 (spec AC-1.3): `hmad-dispatch env` reports `codex -> <handle>` rather than
+      **Node:** `test_tail_pass_env_reports_handle`.
       `UNRESOLVED` for a pane that only the tail pass can identify (generic title, empty
       preview).
 - [ ] AC-3.4 (spec AC-2.1): Two candidates whose tails both match → `_orca_find` prints no handle
+      **Node:** `test_tail_pass_two_matches_declines`.
       from this pass and does **not** return non-zero from the pass itself; control reaches the
       OS-evidence pass, asserted by the final `resolved to N candidates` diagnostic on stderr
       **and by the ABSENCE of the `bound … by tail evidence` marker**.
@@ -853,6 +878,7 @@ status is `grep`'s alone.
       it is the pre-existing pass's line, and changing it would put an unmutated, untested edit in
       a task whose every guard is mutation-backed. Impl-plan audit v36.
 - [ ] AC-3.5 (spec AC-2.2): Zero matching candidates → declines the same way: no handle, fall
+      **Node:** `test_tail_pass_zero_matches_declines`.
       through, same diagnostic. **Fixture: exactly one READABLE, non-matching candidate** — not
       zero candidates and not an unreadable one. Its proof is
       `signature-check-not-enforced`, which drops the signature filter so that readable candidate
@@ -864,6 +890,7 @@ status is `grep`'s alone.
       rc 1, no output). A kill credited to an abort proves the code breaks when broken and nothing
       about the property.
 - [ ] AC-3.6 (spec AC-3.1): When Pass 0 resolves exactly one handle, **no `terminal read` is
+      **Node:** `test_tail_pass_not_run_when_pass0_resolves`.
       issued at all** — asserted by grepping `HMAD_STUB_CAPTURE` for `terminal read` and
       requiring zero occurrences. It is asserted on the capture, never on the resolution, or the
       test merely restates Pass 0 and passes with this whole feature reverted.
@@ -876,21 +903,26 @@ status is `grep`'s alone.
       mutant the only remaining route to a resolution is the tail pass and the capture
       necessarily shows a `terminal read`. Impl-plan audit v21.
 - [ ] AC-3.7 (spec AC-3.2): A pane that `$scoped` excludes — a different `worktreePath`, or the
+      **Node:** `test_tail_pass_pool_is_scoped`.
       coordinator's own pane — is never selected by this pass even when its tail carries a
       perfect signature, and no `terminal read` is issued for its handle (asserted on the
       capture).
 - [ ] AC-3.8 (spec AC-3.3, ambiguous half): With two panes whose titles both match `^agy` in one
+      **Node:** `test_tail_pass_runs_on_ambiguous_title`.
       tab (so Pass 1 yields n>1 and Pass 2 is skipped), the tail pass still runs and resolves —
       proven by the stderr marker. This is the shape no current pass reaches.
 - [ ] AC-3.9 (spec AC-3.3, no-lsof half): With `lsof` absent from the harness `PATH`
+      **Node:** `test_tail_pass_runs_without_lsof`.
       (`_bindir:/usr/bin:/bin`; `lsof` is `/usr/sbin/lsof` on this platform, verified 2026-09-01),
       the pass still resolves and the stderr marker is present — i.e. the resolution did not come
       from the OS-evidence pass.
 - [ ] AC-3.10 (spec AC-4.1): One readable matching candidate plus one candidate whose stubbed
+      **Node:** `test_tail_pass_unreadable_candidate_excluded`.
       `terminal read` fails resolves to the readable one. The unreadable pane is excluded from
       the match set rather than counted as a non-match, and a `terminal read` WAS attempted for
       it (asserted on the capture, so "excluded" is not confused with "never read").
 - [ ] AC-3.11 (spec AC-4.2): When every candidate is unreadable, the pass declines by falling
+      **Node:** `test_tail_pass_all_unreadable_declines`.
       through — no handle, no stderr marker, and control reaches the OS-evidence pass.
       **Fixture is fixed by its mutation, not free:** exactly ONE unreadable candidate, resolving
       the `codex` token. `tail-sig-fabricates-banner-on-failure` emits a hardcoded `OpenAI Codex`
@@ -898,10 +930,12 @@ status is `grep`'s alone.
       still declines on ambiguity, and with an `agy` fixture it fabricates no wanted match at all —
       in both shapes the mutant SURVIVES and this node's green-at-RED proof is void.
 - [ ] AC-3.12 (spec AC-5.1): A comment at the pass states the measured 2000-line cap, that agent
+      **Node:** `test_tail_pass_retention_comment_present`.
       TUIs do not normally reach it, and that a shell-heavy pane is the case that fails to
       UNRESOLVED. Asserted by reading the source section, not by a bare substring search of the
       whole file.
 - [ ] AC-3.13: `_orca_find`'s stdout on a tail resolution is the bare handle and nothing else —
+      **Node:** `test_tail_pass_stdout_is_bare_handle`.
       no tail text, no `[H-MAD]` line. Asserted by exact equality against `<handle>\n`. This is
       what pins the **bare** `if _orca_tail_sig "$h"` idiom out of the implementation: that form
       streams the tail into stdout, so the equality fails.
@@ -959,6 +993,7 @@ status is `grep`'s alone.
       (`test_tail_pass_stale_pane_comment_present`), so a failure names which half of the comment
       is missing rather than reporting "the comment is wrong".
 - [ ] AC-3.16: A candidate whose tail is **large — ≥ 200 KB delivered in ≤ 2000 LINES** — and
+      **Node:** `test_tail_pass_long_tail_early_signature_resolves`.
       carries the agent's banner on its FIRST line resolves, with the `bound … by tail evidence`
       marker. This is the SIGPIPE regression test: with the `printf | grep -q` form it fails at
       rc 141 while every short-tail node stays green.
@@ -1095,6 +1130,7 @@ status is `grep`'s alone.
       applied by this pass alone, so no existing behaviour moves.
 
 - [ ] AC-3.18: `_agent_pv_re`'s OWN source comment is corrected in the same edit. It currently
+      **Node:** `test_tail_agent_pv_re_comment_matches_measurement`.
       asserts of its patterns that "neither occurs in ordinary prose about a model", which audit
       v26/v27/v29 falsified 24/24, and 36/36 over the corpus as it stands. Leaving it would ship a wrapper carrying two mutually exclusive
       statements — that comment and the tail pass's, five hundred lines apart. Replace the claim
@@ -1256,6 +1292,7 @@ ambiguity.
 
 **Acceptance Criteria**:
 - [ ] AC-4.1 (spec AC-2.3): Two candidates, one carrying the agent's signature only and one
+      **Node:** `test_tail_pass_rejects_rival_signature`.
       carrying BOTH that signature and the rival's, resolve to the first — the rival-carrying
       pane is rejected pre-count, so it neither wins nor makes the pass ambiguous. The stderr
       marker names the first handle.
@@ -1265,9 +1302,11 @@ ambiguity.
       AC-4.3, AC-4.4 and AC-4.5 do not renumber. **T4 has FIVE nodes** — AC-4.1, AC-4.3, AC-4.4,
       AC-4.5 and AC-4.6; the count said four until impl-plan audit v30, before AC-4.6 was added.
 - [ ] AC-4.3: Rejection is symmetric — the same fixture resolved for `agy` rejects the pane whose
+      **Node:** `test_tail_pass_rival_rejection_symmetric`.
       tail carries the codex banner, and vice versa. Asserted for both tokens so the test cannot
       pass against a one-sided implementation.
 - [ ] AC-4.4: Rejection happens before counting, not after selection: with **two decoy candidates
+      **Node:** `test_tail_pass_rival_rejected_before_counting`.
       that each carry BOTH the agent's signature AND the rival's**, plus one candidate carrying
       only the agent's, the pass still resolves to that one (count is 1, not 3). A post-count
       filter would have declined on ambiguity here.
@@ -1279,6 +1318,7 @@ ambiguity.
       vacuous.
 
 - [ ] AC-4.5: **Two** candidates: a clean one whose tail carries only the agent's banner, and a
+      **Node:** `test_tail_pass_long_tail_early_rival_rejected`.
       ≥ 200 KB decoy whose tail carries the **RIVAL's banner FIRST** and the agent's banner **near
       the end**. `_orca_find` resolves to the clean candidate, with the stderr marker.
 
@@ -1305,6 +1345,7 @@ ambiguity.
       A rival-**only** tail is likewise not usable here: it fails `$tail_re` and never reaches the
       rejection branch, which is why AC-4.2 was withdrawn rather than reused.
 - [ ] AC-4.6 (spec AC-1.4): **Green at RED — T4 depends on a completed T3, so the pass DOES exist;
+      **Node:** `test_tail_pass_rival_prose_does_not_suppress`.
       the node passes because RIVAL REJECTION does not exist yet, so nothing suppresses anything.** Its reject-direction
       proof is `rival-re-prose-unsafe`. **Rival PROSE must not suppress a real resolution — both
       directions.** A codex pane whose tail carries `OpenAI Codex (v0.145.0)  model: gpt-5.6-terra`
@@ -2432,3 +2473,4 @@ in the one table that is supposed to account for them.
 - v1.56: Impl-plan audit v50 — agy GATE PASS must=0 should=0 nit=0 (fifth clean), codex must=0 should=1, both on v1.55. SHOULD: T4's anchor paragraph still said the rival-assignment anchors are 'unaffected … two-space indentation' — written at v1.37 and true then, false since v1.54 moved the assignment inside the if [ -n "$rival" ] guard and re-anchored the three mutations to four spaces. The spec was already correct; the explanation was the stale surface, and it is the re-anchor discipline it describes applied to itself late. Corrected. Re-verified: all three rival anchors are the four-space form, corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.57: Impl-plan audit v51 — agy GATE PASS (sixth clean, second consecutive), codex must=1 should=1 nit=1, both on v1.56. MUST: AC-6.9 and AC-6.12…AC-6.20 require each mutation's mechanism line to name its pinned node, and 24 of 46 _mechanism strings did not carry the exact node id from their own test field — the 18 I wrote at v1.38 did, the 20 that predate the convention and 6 later ones did not. Amended mechanically from each entry's test field (the truth), appending 'Pinned node: <id>'; 46/46 now carry it, re-derived. SHOULD: the design said 'no config' and 'None user-facing' while telling operators to lower HMAD_TAIL_READ_TIMEOUT; classified in the design as an operator override of the HMAD_SNAPSHOT_LINES kind (code comment + design, NOT SKILL.md) — and my first wording of that claimed 'none of the sibling knobs appear in SKILL.md', which was FALSE: HMAD_CONTEXT_WINDOW appears three times, HMAD_SNAPSHOT_LINES zero; the classification now states the split and which side this knob is on. NIT: 'All all 14 AGY-arm negatives' — a duplicate word my v52 count sweep produced. Provenance re-derived to design v1.41. Re-verified: 46/46 anchors, corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.58: Impl-plan audit v52 — agy GATE PASS (seventh clean, third consecutive), codex must=1 nit=1, both on v1.57. MUST: three verification sites invoked h_mad_mutation_harness.py by BASENAME (AC-6.9, the AC-6.10 prose head, Verification item 2) and one in the paired design; the script is not on PATH and not executable (mode rw-r--r--), so the bare form exits 127 and can never print MUTATION: ALL_CAUGHT — the mutation-verdict step was unexecutable as written, and it contradicted AC-6.10's own repo-relative rule one paragraph below. All four now 'python3 h-mad/scripts/h_mad_mutation_harness.py'; verified the repo-relative form runs (--help prints usage). The :606 source reference is a citation, not a command, and stays. NIT: Task 2's comment stated the prefix rule twice in one sentence after the v45/v47 edits appended to it instead of rewriting it; consolidated into one ordered list of the four constraints. Provenance re-derived to design v1.42. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
+- v1.59: Phase 5d, Task 1 RED, first dispatch — STATUS: BLOCKED, and both causes are defects in THIS document that 53 audit cycles could not see because the tests did not exist yet (the tracer-bullet class). (1) T1's _orca_read_dir helper prescribed tempfile.mkdtemp(dir=tmp_path, prefix='reads-') inside the test module, and the module's own guard test_no_mkdtemp_and_no_pin_file_leak_guard asserts that literal is ABSENT from the source — the scoped run gave 3 failed / 293 passed instead of the expected 2, the third being that guard; verified by re-running myself. The fresh-directory-per-call property is kept with tmp_path / f'reads-{uuid.uuid4().hex[:8]}' (uuid already imported), and the helper's comment names the guard. (2) Codex named all six T1 tests differently from the Test-name contract table (test_orca_stub_terminal_read_dir_serves_handle_file for test_tail_stub_read_dir_serves_per_handle, etc.), which would have orphaned every T1 mutation pin and WIRE-PIN — because the 5d assembler cuts §Task N only and 39 of 45 AC bodies did not name their node; the names lived solely in a table outside every task section. Every AC body now carries **Node:** <name>, derived mechanically from the table (36 added; 6 already named theirs), so a task-scoped dispatch carries its contract. The dispatched test file was reverted (git checkout) rather than kept under invented names. Re-verified: both stub-read mutation anchors still resolve in the T1 helper block, corpus 36/36 + 12/12, WIREPIN PASS.
