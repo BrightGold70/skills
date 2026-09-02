@@ -75,7 +75,20 @@ def _collected_path(*, project_root, feature, phase, cycle, index, surface=None)
 def _readback_equal(path: Path, data: bytes) -> bool:
     return path.is_file() and path.read_bytes() == data
 
+# Every filesystem call in the writers and in collect() runs under this guard: an
+# OSError (PermissionError on an unwritable docs file, EACCES on unlink, a vanished
+# report) becomes OperationalError so the CLI exits 2 with a marker instead of a
+# traceback (exit 1) — the audit-gate signal discipline. `collect()` itself also
+# wraps its read_bytes() comparisons the same way.
+@contextlib.contextmanager
+def _fs_errors(what: str):
+    try:
+        yield
+    except OSError as exc:
+        raise OperationalError(f"{what}: {exc}") from exc
+
 def _copy_collected_report(report_path, collected_path, *, overwrite=True) -> Path:
+  with _fs_errors(f"collect {collected_path}"):        # body indented under this guard
     data = report_path.read_bytes()
     if not data: raise OperationalError(f"report is empty: {report_path}")
     if report_path.resolve() == collected_path.resolve():          # AC-2.8: RP IS the docs path
@@ -94,7 +107,8 @@ def _copy_collected_report(report_path, collected_path, *, overwrite=True) -> Pa
     return collected_path
 
 def _write_collected_report(report_text, collected_path, *, overwrite=True) -> Path:
-    # identical shape over report_text.encode("utf-8"), delivered="out"  (AC-2.6a/2.6b)
+    # identical shape over report_text.encode("utf-8"), delivered="out" (AC-2.6a/2.6b),
+    # under the same _fs_errors guard
 
 def collect(spec, *, grace, project_root, feature, phase, cycle,
             surface=None, overwrite=True) -> tuple[str, Path | None]:
@@ -131,7 +145,10 @@ the existing `test_h_mad_audit_cycle.py` collect tests are the pin).
 Edge cases:
 - `report_path` present but empty with `.done` → `_has_complete_report` is False (size > 0
   required) → `report_wait` times out → MISSING (never copies an empty file; mutation (a)).
-- `collected_path` exists but unreadable → `OSError` → `OperationalError` (exit 2).
+- `collected_path` exists but unreadable, unwritable, or its parent cannot be created →
+  `OSError` inside `_fs_errors` → `OperationalError` → CLI exit 2 with the
+  `operational_error` marker (never a traceback). A test makes the docs file read-only
+  (`chmod 0o444`) with differing bytes and `--force`, and asserts exit 2 + marker.
 - Same-file case with a missing marker → `_has_complete_report` False → `report_wait` waits
   `grace` then MISSING (AC-2.8 requires the marker); the same-file branch returns before the
   AC-2.11 short-circuit, so an existing marker is always removed on OK (a same-file with a
@@ -146,25 +163,45 @@ usage: h_mad_collect_report.py --feature F --phase {plan,design,impl-plan} --cyc
 ```
 
 Algorithm (`main(argv) -> int`):
-1. Parse. Operational checks, each → `ERROR: …` on stderr, exit 2, **no** `COLLECT:` line
-   (AC-2.10): `--project-root` not a directory; `--cycle` < 1; `--surface` fails
-   `validate_surface` (AC-2.7; the ValueError message is echoed); docs dir cannot be created
-   (`mkdir` raises) or is not a directory.
+1. Parse with `argparse`, every flag except `--out`, `--grace`, `--force` declared
+   `required=True`. A missing required flag (or an unknown one, or `--phase` outside its
+   `choices`) makes argparse print usage to stderr and raise `SystemExit(2)`; `main()`
+   catches it, prints `[H-MAD] unknown collect usage_error`, and returns 2 — no `COLLECT:`
+   line (AC-2.10 "missing required flag"). Then the semantic operational checks, each →
+   `ERROR: …` on stderr, `[H-MAD] <feature> collect operational_error` on stdout, exit 2,
+   **no** `COLLECT:` line (AC-2.10): `--project-root` not a directory; `--cycle` < 1;
+   `--surface` fails `validate_surface` (AC-2.7; the ValueError message is echoed); docs dir
+   cannot be created (`mkdir` raises) or is not a directory.
 2. Build `spec = PassSpec(index=1, report_path=Path(RP), out_path=Path(OUT) if OUT else None, rc=0)`.
 3. `same = Path(RP).resolve() == _collected_path(...).resolve()` (for the AC-2.8 detail line).
-4. `try: delivered, path = collect(spec, grace=grace, ..., surface=S, overwrite=False)`
-   - `except CollectConflict as c:` if `--force`: retry `collect(..., overwrite=True)`,
-     `forced = True`; else print `COLLECT: CONFLICT path=<c.collected> delivered=<c.delivered>`,
-     marker `[H-MAD] <F> collect CONFLICT`, return 0.
-   - `except OperationalError as e:` `ERROR: <e>` on stderr; if the message starts with
-     `readback` print `[H-MAD] <F> collect readback_failed`; return 2 (AC-2.12).
+4. Nested handlers, so a failure inside the forced retry is still caught:
+   ```python
+   forced = False
+   try:
+       try:
+           delivered, path = collect(spec, grace=grace, ..., surface=S, overwrite=False)
+       except CollectConflict as c:
+           if not args.force:
+               print(f"COLLECT: CONFLICT path={c.collected} delivered={c.delivered}")
+               print(f"[H-MAD] {F} collect CONFLICT"); return 0
+           delivered, path = collect(spec, ..., surface=S, overwrite=True)   # inside the OUTER try
+           forced = True
+   except OperationalError as e:          # CollectConflict cannot reach here (handled above)
+       print(f"ERROR: {e}", file=sys.stderr)
+       reason = "readback_failed" if str(e).startswith("readback") else "operational_error"
+       print(f"[H-MAD] {F} collect {reason}"); return 2                      # AC-2.12
+   ```
+   The library converts every `OSError` it raises to `OperationalError` (D1), so nothing
+   escapes as a traceback.
 5. `delivered == "none"` → `COLLECT: MISSING path=<derived> delivered=none`, marker, return 0
    (AC-2.2, 2.3).
 6. Else `COLLECT: OK path=<path> delivered=<delivered>[ forced=1]`; if `same` and the marker
    is gone print `marker: removed <RP>.done`; marker `[H-MAD] <F> collect OK`; return 0.
 
-The token line is the FIRST stdout line; detail lines follow; the `[H-MAD]` marker is last
-(same layout as `h_mad_audit_gate.py`). The CLI imports `collect`, `PassSpec`,
+The token line is the FIRST stdout line on a verdict; detail lines follow; the `[H-MAD]`
+marker is last (same layout as `h_mad_audit_gate.py`). On an operational error there is no
+token line and the marker is the only stdout line — `usage_error`, `operational_error` or
+`readback_failed` — so every exit path carries exactly one `[H-MAD]` marker. The CLI imports `collect`, `PassSpec`,
 `_collected_path`, `validate_surface`, `CollectConflict`, `OperationalError` from
 `h_mad_audit_cycle` and nothing from the gate. Stdlib only.
 
@@ -295,13 +332,16 @@ already in the documented grammar).
 
 ## Error Handling Strategy
 Verdicts are stdout tokens with exit 0 (`COLLECT: OK|MISSING|CONFLICT`; `GATE: PASS|FAIL`).
-Operational errors are exit 2 with `ERROR:` on stderr and NO token line (bad surface, bad
-root, unwritable docs dir, readback mismatch, unreadable files); `GATE: INVALID` keeps its
+Operational errors are exit 2 with `ERROR:` (or argparse usage) on stderr, a
+`[H-MAD] <feature|unknown> collect usage_error|operational_error|readback_failed` marker on
+stdout and NO token line (missing flag, bad surface, bad root, unwritable docs dir, readback
+mismatch, unreadable files); `GATE: INVALID` keeps its
 existing exit 2 and exact line shape. Inside the library, `CollectConflict` is an
 `OperationalError` subclass so `audit-cycle`'s existing `except OperationalError` still maps
 anything unexpected to exit 4 — but `audit-cycle` passes `overwrite=True` and can never raise
-it. Every CLI outcome ends with a `[H-MAD] <feature> collect <verdict|readback_failed>`
-marker (Marker discipline). The recipe halts on any non-`OK` token before the gate.
+it. Every CLI exit path — verdict or operational error — carries exactly one `[H-MAD] … collect
+<OK|MISSING|CONFLICT|usage_error|operational_error|readback_failed>` marker (Marker
+discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Test Strategy
 - Unit (in-process, `tmp_path` project roots): `_collected_path`, `validate_surface`, both
@@ -309,7 +349,10 @@ marker (Marker discipline). The recipe halts on any non-`OK` token before the ga
   same-file marker path, `collect()` rungs with a fake `report_wait` (grace 0) and a stub
   `--out` carrying a sentinel pair.
 - CLI (subprocess, `sys.executable`): every `COLLECT:` case, exit codes, stderr, marker lines,
-  `--force`, operational errors, incident replay (AC-2.9 suite half: gate on RP → INVALID;
+  `--force`, operational errors including each missing required flag and an unknown `--phase`
+  (exit 2, usage on stderr, `usage_error` marker, no token), a `PermissionError` on the docs
+  file under `--force` (exit 2, `operational_error` marker, no traceback), a readback
+  mismatch inside the forced retry (exit 2, `readback_failed`), incident replay (AC-2.9 suite half: gate on RP → INVALID;
   collect → OK identical; gate on docs → scores).
 - Gate: transport names refused (all observed shapes), docs names scored, Phase-7 name
   scored, two-direction corpus vs `_VERSION_RE`, repo sweep (`docs/**/*.audit.v*.md` → none
@@ -317,7 +360,10 @@ marker (Marker discipline). The recipe halts on any non-`OK` token before the ga
 - Wrapper: the verb under a stub `HMAD_AUDIT_CYCLE_SCRIPT_DIR` whose `h_mad_collect_report.py`
   records argv and exits with a chosen code; severed route → test fails; unknown verb →
   `unknown verb`, stub not invoked. The wrapper's staged `--report-file` under the existing
-  audit-cycle stub harness is asserted to match `TRANSPORT_RE` (AC-3.5a).
+  audit-cycle stub harness is asserted to match `TRANSPORT_RE`, AND the SKILL.md 6.6 literal
+  (`RP=/tmp/audit_<feature>_<phase>_cycle<N>.report.md`, read from the file by regex) is
+  instantiated with sample tokens (`f`, `plan`, `3`, and the `_codex` suffix form from the D5
+  block) and asserted to match `TRANSPORT_RE` too (AC-3.5a, both halves).
 - Docs: SKILL.md block order (`exec codex` < `collect-report` < `report_not_collected` <
   `h_mad_audit_gate.py`), gate line has no `$RP`, registry entry names the token set and exit
   contract, orchestration-mode verb row, step-9 sentence.
@@ -381,4 +427,6 @@ marker (Marker discipline). The recipe halts on any non-`OK` token before the ga
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
+- v1.2: Design-audit v2 fixes (codex): missing-required-flag path designed explicitly (argparse `required=True`, `SystemExit` caught → `usage_error` marker, exit 2, no token); marker contract made exact — one `[H-MAD]` marker on every exit path including operational errors.
 - v1.1: Design-audit v1 fixes (codex + agy p1, same finding on the short-circuit): the AC-2.8 same-file branch is ordered BEFORE the AC-2.11 byte-identity short-circuit (which would trivially match the same file and skip the marker path); AC-3.3's `gate()` tuple and `combine()` reason are pinned by tests in `test_h_mad_audit_cycle.py`, not inferred from `_gate_token`'s regex.
