@@ -112,7 +112,7 @@ def is_transport_path(path: Path) -> bool:
 - [ ] AC-3.2: the same bytes at `<tmp>/docs/01-plan/features/f.plan.audit.v3.codex.md` → `GATE: PASS|FAIL …`, exit 0.
 - [ ] AC-3.3 (in `test_h_mad_audit_cycle.py`): `gate(Path(".../audit_f_plan_cycle3_codex.report.md"), ack_file=None)` returns `("INVALID", 0, 0, [])`; `combine([PassResult(index=1, delivered="report-file", collected_path=p, verdict="INVALID", must=0, should=0, findings=[], effort=None)])` returns `("UNVERIFIED", "no_gate_sections:p1")`.
 - [ ] AC-3.5: `f.report.md`, `gate-blindness-hardening.report.md`, `audit-report-docs-copy.report.md`, `audit_f.plan.audit.v8.report.md`, `<tmp>/x.md` → scored normally (exit 0, `GATE: PASS|FAIL`).
-- [ ] AC-3.5a: a fixture list of `(name, is_transport)` pairs covering every shape in AC-3.1/3.5 plus `.audit.v<N>.md`, `.p<i>.md`, `.codex.md`, `.codex_draft.md`, `audit_f.plan.audit.v8.codex.md`; every entry satisfies `is_transport == bool(TRANSPORT_RE.match(name))`, every non-transport audit name matches `h_mad_cycle_counts._VERSION_RE`, and NO name matches both.
+- [ ] AC-3.5a: a fixture list of `(name, kind)` triples with `kind ∈ {transport, audit_doc, other}` covering every shape in AC-3.1/3.5 plus `.audit.v<N>.md`, `.p<i>.md`, `.codex.md`, `.codex_draft.md`, `audit_f.plan.audit.v8.codex.md`; every entry satisfies `(kind == "transport") == bool(TRANSPORT_RE.match(name))`; every `audit_doc` entry matches `h_mad_cycle_counts._VERSION_RE`; `other` entries (`f.report.md`, `gate-blindness-hardening.report.md`, `audit-report-docs-copy.report.md`, `x.md`) are asserted only NOT to match `TRANSPORT_RE`; NO name matches both regexes.
 - [ ] AC-3.6: `<tmp>/docs/04-report/features/x.report.md` with gate sections → exit 0.
 - [ ] AC-3.7: for every `*.audit.v*.md` under this repository's `docs/` (live + `docs/archive`), `is_transport_path()` is False (the test walks the real tree; ≥ 100 files found or the test fails as vacuous).
 - [ ] AC-1.6 (property): for `(feature, surface)` in `[("audit_f","report"),("audit_x","report_md"),("audit_","p"),("f","codex"),("nlm-cli-version-pin","agy")]` × phases, `_collected_path(...).name` matches `_VERSION_RE` and does not match `TRANSPORT_RE`.
@@ -281,9 +281,12 @@ its `[H-MAD]` line; (j′) CLI operational-error path drops its marker; (k) gate
 returns 0 instead of 2 (exit-code-only); (k′) gate refusal prints `GATE: PASS must=0 should=0`
 instead of `INVALID` (token-only); (l) CLI operational-error path returns 0 (exit-code-only);
 (l′) CLI operational-error path also prints a `COLLECT: MISSING …` line (no-token-only). One
-mutant per separable output part of each guard: exit code, token, marker. Shape and named-test existence are proven by the harness itself (`MUTATION: ALL_CAUGHT`
-and `--check-anchors` → `ANCHORS_OK`); the existing `test_audit_cycle_mutation_specs_*`
-tests load only their own two specs and are not touched (AC-6.4).
+mutant per separable output part of each guard: exit code, token, marker. Kill-verdicts come from the harness (`MUTATION: ALL_CAUGHT`) and anchor validity from
+`--check-anchors` (`ANCHORS_OK`); the spec's SHAPE — exactly the 22 names, `_mechanism`
+present, `test` present and resolvable — is proven by `test_mutation_spec_shape` (AC-6.3a),
+because the harness treats `test` as optional and never reads `_mechanism`; the existing
+`test_audit_cycle_mutation_specs_*` tests load only their own two specs and are not
+touched (AC-6.4).
 
 **Code structure**:
 ```json
@@ -320,7 +323,6 @@ tests load only their own two specs and are not touched (AC-6.4).
 | l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 | l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 
-**Acceptance Criteria**:
 - [ ] AC-6.3: the spec has exactly the 22 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=22 caught=22 survived=0 refused=0`.
 - [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 22 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
 - [ ] The named test for k/k′/l/l′ asserts ALL THREE parts of its guard's output (exit code, first stdout line, `[H-MAD]` line) so each single-part mutant is caught by it alone.
@@ -334,6 +336,7 @@ tests load only their own two specs and are not touched (AC-6.4).
 
 ## Version History
 - v1.0: Initial implementation plan draft.
+- v1.6: 5b audit v6 sweep (codex; agy v6 clean): AC-3.5a fixture kinds (`transport|audit_doc|other`) match the spec's scoping; Task 6 names `test_mutation_spec_shape` as the shape verifier; duplicate AC label removed.
 - v1.5: 5b audit v5 sweep (codex): Task 3 lists its checkpoint artifact (the plan's Version History entry); design pointer tracks the newest entry.
 - v1.4: 5b audit v4 fixes (codex): AC-6.3a executable spec-shape test (the harness does not enforce `test`/`_mechanism`); `validate_surface` dropped from the CLI import list.
 - v1.3: 5b audit v3 fixes (agy p1 + codex): replay evidence recorded via the version-history helper at the next unused version (no hard-coded `v1.7`); Task 6 prose matches AC-6.4; Task 5 metadata names orchestration-mode.md; design pointer v1.13; mutant e′ dropped as unkillable (the surface is validated in `_collected_path`; the CLI no longer pre-checks it) → 22; Task 6 JSON lists all five test files.
