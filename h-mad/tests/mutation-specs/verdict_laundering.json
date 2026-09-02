@@ -1,0 +1,52 @@
+{
+  "_why": "J23: `exec` verdict recovery used to grep the WHOLE transcript. `codex exec ... -` echoes the piped prompt into that transcript, and a dispatch prompt states its output contract by listing the legal STATUS values one per line (references/codex-implementer-prompt.md requires it), so on a dispatch that never ran `tail -1` returned the LAST option of our own contract block -- deterministically `STATUS: NEEDS_CONTEXT`. The caller then wrote it to --out, where h_mad_extract_verdict.py accepts it without complaint. Silence would have been safer; that path manufactured confidence. Measured on a real 401-auth failure: the only four STATUS lines in a 20,770-byte log were the prompt's own, at 268/271/274/277. The sibling defect in the same recovery block reported `tree delta: 1 changed` for a subdirectory that was clean, because `git -C <subdir> status --porcelain` with no pathspec reports the entire work tree.",
+  "_provenance": "Both guards shipped with unit tests and NO mutation spec. Measured 2026-09-02: 39 specs existed and none named `_verdict_after_boundary` or the porcelain pathspec, so nothing proved those seven assertions bind. That is the gap the exec-verdict-laundering brief left as `mutation-verify both guards` -- the answer is that it was never done, not that no spec could be found by name.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "recovery-scans-the-whole-transcript",
+      "_mechanism": "The original defect exactly. Ignore where the boundary was found and start at line 0, so the scan sees our own echoed contract block again and `tail -1` returns its last option.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    start=\"$last\"",
+      "replace": "    start=0",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_failed_dispatch_does_not_launder_the_prompt_contract_as_a_verdict"
+    },
+    {
+      "name": "missing-boundary-does-not-refuse-on-codex",
+      "_mechanism": "A TRUNCATED echo can still carry the contract block while losing the trailing boundary. Dropping the codex-arm refusal reopens the defect on exactly that case, which is the one where the agent is least likely to have written anything.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  elif [ \"${3:-0}\" = \"1\" ]; then",
+      "replace": "  elif [ \"${3:-0}\" = \"never\" ]; then",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_truncated_echo_without_the_boundary_recovers_nothing"
+    },
+    {
+      "name": "slices-past-the-FIRST-boundary",
+      "_mechanism": "`tail -1` picks the LAST occurrence. With `head -1` the scan resumes after the first, so anything between two boundaries -- our echoed prompt included, on a redispatch appending to the same log -- is back in range.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  last=\"$(grep -aFn -- \"$2\" \"$1\" 2>/dev/null | tail -1 | cut -d: -f1)\"",
+      "replace": "  last=\"$(grep -aFn -- \"$2\" \"$1\" 2>/dev/null | head -1 | cut -d: -f1)\"",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_slices_past_the_LAST_boundary_not_the_first"
+    },
+    {
+      "name": "tree-delta-drops-the-pathspec",
+      "_mechanism": "`git -C <subdir> status --porcelain` with no pathspec reports the whole work tree, so a clean --cd subdir is reported as changed and the caller reads work that did not happen. `-- .` is the entire guard.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "      delta=\"$(git -C \"$cd_dir\" status --porcelain -- . 2>/dev/null | grep -c . || true)\"",
+      "replace": "      delta=\"$(git -C \"$cd_dir\" status --porcelain 2>/dev/null | grep -c . || true)\"",
+      "test": "tests/test_hmad_dispatch_exec.py::test_codex_tree_delta_counts_only_the_cd_subdir"
+    }
+  ]
+}
