@@ -1,6 +1,6 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.40)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.41)
 > Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.20, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
@@ -1617,7 +1617,7 @@ the distinction matters because only the first is pinned by this document:
    "name": "jq-r-not-jq-re",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_missing_tail_key_returns_1",
-   "_mechanism": "Drop the -e. jq then exits 0 on empty output, so an absent key, an ok:false envelope and a non-array payload all stop being unreadable. Re-anchored at audit v20: the .ok gate changed the filter's opening and this find matched nothing, which is silent -- an anchor that matches zero times reports the guard as enforced.",
+   "_mechanism": "Drop the -e. jq then exits 0 on empty output, so an absent key, an ok:false envelope and a non-array payload all stop being unreadable. Re-anchored at audit v20: the .ok gate changed the filter's opening and this find matched nothing, which is silent -- an anchor that matches zero times reports the guard as enforced. Pinned node: `test_tail_sig_missing_tail_key_returns_1`.",
    "find": "| jq -re 'if (.ok? // false) != true then empty",
    "replace": "| jq -r 'if (.ok? // false) != true then empty"
   },
@@ -1639,7 +1639,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "wire-wanted-matcher-disconnected",
-   "_mechanism": "Remove the wanted-matcher CALL, leaving _agent_tail_re defined and every T2 unit test green. $tail_re is then empty, `grep -Eiq \"\"` matches every pane, so AC-3.17's mixed fixture yields TWO matches and the pass declines on ambiguity instead of returning the banner's handle. Connection-only: the callee is intact, which is what a whole-module revert cannot establish.",
+   "_mechanism": "Remove the wanted-matcher CALL, leaving _agent_tail_re defined and every T2 unit test green. $tail_re is then empty, `grep -Eiq \"\"` matches every pane, so AC-3.17's mixed fixture yields TWO matches and the pass declines on ambiguity instead of returning the banner's handle. Connection-only: the callee is intact, which is what a whole-module revert cannot establish. Pinned node: `test_tail_pass_prose_mentioning_agent_does_not_resolve`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
@@ -1647,7 +1647,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "wire-wanted-matcher-forced-empty",
-   "_mechanism": "Force the wanted-matcher connection to produce a universal matcher instead of removing it: the call still happens, the callee is intact, but its result is discarded. Paired with wire-wanted-matcher-disconnected, this is the opposite direction the connection invariant asks for -- one proves the call is MADE, the other proves its RESULT is used.",
+   "_mechanism": "Force the wanted-matcher connection to produce a universal matcher instead of removing it: the call still happens, the callee is intact, but its result is discarded. Paired with wire-wanted-matcher-disconnected, this is the opposite direction the connection invariant asks for -- one proves the call is MADE, the other proves its RESULT is used. Pinned node: `test_tail_pass_prose_mentioning_agent_does_not_resolve`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_prose_mentioning_agent_does_not_resolve",
    "find": "  tail_re=\"$(_agent_tail_re \"$token\")\"",
@@ -1655,7 +1655,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "wire-rival-matcher-disconnected",
-   "_mechanism": "Remove the rival-matcher CALL with the callee intact. Rival rejection then never fires, so a pane carrying a real rival BANNER is counted -- AC-4.1 fails. Paired with rival-re-prose-unsafe, which moves the other way: that one over-rejects, this one under-rejects, and only the two together pin the connection AND its matcher.",
+   "_mechanism": "Remove the rival-matcher CALL with the callee intact. Rival rejection then never fires, so a pane carrying a real rival BANNER is counted -- AC-4.1 fails. Paired with rival-re-prose-unsafe, which moves the other way: that one over-rejects, this one under-rejects, and only the two together pin the connection AND its matcher. Pinned node: `test_tail_pass_rejects_rival_signature`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rejects_rival_signature",
    "find": "    rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
@@ -1671,7 +1671,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "rival-re-prose-unsafe",
-   "_mechanism": "Restore the SHARED `_agent_pv_re` as the rival matcher over the retained tail. A real agent pane whose scrollback merely MENTIONS the other agent is then rejected as rival-bearing -- the false negative that suppresses exactly the panes this feature exists to resolve.",
+   "_mechanism": "Restore the SHARED `_agent_pv_re` as the rival matcher over the retained tail. A real agent pane whose scrollback merely MENTIONS the other agent is then rejected as rival-bearing -- the false negative that suppresses exactly the panes this feature exists to resolve. Pinned node: `test_tail_pass_rival_prose_does_not_suppress`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_rival_prose_does_not_suppress",
    "find": "    rival_tail_re=\"$(_agent_tail_re \"$rival\")\"",
@@ -1695,7 +1695,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "marker-content-changed",
-   "_mechanism": "Keep `>&2` intact and change the marker TEXT. Routing and content are separable guards on one line: `marker-to-stdout` proves the marker does not pollute stdout, and proves nothing about what it says. AC-3.1 and the live check both consume the exact phrase `bound <handle> by tail evidence` -- it is the only output that distinguishes a tail-pass resolution from any other pass -- so a reworded marker leaves both asserting on a string that no longer exists while stdout stays clean.",
+   "_mechanism": "Keep `>&2` intact and change the marker TEXT. Routing and content are separable guards on one line: `marker-to-stdout` proves the marker does not pollute stdout, and proves nothing about what it says. AC-3.1 and the live check both consume the exact phrase `bound <handle> by tail evidence` -- it is the only output that distinguishes a tail-pass resolution from any other pass -- so a reworded marker leaves both asserting on a string that no longer exists while stdout stays clean. Pinned node: `test_tail_pass_resolves_single_vendor_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_resolves_single_vendor_banner",
    "find": "    echo \"[H-MAD] $token: bound $tail_h by tail evidence\" >&2",
@@ -1735,7 +1735,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "stub-read-env-not-array",
-   "_mechanism": "Emit the tail as a joined STRING instead of a JSON array. The measured live shape is an array and production joins it, so a stub that models a string would let a non-array-rejecting implementation pass. Pins the first half of AC-1.5, which is green at RED because the helper is introduced by T1's own patch.",
+   "_mechanism": "Emit the tail as a joined STRING instead of a JSON array. The measured live shape is an array and production joins it, so a stub that models a string would let a non-array-rejecting implementation pass. Pins the first half of AC-1.5, which is green at RED because the helper is introduced by T1's own patch. Pinned node: `test_tail_stub_read_helpers_shape`.",
    "file": "tests/test_hmad_dispatch.py",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_helpers_shape",
    "find": "\"handle\": \"h\", \"tail\": list(lines), \"truncated\": False}}})",
@@ -1743,7 +1743,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "stub-read-dir-writes-one-file",
-   "_mechanism": "Write only the FIRST mapping entry, so a handle the caller supplied is served as UNREADABLE. Several later ACs distinguish readable from unreadable candidates per handle; a stub that silently serves one would make those fixtures mean something other than what they say. Pins the second half of AC-1.5.",
+   "_mechanism": "Write only the FIRST mapping entry, so a handle the caller supplied is served as UNREADABLE. Several later ACs distinguish readable from unreadable candidates per handle; a stub that silently serves one would make those fixtures mean something other than what they say. Pins the second half of AC-1.5. Pinned node: `test_tail_stub_read_helpers_shape`.",
    "file": "tests/test_hmad_dispatch.py",
    "test": "tests/test_hmad_dispatch.py::test_tail_stub_read_helpers_shape",
    "find": "    for handle, text in envelopes.items():",
@@ -1783,7 +1783,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-cx-bare-version-undotted",
-   "_mechanism": "Codex arm, ONE field: allow a bare (unparenthesised) version with zero dots again, parens still paired and the parenthesised form still dotted. Killed on exactly `OpenAI Codex 2026`; `OpenAI Codex v0.145.0` and `OpenAI Codex` still match. Impl-plan audit v47 (codex).",
+   "_mechanism": "Codex arm, ONE field: allow a bare (unparenthesised) version with zero dots again, parens still paired and the parenthesised form still dotted. Killed on exactly `OpenAI Codex 2026`; `OpenAI Codex v0.145.0` and `OpenAI Codex` still match. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
@@ -1791,7 +1791,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-cx-paren-version-undotted",
-   "_mechanism": "Codex arm, ONE field: allow a PARENTHESISED version with zero dots again, bare form still dotted. Killed on exactly `OpenAI Codex (v2026)` — a probe added at v1.52 because no earlier negative exercised this occurrence on its own; `OpenAI Codex (v0.145.0)` and `  OpenAI Codex (v0.145.0)` still match. Impl-plan audit v47 (codex).",
+   "_mechanism": "Codex arm, ONE field: allow a PARENTHESISED version with zero dots again, bare form still dotted. Killed on exactly `OpenAI Codex (v2026)` — a probe added at v1.52 because no earlier negative exercised this occurrence on its own; `OpenAI Codex (v0.145.0)` and `  OpenAI Codex (v0.145.0)` still match. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
@@ -1799,7 +1799,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-agy-cli-version-undotted",
-   "_mechanism": "Agy arm, ONE field: allow the Antigravity CLI version with zero dots again, the Gemini parenthetical still dotted. Killed on exactly `Antigravity CLI 2026`; `Antigravity CLI v1.2.3` and `Antigravity CLI 1.1.22` still match. Replaces the pre-v52 `tail-re-version-loosened-agy`, which loosened both agy positions together and so could not attribute a kill to either — impl-plan audit v47 (codex).",
+   "_mechanism": "Agy arm, ONE field: allow the Antigravity CLI version with zero dots again, the Gemini parenthetical still dotted. Killed on exactly `Antigravity CLI 2026`; `Antigravity CLI v1.2.3` and `Antigravity CLI 1.1.22` still match. Replaces the pre-v52 `tail-re-version-loosened-agy`, which loosened both agy positions together and so could not attribute a kill to either — impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -1807,7 +1807,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-agy-paren-version-undotted",
-   "_mechanism": "Agy arm, ONE field: allow the Gemini parenthetical version with zero dots again, the CLI version still dotted. Killed on exactly `Gemini 3.1 Pro (2026)`; `Gemini 3.1 Pro (High)` still matches because the effort alternative is untouched. Impl-plan audit v47 (codex).",
+   "_mechanism": "Agy arm, ONE field: allow the Gemini parenthetical version with zero dots again, the CLI version still dotted. Killed on exactly `Gemini 3.1 Pro (2026)`; `Gemini 3.1 Pro (High)` still matches because the effort alternative is untouched. Impl-plan audit v47 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -1831,7 +1831,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-prefix-widened-agy",
-   "_mechanism": "The AGY counterpart of `tail-re-prefix-widened`: restore ASCII pipe, colon and `>` to the agy arm's prefix class alone, everything else preserved. All five agy positives still match, so the kill can only come from `> Antigravity CLI 1.1.22` and `| Gemini 3.1 Pro` in AC-2.12's corpus. Without this mutant the agy arm's prefix guard was encoded independently but never isolated — `tail-re-unanchored-agy` replaces the whole arm and cannot attribute a kill to one boundary. Impl-plan audit v46 (codex).",
+   "_mechanism": "The AGY counterpart of `tail-re-prefix-widened`: restore ASCII pipe, colon and `>` to the agy arm's prefix class alone, everything else preserved. All five agy positives still match, so the kill can only come from `> Antigravity CLI 1.1.22` and `| Gemini 3.1 Pro` in AC-2.12's corpus. Without this mutant the agy arm's prefix guard was encoded independently but never isolated — `tail-re-unanchored-agy` replaces the whole arm and cannot attribute a kill to one boundary. Impl-plan audit v46 (codex). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -1839,7 +1839,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-unanchored",
-   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 22 CODEX-arm negatives then match (this mutant touches only the codex arm, so the 14 agy negatives are unaffected; measured 2026-09-02) and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical.",
+   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 22 CODEX-arm negatives then match (this mutant touches only the codex arm, so the 14 agy negatives are unaffected; measured 2026-09-02) and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical. Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
@@ -1847,7 +1847,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-unanchored-agy",
-   "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). All all 14 AGY-arm negatives then match (measured 2026-09-02; the codex negatives are unaffected).",
+   "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). all 14 AGY-arm negatives then match (measured 2026-09-02; the codex negatives are unaffected). Pinned node: `test_tail_matcher_corpus_decides_prose_vs_banner`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -1855,7 +1855,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-widened-to-launch-line-agy",
-   "_mechanism": "ADDITIVELY widen the AGY arm: the full banner grammar is preserved and `|^agy .--dangerously` appended, so every positive control still matches and the ONLY behaviour change is that the launch line is now accepted. A wholesale replacement (the v1.31 form) was killed because the node\u0027s positive controls failed -- an accidental kill that proves nothing about launch-line rejection. Audit v35. AC-3.2 exercises both agents.",
+   "_mechanism": "ADDITIVELY widen the AGY arm: the full banner grammar is preserved and `|^agy .--dangerously` appended, so every positive control still matches and the ONLY behaviour change is that the launch line is now accepted. A wholesale replacement (the v1.31 form) was killed because the node's positive controls failed -- an accidental kill that proves nothing about launch-line rejection. Audit v35. AC-3.2 exercises both agents. Pinned node: `test_tail_pass_launch_command_alone_does_not_resolve`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_pass_launch_command_alone_does_not_resolve",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -1911,7 +1911,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-array-not-joined",
-   "_mechanism": "Drop the array branch so a multi-line tail is stringified instead of joined. The measured live shape IS an array, so this is the extraction T2 exists to pin.",
+   "_mechanism": "Drop the array branch so a multi-line tail is stringified instead of joined. The measured live shape IS an array, so this is the extraction T2 exists to pin. Pinned node: `test_tail_sig_reads_array_tail`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_reads_array_tail",
    "find": "then join(\"\\n\") else empty end'",
@@ -1919,7 +1919,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "timeout-default-dropped",
-   "_mechanism": "Remove the `:-2` fallback. `set -u` is on, so the first call in a shell that never exported the variable aborts the whole wrapper rather than reading a tail.",
+   "_mechanism": "Remove the `:-2` fallback. `set -u` is on, so the first call in a shell that never exported the variable aborts the whole wrapper rather than reading a tail. Pinned node: `test_tail_sig_timeout_default_when_env_unset`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
@@ -1927,7 +1927,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "non-array-tail-accepted",
-   "_mechanism": "Restore `else tostring`, so any non-array payload that survives the .ok gate is stringified and matched. A malformed tail that merely CONTAINS a banner then becomes identity evidence -- the same unsafe direction as the ok:false envelope, reached through the type branch instead.",
+   "_mechanism": "Restore `else tostring`, so any non-array payload that survives the .ok gate is stringified and matched. A malformed tail that merely CONTAINS a banner then becomes identity evidence -- the same unsafe direction as the ok:false envelope, reached through the type branch instead. Pinned node: `test_tail_sig_rejects_non_array_tail`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_rejects_non_array_tail",
    "find": "              | if type == \"array\" then join(\"\\n\") else empty end'",
@@ -1935,7 +1935,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "envelope-ok-false-accepted",
-   "_mechanism": "Drop the .ok gate so an exit-0 error envelope's tail is extracted. The pass then resolves an identity from a FAILED read -- the one FR-4 direction that resolves instead of declining.",
+   "_mechanism": "Drop the .ok gate so an exit-0 error envelope's tail is extracted. The pass then resolves an identity from a FAILED read -- the one FR-4 direction that resolves instead of declining. Pinned node: `test_tail_sig_rejects_ok_false_envelope`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_rejects_ok_false_envelope",
    "find": "    | jq -re 'if (.ok? // false) != true then empty\n              else (.result.terminal.tail? // empty) end",
@@ -1943,7 +1943,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "skill-md-description-reworded",
-   "_mechanism": "Reword the manifest description's opening. `any(startswith(\"description:\"))` -- the v1.13 assertion -- accepts it, and accepts an empty description too, so half the manifest contract this node claims to pin was unenforced.",
+   "_mechanism": "Reword the manifest description's opening. `any(startswith(\"description:\"))` -- the v1.13 assertion -- accepts it, and accepts an empty description too, so half the manifest contract this node claims to pin was unenforced. Pinned node: `test_skill_md_frontmatter_unchanged`.",
    "file": "SKILL.md",
    "test": "tests/test_hmad_dispatch.py::test_skill_md_frontmatter_unchanged",
    "find": "description: Orchestrate the 7-phase H-MAD",
@@ -1951,7 +1951,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "timeout-override-ignored",
-   "_mechanism": "Hardcode the bound at 2, ignoring the caller's override. The read still succeeds on a healthy pane and still times out on a hung one, so no wall-clock window sees it reliably. AC-2.6's _cmd_run argv SEAM does: the recorded call carries --timeout 2 where 1 was asked for. v1.15 tried to discriminate this with a `< 1.5 s` threshold; v1.16 replaced that with the seam because scheduler delay can push a correct run past it.",
+   "_mechanism": "Hardcode the bound at 2, ignoring the caller's override. The read still succeeds on a healthy pane and still times out on a hung one, so no wall-clock window sees it reliably. AC-2.6's _cmd_run argv SEAM does: the recorded call carries --timeout 2 where 1 was asked for. v1.15 tried to discriminate this with a `< 1.5 s` threshold; v1.16 replaced that with the seam because scheduler delay can push a correct run past it. Pinned node: `test_tail_sig_times_out`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
@@ -1959,7 +1959,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "time-bound-removed",
-   "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against. Killed primarily by AC-2.6's argv seam, which records NO _cmd_run call at all; the loose `< 2.5 s` bound is a second, independent witness, since an unbounded call lets the stub's own 3 s sleep run to completion.",
+   "_mechanism": "Call orca directly with no bounder. A hung `terminal read` then stalls every resolution -- the risk FR-4 was written against. Killed primarily by AC-2.6's argv seam, which records NO _cmd_run call at all; the loose `< 2.5 s` bound is a second, independent witness, since an unbounded call lets the stub's own 3 s sleep run to completion. Pinned node: `test_tail_sig_times_out`.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_times_out",
    "find": "  raw=\"$(_cmd_run --timeout \"${HMAD_TAIL_READ_TIMEOUT:-2}\" -- \\",
@@ -1967,7 +1967,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "harness-ambient-timeout-not-scrubbed",
-   "_mechanism": "Delete the scrub from the TEST harness. On a host exporting HMAD_TAIL_READ_TIMEOUT the child inherits it, AC-2.5 never reaches the ${:-2} default, and a build that dropped the fallback entirely would pass. Killed only because AC-2.5 seeds the ambient value 0, which the bounder rejects with rc 2 (measured): unscrubbed the helper returns 1 and the node's rc-0 assertion fails. A seed of 9 leaves both sides completing and makes this mutation EQUIVALENT -- that was the v1.14 form, caught by audit v18.",
+   "_mechanism": "Delete the scrub from the TEST harness. On a host exporting HMAD_TAIL_READ_TIMEOUT the child inherits it, AC-2.5 never reaches the ${:-2} default, and a build that dropped the fallback entirely would pass. Killed only because AC-2.5 seeds the ambient value 0, which the bounder rejects with rc 2 (measured): unscrubbed the helper returns 1 and the node's rc-0 assertion fails. A seed of 9 leaves both sides completing and makes this mutation EQUIVALENT -- that was the v1.14 form, caught by audit v18. Pinned node: `test_tail_sig_timeout_default_when_env_unset`.",
    "file": "tests/test_hmad_dispatch.py",
    "test": "tests/test_hmad_dispatch.py::test_tail_sig_timeout_default_when_env_unset",
    "find": "    e.pop(\"HMAD_TAIL_READ_TIMEOUT\", None)",
@@ -2429,3 +2429,4 @@ in the one table that is supposed to account for them.
 - v1.54: Impl-plan audit v49 (agy) — must=1, a real logic defect in the prescribed code that survived nineteen cycles because it is unreachable through _resolve_target. T4's text claimed that for a token other than codex/agy, rival stays empty and '_agent_tail_re "" falls to the *) arm, so the guard degrades to the shared helper'. Measured 2026-09-02: _agent_pv_re "" prints an EMPTY string, the *) arm wraps it as ^[[:space:]]*([^[:alnum:]]{0,8}[[:space:]]*)?() which matches EVERY line, [ -n "$rival_tail_re" ] is then true, and every candidate is rejected as a rival — the opposite of the claim. Fix: the assignment is guarded on the TOKEN (if [ -n "$rival" ]) with an explicit rival_tail_re="" first, because local alone leaves the name UNSET and the guard would abort under set -u. The rejection guard itself stays [ -n "$rival_tail_re" ], so an empty matcher still means 'no rejection' and wire-rival-matcher-disconnected keeps its meaning. The three mutations anchored on the assignment line were re-anchored to its new 4-space indentation in the same edit; 46/46 anchors resolve, each rival anchor exactly once. Proven: under set -u, empty rival -> guard false, candidate kept, no abort. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS.
 - v1.55: Impl-plan audit v49 (codex) — must=0 should=1 on v1.53 (agy v49 must=1 on the same bytes, applied at v1.54). Both surfaces at must=0 or the single v1.54 fix on v1.53. SHOULD: the paired design's Verification item 2 omitted the '-k test_tail_' selector and the MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK stdout-token checks that this plan's Verification and AC-6.9/AC-6.10 require, while claiming to list the same Success Criteria; aligned in the design (v1.40). Provenance here re-derived: design v1.40.
 - v1.56: Impl-plan audit v50 — agy GATE PASS must=0 should=0 nit=0 (fifth clean), codex must=0 should=1, both on v1.55. SHOULD: T4's anchor paragraph still said the rival-assignment anchors are 'unaffected … two-space indentation' — written at v1.37 and true then, false since v1.54 moved the assignment inside the if [ -n "$rival" ] guard and re-anchored the three mutations to four spaces. The spec was already correct; the explanation was the stale surface, and it is the re-anchor discipline it describes applied to itself late. Corrected. Re-verified: all three rival anchors are the four-space form, corpus 36/36 + 12/12, WIREPIN PASS.
+- v1.57: Impl-plan audit v51 — agy GATE PASS (sixth clean, second consecutive), codex must=1 should=1 nit=1, both on v1.56. MUST: AC-6.9 and AC-6.12…AC-6.20 require each mutation's mechanism line to name its pinned node, and 24 of 46 _mechanism strings did not carry the exact node id from their own test field — the 18 I wrote at v1.38 did, the 20 that predate the convention and 6 later ones did not. Amended mechanically from each entry's test field (the truth), appending 'Pinned node: <id>'; 46/46 now carry it, re-derived. SHOULD: the design said 'no config' and 'None user-facing' while telling operators to lower HMAD_TAIL_READ_TIMEOUT; classified in the design as an operator override of the HMAD_SNAPSHOT_LINES kind (code comment + design, NOT SKILL.md) — and my first wording of that claimed 'none of the sibling knobs appear in SKILL.md', which was FALSE: HMAD_CONTEXT_WINDOW appears three times, HMAD_SNAPSHOT_LINES zero; the classification now states the split and which side this knob is on. NIT: 'All all 14 AGY-arm negatives' — a duplicate word my v52 count sweep produced. Provenance re-derived to design v1.41. Re-verified: 46/46 anchors, corpus 36/36 + 12/12, WIREPIN PASS.

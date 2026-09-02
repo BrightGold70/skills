@@ -308,7 +308,19 @@ resolution and cannot suppress a real one by manufacturing ambiguity.
 
 ## Data Model / Schema Changes
 
-None. No state key, no pin-file field, no config.
+None. No state key, no pin-file field, no config FILE.
+
+**One environment knob, classified as an operator override rather than a user-facing interface:
+`HMAD_TAIL_READ_TIMEOUT`** (seconds, default 2, read as `${HMAD_TAIL_READ_TIMEOUT:-2}`). It bounds
+each per-candidate `terminal read` and therefore the pass's worst case (`candidate_count × timeout`).
+The wrapper's existing knobs are split on this: `HMAD_CONTEXT_WINDOW` is documented in
+`h-mad/SKILL.md` (three mentions — it changes a budget the operator must know about),
+`HMAD_SNAPSHOT_LINES` is not (a read-depth tuning variable, code comment only). This knob is of the
+second kind — it tunes a bound, it does not change what the pass decides — so it is documented in
+the code comment at the read site and here, exercised by impl-plan AC-2.6 / the
+`timeout-override-ignored` mutation, and NOT added to SKILL.md. The sentence under Error Handling that says to lower it for a large pool is
+operator guidance about this override, not a user-facing setting. Impl-plan audit v51 (codex)
+asked for the classification to be explicit rather than implied by "no config".
 
 ## API / Interface Changes
 
@@ -556,3 +568,4 @@ resolution, or it merely restates Pass 0.
 - v1.38: Impl-plan audit v46 (codex): the v1.37 paragraph credited two codex-only revert-mutants with proving 'each closure', but the agy arm encodes the same prefix and dotted-version boundaries independently and had no mutant isolating them — the claim was broader than what the spec measured. Now states the per-arm rule and names all five revert-mutants (prefix x2, version x2, cwd codex-only).
 - v1.39: Impl-plan audit v47 (codex): the per-arm paragraph named two combined revert-mutants that each reverted several guards at once; they are now five single-field mutants and the paragraph says why (a multi-guard revert proves only that one guard bit). The case-fold paragraph said 'all three wire mutations' — there are four (wanted/rival × disconnect/force). Corpus figures swept 35 -> 36.
 - v1.40: Impl-plan audit v49 (codex) should-fix: Verification item 2 said it lists the same Success Criteria as the impl-plan but omitted the feature-focused 'pytest -k test_tail_' step and named no stdout tokens, so an implementer following the declared source could skip the targeted selector and read exit codes instead of MUTATION: ALL_CAUGHT / ANCHORS: ANCHORS_OK. Aligned with the impl-plan's Verification and AC-6.9/AC-6.10.
+- v1.41: Impl-plan audit v51 (codex) should-fix: Data Model said 'no config' and API said 'None user-facing' while Error Handling told operators to lower HMAD_TAIL_READ_TIMEOUT. Classified explicitly as an operator override of the HMAD_SNAPSHOT_LINES kind — a bound-tuning variable documented at the read site and here, not in SKILL.md. The wrapper's knobs are split on SKILL.md exposure (HMAD_CONTEXT_WINDOW x3, HMAD_SNAPSHOT_LINES x0, measured), and the paragraph says which side this one is on rather than claiming a convention that does not exist.
