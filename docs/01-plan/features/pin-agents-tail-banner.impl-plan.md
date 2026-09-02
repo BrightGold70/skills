@@ -1,7 +1,7 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.36)
-> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.18, 16 ACs)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.37)
+> Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.19, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
 ## Executive Summary
@@ -1560,7 +1560,7 @@ the distinction matters because only the first is pinned by this document:
    measures nothing while the spec still prints a verdict-shaped line.
 
    The check that covers both classes, and the one this plan actually ran at v1.46: resolve every
-   `find` against the union of the prescribed blocks AND the live target file, and require 41/41.
+   `find` against the union of the prescribed blocks AND the live target file, and require 43/43.
    Impl-plan audit v45 (agy) — the previous wording claimed class 1 covered everything, which
    would have left these three unwatched.
 
@@ -1776,6 +1776,22 @@ the distinction matters because only the first is pinned by this document:
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
    "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]*)?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-prefix-widened-agy",
+   "_mechanism": "The AGY counterpart of `tail-re-prefix-widened`: restore ASCII pipe, colon and `>` to the agy arm's prefix class alone, everything else preserved. All five agy positives still match, so the kill can only come from `> Antigravity CLI 1.1.22` and `| Gemini 3.1 Pro` in AC-2.12's corpus. Without this mutant the agy arm's prefix guard was encoded independently but never isolated — `tail-re-unanchored-agy` replaces the whole arm and cannot attribute a kill to one boundary. Impl-plan audit v46 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-version-loosened-agy",
+   "_mechanism": "The AGY counterpart of `tail-re-version-loosened`: allow zero dots again in BOTH agy version positions (the CLI version and the parenthetical), everything else preserved. All five agy positives still match — `Antigravity CLI 1.1.22`, `v1.2.3` and `(High)` are unaffected — so the kill comes only from `Antigravity CLI 2026` and `Gemini 3.1 Pro (2026)`. Both positions are loosened together because a mutant that loosened one would be killed by one negative and prove nothing about the other. Impl-plan audit v46 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-unanchored",
@@ -2133,8 +2149,8 @@ false half is recorded so the next reader does not re-derive it.
       hand-edit to a JSON file can also leave it unparseable, which fails the test for a reason
       that has nothing to do with `root`. See AC-2.8.
 **What the proof column is, and is not.** It names the mutation(s) that make a GREEN-AT-RED node
-discriminating — 13 rows. It is NOT an index of the 41 mutations (re-derived from the embedded JSON, not carried — it read
-38, then 39, then 41 as v1.45 and v1.49 each added revert-mutants for a grammar tightening): a `RED: FAIL` node needs no
+discriminating — 13 rows. It is NOT an index of the 43 mutations (re-derived from the embedded JSON, not carried — it read
+38, 39, 41, then 43 as v1.45, v1.49 and v1.50 each added revert-mutants for a grammar tightening): a `RED: FAIL` node needs no
 proof (it already fails without the feature) and carries `—`, and every mutation is pinned by its
 own `test` field regardless. Impl-plan audit v42 read the column as an index and filed the 16
 uncited mutations as an omission; that part does not hold. What DID hold is narrower and is fixed:
@@ -2143,8 +2159,10 @@ three mutations pin to green-at-RED nodes while their rows named only one proof 
 `skill-md-description-reworded` on AC-5.3), so a second guard on those nodes was unaccounted for
 in the one table that is supposed to account for them.
 
-- [ ] AC-6.12 … AC-6.20: nine mutations for nine AC numbers, of TWO kinds — the distinction
-      matters because only the first kind is a green-at-RED proof. **NINE proofs across seven nodes** —
+- [ ] AC-6.12 … AC-6.20: **nine AC numbers covering ELEVEN mutations** — the range was sized when
+      the count was nine and kept its numbering when two second proofs were added; the numbers are
+      identifiers, not a tally. Two kinds — the distinction matters because only the first kind is a
+      green-at-RED proof. **NINE proofs across seven nodes** —
       AC-3.2 and AC-5.3 each carry a SECOND proof (`tail-re-widened-to-launch-line-agy` for the
       agy arm, added at v1.32; `skill-md-description-reworded` for SKILL.md's other field), both
       named in the §"Test-name contract" proof column since v1.44 and enumerated here since v1.48.
@@ -2354,3 +2372,4 @@ in the one table that is supposed to account for them.
 - v1.47: Impl-plan audit v44 — agy GATE PASS must=0 should=0 nit=0, codex must=1 should=1, both on v1.46. codex breaking an agy clean is the SIXTH time on this branch, and both of its findings are carried counts of mine rather than new defects. MUST: the proof-column explanation added at v1.44 said 'not an index of the 38 mutations' and v1.45 then added tail-re-version-loosened, making it 39 — a live count carried across a change I made myself one cycle earlier, which is the invariant this project has broken most often. Re-derived from the embedded JSON (39) rather than edited to match the report, and the sentence now names the transition so the historical 38 references stay readable. SHOULD: the provenance header cited design v1.35 and spec v1.17 while both had moved to v1.36 and v1.18 in the same v42 commit that this plan's matcher tightening depends on. Re-derived after: 39 mutations, 45 nodes (32 FAIL / 13 PASS), WIREPIN PASS tasks=6 wiring=2, corpus 29/29 + 12/12. The only surviving live '38' is the parenthetical recording the transition.
 - v1.48: Impl-plan audit v45 (agy) — must=1 should=1 nit=1, and agy's own v44 clean broke one cycle later for the second time (v38 -> v39 was the first). All three trace to my recent edits. MUST: T6 claimed every find/replace value is 'the exact strings pinned in T2/T3/T4's code blocks, so an anchor here and the code there cannot drift'. False for three mutations that target code this feature does NOT prescribe — wire-force-fire-after-pass0 (Pass 0's _orca_find_by_pane entry), stub-branch-above-capture (the stub's pre-existing argv capture) and skill-md-description-reworded (SKILL.md's description field). Those anchor into LIVE files, so an unrelated edit orphans them silently and the harness REFUSES rather than failing. The claim now names both classes, names the three, and cites the check that actually covers them — resolve every find against the union of the prescribed blocks AND the live target file, requiring 39/39, which is what v1.46 ran. SHOULD: AC-6.12…AC-6.20 said 'Seven proofs, one per node' while AC-3.2 and AC-5.3 have carried a SECOND proof each since v1.32/v1.44 (tail-re-widened-to-launch-line-agy, skill-md-description-reworded) — required by the JSON and by the Test-name contract table but missing from the task's own enumeration. Now nine proofs across seven nodes. NIT: the Verification section named test_tail_pass_names_tail_evidence, a node that has never existed; the real one is test_skill_md_names_tail_evidence_pass. Re-verified: 39/39 anchors resolve against blocks-or-live, 0 references to the phantom node name, WIREPIN PASS tasks=6 wiring=2, corpus 29/29 + 12/12.
 - v1.49: Impl-plan audit v45 (codex) — must=1, real. The normative grammar accepted two shapes the paired design excludes; executing the block matched '> OpenAI Codex', ': OpenAI Codex', '| model: gpt-5.6-terra', 'gpt-5.6-terra high ·' and the agy mirrors. The prefix class admitted ASCII pipe, colon and > — a v29 revision called them 'quote' characters and this document's comment said so, while the design said whitespace or box-drawing ONLY; the surfaces disagreed and the block followed the looser one, so a shell that printed a README blockquote naming the agent was identity evidence (FR-1 wrong-pane class). And 'a · and a cwd' was enforced as [^[:space:]]*, so a bare separator matched. Both closed; six shapes decline, 12/12 positives still match. The boundaries live in five mutation strings as well as the block and four encode the box-drawing characters as JSON escapes, so a text replace found 4 of 9 — done in DECODED space per entry, then all anchors resolved against blocks-or-live: 41/41. Corpus 29 -> 35, swept by value across four documents; _agent_pv_re re-MEASURED (35/35), then-24 comparisons kept, the unrelated 29/11 node aggregate left alone. Two revert-mutants anchored on the whole codex arm line, proven discriminating: prefix-widened -> exactly 3 wrong negatives / 0 wrong positives, cwd-optional -> exactly 1. 39 -> 41 mutations, 41/41 mechanisms; version-loosened still reverts to the pre-v42 form. Re-verified: 35/35 + 12/12, WIREPIN PASS, 41/41 anchors, 50 fences.
+- v1.50: Impl-plan audit v46 — agy GATE PASS must=0 should=0 nit=0 (its third clean: v38, v44, v46), codex must=1 should=2, both on v1.49; the SEVENTH time codex has broken an agy clean. All three findings are consequences of my v45/v49 edits. MUST: the revert-mutants I added were scoped to 'the codex arm alone' — prefix-widened and version-loosened — while the agy arm encodes the SAME boundaries independently and the corpus carries agy negatives for them ('> Antigravity CLI 1.1.22', '| Gemini 3.1 Pro', 'Antigravity CLI 2026', 'Gemini 3.1 Pro (2026)'); no mutant could attribute a kill to those, since tail-re-unanchored-agy replaces the whole arm. Added tail-re-prefix-widened-agy and tail-re-version-loosened-agy, positive-preserving, anchored on the whole agy arm, pinned to AC-2.12; proven discriminating — each kills on exactly its two agy negatives and 0 positives. The version mutant loosens BOTH agy version positions together, because loosening one would be killed by one negative and prove nothing about the other. 41 -> 43 mutations, 43/43 anchors resolve, 43/43 mechanisms. The design paragraph that named only the codex pair now states the per-arm rule. SHOULD 1: AC-6.12…AC-6.20 said 'nine mutations for nine AC numbers' while enumerating eleven (nine proofs + two SIGPIPE) — the numbers are identifiers, not a tally, and the AC now says so. SHOULD 2: provenance cited design v1.36 / spec v1.18, actual v1.37 / v1.19. Re-verified: corpus 35/35 + 12/12, WIREPIN PASS tasks=6 wiring=2.

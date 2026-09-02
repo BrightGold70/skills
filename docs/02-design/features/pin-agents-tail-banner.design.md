@@ -107,9 +107,13 @@ prefix rule above says whitespace or box-drawing only, but the block's class als
 `> OpenAI Codex`, `: OpenAI Codex` and `| model: gpt-5.6-terra` — a Markdown blockquote and a
 table cell, exactly what a shell that printed a README carries — all matched. And "a `·` and a
 cwd" was enforced as `[^[:space:]]*`, so `gpt-5.6-terra high ·` with nothing after the separator
-matched too. Both closed in the block; the corpus carries all six shapes; two revert-mutants
-(`tail-re-prefix-widened`, `tail-re-cwd-optional`) prove each closure is what the corpus
-discriminates. The one prefixed positive control uses U+2502 `│`, which is still admitted.
+matched too. Both closed in the block; the corpus carries all six shapes. **Each closure is proved PER ARM,
+because each arm encodes it independently**: `tail-re-prefix-widened` / `-agy` restore the
+punctuation on one arm at a time, `tail-re-version-loosened` / `-agy` restore the zero-dot form
+on one arm at a time, and `tail-re-cwd-optional` is codex-only because only the codex arm has a
+cwd. A codex-only mutant proves nothing about the agy arm's copy of the same boundary — impl-plan
+audit v46 measured the corpus's agy negatives with no mutant able to attribute a kill to them.
+The one prefixed positive control uses U+2502 `│`, which is still admitted.
 
 **The match is CASE-INSENSITIVE, and that is part of the contract, not an implementation detail.**
 The literals are lowercase (`openai codex`, `antigravity cli`, `gemini [0-9]`) while every real
@@ -540,3 +544,4 @@ resolution, or it merely restates Pass 0.
 - v1.35: Impl-plan audit v41 (codex) should-fix: the same FR mislabel the impl-plan corrected at v1.41 and swept only within itself — this document still called the prose false positive 'the wrong-pane class FR-2 forbids'. Corrected to FR-1 / spec AC-1.4, with the reason: a single prose pane matching is exactly one match, so FR-2's cardinality rule holds while the answer is wrong.
 - v1.36: Impl-plan audit v42 (codex): the normative grammar this document describes was measured accepting 'OpenAI Codex (v0.145.0', 'OpenAI Codex v0.145.0)', 'OpenAI Codex 2026', 'Antigravity CLI 2026' and 'Gemini 3.1 Pro (2026)' — outside the paired-parenthesis, dotted-numeric rule stated here. Arms tightened in the impl-plan block; this document's corpus figures swept 24 -> 29, with the superseded-grammar comparisons labelled 'then-24' rather than renumbered.
 - v1.37: Impl-plan audit v45 (codex): this document's prefix rule (whitespace or box-drawing only) and its cwd rule (a · AND a cwd) were both stated here and not enforced by the impl-plan's block — the block admitted ASCII |, : and > and an empty cwd. Measured: '> OpenAI Codex', '| model: gpt-5.6-terra', 'gpt-5.6-terra high ·' all matched. Closed in the block; a paragraph here records both boundaries, the corpus figures swept 29 -> 35, and the two revert-mutants are named.
+- v1.38: Impl-plan audit v46 (codex): the v1.37 paragraph credited two codex-only revert-mutants with proving 'each closure', but the agy arm encodes the same prefix and dotted-version boundaries independently and had no mutant isolating them — the claim was broader than what the spec measured. Now states the per-arm rule and names all five revert-mutants (prefix x2, version x2, cwd codex-only).
