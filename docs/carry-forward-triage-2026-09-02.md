@@ -97,7 +97,7 @@ wrong verdict.
 | 2 | Decide the verdict token for the unreadable case | CLOSED | `h_mad_do_preconditions.py:70-74` returns `INVALID:{path}`, deliberately distinct from `DIRTY:` per the docstring at `:66-68` |
 | 3 | TDD it with a fixture lacking literal headings; mutation-verify the guard | CLOSED | `h-mad/tests/test_h_mad_do_preconditions_gate_blindness.py:120` `test_guard_routes_through_has_gate_sections`, described in-file as mutation-style |
 | 4 | Sweep sibling consumers of `classify()` for the same bypass | CLOSED | `grep -rn 'classify(' h-mad/scripts/*.py`: the only audit-gate consumer outside `h_mad_audit_gate.py` is `h_mad_do_preconditions.py:53`, which now routes through the guard; the other `classify` symbols are unrelated (`h_mad_pane_janitor.py:137`, `h_mad_state_validate.py:167`) |
-| 5 | (OI) Not filed as a GitHub issue — sanitize absolute paths first | **STILL-OPEN** | `git log --all --grep='gate-blindness'` and `grep -rn 'gate-blindness' docs/` show only the fix and handoffs, no issue reference. Explicitly deferred to the operator by the brief; the fix shipped without it |
+| 5 | (OI) Not filed as a GitHub issue — sanitize absolute paths first | ~~STILL-OPEN~~ **CLOSED 2026-09-03, not filed** | Operator decision taken. `docs/skill-monitoring.md` "Adjudication 2026-09-03 — precondition-gate-blindness: CLOSED, not filed as an issue": every `docs/*bug*.md` is an UPSTREAM report to a project that cannot see this tree; this is our code, our repo, fixed (`379b881`), guarded at `h_mad_do_preconditions.py:70`, and mutation-pinned 6/6. An issue would file a closed internal bug against ourselves. The sanitisation caveat argues the same way — a report needing its paths scrubbed to be publishable has an internal audience |
 | 6 | (OI) No fix attempted at handover time — deliberate | CLOSED | discharged by item 1 |
 
 **verdict:** OWES — the GitHub issue was never filed. This is an operator call the brief deliberately deferred, not code work; the underlying defect is fixed.
@@ -398,8 +398,10 @@ Items. Four are operator decisions; five are work sessions.
    spec deliberately not amended. Corrected 2026-09-02.
 2. ~~`#86`~~ — **NOT OPEN.** Closed 2026-08-03, `docs/skill-monitoring.md:993`, as a duplicate.
    Corrected 2026-09-02.
-3. gate-blindness — never filed as a GitHub issue; absolute paths need sanitising first. Explicitly
-   deferred to the operator by the brief; the code fix itself shipped. *Decision.*
+3. ~~gate-blindness~~ — **CLOSED 2026-09-03, not filed.** Operator decision; see
+   `docs/skill-monitoring.md` "Adjudication 2026-09-03". Original wording follows.
+   ~~never filed as a GitHub issue; absolute paths need sanitising first. Explicitly
+   deferred to the operator by the brief; the code fix itself shipped. *Decision.*~~
 4. Cross-repo sweep of `~/.claude/handoffs/INDEX.md` to see whether the handoff-drop mechanism hit
    repos other than HemaSuite. The probe the brief suggested was never run. (This is the orphaned
    restore-chain brief's residue — this lane is the only one that can carry it.)

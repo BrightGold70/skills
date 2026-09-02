@@ -1002,6 +1002,30 @@ _Append new findings below as later runs surface them. Flip Status + link the co
 > `Waiting for background terminal` string is evidence the pane path was never exercised, not that
 > the guard works.
 
+> **Adjudication 2026-09-03 — precondition-gate-blindness: CLOSED, not filed as an issue.**
+>
+> The 2026-08-10 brief deferred one item to the operator: file the gate-blindness defect as a
+> sanitized GitHub issue once its absolute paths were scrubbed. The code fix shipped without it
+> (`379b881`), and the item then sat open across every closeout since, most recently surfacing as
+> one of four "decisions an operator can settle in minutes" in
+> `docs/carry-forward-triage-2026-09-02.md`.
+>
+> **Closed without filing.** Every existing report under `docs/*bug*.md` is an UPSTREAM one —
+> `orca-bug-terminal-read-empty-after-restart.md`, `orca-bug-worker-release-dispatch-not-found.md`,
+> `bug-gemini-auth-status-orphan-leak.md` — addressed to projects that cannot see this tree and have
+> no other way to learn the defect exists. Gate-blindness is the opposite case on every axis: our
+> code, our repo, already fixed, guarded at `h_mad_do_preconditions.py:70` via the shared
+> `has_gate_sections`, and pinned by a mutation-style test that neutralises that guard and asserts
+> the refusal disappears (`test_h_mad_do_preconditions_gate_blindness.py`, 6/6). An issue would file
+> a closed internal bug against ourselves, duplicating this registry row — which is the artifact
+> that record was always going to be.
+>
+> The sanitisation caveat was the only thing that ever made filing awkward, and it argues the same
+> way: a report that needs its paths scrubbed to be publishable is a report whose audience is
+> internal.
+>
+> Re-open only if the defect recurs in a form an outside reader could hit.
+
 > **Adjudication 2026-08-03 — `#40` re-scoped; `#38`'s guard kept, on better evidence than the one proposed.**
 >
 > `#40` planned to instrument a Phase-5 run and count pane-path vs `exec` dispatches, with the stated
