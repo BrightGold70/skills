@@ -1069,9 +1069,9 @@ def test_cli_main_readback_failed_has_marker_only(
     captured = capsys.readouterr()
 
     assert rc == 2, f"{case} readback mismatch must return 2"
-    assert captured.stdout == "[H-MAD] f collect readback_failed\n", (
+    assert captured.out == "[H-MAD] f collect readback_failed\n", (
         f"{case} readback mismatch stdout must be exactly the readback_failed marker"
     )
-    assert collect_contract_lines(captured.stdout) == [], (
+    assert collect_contract_lines(captured.out) == [], (
         f"{case} readback mismatch must not print a COLLECT line"
     )

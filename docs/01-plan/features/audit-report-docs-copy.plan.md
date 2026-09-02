@@ -221,3 +221,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 - v1.8: Count sweep from 5b-audit v3 (agy): 22 mutations (e′ unkillable, withdrawn). No plan decision changed.
 - v1.9: Count sweep from 5b-audit v8 (codex): e′ restored on the observable bad-project-root path → 23 mutations. No plan decision changed.
 - v1.10: Wording sweep from 5b-audit v10: the transport refusal marker's feature slot is the stem (matches design/impl-plan). No plan decision changed.
+- v1.11: AC-2.9h hand replay 2026-09-02 survivor=/tmp/audit_nlmpin_plan_cycle8_codex.report.md (scratch root, not HemaSuite): gate(RP)=GATE: INVALID must=0 should=0 rc=2 · collect=COLLECT: OK path=<R>/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md delivered=report-file · cmp=identical · gate(docs)=GATE: FAIL must=3 should=1 rc=0
