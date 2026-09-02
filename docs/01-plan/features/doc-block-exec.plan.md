@@ -1,0 +1,307 @@
+# Plan: doc-block-exec
+
+## Executive Summary
+
+Add a stdlib-only helper that runs an explicitly tagged bash block out of a markdown document, and
+migrate the one existing hand-written harness onto it, so that paste-along recipes in these skills
+are covered by the suite instead of by an operator discovering their defects.
+
+## Overview
+
+These skills document operator recipes as fenced bash blocks. Prose review and a green suite both
+passed over four real defects in one such recipe — a phase-hardcoded path, an unimplemented halt,
+whitespace truncation, and a bare `exit` that kills an interactive shell — and all four surfaced
+only when the block was extracted and executed against fixtures. That extract-substitute-run
+harness exists exactly once, inline in a test, so the next recipe worth covering pays to rewrite
+it. This matters now because the recurrence counter on the candidate row reached 4, and because
+the migration is cheapest while there is a single consumer to migrate.
+
+## Scope
+
+In scope: one new helper module with an importable API and a verdict-token CLI; one info-string
+tag convention on bash fences; the tagging of exactly one existing fence; and the migration of the
+**one executing** call site that hand-rolls this today in
+`h-mad/tests/test_h_mad_collect_report_docs.py` (`:270` plus `run_recipe` at `:309`).
+
+User-visible behaviour: an operator can run a documented recipe under test by hand with a single
+command; a fence carrying the tag is executable and every other fence in the tree is not.
+
+**Transport of the three reported values.** The CLI prints exactly one `DOCBLOCK:` verdict line —
+that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
+**separate artifacts, not part of the verdict line**: returned as distinct fields from the
+importable API, and on the CLI written to paths given by **optional** `--stdout <path>` /
+`--stderr <path>` arguments. Omitted, the streams are simply not written — the API is the primary
+consumer and the suite reads the fields, so requiring the flags would make every in-process caller
+invent a path it never reads. A path that cannot be written is a refusal,
+`DOCBLOCK: UNREADABLE reason=stream_path_unwritable`, exit 2 — checked **before** the block runs,
+so a recipe is never executed only for its output to be discarded.
+
+Left unstated, an implementation can satisfy "one verdict line" while dropping the streams, or
+print the streams inline and break every consumer that parses the verdict line.
+
+**The fixture preamble is load-bearing, not a convenience.** A documented recipe may consume a
+variable the surrounding prose sets rather than the block itself — the Second-surface gate block
+reads `COLLECT_OUT`, supplied today by a preamble that runs the real collector. Measured (AC-3.11
+carries the full pair): without the preamble the run still exits 0 and still takes the
+`report_not_collected` halt branch, emitting only a `COLLECT_OUT: unbound variable` diagnostic. So
+it does **not** abort — an earlier draft of this paragraph said it did, and the measurement says
+otherwise. The limitation that matters is narrower and sufficient: without a supplied
+`COLLECT_OUT` the block can never reach the delivered-report `GATE: PASS` branch, which AC-6.3
+requires, so the FR-6 migration is impossible without a preamble parameter.
+
+## Goals
+
+- Address a block unambiguously and only by explicit opt-in — FR-1
+- Make a substitution that would not apply a refusal rather than a silent no-op — FR-2
+- Execute in a disposable cwd from `tempfile.mkdtemp()` — the stdlib call, never the `mktemp -d`
+  shell utility — so a recipe's **ordinary relative** writes cannot reach the repository, under
+  the shell mode the recipe declares — FR-3
+- Report through the same verdict-token contract every other helper here uses — FR-4
+- Bound every run without introducing an external time-bounder — FR-5
+- Leave no hand-written copy of the harness behind — FR-6
+
+## Requirements
+
+- FR-1: Address a block by document, heading, and explicit tag
+- FR-2: Substitute an explicit map, and refuse a substitution that would not apply
+- FR-3: Execute in a disposable cwd under a declared shell mode
+- FR-4: Verdict-token CLI following the established gate contract
+- FR-5: Bounded execution without an external time-bounder
+- FR-6: Migrate the existing inline harness onto the helper
+
+## Implementation Strategy
+
+One layer changes: `h-mad/scripts/` gains a module, `h-mad/tests/` gains its suite and a mutation
+spec, `h-mad/SKILL.md` gains a Helper-scripts registry entry and one tagged fence, and one existing
+test file loses its hand-rolled extraction.
+
+The patterns to follow are already established in this repository and are not being invented here:
+a helper exposes importable functions plus a thin CLI; the CLI prints exactly one verdict line;
+a verdict exits 0 and a cannot-judge exits 2; the registry entry and the emittable detail lines
+are pinned to each other bidirectionally; and every guard gets a mutation that must be caught by a
+named test.
+
+**The count rule, stated precisely — the loose form contradicts AC-4.4.** A cannot-judge must
+carry no count that could be read as a **measured result**: never an `rc=`, never a findings count,
+because that is how "nothing was measured" gets read as "measured, and clean". It **may** carry a
+*diagnostic* count explaining why it could not judge. The distinction is already load-bearing
+elsewhere in this skill rather than being invented for this feature: `ANCHORS_DRIFTED` and
+`ANCHORS_UNREADABLE` both exit 2 and both carry `drifted=`/`unreadable=`, and
+`MUTATION: PRECHECK_FAILED` exits 2 carrying `specs=`/`drifted=`/`unreadable=` — in each case so
+the verdict word chooses the first action without hiding the other finding. `AMBIGUOUS blocks=<n>`
+is that same shape: `n` is the number of candidate blocks that *made* the address ambiguous and is
+the datum the operator needs to pass `--index`, not a result. So AC-4.4 stands and this sentence
+was the error; AC-4.3 (no cannot-judge carries `rc=`) is the invariant that actually matters.
+
+Deliberately untouched: the 67 bash fences that will not carry the tag, and the installed copy
+under `~/.claude/skills` — the helper is exercised against the checkout.
+
+**One further test file does change, and it is a scope increase the design audit forced.**
+`h-mad/tests/docsections.py` currently carries its own `_fence_aware_end`. Keeping both was going
+to require a differential test the Single-source contract demands, and that test is unachievable:
+the existing toggle stops early inside an unbalanced four-backtick fence, which AC-1.6 forbids the
+new scanner from doing. So `docsections.py` imports the authoritative bounder instead — `tests/`
+depending on `scripts/` is the correct direction, it removes the duplicate rather than testing
+around it, and it fixes a latent bug there. Its public signatures are unchanged and no existing
+test pins the old behaviour.
+
+**FR-6 is a wiring task, not a new-behaviour task, and is planned as one.** Its deliverable is a
+*connection* — the migrated call sites reaching `h_mad_doc_block_exec` — and the Connection
+enforcement invariant applies: a callee suite that passes proves nothing about whether the caller
+still reaches the callee. The helper's own tests could stay green while
+`test_h_mad_collect_report_docs.py` quietly kept its hand-rolled extraction, and every gate
+downstream of 5b would report success. So FR-6 carries a `WIRE`/`WIRE-PIN` at impl-plan time, and
+discrimination is required in **both** directions: reverting the connection alone (import + call
+site, helper untouched) must fail a named test in the caller while the helper's own suite still
+passes, and making the call site unconditional — resolving a block regardless of the tag — must
+also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
+and neither is visible to a whole-module revert, which removes both sides at once.
+
+The ordering constraint that shapes the work: the tag and the migration must land together.
+Tagging the gate fence makes `:270`'s `re.findall` — which requires `\n` immediately after
+` ```bash ` — match zero blocks. It fails loudly rather than silently, which is the good case, but
+it is still a broken suite if the two are separated across tasks.
+
+**Only `:270` is affected, and an earlier draft of this plan claimed otherwise.** Measured: the
+Second-surface section holds four bash blocks; `:270` selects block 4 (containing
+`h_mad_audit_gate.py`), `:412` selects block 2 (containing `exec codex`). Only block 4 is tagged,
+so `:412` keeps matching and keeps working. It is also the wrong thing to migrate — it inspects a
+recipe it must never run, since running it would dispatch a real agent — so it stays a text scan
+by decision rather than by omission.
+
+## Architecture Considerations
+
+- **The temp cwd is isolation, not a sandbox — and the plan must not claim otherwise.** A fresh
+  `tempfile.mkdtemp()` cwd stops a recipe's *ordinary relative* writes from reaching the repository, and
+  that is the whole of the guarantee this feature tests. A block containing an absolute path, or
+  an explicit `cd`, escapes it, and no cwd choice could prevent that. Claiming "side effects
+  cannot reach the repository" would assert a containment property nothing here enforces; the
+  tests assert the narrower, true one.
+- **The tag is the security boundary.** This helper executes shell text taken from a document, so
+  the property that keeps it safe is that selection is explicit and cannot be widened. That
+  constrains the API shape as much as any requirement: no parameter may accept a directory, a
+  glob, or an all-blocks flag, because such a parameter is how an opt-in mechanism becomes the
+  blanket sweep it was built to prevent.
+- **The block's exit code and the tool's verdict are different questions**, and conflating them
+  would make a recipe that correctly returns non-zero indistinguishable from a harness failure.
+  This mirrors the existing split between a dispatch's rc and its status token.
+- **Refusal is the default response to anything unmeasured.** Absent block, ambiguous address,
+  inapplicable substitution, unknown info-string key, timeout — each returns nothing rather than a
+  plausible-looking zero. The failure this repository keeps re-encountering is a measurement that
+  did not happen reading as a measurement that came back clean.
+- **Shell mode belongs on the fence, not in the caller.** Whether a recipe is meant to be pasted
+  into an interactive shell is a property of the recipe; putting it in the test would let two
+  callers disagree about one block.
+- **Self-containment**: stdlib only, no import of another skill's internals, no path outside this
+  skill's own directory. The helper must work from a bare clone.
+
+## Deliverables
+
+| Deliverable | Type | Satisfies |
+|---|---|---|
+| `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
+| `hmad:exec` fence info-string tag convention | convention | FR-1 |
+| `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 |
+| Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
+| Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
+| Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
+| Migrated `h-mad/tests/test_h_mad_collect_report_docs.py` (executing path only) | tests | FR-6 |
+| `h-mad/tests/docsections.py` — drop its duplicate bounder, import the authoritative one | tests | FR-1 (AC-1.8) |
+
+## Risks and Mitigation
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Tagging the gate fence breaks the bare-opener extractor at `:270` | High — certain if separated | Land the tag and the migration in one task; the existing assertion on a non-empty block list makes the breakage loud if they are not. **`:412` is NOT affected** — measured, it selects a different, untagged block (`exec codex`), so it keeps matching and deliberately stays a non-executing text scan |
+| A later convenience flag turns opt-in into a sweep | High | No API accepts a directory or glob; the exclusion is written into the spec's out-of-scope list and pinned by a test asserting the CLI rejects such input |
+| A substitution anchor drifts and the replace silently no-ops | High | An absent key is a refusal naming the key; this is the single most load-bearing guard and gets its own mutation |
+| A recipe's side effects reach the working tree | Medium | Every run in a fresh `tempfile.mkdtemp()` cwd, removed afterwards; pinned by asserting the tree is byte-identical across a run that writes files |
+| "Run under `mktemp -d`" is read as the shell utility, acquiring an external dependency | Medium | The phrase came verbatim from the candidate row and is a stdlib call here: AC-3.13 asserts `tempfile.mkdtemp()`, mode `0o700`, and no `mktemp` invocation in the source |
+| A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver |
+| The strict default hides the very defect class that motivated the feature | Medium | `shell=plain` is declarable per fence, and the shell-killing `exit` case is pinned as an explicit acceptance criterion |
+| An unknown info-string key silently falls back to a default mode | Medium | Unknown keys refuse rather than default |
+| The carried "68 fences" figure is stale | Low | Re-measured this session; command and output cited below under Measurements |
+
+## Measurements
+
+Both figures below shape this plan's scope and success criteria, so the command and its observed
+output are recorded here rather than only in the author's terminal — a cited output is checkable
+by a reviewer, "I verified this" is not. Re-run them at implementation time; citing them makes
+staleness detectable, it does not prevent it.
+
+**The fence census (68).** Counted over `h-mad/` and `handoff/`, excluding `archive/`, matching
+opening fences only (a line *starting* ` ```bash `, so a closing fence or an indented mention is
+not counted). Tests and hidden files are **not** excluded — a broad grep re-run by a reviewer will
+therefore agree with this number:
+
+```
+$ python3 - <<'PY'
+from pathlib import Path
+tot=0; files=0
+for p in sorted(Path('.').glob('*/**/*.md')):
+    if 'archive' in p.parts or p.parts[0] not in ('h-mad','handoff'): continue
+    n=sum(1 for l in p.read_text(encoding='utf-8',errors='replace').split('\n')
+          if l.startswith('```bash'))
+    if n: tot+=n; files+=1
+print(f"bash fences: {tot} across {files} files")
+PY
+bash fences: 68 across 10 files
+```
+
+Control, to show the counter is not under-matching — the same sweep counting opening fences of
+*every* language must return a strictly larger number, and does: **83**.
+
+**The extractor census (2).** The consumers that would break when a fence is tagged:
+
+```
+$ grep -rn 'findall.*```bash\|split.*```bash\|re\.compile.*```bash' --include='*.py' .
+h-mad/tests/test_h_mad_collect_report_docs.py:270:    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
+h-mad/tests/test_h_mad_collect_report_docs.py:412:        (b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b),
+```
+
+A broader grep for the bare literal returns five hits; the other three are inline fixture strings
+(`test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551`), not extractors. Control:
+21 `.py` files contain a fence literal, so the narrow pattern is not under-matching. One further
+consumer reads `SKILL.md` and was checked directly rather than inferred — `h-mad/tests/docsections.py:37`
+bounds fences with `stripped.startswith("```")`, a **prefix** match, so an info-string tag does not
+disturb it.
+
+**That measurement stands and is no longer the whole story:** a later design cycle found the same
+toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which is why
+`docsections.py` now appears under Deliverables and Implementation Strategy — it drops its
+duplicate bounder and imports the authoritative one. The tag was never the reason to change it;
+the duplicate bounder is.
+
+## Convention Prerequisites
+
+- Feature branch created at Phase 5c before any implementation commit.
+- Verdict-token discipline: read the token, never `$?`; a cannot-judge carries no count readable
+  as a **measured result** (never `rc=`), though it may carry a diagnostic count saying why it
+  could not judge — see the count rule under Implementation Strategy, and AC-4.3/AC-4.4.
+- Every guard mutation-tested with a per-mutation named test, scored on the pytest summary.
+- Registry entry and emittable detail lines pinned bidirectionally.
+- Full suite run alone before the Phase 5f gate; scoped green is not suite green.
+- **Portable time bounds, and why `hmad-dispatch run --timeout` is not the mechanism here.** The
+  invariant forbids the shell forms `timeout <s> <cmd>` / `gtimeout <s> <cmd>`, because both rest
+  on coreutils that macOS does not ship, and prescribes `hmad-dispatch run --timeout` as the
+  replacement **for a shell-command time bound**. This helper is not a shell command: it is a
+  stdlib Python module whose bound is `Popen.communicate(timeout=…)` — neither forbidden form, and
+  no external CLI. Routing it through `hmad-dispatch` would make a module the design requires to
+  run from a bare clone depend on a wrapper script, which is the very dependency the same
+  invariant family exists to prevent (§"Skill self-containment", §"No new external dependency").
+  So the invariant is satisfied, not waived. Recorded explicitly because the plan previously said
+  only "the bound is Python's own", which cannot be distinguished from having overlooked the rule.
+- No new external dependency; no `timeout`/`gtimeout` **invocation** — the source legitimately
+  contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`, and a substring
+  ban would reject the design that satisfies the invariant (AC-5.3).
+
+## Success Criteria
+
+- Every AC in the spec passes an automated test — **43 as of spec v1.12**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
+  caller test while the helper's own suite still passes, and an unconditional call site fails a
+  named test too.
+- The mutation spec reports `ALL_CAUGHT`, each mutation killed by its own named test.
+- The full suite passes at no lower a count than the pre-change baseline plus this feature's tests.
+- `git status --porcelain` is unchanged across a run of a block that writes files.
+- No hand-written ` ```bash ` extraction remains on the **executing** path of
+  `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` both route through
+  the helper. `:412` keeps its text scan **by decision**: it selects a different, untagged block
+  (`exec codex`) that must never be run, so an executor which returns only tagged blocks cannot
+  serve it. A test asserts `:412` performs no execution, so the exemption is pinned rather than
+  assumed.
+- Exactly one fence in the tree carries the tag at the end of this feature.
+
+## Out-of-Scope (confirmed from spec)
+
+- Any blanket or directory-wide sweep of the 68 bash fences under `h-mad/` and `handoff/`.
+- Tagging any fence beyond the Second-surface gate block.
+- A `name=` addressing key on the info string.
+- A `--list` mode enumerating tagged blocks.
+- Languages other than bash.
+- Executing blocks in another repository or in the installed skills copy rather than the checkout.
+
+## Next Steps
+
+Operator approves plan v1.0, then the Phase 3 audit cycle runs to `must=0 should=0` before Phase 4
+design begins.
+
+## Version History
+
+- v1.0: Initial plan draft.
+- v1.1: Audit v1 fixes: cite both measurements in a Measurements section, plan FR-6 as a wiring task with two-direction discrimination, state the stdout/stderr transport, narrow the temp-cwd isolation claim.
+- v1.2: Audit v2 fixes: state the count rule precisely so it no longer contradicts AC-4.4, and specify the stdout/stderr arguments as optional with a pre-run refusal.
+- v1.3: Audit v3 fixes: the count rule's third surface in Convention Prerequisites (my v1.2 sweep grepped one phrasing and missed it); name the FR-6 wire mutation spec path.
+- v1.4: Track the spec's AC count to 38 after design audit v2 added AC-1.8, AC-2.6 and AC-2.7.
+- v1.5: Design audit v3: the paired-plan surface of the AC-5.3 invocation-versus-substring fix.
+- v1.6: Design audit v4 back-propagation: docsections.py is now in scope, replacing its duplicate bounder with an import of the authoritative one.
+- v1.7: Plan re-audit v5: only the executing call site migrates — :270 and :412 select different blocks (measured, 4 blocks in the section), so the earlier 'both extractors break' claim was false and AC-6.2 was unsatisfiable; add docsections.py to Deliverables.
+- v1.8: Plan re-audit v6: same, plus a risk row recording where the mktemp-d wording came from.
+- v1.9: Plan re-audit v7: the AC count went stale a third time; anchor it to the spec version and record how to re-derive it.
+- v1.10: Plan re-audit v7: scope AC-5.2 to the launched process group (a setsid descendant escapes, measured); refuse aliased --stdout/--stderr (AC-3.9); correct the risk row that still claimed both extractors break.
+- v1.11: Plan re-audit v8: the Success Criteria still demanded removal of every hand-written extraction, contradicting the FR-6 decision that :412 keeps its non-executing text scan.
+- v1.12: Plan re-audit v8: add the fixture preamble boundary (AC-3.11/AC-3.12) — without it the gate block's COLLECT_OUT is unbound under strict bash and the FR-6 migration cannot reach GATE: PASS.
+- v1.13: Plan re-audit v9: track the AC count to 43 after the duplicate-heading refusal.
+- v1.14: Plan re-audit v10: state why the portable-time-bounds prescription does not transfer to a stdlib module (its premise about this helper does not hold); name the full launch/reap/cleanup sequence; correct the preamble causal claim on its seventh surface.
+- v1.15: Plan re-audit v10 (agy): reconcile the docsections measurement with the later decision to change that file — the tag was never the reason, the duplicate bounder is.
