@@ -592,8 +592,14 @@ def test_collect_distinct_unmarked_report_short_circuits_identical_docs_not_empt
     write_report(empty_report, "", done=False)
     write_report(empty_docs, "", done=False)
 
+    # An empty pair is NOT "already collected": per the design it sets
+    # `already = False` and falls through. Express "there is no out capture"
+    # honestly with a real PassSpec — the pass_spec helper substitutes a
+    # `.out` sibling that does not exist on disk, and the installed stub
+    # returns content for it regardless, which would assert a recovery that
+    # cannot happen in production.
     delivered, collected = ac.collect(
-        pass_spec(2, empty_report, out_path=None),
+        ac.PassSpec(index=2, report_path=empty_report, out_path=None, rc=0),
         grace=0,
         project_root=tmp_path,
         feature="f",
@@ -602,6 +608,7 @@ def test_collect_distinct_unmarked_report_short_circuits_identical_docs_not_empt
     )
 
     assert (delivered, collected) == ("none", None)
+    assert empty_docs.read_bytes() == b"", "the empty docs placeholder is untouched"
 
 
 def test_collect_missing_report_with_no_out_skips_extractor(
@@ -1254,9 +1261,17 @@ def test_empty_pair_at_zero_grace_still_reaches_the_out_rung(tmp_path: Path) -> 
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_bytes(b"")
 
+    # a realistic exec capture: the dispatch boundary, then a sentinel-framed
+    # report. Without the sentinel pair the extractor fails closed, which is the
+    # contract that stops narration being collected as an audit.
     out_path = tmp_path / "dispatch" / "codex.out"
     out_path.write_text(
-        "===HMAD-DISPATCH-BOUNDARY===\n" + HOSTILE_OUT_REPORT, encoding="utf-8"
+        "codex echoed the prompt here\n"
+        "===HMAD-DISPATCH-BOUNDARY===\n"
+        "AUDIT-f-plan-v8-BEGIN\n"
+        "## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n"
+        "AUDIT-f-plan-v8-END\n",
+        encoding="utf-8",
     )
 
     result = run_collect_cli(collect_args(tmp_path, report, out=out_path, grace=0))

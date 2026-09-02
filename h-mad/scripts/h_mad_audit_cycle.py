@@ -312,8 +312,6 @@ def _collect_unguarded(
             if report_bytes:
                 return "report-file", collected_path
             empty_matching_pair = True
-            if grace <= 0:
-                return "none", None
 
     if empty_matching_pair:
         overwrite = True
