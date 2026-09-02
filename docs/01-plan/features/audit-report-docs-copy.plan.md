@@ -51,8 +51,9 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
   `CollectConflict` + optional `PassSpec.out_path`.
 - FR-3: gate refuses `TRANSPORT_RE` (`audit_` prefix, dot-free stem, `.report.md` suffix,
   single-sourced in the gate; imported only by the tests — not by the CLI, not by
-  `_collected_path`) with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] …
-  gate INVALID (transport file …)` marker, exit 2; `<feature>.report.md` (Phase 7) still
+  `_collected_path`) with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] <stem>
+  gate INVALID (transport file …)` marker (the feature slot carries the dot-free transport
+  stem verbatim — a transport name has no reliable feature grammar), exit 2; `<feature>.report.md` (Phase 7) still
   scores; verdict preserved for every existing audit doc (AC-3.7, Backward compatibility).
 - FR-1 (AC-1.6): disjointness of the two grammars is a property test over adversarial
   `(feature, surface)` pairs, not a production assert (an unreachable check cannot be
@@ -219,3 +220,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 - v1.7: Count sweep from 5b-audit v2 (codex): 23 mutations (exit-only/token-only mutants per guard). No plan decision changed.
 - v1.8: Count sweep from 5b-audit v3 (agy): 22 mutations (e′ unkillable, withdrawn). No plan decision changed.
 - v1.9: Count sweep from 5b-audit v8 (codex): e′ restored on the observable bad-project-root path → 23 mutations. No plan decision changed.
+- v1.10: Wording sweep from 5b-audit v10: the transport refusal marker's feature slot is the stem (matches design/impl-plan). No plan decision changed.

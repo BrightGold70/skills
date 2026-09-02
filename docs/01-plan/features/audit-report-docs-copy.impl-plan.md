@@ -193,7 +193,7 @@ exact.)
   python3 h-mad/scripts/h_mad_audit_gate.py "$R/docs/01-plan/features/nlm-cli-version-pin.plan.audit.v8.codex.md"; echo "rc=$?"   # expect GATE: PASS|FAIL, rc=0
   ```
   The four outputs are recorded in `audit-report-docs-copy.plan.md`'s Version History via `h_mad_version_history.py <plan> --version v1.<next-unused> --text "AC-2.9h hand replay <date> survivor=<S>: gate(RP)=<GATE line> rc=<n> · collect=<COLLECT line> · cmp=<identical|DIFFER> · gate(docs)=<GATE line> rc=<n>"` — ONE line, the four results joined by ` · `, because the helper refuses newline-bearing text (`multiline_text`, verified by dry-run 2026-09-02) and a duplicate version (read the newest entry first and use the next number). That entry is the checkpoint's evidence, and Task 4 does not start until it exists.
-- [ ] Every exit path prints exactly one `[H-MAD] <feature> collect <verdict|usage_error|operational_error|readback_failed>` line.
+- [ ] Every exit path prints exactly one `[H-MAD] <feature|unknown> collect <verdict|usage_error|operational_error|readback_failed>` line — `unknown` on the argparse path (a missing `--feature` cannot supply the name), `<feature>` everywhere else.
 
 **Dependencies on other tasks**: Task 1, Task 2 (AC-2.9 step i needs the refusal)
 
@@ -351,7 +351,7 @@ copied from the production file at implementation time.)
 | l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 | l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 
-- [ ] AC-6.3: the spec has exactly the 23 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0`.
+- [ ] AC-6.3: the spec has exactly the 23 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0 unreadable=0` (the harness appends `unreadable=` on every measured verdict — verified 2026-09-02).
 - [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 23 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
 - [ ] The named test for k/k′/l/l′ asserts ALL THREE parts of its guard's output (exit code, first stdout line, `[H-MAD]` line) so each single-part mutant is caught by it alone.
 - [ ] `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/collect_report.json` prints a line starting `ANCHORS: ANCHORS_OK`.
@@ -374,3 +374,4 @@ copied from the production file at implementation time.)
 - v1.8: 5b audit v8 fixes (codex): e′ restored on the observable bad-project-root fall-through (23 mutations); PassSpec AC worded as a full constructor.
 - v1.9: 5b audit v8 fix (agy p1): explicit try/except SystemExit around parse_args in the Task 3 code structure.
 - v1.10: 5b audit v9 fixes (codex + agy p1, 22 tools): stale 22/v1.15 strings; no placeholder ellipses in paths, tokens or the JSON skeleton (one full mutation entry shown); render_verdict dropped, _run named; provenance line unpinned.
+- v1.11: 5b audit v10 fixes (codex; agy v10 clean): AC-6.3 expects the harness's unreadable=0 field; marker AC allows unknown on the argparse path.

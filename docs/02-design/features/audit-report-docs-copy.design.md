@@ -482,21 +482,22 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 | grammar disjointness | executed `^audit_[^.]+\.report\.md$` vs `_VERSION_RE` over 10 names incl. `audit_f.plan.audit.v8.report.md` (T=False, V=True) — plan v1.3 table |
 
 ## Version History
-- v1.17: 5b-audit v8 sweep (agy): D2 step 1 states the SystemExit handler is its own try around parse_args.
-- v1.16: 5b-audit v8 sweep (codex): e′ restored (bad-project-root fall-through is observable); 23 mutations.
 - v1.0: Initial design draft.
-- v1.15: 5b-audit v5 sweep (codex): CLI import list and Connection-enforcement line match the impl-plan (no `validate_surface` import; no e′).
-- v1.14: 5b-audit v4 sweep (codex): mutation-count prose no longer derives 22 from stale sub-counts; the impl-plan table is the list.
-- v1.13: 5b-audit v3 sweep (agy): D1's copy writer delegates to `_finalize_write` as Task 1 states; the CLI performs no `--surface` pre-check (single validator in `_collected_path`); mutation count 22 (e′ unkillable, dropped).
-- v1.12: 5b-audit v2 sweep (codex): D5's nested code fence escaped with a four-backtick outer fence; mutation count 23 (exit-only/token-only mutants per guard).
-- v1.11: Design-audit v8 fixes (agy p1): the transport-refusal marker's feature slot is the stem verbatim (a transport name has no reliable feature grammar) — stated, not left to inference; marker-stripping mutants (j)/(j′) added → 19, swept into spec/plan counts.
-- v1.10: Design-audit v8 fix (codex): the already-collected short-circuit requires non-empty bytes, so an empty-identical docs/RP pair is MISSING, not OK.
-- v1.9: Design-audit v7 fix (agy p1): the same-file test is existence-blind so a missing docs-path `--report` ends MISSING instead of reaching the `--out` rung.
-- v1.8: Design-audit v7 fix (codex; agy v6 clean): the outer handler also catches `ValueError` so a bad `--surface` cannot leak as a traceback.
-- v1.7: Design-audit v5 fixes (codex): `collect()` runs its WHOLE body under `_fs_errors` (the probes `_has_complete_report`/`_run_report_wait` included); the SKILL.md block is a new top-level section after `## Putting …`, outside the pinned slice, per spec/plan — one pointer sentence inside.
-- v1.6: Design-audit v5 fix (agy p1): one outer `try … except (OperationalError, OSError)` encloses every step after argparse, so `resolve()`, `mkdir` and the directory probes cannot leak a traceback either.
-- v1.5: Design-audit v4 fix (agy p1, 10 tool calls; codex v4 clean): the PermissionError test chmods the parent DIRECTORY, not the file — `unlink` on a read-only file succeeds under a writable parent and the scenario would have exited 0.
-- v1.4: Design-audit v3 fix (agy p1; codex v3 clean): the `collect()` same-file and already-collected checks run under `_fs_errors` too — the code block now matches the prose.
-- v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
-- v1.2: Design-audit v2 fixes (codex): missing-required-flag path designed explicitly (argparse `required=True`, `SystemExit` caught → `usage_error` marker, exit 2, no token); marker contract made exact — one `[H-MAD]` marker on every exit path including operational errors.
 - v1.1: Design-audit v1 fixes (codex + agy p1, same finding on the short-circuit): the AC-2.8 same-file branch is ordered BEFORE the AC-2.11 byte-identity short-circuit (which would trivially match the same file and skip the marker path); AC-3.3's `gate()` tuple and `combine()` reason are pinned by tests in `test_h_mad_audit_cycle.py`, not inferred from `_gate_token`'s regex.
+- v1.2: Design-audit v2 fixes (codex): missing-required-flag path designed explicitly (argparse `required=True`, `SystemExit` caught → `usage_error` marker, exit 2, no token); marker contract made exact — one `[H-MAD]` marker on every exit path including operational errors.
+- v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
+- v1.4: Design-audit v3 fix (agy p1; codex v3 clean): the `collect()` same-file and already-collected checks run under `_fs_errors` too — the code block now matches the prose.
+- v1.5: Design-audit v4 fix (agy p1, 10 tool calls; codex v4 clean): the PermissionError test chmods the parent DIRECTORY, not the file — `unlink` on a read-only file succeeds under a writable parent and the scenario would have exited 0.
+- v1.6: Design-audit v5 fix (agy p1): one outer `try … except (OperationalError, OSError)` encloses every step after argparse, so `resolve()`, `mkdir` and the directory probes cannot leak a traceback either.
+- v1.7: Design-audit v5 fixes (codex): `collect()` runs its WHOLE body under `_fs_errors` (the probes `_has_complete_report`/`_run_report_wait` included); the SKILL.md block is a new top-level section after `## Putting …`, outside the pinned slice, per spec/plan — one pointer sentence inside.
+- v1.8: Design-audit v7 fix (codex; agy v6 clean): the outer handler also catches `ValueError` so a bad `--surface` cannot leak as a traceback.
+- v1.9: Design-audit v7 fix (agy p1): the same-file test is existence-blind so a missing docs-path `--report` ends MISSING instead of reaching the `--out` rung.
+- v1.10: Design-audit v8 fix (codex): the already-collected short-circuit requires non-empty bytes, so an empty-identical docs/RP pair is MISSING, not OK.
+- v1.11: Design-audit v8 fixes (agy p1): the transport-refusal marker's feature slot is the stem verbatim (a transport name has no reliable feature grammar) — stated, not left to inference; marker-stripping mutants (j)/(j′) added → 19, swept into spec/plan counts.
+- v1.12: 5b-audit v2 sweep (codex): D5's nested code fence escaped with a four-backtick outer fence; mutation count 23 (exit-only/token-only mutants per guard).
+- v1.13: 5b-audit v3 sweep (agy): D1's copy writer delegates to `_finalize_write` as Task 1 states; the CLI performs no `--surface` pre-check (single validator in `_collected_path`); mutation count 22 (e′ unkillable, dropped).
+- v1.14: 5b-audit v4 sweep (codex): mutation-count prose no longer derives 22 from stale sub-counts; the impl-plan table is the list.
+- v1.15: 5b-audit v5 sweep (codex): CLI import list and Connection-enforcement line match the impl-plan (no `validate_surface` import; no e′).
+- v1.16: 5b-audit v8 sweep (codex): e′ restored (bad-project-root fall-through is observable); 23 mutations.
+- v1.17: 5b-audit v8 sweep (agy): D2 step 1 states the SystemExit handler is its own try around parse_args.
+- v1.18: 5b-audit v10 sweep (codex): Version History reordered ascending.
