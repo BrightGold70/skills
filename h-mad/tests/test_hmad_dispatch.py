@@ -412,6 +412,143 @@ def _orca_wt_ps(*worktrees, truncated=False):
             '"truncated":' + ("true" if truncated else "false") + '}}')
 
 
+def _orca_read_env(*lines):
+    """A `terminal read --json` envelope whose .result.terminal.tail is an ARRAY.
+
+    The array shape is the live one, measured 2026-09-01 against the pinned codex
+    pane: ["codex '--dangerously-bypass-approvals-and-sandbox'", "", "..."].
+    """
+    return json.dumps({"ok": True, "result": {"terminal": {
+        "handle": "h", "tail": list(lines), "truncated": False}}})
+
+
+def _orca_read_dir(tmp_path, envelopes):
+    """Write one `terminal read` response file per handle; return the dir as str.
+
+    envelopes: {handle: envelope_json_text}. A handle ABSENT from the mapping is
+    the UNREADABLE case (FR-4) -- the stub exits non-zero for it -- which is not
+    the same as a handle mapped to an envelope carrying an empty tail.
+    """
+    # A FRESH directory per call: `mkdir(exist_ok=True)` on a shared name lets a
+    # previous call's <handle>.json survive, so a handle the caller OMITTED (the
+    # UNREADABLE case) would still be served by a stale file and the helper's
+    # documented semantics would quietly be false within one tmp_path.
+    # NOT `tempfile.mkdtemp`: this module's own guard
+    # `test_no_mkdtemp_and_no_pin_file_leak_guard` asserts that literal is absent
+    # from the source (measured at the first RED dispatch, 2026-09-02: 3 failed
+    # instead of 2, the third being that guard). `uuid` is already imported.
+    d = tmp_path / f"reads-{uuid.uuid4().hex[:8]}"
+    d.mkdir()
+    for handle, text in envelopes.items():
+        (d / f"{handle}.json").write_text(text, encoding="utf-8")
+    return str(d)
+
+
+def _stub_orca_env(**overrides):
+    env = {k: v for k, v in os.environ.items() if k != "HMAD_STUB_ORCA_READ_DIR"}
+    env.update(overrides)
+    return env
+
+
+def _run_stub_orca(args, *, env):
+    return subprocess.run([str(STUBS / "orca"), *args], capture_output=True, text=True,
+                          env=env)
+
+
+def test_tail_stub_read_dir_serves_per_handle(tmp_path):
+    expected = _orca_read_env("h-mad: [a](b) **bold** * [", "second\tline")
+    read_dir = _orca_read_dir(tmp_path, {"term_x": expected})
+
+    r = _run_stub_orca(
+        ["terminal", "read", "--terminal", "term_x", "--cursor", "0", "--limit", "4000",
+         "--json"],
+        env=_stub_orca_env(HMAD_STUB_ORCA_READ_DIR=read_dir,
+                           HMAD_STUB_ORCA_STDOUT='{"ok":true,"result":{"legacy":true}}',
+                           HMAD_STUB_HOSTILE="all"),
+    )
+
+    assert r.returncode == 0, "terminal read per-handle response must exit 0"
+    assert r.stdout == expected, "terminal read must serve term_x.json bytes verbatim"
+
+
+def test_tail_stub_read_dir_missing_handle_fails(tmp_path):
+    read_dir = _orca_read_dir(tmp_path, {"term_x": _orca_read_env("present")})
+
+    r = _run_stub_orca(
+        ["terminal", "read", "--terminal", "term_y", "--cursor", "0", "--limit", "4000",
+         "--json"],
+        env=_stub_orca_env(HMAD_STUB_ORCA_READ_DIR=read_dir,
+                           HMAD_STUB_ORCA_STDOUT='{"ok":true,"result":{"legacy":true}}',
+                           HMAD_STUB_HOSTILE="all"),
+    )
+
+    assert r.returncode != 0, "terminal read missing per-handle file must fail"
+    assert r.stdout == "", "terminal read missing per-handle file must write no stdout"
+
+
+def test_tail_stub_read_dir_does_not_capture_terminal_list(tmp_path):
+    listing = _orca_terms(("term_x", "Codex", "preview"))
+    read_dir = _orca_read_dir(tmp_path, {"term_x": _orca_read_env("tail")})
+
+    r = _run_stub_orca(
+        ["terminal", "list", "--json"],
+        env=_stub_orca_env(HMAD_STUB_ORCA_READ_DIR=read_dir,
+                           HMAD_STUB_ORCA_STDOUT=listing,
+                           HMAD_STUB_HOSTILE="all"),
+    )
+
+    assert r.returncode == 0
+    assert r.stdout == listing, "terminal list must still use shared stub stdout"
+
+
+def test_tail_stub_read_unset_preserves_legacy_behaviour(tmp_path):
+    legacy = '{"ok":true,"result":{"legacy":true}}'
+    args = ["terminal", "read", "--terminal", "term_x", "--cursor", "0", "--limit", "4000",
+            "--json"]
+
+    with_stdout = _run_stub_orca(
+        args,
+        env=_stub_orca_env(HMAD_STUB_ORCA_STDOUT=legacy, HMAD_STUB_HOSTILE="all"),
+    )
+    default_json = _run_stub_orca(args, env=_stub_orca_env(HMAD_STUB_HOSTILE="all"))
+
+    assert with_stdout.returncode == 0
+    assert with_stdout.stdout == legacy, "unset read dir must preserve shared stdout"
+    assert default_json.returncode == 0
+    assert default_json.stdout == '{"ok":true,"result":{}}', (
+        "unset read dir must preserve default --json success envelope"
+    )
+
+
+def test_tail_stub_read_helpers_shape(tmp_path):
+    envelope = _orca_read_env("a", "b")
+    parsed = json.loads(envelope)
+    assert parsed["result"]["terminal"]["tail"] == ["a", "b"]
+
+    h1 = _orca_read_env("h1")
+    h2 = _orca_read_env("h2")
+    read_dir = Path(_orca_read_dir(tmp_path, {"h1": h1, "h2": h2}))
+    assert (read_dir / "h1.json").read_text(encoding="utf-8") == h1
+    assert (read_dir / "h2.json").read_text(encoding="utf-8") == h2
+
+
+def test_tail_stub_read_still_captures_argv(tmp_path):
+    read_dir = _orca_read_dir(tmp_path, {})
+    capture = tmp_path / "capture.txt"
+
+    _run_stub_orca(
+        ["terminal", "read", "--terminal", "term_missing", "--cursor", "0", "--limit", "4000",
+         "--json"],
+        env=_stub_orca_env(HMAD_STUB_ORCA_READ_DIR=read_dir,
+                           HMAD_STUB_CAPTURE=str(capture),
+                           HMAD_STUB_HOSTILE="all"),
+    )
+
+    assert capture.read_text(encoding="utf-8") == (
+        "orca terminal read --terminal term_missing --cursor 0 --limit 4000 --json\n"
+    )
+
+
 # The live listing: note term_agy's title says "Codex", and both previews are
 # empty (buffers reset). Nothing but the join can tell these two apart.
 _J16_TERMS = _orca_terms_paned(
