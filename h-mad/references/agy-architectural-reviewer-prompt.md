@@ -30,6 +30,20 @@ text alone while reporting no issues found.
 a review, and the orchestrator now checks: `h_mad_review_evidence.py` reads the dispatch transcript and
 halts `step6a-prime:review_read_nothing` when no tool call succeeded, whatever the verdict line says.
 
+**Absolute means the WORKTREE path, never `~/.claude/skills/h-mad/…`.** That path is a symlink to
+whichever checkout is currently installed, so it can resolve to a DIFFERENT tree than the one under
+review — a different branch, or a sibling worktree mid-run. A citation through it looks absolute,
+reads successfully, and quotes code that is not in the diff you were given. Cite the repository root
+you were handed in `--cd`, and if a file you want is only reachable through the symlink, say so
+rather than following it.
+
+**Do not create, modify, move or delete anything inside the repository.** This is a review, not a
+change: the tree you are reading is live, and a stray probe file, a rewritten fixture or a `git`
+write is indistinguishable from the feature's own diff to everyone downstream. If you need to run
+something to check a claim — execute a snippet, materialise a fixture, diff two versions — do it in
+a temporary directory (`mktemp -d`) and cite the result. Three of four cycles on 2026-09-02 violated
+one or both of these rules.
+
 Run via your `view_file` tool to inspect specific files. The orchestrator has already attached the per-file diff in `<INLINE_DIFF_FILES>`.
 
 ## What to Check
