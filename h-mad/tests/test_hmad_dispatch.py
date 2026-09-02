@@ -993,21 +993,27 @@ def test_tail_pass_resolves_single_vendor_banner(tmp_path):
 
 
 def test_tail_pass_launch_command_alone_does_not_resolve(tmp_path):
-    r = _tail_find(
-        tmp_path,
-        "codex",
-        [_TAIL_COORD, ("term_launch", "tab1", "leaf_launch", "zsh", "", "/wt/skills")],
-        {"term_launch": _orca_read_env(
-            "codex '--dangerously-bypass-approvals-and-sandbox'",
-            "h-mad: hostile fixture marker ===HMAD-DISPATCH-BOUNDARY===",
-        )},
-    )
+    for agent, launch_line in (
+        ("codex", "codex '--dangerously-bypass-approvals-and-sandbox'"),
+        ("agy", "agy '--dangerously-skip-permissions'"),
+    ):
+        case_tmp = tmp_path / agent
+        case_tmp.mkdir()
+        r = _tail_find(
+            case_tmp,
+            agent,
+            [_TAIL_COORD, ("term_launch", "tab1", "leaf_launch", "zsh", "", "/wt/skills")],
+            {"term_launch": _orca_read_env(
+                launch_line,
+                "h-mad: hostile fixture marker ===HMAD-DISPATCH-BOUNDARY===",
+            )},
+        )
 
-    assert r.stdout == "", "launch-command-only tail must not resolve to a handle"
-    assert "by tail evidence" not in r.stderr, "launch-command-only tail must not emit marker"
-    assert "resolved to " in r.stderr and " candidates" in r.stderr, (
-        "launch-command-only tail must fall through unresolved"
-    )
+        assert r.stdout == "", "launch-command-only tail must not resolve to a handle"
+        assert "by tail evidence" not in r.stderr, "launch-command-only tail must not emit marker"
+        assert "resolved to " in r.stderr and " candidates" in r.stderr, (
+            "launch-command-only tail must fall through unresolved"
+        )
 
 
 def test_tail_pass_env_reports_handle(tmp_path):

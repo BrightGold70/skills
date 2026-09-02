@@ -311,7 +311,13 @@ _agent_pv_re() {
   # "comparing gpt-5 output with ours" matched. What Codex actually prints is a
   # product line ("OpenAI Codex (v0.145.0)  model: gpt-5.6-terra") or a status line
   # pairing the model id with a reasoning effort ("gpt-5.6-terra high · ~/repo").
-  # Both are structured; neither occurs in ordinary prose about a model.
+  # Both are structured. They exclude the BARE-TOKEN and bare-model-id prose that
+  # motivated them ("comparing gpt-5 output with ours", "the codex agent is running",
+  # both still declining) and NOT prose naming the product: measured 2026-09-01,
+  # `Release notes for OpenAI Codex are available` and `The Antigravity CLI
+  # documentation changed` MATCH, 36 of 36 such probes. That is safe for Passes 1-2,
+  # whose inputs are short titles and previews; the tail pass reads arbitrary retained
+  # scrollback and therefore uses its own line-complete grammar, `_agent_tail_re`.
   case "$1" in
     codex) printf '%s\n' 'openai codex|model: *gpt-|gpt-[0-9][^ ]* +(low|medium|high|xhigh)([^a-z]|$)' ;;
     agy)   printf '%s\n' 'antigravity cli|gemini [0-9]' ;;
@@ -599,6 +605,61 @@ _orca_find() {
        | .handle')"
     n="$(printf '%s' "$ids" | grep -c . || true)"
     if [ "$n" -eq 1 ]; then printf '%s\n' "$ids"; return 0; fi
+  fi
+  # Pass 3 -- TAIL evidence (feature: pin-agents-tail-banner).
+  #
+  # Reached whenever control falls past Pass 2, i.e. $n != 1. Deliberately gated
+  # on NEITHER Pass 2's n==0 condition NOR Pass 4's lsof precondition: an
+  # ambiguous title (n>1) never reaches Pass 2, and a machine without lsof never
+  # reaches Pass 4, so both shapes are invisible to every other pass. Pool is
+  # $scoped unconditionally -- Passes 1 and 2 SELECT, they do not remove, so a
+  # pane they failed to match is still a candidate here.
+  #
+  # RETENTION (AC-5.1). Orca caps a pane's retained tail at 2000 lines regardless
+  # of --limit. Measured 2026-09-01: a pane emitting 200 lines kept its first, one
+  # emitting 2000 lost it, one emitting 20000 began at line 18001. Agent panes are
+  # full-screen TUIs and do not normally reach the cap -- they use the alternate
+  # screen, so their output never enters normal-buffer scrollback, and a codex
+  # pane dispatched to for two days still held 18 lines. The case that DOES reach
+  # it is a pane where the agent exited and the operator then ran >2000 lines of
+  # shell; there the signature is gone and this pass declines to UNRESOLVED. That
+  # is the accepted limit of the pass, not a bug in it.
+  #
+  # STALE PANE (AC-5.2) -- the other side of the cap, and the likelier one.
+  # Tail text is HISTORICAL: it proves what a pane once ran, never what it is
+  # running now. A pane whose agent EXITED but which has since emitted fewer than
+  # 2000 lines of shell still carries the banner, is still a unique match, and is
+  # still resolved here -- so a dispatch can land in a plain shell. Accepted
+  # deliberately: Pass 1 (title) and Pass 2 (preview) are not liveness-gated
+  # either, so this adds no new failure class; only Pass 0 (which names the
+  # running program) and Pass 4 (which requires a live process) carry liveness.
+  # Gating this pass on liveness would need lsof and would contradict AC-3.3,
+  # whose whole point is the machine that has none.
+  #
+  # The call form below is mandatory. `if _orca_tail_sig "$h"` streams the pane's
+  # scrollback into _orca_find's OWN stdout and corrupts the handle it returns;
+  # `if local tout="$(...)"` returns `local`'s status (always 0) and discards the
+  # helper's rc, turning every unreadable pane into a readable empty one.
+  local tail_re rival_tail_re tail_ids="" th tout tn tail_h
+  # `_agent_tail_re` is defined in TASK 2 (top level, beside `_orca_tail_sig`).
+  # T3 contains only the two CALL SITES, so each wire connects to a callee that
+  # already exists and whose own tests stay green when the connection is removed.
+  tail_re="$(_agent_tail_re "$token")"
+  while IFS= read -r th; do
+    [ -n "$th" ] || continue
+    if tout="$(_orca_tail_sig "$th")"; then
+      grep -Eiq "$tail_re" <<<"$tout" || continue
+      tail_ids="${tail_ids}${th}
+"
+    fi
+  done <<EOF
+$(printf '%s' "$scoped" | jq -r '.result.terminals[]?.handle')
+EOF
+  tn="$(printf '%s' "$tail_ids" | grep -c . || true)"
+  if [ "$tn" -eq 1 ]; then
+    tail_h="$(printf '%s' "$tail_ids" | grep . | head -n 1)"
+    echo "[H-MAD] $token: bound $tail_h by tail evidence" >&2
+    printf '%s\n' "$tail_h"; return 0
   fi
   # Pass 3 (J18) -- OS evidence for panes Orca did not spawn.
   #
