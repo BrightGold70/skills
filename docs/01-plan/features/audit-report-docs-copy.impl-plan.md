@@ -139,8 +139,9 @@ delivered=report-file|out|none[ forced=1]`), detail lines (`marker: removed <RP>
 exactly one `[H-MAD] <feature> collect <verdict|usage_error|operational_error|readback_failed>`
 marker; exit 0 on any verdict, 2 on operational error with no `COLLECT:` line. `--force`
 retries `collect(overwrite=True)` inside the outer try after a `CollectConflict`. Imports
-`collect`, `PassSpec`, `_collected_path`, `validate_surface`, `CollectConflict`,
-`OperationalError` from `h_mad_audit_cycle`; imports nothing from the gate.
+`collect`, `PassSpec`, `_collected_path`, `CollectConflict`, `OperationalError` from
+`h_mad_audit_cycle` (NOT `validate_surface` — the CLI must not pre-validate; `_collected_path`
+does it); imports nothing from the gate.
 
 **Code structure**:
 ```python
@@ -320,6 +321,7 @@ tests load only their own two specs and are not touched (AC-6.4).
 
 **Acceptance Criteria**:
 - [ ] AC-6.3: the spec has exactly the 22 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=22 caught=22 survived=0 refused=0`.
+- [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 22 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
 - [ ] The named test for k/k′/l/l′ asserts ALL THREE parts of its guard's output (exit code, first stdout line, `[H-MAD]` line) so each single-part mutant is caught by it alone.
 - [ ] `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/collect_report.json` prints `ANCHORS: ANCHORS_OK …`.
 - [ ] AC-6.4: the existing `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` tests load ONLY the two audit-cycle specs under `h-mad/tests/specs/` (verified 2026-09-02: `GATING_MUTATION_SPEC`, `CONNECTIONS_MUTATION_SPEC`) and are NOT extended; they stay green. The new spec's shape and named-test existence are proven by the two harness commands above, which is what those tests prove for their own specs.
@@ -331,6 +333,7 @@ tests load only their own two specs and are not touched (AC-6.4).
 
 ## Version History
 - v1.0: Initial implementation plan draft.
+- v1.4: 5b audit v4 fixes (codex): AC-6.3a executable spec-shape test (the harness does not enforce `test`/`_mechanism`); `validate_surface` dropped from the CLI import list.
 - v1.3: 5b audit v3 fixes (agy p1 + codex): replay evidence recorded via the version-history helper at the next unused version (no hard-coded `v1.7`); Task 6 prose matches AC-6.4; Task 5 metadata names orchestration-mode.md; design pointer v1.13; mutant e′ dropped as unkillable (the surface is validated in `_collected_path`; the CLI no longer pre-checks it) → 22; Task 6 JSON lists all five test files.
 - v1.2: 5b audit v2 fixes (codex; agy v2 clean): exit-code-only and token-only mutants for the gate refusal and the CLI error path (k, k′, l, l′ → 23); Task 6's test surface made explicit (five test files in `command`; `test_hmad_dispatch_audit_cycle.py` not edited).
 - v1.1: 5b audit v1 fixes (agy p1 + codex): no env seam — the CLI readback case runs `main()` in-process with `_readback_equal` monkeypatched; both writers share `_finalize_write` so the readback is one separable part and the `--out` rung is pinned too; the AC-2.9 hand replay is an executable checkpoint with exact commands and a required Version-History paste; 19-row mutation table with fixed names/files/tests; AC-6.4 states the existing spec tests are not extended; verb wording.

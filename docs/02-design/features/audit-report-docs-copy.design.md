@@ -339,7 +339,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | tests | `h-mad/tests/test_h_mad_audit_cycle.py` | modify | AC-3.3 (`gate()`/`combine()` on a transport name), AC-2.8 branch order, compatibility pins |
 | tests | `h-mad/tests/test_hmad_dispatch_collect_report.py` | new | AC-4.1, AC-4.3 |
 | tests | `h-mad/tests/test_h_mad_collect_report_docs.py` | new | AC-4.2, AC-5.1–5.4 |
-| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 22 mutations (17 connection/branch + 2 marker-stripping for separable output parts) |
+| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 22 mutations (see the impl-plan's table: connection drop/force pairs, branch guards, grammar property, and one mutant per separable output part — marker, exit code, token — of the gate refusal and the CLI error path) |
 
 ## Implementation Order
 1. Task 1 — collector (`h_mad_audit_cycle.py`): `validate_surface`, `_collected_path(surface)`,
@@ -357,9 +357,8 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
    AC-4.1, AC-4.3.
 5. Task 5 — docs. RED: AC-4.2, AC-5.1–5.4 (docs tests), `test_h_mad_audit_cycle_docs.py`
    still green.
-6. Task 6 — mutation spec (22 mutations, every one naming a test from tasks 1–5; the two
-   marker-stripping mutants (j) gate refusal without its `[H-MAD]` line, (j′) CLI
-   operational error without its marker, pin the separable output parts) →
+6. Task 6 — mutation spec (22 mutations, every one naming a test from tasks 1–5; per
+   separable output part of each guard — marker, exit code, token — one mutant) →
    `MUTATION: ALL_CAUGHT`; `--check-anchors` clean; full suite green.
 
 ## Data Model / Schema Changes
@@ -418,7 +417,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
   `h_mad_audit_gate.py`), gate line has no `$RP`, registry entry names the token set and exit
   contract, orchestration-mode verb row, step-9 sentence.
 - Mutation: 22 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
-  spec's 19 plus (k)/(k′)/(l)/(l′) exit-only and token-only mutants so the marker assertions are load-bearing.
+  authoritative list is the impl-plan's table; a spec-shape test pins the names and required
+  keys because the harness treats `test` as optional.
 
 ## Test Plan
 | Test file | Scenarios | Command |
@@ -479,6 +479,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.14: 5b-audit v4 sweep (codex): mutation-count prose no longer derives 22 from stale sub-counts; the impl-plan table is the list.
 - v1.13: 5b-audit v3 sweep (agy): D1's copy writer delegates to `_finalize_write` as Task 1 states; the CLI performs no `--surface` pre-check (single validator in `_collected_path`); mutation count 22 (e′ unkillable, dropped).
 - v1.12: 5b-audit v2 sweep (codex): D5's nested code fence escaped with a four-backtick outer fence; mutation count 23 (exit-only/token-only mutants per guard).
 - v1.11: Design-audit v8 fixes (agy p1): the transport-refusal marker's feature slot is the stem verbatim (a transport name has no reliable feature grammar) — stated, not left to inference; marker-stripping mutants (j)/(j′) added → 19, swept into spec/plan counts.
