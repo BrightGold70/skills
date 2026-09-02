@@ -261,3 +261,94 @@ def test_second_surface_gates_the_path_printed_by_collect_report() -> None:
         "the gate must run on a shell variable holding the path collect-report "
         f"printed, not on a reconstructed literal; got: {gate_line!r}"
     )
+
+
+def _gate_bash_block() -> str:
+    """Return the fenced bash block of the Second surface section that gates."""
+    section = _second_surface()
+    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
+    gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
+    assert gating, "Second surface must contain a bash block that runs the gate"
+    assert len(gating) == 1, f"expected exactly one gating bash block, got {len(gating)}"
+    return gating[0]
+
+
+def test_gate_block_guards_on_the_collect_token_before_gating() -> None:
+    """The prose says anything but `COLLECT: OK` is a halt. The runnable example
+    must implement that, not merely sit beneath the sentence.
+    """
+    block = _gate_bash_block()
+
+    gate_index = block.index("h_mad_audit_gate.py")
+    before = block[:gate_index]
+
+    assert "COLLECT: OK" in before, (
+        "the gate block must test for the `COLLECT: OK` token before gating"
+    )
+    assert "report_not_collected" in before, (
+        "the gate block must name the report_not_collected halt before gating"
+    )
+
+
+def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
+    tmp_path: Path,
+) -> None:
+    """Execute the documented snippet for real.
+
+    `COLLECT: MISSING` also prints a `path=` field, so a naive parse yields an
+    empty variable and the gate is then run on `""` — which fails with an
+    operational error and no halt marker, exactly the delivery failure the
+    section says to halt on.
+    """
+    import subprocess
+
+    collector = SCRIPT_DIR / "h_mad_collect_report.py"
+    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
+
+    def run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> subprocess.CompletedProcess[str]:
+        block = _gate_bash_block()
+        # the doc addresses the installed skill; point the snippet at this tree
+        script = block.replace(
+            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", str(gate)
+        )
+        preamble = (
+            f'COLLECT_OUT=$({sys.executable} {collector} --surface codex '
+            f'--feature f --phase {phase} --cycle {cycle} '
+            f'--report {report} --project-root {root})\n'
+        )
+        return subprocess.run(
+            ["bash", "-c", preamble + script],
+            capture_output=True,
+            text=True,
+        )
+
+    root = tmp_path / "proj"
+    (root / "docs/01-plan/features").mkdir(parents=True)
+    (root / "dispatch").mkdir()
+
+    # delivered: the gate must run on the collected path and pass
+    report = root / "dispatch" / "audit_f_plan_cycle3_codex.report.md"
+    report.write_text("## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n", encoding="utf-8")
+    report.with_suffix(report.suffix + ".done").write_text("", encoding="utf-8")
+
+    ok = run_recipe(phase="plan", cycle=3, report=report, root=root)
+    assert "GATE: PASS" in ok.stdout, (
+        f"delivered report must reach the gate; stdout={ok.stdout!r} stderr={ok.stderr!r}"
+    )
+
+    # undelivered: MISSING must halt, never gate an empty path
+    missing = run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
+    combined = missing.stdout + missing.stderr
+
+    assert "GATE:" not in combined, (
+        "an undelivered report must not reach the gate at all; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+    assert "Is a directory" not in combined, (
+        "the recipe must not gate an empty path and crash; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+    assert "report_not_collected" in combined, (
+        "the recipe must emit the report_not_collected halt marker; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
