@@ -16,7 +16,9 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
 
 ## Scope
 - `h-mad/scripts/h_mad_audit_cycle.py` — `_collected_path()` / `collect()` gain an optional
-  `surface`; `_copy_collected_report` stops clobbering differing content.
+  `surface`; `_copy_collected_report` / `_write_collected_report` gain `overwrite` (default
+  `True`, so `audit-cycle`'s re-dispatch semantics are unchanged; the CLI passes `False`
+  unless `--force`).
 - New `h-mad/scripts/h_mad_collect_report.py` — CLI over `collect()`; `COLLECT:` contract.
 - `h-mad/scripts/h_mad_audit_gate.py` — defines `TRANSPORT_RE = ^audit_[^.]+\.report\.md$`
   (the one transport grammar: `audit_` prefix, dot-free stem, `.report.md` suffix) and
@@ -41,24 +43,27 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
 
 ## Requirements
 - FR-1: surface-aware `_collected_path` — single derivation.
-- FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING|CONFLICT path= delivered=` +
+- FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING|CONFLICT path=<docs path>
+  delivered=report-file|out|none [forced=1]` +
   `[H-MAD] <feature> collect <verdict>` on every verdict and `[H-MAD] … collect
   readback_failed` on a readback disagreement (Marker discipline), exit 0 on any verdict /
   2 on operational error; `--force` to overwrite a differing docs copy; internal contract
   `CollectConflict` + optional `PassSpec.out_path`.
 - FR-3: gate refuses `TRANSPORT_RE` (`audit_` prefix, dot-free stem, `.report.md` suffix,
-  single-sourced; imported by `_collected_path` for the AC-1.6 disjointness assert and by the
-  tests — not by the CLI) with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] …
+  single-sourced in the gate; imported only by the tests — not by the CLI, not by
+  `_collected_path`) with exactly `GATE: INVALID must=0 should=0` + the `[H-MAD] …
   gate INVALID (transport file …)` marker, exit 2; `<feature>.report.md` (Phase 7) still
   scores; verdict preserved for every existing audit doc (AC-3.7, Backward compatibility).
-- FR-1 (AC-1.6): `_collected_path` refuses to derive a transport-shaped name.
+- FR-1 (AC-1.6): disjointness of the two grammars is a property test over adversarial
+  `(feature, surface)` pairs, not a production assert (an unreachable check cannot be
+  mutation-tested).
 - FR-4: `hmad-dispatch collect-report` wrapper verb.
 - FR-5: SKILL.md codex-leg recipe (halt `<phase>:report_not_collected` emits its `[H-MAD]`
   marker, per Marker discipline) + helper-registry entry + step-9 sentence.
 - FR-6: tests for every AC including the incident replay (AC-2.9), operational errors
   (AC-2.10) and readback (AC-2.12); mutation spec with 17 named-test mutations — every new
-  connection (incl. the `_collected_path`→`TRANSPORT_RE` import) dropped AND forced on its
-  fall-through path; wrapper wiring test for the verb in both directions (AC-4.1, AC-4.3);
+  connection dropped AND forced on its fall-through path, plus the grammar-disjointness
+  property (regex loosened / docs pattern de-dotted); wrapper wiring test for the verb in both directions (AC-4.1, AC-4.3);
   suite green.
 
 ## Implementation Strategy
@@ -71,9 +76,8 @@ Deliberately not touched: `h_mad_report_wait.py`, `h_mad_extract_report.py`, `ex
 `audit-cycle`'s dispatch loop, `h_mad_cycle_counts.py` (its grammar is read, not changed).
 
 Order of work (each a RED→GREEN task in the impl-plan): (1) `_collected_path` + `collect()`
-surface threading, with the clobber fix and the AC-1.6 derivation assert; (2) the gate
-refusal (`TRANSPORT_RE`, which (1)'s assert imports — so (2)'s regex constant lands in (1) as
-a stub the gate then consumes, or (1) and (2) ship as one RED); (3) the CLI; **then the
+surface threading and the `overwrite` keyword on both writers; (2) the gate refusal
+(`TRANSPORT_RE` + the AC-1.6 / AC-3.5a grammar tests); (3) the CLI; **then the
 AC-2.9 tracer** — it needs (2)'s refusal for its step (i) and (3)'s CLI for step (ii), so it
 cannot run earlier — against a real `/tmp` survivor copied into a scratch project root;
 (4) the wrapper verb; (5) docs + docs-tests; (6) mutation spec.
@@ -90,12 +94,15 @@ cannot run earlier — against a real `/tmp` survivor copied into a scratch proj
   name (`feature="audit_f"`, `surface="report"` → `audit_f.plan.audit.v8.report.md`). The
   v1.3 grammar requires a **dot-free stem**: every docs audit name carries `.audit.v<N>`,
   every transport name observed has no dot before `.report.md`, so the sets are disjoint by
-  construction — and `_collected_path` asserts it (AC-1.6) so no future feature/surface pair
-  can derive a transport-shaped name. All three corrections came from executing the candidate
-  regex over the real `/tmp` and `docs/` listings (Assumption table). `TRANSPORT_RE` lives in
-  `h_mad_audit_gate.py`; `_collected_path` and the tests import it (the CLI does not — it has
-  no use for it), and one two-direction corpus fixture is asserted against it and against
-  `_VERSION_RE` so the two grammars cannot drift apart silently. Deliberately not
+  construction. That property is pinned by a test over adversarial `(feature, surface)`
+  pairs (AC-1.6) rather than by a production assert: the v1.3 draft put an assert in
+  `_collected_path`, and cycle 6 showed it could never fire under the dot rule — an
+  unreachable guard cannot be mutation-tested and would have shipped as the appearance of
+  coverage. All corrections came from executing the candidate regex over the real `/tmp`
+  and `docs/` listings (Assumption table). `TRANSPORT_RE` lives in `h_mad_audit_gate.py`;
+  only the tests import it (the CLI and `_collected_path` have no use for it), and one
+  two-direction corpus fixture is asserted against it and against `_VERSION_RE` so the two
+  grammars cannot drift apart silently. Deliberately not
   `startswith("/tmp")` — pytest's `tmp_path` lives under `/tmp` on Linux.
 - **Backward compatibility is measured, not argued.** The invariant preserves the PASS of
   every audit DOC. A transport path is not an audit doc — no recipe, test or doc ever gated
@@ -155,7 +162,7 @@ cannot run earlier — against a real `/tmp` survivor copied into a scratch proj
 | SKILL.md codex-leg block, registry entry, step-9 sentence; orchestration-mode verb row | docs | FR-5 |
 | `tests/test_h_mad_collect_report.py` (incl. incident replay AC-2.9, operational errors AC-2.10), gate tests (AC-3.1–3.6), docs tests (AC-5.1–5.4) | tests | FR-6 |
 | wrapper wiring test: `collect-report` verb → script (severed route fails) | test | FR-4, FR-6 |
-| `tests/mutation-specs/collect_report.json` — 17 mutations, drop/force pairs per connection incl. fall-through paths and the derivation assert | mutation spec | FR-6 |
+| `tests/mutation-specs/collect_report.json` — 17 mutations, drop/force pairs per connection incl. fall-through paths and the grammar-disjointness property | mutation spec | FR-6 |
 | two-direction name corpus fixture asserted against `TRANSPORT_RE` and `_VERSION_RE`; verdict-preservation sweep over `docs/**/*.audit.v*.md` | tests | FR-3 (AC-3.5a, 3.7) |
 
 ## Risks and Mitigation
@@ -207,3 +214,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 - v1.2: Audit v2 fixes from audit-report-docs-copy.plan.audit.v2.codex.md (agy v2 clean) — transport grammar single-sourced as TRANSPORT_RE (prefix+suffix; hand-staged field names have no _cycle<N>, surfaces may carry _); conflict policy + readback on both rungs; force mutants for CLI/verb fall-through; two-direction corpus + verdict-preservation sweep for Backward compatibility; Assumption rows now cite executed probe output; AC census by command.
 - v1.3: Audit v3 fixes from .plan.audit.v3.p1.md (agy: [H-MAD] markers named in Requirements) + .v3.codex.md (TRANSPORT_RE stem is dot-free so the grammars are disjoint by construction; _collected_path asserts it, AC-1.6, 17 mutations; the CLI does not import the regex).
 - v1.4: Audit v4 fixes from .plan.audit.v4.codex.md (agy v4 clean, low-evidence) — work order reordered so the gate refusal (task 2) precedes the CLI (task 3) and the AC-2.9 tracer runs after task 3, the first point at which both its steps can pass.
+- v1.5: Audit v6 fixes from .plan.audit.v6.codex.md (agy v6 clean, low-evidence) — AC-1.6 is a grammar-disjointness property test, not an unreachable production assert; forced=1 in the FR-2 contract line; Scope wording distinguishes the CLI's no-clobber default from audit-cycle's unchanged overwrite.
