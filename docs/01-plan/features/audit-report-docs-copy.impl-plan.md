@@ -6,7 +6,7 @@
 ## Executive Summary
 Six ordered tasks: the collector gains `surface`/`overwrite`/readback (1), the gate gains the
 transport refusal (2), the CLI wraps the collector (3), the wrapper verb wires to the CLI (4,
-`wiring`), SKILL.md + references carry the recipe (5), and the 19-mutation spec proves every
+`wiring`), SKILL.md + references carry the recipe (5), and the 23-mutation spec proves every
 guard bites (6). Tests run with `python3.11 -m pytest` from the repository root; the AC-2.9
 hand replay runs after task 3.
 
@@ -256,11 +256,11 @@ def _second_surface() -> str: ...   # "## Second surface — the codex leg" → 
 ## Task 6: mutation spec
 
 **Production file**: `h-mad/tests/mutation-specs/collect_report.json`
-**Test file**: `h-mad/tests/test_hmad_dispatch_audit_cycle.py`
+**Test file**: `h-mad/tests/test_h_mad_collect_report.py` (the primary source of named tests; the spec's `command` runs the FIVE new/changed test files — `test_h_mad_collect_report.py`, `test_h_mad_audit_gate.py`, `test_h_mad_audit_cycle.py`, `test_hmad_dispatch_collect_report.py`, `test_h_mad_collect_report_docs.py`; `test_hmad_dispatch_audit_cycle.py` is NOT edited)
 **Task shape**: `new-behaviour`
 
-**Description**: The 19-mutation spec (`root: ../..`, `command: python3.11 -m pytest <the
-four new/changed test files> -q`, `target_command: python3.11 -m pytest -q`), each mutation an
+**Description**: The 23-mutation spec (`root: ../..`, `command: python3.11 -m pytest <the
+five new/changed test files> -q`, `target_command: python3.11 -m pytest -q`), each mutation an
 exact `find`/`replace` in a production file with a named `test`: (a) copy writes empty; (b)
 CONFLICT → overwrite; (b′) overwrite refused even with force; (c) surface validation removed;
 (c′) validation rejects every token; (d) `_collected_path` ignores `surface`; (d′) emits
@@ -269,7 +269,11 @@ CONFLICT → overwrite; (b′) overwrite refused even with force; (c) surface va
 to the script; (g) gate refusal removed; (g′) gate refuses every `.report.md`; (h) copy
 readback removed; (h′) out-rung conflict check removed; (i) `TRANSPORT_RE` loosened to
 `^audit_.*\.report\.md$`; (i′) docs pattern loses `.audit.v` dots; (j) gate refusal drops
-its `[H-MAD]` line; (j′) CLI operational-error path drops its marker. The existing
+its `[H-MAD]` line; (j′) CLI operational-error path drops its marker; (k) gate refusal
+returns 0 instead of 2 (exit-code-only); (k′) gate refusal prints `GATE: PASS must=0 should=0`
+instead of `INVALID` (token-only); (l) CLI operational-error path returns 0 (exit-code-only);
+(l′) CLI operational-error path also prints a `COLLECT: MISSING …` line (no-token-only). One
+mutant per separable output part of each guard: exit code, token, marker. The existing
 `test_audit_cycle_mutation_specs_*` tests validate shape and named-test existence;
 `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`; `--check-anchors` reports
 `ANCHORS_OK`.
@@ -305,9 +309,14 @@ its `[H-MAD]` line; (j′) CLI operational-error path drops its marker. The exis
 | i′ | docs-pattern-dedotted | `scripts/h_mad_audit_cycle.py` | `.audit.v` → `_audit_v` in `_collected_path` | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
 | j | gate-refusal-drops-marker | `scripts/h_mad_audit_gate.py` | the `[H-MAD] … transport file` print removed | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
 | j′ | cli-error-drops-marker | `scripts/h_mad_collect_report.py` | operational-error marker print removed | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
+| k | gate-refusal-exit-0 | `scripts/h_mad_audit_gate.py` | transport branch `return 2` → `return 0` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
+| k′ | gate-refusal-wrong-token | `scripts/h_mad_audit_gate.py` | transport branch prints `GATE: PASS must=0 should=0` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
+| l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
+| l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 
 **Acceptance Criteria**:
-- [ ] AC-6.3: the spec has exactly the 19 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=19 caught=19 survived=0 refused=0`.
+- [ ] AC-6.3: the spec has exactly the 23 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0`.
+- [ ] The named test for k/k′/l/l′ asserts ALL THREE parts of its guard's output (exit code, first stdout line, `[H-MAD]` line) so each single-part mutant is caught by it alone.
 - [ ] `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/collect_report.json` prints `ANCHORS: ANCHORS_OK …`.
 - [ ] AC-6.4: the existing `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` tests load ONLY the two audit-cycle specs under `h-mad/tests/specs/` (verified 2026-09-02: `GATING_MUTATION_SPEC`, `CONNECTIONS_MUTATION_SPEC`) and are NOT extended; they stay green. The new spec's shape and named-test existence are proven by the two harness commands above, which is what those tests prove for their own specs.
 - [ ] AC-6.5: `python3.11 -m pytest h-mad/tests -q` is green from this worktree.
@@ -318,4 +327,5 @@ its `[H-MAD]` line; (j′) CLI operational-error path drops its marker. The exis
 
 ## Version History
 - v1.0: Initial implementation plan draft.
+- v1.2: 5b audit v2 fixes (codex; agy v2 clean): exit-code-only and token-only mutants for the gate refusal and the CLI error path (k, k′, l, l′ → 23); Task 6's test surface made explicit (five test files in `command`; `test_hmad_dispatch_audit_cycle.py` not edited).
 - v1.1: 5b audit v1 fixes (agy p1 + codex): no env seam — the CLI readback case runs `main()` in-process with `_readback_equal` monkeypatched; both writers share `_finalize_write` so the readback is one separable part and the `--out` rung is pinned too; the AC-2.9 hand replay is an executable checkpoint with exact commands and a required Version-History paste; 19-row mutation table with fixed names/files/tests; AC-6.4 states the existing spec tests are not extended; verb wording.

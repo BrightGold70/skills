@@ -293,9 +293,10 @@ immediately after `## Putting \`hmad-dispatch\` on PATH` (SKILL.md:1791) and bef
 that `test_h_mad_audit_cycle_docs.py` pins, as the spec (FR-5) and plan require. Inside the
 slice, the `audit-cycle` paragraph gains ONE pointer sentence: "`audit-cycle` dispatches agy
 only; the codex pass is dispatched and collected by hand — see §"Second surface — the codex
-leg"." The new section's body:
+leg"." The new section's body (shown here inside a four-backtick fence so the inner
+`bash` fence renders; the SKILL.md text itself uses ordinary triple-backtick fences):
 
-```markdown
+````markdown
 **Second surface — the codex leg, collected by the same copier.** `audit-cycle` dispatches agy;
 the codex pass is dispatched by hand and MUST be collected before it is gated:
 ```bash
@@ -311,7 +312,7 @@ hmad-dispatch collect-report --feature <feature> --phase <phase> --cycle <N> --s
 python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py <the path= the COLLECT: OK line printed>
 ```
 Never gate `$RP`: the gate refuses a transport name (`audit_*.report.md`) with `GATE: INVALID`.
-```
+````
 Step 9 gains one sentence after the `report-wait` redirect: "The gate refuses a path named
 like a transport file (`audit_*.report.md`) — gate the docs path, never `$RP`." The helper
 registry gains the `h_mad_collect_report.py` entry (token set, exit contract, `--force`,
@@ -333,7 +334,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | tests | `h-mad/tests/test_h_mad_audit_cycle.py` | modify | AC-3.3 (`gate()`/`combine()` on a transport name), AC-2.8 branch order, compatibility pins |
 | tests | `h-mad/tests/test_hmad_dispatch_collect_report.py` | new | AC-4.1, AC-4.3 |
 | tests | `h-mad/tests/test_h_mad_collect_report_docs.py` | new | AC-4.2, AC-5.1–5.4 |
-| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 19 mutations (17 connection/branch + 2 marker-stripping for separable output parts) |
+| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 23 mutations (17 connection/branch + 2 marker-stripping for separable output parts) |
 
 ## Implementation Order
 1. Task 1 — collector (`h_mad_audit_cycle.py`): `validate_surface`, `_collected_path(surface)`,
@@ -351,7 +352,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
    AC-4.1, AC-4.3.
 5. Task 5 — docs. RED: AC-4.2, AC-5.1–5.4 (docs tests), `test_h_mad_audit_cycle_docs.py`
    still green.
-6. Task 6 — mutation spec (19 mutations, every one naming a test from tasks 1–5; the two
+6. Task 6 — mutation spec (23 mutations, every one naming a test from tasks 1–5; the two
    marker-stripping mutants (j) gate refusal without its `[H-MAD]` line, (j′) CLI
    operational error without its marker, pin the separable output parts) →
    `MUTATION: ALL_CAUGHT`; `--check-anchors` clean; full suite green.
@@ -411,8 +412,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - Docs: SKILL.md block order (`exec codex` < `collect-report` < `report_not_collected` <
   `h_mad_audit_gate.py`), gate line has no `$RP`, registry entry names the token set and exit
   contract, orchestration-mode verb row, step-9 sentence.
-- Mutation: 19 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
-  spec's 17 plus (j)/(j′) marker-stripping mutants so the marker assertions are load-bearing.
+- Mutation: 23 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
+  spec's 19 plus (k)/(k′)/(l)/(l′) exit-only and token-only mutants so the marker assertions are load-bearing.
 
 ## Test Plan
 | Test file | Scenarios | Command |
@@ -423,7 +424,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 | `tests/test_hmad_dispatch_collect_report.py` | AC-4.1, AC-4.3, staged-name grammar | `python3.11 -m pytest h-mad/tests/test_hmad_dispatch_collect_report.py -q` |
 | `tests/test_h_mad_collect_report_docs.py` | AC-4.2, AC-5.1–5.4 | `python3.11 -m pytest h-mad/tests/test_h_mad_collect_report_docs.py -q` |
 | existing `test_h_mad_audit_cycle*.py`, `test_hmad_dispatch_audit_cycle.py` | compatibility, spec-registry tests | `python3.11 -m pytest h-mad/tests -q` |
-| `tests/mutation-specs/collect_report.json` | 19 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
+| `tests/mutation-specs/collect_report.json` | 23 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
 
 ## Invariant Compliance
 - **Audit-gate signal discipline** — complies: `COLLECT:` verdicts exit 0; exit 2 reserved for
@@ -442,7 +443,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - **Marker discipline** — complies: `[H-MAD]` on every `COLLECT:` outcome, on readback
   failure, on the gate refusal, and the recipe's halt line.
 - **Mutation verification** — complies: both writers read back; the marker removal re-checks;
-  19 mutations each with a named test, including one per separable output part (exit code,
+  23 mutations each with a named test, including one per separable output part (exit code,
   token, marker) of the gate refusal and the CLI error path.
 - **Test discrimination** — complies: each mutation names the one test that must bite.
 - **Guard narrowing** — complies: the transport regex was widened from a stem to prefix+suffix
@@ -473,6 +474,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.12: 5b-audit v2 sweep (codex): D5's nested code fence escaped with a four-backtick outer fence; mutation count 23 (exit-only/token-only mutants per guard).
 - v1.11: Design-audit v8 fixes (agy p1): the transport-refusal marker's feature slot is the stem verbatim (a transport name has no reliable feature grammar) — stated, not left to inference; marker-stripping mutants (j)/(j′) added → 19, swept into spec/plan counts.
 - v1.10: Design-audit v8 fix (codex): the already-collected short-circuit requires non-empty bytes, so an empty-identical docs/RP pair is MISSING, not OK.
 - v1.9: Design-audit v7 fix (agy p1): the same-file test is existence-blind so a missing docs-path `--report` ends MISSING instead of reaching the `--out` rung.

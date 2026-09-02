@@ -61,7 +61,7 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
 - FR-5: SKILL.md codex-leg recipe (halt `<phase>:report_not_collected` emits its `[H-MAD]`
   marker, per Marker discipline) + helper-registry entry + step-9 sentence.
 - FR-6: tests for every AC including the incident replay (AC-2.9), operational errors
-  (AC-2.10) and readback (AC-2.12); mutation spec with 19 named-test mutations — every new
+  (AC-2.10) and readback (AC-2.12); mutation spec with 23 named-test mutations — every new
   connection dropped AND forced on its fall-through path, plus the grammar-disjointness
   property (regex loosened / docs pattern de-dotted); wrapper wiring test for the verb in both directions (AC-4.1, AC-4.3);
   suite green.
@@ -162,7 +162,7 @@ cannot run earlier — against a real `/tmp` survivor copied into a scratch proj
 | SKILL.md codex-leg block, registry entry, step-9 sentence; orchestration-mode verb row | docs | FR-5 |
 | `tests/test_h_mad_collect_report.py` (incl. incident replay AC-2.9, operational errors AC-2.10), gate tests (AC-3.1–3.6), docs tests (AC-5.1–5.4) | tests | FR-6 |
 | wrapper wiring test: `collect-report` verb → script (severed route fails) | test | FR-4, FR-6 |
-| `tests/mutation-specs/collect_report.json` — 19 mutations, drop/force pairs per connection incl. fall-through paths and the grammar-disjointness property | mutation spec | FR-6 |
+| `tests/mutation-specs/collect_report.json` — 23 mutations, drop/force pairs per connection incl. fall-through paths and the grammar-disjointness property | mutation spec | FR-6 |
 | two-direction name corpus fixture asserted against `TRANSPORT_RE` and `_VERSION_RE`; verdict-preservation sweep over `docs/**/*.audit.v*.md` | tests | FR-3 (AC-3.5a, 3.7) |
 
 ## Risks and Mitigation
@@ -189,7 +189,7 @@ cannot run earlier — against a real `/tmp` survivor copied into a scratch proj
 
 ## Success Criteria
 - All 40 unique ACs in the spec pass automated tests (AC-2.9's hand replay is recorded, its suite half asserted).
-- `MUTATION: ALL_CAUGHT` on `collect_report.json` (19 mutations, every connection dropped
+- `MUTATION: ALL_CAUGHT` on `collect_report.json` (23 mutations, every connection dropped
   AND forced, fall-through paths included).
 - Incident replay (AC-2.9) passes in the suite and once by hand against a real `/tmp`
   survivor in a scratch root, transcript in Version History.
@@ -216,3 +216,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 - v1.4: Audit v4 fixes from .plan.audit.v4.codex.md (agy v4 clean, low-evidence) — work order reordered so the gate refusal (task 2) precedes the CLI (task 3) and the AC-2.9 tracer runs after task 3, the first point at which both its steps can pass.
 - v1.5: Audit v6 fixes from .plan.audit.v6.codex.md (agy v6 clean, low-evidence) — AC-1.6 is a grammar-disjointness property test, not an unreachable production assert; forced=1 in the FR-2 contract line; Scope wording distinguishes the CLI's no-clobber default from audit-cycle's unchanged overwrite.
 - v1.6: Count sweep from design-audit v8 (agy): 19 mutations (marker-stripping mutants for separable output parts). No plan decision changed.
+- v1.7: Count sweep from 5b-audit v2 (codex): 23 mutations (exit-only/token-only mutants per guard). No plan decision changed.

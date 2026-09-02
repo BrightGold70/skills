@@ -231,7 +231,9 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     stem → AC-1.6 property bites; (i′) `_collected_path` docs pattern loses its `.audit.v`
     dots (force toward transport shape) → AC-1.1/1.2 bite; (j) gate refusal keeps exit 2 +
     token but drops its `[H-MAD]` marker → AC-3.1 bites; (j′) CLI operational-error path
-    drops its marker → AC-2.10 bites. 19 mutations.
+    drops its marker → AC-2.10 bites; (k) gate refusal exits 0 → AC-3.1 bites; (k′) gate
+    refusal prints a PASS token → AC-3.1 bites; (l) CLI error path exits 0 → AC-2.10 bites;
+    (l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 23 mutations.
     `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
   - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
     `…_name_existing_failure_tests` pass with the new spec present.
@@ -267,6 +269,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
 
 ## Version History
 - v1.0: Initial specification draft.
+- v1.6: 5b-audit v2 sweep: exit-only/token-only mutants (k, k′, l, l′) → 23.
 - v1.5: Design-audit v8 sweep: marker-stripping mutants (j)/(j′) → 19 mutations (Mutation verification: one mutant per separable output part).
 - v1.4: Plan-audit v6 fix (codex): the AC-1.6 production assert was unreachable under the dot-free grammar (a check that can never fire cannot be mutation-tested) — replaced by a property test over adversarial `(feature, surface)` pairs; `TRANSPORT_RE` is imported only by the gate and the tests; mutation (i) loosens the regex instead of removing an assert.
 - v1.3: Plan-audit v3 fixes (codex): `TRANSPORT_RE` stem is dot-free (`^audit_[^.]+\.report\.md$`) so the grammars are disjoint by construction; `_collected_path` asserts it never derives a transport-shaped name (AC-1.6, mutations i/i′ → 17); the CLI does not import the regex — `_collected_path` and the tests do; collision candidates added to the AC-3.5a corpus.
