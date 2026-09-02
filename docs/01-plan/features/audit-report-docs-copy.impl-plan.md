@@ -6,7 +6,7 @@
 ## Executive Summary
 Six ordered tasks: the collector gains `surface`/`overwrite`/readback (1), the gate gains the
 transport refusal (2), the CLI wraps the collector (3), the wrapper verb wires to the CLI (4,
-`wiring`), SKILL.md + references carry the recipe (5), and the 22-mutation spec proves every
+`wiring`), SKILL.md + references carry the recipe (5), and the 23-mutation spec proves every
 guard bites (6). Tests run with `python3.11 -m pytest` from the repository root; the AC-2.9
 hand replay runs after task 3.
 
@@ -73,7 +73,7 @@ def _collect_unguarded(spec, *, grace, project_root, feature, phase, cycle, surf
 - [ ] AC-2.12 (writers): with `_readback_equal` monkeypatched to return False, `_copy_collected_report` raises `OperationalError` whose message starts with `readback` AND `_write_collected_report` raises the same (both go through `_finalize_write`); with `Path.unlink` monkeypatched to a no-op, the same-file marker removal raises `OperationalError` starting with `readback`.
 - [ ] AC-2.8 (collect order): `spec.report_path` == docs path with a `.done` marker → `("report-file", path)` and the marker is gone; without a marker (grace 0) → `("none", None)` even when `--out` holds a valid report; a docs-path `report_path` that does not exist → `("none", None)`.
 - [ ] AC-2.11 (collect): distinct `report_path` with NO marker, docs file present and byte-identical → `("report-file", docs)`; both files empty → `("none", None)`.
-- [ ] `PassSpec(out_path=None)`: `collect()` skips `_run_extract_report` (a fake `_script` dir with a failing extractor proves it was not called).
+- [ ] A `PassSpec(index=1, report_path=<absent>, out_path=None, rc=0)`: `collect()` skips `_run_extract_report` (a fake `_script` dir with a failing extractor proves it was not called) and returns `("none", None)`.
 - [ ] `_fs_errors`: a `PermissionError` raised inside any writer surfaces as `OperationalError`, never a raw `OSError`.
 
 **Dependencies on other tasks**: None
@@ -149,7 +149,15 @@ does it); imports nothing from the gate.
 def build_parser() -> argparse.ArgumentParser: ...
 def render_verdict(verdict: str, path: Path, delivered: str, *, forced: bool = False) -> str:
     """'COLLECT: <verdict> path=<path> delivered=<delivered>[ forced=1]'."""
-def main(argv: list[str] | None = None) -> int: ...
+def main(argv: list[str] | None = None) -> int:
+    try:                                   # its OWN handler: SystemExit is a BaseException and
+        args = build_parser().parse_args(argv)   # would escape the (OperationalError, OSError,
+    except SystemExit:                     # ValueError) handler below
+        print("[H-MAD] unknown collect usage_error"); return 2
+    try:                                   # the ONE outer try around everything else
+        ...
+    except (OperationalError, OSError, ValueError) as e:
+        ...; return 2
 ```
 
 **Acceptance Criteria**:
@@ -263,17 +271,18 @@ def _second_surface() -> str: ...   # "## Second surface — the codex leg" → 
 **Test file**: `h-mad/tests/test_h_mad_collect_report.py` (the primary source of named tests; the spec's `command` runs the FIVE new/changed test files — `test_h_mad_collect_report.py`, `test_h_mad_audit_gate.py`, `test_h_mad_audit_cycle.py`, `test_hmad_dispatch_collect_report.py`, `test_h_mad_collect_report_docs.py`; `test_hmad_dispatch_audit_cycle.py` is NOT edited)
 **Task shape**: `new-behaviour`
 
-**Description**: The 22-mutation spec (`root: ../..`, `command: python3.11 -m pytest <the
+**Description**: The 23-mutation spec (`root: ../..`, `command: python3.11 -m pytest <the
 five new/changed test files> -q`, `target_command: python3.11 -m pytest -q`), each mutation an
 exact `find`/`replace` in a production file with a named `test`: (a) copy writes empty; (b)
 CONFLICT → overwrite; (b′) overwrite refused even with force; (c) surface validation removed;
 (c′) validation rejects every token; (d) `_collected_path` ignores `surface`; (d′) emits
-`.<surface>` when `None`; (e) CLI returns hard-coded `OK` without `collect()` — there is NO (e′) "force" mutant for
-this connection: the CLI does not pre-validate `--surface` (validation lives only in
-`_collected_path`, single source), and every fall-through path (bad root, unwritable docs
-dir) ends in the same outer handler whether or not `collect()` was entered, so a mutant that
-forces the call has no observable consequence and would survive by construction (5b audit
-v3, agy); (f) verb execs wrong script; (f′) wrapper routes unknown verb
+`.<surface>` when `None`; (e) CLI returns hard-coded `OK` without `collect()`; (e′) CLI enters `collect()` on the
+bad-`--project-root` fall-through (the `is_dir()` refusal neutralized) — observable: with no
+report and no `--out`, `_collected_path` merely joins paths and `collect()` returns
+`("none", None)`, so the CLI would print `COLLECT: MISSING` / exit 0 where AC-2.10 requires
+exit 2 + `operational_error` (the earlier claim that no fall-through was observable was
+wrong for this path — 5b audit v8, codex; the `--surface` fall-through remains
+unobservable and is not mutated); (f) verb execs wrong script; (f′) wrapper routes unknown verb
 to the script; (g) gate refusal removed; (g′) gate refuses every `.report.md`; (h) copy
 readback removed; (h′) out-rung conflict check removed; (i) `TRANSPORT_RE` loosened to
 `^audit_.*\.report\.md$`; (i′) docs pattern loses `.audit.v` dots; (j) gate refusal drops
@@ -308,6 +317,7 @@ touched (AC-6.4).
 | d | collected-path-ignores-surface | `scripts/h_mad_audit_cycle.py` | token = `f"p{index}"` regardless of surface | `tests/test_h_mad_collect_report.py::test_collected_path_surface_token` |
 | d′ | collected-path-forces-surface | `scripts/h_mad_audit_cycle.py` | token = `str(surface)` even when None | `tests/test_h_mad_collect_report.py::test_collected_path_default_is_pass_index` |
 | e | cli-skips-collect | `scripts/h_mad_collect_report.py` | `collect(...)` replaced by `("report-file", docs)` | `tests/test_h_mad_collect_report.py::test_cli_missing_when_no_report` |
+| e′ | cli-collects-on-bad-root | `scripts/h_mad_collect_report.py` | `if not project_root.is_dir(): raise …` → `if False:` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 | f | verb-execs-wrong-script | `scripts/hmad-dispatch.sh` | `h_mad_collect_report.py` → `h_mad_report_wait.py` in `_cmd_collect_report` | `tests/test_hmad_dispatch_collect_report.py::test_collect_report_verb_execs_script_with_argv` |
 | f′ | verb-routes-unknown | `scripts/hmad-dispatch.sh` | `*)` arm calls `_cmd_collect_report "$@"` | `tests/test_hmad_dispatch_collect_report.py::test_unknown_verb_does_not_exec_script` |
 | g | gate-refusal-removed | `scripts/h_mad_audit_gate.py` | `if is_transport_path(...)` → `if False` | `tests/test_h_mad_audit_gate.py::test_gate_refuses_transport_names` |
@@ -323,8 +333,8 @@ touched (AC-6.4).
 | l | cli-error-exit-0 | `scripts/h_mad_collect_report.py` | outer handler `return 2` → `return 0` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 | l′ | cli-error-prints-token | `scripts/h_mad_collect_report.py` | outer handler also prints `COLLECT: MISSING path=- delivered=none` | `tests/test_h_mad_collect_report.py::test_cli_operational_errors_exit_2_with_marker` |
 
-- [ ] AC-6.3: the spec has exactly the 22 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=22 caught=22 survived=0 refused=0`.
-- [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 22 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
+- [ ] AC-6.3: the spec has exactly the 23 mutations above, each with `name`, `_mechanism`, `file`, `find`, `replace`, `test`; `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` prints `MUTATION: ALL_CAUGHT mutations=23 caught=23 survived=0 refused=0`.
+- [ ] AC-6.3a (executable shape check — the harness treats `test` as optional and never reads `_mechanism`, verified 2026-09-02 in `h_mad_mutation_harness.py`): `tests/test_h_mad_collect_report.py::test_mutation_spec_shape` loads `tests/mutation-specs/collect_report.json` and asserts: exactly the 23 mutation `name`s in the table above, each entry has non-empty `_mechanism`, `file`, `find`, `replace`, `test`, each `file` exists under `root`, and each `test` is `<path>::<func>` where `<path>` exists and `def <func>(` appears in it.
 - [ ] The named test for k/k′/l/l′ asserts ALL THREE parts of its guard's output (exit code, first stdout line, `[H-MAD]` line) so each single-part mutant is caught by it alone.
 - [ ] `h_mad_mutation_harness.py --check-anchors h-mad/tests/mutation-specs/collect_report.json` prints `ANCHORS: ANCHORS_OK …`.
 - [ ] AC-6.4: the existing `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` tests load ONLY the two audit-cycle specs under `h-mad/tests/specs/` (verified 2026-09-02: `GATING_MUTATION_SPEC`, `CONNECTIONS_MUTATION_SPEC`) and are NOT extended; they stay green. The new spec's shape and named-test existence are proven by the two harness commands above, which is what those tests prove for their own specs.
@@ -343,3 +353,5 @@ touched (AC-6.4).
 - v1.5: 5b audit v5 sweep (codex): Task 3 lists its checkpoint artifact (the plan's Version History entry); design pointer tracks the newest entry.
 - v1.6: 5b audit v6 sweep (codex; agy v6 clean): AC-3.5a fixture kinds (`transport|audit_doc|other`) match the spec's scoping; Task 6 names `test_mutation_spec_shape` as the shape verifier; duplicate AC label removed.
 - v1.7: 5b audit v7 fixes (codex; agy v7 clean): AC-2.9h evidence is one `·`-joined line (the version-history helper refuses multiline text); docs-half grammar test uses `is_transport_path(Path(...))`; hand replay renumbered AC-2.9h; Version History reordered ascending; `# Verbs:` header located by prefix.
+- v1.8: 5b audit v8 fixes (codex): e′ restored on the observable bad-project-root fall-through (23 mutations); PassSpec AC worded as a full constructor.
+- v1.9: 5b audit v8 fix (agy p1): explicit try/except SystemExit around parse_args in the Task 3 code structure.

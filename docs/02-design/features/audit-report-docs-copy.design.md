@@ -198,8 +198,10 @@ outer try.
 1. Parse with `argparse`, every flag except `--out`, `--grace`, `--force` declared
    `required=True`. A missing required flag (or an unknown one, or `--phase` outside its
    `choices`) makes argparse print usage to stderr and raise `SystemExit(2)`; `main()`
-   catches it, prints `[H-MAD] unknown collect usage_error`, and returns 2 — no `COLLECT:`
-   line (AC-2.10 "missing required flag"). Then the semantic operational checks, each →
+   catches it in its OWN `try … except SystemExit:` around `parse_args` (it is a
+   `BaseException`, so the outer handler below would not see it), prints
+   `[H-MAD] unknown collect usage_error`, and returns 2 — no `COLLECT:` line (AC-2.10
+   "missing required flag"). Then the semantic operational checks, each →
    `ERROR: …` on stderr, `[H-MAD] <feature> collect operational_error` on stdout, exit 2,
    **no** `COLLECT:` line (AC-2.10): `--project-root` not a directory; `--cycle` < 1;
    `--surface` is validated by `_collected_path` (the single validator — the CLI performs no
@@ -340,7 +342,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
 | tests | `h-mad/tests/test_h_mad_audit_cycle.py` | modify | AC-3.3 (`gate()`/`combine()` on a transport name), AC-2.8 branch order, compatibility pins |
 | tests | `h-mad/tests/test_hmad_dispatch_collect_report.py` | new | AC-4.1, AC-4.3 |
 | tests | `h-mad/tests/test_h_mad_collect_report_docs.py` | new | AC-4.2, AC-5.1–5.4 |
-| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 22 mutations (see the impl-plan's table: connection drop/force pairs, branch guards, grammar property, and one mutant per separable output part — marker, exit code, token — of the gate refusal and the CLI error path) |
+| mutation spec | `h-mad/tests/mutation-specs/collect_report.json` | new | 23 mutations (see the impl-plan's table: connection drop/force pairs, branch guards, grammar property, and one mutant per separable output part — marker, exit code, token — of the gate refusal and the CLI error path) |
 
 ## Implementation Order
 1. Task 1 — collector (`h_mad_audit_cycle.py`): `validate_surface`, `_collected_path(surface)`,
@@ -358,7 +360,7 @@ readback). `references/orchestration-mode.md` verb table gains a `collect-report
    AC-4.1, AC-4.3.
 5. Task 5 — docs. RED: AC-4.2, AC-5.1–5.4 (docs tests), `test_h_mad_audit_cycle_docs.py`
    still green.
-6. Task 6 — mutation spec (22 mutations, every one naming a test from tasks 1–5; per
+6. Task 6 — mutation spec (23 mutations, every one naming a test from tasks 1–5; per
    separable output part of each guard — marker, exit code, token — one mutant) →
    `MUTATION: ALL_CAUGHT`; `--check-anchors` clean; full suite green.
 
@@ -417,7 +419,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - Docs: SKILL.md block order (`exec codex` < `collect-report` < `report_not_collected` <
   `h_mad_audit_gate.py`), gate line has no `$RP`, registry entry names the token set and exit
   contract, orchestration-mode verb row, step-9 sentence.
-- Mutation: 22 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
+- Mutation: 23 mutations, each with `test`, `root: ../..`, `python3.11 -m pytest` — the
   authoritative list is the impl-plan's table; a spec-shape test pins the names and required
   keys because the harness treats `test` as optional.
 
@@ -430,7 +432,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 | `tests/test_hmad_dispatch_collect_report.py` | AC-4.1, AC-4.3, staged-name grammar | `python3.11 -m pytest h-mad/tests/test_hmad_dispatch_collect_report.py -q` |
 | `tests/test_h_mad_collect_report_docs.py` | AC-4.2, AC-5.1–5.4 | `python3.11 -m pytest h-mad/tests/test_h_mad_collect_report_docs.py -q` |
 | existing `test_h_mad_audit_cycle*.py`, `test_hmad_dispatch_audit_cycle.py` | compatibility, spec-registry tests | `python3.11 -m pytest h-mad/tests -q` |
-| `tests/mutation-specs/collect_report.json` | 22 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
+| `tests/mutation-specs/collect_report.json` | 23 mutations | `python3 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/collect_report.json` → `MUTATION: ALL_CAUGHT` |
 
 ## Invariant Compliance
 - **Audit-gate signal discipline** — complies: `COLLECT:` verdicts exit 0; exit 2 reserved for
@@ -449,13 +451,13 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 - **Marker discipline** — complies: `[H-MAD]` on every `COLLECT:` outcome, on readback
   failure, on the gate refusal, and the recipe's halt line.
 - **Mutation verification** — complies: both writers read back; the marker removal re-checks;
-  22 mutations each with a named test, including one per separable output part (exit code,
+  23 mutations each with a named test, including one per separable output part (exit code,
   token, marker) of the gate refusal and the CLI error path.
 - **Test discrimination** — complies: each mutation names the one test that must bite.
 - **Guard narrowing** — complies: the transport regex was widened from a stem to prefix+suffix
   and then narrowed by the dot rule, each step with executed evidence in the plan.
-- **Connection enforcement** — complies: CLI→`collect()` (e; the force direction has no
-  observable consequence and is documented as withdrawn), verb→script (f/f′),
+- **Connection enforcement** — complies: CLI→`collect()` (e/e′ — the force direction is the
+  bad-project-root fall-through, observable as a wrong `MISSING`/exit 0), verb→script (f/f′),
   gate refusal (g/g′), grammar disjointness (i/i′) all dropped AND forced.
 - **Incident replay** — complies: AC-2.9 replays absent-docs → collected → gateable, in the
   suite and once by hand on a real survivor.
@@ -480,6 +482,8 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 | grammar disjointness | executed `^audit_[^.]+\.report\.md$` vs `_VERSION_RE` over 10 names incl. `audit_f.plan.audit.v8.report.md` (T=False, V=True) — plan v1.3 table |
 
 ## Version History
+- v1.17: 5b-audit v8 sweep (agy): D2 step 1 states the SystemExit handler is its own try around parse_args.
+- v1.16: 5b-audit v8 sweep (codex): e′ restored (bad-project-root fall-through is observable); 23 mutations.
 - v1.0: Initial design draft.
 - v1.15: 5b-audit v5 sweep (codex): CLI import list and Connection-enforcement line match the impl-plan (no `validate_surface` import; no e′).
 - v1.14: 5b-audit v4 sweep (codex): mutation-count prose no longer derives 22 from stale sub-counts; the impl-plan table is the list.

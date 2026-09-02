@@ -223,10 +223,8 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     validation forced to reject every token → AC-2.1 bites; (d) `_collected_path` ignores
     `surface` (drop) → AC-1.2 bites; (d′) `_collected_path` emits `.<surface>` even when
     `surface=None` (force) → AC-1.1 bites; (e) CLI no longer calls `collect()` (delegation
-    severed: returns a hard-coded `OK`) → AC-2.2 bites; (no (e′): a mutant forcing the
-    CLI→`collect()` call on a fall-through path has no observable consequence — every such
-    path ends in the same outer handler — and would survive by construction; the spec does
-    not demand an unkillable mutant); (f) `hmad-dispatch collect-report` route severed
+    severed: returns a hard-coded `OK`) → AC-2.2 bites; (e′) the CLI enters `collect()` on the bad-`--project-root` fall-through
+    (`is_dir()` refusal neutralized) → AC-2.10 bites with a wrong `MISSING`/exit 0; (f) `hmad-dispatch collect-report` route severed
     (execs nothing / wrong script) → AC-4.1 bites; (f′) the wrapper routes the fall-through
     (an unknown verb such as `collect-reportx`) to the script (force) → AC-4.3 bites; (g)
     gate transport refusal removed → AC-3.1 bites; (g′) gate refuses every `.report.md`
@@ -237,7 +235,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
     token but drops its `[H-MAD]` marker → AC-3.1 bites; (j′) CLI operational-error path
     drops its marker → AC-2.10 bites; (k) gate refusal exits 0 → AC-3.1 bites; (k′) gate
     refusal prints a PASS token → AC-3.1 bites; (l) CLI error path exits 0 → AC-2.10 bites;
-    (l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 22 mutations.
+    (l′) CLI error path prints a `COLLECT:` line → AC-2.10 bites. 23 mutations.
     `h_mad_mutation_harness.py` reports `MUTATION: ALL_CAUGHT`.
   - AC-6.4: `test_hmad_dispatch_audit_cycle.py::test_audit_cycle_mutation_specs_*` and
     `…_name_existing_failure_tests` pass with the new spec present.
@@ -272,6 +270,7 @@ Make the docs copy of an audit report a mechanical step of the recipe — perfor
   this worktree's edits are invisible to it until merge.
 
 ## Version History
+- v1.9: 5b-audit v8 sweep: e′ restored on the bad-project-root path → 23 mutations.
 - v1.0: Initial specification draft.
 - v1.8: 5b-audit v5 sweep: AC-3.5a's `_VERSION_RE` assertion scoped to docs audit-artifact names.
 - v1.7: 5b-audit v3 sweep: e′ withdrawn as unkillable → 22 mutations.
