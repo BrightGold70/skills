@@ -1110,6 +1110,93 @@ def test_cli_absent_project_root_refuses_and_creates_nothing(tmp_path: Path) -> 
     )
 
 
+def test_same_file_is_detected_through_differing_path_spellings(tmp_path: Path) -> None:
+    """6a-prime: the same-file check must compare RESOLVED paths.
+
+    Design line 135 specifies `spec.report_path.resolve() == collected_path.resolve()`.
+    With a plain `==`, a relative `--report` naming the very file the docs path
+    names does not match, the AC-2.11 byte-identity short-circuit fires instead,
+    and the `.done` marker is never removed — while the CLI, which DOES resolve,
+    prints `marker: removed ...`. The output then claims a removal that did not
+    happen.
+    """
+    docs = docs_path(tmp_path)
+    write_report(docs, HOSTILE_REPORT, done=True)
+    marker = Path(str(docs) + ".done")
+    assert marker.exists()
+
+    relative = docs.relative_to(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable, str(COLLECT_CLI),
+            "--feature", "f", "--phase", "plan", "--cycle", "8",
+            "--surface", "codex", "--report", str(relative),
+            "--project-root", str(tmp_path),
+        ],
+        capture_output=True, text=True, cwd=tmp_path, check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists(), (
+        "the same-file case must remove the .done marker however the path is "
+        "spelled; the CLI already reports it as removed, so leaving it on disk "
+        f"makes that line false. stdout={result.stdout!r}"
+    )
+
+
+def test_same_file_waits_out_grace_for_a_late_marker(tmp_path: Path) -> None:
+    """6a-prime: the same-file branch must honour `grace`.
+
+    Design lines 178-181: a same-file case with a missing marker goes through
+    `_has_complete_report` -> `report_wait`, waiting `grace` before reporting
+    MISSING. Returning the instant the marker is absent makes `--grace` dead on
+    this path, and the marker is exactly the signal that arrives late.
+    """
+    docs = docs_path(tmp_path)
+    write_report(docs, HOSTILE_REPORT, done=False)
+    marker = Path(str(docs) + ".done")
+
+    import threading
+
+    timer = threading.Timer(1.0, lambda: marker.write_text("", encoding="utf-8"))
+    timer.start()
+    try:
+        result = run_collect_cli(
+            collect_args(tmp_path, docs, grace=10)
+        )
+    finally:
+        timer.cancel()
+
+    assert collect_contract_lines(result.stdout) == [
+        f"COLLECT: OK path={docs} delivered=report-file"
+    ], (
+        "a marker arriving inside the grace window must be waited for on the "
+        f"same-file path; stdout={result.stdout!r}"
+    )
+
+
+def test_empty_report_is_never_delivered_as_a_collected_audit(tmp_path: Path) -> None:
+    """6a-prime: an empty report is not a report.
+
+    Design line 93 specifies `if not data: raise OperationalError(...)`. That
+    check is absent, and `_finalize_write` writes empty bytes without complaint,
+    so the guard that was meant to replace it can never fire. On the same-file
+    path a zero-byte file plus a marker is reported as
+    `COLLECT: OK ... delivered=report-file` — a successful delivery of nothing.
+    """
+    docs = docs_path(tmp_path)
+    docs.parent.mkdir(parents=True, exist_ok=True)
+    docs.write_bytes(b"")
+    Path(str(docs) + ".done").write_text("", encoding="utf-8")
+
+    result = run_collect_cli(collect_args(tmp_path, docs))
+
+    assert f"COLLECT: OK path={docs} delivered=report-file" not in result.stdout, (
+        "a zero-byte report must never be reported as a delivered audit; "
+        f"stdout={result.stdout!r}"
+    )
+
+
 MUTATION_SPEC = REPO_ROOT / "h-mad" / "tests" / "mutation-specs" / "collect_report.json"
 
 EXPECTED_MUTATION_NAMES = (
