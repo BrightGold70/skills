@@ -8,6 +8,7 @@ assertions describe.
 from __future__ import annotations
 
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -309,12 +310,15 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
         block = _gate_bash_block()
         # the doc addresses the installed skill; point the snippet at this tree
         script = block.replace(
-            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", str(gate)
+            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
         )
+        # quote every interpolated path: the harness must not be the thing that
+        # breaks on whitespace, or it measures itself instead of the recipe
+        q = shlex.quote
         preamble = (
-            f'COLLECT_OUT=$({sys.executable} {collector} --surface codex '
+            f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
             f'--feature f --phase {phase} --cycle {cycle} '
-            f'--report {report} --project-root {root})\n'
+            f'--report {q(str(report))} --project-root {q(str(root))})\n'
         )
         return subprocess.run(
             ["bash", "-c", preamble + script],
@@ -322,7 +326,9 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
             text=True,
         )
 
-    root = tmp_path / "proj"
+    # a root with a space: this machine's own codex home is under
+    # "Application Support", so whitespace in a project root is ordinary.
+    root = tmp_path / "pro j"
     (root / "docs/01-plan/features").mkdir(parents=True)
     (root / "dispatch").mkdir()
 
@@ -351,4 +357,22 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
     assert "report_not_collected" in combined, (
         "the recipe must emit the report_not_collected halt marker; "
         f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+
+
+def test_gate_block_does_not_exit_the_operators_shell() -> None:
+    """The section is a paste-along recipe. A bare `exit` in it terminates an
+    interactive shell when the halt branch is taken, so the block must branch
+    around the gate instead of exiting.
+    """
+    block = _gate_bash_block()
+
+    offenders = [
+        line
+        for line in block.splitlines()
+        if re.match(r"\s*exit\b", line)
+    ]
+    assert not offenders, (
+        "the gate block must not `exit` — it would kill an interactive shell; "
+        f"offending lines: {offenders}"
     )
