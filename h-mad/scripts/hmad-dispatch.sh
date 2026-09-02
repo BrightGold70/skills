@@ -2076,13 +2076,23 @@ _verdict_after_boundary() {  # $1 = transcript, $2 = boundary, $3 = echo_expecte
   # Bias in both directions is toward silence: if the agent QUOTES the boundary back,
   # the last occurrence lands inside its reply and we may slice past a real verdict.
   # That fails to silence, not to a fabricated answer -- the whole point of the change.
-  local start=0 last
+  # $4 (optional) -- lines of the transcript that PREDATE this dispatch. The agy
+  # arm already computes this as `pre_lines` and the structured NDJSON read has
+  # always honoured it; the degraded fallback did not, and that is a live hole,
+  # not a hypothetical one. Both arms append to a caller-supplied --log with `>>`,
+  # so a codex dispatch whose echo was TRUNCATED before its boundary landed leaves
+  # our contract block in a log that a later agy dispatch then scans whole. The
+  # agy arm has no boundary to expect, so it cannot refuse the way $3=1 does --
+  # but it does not need to: content written before this dispatch started cannot
+  # be this agent's answer, whatever it looks like. Floor the scan there.
+  local start=0 last skip="${4:-0}"
   last="$(grep -aFn -- "$2" "$1" 2>/dev/null | tail -1 | cut -d: -f1)"
   if [ -n "$last" ]; then
     start="$last"
   elif [ "${3:-0}" = "1" ]; then
     return 0
   fi
+  [ "$skip" -gt "$start" ] 2>/dev/null && start="$skip"
   tail -n "+$((start + 1))" "$1" 2>/dev/null \
     | grep -aE '^(STATUS|VERDICT):' | tail -1 || true
 }
@@ -2797,7 +2807,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # a stream that died before its first event. The line-oriented scan is what
       # `exec agy` recovery has always used and it costs nothing to keep behind
       # the structured path, so the change is additive rather than a swap.
-      [ -n "$recovered" ] || recovered="$(_verdict_after_boundary "$log" "$boundary" 0)"
+      [ -n "$recovered" ] || recovered="$(_verdict_after_boundary "$log" "$boundary" 0 "$pre_lines")"
     else
       recovered="$(_verdict_after_boundary "$log" "$boundary" "$echo_expected")"
     fi

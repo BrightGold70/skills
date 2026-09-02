@@ -329,6 +329,37 @@ def test_agy_empty_response_recovers_verdict_from_caller_log(tmp_path):
     assert "verdict recovered from log" in r.stderr
 
 
+def test_agy_degraded_recovery_ignores_content_written_before_this_dispatch(tmp_path):
+    """J23, agy arm: the degraded scan must not read a PRIOR dispatch's echo.
+
+    The codex arm refuses when its boundary is absent, because a truncated echo
+    still carries the contract block. The agy arm has no boundary to expect and
+    scanned the whole transcript -- but both arms append to a caller-supplied
+    `--log` with `>>`, so a codex dispatch whose echo was truncated before the
+    boundary landed leaves that contract block in a log a later agy dispatch then
+    scans. `tail -1` returns its last option, deterministically NEEDS_CONTEXT,
+    and the caller writes it to `--out`: the original laundering, reached through
+    the other arm.
+
+    `pre_lines` already records how much of the log predates this dispatch, and
+    the structured NDJSON read has always honoured it. Only the fallback did not.
+    """
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "shared.log"
+    log.write_text(
+        "STATUS: DONE\nSTATUS: DONE_WITH_CONCERNS\n"
+        "STATUS: BLOCKED\nSTATUS: NEEDS_CONTEXT\n"
+    )
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RESP=""))
+
+    assert "NEEDS_CONTEXT" not in r.stdout, (
+        "recovered a verdict from a PRIOR dispatch's echoed contract block"
+    )
+    assert "verdict recovered from log" not in r.stderr
+
+
 def test_empty_message_crash_preserves_agent_rc(tmp_path):
     """AC-5.2: rc 3 is reserved for agent-exit-0 reporting failures."""
     b = _bindir(tmp_path, ["codex"])

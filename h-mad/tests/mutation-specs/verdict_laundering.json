@@ -47,6 +47,14 @@
       "find": "      delta=\"$(git -C \"$cd_dir\" status --porcelain -- . 2>/dev/null | grep -c . || true)\"",
       "replace": "      delta=\"$(git -C \"$cd_dir\" status --porcelain 2>/dev/null | grep -c . || true)\"",
       "test": "tests/test_hmad_dispatch_exec.py::test_codex_tree_delta_counts_only_the_cd_subdir"
+    },
+    {
+      "name": "agy-fallback-ignores-the-pre-dispatch-floor",
+      "_mechanism": "The agy arm has no boundary to expect, so it cannot refuse the way the codex arm does -- the pre_lines floor is its whole guard. Drop it and a codex dispatch whose echo was truncated before its boundary landed leaves a contract block that a later agy dispatch on the same --log scans whole, laundering NEEDS_CONTEXT into --out. Reached through the other arm; both append with `>>`.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  [ \"$skip\" -gt \"$start\" ] 2>/dev/null && start=\"$skip\"",
+      "replace": "  :",
+      "test": "tests/test_hmad_dispatch_exec.py::test_agy_degraded_recovery_ignores_content_written_before_this_dispatch"
     }
   ]
 }
