@@ -104,6 +104,23 @@ if [ "${1:-}" = "terminal" ] && [ "${2:-}" = "create" ] && [ -n "${HMAD_STUB_ORC
   printf '%s' "$HMAD_STUB_ORCA_CREATE_STDOUT"
   exit 0
 fi
+# The tail-evidence pass consumes `terminal list` and `terminal read` in ONE
+# _orca_find call, and a single HMAD_STUB_ORCA_STDOUT cannot express both (same
+# reason as the J16 worktree-ps and J1 terminal-create overrides above). Keyed by
+# handle because the pass reads EVERY candidate and each must be able to differ.
+# A handle with no file is the UNREADABLE case (FR-4), not an empty tail.
+if [ "${1:-}" = "terminal" ] && [ "${2:-}" = "read" ] && [ -n "${HMAD_STUB_ORCA_READ_DIR:-}" ]; then
+  _h=""; _prev=""
+  for _arg in "$@"; do
+    [ "$_prev" = "--terminal" ] && _h="$_arg"
+    _prev="$_arg"
+  done
+  if [ -n "$_h" ] && [ -f "$HMAD_STUB_ORCA_READ_DIR/$_h.json" ]; then
+    cat "$HMAD_STUB_ORCA_READ_DIR/$_h.json"
+    exit 0
+  fi
+  exit 1
+fi
 # Default success envelope for un-cased `--json` verbs. Real Orca always returns
 # {"ok":true,"result":{…}}; the previous empty-stdout default was unrealistic and
 # is now rejected by the wrapper's `_orca_json` ok-check. Only applies when no
