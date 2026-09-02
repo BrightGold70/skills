@@ -152,8 +152,12 @@ Edge cases:
   required) → `report_wait` times out → MISSING (never copies an empty file; mutation (a)).
 - `collected_path` exists but unreadable, unwritable, or its parent cannot be created →
   `OSError` inside `_fs_errors` → `OperationalError` → CLI exit 2 with the
-  `operational_error` marker (never a traceback). A test makes the docs file read-only
-  (`chmod 0o444`) with differing bytes and `--force`, and asserts exit 2 + marker.
+  `operational_error` marker (never a traceback). A test makes the docs file's PARENT
+  directory unwritable (`chmod 0o555` on `docs/01-plan/features`, restored in `finally`)
+  with a differing docs file and `--force`, and asserts exit 2 + marker: a read-only FILE
+  would not do — `unlink()` succeeds on a read-only file when its directory is writable, and
+  `write_bytes()` then creates a fresh file and exits 0. Skipped when running as root
+  (root ignores mode bits).
 - Same-file case with a missing marker → `_has_complete_report` False → `report_wait` waits
   `grace` then MISSING (AC-2.8 requires the marker); the same-file branch returns before the
   AC-2.11 short-circuit, so an existing marker is always removed on OK (a same-file with a
@@ -355,8 +359,9 @@ discipline). The recipe halts on any non-`OK` token before the gate.
   `--out` carrying a sentinel pair.
 - CLI (subprocess, `sys.executable`): every `COLLECT:` case, exit codes, stderr, marker lines,
   `--force`, operational errors including each missing required flag and an unknown `--phase`
-  (exit 2, usage on stderr, `usage_error` marker, no token), a `PermissionError` on the docs
-  file under `--force` (exit 2, `operational_error` marker, no traceback), a readback
+  (exit 2, usage on stderr, `usage_error` marker, no token), a `PermissionError` from an
+  unwritable docs DIRECTORY (`0o555`) under `--force` (exit 2, `operational_error` marker,
+  no traceback; skipped as root), a readback
   mismatch inside the forced retry (exit 2, `readback_failed`), incident replay (AC-2.9 suite half: gate on RP → INVALID;
   collect → OK identical; gate on docs → scores).
 - Gate: transport names refused (all observed shapes), docs names scored, Phase-7 name
@@ -432,6 +437,7 @@ discipline). The recipe halts on any non-`OK` token before the gate.
 
 ## Version History
 - v1.0: Initial design draft.
+- v1.5: Design-audit v4 fix (agy p1, 10 tool calls; codex v4 clean): the PermissionError test chmods the parent DIRECTORY, not the file — `unlink` on a read-only file succeeds under a writable parent and the scenario would have exited 0.
 - v1.4: Design-audit v3 fix (agy p1; codex v3 clean): the `collect()` same-file and already-collected checks run under `_fs_errors` too — the code block now matches the prose.
 - v1.3: Design-audit v2 fixes (agy p1): the `--force` retry runs inside the OUTER try so an `OperationalError` from the retry is still caught; every filesystem call in the writers/`collect()` runs under `_fs_errors` (OSError → OperationalError, exit 2 + marker, never a traceback); AC-3.5a's SKILL.md 6.6 literal assertion restored in Test Strategy.
 - v1.2: Design-audit v2 fixes (codex): missing-required-flag path designed explicitly (argparse `required=True`, `SystemExit` caught → `usage_error` marker, exit 2, no token); marker contract made exact — one `[H-MAD]` marker on every exit path including operational errors.
