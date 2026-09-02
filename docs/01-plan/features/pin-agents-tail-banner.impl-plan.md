@@ -1,6 +1,6 @@
 # Implementation Plan: pin-agents-tail-banner
 
-> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.37)
+> Source: docs/02-design/features/pin-agents-tail-banner.design.md (post-audit, v1.38)
 > Paired spec: docs/01-plan/features/pin-agents-tail-banner.spec.md (v1.19, 16 ACs)
 > Branch target: feature/pin-agents-tail-banner
 
@@ -20,7 +20,7 @@ The design lists seven ordered steps. This plan carries all seven and adds one p
 | design step | task | note |
 |---|---|---|
 | — (design §Test Strategy: "the stub must serve BOTH `terminal list` and `terminal read`") | T1 | prerequisite; no production behaviour |
-| 1. `_orca_tail_sig` **and `_agent_tail_re`** + unit tests, incl. the matcher's direct 35/12 corpus | T2 | both helpers land together; step 2 consumes the matcher |
+| 1. `_orca_tail_sig` **and `_agent_tail_re`** + unit tests, incl. the matcher's direct 36/12 corpus | T2 | both helpers land together; step 2 consumes the matcher |
 | 2. The pass, entered on `n != 1`, resolving on exactly one | T3 | |
 | 4. Unreadable-candidate handling | T3 | **folded — see below** |
 | 3. Rival rejection | T4 | |
@@ -189,8 +189,8 @@ only the call sites.
 # parenthetical is an effort word or a version, and a version is DOTTED with its
 # parens PAIRED (audit v42), and the prefix admits ONLY whitespace and box-drawing
 # characters -- no ASCII pipe, colon or `>` (audit v45: a Markdown blockquote or
-# table cell in shell output is prose). Measured over 35 negatives and 12
-# positives: 35/35 decline, 12/12 still match.
+# table cell in shell output is prose). Measured over 36 negatives and 12
+# positives: 36/36 decline, 12/12 still match.
 #
 # LINE-COMPLETE grammar, not a line anchor. The v1.23 anchor was falsified by
 # line-LEADING prose; the v1.24 grammar was falsified by prose AFTER a
@@ -202,11 +202,11 @@ only the call sites.
 # them (design v1.32 carries the per-arm table). MATCHED CASE-INSENSITIVELY:
 # these literals are lowercase and real banners are capitalised, so every call
 # site uses `grep -Eiq`; under `grep -E` nine of the twelve positives decline.
-# Measured over the corpus, which grew 24 -> 29 (audit v42) -> 35 (audit v45). On the
+# Measured over the corpus, which grew 24 -> 29 (v42) -> 35 (v45) -> 36 (v47). On the
 # THEN-24: unanchored 0/24 decline, anchored-only 7/24, leading-position 14/24,
-# line-complete 19/24, that grammar 24/24. On the CURRENT 35, which adds the
+# line-complete 19/24, that grammar 24/24. On the CURRENT 36, which adds the
 # unbalanced-paren, non-dotted-version, Markdown-prefix and bare-separator
-# shapes: this grammar 35/35 -- with all
+# shapes: this grammar 36/36 -- with all
 # 12 positives matching under every revision.
 _agent_tail_re() {   # <codex|agy> -> tail-only banner/status grammar
   case "$1" in
@@ -607,11 +607,11 @@ _orca_tail_sig() {  # <handle> -> stdout: the pane's tail text; rc 0 = read ok, 
       a consequence of the state.
 
 - [ ] AC-2.12: `_agent_tail_re` is tested DIRECTLY against the full corpus **under a
-      case-insensitive match (`grep -Ei`, the flag every call site uses)** — all 35 negative
+      case-insensitive match (`grep -Ei`, the flag every call site uses)** — all 36 negative
       probes decline and all 12 positive controls match, per agent. **The fold is load-bearing
       and was named nowhere until v1.33.** The literals are lowercase and every real banner is
       capitalised: measured 2026-09-02 by running this plan's own block over this corpus, a
-      case-SENSITIVE `grep -E` still declines 35/35 negatives but declines **9 of the 12
+      case-SENSITIVE `grep -E` still declines 36/36 negatives but declines **9 of the 12
       positives** as well — only the three all-lowercase controls survive. So the decline half of
       the corpus cannot detect the error, and an implementer who reads AC-2.11's `grep -E` as the
       match semantics ships a matcher that rejects every real banner. Design pass 2026-09-02. T2 owns the helper, so T2
@@ -992,11 +992,11 @@ status is `grep`'s alone.
       not the name. Impl-plan audit v38 (codex) nit, decided rather than deferred.
       The mixed fixture fails in both directions that matter: before the pass exists nothing
       resolves, and with the matcher connection removed both candidates match, the count is 2, and
-      the pass declines on ambiguity. The matcher's own 35/12 corpus is tested directly in T2
+      the pass declines on ambiguity. The matcher's own 36/12 corpus is tested directly in T2
       (AC-2.12), so this node tests the CONNECTION and the pass-level selection, not the grammar.
 
       A candidate whose tail carries the agent's tokens only inside ORDINARY
-      PROSE does **not** resolve. Corpus, measured 2026-09-01 — all 35 match the UNANCHORED
+      PROSE does **not** resolve. Corpus, measured 2026-09-01 — all 36 match the UNANCHORED
       regex and none matches the current bounded banner grammar (the anchor-only revision
       declined just 7 of the then-24, which is why the anchor was replaced — see the block in Task 2,
       which is normative):
@@ -1032,6 +1032,7 @@ status is `grep`'s alone.
       | `OpenAI Codex 2026` | codex |
       | `Antigravity CLI 2026` | agy |
       | `Gemini 3.1 Pro (2026)` | agy |
+      | `OpenAI Codex (v2026)` | codex |
       | `> OpenAI Codex` | codex |
       | `: OpenAI Codex` | codex |
       | `\| model: gpt-5.6-terra` | codex |
@@ -1058,15 +1059,15 @@ status is `grep`'s alone.
       rows. FOUR corpus revisions, each adding one shape the previous corpus
       lacked: mid-sentence, line-leading, banner-prefixed, then (audit v42) unbalanced parentheses
       and non-dotted pseudo-versions. Measured across the then-24 — unanchored 0/24, anchored-only
-      7/24, leading-position 14/24, line-complete 19/24, that grammar 24/24; across the current 35,
-      this grammar declines 35/35.
+      7/24, leading-position 14/24, line-complete 19/24, that grammar 24/24; across the current 36,
+      this grammar declines 36/36.
 
       **Group C — LINE-LEADING, and why a bare anchor is not enough.** The
       v1.23 fix anchored the shipped regex to line start and this AC claimed prose then declined.
       Audit v27 falsified that: every probe in the original corpus happened to put the token
       mid-sentence, so the anchor separated the corpus without separating the CLASS. Measured
-      over the then-24: unanchored 0/24 decline, anchored-only 7/24, the banner grammar 24/24 (35/35
-      over the current 35-probe corpus). A
+      over the then-24: unanchored 0/24 decline, anchored-only 7/24, the banner grammar 24/24 (36/36
+      over the current 36-probe corpus). A
       negative corpus is only as strong as the shapes in it, and one shape was doing all the
       work.
 
@@ -1096,7 +1097,7 @@ status is `grep`'s alone.
 
 - [ ] AC-3.18: `_agent_pv_re`'s OWN source comment is corrected in the same edit. It currently
       asserts of its patterns that "neither occurs in ordinary prose about a model", which audit
-      v26/v27/v29 falsified 24/24, and 35/35 over the corpus as it stands. Leaving it would ship a wrapper carrying two mutually exclusive
+      v26/v27/v29 falsified 24/24, and 36/36 over the corpus as it stands. Leaving it would ship a wrapper carrying two mutually exclusive
       statements — that comment and the tail pass's, five hundred lines apart. Replace the claim
       with what is measured: the patterns exclude the BARE-TOKEN and bare-model-id prose that
       motivated them, and do NOT exclude prose naming the product; the tail pass therefore
@@ -1113,7 +1114,7 @@ status is `grep`'s alone.
         # motivated them ("comparing gpt-5 output with ours", "the codex agent is running",
         # both still declining) and NOT prose naming the product: measured 2026-09-01,
         # `Release notes for OpenAI Codex are available` and `The Antigravity CLI
-        # documentation changed` MATCH, 35 of 35 such probes. That is safe for Passes 1-2,
+        # documentation changed` MATCH, 36 of 36 such probes. That is safe for Passes 1-2,
         # whose inputs are short titles and previews; the tail pass reads arbitrary retained
         # scrollback and therefore uses its own line-complete grammar, `_agent_tail_re`.
       ```
@@ -1200,7 +1201,7 @@ guard degrades to the shared helper rather than aborting.
 **Description**: Design Implementation Order step 3. A candidate whose tail carries the RIVAL
 agent's signature is rejected **before** it is counted, so it can neither be selected nor create
 a false ambiguity that suppresses a real resolution. The shared `$rival_re` computed above Pass 1
-is NOT reused here — it is `_agent_pv_re`, which matches prose 35/35; this pass builds its own
+is NOT reused here — it is `_agent_pv_re`, which matches prose 36/36; this pass builds its own
 `rival_tail_re` from `_agent_tail_re`, the same grammar as the wanted check (AC-4.6). The old
 sentence said `$rival_re` was reused unchanged, which contradicted this task's own code block and
 would have reproduced the false-negative. Impl-plan audit v30. The shared `$rival_re` computed in `_orca_find` is unchanged and still
@@ -1225,7 +1226,7 @@ ambiguity.
       # neither a match nor a source of ambiguity. This is the predicate Pass 2
       # applies, extended to the tail -- but built from _agent_tail_re, NOT from
       # the shared $rival_re computed above Pass 1: that one is `_agent_pv_re`,
-      # which matches prose (35/35 measured), and this input is arbitrary retained
+      # which matches prose (36/36 measured), and this input is arbitrary retained
       # scrollback. Same grammar as the wanted check, or a real agent pane is
       # suppressed for merely MENTIONING the other agent -- a false negative in
       # the feature's own goal. Audit v28. HOISTED above the loop beside `tail_re`
@@ -1297,7 +1298,7 @@ ambiguity.
       an agy pane carrying `Antigravity CLI v1.2.3` AND `OpenAI Codex documentation changed` still
       resolves as agy. The real-rival-banner rejection (AC-4.1) is unchanged.
 
-      Task 4 reused the SHARED `$rival_re` — that is `_agent_pv_re`, which matches prose 35/35 —
+      Task 4 reused the SHARED `$rival_re` — that is `_agent_pv_re`, which matches prose 36/36 —
       over the whole retained tail. So the feature suppressed exactly the panes it exists to
       resolve, whenever their scrollback happened to mention the other agent. It is a false
       NEGATIVE, the mirror of the false positive AC-3.17 closes, and one matcher now serves both
@@ -1564,7 +1565,7 @@ the distinction matters because only the first is pinned by this document:
    measures nothing while the spec still prints a verdict-shaped line.
 
    The check that covers both classes, and the one this plan actually ran at v1.46: resolve every
-   `find` against the union of the prescribed blocks AND the live target file, and require 43/43.
+   `find` against the union of the prescribed blocks AND the live target file, and require 46/46.
    Impl-plan audit v45 (agy) — the previous wording claimed class 1 covered everything, which
    would have left these three unwatched.
 
@@ -1758,12 +1759,44 @@ the distinction matters because only the first is pinned by this document:
    "replace": "true"
   },
   {
-   "name": "tail-re-version-loosened",
-   "_mechanism": "Revert the audit-v42 tightening on the codex arm alone: restore the independently-optional parens and the zero-or-more dot form (`\\(?v?[0-9]+(\\.[0-9]+)*\\)?`). The full banner grammar is otherwise preserved, so the 12 positives all still match and the kill can only come from the five shapes the tightening closed. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` (AC-2.12), whose corpus carries `OpenAI Codex (v0.145.0`, `OpenAI Codex v0.145.0)` and `OpenAI Codex 2026`. Additive-preserving by construction, which is the rule audit v35 established after a wholesale arm replacement produced an accidental kill.",
+   "name": "tail-re-cx-parens-unpaired",
+   "_mechanism": "Codex arm, ONE field: make the version's parentheses independently optional again (`\\(?…\\)?`), keeping every version position dotted and everything else intact. Killed by `test_tail_matcher_corpus_decides_prose_vs_banner` on exactly `OpenAI Codex (v0.145.0` and `OpenAI Codex v0.145.0)`; all 12 positives still match, including the paired `(v0.145.0)` controls. Replaces the pre-v52 `tail-re-version-loosened`, which reverted this AND both dot rules at once and so could only prove that at least one of three guards bit — impl-plan audit v47 (codex).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?",
-   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)*\\)?)?"
+   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+\\(?v?[0-9]+(\\.[0-9]+)+\\)?)?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-cx-bare-version-undotted",
+   "_mechanism": "Codex arm, ONE field: allow a bare (unparenthesised) version with zero dots again, parens still paired and the parenthesised form still dotted. Killed on exactly `OpenAI Codex 2026`; `OpenAI Codex v0.145.0` and `OpenAI Codex` still match. Impl-plan audit v47 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)*))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-cx-paren-version-undotted",
+   "_mechanism": "Codex arm, ONE field: allow a PARENTHESISED version with zero dots again, bare form still dotted. Killed on exactly `OpenAI Codex (v2026)` — a probe added at v1.52 because no earlier negative exercised this occurrence on its own; `OpenAI Codex (v0.145.0)` and `  OpenAI Codex (v0.145.0)` still match. Impl-plan audit v47 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
+   "replace": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)*\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-agy-cli-version-undotted",
+   "_mechanism": "Agy arm, ONE field: allow the Antigravity CLI version with zero dots again, the Gemini parenthetical still dotted. Killed on exactly `Antigravity CLI 2026`; `Antigravity CLI v1.2.3` and `Antigravity CLI 1.1.22` still match. Replaces the pre-v52 `tail-re-version-loosened-agy`, which loosened both agy positions together and so could not attribute a kill to either — impl-plan audit v47 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
+  },
+  {
+   "name": "tail-re-agy-paren-version-undotted",
+   "_mechanism": "Agy arm, ONE field: allow the Gemini parenthetical version with zero dots again, the CLI version still dotted. Killed on exactly `Gemini 3.1 Pro (2026)`; `Gemini 3.1 Pro (High)` still matches because the effort alternative is untouched. Impl-plan audit v47 (codex).",
+   "file": "scripts/hmad-dispatch.sh",
+   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
+   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
+   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;"
   },
   {
    "name": "tail-re-prefix-widened",
@@ -1790,16 +1823,8 @@ the distinction matters because only the first is pinned by this document:
    "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│|┃╎┆:>[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;"
   },
   {
-   "name": "tail-re-version-loosened-agy",
-   "_mechanism": "The AGY counterpart of `tail-re-version-loosened`: allow zero dots again in BOTH agy version positions (the CLI version and the parenthetical), everything else preserved. All five agy positives still match — `Antigravity CLI 1.1.22`, `v1.2.3` and `(High)` are unaffected — so the kill comes only from `Antigravity CLI 2026` and `Gemini 3.1 Pro (2026)`. Both positions are loosened together because a mutant that loosened one would be killed by one negative and prove nothing about the other. Impl-plan audit v46 (codex).",
-   "file": "scripts/hmad-dispatch.sh",
-   "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
-   "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
-   "replace": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)*)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)*)\\))?[[:space:]]*$)' ;;"
-  },
-  {
    "name": "tail-re-unanchored",
-   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 35 prose probes then match and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical.",
+   "_mechanism": "Drop the line anchor, restoring the shipped `_agent_pv_re` output as the tail matcher. All 22 CODEX-arm negatives then match (this mutant touches only the codex arm, so the 14 agy negatives are unaffected; measured 2026-09-02) and a plain shell pane that printed release notes or documentation resolves AS THE AGENT -- the wrong-pane class FR-1 / spec AC-1.4 forbids (the wrong-pane rule, NOT FR-2's cardinality rule), reachable because $scoped includes shell panes and tail evidence is historical.",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    codex) printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(openai codex([[:space:]]+(\\(v?[0-9]+(\\.[0-9]+)+\\)|v?[0-9]+(\\.[0-9]+)+))?([[:space:]]+model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*)?[[:space:]]*$|model:[[:space:]]*gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]*$|gpt-[0-9]+(\\.[0-9]+)+[a-z0-9-]*[[:space:]]+(low|medium|high|xhigh)([[:space:]]*·[[:space:]]*[^[:space:]]+)?[[:space:]]*$)' ;;",
@@ -1807,7 +1832,7 @@ the distinction matters because only the first is pinned by this document:
   },
   {
    "name": "tail-re-unanchored-agy",
-   "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). All 10 agy prose probes then match.",
+   "_mechanism": "Restore the shared `_agent_pv_re` output on the AGY arm only, leaving codex intact so the agy guard is isolated. No mutation had ever touched it, so half the classifier was unobserved (audit v32). All all 14 AGY-arm negatives then match (measured 2026-09-02; the codex negatives are unaffected).",
    "file": "scripts/hmad-dispatch.sh",
    "test": "tests/test_hmad_dispatch.py::test_tail_matcher_corpus_decides_prose_vs_banner",
    "find": "    agy)   printf '%s\\n' '^[[:space:]]*([│┃╎┆[:space:]]{0,6}[[:space:]]*)?(antigravity cli([[:space:]]+v?[0-9]+(\\.[0-9]+)+)?[[:space:]]*$|gemini [0-9]+(\\.[0-9]+)*([[:space:]]+(pro|flash|ultra))?([[:space:]]*\\((low|medium|high|xhigh|v?[0-9]+(\\.[0-9]+)+)\\))?[[:space:]]*$)' ;;",
@@ -2153,8 +2178,8 @@ false half is recorded so the next reader does not re-derive it.
       hand-edit to a JSON file can also leave it unparseable, which fails the test for a reason
       that has nothing to do with `root`. See AC-2.8.
 **What the proof column is, and is not.** It names the mutation(s) that make a GREEN-AT-RED node
-discriminating — 13 rows. It is NOT an index of the 43 mutations (re-derived from the embedded JSON, not carried — it read
-38, 39, 41, then 43 as v1.45, v1.49 and v1.50 each added revert-mutants for a grammar tightening): a `RED: FAIL` node needs no
+discriminating — 13 rows. It is NOT an index of the 46 mutations (re-derived from the embedded JSON, not carried — it read
+38, 39, 41, 43, then 46 as v1.45/v1.49/v1.50 added revert-mutants and v1.52 split two of them): a `RED: FAIL` node needs no
 proof (it already fails without the feature) and carries `—`, and every mutation is pinned by its
 own `test` field regardless. Impl-plan audit v42 read the column as an index and filed the 16
 uncited mutations as an omission; that part does not hold. What DID hold is narrower and is fixed:
@@ -2378,3 +2403,4 @@ in the one table that is supposed to account for them.
 - v1.49: Impl-plan audit v45 (codex) — must=1, real. The normative grammar accepted two shapes the paired design excludes; executing the block matched '> OpenAI Codex', ': OpenAI Codex', '| model: gpt-5.6-terra', 'gpt-5.6-terra high ·' and the agy mirrors. The prefix class admitted ASCII pipe, colon and > — a v29 revision called them 'quote' characters and this document's comment said so, while the design said whitespace or box-drawing ONLY; the surfaces disagreed and the block followed the looser one, so a shell that printed a README blockquote naming the agent was identity evidence (FR-1 wrong-pane class). And 'a · and a cwd' was enforced as [^[:space:]]*, so a bare separator matched. Both closed; six shapes decline, 12/12 positives still match. The boundaries live in five mutation strings as well as the block and four encode the box-drawing characters as JSON escapes, so a text replace found 4 of 9 — done in DECODED space per entry, then all anchors resolved against blocks-or-live: 41/41. Corpus 29 -> 35, swept by value across four documents; _agent_pv_re re-MEASURED (35/35), then-24 comparisons kept, the unrelated 29/11 node aggregate left alone. Two revert-mutants anchored on the whole codex arm line, proven discriminating: prefix-widened -> exactly 3 wrong negatives / 0 wrong positives, cwd-optional -> exactly 1. 39 -> 41 mutations, 41/41 mechanisms; version-loosened still reverts to the pre-v42 form. Re-verified: 35/35 + 12/12, WIREPIN PASS, 41/41 anchors, 50 fences.
 - v1.50: Impl-plan audit v46 — agy GATE PASS must=0 should=0 nit=0 (its third clean: v38, v44, v46), codex must=1 should=2, both on v1.49; the SEVENTH time codex has broken an agy clean. All three findings are consequences of my v45/v49 edits. MUST: the revert-mutants I added were scoped to 'the codex arm alone' — prefix-widened and version-loosened — while the agy arm encodes the SAME boundaries independently and the corpus carries agy negatives for them ('> Antigravity CLI 1.1.22', '| Gemini 3.1 Pro', 'Antigravity CLI 2026', 'Gemini 3.1 Pro (2026)'); no mutant could attribute a kill to those, since tail-re-unanchored-agy replaces the whole arm. Added tail-re-prefix-widened-agy and tail-re-version-loosened-agy, positive-preserving, anchored on the whole agy arm, pinned to AC-2.12; proven discriminating — each kills on exactly its two agy negatives and 0 positives. The version mutant loosens BOTH agy version positions together, because loosening one would be killed by one negative and prove nothing about the other. 41 -> 43 mutations, 43/43 anchors resolve, 43/43 mechanisms. The design paragraph that named only the codex pair now states the per-arm rule. SHOULD 1: AC-6.12…AC-6.20 said 'nine mutations for nine AC numbers' while enumerating eleven (nine proofs + two SIGPIPE) — the numbers are identifiers, not a tally, and the AC now says so. SHOULD 2: provenance cited design v1.36 / spec v1.18, actual v1.37 / v1.19. Re-verified: corpus 35/35 + 12/12, WIREPIN PASS tasks=6 wiring=2.
 - v1.51: Impl-plan audit v47 (agy) — must=2 should=0, and agy's own v46 clean broke one cycle later for the THIRD time (v38->39, v44->45, v46->47). One real, one not reproduced. MUST (real): T6's class-2 list — mutations anchoring into LIVE files rather than prescribed blocks — said 'exactly three' and omitted skill-md-frontmatter-renamed. Its anchor 'name: h-mad' does appear in this plan, but only inside a TEST ASSERTION in AC-5.3's block, which is why the blocks-or-live check I ran at v1.48 counted it as class 1; an assertion is not a prescribed edit, and the live SKILL.md frontmatter is what the mutation rewrites. Re-derived by classifying each anchor's python block as prescribed helper vs test: three others (stub-read-env-not-array, stub-read-dir-writes-one-file, harness-ambient-timeout-not-scrubbed) sit in T1's prescribed _orca_read_env / _isolated_env helpers and are class 1; only the frontmatter one is class 2. Now 'exactly four', with the reason the naive check misclassifies it. NOT REPRODUCED: 'Task 1 states its insertion point is IMMEDIATELY AFTER _hostile_comment (before [ "$1" = "worktree" ])' — that text does not exist in this plan. T1's actual landmark is 'after the terminal create branch and before the default --json success envelope', verified against the live stub: terminal create at :103, the default envelope at :112. Re-verified: corpus 35/35 + 12/12, WIREPIN PASS.
+- v1.52: Impl-plan audit v47 (codex) — must=2 should=1 nit=1, all four traceable to my v49/v50 edits. MUST 1 (fair): the two version revert-mutants changed several independently-encoded guards at once — tail-re-version-loosened unpaired the codex parens AND loosened both dot rules, tail-re-version-loosened-agy loosened both agy positions — so a corpus kill proved only that at least one guard bit, against the plan's own one-control-per-mutation rule. Split into FIVE single-field mutants on the shared arm anchors (cx-parens-unpaired, cx-bare-version-undotted, cx-paren-version-undotted, agy-cli-version-undotted, agy-paren-version-undotted), each measured to kill on exactly its own negative(s) with 0 wrong positives. The codex parenthesised-version field had no negative exercising it alone, so 'OpenAI Codex (v2026)' was added: corpus 35 -> 36, swept across four documents, _agent_pv_re re-measured 36/36. 43 -> 46 mutations, 46/46 anchors, 46/46 mechanisms. MUST 2: the unanchored mechanisms carried false counts — codex claimed all 35 negatives although it touches only the codex arm; agy said 10 from a corpus that has grown since. Measured by applying each: codex 22/22 of its arm's negatives, agy 14/14, 0 cross-arm, 0 positives. SHOULD: provenance design v1.37 -> v1.38. NIT: the design's case-fold paragraph said 'all three wire mutations'; there are four (wanted/rival × disconnect/force). The design's per-arm paragraph now names the five single-field mutants. Re-verified: corpus 36/36 + 12/12, WIREPIN PASS tasks=6 wiring=2.
