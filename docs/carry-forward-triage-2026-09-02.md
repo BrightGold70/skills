@@ -33,6 +33,15 @@ Read-only pass. No repo file was created, edited, or committed.
 
 Of the 9 STILL-OPEN, **4 are decisions an operator can settle in minutes** (brief 2's `#68` and `#86`, brief 3's issue filing, brief 7's summary tables) and **5 are work sessions**.
 
+> **Correction 2026-09-02.** Two of those four were not open. `#68` and `#86` were adjudicated and
+> closed on **2026-08-03** in `docs/skill-monitoring.md:971-995`; this ledger carried them as
+> STILL-OPEN on the strength of an evidence line that does not survive re-running — see rows 3 and
+> 4 of brief 2. So the totals read **7 still-open, 12 fully-absorbed, 4 owe**, and of the remaining
+> decisions only the gate-blindness issue filing is real. **Re-run a cited grep before trusting the
+> verdict it produced**, including this ledger's: five CLOSED verdicts were spot-checked when this
+> was written and all five held, which is exactly why the two that did not went unnoticed —
+> spot-checking the closures cannot find a false OPEN.
+
 The 17th brief carries 5 open items that are **not this lane's to work** — the `BrightGold70/audit-report-docs-copy` lane is committing right now (its tip moved `5b6c7b6` → `b551ca0` inside a minute). Its items are reported below and excluded from the still-open count.
 
 ---
@@ -65,12 +74,15 @@ The 17th brief carries 5 open items that are **not this lane's to work** — the
 |---|---|---|---|
 | 1 | `#67` TDD gate resolves state file at repo root, no-ops in sub-project layouts | CLOSED | `dde1c7a` "TDD gate finds its state file in sub-project layouts (#67) (#28)"; `_resolve_state_file` at `h-mad/hooks/h-mad-tdd-gate.sh:80` |
 | 2 | `#66` item 2: `phase_counter_behind` false-fires on a live mid-Phase-5 record | CLOSED | `5c8428d` "phase_counter_behind no longer fires mid-phase (#66 item 2) (#29)"; `mid_phase` suppression at `h-mad/scripts/h_mad_state_staleness.py:99-101` |
-| 3 | `#68` decide: amend the shipped spec with the size-ceiling finding, or close as covered | **STILL-OPEN** | `grep -c '92,055\|size ceiling\|size_status\|ARG_MAX' docs/01-plan/features/tdd-dispatch-verification-discipline.spec.md` → **0**; `git log --all --grep` and `grep -rn '#68'` over `docs/learnings.md`, `docs/skill-candidates.md`, `docs/skill-monitoring.md` find no decision |
-| 4 | `#86` close as a duplicate of `#67`/`#66`/`#68` | **STILL-OPEN** | `grep -rn '#86' docs/` hits only this brief; `#NN` were HemaSuite TodoList numbers, and that list is gone (see brief 15's finding). No closure record anywhere |
+| 3 | `#68` decide: amend the shipped spec with the size-ceiling finding, or close as covered | ~~STILL-OPEN~~ **CLOSED 2026-08-03** — corrected 2026-09-02 | `docs/skill-monitoring.md:971` "**Adjudication 2026-08-03 — `#68` and `#86` closed, from the HemaSuite handover**"; :973 closes `#68` as covered elsewhere, spec deliberately NOT amended (verification discipline vs transport capacity are orthogonal axes; the finding is recorded in `docs/learnings.md` ×2, its own handoff ×5, and the `size_status` contract). **The evidence line this row used to carry was false**: re-running its own `grep -rn '#68' docs/learnings.md docs/skill-candidates.md docs/skill-monitoring.md` returns 3 hits, the FIRST of which is the adjudication headline. The `grep -c` half was correct and irrelevant — the spec has no size string precisely because the adjudication decided not to add one |
+| 4 | `#86` close as a duplicate of `#67`/`#66`/`#68` | ~~STILL-OPEN~~ **CLOSED 2026-08-03** — corrected 2026-09-02 | `docs/skill-monitoring.md:993` "`#86` — closed as a duplicate of `#67`/`#66`/`#68`. It was a rollup adding only two verification notes, both discharged by the inbound handover brief before any work started." Same false-negative as row 3: `grep -rn '#86' docs/` does hit `skill-monitoring.md`, not only this brief |
 | 5 | `#40` re-scope, or close skills `#38` (pane-path guard unreachable from `exec` default) | CLOSED | `docs/skill-monitoring.md:1005` "Adjudication 2026-08-03 — `#40` re-scoped; `#38`'s guard kept, on better evidence than the one proposed" |
 | 6 | (OI) No claim to release | CLOSED | state file has no owner for any of these |
 
-**verdict:** OWES — `#68` (spec amendment or documented close), `#86` (close as duplicate).
+**verdict:** ~~OWES~~ **FULLY-ABSORBED** (corrected 2026-09-02). Both items were adjudicated and
+closed on 2026-08-03 in `docs/skill-monitoring.md:971-995`, a month before this triage carried them
+as open. Neither needed an operator. See rows 3 and 4 for the false evidence line that produced the
+wrong verdict.
 
 ---
 
@@ -382,10 +394,10 @@ Who may name each brief, from its own `Taken-Over-By` value:
 **The 9 still-open items this branch owes** — re-emit every one in the next WRITE's Open / Blocked
 Items. Four are operator decisions; five are work sessions.
 
-1. `#68` — decide whether to amend the shipped `tdd-dispatch-verification-discipline` spec with the
-   prompt-size-ceiling finding, or close it as covered. No decision recorded anywhere. *Decision.*
-2. `#86` — close as a duplicate of `#67`/`#66`/`#68`. The `#NN` numbers were HemaSuite TodoList ids
-   and that list is gone, so this needs a judgement call, not a lookup. *Decision.*
+1. ~~`#68`~~ — **NOT OPEN.** Closed 2026-08-03, `docs/skill-monitoring.md:973`: covered elsewhere,
+   spec deliberately not amended. Corrected 2026-09-02.
+2. ~~`#86`~~ — **NOT OPEN.** Closed 2026-08-03, `docs/skill-monitoring.md:993`, as a duplicate.
+   Corrected 2026-09-02.
 3. gate-blindness — never filed as a GitHub issue; absolute paths need sanitising first. Explicitly
    deferred to the operator by the brief; the code fix itself shipped. *Decision.*
 4. Cross-repo sweep of `~/.claude/handoffs/INDEX.md` to see whether the handoff-drop mechanism hit
