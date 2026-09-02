@@ -563,10 +563,10 @@ _orca_find() {
   #      candidate whose preview carries the other agent's banner is rejected,
   #      which closes (a)'s single-leaf hole: the Codex pane in the "agy - worker"
   #      tab is printing "gpt-5.6-terra high", so it cannot be agy.
-  local rival_re=""
+  local rival_re="" rival=""
   case "$token" in
-    codex) rival_re="$(_agent_pv_re agy)" ;;
-    agy)   rival_re="$(_agent_pv_re codex)" ;;
+    codex) rival_re="$(_agent_pv_re agy)";   rival=agy   ;;
+    agy)   rival_re="$(_agent_pv_re codex)"; rival=codex ;;
   esac
   ids=""
   if [ "$token" != "codex" ]; then
@@ -645,10 +645,27 @@ _orca_find() {
   # T3 contains only the two CALL SITES, so each wire connects to a callee that
   # already exists and whose own tests stay green when the connection is removed.
   tail_re="$(_agent_tail_re "$token")"
+  rival_tail_re=""
+  if [ -n "$rival" ]; then
+    rival_tail_re="$(_agent_tail_re "$rival")"
+  fi
   while IFS= read -r th; do
     [ -n "$th" ] || continue
     if tout="$(_orca_tail_sig "$th")"; then
       grep -Eiq "$tail_re" <<<"$tout" || continue
+      # Reject BEFORE counting: a pane demonstrably running the other agent is
+      # neither a match nor a source of ambiguity. This is the predicate Pass 2
+      # applies, extended to the tail -- but built from _agent_tail_re, NOT from
+      # the shared $rival_re computed above Pass 1: that one is `_agent_pv_re`,
+      # which matches prose (36/36 measured), and this input is arbitrary retained
+      # scrollback. Same grammar as the wanted check, or a real agent pane is
+      # suppressed for merely MENTIONING the other agent -- a false negative in
+      # the feature's own goal. Audit v28. HOISTED above the loop beside `tail_re`
+      # (audit v36, agy): `$rival` is constant across candidates, so computing it
+      # per matched candidate spawns one subshell each for the same value.
+      if [ -n "$rival_tail_re" ] && grep -Eiq "$rival_tail_re" <<<"$tout"; then
+        continue
+      fi
       tail_ids="${tail_ids}${th}
 "
     fi
