@@ -18,9 +18,9 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
 - `h-mad/scripts/h_mad_audit_cycle.py` — `_collected_path()` / `collect()` gain an optional
   `surface`; `_copy_collected_report` stops clobbering differing content.
 - New `h-mad/scripts/h_mad_collect_report.py` — CLI over `collect()`; `COLLECT:` contract.
-- `h-mad/scripts/h_mad_audit_gate.py` — refuses the transport stem
-  `audit_<…>_cycle<N>[_<tok>].report.md` by basename (NOT bare `*.report.md`: Phase-7 reports
-  are `<feature>.report.md`).
+- `h-mad/scripts/h_mad_audit_gate.py` — defines `TRANSPORT_RE = ^audit_.*\.report\.md$`
+  (the one transport grammar) and refuses a basename matching it (NOT bare `*.report.md`:
+  Phase-7 reports are `<feature>.report.md`).
 - `h-mad/scripts/hmad-dispatch.sh` — `collect-report` verb delegating to the script.
 - `h-mad/SKILL.md`, `h-mad/references/orchestration-mode.md` — codex-leg recipe, registry
   entry, verb table row, one sentence in step 9.
@@ -42,13 +42,15 @@ recipe half (the consumer-side guard already landed in HemaSuite `d1e73d53`).
 - FR-2: `h_mad_collect_report.py` with `COLLECT: OK|MISSING|CONFLICT path= delivered=`,
   exit 0 on any verdict / 2 on operational error; `--force` to overwrite a differing docs
   copy; internal contract `CollectConflict` + optional `PassSpec.out_path`.
-- FR-3: gate refuses the transport stem with exactly `GATE: INVALID must=0 should=0`, exit 2;
-  `<feature>.report.md` (Phase 7) still scores.
+- FR-3: gate refuses `TRANSPORT_RE` (`audit_` prefix + `.report.md` suffix, single-sourced)
+  with exactly `GATE: INVALID must=0 should=0`, exit 2; `<feature>.report.md` (Phase 7) still
+  scores; verdict preserved for every existing audit doc (AC-3.7, Backward compatibility).
 - FR-4: `hmad-dispatch collect-report` wrapper verb.
 - FR-5: SKILL.md codex-leg recipe + helper-registry entry + step-9 sentence.
-- FR-6: tests for every AC including the incident replay (AC-2.9) and operational errors
-  (AC-2.10); mutation spec with 11 named-test mutations pairing every new connection in both
-  directions; a wrapper wiring test for the verb (AC-4.1); suite green.
+- FR-6: tests for every AC including the incident replay (AC-2.9), operational errors
+  (AC-2.10) and readback (AC-2.12); mutation spec with 15 named-test mutations — every new
+  connection dropped AND forced on its fall-through path; wrapper wiring test for the verb in
+  both directions (AC-4.1, AC-4.3); suite green.
 
 ## Implementation Strategy
 Layers that change: the audit-cycle collector (python), the gate (python), the dispatch
@@ -68,13 +70,25 @@ the live HemaSuite corpus before any later task starts.
 - **One copier.** `audit-cycle` already calls `collect()`; the CLI calls the same function.
   Two copiers would drift on the fallback ladder (report-file → `--out` → none) and on the
   clobber rule.
-- **The transport-file grammar is a name, not a directory — and it is the STEM, not the
-  suffix.** Step 6.6 and `audit-cycle` stage `audit_<feature>_<phase>_cycle<N>[_<tok>].report.md`;
-  the gate refuses exactly that shape wherever it sits. A bare `*.report.md` rule was the
-  cycle-1 plan and was wrong: this repository holds Phase-7 reports named
-  `<feature>.report.md` (`docs/04-report/features/*.report.md`, `docs/archive/*/*/*.report.md`),
-  which a suffix rule would have refused. Deliberately not `startswith("/tmp")` either —
-  pytest's `tmp_path` lives under `/tmp` on Linux.
+- **The transport-file grammar is a name, not a directory — prefix `audit_` plus suffix
+  `.report.md`, defined once.** The cycle-1 rule (bare `*.report.md`) was wrong because Phase-7
+  reports are `<feature>.report.md`; the cycle-2 rule (a `_cycle<N>[_tok]` stem) was wrong
+  because the field hand-stages transport files without `_cycle<N>` and a surface token may
+  carry `_`. Both were found by executing the candidate regex over the real `/tmp` and
+  `docs/` listings (Assumption table). `TRANSPORT_RE` lives in `h_mad_audit_gate.py`; the CLI
+  and the tests import it, and one two-direction corpus fixture is asserted against it and
+  against `_VERSION_RE` so the two grammars cannot drift apart silently. Deliberately not
+  `startswith("/tmp")` — pytest's `tmp_path` lives under `/tmp` on Linux.
+- **Backward compatibility is measured, not argued.** The invariant preserves the PASS of
+  every audit DOC. A transport path is not an audit doc — no recipe, test or doc ever gated
+  one (grep: 0) — and its bytes keep their verdict at the docs path. AC-3.7 runs
+  `is_transport_path()` over every `*.audit.v*.md` in this repo's `docs/` (live + archive)
+  and requires False, so the change is provably verdict-neutral for the existing corpus.
+  The refusal itself is an operator decision (2026-09-02: "refuse, not warn").
+- **Conflict policy and readback cover both delivery rungs.** `_copy_collected_report`
+  (report-file) and `_write_collected_report` (`--out` extract) both take `overwrite` and
+  both re-read what they wrote; the docs-path marker removal re-checks `exists()`. A
+  readback that disagrees is an operational failure (exit 2, no `COLLECT:` line).
 - **A non-`OK` collect never reaches the gate.** `MISSING` and `CONFLICT` exit 0 (verdicts),
   so the recipe must read the token: anything but `OK` halts `<phase>:report_not_collected`
   and the gate is not invoked — otherwise a `CONFLICT` (preserved, DIFFERENT docs bytes)
@@ -100,11 +114,14 @@ the live HemaSuite corpus before any later task starts.
 | The codex leg has no recipe step | `grep -c 'exec codex.*audit\|\.codex\.md' h-mad/SKILL.md h-mad/references/*.md` → 0; recipe found only in two memory files |
 | `exec` has no `--report-file` | `_cmd_exec` option loop (`hmad-dispatch.sh:2493-2499`): `--cd --model --out --log --timeout --sandbox --effort` only |
 | Nothing gates a transport file today | `grep -rn 'audit_gate.*report\.md' h-mad/tests h-mad/SKILL.md h-mad/references` → 0; `audit_cycle.gate()` is only called on `collected_path` |
-| `*.report.md` is NOT transport-only | `ls docs/04-report/features/*.report.md` → Phase-7 reports (e.g. `gate-blindness-hardening.report.md`); `docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.report.md` — a suffix rule would refuse them, hence the stem rule |
-| Transport stem is fixed | SKILL.md 6.6: `/tmp/audit_<feature>_<phase>_cycle<N>.report.md`; `hmad-dispatch.sh:2735` stem `/tmp/audit_${feature}_${phase}_cycle${cycle}` + `_p${i}.report.md`; codex leg `_codex.report.md` (21 files, HemaSuite) |
+| `*.report.md` is NOT transport-only | `ls docs/04-report/features/*.report.md` → 7 Phase-7 reports (e.g. `gate-blindness-hardening.report.md`); `docs/archive/2026-08/audit-cycle-verb/audit-cycle-verb.report.md` — a suffix rule would refuse them, hence prefix+suffix |
 | Re-dispatching a cycle overwrites its collected file | `_copy_collected_report`: `unlink(missing_ok=True)` then write; the low-evidence remedy is "re-dispatch that pass" at the SAME cycle number |
 | `_gate_token` requires the exact INVALID shape | `GATE_RE = ^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$`; gate prints `GATE: INVALID must=0 should=0` |
-| Surface grammar is one dot-free token, `p<i>` never co-occurs | `h_mad_cycle_counts.py:24-41` comment + `_VERSION_RE` |
+| Surface grammar is one dot-free token, `p<i>` never co-occurs; `_` is legal in a surface | executed `_VERSION_RE.search` (2026-09-02): `f.plan.audit.v8.p1.md`→True, `….v8.codex.md`→True, `….v8.codex_draft.md`→**True**, `….v8.codex.draft.md`→False, `f.report.md`→False, `audit_f_plan_cycle8_codex.report.md`→False |
+| Transport names in the field always carry `audit_` + `.report.md`, NOT always `_cycle<N>` | `ls /tmp \| grep -E '^audit_.*\.report\.md$'` (2026-09-02): 144 `_p1`, 129 `_p2`, 36 `_codex`, 14 `_agy`, 1 `_agy_p2`, and 7 hand-staged `audit_hnag_c28_agy.report.md` / `audit_hnag_implplan_c11.report.md` …; executed candidate regexes: the `_cycle<N>` stem matched 0 of those 7 and missed `_codex_draft`; `^audit_.*\.report\.md$` matched all |
+| No docs artifact starts with `audit_` | `find docs -name 'audit_*'` → 0 (this repo); same under HemaSuite `docs/` → 0; all 7 `docs/04-report/features/*.report.md` basenames match `^[a-z0-9-]+\.report\.md$` |
+| The `--out` rung also clobbers | `grep -n unlink h_mad_audit_cycle.py` → lines 92 (`_copy_collected_report`) AND 169 (`_write_collected_report`) |
+| Unknown verb is a fall-through, not an exec | `hmad-dispatch collect-reportx` → `hmad-dispatch: unknown verb 'collect-reportx'` |
 | Transport and docs copies are byte-identical in the field | 21/21 overlapping `nlm-cli-version-pin` codex cycles `cmp -s` equal |
 | `/tmp` decays | 31 codex reports at handover (2026-09-02 morning) → 21 the same day |
 
@@ -114,12 +131,13 @@ the live HemaSuite corpus before any later task starts.
 | `_collected_path(surface=None)` + `collect(surface=None)` | module change | FR-1 |
 | `_copy_collected_report` conflict-safe | module change | FR-2 (AC-2.5) |
 | `h_mad_collect_report.py` | CLI | FR-2 |
-| gate transport-stem refusal (`_is_transport_path`) | module change | FR-3 |
+| `TRANSPORT_RE` + `is_transport_path()` + refusal in the gate | module change | FR-3 |
 | `hmad-dispatch collect-report` | CLI verb | FR-4 |
 | SKILL.md codex-leg block, registry entry, step-9 sentence; orchestration-mode verb row | docs | FR-5 |
 | `tests/test_h_mad_collect_report.py` (incl. incident replay AC-2.9, operational errors AC-2.10), gate tests (AC-3.1–3.6), docs tests (AC-5.1–5.4) | tests | FR-6 |
 | wrapper wiring test: `collect-report` verb → script (severed route fails) | test | FR-4, FR-6 |
-| `tests/mutation-specs/collect_report.json` — 11 mutations, drop/force pairs per connection | mutation spec | FR-6 |
+| `tests/mutation-specs/collect_report.json` — 15 mutations, drop/force pairs per connection incl. fall-through paths | mutation spec | FR-6 |
+| two-direction name corpus fixture asserted against `TRANSPORT_RE` and `_VERSION_RE`; verdict-preservation sweep over `docs/**/*.audit.v*.md` | tests | FR-3 (AC-3.5a, 3.7) |
 
 ## Risks and Mitigation
 | Risk | Impact | Mitigation |
@@ -127,8 +145,8 @@ the live HemaSuite corpus before any later task starts.
 | This run's own codex audits lose their docs copy (old recipe live) | the defect recurs inside the feature fixing it | hand-collect + `cmp -s` before reading any codex GATE line, every cycle; after task 2, use the worktree CLI |
 | `_collected_path` signature change breaks a caller | suite red | keyword-only `surface=None`; grep every caller (`audit_cycle.py` only) |
 | `test_h_mad_audit_cycle_docs.py` slices SKILL.md by exact anchors | docs test red | insert outside `## Audit prompt assembly`→`## Putting …` and `6.6.`→`\n7.`; run that test after each edit |
-| Mutation-spec tests refuse a spec without named failure tests | test red | write the spec and the tests in one task; run `--check-anchors` |
-| Stem refusal drifts from the staged name (a future stem change silently un-guards) | transport files score again | the refusal regex and the 6.6/`audit-cycle` stem are pinned by one docs test that greps SKILL.md 6.6 and the wrapper for the stem; AC-3.5/3.6 pin both directions |
+| Mutation-spec tests refuse a spec without named failure tests | test red | each task's RED names the tests its mutations will cite; task 6 assembles the spec from them and runs `--check-anchors` |
+| Transport grammar drifts from what gets staged (a future naming change silently un-guards) | transport files score again | one grammar (`TRANSPORT_RE`), one corpus fixture in both directions, the wrapper's staged `--report-file` asserted against it under the stub harness, the 6.6 literal asserted too (AC-3.5a) |
 | `CONFLICT` followed by a hand-run gate scores stale bytes | wrong verdict on a preserved old report | recipe halt on non-`OK` (AC-5.3 docs test); `--force` is the only overwrite path |
 | `--out` extract is not byte-identical to any `/tmp` file | a byte-identity test would fail | assert identity only for `delivered=report-file`; token carries `delivered=` |
 | bkit heredoc-in-substitution hook denies the commit idiom | commit refused | `git commit -F <file>` |
@@ -143,9 +161,9 @@ the live HemaSuite corpus before any later task starts.
   (pre-push hook sweeps them).
 
 ## Success Criteria
-- All 32 ACs in the spec pass automated tests (AC-2.9 is a recorded tracer).
-- `MUTATION: ALL_CAUGHT` on `collect_report.json` (11 mutations, every connection dropped
-  AND forced).
+- All 39 unique ACs in the spec pass automated tests (AC-2.9's hand replay is recorded, its suite half asserted).
+- `MUTATION: ALL_CAUGHT` on `collect_report.json` (15 mutations, every connection dropped
+  AND forced, fall-through paths included).
 - Incident replay (AC-2.9) passes in the suite and once by hand against a real `/tmp`
   survivor in a scratch root, transcript in Version History.
 - `h-mad/tests` suite green from this worktree; `audit-cycle` output byte-identical on the
@@ -166,3 +184,4 @@ assemble/exec/hand-collect) until `must=0 should=0` on the union → Phase 4 des
 ## Version History
 - v1.0: Initial plan draft.
 - v1.1: Audit v1 fixes from audit-report-docs-copy.plan.audit.v1.p1.md (agy) + .v1.codex.md — verb wiring test in Deliverables; transport refusal is the audit_*_cycle<N> STEM, not *.report.md (Phase-7 reports share the suffix — corpus claim corrected); recipe halts on non-OK COLLECT; 11 bidirectional mutations; incident-replay tracer; collector contract (CollectConflict, optional out_path, --force).
+- v1.2: Audit v2 fixes from audit-report-docs-copy.plan.audit.v2.codex.md (agy v2 clean) — transport grammar single-sourced as TRANSPORT_RE (prefix+suffix; hand-staged field names have no _cycle<N>, surfaces may carry _); conflict policy + readback on both rungs; force mutants for CLI/verb fall-through; two-direction corpus + verdict-preservation sweep for Backward compatibility; Assumption rows now cite executed probe output; AC census by command.
