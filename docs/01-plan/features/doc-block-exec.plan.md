@@ -40,7 +40,7 @@ Left unstated, an implementation can satisfy "one verdict line" while dropping t
 print the streams inline and break every consumer that parses the verdict line.
 
 **The CLI contract, in full.** `h_mad_doc_block_exec.py <doc> --heading <h> [--index N]
-[--subst K=V]... [--preamble-file <path>] [--shell-timeout SECONDS] [--stdout PATH]
+[--subst K=V]... [--preamble-file PATH] [--shell-timeout SECONDS] [--stdout PATH]
 [--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
 parser-rejection test. `--subst` values are split once on the first `=` (a value may contain `=`;
 `K=` is an empty value); no `=`, an empty key, or a repeated key is `BAD_SUBST arg=<raw>` (exit 0,
@@ -56,7 +56,7 @@ value) and is the documented single non-`DOCBLOCK` exit. `--preamble-file` is th
 2, block not run — for a path that cannot be read **and** for a file that is not valid UTF-8,
 since the preamble is read strictly and text that will execute is never silently repaired (tests:
 `test_cli_unreadable_preamble_refuses_before_running` and
-`test_cli_invalid_utf8_preamble_refuses_before_running`, each with a block whose side effect the
+`test_invalid_utf8_preamble_is_unreadable` — the node ID the design's `preamble-decode-error-unwrapped` mutation binds, one name on every surface — each with a block whose side effect the
 test asserts is absent; the document gets the same treatment under `doc_unreadable`). The preamble and the block are composed as
 `preamble.rstrip("\n") + "\n" + text′`, with `text′` the block text *after* substitution, so the
 preamble precedes what actually runs — one newline boundary, always — so a preamble file
@@ -257,7 +257,7 @@ planned against):
 | symbol | signature | returns / raises |
 |---|---|---|
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` — `doc` is always a **path** (`str` accepted and converted with `Path`), read strictly as UTF-8; document *text* is never accepted, so `DocUnreadable` is deterministic for every caller | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
-| `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
+| `select` | `(blocks: Sequence[Block], index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
 | `extract` body normalisation | *(rule on `extract`, not a function)* | a selected fence's body is de-indented by **up to the opener's indentation** per line, as CommonMark specifies — an opener indented 1–3 spaces yields body text with those leading spaces removed and no more; recognising the fence correctly but returning un-normalised text is the gap this row closes. Test `test_indented_fence_body_is_deindented` (exact-text fixture at 1, 2 and 3 spaces, and a body line indented *less* than the opener, which is left as is); mutation `body-indent-not-stripped` |
@@ -696,3 +696,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.40: Plan re-audit v25 (codex must 1 should 1; agy nit) + design audit v29 (codex must 1; agy must 3): the mutation count is re-derived from the design's matrix (43 = 41 + 2); the FR-6 table names all seven floor-tuple node IDs; Next Steps state the dual-surface same-commit gate; AC anchor at spec v1.34.
 - v1.41: Plan re-audit v26 (codex must 1; agy clean) + design audit v30 back-propagation: fence_aware_end establishes fence state over the prefix; 48 mutations (46 + 2) after the four main/I-O rows and the prefix row.
 - v1.42: Plan re-audit v28 (codex must 1 should 2; agy should 1): the timeout risk row requires poll() before killpg; _final_write closes in a finally; the AC count line records its re-derivation (49 at spec v1.35) and no longer stales on a count-preserving spec bump.
+- v1.43: Plan re-audit v29 (both surfaces clean) + design audit v33 (agy must 1 + nits): the invalid-UTF-8 preamble test carries the matrix's node ID on every surface; select's Sequence[Block] hint; PATH placeholder.

@@ -29,11 +29,11 @@ not opted in.
     that policy — because a single function typed to return one block while also handling 0 and
     many is the contradiction the design audit surfaced.
   - AC-1.2: Given a section containing only untagged ` ```bash ` fences, extraction yields zero
-    blocks and the CLI prints `DOCBLOCK: NOT_FOUND` and exits 0 — a refusal is a verdict (FR-4).
+    blocks and the CLI prints `DOCBLOCK: NOT_FOUND heading=<h>` and exits 0 — a refusal is a verdict (FR-4).
   - AC-1.3: Given a section with two tagged blocks and no ordinal supplied, the CLI prints
-    `DOCBLOCK: AMBIGUOUS blocks=2` and exits 0, executing nothing.
+    `DOCBLOCK: AMBIGUOUS blocks=2 heading=<h>` and exits 0, executing nothing.
   - AC-1.4: With the same document, `--index 2` selects the second tagged block; `--index 3`
-    prints `DOCBLOCK: NOT_FOUND` and exits 0.
+    prints `DOCBLOCK: NOT_FOUND heading=<h>` and exits 0.
   - AC-1.5: The section boundary is the next **ATX** heading (`#`-prefixed) at the same or
     shallower level; a tagged fence under a *later* heading is not returned for the earlier
     heading. **Setext headings (underlined with `===`/`---`) are explicitly out of scope and not
@@ -543,3 +543,4 @@ quoted
 - v1.33: Design audit v28 (codex must 1 should 2; agy must 2 should 1): SUBST_MISSING carries keys=<n> like SUBST_OVERLAP; an empty map is a no-op; duplicated info-string tokens refuse as BAD_INFO.
 - v1.34: Design audit v29 back-propagation: FR-4's exit-0 list names BAD_SUBST.
 - v1.35: Design audit v31 (codex must 2; agy UNVERIFIED, dispatch timeout): AC-2.3 orders missing keys by map insertion; AC-3.12 defines rc as the exit code of the one spawned bash -c.
+- v1.36: Design audit v33 back-propagation (nits): NOT_FOUND and AMBIGUOUS examples carry heading=<h>.

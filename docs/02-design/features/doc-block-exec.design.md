@@ -517,8 +517,9 @@ helper does not, and cannot, attribute a line to one half or the other. On the C
 quoting an inline form would corrupt it; a path that cannot be read raises `PreambleUnreadable`
 in `main`'s pre-check, before the block runs.
 
-`substitute` raises `MissingSubstitution(keys)` or `OverlappingSubstitution(pairs)`; `run_block` raises
-`BlockTimeout(seconds)`, `CleanupFailed(path, cleanup_error)` or `LaunchFailed(stage, err)`.
+`substitute` raises `MissingSubstitution(keys)`, `OverlappingSubstitution(pairs)` or `BadSubstArg("")`;
+`run_block` raises `BadTimeout(value)`, `BlockTimeout(seconds)`, `CleanupFailed(path, cleanup_error)`
+or `LaunchFailed(stage, err, pgid=None)`.
 The CLI converts each to a verdict line — exceptions are the API's contract, tokens are the CLI's.
 
 CLI:
@@ -934,3 +935,4 @@ mean the probe never created one.
 - v1.36: Design audit v30 (codex must 1 should 1; agy must 1 should 1 + nit): read-back compares bytes, never decoded text; fence_aware_end's prefix-state contract with test and mutation; test_docsections.py tracked in Components and Task 1; Task 3 names its exceptions, Task 4 the preamble read; four main/I-O mutation rows (48 rows).
 - v1.37: Design audit v31 (codex must 2): missing keys listed in map insertion order with a multi-key test; RunResult.rc is the spawned invocation's exit code.
 - v1.38: Design audit v32 (both surfaces clean; agy nit): the AC-6.1 cardinality test is named.
+- v1.39: Design audit v33 (codex clean; agy must 1 + nits): the API prose lists BadSubstArg and BadTimeout.
