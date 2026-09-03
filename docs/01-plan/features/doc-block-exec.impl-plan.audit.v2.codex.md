@@ -1,0 +1,14 @@
+## Summary
+The plan is unusually specific, but four core acceptance paths remain internally inconsistent or under-specified. In particular, its CLI fault-injection method, verdict-table model, scanner safety boundary, and suite-floor arithmetic need correction before implementation can be trusted.
+
+## Must-fix
+- Task 4 requires every CLI test to invoke the script in a fresh `subprocess.run`, yet several of those same CLI tests require `monkeypatch` of in-process module seams (`_final_write`, `_close_stream`, `tempfile.mkdtemp`, and `os.chmod`) — pytest monkeypatches do not cross an exec boundary, so these tests cannot both exercise the real CLI process and induce their stated failures. Specify a concrete, non-production test transport for each injected fault (and retain a subprocess assertion for the resulting exit code), or classify the seam tests as in-process `main()` tests rather than CLI-process tests.
+- `VERDICTS: dict[type[DocBlockError], tuple[str, int]]` cannot meet AC-4.2 as written — one `LaunchFailed` class can have `mkdtemp`, `spawn`, or `reap`, and the UNREADABLE subclasses have distinct `reason=` values, while the AC requires the parametrisation/table set to enumerate each complete `LAUNCH_FAILED stage=` and `UNREADABLE reason=` token. Define the table at the actual emitted-verdict granularity (or change the AC to test a class-level prefix plus explicitly enumerated dynamic variants); otherwise the claimed table-completeness test has no coherent expected set.
+- `extract` specifies fence-aware bounding but not fence-aware matching of the requested heading — it says to locate any exact heading-text line, so a `## <requested heading>` inside a fenced example can become the selected section start and cause a later real tagged block to run. Require the target heading itself to be an ATX heading on a scanner `prose` line, and add a hostile fixture with the requested heading quoted inside a fence followed by a real tagged block.
+- AC-6.4’s suite floor is both unsubstantiated and arithmetically incomplete — the stated `2747` baseline is not accompanied by a collect-only observation (the current specified command reports `2485 tests collected`), and the formula adds only seven existing-file tests even though Task 1 adds four tests to `test_docsections.py` and Task 5 adds six to `test_h_mad_collect_report_docs.py`. Re-measure and cite the baseline, use `baseline + collect(test_h_mad_doc_block_exec.py) + 10`, and assert all ten named pre-existing-file node IDs so loss of any new regression guard fails the floor.
+
+## Should-fix
+None
+
+## Nit
+- The Task 1 `__all__` comment calls its exports “the six public callables/classes,” although the list contains eight such API entries (`Block`, `RunResult`, and six functions); correct the wording to avoid a misleading maintenance count.
