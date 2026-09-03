@@ -895,7 +895,10 @@ inside `heading="…"`, and a `--heading` of `x rc=0` yields `heading="x rc=0"`,
 value, never a bare ` rc=0` token on a refusal line (plan audit v61: AC-4.3 promises no
 cannot-judge line carries `rc=`, and control-character escaping alone left that forgeable).
 Helper-constrained fields — `rc=<n>`, `blocks=<n>`, `count=<n>`, `keys=<n>`, `shell=`,
-`stage=`, `reason=` — are ints or enums the helper produces and stay bare, so the line grammar is
+`stage=`, `reason=` — are ints or enums the helper produces and stay bare; **that list is
+exhaustive**: every other field is quoted, including the helper-produced numbers `seconds=` and
+`pgid:` (`seconds="1.0"`, `pgid: "4242"` — quoting a number never enables a forgery and the
+grammar parses it either way; impl-plan v1.22), so the line grammar is
 `DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")*` and a consumer that splits on the
 quoted-string grammar recovers every field. The rule is what keeps the one-line, one-token-per-field
 contract true for a machine consumer; `_field` is the only place a dynamic value is rendered.
@@ -1351,3 +1354,4 @@ mean the probe never created one.
 - v1.76: Design audit v68 (codex clean; agy must 1 REFUTED — 2485 is the count from h-mad/, the 2747 baseline is from the repository root; pinned in the AC-6.4 row) + impl-plan audit v19 back-propagation: the forge test's leftover case uses a newline-named stdout path the first arm creates, a second-arm ENOTDIR and the os.unlink injection, since a first-arm failure creates nothing.
 - v1.77: Design audit v69 (codex clean; agy must 2 at 42 tool calls — one REFUTED: the named tests and a 'Task 6' exist in no document; one held): main refuses an empty --subst key itself while building the map, with the raw argument, and substitute keeps the API refusal — the same predicate pinned twice (cli-empty-key-delegated added, 76 rows: 74 + 2).
 - v1.78: Design audit v70 (codex must 1) + plan audit v61 back-propagation: dynamic fields are rendered as double-quoted JSON strings (json.dumps, ensure_ascii=False), so a printable value cannot forge a field token either — test_dynamic_field_cannot_forge_a_token, mutation field-quoting-removed (77 rows: 75 + 2); helper-constrained int/enum fields stay bare and the line grammar is stated.
+- v1.79: Impl-plan v1.22 back-propagation: the bare-field list is exhaustive; seconds= and pgid: are quoted like every other non-listed field.
