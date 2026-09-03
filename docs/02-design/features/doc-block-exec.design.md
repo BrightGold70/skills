@@ -161,7 +161,7 @@ fence state of its own. That is what
 makes the two surfaces unable to disagree by construction — a change to marker kind, run length,
 indentation, the closer rule or prefix state lands in one place — and it is where every
 fence-grammar mutation row anchors (`fence-run-length-ignored`, `tilde-fence-not-tracked`,
-`indented-opener-accepted`, `closer-trailing-text-accepted`, `prefix-fence-state-skipped`), so
+`indented-opener-accepted`, `indented-closer-accepted`, `closer-trailing-text-accepted`, `prefix-fence-state-skipped`), so
 each mutant is observed by both consumers' tests. The parity guard is observable at the scanner, not through the two public APIs (which expose
 only tagged candidates and one boundary offset): `test_fence_events_trace_on_every_hostile_fixture`
 runs every hostile fixture (balanced and unbalanced four-backtick, tilde-quoted backtick,
@@ -192,7 +192,10 @@ examples. So:
 - an opener is recognised only when its marker run is preceded by **0–3 spaces** (CommonMark
   §4.5): four or more spaces make the line an indented code block, so a literal
   `    ```bash hmad:exec` is never an opener and never a candidate — the security boundary AC-1.6
-  states, restated for indentation; the same 0–3 rule applies to a closer, and **`extract`
+  states, restated for indentation; the same 0–3 rule applies to a closer — a marker run preceded by
+  four or more spaces inside a fence is body text, never the closer (`test_indented_closer_does_not_close`:
+  a ```` ```` ```` line at four spaces inside a bash fence stays in the body and the fence ends at the
+  next 0–3-space closer; mutation `indented-closer-accepted`) — and **`extract`
   normalises the body**: up to the opener's indentation is stripped from each body line (a line
   indented less than the opener loses only what it has), so the `Block.text` returned is the
   CommonMark content of the fence, not its source bytes — recognising the fence but returning
@@ -411,7 +414,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 55 mutations (55 rows: 53 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 59 mutations (59 rows: 57 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -596,7 +599,15 @@ other is still unreserved. **Creation is detected atomically, not by an `exists(
 reservation is a two-arm loop: try `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` —
 success means this call created the file and records `created=True`; on `FileExistsError` try
 `os.open(path, O_WRONLY | O_APPEND | O_NONBLOCK)` **without `O_CREAT`** — success means a
-pre-existing file (`created=False`); `O_NONBLOCK` is what keeps the open **bounded**: on a FIFO
+pre-existing file (`created=False`). **The whole reservation stage is one mapped region**: the
+two-arm loop, the `fstat` regular-file and alias checks on the descriptors, and the rollback of a
+first reservation when the second fails (close, and unlink only if this call created it) sit inside
+one `try`/`except OSError` mapped to `StreamPathUnwritable`, so no `OSError` from any of those calls
+can escape as a traceback. `test_stream_path_under_a_regular_file_refuses` gives `--stdout` a path
+whose parent is a regular file (`ENOTDIR` on both arms — a real fault, no injection, no permission
+dependence) and asserts `UNREADABLE reason=stream_path_unwritable`, exit 2, no traceback, and a
+side-effect block that left nothing; mutation `stream-open-oserror-unwrapped` (the region's `except
+OSError` removed) turns that refusal into a traceback. `O_NONBLOCK` is what keeps the open **bounded**: on a FIFO
 with no reader a blocking open never returns (no `DOCBLOCK:` line, no timeout — the block has not
 even been spawned), whereas with `O_NONBLOCK` it fails at once with `ENXIO` — measured on the
 supported interpreter (plan §Measurements cites the command): `OSError errno=6 (ENXIO) after
@@ -669,10 +680,36 @@ has its test (`test_first_stream_write_failure_skips_the_second`,
 `test_second_stream_write_failure_leaves_the_first_as_written`). **Both writes go
 through one module function, `_final_write(handle, text)`** — the seam the AC-3.8 tests
 fault-inject, since no real mechanism makes a held descriptor fail deterministically on macOS
-(no `/dev/full`). **Every held handle has exactly one closure path**: `main` holds the two
+(no `/dev/full`). **Every held handle has exactly one closure primitive, `_close_stream(handle)`**, called by
+`_final_write`'s `finally` and by `main`'s backstop alike: `main` holds the two
 reservations in a `try`/`finally` that spans the alias check, `run_block` and the final writes,
-and the `finally` closes any handle `_final_write` has not already closed (closing an
-already-closed handle is a no-op). So `TIMEOUT`, `CLEANUP_FAILED`, `LAUNCH_FAILED`, an alias
+and the `finally` closes, through `_close_stream`, any handle `_final_write` has not already closed
+(closing an already-closed handle is a no-op). **The backstop never raises from the `finally`**: each
+close runs under `except OSError`, the first close error is recorded as `close_error` together with
+the stream name, and — exactly as `run_block` selects after its own `try`/`finally` — `main` selects
+the outcome after the block has completed. **Precedence, the same rule as cleanup: an operational
+error outranks a verdict, and the first operational error wins.** If a `close_error` was recorded
+and the pending outcome is a `BlockTimeout` (exit 0) — or there is no pending exception at all —
+`StreamCloseFailed(stream, close_error)` is raised `from` the pending outcome and printed as
+`DOCBLOCK: UNREADABLE reason=stream_close_failed` + `os_error: <text>`, exit 2; if the pending
+outcome is already an exit-2 `DocBlockError` (`CleanupFailed`, `LaunchFailed`, `StreamPathsAlias`,
+`StreamWriteFailed`), that error is raised unchanged and the close error is attached as its
+`__context__`. (On the `RAN` path `_final_write` has closed both handles inside its own mapped
+region, so the backstop is a no-op there.) Two tests, both through the `_close_stream` seam (the
+sixth named injection, Test Strategy): `test_backstop_close_failure_on_timeout_is_mapped` patches
+`_close_stream` to raise `OSError` under `sleep 300` / `timeout=1` with `--stdout` given and asserts
+`UNREADABLE reason=stream_close_failed`, exit 2, the `os_error:` line, no traceback and the cwd gone
+(mutation `backstop-close-unmapped`: the `except OSError` around the backstop removed, so the
+timeout run prints a traceback); `test_backstop_close_failure_does_not_outrank_a_refusal` patches
+the same seam under an aliased `--stdout`/`--stderr` pair and asserts the verdict is still
+`stream_paths_alias`, exit 2, no traceback (mutation `backstop-close-outranks-error`: the
+selection prefers the close error over a pending exit-2 error). **This closes the class, with the
+residual stated:** every OS call `main` makes on its own behalf falls in exactly one of three
+mapped regions — reservation (`os.open`, `fstat`, rollback close/unlink → `stream_path_unwritable`),
+final write (`seek`/`truncate`/`write`/`flush`/`close`/read-back → `stream_write_failed`), and
+backstop close (→ `stream_close_failed`, or chained under the pending exit-2 error); the calls
+`run_block` makes are AC-4.6's (`mkdtemp`/`chmod`/`Popen`/`killpg`/`rmtree`), and nothing else in
+`main` touches the OS. So `TIMEOUT`, `CLEANUP_FAILED`, `LAUNCH_FAILED`, an alias
 refusal, and an exception inside the first `_final_write` all release both descriptors before
 `main` returns — a repeated CLI use in one process cannot leak descriptors and turn a later
 reservation into `stream_path_unwritable`. `test_stream_handles_are_closed_on_every_path` drives
@@ -705,7 +742,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` (+ `pgid: <n>` when `stage=reap`) | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
-| `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
+| `DOCBLOCK: UNREADABLE reason=<r>` (+ `os_error: <text>` when `r=stream_close_failed`) | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed`, `stream_close_failed` (a backstop close of a held handle failed on a path where the final write never ran; an exit-2 error already pending wins instead) |
 
 The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
 → `select` (which validates the ordinal) → `--subst` syntax → `substitute` → the remaining
@@ -748,6 +785,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
 | `StreamWriteFailed(written, failed, skipped, verify=None)` | `main`, writing a stream to its held handle after the run, or verifying it by read-back | `UNREADABLE reason=stream_write_failed` + `written:`/`failed:`/`skipped:` detail lines from its fields, and `verify: <stream>` when the read-back disagreed |
+| `StreamCloseFailed(stream, close_error)` | `main`, selected after its reservation `try`/`finally` when the backstop `_close_stream` raised and no exit-2 error was pending (a pending `BlockTimeout` becomes `__cause__`) | `UNREADABLE reason=stream_close_failed` + `os_error: <text>` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` |
 | `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, or a non-`ESRCH` `killpg` error, wrapped; `pgid` set on the `reap` stage | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap>` + `os_error: <text>` (+ `pgid: <n>` on `reap`) |
@@ -763,7 +801,7 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **Five named exceptions, all fault injections on a call whose *failure* is under test,
+stub out. **Six named exceptions, all fault injections on a call whose *failure* is under test,
 all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real:** the AC-5.5
 `killpg` seam is patched only for AC-4.6's `reap` stage (`PermissionError` after `poll()`), since
 the AC-5.5 race itself is reproduced by a real fixture (a leader that exits at once behind an
@@ -777,7 +815,10 @@ not found. The fifth is the module's own `_final_write(handle, text)` seam, patc
 `OSError` for AC-3.8's post-run write failure — the one call for which no real fault exists on
 this platform — or patched to call the real `_final_write` with a recording proxy around the held
 handle whose `flush`/`close` raise (the close-in-`finally` tests), which is the same seam and the
-same injection, not a sixth. The drain race needs no mock, because a real
+same injection, not a new one. The sixth is the module's own `_close_stream(handle)` seam — the one
+closure primitive — patched to raise `OSError` for the backstop-close tests on paths where the final
+write never ran (a timeout, an alias refusal), because a held descriptor cannot be made to fail at
+close deterministically either. The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -895,11 +936,15 @@ exactly what the base Mutation verification invariant forbids.
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
+| `indented-closer-accepted` | the scanner closes a fence on a marker run preceded by four or more spaces | `test_indented_closer_does_not_close` (AC-1.6 — the four-space ```` ```` ```` line stays body text and the fence ends at the next 0–3-space closer) |
+| `stream-open-oserror-unwrapped` | the reservation region's `except OSError` is removed, so an `ENOTDIR`/`EACCES` on `os.open` (or an `OSError` from `fstat` or the rollback) escapes as a traceback | `test_stream_path_under_a_regular_file_refuses` (AC-3.10 — a real `ENOTDIR`, no injection; the verdict must be `stream_path_unwritable`, exit 2, no traceback) |
+| `backstop-close-unmapped` | the `except OSError` around `main`'s backstop `_close_stream` is removed, so a failing close on the timeout path escapes as a traceback | `test_backstop_close_failure_on_timeout_is_mapped` (AC-3.8 — `_close_stream` injected to raise under `TIMEOUT`; the verdict must be `stream_close_failed`, exit 2) |
+| `backstop-close-outranks-error` | the post-`finally` selection raises `StreamCloseFailed` even when an exit-2 error is already pending | `test_backstop_close_failure_does_not_outrank_a_refusal` (AC-3.8 — an aliased pair plus an injected close failure must still report `stream_paths_alias`) |
 | `registry-row-removed` | one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`) | `test_every_emittable_line_has_a_registry_row` (AC-4.5) |
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Fifty-five rows, fifty-five mutations — fifty-three of the helper's source (the AC-5.3 row, once
+Fifty-nine rows, fifty-nine mutations — fifty-seven of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1040,3 +1085,4 @@ mean the probe never created one.
 - v1.46: Design audit v40 (codex must 2; agy clean + nits): Popen passes cwd=cwd, with the cwd-not-passed mutation; the parity guard becomes a scanner event-trace test plus a no-fence-state source assertion on extract (54 rows); _gate_block returns dbe.Block.
 - v1.47: Design audit v41 (codex must 2; agy clean): _final_write closes in a finally with the close error mapped in the same region, plus its mutation (55 rows); the reader-less-FIFO ENXIO behaviour is cited from a probe on python 3.11.8/darwin.
 - v1.48: Design audit v42 (codex must 1; agy clean): final-write-close-not-in-finally is killed by an injected close failure — test_final_write_close_failure_is_mapped (close alone raises → mapped, no traceback) and test_final_write_failure_before_close_still_closes now injects flush AND close on a recording proxy handed through the _final_write seam and asserts the proxy's close was called, which the outer finally (holding the real handle) cannot produce; fifth injection reused, 55 rows unchanged.
+- v1.49: Design audit v43 (codex must 1; agy must 1 should 1): _close_stream(handle) is the one closure primitive and the sixth named injection; main's backstop close records instead of raising and selects afterwards — StreamCloseFailed → UNREADABLE reason=stream_close_failed (exit 2, os_error:) outranks TIMEOUT, a pending exit-2 error outranks it (__context__); the three mapped OS-call regions of main stated as the class with its residual; indented-closer-accepted and stream-open-oserror-unwrapped mutations with their tests; 59 rows (57 + 2).

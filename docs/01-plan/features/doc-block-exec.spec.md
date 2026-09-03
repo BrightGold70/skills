@@ -182,7 +182,12 @@ not opted in.
     written (`written: stdout` / `failed: stderr`) — no rollback, because the old artifact was
     truncated in place and there is nothing to roll back to. The detail lines name the state of
     each artifact so the operator knows which is current, and each of `written:`, `failed:` and
-    `skipped:` has a registry row (tested by failing the first write only, and the second only). The final write goes through
+    `skipped:` has a registry row (tested by failing the first write only, and the second only). A close of a held
+    handle that fails on a path where the final write never ran (a timeout, a refusal, a launch
+    failure) is `DOCBLOCK: UNREADABLE reason=stream_close_failed` with an `os_error:` detail line,
+    exit 2 — an operational error outranks the `TIMEOUT` verdict, and an exit-2 error already
+    pending outranks it (first error wins, the close error chained as `__context__`); never a
+    traceback. The final write goes through
     one named module function, `_final_write(handle, text)` — which seeks, truncates, writes,
     **flushes and closes** the handle inside the region mapped to `stream_write_failed` — and after
     the close each requested artifact is **read back and compared byte-for-byte to the stream
@@ -375,9 +380,10 @@ not opted in.
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. Both (a) and (b) are driven by one real
     `os.setsid()` fixture, no mock; `os.killpg` is monkeypatched only for AC-4.6's
-    `PermissionError`-after-`poll()` case — one of exactly **five** named fault injections this
-    suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, and the module's
-    own `_final_write` seam for AC-3.8's post-run write failure; the design's Test Strategy bounds
+    `PermissionError`-after-`poll()` case — one of exactly **six** named fault injections this
+    suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, the module's
+    own `_final_write` seam for AC-3.8's post-run write failure, and its `_close_stream` seam for
+    the backstop close on a path where the final write never ran; the design's Test Strategy bounds
     the list, and `subprocess` is never mocked).
 
 ### FR-6: Migrate the existing inline harness onto the helper
@@ -548,3 +554,4 @@ quoted
 - v1.35: Design audit v31 (codex must 2; agy UNVERIFIED, dispatch timeout): AC-2.3 orders missing keys by map insertion; AC-3.12 defines rc as the exit code of the one spawned bash -c.
 - v1.36: Design audit v33 back-propagation (nits): NOT_FOUND and AMBIGUOUS examples carry heading=<h>.
 - v1.37: Design audit v38 (codex must 1; agy clean): AC-1.6 — a backtick fence whose info string contains a backtick is not a fence (CommonMark; measured on markdown-it-py and GitHub).
+- v1.38: Design audit v43 back-propagation: AC-3.8 adds the backstop-close failure verdict stream_close_failed with its precedence; the named-injection list is six with the _close_stream seam.

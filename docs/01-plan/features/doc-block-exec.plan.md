@@ -78,7 +78,7 @@ on the descriptor so there is no check-to-open race — tests
 a second, block never run), mutations `nonregular-stream-accepted` and `stream-open-blocking`),
 the handles held, and only then compared for aliasing on their descriptors — append creates a missing file
 and never empties an existing one. The truncation is the final write itself — `seek(0);
-truncate(); write; flush(); close()`, all five inside the module's `_final_write(handle, text)` — the `close()` in a `finally`, so an `OSError` from any earlier step still releases the descriptor before the exception is mapped, and `main`'s own `try`/`finally` around both reservations closes whatever `_final_write` never reached —
+truncate(); write; flush(); close()`, all five inside the module's `_final_write(handle, text)` — the `close()` in a `finally`, so an `OSError` from any earlier step still releases the descriptor before the exception is mapped, and `main`'s own `try`/`finally` around both reservations closes, through the one closure primitive `_close_stream(handle)`, whatever `_final_write` never reached — a backstop close that fails is recorded, never raised from the `finally`, and selected afterwards as `UNREADABLE reason=stream_close_failed` (exit 2, `os_error:` line) unless an exit-2 error is already pending, which wins with the close error as its `__context__` (tests `test_backstop_close_failure_on_timeout_is_mapped`, `test_backstop_close_failure_does_not_outrank_a_refusal`; mutations `backstop-close-unmapped`, `backstop-close-outranks-error`) —
 because a buffered `TextIOWrapper` may defer the OS write until `flush()`/`close()` and an error
 surfacing at a close outside the mapped region would be a traceback rather than
 `stream_write_failed` — on those held handles after a successful run. Writes are ordered stdout
@@ -106,11 +106,13 @@ handles, unlinks one the call created, and touches no bytes. Tests:
 after `--stderr` names an unwritable path, and a `--stdout` file the call created is gone),
 `test_streams_untouched_after_a_timeout`, and
 `test_stream_write_failure_after_the_run_is_a_refusal` (the module's `_final_write(handle, text)`
-seam is fault-injected to raise `OSError` — the fifth and last named injection, because a held
+seam is fault-injected to raise `OSError` — the fifth named injection (the sixth is the `_close_stream` seam for the backstop close), because a held
 descriptor cannot be made to fail deterministically on macOS, which has no `/dev/full` — and the
 verdict is `UNREADABLE reason=stream_write_failed`), and
 `test_second_stream_write_failure_leaves_the_first_as_written` (only the stderr write fails; the
-stdout artifact is current and the detail lines say `written: stdout` / `failed: stderr`).
+stdout artifact is current and the detail lines say `written: stdout` / `failed: stderr`), and
+`test_stream_path_under_a_regular_file_refuses` (AC-3.10 — a real `ENOTDIR`, no injection; mutation
+`stream-open-oserror-unwrapped`).
 
 **The fixture preamble is load-bearing, not a convenience.** A documented recipe may consume a
 variable the surrounding prose sets rather than the block itself — the Second-surface gate block
@@ -362,7 +364,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 55 mutations with a full-node-ID `test` binding each — 53 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 59 mutations with a full-node-ID `test` binding each — 57 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -739,3 +741,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.48: Design audit v39 back-propagation: 52 mutations (50 + 2).
 - v1.49: Plan re-audit v35 (codex must 1; agy see report): the reservation paragraph carries O_NONBLOCK on the existing-file arm and the regular-file check with its FIFO test and two mutations; the stale 'third stays' fragment removed; 54 mutations.
 - v1.50: Plan re-audit v36 (codex must 2; agy clean): the launch passes cwd=cwd with its mutation; the one-private-scanner rule (_fence_events) with its trace test and mutation; the reader-less-FIFO probe cited; 55 mutations.
+- v1.51: Design audit v43 back-propagation (spec v1.38): _close_stream backstop with the stream_close_failed selection and its two tests/mutations; the ENOTDIR reservation test; 59 mutations (57 + 2).
