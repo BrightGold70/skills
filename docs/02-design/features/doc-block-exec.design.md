@@ -255,7 +255,19 @@ more than one) that `extract` and `docsections.titled_section` both call. **`hea
 accepted forms, and each real caller uses one**: the full line form `## Text` (what `extract` and
 the CLI's `--heading` pass) matches a heading event whose text after the hash run — closing hashes
 stripped — equals `Text` **and** whose level equals the hash count; the bare form `Text` (what
-`docsections.titled_section` passes today) matches on text at any level — with one deliberate
+`docsections.titled_section` passes today) matches on text at any level. **The two forms are told
+apart by the request itself, full form first** (impl-plan audit v26): a request that parses as an
+ATX heading line — 0–3 spaces, 1–6 `#`, a space — IS the full form, always; only a request that
+does not parse as one is the bare form. So a heading whose visible title itself begins with an
+ATX prefix (`### ## Text`, title `## Text`) is reachable only through its full form
+(`### ## Text` → level 3, title `## Text`) and never through the bare form — the one documented
+exclusion, harmless to every live caller (measured: none of `titled_section`'s targets begins
+with `#`). `test_heading_form_precedence_full_wins` pins it on a document holding both
+`### ## Text` and `## Text`: `find_heading(text, "## Text")` returns the level-2 `Text` heading
+only, `find_heading(text, "### ## Text")` the level-3 one only, and neither raises
+`AmbiguousHeading`; mutation `form-precedence-bare-first` (the bare form is tried first, or the
+two matches are unioned, so the request `## Text` finds two headings and refuses) is killed by
+it — with one deliberate
 tightening over the `re.search` it replaces, which took the FIRST of several same-text headings:
 the bare form refuses duplicates at any level with `AmbiguousHeading(n)` exactly as the full form
 does (`test_bare_form_duplicate_headings_refuse`; the same guard `duplicate-heading-takes-first`
@@ -535,7 +547,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 78 mutations (78 rows: 76 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 79 mutations (79 rows: 77 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -980,7 +992,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading="<h>"` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index="<n>"` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value="<v>"` |
-| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg==V` — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg="<raw>"` + `duplicate_key: "<k>"` when it is a repeat |
+| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg="=V"` under the quoted-field grammar (design audit v75: never a bare `arg="=V"`) — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg="<raw>"` + `duplicate_key: "<k>"` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable(leftover=None)` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (raised `from` the `OSError`, which is its `__cause__`; also its bounded-retry exhaustion, with no cause); `leftover` set when the rollback read-back finds the created file still present; constructible with no arguments — the reservation region raises it bare, `from` the `OSError` (AC-4.5's subclass walk checks table membership by class and instantiates nothing; other subclasses keep their required arguments — design audit v72 agy) | `UNREADABLE reason=stream_path_unwritable` (+ `leftover: "<path>"` when set) |
@@ -1082,10 +1094,10 @@ bare `test_*` name is a nonexistent path to pytest, so the names in the table be
 `<name>` half and the spec carries them qualified. The same rule binds the other two specs:
 `tests/test_h_mad_collect_report_docs.py::<name>` in `doc_block_exec_wire.json` (whose `command`
 is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`) and
-`tests/test_docsections.py::<name>` in `docsections.json` for the five rows killed there, while its sixth, seventh and eighth rows —
+`tests/test_docsections.py::<name>` in `docsections.json` for the **six** rows killed there — the four re-anchored originals, `docsections-delegation-reverted` and
+`docsections-heading-lookup-reverted` (the local `re.search` heading regex restored in `titled_section`, `find_heading` untouched), the last two both bound to the delegation spy — while its sixth and eighth rows,
 `docsections-syspath-setup-removed`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd`, and
-`docsections-heading-lookup-reverted` (the local `re.search` heading regex restored in `titled_section`, `find_heading` untouched), bound to the delegation spy in `tests/test_docsections.py`, and
-`docsections-local-bounder-restored`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder` —
+`docsections-local-bounder-restored`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder`, bind into the new module's file (design audit v75 agy: 6 + 2 = 8) —
 (a `test` key is a full node ID and may name any collectable file; the harness runs `target_command + [test]`). Exact `find` anchors are set from the
 landed source in the same task that lands it (the author-together ordering the plan states for
 `docsections.json`), each exact-once; the mechanism column is what the anchor must express.
@@ -1118,6 +1130,7 @@ exactly what the base Mutation verification invariant forbids.
 | `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
 | `adjacent-heading-skipped` | the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address | `test_adjacent_heading_bounds_the_section` (AC-1.5 — the first section has no candidate and `fence_aware_end(text, start, level) == start`) |
 | `heading-level-pin-ignored` | `find_heading` matches the full `## Text` form on text alone, ignoring the hash count | `test_find_heading_accepts_full_and_bare_forms` (AC-1.5 — `### Text` must not satisfy `## Text`) |
+| `form-precedence-bare-first` | `find_heading` tries the bare form first (or unions both forms), so the request `## Text` also matches a `### ## Text` heading and refuses as ambiguous | `test_heading_form_precedence_full_wins` (AC-1.5) |
 | `closing-hash-run-kept` | `_fence_events` leaves the optional closing hash run in a heading event's text, so `## Text ##` no longer matches `## Text` and a `## Text`/`## Text ##` pair counts as one | `test_closing_hash_run_does_not_change_heading_identity` (AC-1.5/1.7) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
 | `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse` (AC-1.7 — the row's one `test` key; `test_bare_form_duplicate_headings_refuse` exercises the same guard through the bare form and is a regression test, not a second key) |
@@ -1128,7 +1141,7 @@ exactly what the base Mutation verification invariant forbids.
 | `replacement-sequential` | replacement becomes a per-key `str.replace` loop in map order, so a value containing another key is re-scanned | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A B` must yield `B C` for **both** map orders; the sequential mutant yields `C C` in the `A`-first order, and both keys occur so a missing-key precheck cannot mask it) |
 | `subst-split-on-every-equals` | `--subst` split on every `=` | `test_subst_value_may_contain_equals` (AC-2.8) |
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
-| `cli-empty-key-delegated` | `main` stops refusing the empty key while building the map and lets `substitute` raise `BadSubstArg("")`, so the verdict prints `arg=` instead of the raw `arg==V` | `test_subst_empty_key_is_bad_subst` (AC-2.8 — `--subst =V` asserts `arg==V`; the impl-plan's Task 4 CLI test) |
+| `cli-empty-key-delegated` | `main` stops refusing the empty key while building the map and lets `substitute` raise `BadSubstArg("")`, so the verdict prints `arg=""` instead of the raw `arg="=V"` | `test_subst_empty_key_is_bad_subst` (AC-2.8 — `--subst =V` asserts `arg="=V"`; the impl-plan's Task 4 CLI test) |
 | `empty-map-not-short-circuited` | the empty-map guard is removed, so `{}` compiles a `""` alternation | `test_empty_substitution_map_is_a_no_op` (AC-2.2) |
 | `duplicate-info-token-last-wins` | a repeated recognised token overwrites instead of refusing | `test_duplicate_info_tokens_refuse` (AC-3.7) |
 | `index-nonint-unmapped` | `main` lets a non-integer `--index` raise `ValueError` instead of `BAD_INDEX` | `test_non_integer_index_is_bad_index` (AC-1.9/5.6 — values are the contract's, grammar is argparse's) |
@@ -1191,7 +1204,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-eight rows, seventy-eight mutations — seventy-six of the helper's source (the AC-5.3 row, once
+Seventy-nine rows, seventy-nine mutations — seventy-seven of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1369,3 +1382,4 @@ mean the probe never created one.
 - v1.81: Impl-plan v1.24 back-propagation: `key=` (BAD_INFO) and both halves of `overlap:` are quoted like every non-exempt field.
 - v1.82: Design audit v73 (codex must 1 should 1; agy must 1 — held, measured): _field's second pass escapes Cc/Zl/Zp (DEL, C1 incl. U+0085, U+2028/9) with test_unicode_line_separators_cannot_split_a_verdict_line and c1-escape-removed (78 rows: 76 + 2); nonregular-stream-accepted is killed by test_stream_path_char_device_refuses (/dev/null opens, the fstat check is reached; a reader-less FIFO fails at open with ENXIO); inline examples in the quoted grammar.
 - v1.83: Design audit v74 (codex nit; agy clean) + impl-plan audit v25 back-propagation: duplicate-heading-takes-first has one test key (the bare-form duplicate test is a regression test on the same guard); the Executive Summary names all seven public names.
+- v1.84: Design audit v75 (codex must 1; agy must 1 at 16 tool calls) + plan audit v66 / impl-plan audit v26 back-propagation: six docsections.json rows bind into test_docsections.py (4 + delegation + heading-lookup), two into the new module's file; --subst =V prints arg="=V" under the quoted grammar; find_heading's two forms are told apart by the request (full form first), a title beginning with an ATX prefix is reachable only in full form — test_heading_form_precedence_full_wins, mutation form-precedence-bare-first (79 rows: 77 + 2).

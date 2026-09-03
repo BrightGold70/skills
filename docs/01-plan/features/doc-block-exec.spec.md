@@ -138,7 +138,7 @@ not opted in.
     would insert `v` at every character boundary — so an in-process caller cannot bypass the
     refusal the CLI enforces. **`main` does not reach it through `substitute`**: it refuses the
     empty key itself while building the map, so the verdict carries the raw argument
-    (`arg==V`), and `substitute`'s refusal is the separate API guard — the same predicate in two
+    (`arg="=V"`, quoted like every dynamic field), and `substitute`'s refusal is the separate API guard — the same predicate in two
     places, each with its own test and mutation (design audit v69/v70).
 
 ### FR-3: Execute in a disposable cwd under a declared shell mode
@@ -596,3 +596,4 @@ quoted
 - v1.48: Design v1.82 back-propagation: FR-4's escape set names C1 controls, DEL and U+2028/U+2029.
 - v1.49: Plan audit v65 agy back-propagation: AC-6.4's gate command is bounded through hmad-dispatch run --timeout 1200 (1 occurrence(s) rewritten), as the plan and design already state.
 - v1.50: Impl-plan v1.26 back-propagation: AC-6.4's gate command runs from the repository root in a subshell (from h-mad/ it collects 2485, not the 2747 baseline); the subshell propagates the wrapped status (measured).
+- v1.51: Design v1.84 back-propagation: the empty-key CLI refusal prints arg="=V" (quoted).
