@@ -2,8 +2,8 @@
 
 ## Executive Summary
 
-A single stdlib-only module, `h-mad/scripts/h_mad_doc_block_exec.py`, exposing `extract` /
-`substitute` / `run_block` / `main`, which selects a bash fence by (document, heading, `hmad:exec`
+A single stdlib-only module, `h-mad/scripts/h_mad_doc_block_exec.py`, exposing `extract` / `select` / `substitute` / `run_block` / `find_heading` /
+`fence_aware_end` / `main` (the seven names in `__all__`), which selects a bash fence by (document, heading, `hmad:exec`
 tag, optional ordinal), applies an explicit substitution map, and runs the block via
 `subprocess.Popen(start_new_session=True)` in a `mkdtemp` cwd — printing one `DOCBLOCK:` verdict
 line and refusing on every condition under which it would measure nothing.
@@ -1120,7 +1120,7 @@ exactly what the base Mutation verification invariant forbids.
 | `heading-level-pin-ignored` | `find_heading` matches the full `## Text` form on text alone, ignoring the hash count | `test_find_heading_accepts_full_and_bare_forms` (AC-1.5 — `### Text` must not satisfy `## Text`) |
 | `closing-hash-run-kept` | `_fence_events` leaves the optional closing hash run in a heading event's text, so `## Text ##` no longer matches `## Text` and a `## Text`/`## Text ##` pair counts as one | `test_closing_hash_run_does_not_change_heading_identity` (AC-1.5/1.7) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
-| `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse`, `test_bare_form_duplicate_headings_refuse` (AC-1.7) |
+| `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse` (AC-1.7 — the row's one `test` key; `test_bare_form_duplicate_headings_refuse` exercises the same guard through the bare form and is a regression test, not a second key) |
 | `select-first-on-ambiguous` | `select` returns `blocks[0]` when >1 and no index | `test_two_tagged_blocks_without_index_are_ambiguous` (AC-1.3) |
 | `index-below-one-accepted` | `index < 1` reaches `blocks[index - 1]` | `test_index_zero_refuses` (AC-1.9) |
 | `missing-key-silently-skipped` | a zero-count key is not collected | `test_absent_key_refuses` (AC-2.2) |
@@ -1368,3 +1368,4 @@ mean the probe never created one.
 - v1.80: Design audit v72 (codex should 1; agy must 2 at 3 tool calls — int quoting held, the 'type-walk' phrase was this document's own error): _field stringifies before json.dumps so numbers are quoted; StreamPathUnwritable's zero-argument construction is justified by its raise site, not by a walk that instantiates nothing; every verdict/detail example rewritten in the quoted grammar (`heading="<h>"`, `os_error: "<text>"`, `written: "stdout"`).
 - v1.81: Impl-plan v1.24 back-propagation: `key=` (BAD_INFO) and both halves of `overlap:` are quoted like every non-exempt field.
 - v1.82: Design audit v73 (codex must 1 should 1; agy must 1 — held, measured): _field's second pass escapes Cc/Zl/Zp (DEL, C1 incl. U+0085, U+2028/9) with test_unicode_line_separators_cannot_split_a_verdict_line and c1-escape-removed (78 rows: 76 + 2); nonregular-stream-accepted is killed by test_stream_path_char_device_refuses (/dev/null opens, the fstat check is reached; a reader-less FIFO fails at open with ENXIO); inline examples in the quoted grammar.
+- v1.83: Design audit v74 (codex nit; agy clean) + impl-plan audit v25 back-propagation: duplicate-heading-takes-first has one test key (the bare-form duplicate test is a regression test on the same guard); the Executive Summary names all seven public names.
