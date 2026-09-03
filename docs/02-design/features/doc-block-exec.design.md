@@ -575,7 +575,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `h-mad/tests/docsections.py` drops `_fence_aware_end` and its local heading regex and delegates through
    `_dbe.find_heading` and `_dbe.fence_aware_end`, `h-mad/tests/test_docsections.py` gains the delegation spy test, and
    `h-mad/tests/mutation-specs/docsections.json` is re-pointed, converted to named-test form and
-   run to `ALL_CAUGHT` (the author-together ordering the plan requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. New-behaviour shape, plus one wire.
+   run to `ALL_CAUGHT` (the author-together ordering the plan requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. **`wiring` shape** — it carries the docsections wire and its WIRE-PIN, so the impl-plan's one-shape rule makes it `wiring` with the new-behaviour RED split stated in prose (impl-plan audit v30).
 2. **Task 2 — substitution.** `substitute` in `h-mad/scripts/h_mad_doc_block_exec.py`: simultaneous
    replacement, counts on the original text, missing-key collection, overlap and empty-key
    refusal, the empty-map no-op; its tests and mutation rows in the same two files as Task 1.
@@ -755,10 +755,12 @@ mutation `argparse-error-unrouted` (the `error()` override removed, so argparse 
 The order in `main` is `extract` → `select` → `substitute` → the remaining validations (timeout,
 preamble readability — the info string is validated inside `extract`, the ordinal inside
 `select`, and `--subst` syntax before `substitute` is called) → **reserve** → **alias check on the
-reserved descriptors** → spawn. Reservation opens `--stdout` then `--stderr` with
-`open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
-never empties an existing one, so there is no moment at which one artifact is truncated while the
-other is still unreserved. **Creation is detected atomically, not by an `exists()` check**: the
+reserved descriptors** → spawn. Reservation opens `--stdout` then `--stderr` through the two-arm
+`os.open` protocol below (`O_CREAT | O_EXCL` first, then `O_WRONLY | O_APPEND | O_NONBLOCK` on an
+existing file), wraps each descriptor with `os.fdopen(fd, "a", encoding="utf-8")` and holds both
+handles: append-mode creates or opens without emptying an existing file, so there is no moment at
+which one artifact is truncated while the other is still unreserved (design audit v79: an earlier
+sentence here still said plain `open(path, "a")`, which cannot establish `created` atomically). **Creation is detected atomically, not by an `exists()` check**: the
 reservation is a two-arm loop: try `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` —
 success means this call created the file and records `created=True`; on `FileExistsError` try
 `os.open(path, O_WRONLY | O_APPEND | O_NONBLOCK)` **without `O_CREAT`** — success means a
@@ -1416,3 +1418,4 @@ mean the probe never created one.
 - v1.87: Design audit v77 (codex must 1; agy must 1 at 13 tool calls): Task 5 unpacks substitute's (Block, counts) tuple before run_block; the two source-scan rows say the scan is green on the real helper and RED on the mutant (the earlier wording inverted it).
 - v1.88: Impl-plan v1.29 back-propagation: the bounded-wait test's TimeoutExpired is constructed with cmd and timeout (a bare constructor call raises TypeError).
 - v1.89: Impl-plan audit v29 back-propagation: allow-abbrev-restored's expected outcome is a BAD_ARGS verdict, not a usage error; the unreadable-preamble test is test_unreadable_preamble_path_refuses everywhere.
+- v1.90: Design audit v79 (codex must 1; agy clean at 21 tool calls) + impl-plan audit v30: the reservation summary names the two-arm os.open protocol, not plain open(path, "a"); Task 1 is the wiring shape.
