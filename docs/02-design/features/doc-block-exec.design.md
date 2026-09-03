@@ -390,17 +390,17 @@ ambiguity in v1.0**: `extract` was typed `list[Block]` while the error contract 
 lives. Split, each has one job:
 
 ```python
-def extract(doc: str | Path, heading: str) -> list[Block]
+def extract(doc: str | Path, heading: str) -> list[Block]:
     """Pure scan. Returns every tagged block under `heading`, possibly empty.
     Raises DocUnreadable, BadInfoString or AmbiguousHeading — never on candidate count."""
 
-def select(blocks: Sequence[Block], index: int | None = None) -> Block
+def select(blocks: Sequence[Block], index: int | None = None) -> Block:
     """Policy. Raises BadIndex(n) (index given and < 1 — validated BEFORE any
     lookup, so 0 can never reach `blocks[index - 1]` and alias the last block),
     BlockNotFound (0 candidates, or index past the end) or AmbiguousBlock(n)
     (>1 with no index)."""
 
-def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]
+def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]:
     """Returns a NEW Block (dataclasses.replace) whose text has every key replaced,
     plus the per-key counts. run_block never substitutes: main calls this first,
     so a bad map is refused before any stream artifact is reserved."""
@@ -409,7 +409,7 @@ def run_block(block: Block, *, preamble: str | None = None,
               timeout: float = 30.0) -> RunResult
 def main(argv: Sequence[str] | None = None) -> int
 
-def fence_aware_end(text: str, start: int, level: int) -> int
+def fence_aware_end(text: str, start: int, level: int) -> int:
     """Offset of the next ATX heading at `level` or shallower after `start`,
     skipping fenced blocks with backtick-run tracking. The bounder `extract`
     uses, exported so `h-mad/tests/docsections.py` can delegate to it (AC-1.8)."""
@@ -550,7 +550,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading=<h>` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index=<n>` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
-| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; empty key or repeat refused) | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
+| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; repeat refused) **and `substitute`, for an empty key** — the one rule lives in the API | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING key=<k>` + a detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable` | `main`'s stream reservation — the `open(path, "a")` itself (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
@@ -599,7 +599,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 
 | ACs | Tests |
 |---|---|
-| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, a `~~~` fence quoting the tag, and a four-space-indented literal tag (an indented code block, never an opener); **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
+| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2 heading=<h>`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, a `~~~` fence quoting the tag, and a four-space-indented literal tag (an indented code block, never an opener); **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
