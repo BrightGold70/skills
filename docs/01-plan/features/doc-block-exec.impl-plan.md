@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.80 — design cycle 72 / impl-plan cycle 23 back-propagation, commit 2a411aa)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.46) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.77)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.81 — design cycle 72 / impl-plan cycle 23 back-propagation, commit 2fa1601)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.47) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.78)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
