@@ -686,7 +686,7 @@ def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     AmbiguousHeading(n) when more than one matches."""
 ```
 
-`__all__` names all seven functions, plus `Block`, `RunResult` and every `DocBlockError` subclass — 29 names (`BadArgs` included) — so a consumer catches `dbe.BlockNotFound` through the public surface (design audit v76: the impl-plan's Task 1 enumerates them). `fence_aware_end` and `find_heading` are public on purpose:
+`__all__` names all seven functions, plus `Block`, `RunResult` and the whole `DocBlockError` hierarchy — the base class and its 19 subclasses — 29 names (`BadArgs` included); the seven-plus-two-plus-*subclasses* reading gives 28 and is the error to avoid — so a consumer catches `dbe.BlockNotFound` through the public surface (design audit v76: the impl-plan's Task 1 enumerates them). `fence_aware_end` and `find_heading` are public on purpose:
 `docsections.titled_section` calls `find_heading` in place of its own `re.search` heading regex
 and then `fence_aware_end` in place of the deleted `_fence_aware_end`; `docsections.section_from`
 calls `fence_aware_end` with the same `(text, start, level)` arguments. A heading `find_heading`
@@ -741,12 +741,35 @@ spellings — `--shell-t` is an error, not an alias — and a test asserts that 
 are the contract's, argument grammar is argparse's**: `--index` and `--shell-timeout` are declared
 `type=str` and validated by `main` (`BAD_INDEX` / `BAD_TIMEOUT`), so a malformed value still gets
 one `DOCBLOCK:` line — **and so does a grammar error**: the parser is built with
-`exit_on_error=False` and its `error()` overridden to raise `BadArgs(message)`, a `DocBlockError`
+`allow_abbrev=False` and its `error()` overridden to raise `BadArgs(message)`, a `DocBlockError`
 that `main` renders as `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0, because a malformed but
 readable invocation is input the helper declined and the Audit-gate signal discipline admits no
 non-`DOCBLOCK` exit (plan audit v67; an earlier draft left argparse's exit-2 usage error as "the
 documented exception", which was a breach, not an exception). `--help` alone keeps argparse's
-exit-0 help text. `test_malformed_invocation_is_a_verdict` drives an unknown option and a missing
+exit-0 help text.
+
+**`exit_on_error` is left at its argparse default (`True`), and that is load-bearing.** An earlier
+draft specified `exit_on_error=False`, which is precisely what suppresses argparse's own
+`except ArgumentError: self.error(str(err))` — so a **missing option value** raised
+`argparse.ArgumentError` inside `_parse_known_args` and never reached the override. `ArgumentError`
+is not a `DocBlockError`, so it escaped `main` as a traceback with a non-`DOCBLOCK` exit: the exact
+breach this paragraph forbids, on one of the two inputs `test_malformed_invocation_is_a_verdict`
+drives. Measured on python 3.11.8 with `allow_abbrev=False` and `error()` overridden:
+
+| grammar shape | `exit_on_error=False` | default (`True`) |
+|---|---|---|
+| unknown option | `BadArgs` | `BadArgs` |
+| **missing option value** | **`ArgumentError` escapes** | `BadArgs` |
+| missing required option | `BadArgs` | `BadArgs` |
+| missing positional | `BadArgs` | `BadArgs` |
+| abbreviation | `BadArgs` | `BadArgs` |
+
+The class is closed at the default: all five grammar shapes reach the override, and `--help` still
+exits 0 with its help text. The residual is anything argparse raises *outside* `error()` — nothing
+in this CLI's grammar does, and a future argument type that can (a custom `type=` callable raising
+something other than `ArgumentTypeError`) must route itself, since the parser will not.
+
+`test_malformed_invocation_is_a_verdict` drives an unknown option and a missing
 option value in-process and asserts one `BAD_ARGS` line each, exit 0, and no usage text on stdout;
 mutation `argparse-error-unrouted` (the `error()` override removed, so argparse raises
 `SystemExit(2)` and prints usage) is killed by it.
@@ -1019,7 +1042,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading="<h>"` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index="<n>"` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value="<v>"` |
-| `BadArgs(message)` | `main`, from the parser's overridden `error()` (`exit_on_error=False`) | `BAD_ARGS message="<m>"` |
+| `BadArgs(message)` | `main`, from the parser's overridden `error()` (argparse's default `exit_on_error=True`) | `BAD_ARGS message="<m>"` |
 | `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg="=V"` under the quoted-field grammar (design audit v75: never a bare `arg="=V"`) — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg="<raw>"` + `duplicate_key: "<k>"` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
@@ -1419,3 +1442,4 @@ mean the probe never created one.
 - v1.88: Impl-plan v1.29 back-propagation: the bounded-wait test's TimeoutExpired is constructed with cmd and timeout (a bare constructor call raises TypeError).
 - v1.89: Impl-plan audit v29 back-propagation: allow-abbrev-restored's expected outcome is a BAD_ARGS verdict, not a usage error; the unreadable-preamble test is test_unreadable_preamble_path_refuses everywhere.
 - v1.90: Design audit v79 (codex must 1; agy clean at 21 tool calls) + impl-plan audit v30: the reservation summary names the two-arm os.open protocol, not plain open(path, "a"); Task 1 is the wiring shape.
+- v1.91: Design audit v82 (teammate surface, advisory — codex quota-blocked). MUST: the parser's exit_on_error=False cannot emit BAD_ARGS for a missing option value — it suppresses argparse's own except ArgumentError: self.error(...), so ArgumentError escapes main as a non-DOCBLOCK traceback, on one of the two inputs test_malformed_invocation_is_a_verdict drives; measured on 3.11.8 and independently re-probed. exit_on_error now stays at the default True, with the five-shape table and the residual (anything argparse raises outside error()) stated; argparse-error-unrouted becomes true as written at the default. __all__'s enumeration said 'every DocBlockError subclass — 29' where subclasses number 19 (7+2+19=28); it now names the hierarchy (base + 19) and calls out the 28 misreading.

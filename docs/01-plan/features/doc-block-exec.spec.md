@@ -389,7 +389,7 @@ not opted in.
     `communicate`, a negative value raises `ValueError` *after* the spawn and `inf` makes the
     promised bound unbounded. On the CLI the value is taken as a string and validated by `main`,
     so a non-numeric argument reaches the `DOCBLOCK:` contract rather than argparse's usage path;
-    the same policy makes a non-integer `--index` a `BAD_INDEX`. argparse's own usage path is routed too: the parser is built with `exit_on_error=False` and its
+    the same policy makes a non-integer `--index` a `BAD_INDEX`. argparse's own usage path is routed too: the parser is built with `allow_abbrev=False`, `exit_on_error` left at argparse's default `True` (with `False` a missing option value raises `argparse.ArgumentError` past the override — measured), and its
     `error()` raises `BadArgs(message)`, rendered as `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0, so an
     unknown option or a missing value is a verdict and there is no non-`DOCBLOCK` exit (`--help`
     alone keeps argparse's exit-0 help text).
@@ -448,14 +448,14 @@ not opted in.
     that cannot supply it cannot reach the `GATE: PASS` branch at all.
   - AC-6.4: The full suite passes, and the count is no lower than the pre-change count plus the
     tests this feature adds. **The floor is mechanical, not prose**: the baseline is the constant
-    `2747` (collected and passing at `6b4df35`, cited in the plan with its commands); the
+    `2748` (collected and passing at `e8eaf6f`, cited in the plan with its commands and its re-measure-at-5c rule; it was `2747` at `6b4df35` and `b59e05e` moved it, which is why the commit travels with the number); the
     feature's additions are the collected count of the new module
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
     alone) plus a fixed tuple of the named new node IDs added to existing files — the **seven**
     enumerated in the plan: six wire and exemption tests in `test_h_mad_collect_report_docs.py`
     and the delegation spy test in `test_docsections.py`; every other new test, the collect-alone
     pins included, lives in the new module — each
-    of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
+    of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2748 + new_module + len(tuple)`
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
@@ -602,3 +602,4 @@ quoted
 - v1.50: Impl-plan v1.26 back-propagation: AC-6.4's gate command runs from the repository root in a subshell (from h-mad/ it collects 2485, not the 2747 baseline); the subshell propagates the wrapped status (measured).
 - v1.51: Design v1.84 back-propagation: the empty-key CLI refusal prints arg="=V" (quoted).
 - v1.52: Design v1.85 back-propagation: BAD_ARGS verdict for argparse grammar errors (no non-DOCBLOCK exit); AC-3.10 states the concurrent-replacement non-goal and the identity check.
+- v1.53: Plan audit v73 / design audit v82 back-propagation (teammate surface, advisory). AC-6.4's floor baseline re-measured to 2748 at e8eaf6f (was 2747 at 6b4df35; b59e05e moved it), with the commit now travelling with the number. AC-5.6 states exit_on_error at argparse's default True — with False a missing option value raises argparse.ArgumentError past the overridden error() and escapes main as a non-DOCBLOCK exit.

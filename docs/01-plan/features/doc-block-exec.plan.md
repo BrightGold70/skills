@@ -63,8 +63,15 @@ undocumented aliases (test: `test_parser_rejects_all_dir_and_abbreviations`). Ar
 validated by `main` and map to verdict lines — `--index` non-integer or below 1 → `BAD_INDEX`,
 `--shell-timeout` non-numeric, non-finite or not positive → `BAD_TIMEOUT value="<v>"` (AC-5.6), both
 before any spawn; argparse grammar errors (unknown option, missing value) are routed through the
-parser's overridden `error()` (`exit_on_error=False`) to `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0 —
-there is no non-`DOCBLOCK` exit (design v1.85; `test_malformed_invocation_is_a_verdict`, mutation
+parser's overridden `error()` to `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0 — there is no
+non-`DOCBLOCK` exit (`--help` alone excepted: it keeps argparse's exit-0 help text and emits no
+`DOCBLOCK:` line, which is why the contract is stated with that carve-out in spec AC-5.6, design
+§API and impl-plan §Conventions; this document was the one of the four the v1.31 sweep missed).
+**`exit_on_error` stays at argparse's default `True`** — an earlier draft said `False`, which
+suppresses argparse's own `except ArgumentError: self.error(...)` so a *missing option value*
+raised `argparse.ArgumentError` past the override and out of `main` as a non-`DOCBLOCK` traceback;
+measured on python 3.11.8, the default routes all five grammar shapes to the override (design
+§API carries the table) (design v1.85; `test_malformed_invocation_is_a_verdict`, mutation
 `argparse-error-unrouted`). `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
 2, block not run — for a path that cannot be read **and** for a file that is not valid UTF-8,
@@ -367,8 +374,12 @@ the wire and not the callee, and the mutation harness records both runs.
 
 The ordering constraint that shapes the work: the tag and the migration must land together.
 Tagging the gate fence makes `:270`'s `re.findall` — which requires `\n` immediately after
-` ```bash ` — match zero blocks. It fails loudly rather than silently, which is the good case, but
-it is still a broken suite if the two are separated across tasks.
+` ```bash ` — match **3 of the section's 4 blocks instead of 4** (measured at `e8eaf6f`: before the
+tag 4 blocks, 1 of them gating; after, 3 blocks, 0 gating). What goes to zero is the
+`h_mad_audit_gate.py` filter on the next line, so the loud failure is `_gate_bash_block`'s
+`assert gating`, not an empty `findall` — an implementer looking for the latter will not find it.
+It fails loudly rather than silently, which is the good case, but it is still a broken suite if the
+two are separated across tasks.
 
 **Only `:270` is affected, and an earlier draft of this plan claimed otherwise.** Measured: the
 Second-surface section holds four bash blocks; `:270` selects block 4 (containing
@@ -740,15 +751,26 @@ the duplicate bounder is.
 - All three mutation specs (`doc_block_exec.json`, `doc_block_exec_wire.json`, `docsections.json`)
   report `ALL_CAUGHT`, each mutation killed by its own named `test`, scored on the pytest summary.
 - The full suite passes at no lower a count than the pre-change baseline plus this feature's tests.
-  **The baseline is cited, not remembered** — measured at `6b4df35`, before any implementation
-  commit, from the repo root:
+  **The baseline is cited, not remembered, and it is cited WITH the commit it was measured at,
+  because it drifts.** Re-measured at `e8eaf6f`, before any implementation commit, from the repo
+  root:
 
   ```
   $ python3.11 -m pytest --collect-only -q | tail -1
-  2747 tests collected in 2.03s
+  2748 tests collected in 0.40s
   $ python3.11 -m pytest -q -p no:cacheprovider | tail -1
-  2747 passed in 397.40s (0:06:37)
+  2748 passed in 383.05s (0:06:23)
   ```
+
+  It was `2747` at `6b4df35`; `b59e05e` then added one test to
+  `h-mad/tests/test_h_mad_assemble_audit.py` and the plan was not re-measured, so for a while the
+  floor asserted `>= 2747 + …` against a real 2748 — which let **exactly one** pre-existing test be
+  deleted with the floor still green, falsifying the no-hidden-deletion guarantee this bullet
+  exists to make. That is the failure mode of a remembered number, and it recurs by construction:
+  **any** commit landing a test outside this feature moves it again. So the number here is the
+  value at the named commit and nothing more, and the residual is stated rather than implied — the
+  floor MUST be re-measured at 5c branch time and the two numbers below updated in the same commit
+  that creates the branch. A floor carried across an unmeasured interval proves nothing.
 
   The second command is quoted as it was run for the baseline; as a **gate** it is written so the
   exit status survives — a bare pipe reports `tail`'s status and would let a red suite print as
@@ -767,16 +789,16 @@ the duplicate bounder is.
   full suite (three times the 397 s baseline), 600 s for the scoped run and for each mutation-harness
   invocation (the impl-plan's Phase 5f block carries the wrapped commands).
 
-  So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
+  So AC-6.4's floor is 2748 collected and the same number passing (at `e8eaf6f`; re-measure at 5c), plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
   `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone (the floor test itself
   runs `pytest --collect-only -q` in a subprocess with `cwd=REPO_ROOT`, the repository root the
-  baseline was measured from — from `h-mad/` the same command collects 2485, a different tree), plus a fixed tuple
+  baseline was measured from — from `h-mad/` the same command collects 2486, a different tree), plus a fixed tuple
   of the named node IDs added to existing files — **exactly these seven**, six in
   `h-mad/tests/test_h_mad_collect_report_docs.py`: `test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction` — and, in `h-mad/tests/test_docsections.py`, `test_docsections_delegates_to_the_authoritative_bounder` (it must live beside the module it spies on, which is where `docsections.json` binds it)
   (each asserted to exist). Every other new test — FR-1..5, AC-1.8's source assertion and
   collect-alone pins, the CLI table walk — lives in the new module and is counted by the collector.
-  `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + 7` from a
+  `test_suite_floor_holds` asserts `full_collected >= 2748 + new_module + 7` from a
   `--collect-only` subprocess, which never executes tests and so cannot recurse (an env guard
   `DOCBLOCK_FLOOR_INNER=1` also makes any inner instance skip); the *pass* half is the Phase-5f
   gate command run alone, outside the suite, and recorded in the report. A deleted pre-existing
@@ -893,3 +915,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.81: Plan re-audit v67 (codex must 1; agy must 1): BAD_ARGS routing; __all__ is 28 names; find_heading's request predicate is the scanner's; the AC-6.4 gate block runs from the repository root as the spec spells it; 81 mutations (79 of the helper's source).
 - v1.82: __all__ is 29 names (BadArgs included).
 - v1.83: Plan re-audit v69 (codex must 1; agy clean) + impl-plan audit v29: FR-6's caller pseudocode binds substituted_block from substitute's tuple; the unreadable-preamble test is test_unreadable_preamble_path_refuses.
+- v1.84: Plan audit v73 (teammate surface, advisory). MUST 1: the AC-6.4 suite-floor baseline was stale by one — 2747/2485 measured at 6b4df35, but b59e05e added a test and the real counts at e8eaf6f are 2748/2486, so the floor asserted >= 2747 + … against a real 2748 and exactly one pre-existing test could be deleted with the floor green, falsifying the bullet's own no-hidden-deletion guarantee. Re-measured, and the drift is now closed as a class rather than a number: the count travels with the commit it was measured at and MUST be re-measured at 5c branch time. MUST 2: this was the one document of four stating the exit-code contract without the --help carve-out (the impl-plan swept it at v1.31, the plan was not swept with it); carve-out added, plus exit_on_error at the default per design v1.91. Also: 'tagging makes re.findall match zero blocks' is measured false — 4 blocks before, 3 after, and what empties is the h_mad_audit_gate.py filter, so the loud failure is _gate_bash_block's assert gating.
