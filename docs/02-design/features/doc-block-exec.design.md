@@ -89,15 +89,20 @@ caller (test, or operator on the CLI)
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
 validation, ordinal validation, timeout validation, preamble readability and stream-path
 writability are all checked **before** `bash` is spawned, and no stream artifact is truncated
-before a successful run. **Exactly four non-`RAN` outcomes can follow a spawn, in this
+before a successful run. **Exactly five non-`RAN` outcomes can follow a spawn, in this
 precedence:** `CLEANUP_FAILED` (exit 2 — selected after cleanup and read-back have run, so it
 outranks everything), then `LAUNCH_FAILED stage=reap` (exit 2 — a timed-out block whose group
 could not be signalled; it outranks the timeout it implies because an unkillable child is the
-more urgent finding), then `TIMEOUT` (exit 0 — a measured fact about the block), then
+more urgent finding), then `UNREADABLE reason=stream_close_failed` (exit 2 — `main`'s backstop
+close of a held stream handle failed after the block's outcome was already decided; it is selected
+by `main` after its reservation `try`/`finally`, so it can only ever replace the exit-0 `TIMEOUT`
+below it — the two exit-2 outcomes above it are already-pending errors and win, with the close
+error chained as `__context__`), then `TIMEOUT` (exit 0 — a measured fact about the block), then
 `UNREADABLE reason=stream_write_failed` (exit 2 — only reachable on the path that would otherwise
 print `RAN`, because streams are written only after a successful, cleaned-up run). The `mkdtemp`
-and `spawn` stages of `LAUNCH_FAILED` are pre-spawn by definition and sit outside this list. None
-of the four carries `rc=`, and on the first three nothing is written to any artifact; nothing that ran is reported as a
+and `spawn` stages of `LAUNCH_FAILED` are pre-spawn by definition and sit outside this list, and so
+are the pre-spawn refusals. None
+of the five carries `rc=`, and on the first four nothing is written to any artifact; nothing that ran is reported as a
 measurement unless the cwd is gone *and* every promised artifact exists. **The precedence is a
 control-flow design, not a hope:** `run_block` never raises from inside the timeout handler. It
 records a *pending* outcome — `pending = BlockTimeout(timeout)` after the reap, or the `RunResult`
@@ -414,7 +419,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 59 mutations (59 rows: 57 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 60 mutations (60 rows: 58 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -657,7 +662,8 @@ in the mutation spec. It is all inside `_final_write` because a buffered `TextIO
 the OS write (and even the truncate) until `flush()` or `close()`, and an `OSError` surfacing at a
 close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
 so an existing artifact is overwritten, never appended. **The write is then verified, not
-trusted**: after `_final_write` returns, `main` re-reads each requested artifact
+trusted, per stream and before the next stream is written**: immediately after a stream's
+`_final_write` returns — and before stderr's write is attempted — `main` re-reads that artifact
 (`Path(path).read_bytes()`) and compares those bytes to the exact bytes it wrote,
 `text.encode("utf-8", errors="replace")` — byte-for-byte, never a decoded `str` comparison, so a
 changed or malformed byte is a mismatch rather than a `UnicodeDecodeError` escaping the mapped
@@ -665,7 +671,13 @@ region; a missing file, an `OSError` on the read, or a mismatch is `StreamWriteF
 `verify: <stream>` in its detail, so a writer that silently
 did nothing — or an artifact that vanished between close and verdict — can never be reported as
 `RAN` (the base mutation-verification rule, applied to the helper's own output; mutation
-`final-write-not-verified`). On `TIMEOUT` or `CLEANUP_FAILED` nothing is
+`final-write-not-verified`). Because verification is per stream, a stdout verification failure
+takes the first-stream rule below exactly as a stdout write failure does: `failed: stdout` /
+`skipped: stderr`, and the stderr artifact keeps its previous bytes untouched —
+`test_final_write_readback_catches_a_silent_no_op` asserts both detail lines and the untouched
+stderr bytes; mutation `verify-deferred-past-second-write` (both writes run, then both
+verifications) writes stderr before stdout's silent no-op is diagnosed and is killed by that
+assertion. On `TIMEOUT` or `CLEANUP_FAILED` nothing is
 written to either handle and pre-existing artifacts are untouched. A failure *in* that final write
 can therefore only be an error on an open descriptor (disk full, I/O error) and maps to
 `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2; the `rc` is not reported,
@@ -842,7 +854,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path, cleanup_error)` with `cleanup_error` the `PermissionError` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid and the test's `finally` sends the real `SIGKILL` to it and asserts the group is gone; each carries an `os_error:` detail line and no `rc=` |
+| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid; because `dbe.os` is the process-global `os` module, the test binds `real_killpg = os.killpg` **before** `monkeypatch.setattr(dbe.os, "killpg", fake)` and its `finally` uses that bound original to send `SIGKILL` to the recorded pgid and to assert the group is gone (`real_killpg(pgid, 0)` raising `ProcessLookupError`), so neither the teardown nor the assertion goes through the fake; each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE` and `CLEANUP_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
@@ -909,6 +921,7 @@ exactly what the base Mutation verification invariant forbids.
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
 | `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally` (a plain statement after the `try`), so a failing `flush` skips the close inside the mapped region and a failing close's error escapes | `test_final_write_close_failure_is_mapped` (AC-3.8 — the recording proxy's `close` alone raises; the mutant prints a traceback instead of `stream_write_failed`) and `test_final_write_failure_before_close_still_closes` (AC-3.8 — the proxy's `flush` and `close` both raise; the mutant never calls the proxy's `close` from `_final_write`, and the outer `finally` closes the real handle, not the proxy) |
+| `verify-deferred-past-second-write` | `main` verifies both artifacts only after both `_final_write` calls, so stderr is truncated and written before a stdout verification failure is diagnosed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — the detail lines must read `failed: stdout` / `skipped: stderr` and the stderr artifact's bytes must be unchanged) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
 | `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
@@ -944,7 +957,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Fifty-nine rows, fifty-nine mutations — fifty-seven of the helper's source (the AC-5.3 row, once
+Sixty rows, sixty mutations — fifty-eight of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1086,3 +1099,4 @@ mean the probe never created one.
 - v1.47: Design audit v41 (codex must 2; agy clean): _final_write closes in a finally with the close error mapped in the same region, plus its mutation (55 rows); the reader-less-FIFO ENXIO behaviour is cited from a probe on python 3.11.8/darwin.
 - v1.48: Design audit v42 (codex must 1; agy clean): final-write-close-not-in-finally is killed by an injected close failure — test_final_write_close_failure_is_mapped (close alone raises → mapped, no traceback) and test_final_write_failure_before_close_still_closes now injects flush AND close on a recording proxy handed through the _final_write seam and asserts the proxy's close was called, which the outer finally (holding the real handle) cannot produce; fifth injection reused, 55 rows unchanged.
 - v1.49: Design audit v43 (codex must 1; agy must 1 should 1): _close_stream(handle) is the one closure primitive and the sixth named injection; main's backstop close records instead of raising and selects afterwards — StreamCloseFailed → UNREADABLE reason=stream_close_failed (exit 2, os_error:) outranks TIMEOUT, a pending exit-2 error outranks it (__context__); the three mapped OS-call regions of main stated as the class with its residual; indented-closer-accepted and stream-open-oserror-unwrapped mutations with their tests; 59 rows (57 + 2).
+- v1.50: Design audit v44 (codex must 2 should 1; agy clean, low-evidence): the post-spawn taxonomy is five outcomes with stream_close_failed between LAUNCH_FAILED stage=reap and TIMEOUT; the AC-4.6 reap test binds real_killpg before patching the process-global os; artifact verification is per stream before the next write, with verify-deferred-past-second-write and the extended read-back test; 60 rows (58 + 2).
