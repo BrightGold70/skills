@@ -79,10 +79,14 @@ caller (test, or operator on the CLI)
 
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
 validation, ordinal validation, timeout validation, preamble readability and stream-path
-writability are all checked **before** `bash` is spawned, and stream artifacts are truncated only
-after the last of them passes. Exactly two exit-2 verdicts can follow a spawn — `TIMEOUT` and
-`CLEANUP_FAILED` — and both are operational errors about the run itself, so neither carries
-`rc=`; nothing that ran is reported as a measurement unless the cwd is gone.
+writability are all checked **before** `bash` is spawned, and no stream artifact is truncated
+before a successful run. **Exactly three exit-2 verdicts can follow a spawn, in this precedence:**
+`CLEANUP_FAILED` (raised from the read-back after `finally`, so it outranks everything), then
+`TIMEOUT`, then `UNREADABLE reason=stream_write_failed` (only reachable on the path that would
+otherwise print `RAN`, because streams are written only after a successful, cleaned-up run). All
+three are operational errors about the run itself, so none carries `rc=`, and on the first two
+nothing is written to any artifact; nothing that ran is reported as a measurement unless the cwd
+is gone *and* every promised artifact exists.
 
 ## Detailed Design
 
@@ -157,7 +161,10 @@ replaced (AC-2.5).
 **Overlapping keys refuse** (AC-2.7). If any key is a substring of another, the result depends on
 iteration order, and a silently order-dependent answer is the failure class this whole feature
 exists to catch. `SUBST_OVERLAP keys=<n>` with a detail line per offending pair, exit 2, nothing
-executed — rather than picking an order and documenting it, which only moves the surprise.
+executed — rather than picking an order and documenting it, which only moves the surprise. `<n>`
+counts the **distinct keys implicated**, not the pairs (`a`, `ab`, `abc` → `keys=3`, three pairs);
+each unordered pair appears once as `overlap: <shorter> <longer>`, and the lines are sorted by
+`(shorter, longer)`, so the same map always produces the same diagnostic.
 
 Any key with a count of zero is collected; if the collection is non-empty nothing is executed and
 every missing key gets its own detail line.
@@ -252,7 +259,7 @@ an undecodable byte becomes U+FFFD instead of a `UnicodeDecodeError` escaping th
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
 | Delegating bounder | `h-mad/tests/docsections.py` | modify | import the authoritative bounder; drop the duplicate `_fence_aware_end` (AC-1.8) |
-| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py` |
+| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`, so the harness credits each only through its named RED |
 
 ## Implementation Order
 
@@ -370,18 +377,22 @@ are the contract's, argument grammar is argparse's**: `--index` and `--shell-tim
 one `DOCBLOCK:` line; only an unknown option or a missing value reaches argparse's usage error,
 the documented single non-`DOCBLOCK` exit 2.
 
-**Stream artifacts: probed without truncation, reserved after every check, overwritten, written
-through the held handle.** The writability pre-check opens each of `--stdout`/`--stderr` for
-*append* and closes it — writable or not, nothing is emptied — and runs beside the alias, index,
-timeout, info-string and preamble checks. Only once all of them pass are both opened with
-`open(path, "w", encoding="utf-8")`, which creates or truncates exactly as a shell `>` does, so an
-existing artifact is overwritten, never appended, and a refusal on the second path can never have
-already emptied the first. Those two handles stay open across the run and are what the streams are
-finally written to. A failure *after* the run can therefore only be a write on an open descriptor (disk
-full, I/O error) and maps to `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2;
-the `rc` is not reported, because the artifact the caller was promised does not exist. Aliased
-paths are refused before either is opened (AC-3.9), so two distinct destinations cannot collapse
-between the check and the write.
+**Stream artifacts: reserved last, never truncated by an open, written through the held handle.**
+The order in `main` is extract → select → substitute → validate (info string, index, timeout,
+preamble, alias) → **reserve** → spawn. Reservation opens `--stdout` then `--stderr` with
+`open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
+never empties an existing one, so there is no moment at which one artifact is truncated while the
+other is still unreserved. If the second open fails, the first handle is closed and — only if this
+call created the file (it did not exist before the open) — unlinked, so a pre-existing artifact
+keeps every byte and a refusal leaves no new empty file. The truncation is the final write itself:
+on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); truncate(); write(…)`,
+so an existing artifact is overwritten, never appended. On `TIMEOUT` or `CLEANUP_FAILED` nothing is
+written to either handle and pre-existing artifacts are untouched. A failure *in* that final write
+can therefore only be an error on an open descriptor (disk full, I/O error) and maps to
+`StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2; the `rc` is not reported,
+because the artifact the caller was promised does not exist. Aliased paths are refused before
+either is opened (AC-3.9), so two distinct destinations cannot collapse between the check and the
+write.
 
 Verdict lines, one per run:
 
@@ -468,8 +479,8 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-1.1–1.7 | tagged-vs-untagged selection; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 2, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
-| AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP` |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a refusal on `--stderr` leaves a pre-existing `--stdout` file's bytes intact** (probe-then-reserve); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
+| AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path)` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
@@ -477,7 +488,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 2, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`: `os.killpg` monkeypatched to raise `ProcessLookupError` → still `TIMEOUT`, cwd absent, no traceback; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
-| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither); and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
+| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither), where `test_suite_floor_holds` computes the floor as `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + the length of a fixed tuple of the named node IDs added to existing files, each asserted present; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 Verification commands:
 
@@ -570,3 +581,4 @@ mean the probe never created one.
 - v1.12: Plan re-audit v13 back-propagation: --preamble-file in the CLI line; stream artifacts reserved at pre-check with overwrite semantics and StreamWriteFailed; CleanupFailed carries its cause, with the two cleanup mutations and the tests that kill them; the second named fault injection (rmtree).
 - v1.13: Plan re-audit v14 back-propagation: composition rule in the preamble paragraph; allow_abbrev=False on the parser; Test Plan rows for both.
 - v1.14: Design audit v6 (agy must 1, codex must 2 should 2): composition uses text-prime (substituted); Popen text=True utf-8 replace; timeout validated finite and positive before spawn (BadTimeout/BAD_TIMEOUT); stream artifacts probed for append then reserved after every check; tree-wide single-tag cardinality test; Test Plan rows for each.
+- v1.15: Design audit v7 (codex must 4 should 1; agy clean): reservation last, append-mode, truncate at the final write, created-file unlink on a failed second reservation; three post-spawn exit-2 verdicts with explicit precedence; SUBST_OVERLAP keys= and ordering defined; docsections.json named-test form; computed AC-6.4 floor.

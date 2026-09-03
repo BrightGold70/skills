@@ -58,20 +58,25 @@ that lacks a trailing newline cannot fuse with the recipe's first line
 (test: `test_preamble_without_trailing_newline_still_precedes_the_block`, whose preamble sets a
 variable and ends without `\n`, and whose block's first line reads it). The registry entry carries a detail row for that reason
 like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
-reserved after every check**: each path is first probed writable without truncation (opened for
-append, closed) alongside the alias, index, timeout, info-string and preamble checks; only when
-all of them pass are both opened with `open(path, "w")` — creating or truncating exactly as a
-shell `>` would — and those handles stay open through the run and are what the streams are
-finally written to. So a refusal on any check leaves a pre-existing artifact intact, and a
-truncation is always followed by a run. So "passed the pre-check, then failed the write" can
-only mean a write error on an already-open descriptor (disk full, I/O error), which maps to
+reserved after every check, and no open ever truncates**: after extraction, selection,
+substitution and every pre-spawn validation (info string, index, timeout, preamble, alias) have
+passed, both paths are opened for *append* and the handles held — append creates a missing file
+and never empties an existing one. The truncation is the final write itself, `seek(0);
+truncate(); write`, on those held handles after a successful run. So a failure to reserve the
+second path finds the first untouched (a file this call created is unlinked again; a pre-existing
+one keeps every byte), a refusal anywhere earlier touches neither, and a run ending in `TIMEOUT`
+or `CLEANUP_FAILED` writes nothing to either. "Reserved, then failed the write" can therefore only
+mean a write error on an already-open descriptor (disk full, I/O error), which maps to
 `UNREADABLE reason=stream_write_failed`, exit 2, after the run — the block's `rc` is lost with the
 artifact, which is the honest outcome, since the artifact the caller was promised does not exist.
 Two paths that resolve to one file are refused before either is opened (AC-3.9), so distinct
 destinations cannot collapse between check and write. Tests:
-`test_stream_paths_truncate_an_existing_file` (a pre-existing file is overwritten, not appended)
-and `test_stream_write_failure_after_the_run_is_a_refusal` (the second open descriptor is closed
-under the helper's feet by the test — a deterministic stand-in for disk-full — and the verdict is
+`test_stream_paths_truncate_an_existing_file` (a pre-existing file is overwritten, not appended),
+`test_stdout_survives_a_failed_stderr_reservation` (pre-existing `--stdout` bytes are identical
+after `--stderr` names an unwritable path, and a `--stdout` file the call created is gone),
+`test_streams_untouched_after_a_timeout`, and
+`test_stream_write_failure_after_the_run_is_a_refusal` (the held descriptor is closed under the
+helper's feet by the test — a deterministic stand-in for disk-full — and the verdict is
 `UNREADABLE reason=stream_write_failed`).
 
 **The fixture preamble is load-bearing, not a convenience.** A documented recipe may consume a
@@ -164,7 +169,15 @@ directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves
 first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py` — at its
 fence-state update and its heading match respectively, the same two guards they mutate today —
 the third stays (it mutates `section_from`'s call, which remains), and the harness's exact-once
-anchor rule makes a missed re-point a refusal rather than a silent survivor. **Ordering, since the
+anchor rule makes a missed re-point a refusal rather than a silent survivor. **All four convert to
+the harness's named-test form at the same time**: today the spec carries only `command` and an
+informational `_killed_by` per mutation, which the harness does not execute — it scores "did the
+suite go red", the form this repo has already seen ship a wrong-catcher as `ALL_CAUGHT`. The
+conversion adds `"target_command": ["python3.11", "-m", "pytest", "-q"]` and moves each
+`_killed_by` value into that mutation's `test` key (`test_a_fenced_comment_does_not_end_the_section`,
+`test_a_section_owns_its_subsections`, `test_section_from_bounds_an_offset_anchored_pin`,
+`test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named test
+goes RED. **Ordering, since the
 source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
 — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
 lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
@@ -462,7 +475,12 @@ the duplicate bounder is.
   ```
 
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
-  adds; a run that reports fewer collected has lost a test, whatever its pass line says.
+  adds — and "every test this feature adds" is computed, not estimated: the collected count of
+  `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone, plus a fixed tuple
+  of the named node IDs added to `test_h_mad_collect_report_docs.py` and `test_docsections.py`
+  (each asserted to exist). `test_suite_floor_holds` asserts
+  `full_collected >= 2747 + new_module + len(tuple)` and the same for passing, so a deleted
+  pre-existing test cannot hide behind the additions.
 - `git status --porcelain` is unchanged across a run of a block that writes files.
 - No hand-written ` ```bash ` extraction remains on the **executing** path of
   `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` both route through
@@ -509,3 +527,4 @@ design begins.
 - v1.18: Plan re-audit v13 (codex must 3 should 1; agy clean): state the full CLI contract including --preamble-file and its pre-spawn refusal; cite the AC-3.14 cleanup probe (python3.11, euid 501) and add the root-skip plus fault-injected fallbacks; replace 'anchors pinned at impl-plan time' with the author-together / re-read / harness / named-RED ordering; define stream overwrite and reservation semantics (stream_write_failed).
 - v1.19: Plan re-audit v14 (codex must 1 should 1; agy clean): preamble/block composition rule with its no-final-newline test; allow_abbrev=False with an abbreviated-option rejection test.
 - v1.20: Design audit v6 back-propagation: composition with the substituted text; probe-then-reserve stream artifacts; BAD_TIMEOUT and the values-vs-grammar CLI policy; RunResult streams are UTF-8/replace str.
+- v1.21: Design audit v7 back-propagation: append-mode reservation after every check with truncation at the final write, and its four tests; docsections.json converts all four mutations to the named-test form; the AC-6.4 floor is computed by test_suite_floor_holds.

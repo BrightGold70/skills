@@ -92,8 +92,11 @@ not opted in.
     cannot inflate or deflate a reported count.
   - AC-2.7: Overlapping keys refuse rather than resolve by order — if any key is a substring of
     another, nothing is executed and the CLI prints `DOCBLOCK: SUBST_OVERLAP keys=<n>` with a
-    detail line naming each overlapping pair, and exits 2. Order-dependent substitution is the
-    silent-wrong-answer shape this feature exists to avoid.
+    detail line naming each overlapping pair, and exits 2. `<n>` is the number of **distinct keys
+    implicated** (three keys where one contains both others → `keys=3`, two pairs); the detail
+    lines are `overlap: <shorter> <longer>`, one per unordered pair, sorted lexicographically by
+    `(shorter, longer)`, so the diagnostic is deterministic and the registry can pin it.
+    Order-dependent substitution is the silent-wrong-answer shape this feature exists to avoid.
 
 ### FR-3: Execute in a disposable cwd under a declared shell mode
 
@@ -132,10 +135,15 @@ not opted in.
     **overwritten** — truncated at the pre-run check, as a shell `>` would — never appended; and a
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
-    over an artifact that does not exist. The truncation happens only once every refusal has been
-    passed: both paths are first checked writable *without* truncating (opened for append and
-    closed), and only after every other check succeeds are they opened for writing — so a
-    refusal on the second path cannot have already emptied the first.
+    over an artifact that does not exist. **No open ever truncates.** After every other refusal
+    has passed — including substitution — both paths are opened for *append* and the handles
+    held; the truncation is the final write itself (`seek(0); truncate(); write`) on those held
+    handles, after a successful run. So a failure to reserve the second path finds the first
+    untouched (a file this call *created* while reserving is unlinked again, a pre-existing one
+    keeps every byte), and a run that ends in `TIMEOUT` or `CLEANUP_FAILED` leaves pre-existing
+    artifacts exactly as they were, because nothing is written on those paths. Tests: a
+    pre-existing `--stdout` file is byte-identical after `--stderr` fails to reserve, and after a
+    timeout.
   - AC-3.9: `--stdout` and `--stderr` naming the **same path** refuses with
     `DOCBLOCK: UNREADABLE reason=stream_paths_alias`, exits 2, and **does not run the block** —
     one file cannot hold two streams verbatim, so the alternative is silently merging or
@@ -275,7 +283,15 @@ not opted in.
     of AC-3.11**, which is what supplies `COLLECT_OUT` by running the real collector; a migration
     that cannot supply it cannot reach the `GATE: PASS` branch at all.
   - AC-6.4: The full suite passes, and the count is no lower than the pre-change count plus the
-    tests this feature adds.
+    tests this feature adds. **The floor is mechanical, not prose**: the baseline is the constant
+    `2747` (collected and passing at `6b4df35`, cited in the plan with its commands); the
+    feature's additions are the collected count of the new module
+    `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
+    alone) plus a fixed tuple of the named new node IDs added to existing files
+    (`test_h_mad_collect_report_docs.py`, `test_docsections.py`), each of which the test asserts
+    exists. The test asserts `full_collected >= 2747 + new_module + len(tuple)` and the same for
+    the pass count, so a deleted pre-existing test lowers the left side below the floor and
+    cannot hide behind the additions.
   - AC-6.5: **Connection discrimination.** Reverting the connection alone — the import of
     `h_mad_doc_block_exec` and the call to it in `test_h_mad_collect_report_docs.py`, leaving the
     helper and its own tests intact — makes a named test in that file fail. The helper's own suite
@@ -356,3 +372,4 @@ not opted in.
 - v1.14: Plan re-audit v13 back-propagation: AC-3.8 states overwrite semantics and the post-run stream_write_failed refusal; AC-3.14's CleanupFailed carries its cause.
 - v1.15: Plan re-audit v14: AC-3.11 states the preamble/block composition rule (one newline boundary, always) and its no-trailing-newline test.
 - v1.16: Design audit v6 (agy must 1, codex must 2 should 2): AC-3.11 composes the preamble with the substituted text; AC-5.6 validates the bound before spawn (BAD_TIMEOUT) and states the values-vs-grammar CLI policy; AC-3.6 pins UTF-8/replace str streams; AC-6.1 asserts tree-wide tag cardinality 1; AC-3.8 probes stream paths without truncation and reserves after every check. 47 ACs.
+- v1.17: Design audit v7 (codex must 4 should 1; agy clean): AC-3.8 reserves both streams in append mode after every refusal and truncates only at the final write; AC-6.4's floor is computed (2747 + new module + named tuple); AC-2.7 defines keys= as distinct keys and orders the overlap lines.
