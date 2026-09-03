@@ -346,8 +346,8 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 37 mutations plus the AC-5.3 self-check (38 rows), each bound to its RED test, enumerated under Test Plan |
-| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 38 source mutations (38 rows), each bound to its RED test, enumerated under Test Plan |
+| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
@@ -629,10 +629,29 @@ are the real process's, not a return value — the same shape `test_skill_candid
 **Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry.** Every
 guard below carries one mutation and the one named test that must go RED under it; the spec's
 `command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_doc_block_exec.py", "-q"]` and its
-`target_command` is `["python3.11", "-m", "pytest", "-q"]`, so the harness credits a mutation only
-through its `test` key. Exact `find` anchors are set from the landed source in the same task that
-lands it (the author-together ordering the plan states for `docsections.json`), each exact-once;
-the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
+`target_command` is `["python3.11", "-m", "pytest", "-q"]`, `root` is `../..` (commands run from
+`h-mad/`, as `docsections.json` does), and **every `test` key is the full node ID**
+`tests/test_h_mad_doc_block_exec.py::<name>` — the harness runs `target_command + [test]`, and a
+bare `test_*` name is a nonexistent path to pytest, so the names in the table below are the
+`<name>` half and the spec carries them qualified. The same rule binds the other two specs:
+`tests/test_h_mad_collect_report_docs.py::<name>` in `doc_block_exec_wire.json` (whose `command`
+is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`) and
+`tests/test_docsections.py::<name>` in `docsections.json`. Exact `find` anchors are set from the
+landed source in the same task that lands it (the author-together ordering the plan states for
+`docsections.json`), each exact-once; the mechanism column is what the anchor must express.
+`ALL_CAUGHT` is required for all three.
+
+**Wire mutation spec — `h-mad/tests/mutation-specs/doc_block_exec_wire.json`** (the plan's FR-6
+table, restated here so the design enumerates every spec it names):
+
+| mutation | mechanism | killed by (`test` key, under `tests/test_h_mad_collect_report_docs.py::`) |
+|---|---|---|
+| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall` instead of `dbe.extract`/`dbe.select`, helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
+| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
+| `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
+
+Under the two reverts the helper's own suite must stay green — the half that proves the failing
+test pins the wire, not the callee — and the harness records both runs.
 
 | mutation | guard it removes (mechanism) | killed by (`test` key) |
 |---|---|---|
@@ -673,9 +692,11 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `registry-row-removed` | one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`) | `test_every_emittable_line_has_a_registry_row` (AC-4.5) |
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
-| `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
+| `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Thirty-eight rows: thirty-seven mutations plus the AC-5.3 self-check — the two AC-4.5 rows are the
+Thirty-eight rows, thirty-eight mutations — every row is a source mutation of the helper (the
+AC-5.3 row, once described as a fixture-copy self-check, is now a real argv mutation the source
+scan must catch); the two AC-4.5 rows are the
 manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
@@ -793,3 +814,4 @@ mean the probe never created one.
 - v1.26: Design audit v18 (codex must 2 should 1 nit 1; agy clean): AC-4.5 gets two mutations (registry row removed, detail line undocumented); the delegation wire is module-qualified and mutation-pinned; the reap-failure branch is stated never to wait (37 rows).
 - v1.27: Design audit v19 (codex must 1; agy see report): the AC-6 test row scopes the no-re.findall assertion to the executing path and pins the :412 scan as the single remaining occurrence.
 - v1.28: Design audit v21 (codex must 1; agy should 3): poll() before killpg, the AC-5.5 race driven by a real fixture with no mock, the AC-4.6 reap test's teardown waits on the handle it holds; poll-before-killpg-removed mutation (38 rows); FR-4 summary names three operational classes; extract's doc is a path.
+- v1.29: Design audit v22 (codex must 2; agy clean + 2 nits): the binding rule (root, command, target_command, full node IDs) stated for all three specs; the AC-5.3 row is a real argv mutation; the wire spec's three mutations enumerated.

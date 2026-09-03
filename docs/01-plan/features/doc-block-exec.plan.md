@@ -127,8 +127,9 @@ test file loses its hand-rolled extraction.
 The patterns to follow are already established in this repository and are not being invented here:
 a helper exposes importable functions plus a thin CLI; the CLI prints exactly one verdict line;
 every verdict — `RAN` and every refusal that judged readable input, `TIMEOUT` included — exits 0,
-and exit 2 is reserved for the operational errors the base invariant names (`UNREADABLE`,
-`CLEANUP_FAILED`, `LAUNCH_FAILED`); the registry entry and the emittable detail lines
+and exit 2 is reserved for the operational-error class the base invariant reserves non-zero for
+— "missing/unreadable input" is its example; `UNREADABLE`, `CLEANUP_FAILED` and `LAUNCH_FAILED`
+are this feature's members of that class; the registry entry and the emittable detail lines
 are pinned to each other bidirectionally; and every guard gets a mutation that must be caught by a
 named test.
 
@@ -193,12 +194,14 @@ the harness's named-test form at the same time**: today the spec carries only `c
 informational `_killed_by` per mutation, which the harness does not execute — it scores "did the
 suite go red", the form this repo has already seen ship a wrong-catcher as `ALL_CAUGHT`. The
 conversion adds `"target_command": ["python3.11", "-m", "pytest", "-q"]` and moves each
-`_killed_by` value into that mutation's `test` key (`test_a_fenced_comment_does_not_end_the_section`,
-`test_a_section_owns_its_subsections`, `test_section_from_bounds_an_offset_anchored_pin`,
-`test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named test
-goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` restores a
+`_killed_by` value — already a **full node ID**, `tests/test_docsections.py::<name>`, the only
+form the harness can run as `target_command + [test]` — into that mutation's `test` key
+(`tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section`,
+`…::test_a_section_owns_its_subsections`, `…::test_section_from_bounds_an_offset_anchored_pin`,
+`…::test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named
+test goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` restores a
 local `_fence_aware_end` in `tests/docsections.py` and calls it — the callee untouched — and is
-killed by `test_docsections_delegates_to_the_authoritative_bounder`
+killed by `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`
 (`monkeypatch.setattr(_dbe, "fence_aware_end", spy)` then `titled_section(...)`; the spy must
 fire), while the helper's own suite stays green under that revert, which is the half proving the
 test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
@@ -322,7 +325,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 37 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 38 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -641,3 +644,4 @@ design begins.
 - v1.30: Design audit v18 (codex must 2 should 1 nit 1; agy clean): docsections delegates through a module-qualified alias and carries its own wire mutation (docsections-delegation-reverted); importer census corrected to three files with the command; 36 mutations plus the self-check.
 - v1.31: Plan re-audit v16 (codex clean + 1 nit; agy must 1 + 1 nit): substitute's row names BadSubstArg; five functions, not four; AC anchor cites spec v1.26.
 - v1.32: Plan re-audit v17 (codex must 2 should 1; agy clean) + design audit v21: fence_aware_end's contract names tilde runs and the 0-3 indentation rule with its tests and mutations; mutation-spec binding rule (root, command, target_command, full node IDs) for both new specs; extract's doc is a path; the naturally-emptied-group probe cited with poll()-first; five functions plus main; 37 mutations.
+- v1.33: Plan re-audit v18 (codex must 1; agy clean): docsections.json test keys are full node IDs; 38 source mutations; FR-4 summary states the invariant's class rather than claiming it names the tokens.
