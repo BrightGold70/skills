@@ -41,9 +41,13 @@ call.** This module owns the bounder; `h-mad/tests/docsections.py` imports it an
 `tests/`; `tests/` → `scripts/` is the correct direction and was available all along. **The
 mechanism is the one every test in `h-mad/tests/` already uses** for `SCRIPT_DIR`: `docsections.py`
 does `sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` itself, on the
-line before `from h_mad_doc_block_exec import fence_aware_end`, so the import holds when
-`test_docsections.py` is collected alone and never depends on a sibling test module having
-inserted the path first (the plan names the two tests that pin this). This also
+line before `import h_mad_doc_block_exec as _dbe`, so the import holds when `test_docsections.py`
+is collected alone and never depends on a sibling test module having inserted the path first
+(the plan names the two tests that pin this); the call is module-qualified,
+`_dbe.fence_aware_end(text, start, level)`, so the delegation *wire* can be discriminated by a spy
+under an isolated revert of the connection (`docsections.json`'s
+`docsections-delegation-reverted`, killed by
+`test_docsections_delegates_to_the_authoritative_bounder`). This also
 fixes a latent bug in `docsections` rather than duplicating it, and no existing test pins the
 early-exit behaviour (verified by grep before proposing the change).
 
@@ -270,7 +274,12 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    escapee) still holds the inherited pipes, so that `communicate` can block for as long as the
    escapee lives. It is therefore bounded too — `communicate(timeout=DRAIN_SECONDS)`, a module
    constant of 5 s — and on its own `TimeoutExpired` the helper closes `proc.stdout` and
-   `proc.stderr` itself, calls `proc.wait()` (the leader is SIGKILLed, so this returns at once),
+   `proc.stderr` itself, calls `proc.wait()` **only on the branch where `killpg` succeeded or
+   raised `ProcessLookupError`** — the leader is then SIGKILLed or gone, so this returns at once —
+   and **never on the `LaunchFailed("reap")` branch**, where the child could not be signalled and a
+   `wait()` would be unbounded (the state machine is: drain-with-timeout → close pipes → `wait()`
+   iff the group was signalled; the AC-4.6 reap test asserts the bounded return, which is what
+   proves that branch skips the wait),
    and raises `BlockTimeout` as it would have anyway. The escapee is outside the reap by AC-5.2's
    stated scope; what this bounds is the *helper's* wall time, which is now at most
    `timeout + DRAIN_SECONDS` plus process teardown, so FR-5's "every run is bounded" holds against
@@ -328,13 +337,13 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 34 mutations plus the AC-5.3 self-check (35 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 36 mutations plus the AC-5.3 self-check (37 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
 | Delegating bounder | `h-mad/tests/docsections.py` | modify | import the authoritative bounder; drop the duplicate `_fence_aware_end` (AC-1.8) |
-| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`, so the harness credits each only through its named RED |
+| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`; a fifth, `docsections-delegation-reverted` (local bounder restored, callee intact), is the Connection-enforcement wire mutation, killed by `test_docsections_delegates_to_the_authoritative_bounder` with the helper suite still green |
 
 ## Implementation Order
 
@@ -651,9 +660,12 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a quoted ```bash opener inside one is a candidate | `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` (AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
+| `registry-row-removed` | one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`) | `test_every_emittable_line_has_a_registry_row` (AC-4.5) |
+| `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
 
-Thirty-five rows: thirty-four mutations plus the AC-5.3 self-check; a guard added later without a
+Thirty-seven rows: thirty-six mutations plus the AC-5.3 self-check — the two AC-4.5 rows are the
+manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
 
@@ -767,3 +779,4 @@ mean the probe never created one.
 - v1.23: Design audit v15 (codex must 5 should 2; agy clean): tilde fences tracked with the marker character; cleanup failure on recorded error OR read-back; _final_write seam as the fifth injection with ordered writes and reported partial state; empty key refused in substitute; alias row worded on inodes; three new mutations (32 rows).
 - v1.24: Design audit v16 (codex must 3; agy clean): the killpg fake models an empty group (kill, wait, then raise); duplicate-key gets its own mutation; the chmod rollback runs inside the same try/finally selection with its own mutation and test (34 rows).
 - v1.25: Design audit v17 (codex must 1): 0-3 space indentation rule in the scanner, its hostile fixture and mutation (35 rows).
+- v1.26: Design audit v18 (codex must 2 should 1 nit 1; agy clean): AC-4.5 gets two mutations (registry row removed, detail line undocumented); the delegation wire is module-qualified and mutation-pinned; the reap-failure branch is stated never to wait (37 rows).

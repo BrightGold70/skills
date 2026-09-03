@@ -157,8 +157,10 @@ the existing toggle stops early inside an unbalanced four-backtick fence, which 
 new scanner from doing. So `docsections.py` imports the authoritative bounder instead — `tests/`
 depending on `scripts/` is the correct direction, it removes the duplicate rather than testing
 around it, and it fixes a latent bug there. Its public signatures are unchanged and no existing
-test pins the old behaviour (two files import it — `test_docsections.py` and
-`test_h_mad_review_evidence.py` — and both use only `titled_section`/`section_from`).
+test pins the old behaviour (three files import it — `test_docsections.py`,
+`test_h_mad_review_evidence.py` and `test_h_mad_wire_registry.py`, measured with
+`grep -rln 'from docsections import' --include='*.py' h-mad handoff` — and all three use only
+`titled_section`/`section_from`).
 
 **The cross-directory import is specified, not implied.** `docsections.py` is imported as a
 top-level module by test files that never touch `sys.path` for `scripts/`, so a bare
@@ -166,8 +168,11 @@ top-level module by test files that never touch `sys.path` for `scripts/`, so a 
 every test in `h-mad/tests/` already uses for `SCRIPT_DIR`
 (`test_h_mad_collect_report_docs.py:22`): `docsections.py` itself does
 `sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` immediately before
-`from h_mad_doc_block_exec import fence_aware_end`, so it is self-contained and never relies on
-another module having inserted the path first. **The bounder has a name and a contract**:
+`import h_mad_doc_block_exec as _dbe`, so it is self-contained and never relies on another module
+having inserted the path first — and the call is **module-qualified**, `_dbe.fence_aware_end(…)`,
+for the same reason the FR-6 consumer's calls are: the delegation is a *connection*, and the
+Connection-enforcement invariant wants it discriminated by an isolated wire mutation with the
+callee intact, which needs a spy that a pre-bound alias would hide. **The bounder has a name and a contract**:
 `fence_aware_end(text: str, start: int, level: int) -> int` — the offset of the next ATX heading
 at `level` or shallower after `start`, ignoring fenced blocks with CommonMark backtick-run
 tracking — exported in the module's `__all__` beside `extract`/`select`/`substitute`/`run_block`,
@@ -191,7 +196,13 @@ conversion adds `"target_command": ["python3.11", "-m", "pytest", "-q"]` and mov
 `_killed_by` value into that mutation's `test` key (`test_a_fenced_comment_does_not_end_the_section`,
 `test_a_section_owns_its_subsections`, `test_section_from_bounds_an_offset_anchored_pin`,
 `test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named test
-goes RED. **Ordering, since the
+goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` restores a
+local `_fence_aware_end` in `tests/docsections.py` and calls it — the callee untouched — and is
+killed by `test_docsections_delegates_to_the_authoritative_bounder`
+(`monkeypatch.setattr(_dbe, "fence_aware_end", spy)` then `titled_section(...)`; the spy must
+fire), while the helper's own suite stays green under that revert, which is the half proving the
+test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
+this row is the connection half, and the invariant requires both. **Ordering, since the
 source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
 — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
 lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
@@ -299,7 +310,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 34 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 36 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -570,3 +581,4 @@ design begins.
 - v1.27: Design audit v15 back-propagation: LAUNCH_FAILED named in both partition summaries; the stream-write-failure tests name the _final_write seam and the partial-write case; 31 mutations plus the self-check.
 - v1.28: Design audit v16 back-propagation: 33 mutations plus the self-check.
 - v1.29: Design audit v17 back-propagation: 34 mutations plus the self-check.
+- v1.30: Design audit v18 (codex must 2 should 1 nit 1; agy clean): docsections delegates through a module-qualified alias and carries its own wire mutation (docsections-delegation-reverted); importer census corrected to three files with the command; 36 mutations plus the self-check.
