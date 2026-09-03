@@ -112,16 +112,27 @@ top-level module by test files that never touch `sys.path` for `scripts/`, so a 
 every test in `h-mad/tests/` already uses for `SCRIPT_DIR`
 (`test_h_mad_collect_report_docs.py:22`): `docsections.py` itself does
 `sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` immediately before
-the import, so it is self-contained and never relies on another module having inserted the path
-first. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
+`from h_mad_doc_block_exec import fence_aware_end`, so it is self-contained and never relies on
+another module having inserted the path first. **The bounder has a name and a contract**:
+`fence_aware_end(text: str, start: int, level: int) -> int` — the offset of the next ATX heading
+at `level` or shallower after `start`, ignoring fenced blocks with CommonMark backtick-run
+tracking — exported in the module's `__all__` beside `extract`/`select`/`substitute`/`run_block`,
+and the same function `extract` uses to bound its own section. The two call sites replace
+one-for-one: `titled_section` returns
+`text[match.end():fence_aware_end(text, match.end(), level)]` and `section_from` returns
+`text[offset:fence_aware_end(text, offset, level)]`; `_fence_aware_end` is deleted. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
 repo root (collected **alone**), and an isolated `python3 -c "import docsections"` with the tests
 directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves with the code:**
 `h-mad/tests/mutation-specs/docsections.json` anchors three of its four mutations
 (`fence-tracking-removed`, `section-no-longer-owns-its-subsections`,
 `offset-anchored-bound-runs-to-end-of-file`) on lines that leave `tests/docsections.py`; the
-first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py`, the third
-stays (it mutates `section_from`'s call, which remains), and the harness's exact-once anchor
-rule makes a missed re-point a refusal rather than a silent survivor.
+first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py` — at its
+fence-state update and its heading match respectively, the same two guards they mutate today —
+the third stays (it mutates `section_from`'s call, which remains), and the harness's exact-once
+anchor rule makes a missed re-point a refusal rather than a silent survivor. The exact `find`
+strings are pinned at impl-plan time against the landed source, because a plan cannot quote lines
+of a file that does not exist yet and a guessed anchor is the harness refusal this paragraph just
+promised.
 
 **FR-6 is a wiring task, not a new-behaviour task, and is planned as one.** Its deliverable is a
 *connection* — the migrated call sites reaching `h_mad_doc_block_exec` — and the Connection
@@ -145,11 +156,18 @@ planned against):
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(text: str, subs: Mapping[str, str]) -> tuple[str, dict[str, int]]` | raises `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block, *, subs=None, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)`; raises `BlockTimeout`, `CleanupFailed` |
+| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
 
-`h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points. `_gate_bash_block`
-becomes `select(extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
+`h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
+is module-qualified**: the file adds `import h_mad_doc_block_exec as dbe` after its existing
+`sys.path.insert(0, str(SCRIPT_DIR))` and never `from h_mad_doc_block_exec import …`, because a
+pre-bound alias is invisible to a spy installed on the module (`monkeypatch.setattr(dbe,
+"extract", spy)` observes `dbe.extract(...)` and observes nothing through a bare `extract`). A
+test asserts the consumer's source carries no `from h_mad_doc_block_exec import`, so the
+discrimination cannot be lost by a later tidy-up. `_gate_bash_block` becomes
+`dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
 `run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
-`RunResult`, calling `run_block(block, subs={"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
+`RunResult`, calling `dbe.run_block(block, subs={"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
 shlex.quote(str(gate))}, preamble=<the COLLECT_OUT line it builds today>)`. Its four assertions
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
 nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
@@ -159,8 +177,8 @@ moves; `:412` keeps `re.findall` on purpose.
 
 | mutation | mechanism | killed by |
 |---|---|---|
-| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `extract`/`select` (the pre-migration shape, helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — a spy on `h_mad_doc_block_exec.extract` must be called (AC-6.5) |
-| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and a spy on `run_block` fires (AC-6.5) |
+| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select` (the pre-migration shape, helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — `monkeypatch.setattr(dbe, "extract", spy)` on the consumer's module-qualified alias, and the spy must have been called (AC-6.5) |
+| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and `monkeypatch.setattr(dbe, "run_block", spy)` fires (AC-6.5) |
 | `wire-unconditional` | the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences | `test_gate_block_refuses_an_untagged_recipe` — a fixture section whose gating block lacks the tag must raise `BlockNotFound` (AC-6.6) |
 | (no mutation) | — | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned) |
 
@@ -365,6 +383,18 @@ the duplicate bounder is.
   named test too.
 - The mutation spec reports `ALL_CAUGHT`, each mutation killed by its own named test.
 - The full suite passes at no lower a count than the pre-change baseline plus this feature's tests.
+  **The baseline is cited, not remembered** — measured at `6b4df35`, before any implementation
+  commit, from the repo root:
+
+  ```
+  $ python3.11 -m pytest --collect-only -q | tail -1
+  2747 tests collected in 2.03s
+  $ python3.11 -m pytest -q -p no:cacheprovider | tail -1
+  2747 passed in 397.40s (0:06:37)
+  ```
+
+  So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
+  adds; a run that reports fewer collected has lost a test, whatever its pass line says.
 - `git status --porcelain` is unchanged across a run of a block that writes files.
 - No hand-written ` ```bash ` extraction remains on the **executing** path of
   `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` both route through
@@ -407,3 +437,4 @@ design begins.
 - v1.14: Plan re-audit v10: state why the portable-time-bounds prescription does not transfer to a stdlib module (its premise about this helper does not hold); name the full launch/reap/cleanup sequence; correct the preamble causal claim on its seventh surface.
 - v1.15: Plan re-audit v10 (agy): reconcile the docsections measurement with the later decision to change that file — the tag was never the reason, the duplicate bounder is.
 - v1.16: Plan re-audit v11: specify the tests/->scripts/ import (self-contained sys.path insert, collect-alone test, docsections.json re-point); cite the AC-5.2 in-group/escape/ProcessLookupError probe with its command and output; add the task-level API and caller map; name the FR-6 wire tests and the mutation each kills; track the AC count to 46 (spec v1.13); add the cleanup-verification risk row.
+- v1.17: Plan re-audit v12 (codex must 2 should 1; agy clean): name the bounder fence_aware_end(text, start, level) -> int and its two call replacements in docsections; make every consumer call module-qualified (dbe.*) so the wire spies observe it, pinned by a no-from-import test; cite the collected and passing baseline (2747/2747 at 6b4df35) with commands.
