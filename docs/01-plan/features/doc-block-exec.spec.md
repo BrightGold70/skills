@@ -125,7 +125,11 @@ not opted in.
     elsewhere in the tree, must not make this tool refuse. Validation follows opt-in.
   - AC-3.8: `--stdout <path>` and `--stderr <path>` are **optional**; given, each receives that
     stream verbatim, and the two files differ for a block writing different text to each. Omitted,
-    no stream file is written and the run still succeeds.
+    no stream file is written and the run still succeeds. An existing file at either path is
+    **overwritten** — truncated at the pre-run check, as a shell `>` would — never appended; and a
+    write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
+    with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
+    over an artifact that does not exist.
   - AC-3.9: `--stdout` and `--stderr` naming the **same path** refuses with
     `DOCBLOCK: UNREADABLE reason=stream_paths_alias`, exits 2, and **does not run the block** —
     one file cannot hold two streams verbatim, so the alternative is silently merging or
@@ -163,7 +167,8 @@ not opted in.
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
     exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
-    `CleanupFailed(path)` and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2 —
+    `CleanupFailed(path)` — carrying the `OSError` when one was raised, `None` when only the
+    read-back caught a silent retention — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2 —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
     (`mkdir keep && chmod 000 keep`); measured on this machine, `shutil.rmtree` raises
