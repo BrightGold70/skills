@@ -403,7 +403,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 50 mutations (50 rows: 48 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 52 mutations (52 rows: 50 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -447,7 +447,11 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `_gate_block() -> Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
    str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
    `run_recipe` — in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
-   (new) and the six named tests in that file. `:412` in the same file is deliberately untouched:
+   (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
+   because they assert post-Task-5 state, `test_exactly_one_tagged_fence_in_the_tree` (the tag
+   exists only after this task) and `test_suite_floor_holds` (its seven-node tuple exists only
+   after this task), both still living in `h-mad/tests/test_h_mad_doc_block_exec.py`**. `:412` in
+   the same file is deliberately untouched:
    it selects a *different*, untagged block (`exec codex`) and only inspects it, so it neither
    breaks nor belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour.
    Depends on 1–4. Tag and migration cannot be split: tagging the gate fence makes `:270`'s
@@ -583,8 +587,19 @@ never empties an existing one, so there is no moment at which one artifact is tr
 other is still unreserved. **Creation is detected atomically, not by an `exists()` check**: the
 reservation is a two-arm loop: try `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` —
 success means this call created the file and records `created=True`; on `FileExistsError` try
-`os.open(path, O_WRONLY | O_APPEND)` **without `O_CREAT`** — success means a pre-existing file
-(`created=False`); on `FileNotFoundError` there (the file vanished between the two opens) go back
+`os.open(path, O_WRONLY | O_APPEND | O_NONBLOCK)` **without `O_CREAT`** — success means a
+pre-existing file (`created=False`); `O_NONBLOCK` is what keeps the open **bounded**: on a FIFO
+with no reader a blocking open never returns (no `DOCBLOCK:` line, no timeout — the block has not
+even been spawned), whereas with `O_NONBLOCK` it fails at once with `ENXIO`. Every descriptor from
+either arm is then `fstat`ed and must be a **regular file** (`stat.S_ISREG`); a FIFO, socket,
+device or directory is closed and refused as `StreamPathUnwritable`
+(`UNREADABLE reason=stream_path_unwritable`), checked on the descriptor rather than the path so
+there is no check-to-open race, and a file this call created that turns out non-regular cannot
+exist (an exclusive create makes a regular file). `test_stream_path_fifo_without_reader_refuses_bounded`
+makes a `os.mkfifo` path the `--stdout` and asserts the refusal arrives within a second and the
+block ran nothing; mutation `nonregular-stream-accepted` (the `S_ISREG` check removed) and
+`stream-open-blocking` (`O_NONBLOCK` dropped, which the same FIFO test catches by timing out its
+own bounded wait); on `FileNotFoundError` there (the file vanished between the two opens) go back
 to the exclusive-create arm. Because the second arm can never create, every file this call
 creates is created by the exclusive arm and recorded as such — a plain retry with `O_CREAT`
 would create a fresh file and mis-record it as pre-existing, which is exactly what a later refusal
@@ -780,7 +795,7 @@ table, restated here so the design enumerates every spec it names):
 
 | mutation | mechanism | killed by (`test` key, under `tests/test_h_mad_collect_report_docs.py::`) |
 |---|---|---|
-| `wire-revert-extract` | `_gate_block` resolves its block with a local `re.findall` instead of `dbe.extract`/`dbe.select`, helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
+| `wire-revert-extract` | `_gate_block` resolves its block with a local, tag-tolerant `re.findall(r"```bash[^\n]*\n(.*?)```")` instead of `dbe.extract`/`dbe.select` (tag-tolerant so the mutant still resolves the tagged block and the wire, not the regex, is what fails), helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
 | `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` (AC-6.2) |
@@ -818,6 +833,8 @@ exactly what the base Mutation verification invariant forbids.
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
+| `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
+| `stream-open-blocking` | `O_NONBLOCK` is dropped from the existing-file arm, so a reader-less FIFO blocks the open forever | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10 — the test's own bounded wait is what makes this mutant RED rather than a hang; it runs the CLI in a subprocess with `timeout=5` and treats expiry as failure) |
 | `stream-alias-check-removed` | the `fstat` `(st_dev, st_ino)` comparison is gone | `test_hard_linked_stream_paths_refuse` (AC-3.9) |
 | `chmod-0700-removed` | `os.chmod(cwd, 0o700)` after `mkdtemp` is gone | `test_cwd_mode_is_0700_under_hostile_umask` (AC-3.13) |
 | `cleanup-errors-ignored` | `ignore_errors=True` restored | `test_cleanup_failure_carries_the_os_error` (AC-3.14) |
@@ -845,7 +862,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Fifty rows, fifty mutations — forty-eight of the helper's source (the AC-5.3 row, once
+Fifty-two rows, fifty-two mutations — fifty of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -982,3 +999,4 @@ mean the probe never created one.
 - v1.42: Design audit v36 (codex must 1; agy clean): prefix fence state from whole lines through the line containing start, boundaries only after start; hostile mid-line fixture and the prefix-state-truncated-mid-line mutation (49 rows).
 - v1.43: Plan re-audit v32 back-propagation: Task 5 and the wire-revert-extract row name _gate_block.
 - v1.44: Design audit v38 (codex must 1; agy clean): backtick-in-info prohibition in _fence_events, measured on both renderers, with its mutation (50 rows).
+- v1.45: Design audit v39 (codex must 1; agy must 1 should 1): the existing-file reservation arm opens O_NONBLOCK and every reserved descriptor must be a regular file (a reader-less FIFO refuses bounded), with two mutations (52 rows); the two post-Task-5 tests are authored in Task 5; the wire-revert-extract row names the tag-tolerant regex.
