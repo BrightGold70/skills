@@ -535,7 +535,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 76 mutations (76 rows: 74 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 77 mutations (77 rows: 75 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -885,13 +885,24 @@ and racy.)
 Verdict lines, one per run. **Every dynamic field is rendered through one escaper, `_field(value)`**
 (design audit v67): `heading=<h>`, `arg=<raw>`, `missing_key: <k>`, `duplicate_key: <k>`,
 `overlap: …`, `os_error: <text>`, `path=<p>`, `leftover: <path>`, `stream: <name>`, `value=<v>`
-and every other caller- or document-controlled value pass through it, and it rewrites `\r`, `\n`
-and every other control character (Unicode category `Cc`) to its `\xNN`/`\uNNNN` escape, so
-no argument, key, heading or path can start a second line — a `--heading` of
-`"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` yields exactly one `DOCBLOCK:` line, the
-`NOT_FOUND` one, with the newline visible as `\n` inside `heading=`. The rule is what keeps the
-one-line contract true for a machine consumer that greps `^DOCBLOCK:`; nothing else about the
-value is changed (spaces, quotes and non-ASCII pass verbatim). `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line`
+and every other caller- or document-controlled value pass through it, and it renders the value as
+a **double-quoted JSON string** — `json.dumps(value, ensure_ascii=False)`: `"` and `\` escaped,
+`\r`, `\n` and every other control character escaped, everything else (spaces, `=`, non-ASCII)
+verbatim inside the quotes — so no argument, key, heading or path can start a second line **or
+forge a field token inside the line**: a `--heading` of `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"`
+yields exactly one `DOCBLOCK:` line, the `NOT_FOUND` one, with the newline visible as `\n`
+inside `heading="…"`, and a `--heading` of `x rc=0` yields `heading="x rc=0"`, one quoted
+value, never a bare ` rc=0` token on a refusal line (plan audit v61: AC-4.3 promises no
+cannot-judge line carries `rc=`, and control-character escaping alone left that forgeable).
+Helper-constrained fields — `rc=<n>`, `blocks=<n>`, `count=<n>`, `keys=<n>`, `shell=`,
+`stage=`, `reason=` — are ints or enums the helper produces and stay bare, so the line grammar is
+`DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")*` and a consumer that splits on the
+quoted-string grammar recovers every field. The rule is what keeps the one-line, one-token-per-field
+contract true for a machine consumer; `_field` is the only place a dynamic value is rendered.
+`test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'` in-process and asserts the
+`NOT_FOUND` line parses under that grammar to exactly `heading` (`== "x rc=0"`) with no `rc`
+field; mutation `field-quoting-removed` (`_field` escapes control characters but emits the value
+bare, so the parse yields an `rc` field) is killed by it. `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line`
 drives the CLI in-process with a newline-bearing `--heading`, a `--subst` key and value carrying
 `\n`, and — for the `leftover:` slot — a `--stdout` path with `\n` in its file name that the first
 arm creates (a fresh path under `tmp_path`; a newline is a legal POSIX file-name byte), with
@@ -1136,6 +1147,7 @@ exactly what the base Mutation verification invariant forbids.
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
 | `field-escape-removed` | `_field` returns its input unchanged, so a newline inside a heading, key, path or OS-error text starts a second `DOCBLOCK:` line | `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (AC-4.1) |
+| `field-quoting-removed` | `_field` escapes control characters but emits the value bare, without the JSON quotes, so `--heading 'x rc=0'` renders `heading=x rc=0` and a key/value consumer reads an `rc` field on a refusal | `test_dynamic_field_cannot_forge_a_token` (AC-4.1/4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
 | `drain-oserror-unmapped` | the guard around the post-kill drain, the pipe closes and the `wait()` is removed, so a failure there escapes past the pending `BlockTimeout` | `test_drain_wait_oserror_is_launch_failed_collect` (AC-4.6) |
@@ -1166,7 +1178,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-six rows, seventy-six mutations — seventy-four of the helper's source (the AC-5.3 row, once
+Seventy-seven rows, seventy-seven mutations — seventy-five of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1338,3 +1350,4 @@ mean the probe never created one.
 - v1.75: Design audit v67 (codex must 1, 10 tool calls; agy clean): every dynamic field in a verdict or detail line passes through one escaper, `_field`, that escapes control characters, so no input can forge a second `DOCBLOCK:` line — test_newline_in_dynamic_fields_cannot_forge_a_verdict_line, mutation field-escape-removed — 75 rows (73 + 2).
 - v1.76: Design audit v68 (codex clean; agy must 1 REFUTED — 2485 is the count from h-mad/, the 2747 baseline is from the repository root; pinned in the AC-6.4 row) + impl-plan audit v19 back-propagation: the forge test's leftover case uses a newline-named stdout path the first arm creates, a second-arm ENOTDIR and the os.unlink injection, since a first-arm failure creates nothing.
 - v1.77: Design audit v69 (codex clean; agy must 2 at 42 tool calls — one REFUTED: the named tests and a 'Task 6' exist in no document; one held): main refuses an empty --subst key itself while building the map, with the raw argument, and substitute keeps the API refusal — the same predicate pinned twice (cli-empty-key-delegated added, 76 rows: 74 + 2).
+- v1.78: Design audit v70 (codex must 1) + plan audit v61 back-propagation: dynamic fields are rendered as double-quoted JSON strings (json.dumps, ensure_ascii=False), so a printable value cannot forge a field token either — test_dynamic_field_cannot_forge_a_token, mutation field-quoting-removed (77 rows: 75 + 2); helper-constrained int/enum fields stay bare and the line grammar is stated.

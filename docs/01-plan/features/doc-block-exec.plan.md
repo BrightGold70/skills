@@ -28,12 +28,16 @@ command; a fence carrying the tag is executable and every other fence in the tre
 
 **Transport of the three reported values.** The CLI prints exactly one `DOCBLOCK:` verdict line —
 one *physical* line whatever the inputs: every dynamic field (`heading=`, `arg=`, `index=`, keys,
-paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, that rewrites `\r`,
-`\n` and every other control character to its `\xNN`/`\uNNNN` escape, so a caller- or
-document-controlled value can never start a second `DOCBLOCK:` line (design v1.75 §Verdict lines;
-`test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives a newline-bearing `--heading`,
-`--subst` and a newline-named created `--stdout` artifact on the AC-3.10 rollback fixture;
-mutation `field-escape-removed`) — that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
+paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, as a double-quoted
+JSON string (`json.dumps(value, ensure_ascii=False)`: `"`, `\` and every control character
+escaped, everything else verbatim), so a caller- or document-controlled value can neither start a
+second `DOCBLOCK:` line nor forge a field token inside it — `--heading 'x rc=0'` renders as
+`heading="x rc=0"`, one quoted value, never a bare `rc=` on a refusal line (AC-4.3); helper-
+constrained fields (`rc=<n>`, `blocks=<n>`, `shell=`, `stage=`, `count=`, `keys=`) stay bare
+(design v1.78 §Verdict lines; `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives
+a newline-bearing `--heading`, `--subst` and a newline-named created `--stdout` artifact on the
+AC-3.10 rollback fixture, `test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'`;
+mutations `field-escape-removed`, `field-quoting-removed`) — that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
 **separate artifacts, not part of the verdict line**: returned as distinct fields from the
 importable API, and on the CLI written to paths given by **optional** `--stdout <path>` /
 `--stderr <path>` arguments. Omitted, the streams are simply not written — the API is the primary
@@ -283,8 +287,9 @@ passes, and making the call site unconditional — resolving a block regardless 
 also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
 and neither is visible to a whole-module revert, which removes both sides at once.
 
-**Task-level API, and how the caller changes.** The importable surface is five functions plus
-`main`, `find_heading` (all seven in `__all__`) and two
+**Task-level API, and how the caller changes.** The importable surface is seven names in
+`__all__` — `extract`, `select`, `substitute`, `run_block`, `fence_aware_end`, `find_heading` and
+`main` — and two
 frozen dataclasses (the design carries the full signatures; this is the contract the wire is
 planned against):
 
@@ -292,7 +297,7 @@ planned against):
 |---|---|---|
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` — `doc` is always a **path** (`str` accepted and converted with `Path`), read strictly as UTF-8; document *text* is never accepted, so `DocUnreadable` is deterministic for every caller | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks: Sequence[Block], index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
-| `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
+| `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg("")` for an empty key (the API guard for in-process callers; `main` refuses the CLI's empty key itself while building the map, with the raw argument, and never reaches this one — AC-2.8, design v1.77), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble: str \| None = None, timeout: float = 30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap, collect — the helper's own communicate/drain/close/wait on the child), `BlockTimeout`, `CleanupFailed` |
 | `extract` body normalisation | *(rule on `extract`, not a function)* | a selected fence's body is de-indented by **up to the opener's indentation** per line, as CommonMark specifies — an opener indented 1–3 spaces yields body text with those leading spaces removed and no more; recognising the fence correctly but returning un-normalised text is the gap this row closes. Test `test_indented_fence_body_is_deindented` (exact-text fixture at 1, 2 and 3 spaces, and a body line indented *less* than the opener, which is left as is); mutation `body-indent-not-stripped` |
 | `find_heading` | `(text: str, heading: str) -> tuple[int, int] \| None` | offset just past the ATX heading line equal to `heading` (stripped) and its level, found among the scanner's heading events only — never inside a fence; `None` when absent; `AmbiguousHeading(n)` on more than one |
@@ -399,7 +404,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 76 mutations with a full-node-ID `test` binding each — 74 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 77 mutations with a full-node-ID `test` binding each — 75 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -758,7 +763,9 @@ the duplicate bounder is.
 
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
-  `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone, plus a fixed tuple
+  `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone (the floor test itself
+  runs `pytest --collect-only -q` in a subprocess with `cwd=REPO_ROOT`, the repository root the
+  baseline was measured from — from `h-mad/` the same command collects 2485, a different tree), plus a fixed tuple
   of the named node IDs added to existing files — **exactly these seven**, six in
   `h-mad/tests/test_h_mad_collect_report_docs.py`: `test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction` — and, in `h-mad/tests/test_docsections.py`, `test_docsections_delegates_to_the_authoritative_bounder` (it must live beside the module it spies on, which is where `docsections.json` binds it)
   (each asserted to exist). Every other new test — FR-1..5, AC-1.8's source assertion and
@@ -871,3 +878,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.72: Plan re-audit v57 clean (both surfaces) + design v1.73 back-propagation: 74 mutations (72 of the helper's source) after the bounded-wait rows.
 - v1.73: Plan re-audit v58 (codex must 1) + impl-plan audit v18 back-propagation: the reap sequence and its probe prose carry the bounded wait(timeout=DRAIN_SECONDS) and its stage=reap expiry; 75 mutations (73 of the helper's source) with the field-escape row.
 - v1.74: Plan re-audit v60 (codex must 1): FR-4's transport paragraph carries the one-physical-line escaping rule, its test and mutation from design v1.75; 76 mutations (74 of the helper's source).
+- v1.75: Plan re-audit v61 (codex must 3 nit 1): the substitute API row and FR-4 carry the two-layer empty-key rule; FR-4 carries the quoted-JSON field rule with test_dynamic_field_cannot_forge_a_token and field-quoting-removed; AC-6.4's floor test runs with cwd=REPO_ROOT; the __all__ seven are listed; 77 mutations (75 of the helper's source).

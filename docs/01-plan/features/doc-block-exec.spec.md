@@ -136,7 +136,10 @@ not opted in.
     `--subst K=a=b` (value `a=b`). **The empty-key rule lives in the API, not only the CLI:**
     `substitute(block, subs)` raises `BadSubstArg("")` for an empty key — `str.replace("", v)`
     would insert `v` at every character boundary — so an in-process caller cannot bypass the
-    refusal the CLI enforces; `main` reaches the same rule through `substitute`.
+    refusal the CLI enforces. **`main` does not reach it through `substitute`**: it refuses the
+    empty key itself while building the map, so the verdict carries the raw argument
+    (`arg==V`), and `substitute`'s refusal is the separate API guard — the same predicate in two
+    places, each with its own test and mutation (design audit v69/v70).
 
 ### FR-3: Execute in a disposable cwd under a declared shell mode
 
@@ -299,10 +302,13 @@ not opted in.
 ### FR-4: Verdict-token CLI following the established gate contract
 
 - **Description**: The CLI prints one `DOCBLOCK:` line — one physical line, whatever the inputs:
-  every dynamic field (`heading=`, `arg=`, keys, paths, OS-error text) is rendered with `\r`, `\n`
-  and other control characters escaped, so a caller- or document-controlled value can never start a
-  second `DOCBLOCK:` line (tested with newline-bearing `--heading`, `--subst` and `--stdout`
-  values) — and the exit code follows the base
+  every dynamic field (`heading=`, `arg=`, keys, paths, OS-error text) is rendered as a
+  double-quoted JSON string — `"`, `\` and every control character escaped, everything else
+  verbatim — so a caller- or document-controlled value can never start a second `DOCBLOCK:` line
+  nor forge a field token such as ` rc=0` inside the line (`heading="x rc=0"` is one quoted
+  value; helper-constrained fields such as `rc=<n>`, `blocks=<n>`, `shell=`, `stage=` stay bare);
+  tested with newline-bearing and token-bearing `--heading`, `--subst` and `--stdout` values — and
+  the exit code follows the base
   **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
   refusal that judged a readable input and declined to run it (`NOT_FOUND`, `AMBIGUOUS`,
   `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `BAD_SUBST`, `SUBST_MISSING`,
@@ -582,3 +588,4 @@ quoted
 - v1.42: Design v1.69 back-propagation: AC-3.10's failed-second-reservation rollback is read back and reports `leftover: <path>`; eight named fault injections (os.unlink added).
 - v1.43: Design v1.73 back-propagation: the drain allowance is 2·DRAIN_SECONDS (drain + bounded post-kill wait, expiry = LAUNCH_FAILED stage=reap); the instance-level injection names communicate/wait/poll.
 - v1.44: Design v1.75 back-propagation: FR-4's one-line contract holds for every input — dynamic fields are control-character-escaped.
+- v1.45: Design v1.78 back-propagation: AC-2.8 authorizes the two-layer empty-key rule (main refuses with the raw argument; substitute is the API guard); FR-4's dynamic fields are quoted JSON strings so no value forges a token.
