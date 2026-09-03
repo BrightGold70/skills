@@ -132,7 +132,7 @@ not opted in.
   - AC-3.8: `--stdout <path>` and `--stderr <path>` are **optional**; given, each receives that
     stream verbatim, and the two files differ for a block writing different text to each. Omitted,
     no stream file is written and the run still succeeds. An existing file at either path is
-    **overwritten** — truncated at the pre-run check, as a shell `>` would — never appended; and a
+    **overwritten** — truncated at the final write, as a shell `>` would — never appended; and a
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
     over an artifact that does not exist. **No open ever truncates.** After every other refusal

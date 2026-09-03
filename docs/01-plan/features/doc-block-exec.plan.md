@@ -458,7 +458,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **47 as of spec v1.16**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **47 as of spec v1.17**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
