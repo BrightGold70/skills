@@ -223,7 +223,7 @@ passes, and making the call site unconditional — resolving a block regardless 
 also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
 and neither is visible to a whole-module revert, which removes both sides at once.
 
-**Task-level API, and how the caller changes.** The importable surface is four functions and two
+**Task-level API, and how the caller changes.** The importable surface is five functions and two
 frozen dataclasses (the design carries the full signatures; this is the contract the wire is
 planned against):
 
@@ -231,7 +231,7 @@ planned against):
 |---|---|---|
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
-| `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `MissingSubstitution`, `OverlappingSubstitution` |
+| `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
 
@@ -486,7 +486,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **49 as of spec v1.21**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **49 as of spec v1.26**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
@@ -582,3 +582,4 @@ design begins.
 - v1.28: Design audit v16 back-propagation: 33 mutations plus the self-check.
 - v1.29: Design audit v17 back-propagation: 34 mutations plus the self-check.
 - v1.30: Design audit v18 (codex must 2 should 1 nit 1; agy clean): docsections delegates through a module-qualified alias and carries its own wire mutation (docsections-delegation-reverted); importer census corrected to three files with the command; 36 mutations plus the self-check.
+- v1.31: Plan re-audit v16 (codex clean + 1 nit; agy must 1 + 1 nit): substitute's row names BadSubstArg; five functions, not four; AC anchor cites spec v1.26.
