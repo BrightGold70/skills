@@ -385,11 +385,13 @@ not opted in.
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. Both (a) and (b) are driven by one real
     `os.setsid()` fixture, no mock; `os.killpg` is monkeypatched only for AC-4.6's
-    `PermissionError`-after-`poll()` case — one of exactly **six** named fault injections this
+    `PermissionError`-after-`poll()` case — one of exactly **seven** named fault injections this
     suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, the module's
-    own `_final_write` seam for AC-3.8's post-run write failure, and its `_close_stream` seam for
-    the backstop close on a path where the final write never ran; the design's Test Strategy bounds
-    the list, and `subprocess` is never mocked).
+    own `_final_write` seam for AC-3.8's post-run write failure, its `_close_stream` seam for
+    the backstop close on a path where the final write never ran, and the recorded `Popen`
+    instance's own `communicate`/`wait` for AC-4.6's `collect` stage — an instance-level injection
+    through the AC-5.6 recording pass-through, `subprocess.Popen` itself still real; the design's
+    Test Strategy bounds the list, and `subprocess` is never mocked).
 
 ### FR-6: Migrate the existing inline harness onto the helper
 
@@ -561,3 +563,4 @@ quoted
 - v1.37: Design audit v38 (codex must 1; agy clean): AC-1.6 — a backtick fence whose info string contains a backtick is not a fence (CommonMark; measured on markdown-it-py and GitHub).
 - v1.38: Design audit v43 back-propagation: AC-3.8 adds the backstop-close failure verdict stream_close_failed with its precedence; the named-injection list is six with the _close_stream seam.
 - v1.39: Design audit v62 back-propagation: AC-4.6 covers an OSError from the helper's own communicate/drain/close/wait on the child as LAUNCH_FAILED stage=collect, tested by fault-injecting the recorded Popen instance.
+- v1.40: Design v1.66 back-propagation: seven named fault injections (the recorded Popen instance's communicate/wait for the collect stage).

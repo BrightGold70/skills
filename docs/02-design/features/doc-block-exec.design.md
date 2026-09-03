@@ -898,7 +898,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamCloseFailed(stream, close_error)` | `main`, selected after its reservation `try`/`finally` when the backstop `_close_stream` raised and no exit-2 error was pending (a pending `BlockTimeout` becomes `__cause__`) | `UNREADABLE reason=stream_close_failed` + `stream: <name>` + `os_error: <text>` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set |
-| `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, a non-`ESRCH` `killpg` error, or an `OSError` from `communicate`/the drain/pipe close/`wait` (`collect`), wrapped; `pgid` set on the `reap` and `collect` stages | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap\|collect>` + `os_error: <text>` (+ `pgid: <n>` on `reap`) |
+| `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, a non-`ESRCH` `killpg` error, or an `OSError` from `communicate`/the drain/pipe close/`wait` (`collect`), wrapped; `pgid` set on the `reap` and `collect` stages | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap\|collect>` + `os_error: <text>` (+ `pgid: <n>` on `reap` and `collect`) |
 
 `main` catches `DocBlockError` and dispatches on type, so adding an exception without a verdict
 line is a `KeyError` in the mapping table rather than a silent traceback — and a test asserts every
@@ -911,8 +911,9 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **Six named exceptions, all fault injections on a call whose *failure* is under test,
-all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real:** the AC-5.5
+stub out. **Seven named fault-injection seams, each on a call whose *failure* is under test,
+all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real — the seventh is
+instance-level rather than a module seam:** the AC-5.5
 `killpg` seam is patched only for AC-4.6's `reap` stage (`PermissionError` after `poll()`), since
 the AC-5.5 race itself is reproduced by a real fixture (a leader that exits at once behind an
 `os.setsid()` escapee) and needs no mock; the AC-3.14 cleanup guards are exercised by patching `shutil.rmtree`
@@ -928,7 +929,11 @@ handle whose `flush`/`close` raise (the close-in-`finally` tests), which is the 
 same injection, not a new one. The sixth is the module's own `_close_stream(handle)` seam — the one
 closure primitive — patched to raise `OSError` for the backstop-close tests on paths where the final
 write never ran (a timeout, an alias refusal), because a held descriptor cannot be made to fail at
-close deterministically either. The drain race needs no mock, because a real
+close deterministically either. The seventh, for AC-4.6's `collect` stage, is the recorded
+`Popen` instance's own bound `communicate` (first call raises `OSError(EIO)`, later calls pass
+through) and, separately, its `wait` — reached through the AC-5.6 recording pass-through, which
+observes the real constructor and stubs nothing, so `subprocess.Popen` itself stays real
+(design audit v62). The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -1234,3 +1239,4 @@ mean the probe never created one.
 - v1.63: Design audit v59 (codex should 1 nit 1; agy clean) + impl-plan audit v10 back-propagation: the delegation spy test restores sys.modules and reloads docsections in a finally (pytest restores neither); the close-backstop precedence names every pending exit-2 error that wins over it, StreamWriteFailed included.
 - v1.64: Design audit v60 (codex must 1 should 1; agy clean) + impl-plan audit v11 back-propagation: the ATX-only assumption is measured directly (Setext census: 30 files, 0 Setext headings) instead of inferred from the selector differential; the bare form's duplicate refusal is stated as a deliberate tightening over the old first-match with test_bare_form_duplicate_headings_refuse (live titled_section targets measured unique); the connection-only revert registers its private instance in sys.modules under a private spec name (dataclass processing needs it — AttributeError measured without).
 - v1.65: Design audit v62 (codex must 1; agy clean): an OSError from the helper's own communicate, the post-kill drain, the pipe closes or the wait is LAUNCH_FAILED stage=collect (ranked with stage=reap; the child then killed and reaped as a timed-out one) with test_communicate_oserror_is_launch_failed_collect / test_drain_wait_oserror_is_launch_failed_collect and mutations collect-oserror-unmapped / drain-oserror-unmapped — 69 rows (67 + 2).
+- v1.66: Impl-plan author contradictions after v1.65: the fault-injection list is seven seams (the collect stage's instance-level communicate/wait injection added); the exception table renders pgid on reap and collect, as the verdict table already did.
