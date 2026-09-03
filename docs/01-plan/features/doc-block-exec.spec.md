@@ -455,7 +455,7 @@ not opted in.
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
-    Phase-5f gate command, `hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
+    Phase-5f gate command, `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?   # from the REPOSITORY ROOT: the 2747 baseline is the root count; from h-mad/ the same command collects 2485; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
     the last line must read `N passed` with no failures **and** `SUITE: rc=0` — the exit status is
     captured before `tail`, because a bare pipe reports `tail`'s status and lets a red suite print
     as success.
@@ -595,3 +595,4 @@ quoted
 - v1.47: Design v1.81 back-propagation: `key=` and both `overlap:` elements quoted.
 - v1.48: Design v1.82 back-propagation: FR-4's escape set names C1 controls, DEL and U+2028/U+2029.
 - v1.49: Plan audit v65 agy back-propagation: AC-6.4's gate command is bounded through hmad-dispatch run --timeout 1200 (1 occurrence(s) rewritten), as the plan and design already state.
+- v1.50: Impl-plan v1.26 back-propagation: AC-6.4's gate command runs from the repository root in a subshell (from h-mad/ it collects 2485, not the 2747 baseline); the subshell propagates the wrapped status (measured).

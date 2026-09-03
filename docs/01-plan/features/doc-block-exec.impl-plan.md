@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.82 — design cycle 73 / impl-plan cycle 24 back-propagation, commit 84b76ab)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.48) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.79)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.83 — design cycle 74 / impl-plan cycle 25 back-propagation, commit d718cde)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.49) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.79)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -74,10 +74,15 @@ Every guard the design names carries a mutation row bound to one named test; the
   row, even where a second test also goes red on the mutant (that test stays a regression test,
   never the spec's key: for `final-write-close-not-in-finally` the canonical key is
   `tests/test_h_mad_doc_block_exec.py::test_final_write_failure_before_close_still_closes` and
-  `test_final_write_close_failure_is_mapped` is the regression test; a sweep of every other row
-  bound in this document — the docsections rows to the WIRE-PIN / their `_killed_by` /
-  `test_docsections_imports_from_an_unrelated_cwd`, the wire rows to one pin each — found no
-  other row naming two tests) — and every `find` anchor
+  `test_final_write_close_failure_is_mapped` is the regression test. **A second such pair exists**
+  and the earlier sweep missed it (impl-plan audit v25, which is why this list is now stated
+  rather than asserted as clean): `duplicate-heading-takes-first`'s canonical key is
+  `tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse`, with
+  `test_bare_form_duplicate_headings_refuse` the regression test on the same guard. Those two are
+  the only rows in this document whose mutant reds a second named test; the docsections rows bind
+  to the WIRE-PIN / their `_killed_by` / `test_docsections_imports_from_an_unrelated_cwd`, and the
+  wire rows to one pin each, with `wire-revert-extract`'s and `consumer-from-import`'s collateral
+  reds documented per row rather than promoted to keys) — and every `find` anchor
   matches the landed source exactly once (the harness applies one `find`/`replace` pair per row
   via `str.replace` — `h_mad_mutation_harness.py:645` — so a multi-site revert must be expressed
   as one replacement). Each task appends its rows; the file is created in Task 1. Run
@@ -324,9 +329,18 @@ def section_from(text: str, offset: int, level: int = 2) -> str:
     """
     return text[offset:_fence_aware_end(text, offset, level)]
 ````
-The two restored bodies are today's `docsections.py:31-42` and `:53` verbatim (the
-`startswith("```")` toggle and the heading regex), and the docstrings are carried through
-unchanged so the `find` and the delta are one literal shape. The `import h_mad_doc_block_exec
+**Provenance of the two restored bodies, stated exactly** (impl-plan audit v25). They are not
+both lifted verbatim, and the difference matters for anyone reviewing the revert later.
+`_fence_aware_end` **is** today's function: its body is `docsections.py:33-42` character for
+character, the `startswith("```")` toggle included; only today's one-line docstring at `:32` is
+omitted, which changes nothing the source guard asserts. `_find_heading` is **not** today's text —
+today's file defines no such function (`grep -c "def _find_heading"` → 0). The heading lookup
+lives inline inside `titled_section` at `:53`, so the revert **lifts that inline `re.search` into
+a function** to give the two re-pointed call sites a name to call. It is behaviour-identical to
+today's lookup — the same pattern, the same `match.end()` offset and the same
+`len(match.group("marks"))` level — returning `None` where today's inline form falls through to
+its `assert`. The docstrings on `titled_section` and `section_from` are carried through unchanged
+so the `find` and the delta are one literal shape. The `import h_mad_doc_block_exec
 as _dbe` line is above the `find` region and stays, which is what leaves the callee untouched. Its `test` key is
 `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder`, which goes red on
 the restored `_fence_aware_end` definition; the WIRE-PIN and the two hostile tests also go red
@@ -573,7 +587,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `# hashtag`, `## x` or the seven-run line in the full form yields no heading match; every `extract`/`find_heading` argument in this file's ACs is the full form unless it says bare).
 - [ ] AC-1.5/1.6 `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading appears first inside a ```` ```markdown ```` fence with a tagged block under that quoted copy, then for real with a tagged block under it; `extract` returns only the block under the real heading (the fenced copy is a `body` line, never a heading match, and the tagged block under it is never a candidate).
 - [ ] AC-1.6 `test_quoted_tag_inside_longer_fence_is_not_an_opener`: a four-backtick fence whose body contains ` ```bash hmad:exec ` yields no candidate from the quoted line; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener`: same inside `~~~`; `test_indented_literal_tag_is_not_a_candidate`: `    ```bash hmad:exec` (four spaces) is never a candidate; `test_backtick_in_info_string_is_not_an_opener`: ```` ```bash hmad:exec `x` ```` is inert — not a candidate, not `BadInfoString`, and the following ``` line opens a fence; `test_closer_with_trailing_text_does_not_close`: a ```` ```trailing ```` line inside a quoting fence does not close it; `test_indented_closer_does_not_close`: a ```` ``` ```` line at four spaces inside a bash fence stays in the body and the fence ends at the next 0–3-space closer; `test_indented_fence_body_is_deindented`: openers at 1, 2 and 3 spaces yield bodies with that indentation stripped, and a body line indented less than the opener loses only what it has.
-- [ ] AC-1.7 `test_duplicate_headings_refuse`: two identical `###` headings (fixture mirrors `h-mad/invariants.example.md`), requested in the full form → `AmbiguousHeading` with `n == 2`; `test_bare_form_duplicate_headings_refuse`: `## Text` and `### Text` in one document, `find_heading(text, "Text")` (bare form) → `AmbiguousHeading` with `n == 2` — the deliberate tightening over the old `re.search` first-match (design §Scanning; both live `titled_section` targets in `h-mad/SKILL.md` measured unique, so no caller acquires the refusal).
+- [ ] AC-1.7 `test_duplicate_headings_refuse`: two identical `###` headings (fixture mirrors `h-mad/invariants.example.md`), requested in the full form → `AmbiguousHeading` with `n == 2`; `test_bare_form_duplicate_headings_refuse`: `## Text` and `### Text` in one document, `find_heading(text, "Text")` (bare form) → `AmbiguousHeading` with `n == 2` — **a regression test on the same guard, not a second killer**: `duplicate-heading-takes-first`'s one `test` key is `tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse`, and this bare-form test exercises that guard through the other input form (design v1.83 matrix, impl-plan audit v25). It is the deliberate tightening over the old `re.search` first-match (design §Scanning; both live `titled_section` targets in `h-mad/SKILL.md` measured unique, so no caller acquires the refusal).
 - [ ] AC-1.8 (bounder's own contract) `test_bounder_ignores_a_heading_inside_a_tilde_fence`, `test_bounder_ignores_an_indented_literal_fence`, `test_bounder_from_an_offset_inside_a_fence` (`start` inside an open fence; a fenced `#` after it does not end the section), `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (`start` immediately after the three backticks of a ```` ```trailing ```` body line; the next fenced `#` still does not end the section), `test_fence_events_trace_on_every_hostile_fixture` (exact event trace — kind, marker, run, indent, info, candidate, level AND the `start`/`end` offsets of every line, on LF and CRLF copies of each fixture — over: balanced and unbalanced four-backtick, tilde-quoted backtick, backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence), `test_extract_has_no_fence_state_of_its_own` (source assertion on marker-run **recognition**: the literals ```` ``` ```` and `~~~`, the run-length regex, any `in_fence` toggle, and the ATX heading regex (a `#{1,6}` pattern or any `startswith("#")` test) appear in exactly one function body, `_fence_events`; consumers may read `_FenceEvent.kind`/`.marker`/`.run`/`.indent`/`.info`/`.candidate`, and `extract` selects on `.candidate`, never on `.marker`).
 - [ ] AC-1.8 (the wire) `test_docsections_delegates_to_the_authoritative_bounder` (WIRE-PIN, in `test_docsections.py`, scaffold above): on the fenced fixture `titled_section` records exactly one `find_heading` call with `(text, heading)` and one `fence_aware_end` call with `(text, start, level)`, and `section_from` records one `fence_aware_end` call with `(text, offset, level)` on the `sys.modules` fake; its RED reason is the assertion on the call record, never an import error.
 - [ ] AC-1.8 `test_titled_section_ignores_a_heading_inside_a_fence` (in `test_h_mad_doc_block_exec.py`, function-local `import docsections`): a document whose requested heading first appears quoted inside a ```` ``` ```` fence and then for real — `titled_section(doc, heading)` (bare form, `titled_section`'s contract) returns the real section's body (the old `re.search` at `docsections.py:53` picked the fenced copy).
@@ -587,7 +601,11 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 
 **Mutation rows added to `doc_block_exec.json`** (mechanism per the design's Test Plan table):
 `tag-check-removed`, `fence-run-length-ignored`, `section-bound-ignores-level`,
-`duplicate-heading-takes-first`, `select-first-on-ambiguous`, `index-below-one-accepted`,
+`duplicate-heading-takes-first` (one `test` key,
+`tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse`;
+`test_bare_form_duplicate_headings_refuse` goes red on the same mutant through the bare form and
+stays a regression test — the Conventions bullet names the one other row with this shape),
+`select-first-on-ambiguous`, `index-below-one-accepted`,
 `duplicate-info-token-last-wins`, `unknown-info-key-ignored`, `scanner-duplicated-in-consumer`,
 `doc-decode-error-unwrapped`, `closer-trailing-text-accepted`, `body-indent-not-stripped`,
 `indented-opener-accepted`, `indented-closer-accepted`, `prefix-state-truncated-mid-line`,
@@ -1506,6 +1524,12 @@ it cannot establish the pass half at all. The subshell `( cd "$(git rev-parse --
 does that without disturbing the `cd h-mad` the earlier lines rely on, and the redirect and
 `RC=$?` sit outside it, so the log still lands and `$?` is still the wrapper's propagated status
 for pytest, not the subshell's `cd`.
+**The paired spec's AC-6.4 gate command does not yet carry this root pin** (spec v1.49 `:458`):
+it bounds correctly through `hmad-dispatch run --timeout 1200` and captures `RC=$?` and the
+`SUITE:` token exactly as this block does, but it has no `cd` to the repository root, so an
+operator running it from `h-mad/` — where the lines above leave them — would collect 2485 and
+reproduce the very defect plan audit v62 raised. This block is the stricter of the two and is what
+5f runs; flagged for back-propagation into the spec.
 
 **Every 5f command is bounded** through the `hmad-dispatch run --timeout` wrapper shown in the
 block above, with the concrete bound on each line (the base Portable
@@ -1551,3 +1575,4 @@ into the log.
 - v1.23: Plan audit v62 (codex must 1, which names THIS document) + impl-plan audit v22 (codex should 1; agy clean) + design v1.79 back-propagation: the Phase-5f full-suite gate now runs at the REPOSITORY ROOT — ( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > log; RC=$? — because the block's opening cd h-mad made it collect 2485 instead of the 2747 baseline AC-6.4's floor is defined against, so a green run there measured 262 fewer tests and could not establish the pass half; the scoped run and the three harness runs stay in h-mad/ since their arguments are h-mad-relative, and the subshell form was MEASURED (RC=3 propagated through the cd, log written) rather than assumed. One path idiom in the docsections delta: the design's spelling sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts")) verbatim, with the docsections-syspath-setup-removed anchor quoting that exact line and the fifth row's spec_from_file_location path using the same Path form, so os is dropped from the delta's imports and pathlib.Path added. The seconds=/pgid: quoting question v1.22 left open is closed: design v1.79 makes the bare list exhaustive and quotes both, as v1.22 had chosen. Counts unchanged at 77.
 - v1.24: Impl-plan audit v23 (codex must 1 nit 1; agy clean) + design v1.80 / design audit v72 back-propagation: the universal-renderer sentence no longer contradicts the bare grammar — of the 25 rendering slots, 18 dynamic values go through _field and 7 (rc, blocks, count, keys, shell, stage, reason) are rendered bare by construction as the exhaustive exemption, stated in both directions (no other field is bare, no bare field reaches _field); _field is json.dumps(str(value), ensure_ascii=False) with the str() called out as load-bearing, since json.dumps(3) emits a bare 3 and an int would otherwise leave the grammar unquoted; AC-4.2's subclass walk asserts membership BY CLASS and instantiates nothing, so StreamPathUnwritable's leftover=None default is justified by its raise site (the reservation raises it bare, from the OSError) rather than by a test, and no other subclass is forced to be zero-argument constructible; every example verdict and detail line is rewritten in the quoted grammar (failed: "stdout", skipped: "stderr", verify: "stdout", stream: "stdout", os_error: "<text>", pgid: "<n>", seconds="1.0"), including the joined written/skipped lists; DETAIL_KEYS lets tests enumerate all ELEVEN, not three. Two design-internal disagreements surfaced rather than silently absorbed: its verdict table still shows BAD_INFO key=<k> bare and overlap: "<a>" <b> half-quoted, both of which the design's own exhaustive list contradicts, so this document quotes them and flags the two table rows for the next design cycle. Counts unchanged at 77.
 - v1.25: Impl-plan audit v24 (codex must 1 nit 1; agy clean) + design v1.82 / design audit v73 back-propagation: docsections-local-bounder-restored and consumer-from-import now carry COMPLETE LITERAL find/replace payloads as fenced blocks, since both anchor in source that exists at HEAD plus deltas this document already writes out; the Task 1 delta gains titled_section's and section_from's real docstrings, quoted from docsections.py:46-52 and :60-65, so the delta and the local-bounder find are ONE literal shape (the nit). _field gains a SECOND PASS after json.dumps, rewriting every remaining Cc/Zl/Zp character to \uXXXX, because json.dumps leaves U+0085, U+2028, U+2029 and U+007F literal and str.splitlines() breaks on the first three — MEASURED here: one verdict line split into FOUR pieces without the pass and ONE with it — so unicodedata returns to the imports, with test_unicode_line_separators_cannot_split_a_verdict_line (asserting on .splitlines(), which is the splitter that breaks) and row c1-escape-removed, discriminated from field-escape-removed by character class. AC-3.10's two rows are re-bound: a reader-less FIFO fails at os.open with ENXIO and never reaches the S_ISREG check (measured), so nonregular-stream-accepted moves to the new test_stream_path_char_device_refuses (--stdout /dev/null, which opens and fstats as a character device — measured) and the FIFO test keeps stream-open-blocking alone; each row now has a killer that reaches its guard (Task 4 26 rows; 23 + 5 + 24 + 26 = 78, 76 of the helper's source). The local-bounder replace block sits in a FOUR-backtick fence: its restored toggle contains the literal ``` and a three-backtick fence closed on it, truncating the payload — caught by parsing every fenced python block in this document with ast, which is also how both find blocks were verified byte-identical to the deltas they anchor on.
+- v1.26: Impl-plan audit v25 (codex must 1 should 1; agy clean) + design v1.83 back-propagation: duplicate-heading-takes-first now names ONE test key, tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse, with test_bare_form_duplicate_headings_refuse demoted to a regression test on the same guard, stated at the row, at the AC and in the Conventions bullet — whose earlier claim that a sweep 'found no other row naming two tests' was FALSE and is replaced by the two pairs that actually exist (this one and final-write-close-not-in-finally). The docsections-local-bounder-restored provenance is corrected: _fence_aware_end IS today's :33-42 body character for character (only its :32 docstring omitted, which the source guard does not read), but _find_heading is NOT today's text — grep -c 'def _find_heading' on today's docsections.py returns 0, the lookup being an inline re.search inside titled_section at :53 — so the revert LIFTS that inline regex into a function to give the two re-pointed call sites a name, behaviour-identical (same pattern, same match.end(), same len(match.group('marks')), None where today falls through to its assert). The payload is unchanged; only the false provenance claim was. Also flagged: the spec's AC-6.4 gate command is bounded but carries no repository-root pin, so it would collect 2485 from h-mad/ — this document's 5f block keeps the pin and the divergence is noted for back-propagation. Counts unchanged at 78.
