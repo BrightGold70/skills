@@ -325,9 +325,14 @@ not opted in.
     (pinned bidirectionally by a test).
   - AC-4.6: **The helper's own failures are verdicts too, never tracebacks.** Every `OSError` the
     helper can raise on its own behalf — `tempfile.mkdtemp()` failing, `Popen` failing (`bash`
-    absent from `PATH`), a `killpg` error other than `ProcessLookupError` — maps to
-    `DOCBLOCK: LAUNCH_FAILED stage=<mkdtemp|spawn|reap>` with a detail line carrying the OS error
-    text, exit 2, and the cwd (if one was created) is still cleaned up. Tests: `mkdtemp`
+    absent from `PATH`), a `killpg` error other than `ProcessLookupError`, and an `OSError` from
+    the helper's own read of the child's pipes (`communicate`), from the post-kill drain, or from
+    closing the pipes or waiting on a signalled group (`stage=collect`, after which the child is
+    killed and reaped exactly as a timed-out one) — maps to
+    `DOCBLOCK: LAUNCH_FAILED stage=<mkdtemp|spawn|reap|collect>` with a detail line carrying the OS error
+    text, exit 2, and the cwd (if one was created) is still cleaned up. Tests: `communicate`
+    fault-injected on the recorded `Popen` instance → `stage=collect`, cwd gone, group reaped;
+    `wait` fault-injected under a timed-out, signalled block → `stage=collect`; `mkdtemp`
     fault-injected to raise; `PATH` set to an empty directory so `bash` cannot be found (real, no
     mock); `os.killpg` fault-injected to raise `PermissionError` under a timed-out block — **and
     that test reaps what it launched**: `run_block` owns its `Popen` and exposes no handle, so the
@@ -555,3 +560,4 @@ quoted
 - v1.36: Design audit v33 back-propagation (nits): NOT_FOUND and AMBIGUOUS examples carry heading=<h>.
 - v1.37: Design audit v38 (codex must 1; agy clean): AC-1.6 — a backtick fence whose info string contains a backtick is not a fence (CommonMark; measured on markdown-it-py and GitHub).
 - v1.38: Design audit v43 back-propagation: AC-3.8 adds the backstop-close failure verdict stream_close_failed with its precedence; the named-injection list is six with the _close_stream seam.
+- v1.39: Design audit v62 back-propagation: AC-4.6 covers an OSError from the helper's own communicate/drain/close/wait on the child as LAUNCH_FAILED stage=collect, tested by fault-injecting the recorded Popen instance.

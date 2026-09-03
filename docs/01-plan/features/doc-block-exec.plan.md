@@ -390,7 +390,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 67 mutations with a full-node-ID `test` binding each — 65 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 69 mutations with a full-node-ID `test` binding each — 67 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -840,3 +840,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.64: Plan re-audit v50 clean (both surfaces) + design v1.63 back-propagation: the WIRE-PIN's finally-path restoration of sys.modules and the docsections reload is stated here too.
 - v1.65: Design v1.64 back-propagation: Setext census added to §Measurements (files=30 setext_headings=0); the connection-only revert's private sys.modules registration stated.
 - v1.66: Plan re-audit v52 (codex clean; agy should 1): the docsections.json deliverables row names the named-test conversion and the four connection rows (8 rows).
+- v1.67: Plan re-audit v53 clean (both surfaces) + design v1.65 back-propagation: 69 mutations (67 of the helper's source) after the two collect-stage rows.
