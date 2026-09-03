@@ -230,14 +230,28 @@ form the harness can run as `target_command + [test]` (the sixth row's key names
 (`tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section`,
 `…::test_a_section_owns_its_subsections`, `…::test_section_from_bounds_an_offset_anchored_pin`,
 `…::test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named
-test goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` restores a
-local `_fence_aware_end` in `tests/docsections.py` and calls it — the callee untouched — and is
-killed by `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`
-(`monkeypatch.setattr(docsections._dbe, "fence_aware_end", spy)` — the alias is
-`docsections.py`'s own module attribute, so the spy is installed on *that* reference, not on a
-second `import h_mad_doc_block_exec` in the test — then `titled_section(...)`; the spy must
-fire), while the helper's own behaviour tests stay green under that revert — the one designed exception being the source guard `test_docsections_has_no_second_bounder`, which goes red because a restored local bounder is exactly the second bounder it refuses — which is the half proving the
-test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
+test goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` is **connection-only** —
+the shared `import h_mad_doc_block_exec as _dbe` line is replaced by a private instance of the
+same file loaded through `importlib.util.spec_from_file_location` + `exec_module` (which never
+registers in or consults `sys.modules`), the callee untouched and no local bounder restored, so
+the helper still does the real work through a second, byte-identical instance. It is killed by
+`tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`, which
+installs a recording fake as `sys.modules["h_mad_doc_block_exec"]`, runs
+`importlib.reload(docsections)` so the module-level import re-binds `docsections._dbe` to that
+fake, then calls `titled_section(...)` and `section_from(...)` and asserts the recorded call
+sequence — a `monkeypatch.setattr(docsections._dbe, …)` spy would not do, because it patches
+whatever object `_dbe` holds, the private copy included, and so cannot see this revert. Every
+other test stays green under it — the helper's own behaviour tests, the two docsections-side
+hostile tests and the source guard `test_docsections_has_no_second_bounder`, whose source
+predicate still holds — which is the half proving the test pins the wire and not the callee
+(design audit v58: the earlier local-restore revert also failed the two hostile tests, so its
+kill was confounded with behaviour). **An eighth row keeps that local-restore revert**,
+`docsections-local-bounder-restored` — the old `_fence_aware_end` toggle and `_find_heading`
+regex restored in `tests/docsections.py`, both call sites re-pointed, `_dbe` still imported —
+bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder`, so the
+source guard has a named RED of its own (the WIRE-PIN and the two hostile tests also go red
+under it; its `test` key is the guard, whose file imports `docsections` only inside test
+functions and so still collects under the mutant). The re-pointed callee mutations are the behaviour half;
 this row is the connection half, and the invariant requires both. **Ordering, since the
 source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
 **A seventh, `docsections-heading-lookup-reverted`, pins the START of the section the same way** — `titled_section`'s own `re.search(r"(?m)^(?P<marks>#+) …")` restored while `find_heading` stays intact — and is killed by the same delegation spy, which records `find_heading` as well as `fence_aware_end`. **A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect. — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
@@ -321,6 +335,7 @@ carries them fully qualified.
 | (bound in `docsections.json`, not here) | `docsections-heading-lookup-reverted` | `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — `titled_section`'s local heading `re.search` restored with `find_heading` untouched; the spy's `find_heading` recorder sees no call |
 | (bound in `docsections.json`, not here) | `docsections-syspath-setup-removed` | `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — the delegating import's own `sys.path.insert` deleted; a fresh process with only the tests dir on `sys.path` must still import `docsections` (not a floor-tuple node: it lives in the new module) |
 | (bound in `docsections.json`, not here) | `docsections-delegation-reverted` | `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — listed here so the FR-6 table names all **seven** node IDs the AC-6.4 floor tuple counts |
+| (bound in `docsections.json`, not here) | `docsections-local-bounder-restored` | `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder` — the old local toggle and heading regex restored with `_dbe` still imported; the source guard's own named RED (not a floor-tuple node: it lives in the new module) |
 
 Under `wire-revert-extract` and `wire-revert-run` the helper's own suite
 (`test_h_mad_doc_block_exec.py`) still passes — that is the half that proves the failing test pins
@@ -802,4 +817,5 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.59: Plan re-audit v45 (codex must 1) + design v1.59 back-propagation: titled_section's replacement calls find_heading for (start, level); find_heading in the API table.
 - v1.60: Plan re-audit v46 (codex must 1 should 1; agy clean): heading selector differential in §Measurements (30 files, new_only=0, old_only=76); run_block timeout=60.0 in the migration; 63 mutations.
 - v1.61: Plan re-audit v47 (codex must 2; agy clean): the bounder wording and its API row carry the >= start predicate; the delegation-revert claim names the source-guard exception.
+- v1.63: Design v1.62 back-propagation (design audit v58 codex must 1): docsections-delegation-reverted is connection-only (a private spec_from_file_location instance replaces the shared import); the WIRE-PIN's mechanism is stated as the impl-plan has it — a sys.modules fake bound by importlib.reload, since a setattr spy on docsections._dbe cannot see this revert; eighth row docsections-local-bounder-restored bound to the source guard.
 - v1.62: Plan re-audit v48 (codex must 1 should 1; agy clean) + design v1.61 back-propagation: 67 mutations; test_parser_rejects_all_dir_and_abbreviations named on both surfaces; corpus on both renderer versions.
