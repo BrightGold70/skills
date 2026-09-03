@@ -232,8 +232,10 @@ form the harness can run as `target_command + [test]` (the sixth row's key names
 `…::test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named
 test goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` is **connection-only** —
 the shared `import h_mad_doc_block_exec as _dbe` line is replaced by a private instance of the
-same file loaded through `importlib.util.spec_from_file_location` + `exec_module` (which never
-registers in or consults `sys.modules`), the callee untouched and no local bounder restored, so
+same file loaded through `importlib.util.spec_from_file_location` + `exec_module` (registered in
+`sys.modules` only under its private spec name `_h_mad_doc_block_exec_private` — dataclass
+processing needs `sys.modules[cls.__module__]` under `from __future__ import annotations` — and
+never under the name the import system resolves), the callee untouched and no local bounder restored, so
 the helper still does the real work through a second, byte-identical instance. It is killed by
 `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`, which
 installs a recording fake as `sys.modules["h_mad_doc_block_exec"]`, runs
@@ -634,6 +636,20 @@ the duplicate bounder is.
   corpus — `##\tx` and `## x ##` are accepted by the new selector in principle and occur nowhere.
   `old_only=76`: all 76 are `#` comment lines inside fenced code the old regex read as headings; the
   migration narrows the guard.
+- **Setext census** — the ATX-only assumption measured directly rather than through the selector
+  differential (both of whose selectors ignore Setext): a fence-aware scan for a `===`/`---`
+  underline line immediately after a paragraph line (CommonMark §4.3; YAML front matter skipped;
+  list, table, blockquote and indented-code lines are not paragraphs) over the same corpus (`*.md`
+  under `h-mad/` and `handoff/` excluding `archive/`; throwaway `setext_census.py`, 2026-09-03):
+
+  ```
+  $ python3.11 setext_census.py
+  files=30 setext_headings=0
+  ```
+
+  So no document `docsections` or the helper reads today bounds wrongly under the ATX-only grammar;
+  a Setext heading that arrives later is still unrecognised silently, which the design carries as a
+  limitation rather than a guard.
 - **Scanner grammar corpus** — every fence and ATX rule the scanner implements, rendered through
   markdown-it-py 2.2.0 (interpreter-local) AND 4.2.0 (the spec's throwaway-venv version, installed
   with `pip install --target` for this run), CommonMark preset on both, 14 of 14 agreeing on each; the
@@ -822,3 +838,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.62: Plan re-audit v48 (codex must 1 should 1; agy clean) + design v1.61 back-propagation: 67 mutations; test_parser_rejects_all_dir_and_abbreviations named on both surfaces; corpus on both renderer versions.
 - v1.63: Design v1.62 back-propagation (design audit v58 codex must 1): docsections-delegation-reverted is connection-only (a private spec_from_file_location instance replaces the shared import); the WIRE-PIN's mechanism is stated as the impl-plan has it — a sys.modules fake bound by importlib.reload, since a setattr spy on docsections._dbe cannot see this revert; eighth row docsections-local-bounder-restored bound to the source guard.
 - v1.64: Plan re-audit v50 clean (both surfaces) + design v1.63 back-propagation: the WIRE-PIN's finally-path restoration of sys.modules and the docsections reload is stated here too.
+- v1.65: Design v1.64 back-propagation: Setext census added to §Measurements (files=30 setext_headings=0); the connection-only revert's private sys.modules registration stated.
