@@ -47,7 +47,10 @@ not opted in.
     including when the enclosing fence is a tilde fence** (`~~~`), which CommonMark defines as a
     fence too and which can quote a backtick fence verbatim. Tilde fences are tracked for bounding
     only; a candidate is always a backtick fence with `bash` as its first info-string word.
-    **Indentation follows CommonMark too**: a fence opener may be indented by at most three
+    **A backtick fence whose info string contains a backtick is not a fence** (CommonMark §4.5),
+    so ```` ```bash hmad:exec `x` ```` is inert prose — never a candidate and never `BAD_INFO` —
+    measured on markdown-it-py and on GitHub's renderer, both of which emit it as a paragraph
+    (tilde fences have no such rule). **Indentation follows CommonMark too**: a fence opener may be indented by at most three
     spaces; a line indented four or more spaces is an indented code block, never a fence, so a
     literal `    ```bash hmad:exec` (four spaces) is body text of an indented code block and is
     never a candidate — a hostile fixture pins it. A closer obeys the same 0–3 rule, and the
@@ -544,3 +547,4 @@ quoted
 - v1.34: Design audit v29 back-propagation: FR-4's exit-0 list names BAD_SUBST.
 - v1.35: Design audit v31 (codex must 2; agy UNVERIFIED, dispatch timeout): AC-2.3 orders missing keys by map insertion; AC-3.12 defines rc as the exit code of the one spawned bash -c.
 - v1.36: Design audit v33 back-propagation (nits): NOT_FOUND and AMBIGUOUS examples carry heading=<h>.
+- v1.37: Design audit v38 (codex must 1; agy clean): AC-1.6 — a backtick fence whose info string contains a backtick is not a fence (CommonMark; measured on markdown-it-py and GitHub).

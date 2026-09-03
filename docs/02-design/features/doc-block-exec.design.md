@@ -178,6 +178,12 @@ with a run of ≥ *N*, so a fence opened with four backticks legitimately contai
 body text. This design's own documents contain exactly that shape, because they quote fenced
 examples. So:
 
+- a **backtick** opener whose info string contains a backtick is not a fence at all (CommonMark
+  §4.5: "the info string of a backtick fence may not contain backticks"), so ```` ```bash hmad:exec `x` ````
+  is inert prose — neither a candidate nor a `BAD_INFO` — and the next ``` line opens a fence
+  rather than closing one; tilde fences carry no such rule. Measured on both renderers used for
+  AC-1.6 (markdown-it-py: `<p>```bash hmad:exec <code>x</code>…`; GitHub `POST /markdown`: the same
+  paragraph, with the following line opening a fence that swallowed a tilde block after it);
 - an opener is recognised only when its marker run is preceded by **0–3 spaces** (CommonMark
   §4.5): four or more spaces make the line an indented code block, so a literal
   `    ```bash hmad:exec` is never an opener and never a candidate — the security boundary AC-1.6
@@ -397,7 +403,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 49 mutations (49 rows: 47 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 50 mutations (50 rows: 48 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -831,6 +837,7 @@ exactly what the base Mutation verification invariant forbids.
 | `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_bounder_ignores_an_indented_literal_fence` (AC-1.8 — the bounder's own contract; `test_indented_literal_tag_is_not_a_candidate` pins the extractor side of the same rule under AC-1.6) |
 | `prefix-state-truncated-mid-line` | the prefix is fed as `text[:start]` instead of whole lines through the line containing `start`, so a ```` ```trailing ```` line cut after its run reads as a closer | `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (AC-1.8) |
 | `prefix-fence-state-skipped` | `fence_aware_end` starts its fence state at `start` instead of scanning the lines before it | `test_bounder_from_an_offset_inside_a_fence` (AC-1.8 — `section_from` anchored inside a fenced block must not end at a fenced `#`) |
+| `backtick-in-info-accepted` | `_fence_events` treats a backtick-fence line whose info string contains a backtick as an opener | `test_backtick_in_info_string_is_not_an_opener` (AC-1.6 — the line must be inert: not a candidate, not `BAD_INFO`, and the following ``` line opens a fence) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
@@ -838,7 +845,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Forty-nine rows, forty-nine mutations — forty-seven of the helper's source (the AC-5.3 row, once
+Fifty rows, fifty mutations — forty-eight of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -974,3 +981,4 @@ mean the probe never created one.
 - v1.41: Design audit v35 (codex must 1; agy clean): one private fence scanner, _fence_events, consumed by both extract and fence_aware_end — the fence-grammar mutations anchor in it and a construct-complete parity test runs every hostile fixture through both consumers.
 - v1.42: Design audit v36 (codex must 1; agy clean): prefix fence state from whole lines through the line containing start, boundaries only after start; hostile mid-line fixture and the prefix-state-truncated-mid-line mutation (49 rows).
 - v1.43: Plan re-audit v32 back-propagation: Task 5 and the wire-revert-extract row name _gate_block.
+- v1.44: Design audit v38 (codex must 1; agy clean): backtick-in-info prohibition in _fence_events, measured on both renderers, with its mutation (50 rows).
