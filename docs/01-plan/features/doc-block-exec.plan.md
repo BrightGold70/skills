@@ -54,13 +54,13 @@ print the streams inline and break every consumer that parses the verdict line.
 [--subst K=V]... [--preamble-file PATH] [--shell-timeout SECONDS] [--stdout PATH]
 [--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
 parser-rejection test. `--subst` values are split once on the first `=` (a value may contain `=`;
-`K=` is an empty value); no `=`, an empty key, or a repeated key is `BAD_SUBST arg=<raw>` (exit 0,
+`K=` is an empty value); no `=`, an empty key, or a repeated key is `BAD_SUBST arg="<raw>"` (exit 0,
 `duplicate_key:` detail for the repeat), judged before anything is reserved (AC-2.8). There are
 **no abbreviated spellings**: the parser is built with
 `allow_abbrev=False`, so `--shell-t` or `--pre` are rejected rather than silently accepted as
 undocumented aliases (test: `test_parser_rejects_all_dir_and_abbreviations`). Argument *values* are
 validated by `main` and map to verdict lines — `--index` non-integer or below 1 → `BAD_INDEX`,
-`--shell-timeout` non-numeric, non-finite or not positive → `BAD_TIMEOUT value=<v>` (AC-5.6), both
+`--shell-timeout` non-numeric, non-finite or not positive → `BAD_TIMEOUT value="<v>"` (AC-5.6), both
 before any spawn; argparse's own usage error covers only *grammar* (unknown option, missing
 value) and is the documented single non-`DOCBLOCK` exit. `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
@@ -93,10 +93,10 @@ truncate(); write; flush(); close()`, all five inside the module's `_final_write
 because a buffered `TextIOWrapper` may defer the OS write until `flush()`/`close()` and an error
 surfacing at a close outside the mapped region would be a traceback rather than
 `stream_write_failed` — on those held handles after a successful run. Writes are ordered stdout
-then stderr; a failure on stdout skips stderr (`failed: stdout` / `skipped: stderr`), a failure on
-stderr leaves stdout as written (`written: stdout` / `failed: stderr`), and every one of those
+then stderr; a failure on stdout skips stderr (`failed: "stdout"` / `skipped: "stderr"`), a failure on
+stderr leaves stdout as written (`written: "stdout"` / `failed: "stderr"`), and every one of those
 detail lines has a registry row. **After every close the artifact is read back** and compared to
-the stream text — a missing or mismatching file is `stream_write_failed` with a `verify: <stream>`
+the stream text — a missing or mismatching file is `stream_write_failed` with a `verify: "<stream>"`
 detail line (registry row), so a writer that silently did nothing cannot be reported as `RAN`
 (mutation `final-write-not-verified`, test `test_final_write_readback_catches_a_silent_no_op`).
 Tests: `test_stream_write_failure_after_the_run_is_a_refusal`,
@@ -121,7 +121,7 @@ seam is fault-injected to raise `OSError` — the fifth named injection (the six
 descriptor cannot be made to fail deterministically on macOS, which has no `/dev/full` — and the
 verdict is `UNREADABLE reason=stream_write_failed`), and
 `test_second_stream_write_failure_leaves_the_first_as_written` (only the stderr write fails; the
-stdout artifact is current and the detail lines say `written: stdout` / `failed: stderr`), and
+stdout artifact is current and the detail lines say `written: "stdout"` / `failed: "stderr"`), and
 `test_stream_path_under_a_regular_file_refuses` (AC-3.10 — a real `ENOTDIR`, no injection; mutation
 `stream-open-oserror-unwrapped`).
 
@@ -425,7 +425,7 @@ by decision rather than by omission.
 | A recipe's side effects reach the working tree | Medium | Every run in a fresh `tempfile.mkdtemp()` cwd **passed to the launch as `Popen(…, cwd=cwd, …)`** — creating the directory does nothing to the child's cwd by itself, so the keyword is the guarantee (mutation `cwd-not-passed`, test `test_block_runs_in_the_temp_cwd`) — removed afterwards; pinned by asserting the tree is byte-identical across a run that writes files |
 | "Run under `mktemp -d`" is read as the shell utility, acquiring an external dependency | Medium | The phrase came verbatim from the candidate row and is a stdlib call here: AC-3.13 asserts `tempfile.mkdtemp()`, mode `0o700`, and no `mktemp` invocation in the source |
 | A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, **`proc.poll()` first** (a leader that already exited is a zombie, and on macOS `killpg` on a zombie-only group raises `PermissionError` — measured under §Measurements — whereas after `poll()` it raises `ProcessLookupError`, the one exception read as "already reaped") → `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver. Two races on that path are handled, not hoped away (AC-5.5): `killpg` on a group that already emptied raises `ProcessLookupError` (measured) and is read as "already reaped"; a drain `communicate` that an escapee keeps open is itself bounded, after which the pipes are closed and the leader reaped |
-| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure — with an `os_error: <text>` detail line whenever an `OSError` was recorded, so the diagnostic is never lost (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` raises and `ignore_errors=True` retains the tree — command and output under Measurements. The permission fixture is skipped under root (`euid == 0`, where mode bits do not bind) and a deterministic fault injection runs everywhere: `shutil.rmtree` monkeypatched in the helper's namespace to raise `OSError`, and separately to silently do nothing, so both guards — the recorded error and the read-back — each have a mutation only they kill |
+| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path="<p>"` exit 2 on failure — with an `os_error: "<text>"` detail line whenever an `OSError` was recorded, so the diagnostic is never lost (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` raises and `ignore_errors=True` retains the tree — command and output under Measurements. The permission fixture is skipped under root (`euid == 0`, where mode bits do not bind) and a deterministic fault injection runs everywhere: `shutil.rmtree` monkeypatched in the helper's namespace to raise `OSError`, and separately to silently do nothing, so both guards — the recorded error and the read-back — each have a mutation only they kill |
 | The strict default hides the very defect class that motivated the feature | Medium | `shell=plain` is declarable per fence, and the shell-killing `exit` case is pinned as an explicit acceptance criterion |
 | An unknown info-string key silently falls back to a default mode | Medium | Unknown keys refuse rather than default |
 | The carried "68 fences" figure is stale | Low | Re-measured this session; command and output cited below under Measurements |
@@ -882,3 +882,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.74: Plan re-audit v60 (codex must 1): FR-4's transport paragraph carries the one-physical-line escaping rule, its test and mutation from design v1.75; 76 mutations (74 of the helper's source).
 - v1.75: Plan re-audit v61 (codex must 3 nit 1): the substitute API row and FR-4 carry the two-layer empty-key rule; FR-4 carries the quoted-JSON field rule with test_dynamic_field_cannot_forge_a_token and field-quoting-removed; AC-6.4's floor test runs with cwd=REPO_ROOT; the __all__ seven are listed; 77 mutations (75 of the helper's source).
 - v1.76: Plan re-audit v62 (codex must 2; agy clean) + design audit v71 nit: the bare-field list is the design's exhaustive seven (reason= included; seconds=/pgid: quoted); the docsections ordering paragraph is un-spliced (the sixth/seventh-row sentences now follow it as their own paragraph).
+- v1.77: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar.

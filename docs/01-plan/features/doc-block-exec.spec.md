@@ -29,11 +29,11 @@ not opted in.
     that policy — because a single function typed to return one block while also handling 0 and
     many is the contradiction the design audit surfaced.
   - AC-1.2: Given a section containing only untagged ` ```bash ` fences, extraction yields zero
-    blocks and the CLI prints `DOCBLOCK: NOT_FOUND heading=<h>` and exits 0 — a refusal is a verdict (FR-4).
+    blocks and the CLI prints `DOCBLOCK: NOT_FOUND heading="<h>"` and exits 0 — a refusal is a verdict (FR-4).
   - AC-1.3: Given a section with two tagged blocks and no ordinal supplied, the CLI prints
-    `DOCBLOCK: AMBIGUOUS blocks=2 heading=<h>` and exits 0, executing nothing.
+    `DOCBLOCK: AMBIGUOUS blocks=2 heading="<h>"` and exits 0, executing nothing.
   - AC-1.4: With the same document, `--index 2` selects the second tagged block; `--index 3`
-    prints `DOCBLOCK: NOT_FOUND heading=<h>` and exits 0.
+    prints `DOCBLOCK: NOT_FOUND heading="<h>"` and exits 0.
   - AC-1.5: The section boundary is the next **ATX** heading (`#`-prefixed) at the same or
     shallower level; a tagged fence under a *later* heading is not returned for the earlier
     heading. **Setext headings (underlined with `===`/`---`) are explicitly out of scope and not
@@ -62,7 +62,7 @@ not opted in.
     text and level both match — text compared after the CommonMark closing hash run and trailing
     whitespace are stripped, so `## Text ##` and `## Text` are the same heading and two such lines
     are duplicates — nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>
-    heading=<h>`, exit 0. Two identical headings share one address, and silently taking the first would run a
+    heading="<h>"`, exit 0. Two identical headings share one address, and silently taking the first would run a
     tagged block from the wrong section — the same silent-wrong-answer shape the tag exists to
     prevent, one level up, and the tag cannot repair an ambiguous *section* selector. Not
     hypothetical: `h-mad/invariants.example.md` already carries `### Unified-facade routing` and
@@ -82,7 +82,7 @@ not opted in.
     collected alone and when `docsections` is imported from an unrelated cwd, never through
     another module's `sys.path` side effect. A test collects it alone to prove that.
   - AC-1.9: **An ordinal below 1 refuses.** `--index 0` and `--index -1` print
-    `DOCBLOCK: BAD_INDEX index=<n>` and exit 0, executing nothing; `select(blocks, 0)` raises
+    `DOCBLOCK: BAD_INDEX index="<n>"` and exit 0, executing nothing; `select(blocks, 0)` raises
     `BadIndex(0)`. Left to a conventional `blocks[index - 1]`, `0` silently addresses the *last*
     tagged block and a negative value some other one — a wrong block run without a word, the
     shape the explicit address exists to prevent. Past-the-end stays `NOT_FOUND` (AC-1.4): that
@@ -102,7 +102,7 @@ not opted in.
     An **empty** map is a no-op, not a refusal: `substitute(block, {})` returns an equivalent
     `Block` and `{}` without compiling any alternation (a zero-key alternation would match the
     empty string), and a CLI invocation with no `--subst` takes that path.
-  - AC-2.3: The refusal names every offending key, one `missing_key: <k>` detail line each, in
+  - AC-2.3: The refusal names every offending key, one `missing_key: "<k>"` detail line each, in
     the **map's insertion order** (an absent key has no position in the block, so the map is the
     only order that exists; on the CLI that is `--subst` argument order); with two absent keys,
     `keys=2` and both are named in that order, pinned by a multi-key test.
@@ -123,14 +123,14 @@ not opted in.
     another, nothing is executed and the CLI prints `DOCBLOCK: SUBST_OVERLAP keys=<n>` with a
     detail line naming each overlapping pair, and exits 0. `<n>` is the number of **distinct keys
     implicated** (three keys where one contains both others → `keys=3`, two pairs); the detail
-    lines are `overlap: <shorter> <longer>`, one per unordered pair, sorted lexicographically by
+    lines are `overlap: "<shorter>" <longer>`, one per unordered pair, sorted lexicographically by
     `(shorter, longer)`, so the diagnostic is deterministic and the registry can pin it.
     Order-dependent substitution is the silent-wrong-answer shape this feature exists to avoid.
   - AC-2.8: **`--subst` has a parser contract.** Each value is split **once, on the first `=`**:
     the key is everything before it, the value everything after (so a value may itself contain
     `=`, and `K=` is a legal empty value). A value with no `=`, or an empty key (`=V`), refuses with
-    `DOCBLOCK: BAD_SUBST arg=<raw>`; the same key given twice refuses with
-    `DOCBLOCK: BAD_SUBST arg=<raw>` plus a `duplicate_key: <k>` detail line, never a last-wins
+    `DOCBLOCK: BAD_SUBST arg="<raw>"`; the same key given twice refuses with
+    `DOCBLOCK: BAD_SUBST arg="<raw>"` plus a `duplicate_key: "<k>"` detail line, never a last-wins
     overwrite. Both exit 0 (a refusal of readable input), execute nothing, and are judged before
     any artifact is reserved. Tests: `--subst K`, `--subst =V`, `--subst K=a --subst K=b`, and
     `--subst K=a=b` (value `a=b`). **The empty-key rule lives in the API, not only the CLI:**
@@ -182,9 +182,9 @@ not opted in.
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
     over an artifact that does not exist. Streams are written stdout first, then stderr. A failure
-    on the **first** skips the second (`failed: stdout` / `skipped: stderr` — the stderr artifact
+    on the **first** skips the second (`failed: "stdout"` / `skipped: "stderr"` — the stderr artifact
     keeps its previous contents untouched); a failure on the **second** leaves the first as
-    written (`written: stdout` / `failed: stderr`) — no rollback, because the old artifact was
+    written (`written: "stdout"` / `failed: "stderr"`) — no rollback, because the old artifact was
     truncated in place and there is nothing to roll back to. The detail lines name the state of
     each artifact so the operator knows which is current, and each of `written:`, `failed:` and
     `skipped:` has a registry row (tested by failing the first write only, and the second only). A close of a held
@@ -197,7 +197,7 @@ not opted in.
     **flushes and closes** the handle inside the region mapped to `stream_write_failed` — and after
     the close each requested artifact is **read back and compared byte-for-byte to the stream
     text**, a missing or mismatching artifact refusing with `stream_write_failed` and a
-    `verify: <stream>` detail line, so a write that silently did nothing cannot be reported as
+    `verify: "<stream>"` detail line, so a write that silently did nothing cannot be reported as
     `RAN` — because a
     buffered `TextIOWrapper` may not hit the OS until `flush()`/`close()` and an error surfacing
     at a close outside that region would be a traceback — and which is the seam the test
@@ -227,7 +227,7 @@ not opted in.
     run** — observable because a block with a side effect leaves none. When the second
     reservation fails after the first created a file, the first is closed and unlinked and the
     helper reads back that the path is gone; if the rollback left it behind, the same verdict
-    carries a `leftover: <path>` detail line (tested by fault-injecting `os.unlink`), so a
+    carries a `leftover: "<path>"` detail line (tested by fault-injecting `os.unlink`), so a
     refusal never silently leaves a new artifact.
   - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
     the *same* invocation immediately before the block. It is fixture setup, never doc content:
@@ -288,8 +288,8 @@ not opted in.
     `CleanupFailed(path, cleanup_error)` — the `cleanup_error` attribute is the `OSError` when
     one was raised, `None` when only the read-back caught a silent retention; `__cause__` is the
     pending outcome when there was one — the `BlockTimeout`, or a `LaunchFailed` from the reap
-    stage — else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>`, plus an
-    `os_error: <text>` detail line whenever `cleanup_error` is set, and exits 2
+    stage — else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path="<p>"`, plus an
+    `os_error: "<text>"` detail line whenever `cleanup_error` is set, and exits 2
     (a timeout that also leaves an unremovable cwd reports `CLEANUP_FAILED`, tested as one case) —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
@@ -366,7 +366,7 @@ not opted in.
 - **Description**: Every run is time-bounded. `timeout`/`gtimeout` are forbidden by the skill's own
   rules and are not used; the bound is Python's own.
 - **Acceptance Criteria**:
-  - AC-5.1: A block that sleeps past the bound returns `DOCBLOCK: TIMEOUT seconds=<n>` and exits 0
+  - AC-5.1: A block that sleeps past the bound returns `DOCBLOCK: TIMEOUT seconds="<n>"` and exits 0
     — the hang is a measured fact about the recipe, like a non-zero `rc`, not a tool fault.
   - AC-5.2: After a timeout, **no descendant remaining in the launched process group** is alive —
     the whole group is reaped, not just the direct child. The claim is bounded deliberately: a
@@ -379,7 +379,7 @@ not opted in.
   - AC-5.4: The temp cwd is removed after a timeout, exactly as after a normal run.
   - AC-5.6: **The bound is validated before anything is spawned.** `timeout` must be a finite
     number greater than zero: `0`, a negative value, `nan`, `inf` and a non-numeric
-    `--shell-timeout` argument all refuse with `DOCBLOCK: BAD_TIMEOUT value=<v>`, exit 0, block
+    `--shell-timeout` argument all refuse with `DOCBLOCK: BAD_TIMEOUT value="<v>"`, exit 0, block
     not run — `run_block` raises `BadTimeout(value)` before `Popen`. Left to `argparse` and
     `communicate`, a negative value raises `ValueError` *after* the spawn and `inf` makes the
     promised bound unbounded. On the CLI the value is taken as a string and validated by `main`,
@@ -589,3 +589,4 @@ quoted
 - v1.43: Design v1.73 back-propagation: the drain allowance is 2·DRAIN_SECONDS (drain + bounded post-kill wait, expiry = LAUNCH_FAILED stage=reap); the instance-level injection names communicate/wait/poll.
 - v1.44: Design v1.75 back-propagation: FR-4's one-line contract holds for every input — dynamic fields are control-character-escaped.
 - v1.45: Design v1.78 back-propagation: AC-2.8 authorizes the two-layer empty-key rule (main refuses with the raw argument; substitute is the API guard); FR-4's dynamic fields are quoted JSON strings so no value forges a token.
+- v1.46: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar; _field stringifies before json.dumps.
