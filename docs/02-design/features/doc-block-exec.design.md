@@ -153,9 +153,14 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 ### Scanning (`extract`)
 
 **One private scanner, two consumers.** The fence grammar below is implemented exactly once, as
-a private generator `_fence_events(text)` that walks the document and yields, per line, whether
-the line is a fence opener, a fence closer, or body/prose, together with the opener's marker
-character, run length, indentation and info string. `extract` consumes it to find candidates and
+a private generator `_fence_events(text)` that walks the document and yields, per line, one of
+five kinds — fence `open`, fence `close`, fence `body`, ATX `heading` (with its `level`), or
+`prose` — together with the opener's marker character, run length, indentation and info string,
+and a scanner-derived `candidate` flag (a backtick opener whose first info word is `bash`), so
+no consumer re-recognises a fence or a heading. **Every grammar rule the scanner implements was
+rendered through markdown-it-py 2.2.0 (CommonMark preset) before it was written down — 14 of 14
+agree with the renderer; the corpus and its output are in the plan's §Measurements ("Scanner
+grammar corpus").** `extract` consumes it to find candidates and
 `fence_aware_end` consumes it to bound a section — feeding the scanner **complete source lines
 from the top of the document through the line that contains `start`**, then considering a
 boundary only at line starts strictly after `start`; never a `text[:start]` slice, which can cut a
@@ -216,8 +221,11 @@ That is what makes AC-1.6 structural rather than a special case: a body quoting
 fence keeps it that way.
 
 Heading bounding: locate the line equal to `heading` (exact match, stripped of trailing
-whitespace) **among the lines the scanner reports as `prose`** — a line inside any fence is never a
-heading match, so a fenced example that quotes `## <the requested heading>` cannot become the
+whitespace) **among the scanner's `heading` events** — a line inside any fence is never a
+heading event, and this lookup is the public `find_heading(text, heading) -> tuple[int, int] | None`
+(the offset just past the heading line and its level; `None` when absent; `AmbiguousHeading` on
+more than one) that `extract` and `docsections.titled_section` both call, so the section START is
+found by one implementation exactly as its END is — so a fenced example that quotes `## <the requested heading>` cannot become the
 section start and hand a later real tagged block to the wrong address
 (`test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading
 appears first inside a ```` ```markdown ```` fence, then for real; the only candidate is the block
@@ -430,9 +438,9 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
-| Delegating bounder | `h-mad/tests/docsections.py` | modify | import the authoritative bounder; drop the duplicate `_fence_aware_end` (AC-1.8) |
-| Delegation spy test | `h-mad/tests/test_docsections.py` | modify | gains `test_docsections_delegates_to_the_authoritative_bounder`, the killer of `docsections.json`'s wire mutation and one of the seven floor-tuple node IDs (AC-1.8, AC-6.4) |
-| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`; a fifth, `docsections-delegation-reverted` (local bounder restored, callee intact), is the Connection-enforcement wire mutation, killed by `test_docsections_delegates_to_the_authoritative_bounder` with the helper's behaviour tests still green — the one designed exception being the source guard `test_docsections_has_no_second_bounder`, which goes red on exactly this mutant because restoring a local toggle is the second bounder it exists to refuse; a sixth, `docsections-syspath-setup-removed` (the `sys.path.insert` that makes the delegating import self-contained is deleted), is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path`, a process that has imported nothing else — so the wire's import cannot ride another module's `sys.path` side effect |
+| Delegating bounder | `h-mad/tests/docsections.py` | modify | import the authoritative module; drop the duplicate `_fence_aware_end` **and** the local heading regex in `titled_section` — both the section start (`_dbe.find_heading`) and its end (`_dbe.fence_aware_end`) come from the scanner (AC-1.8) |
+| Delegation spy test | `h-mad/tests/test_docsections.py` | modify | gains `test_docsections_delegates_to_the_authoritative_bounder`, which spies BOTH `_dbe.find_heading` and `_dbe.fence_aware_end`, the killer of `docsections.json`'s two wire mutations and one of the seven floor-tuple node IDs (AC-1.8, AC-6.4); the hostile `test_titled_section_ignores_a_heading_inside_a_fence` lives in the new module beside the other docsections-side tests |
+| Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`; a fifth, `docsections-delegation-reverted` (local bounder restored, callee intact), is the Connection-enforcement wire mutation, killed by `test_docsections_delegates_to_the_authoritative_bounder` with the helper's behaviour tests still green — the one designed exception being the source guard `test_docsections_has_no_second_bounder`, which goes red on exactly this mutant because restoring a local toggle is the second bounder it exists to refuse; a sixth, `docsections-syspath-setup-removed` (the `sys.path.insert` that makes the delegating import self-contained is deleted), is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path`, a process that has imported nothing else — so the wire's import cannot ride another module's `sys.path` side effect; a seventh, `docsections-heading-lookup-reverted` (the local heading `re.search` restored, `find_heading` untouched), is killed by the same delegation spy, whose `find_heading` recorder then sees no call |
 
 ## Implementation Order
 
@@ -443,8 +451,8 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `substitute` and `run_block` take), tag and key validation; tests in
    `h-mad/tests/test_h_mad_doc_block_exec.py` (new) and the matching rows of
    `h-mad/tests/mutation-specs/doc_block_exec.json` (new). **In the same task**,
-   `h-mad/tests/docsections.py` drops `_fence_aware_end` and delegates through
-   `_dbe.fence_aware_end`, `h-mad/tests/test_docsections.py` gains the delegation spy test, and
+   `h-mad/tests/docsections.py` drops `_fence_aware_end` and its local heading regex and delegates through
+   `_dbe.find_heading` and `_dbe.fence_aware_end`, `h-mad/tests/test_docsections.py` gains the delegation spy test, and
    `h-mad/tests/mutation-specs/docsections.json` is re-pointed, converted to named-test form and
    run to `ALL_CAUGHT` (the author-together ordering the plan requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. New-behaviour shape, plus one wire.
 2. **Task 2 — substitution.** `substitute` in `h-mad/scripts/h_mad_doc_block_exec.py`: simultaneous
@@ -547,9 +555,18 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
     `h-mad/tests/docsections.py` can delegate to it (AC-1.8)."""
 ```
 
-`__all__` names all six. `fence_aware_end` is public on purpose: `docsections.titled_section`
-and `docsections.section_from` call it in place of the deleted `_fence_aware_end` with the same
-`(text, start, level)` arguments. Both it and `extract` are thin consumers of the private
+```python
+def find_heading(text: str, heading: str) -> tuple[int, int] | None:
+    """Offset just past the ATX heading line equal to `heading` (stripped) and its
+    level, found among the scanner's heading events only — never inside a fence.
+    None when absent; raises AmbiguousHeading(n) when more than one matches."""
+```
+
+`__all__` names all seven. `fence_aware_end` and `find_heading` are public on purpose:
+`docsections.titled_section` calls `find_heading` in place of its own `re.search` heading regex
+and then `fence_aware_end` in place of the deleted `_fence_aware_end`; `docsections.section_from`
+calls `fence_aware_end` with the same `(text, start, level)` arguments. A heading `find_heading`
+reports absent keeps `docsections`' own loud failure (`test_a_missing_heading_fails_loudly`). Both it and `extract` are thin consumers of the private
 `_fence_events(text)` generator (§Scanning), the single home of the fence grammar; the two
 re-pointed `docsections.json` mutations therefore target `_fence_events`'s state transition and
 `fence_aware_end`'s heading match, and every fence-grammar row of `doc_block_exec.json` anchors in
@@ -739,8 +756,13 @@ reservation into `stream_path_unwritable`. `test_stream_handles_are_closed_on_ev
 descriptors** (AC-3.9): once both handles are held, `os.fstat` on each gives `(st_dev, st_ino)`,
 and equality is `StreamPathsAlias` — a symlink, a `./x`/`x` spelling and a **hard link** all
 collapse to one inode, and because the comparison is on the descriptors there is no
-check-to-open window in which two distinct strings can come to name one file. The refusal closes
-both handles, unlinks one this call created, and has written nothing. (A string-level pre-check is
+check-to-open window in which two distinct strings can come to name one file. The refusal unlinks a
+file this call created (an `OSError` there maps to `stream_path_unwritable`, the region's verdict)
+and raises `StreamPathsAlias`; **it does not close the handles itself** — closing is the backstop
+`finally`'s job through `_close_stream`, which is what lets
+`test_backstop_close_failure_does_not_outrank_a_refusal` inject a failing close and still see
+`stream_paths_alias` (a close inside the reservation region would map that injected error to
+`stream_path_unwritable` instead). Nothing has been written. (A string-level pre-check is
 therefore not needed and is not performed; the earlier resolved-path comparison was both weaker
 and racy.)
 
@@ -887,8 +909,9 @@ bare `test_*` name is a nonexistent path to pytest, so the names in the table be
 `<name>` half and the spec carries them qualified. The same rule binds the other two specs:
 `tests/test_h_mad_collect_report_docs.py::<name>` in `doc_block_exec_wire.json` (whose `command`
 is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`) and
-`tests/test_docsections.py::<name>` in `docsections.json` for the five rows killed there, while its sixth row,
-`docsections-syspath-setup-removed`, is bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd`
+`tests/test_docsections.py::<name>` in `docsections.json` for the five rows killed there, while its sixth and seventh rows —
+`docsections-syspath-setup-removed`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd`, and
+`docsections-heading-lookup-reverted` (the local `re.search` heading regex restored in `titled_section`, `find_heading` untouched), bound to the delegation spy in `tests/test_docsections.py` —
 (a `test` key is a full node ID and may name any collectable file; the harness runs `target_command + [test]`). Exact `find` anchors are set from the
 landed source in the same task that lands it (the author-together ordering the plan states for
 `docsections.json`), each exact-once; the mechanism column is what the anchor must express.
@@ -1128,3 +1151,4 @@ mean the probe never created one.
 - v1.55: Design audit v50 (codex must 1; agy clean) + impl-plan audit v5 back-propagation: the AC-5.5 escapee fixture is an esc.py under the test's tmp_path reached through the substitution map (ESC_PATH), never a file in the child's fresh cwd; the docsections-delegation-reverted mutant is expected to trip the docsections source guard, which is stated instead of 'helper suite still green'.
 - v1.56: Impl-plan audit v6 back-propagation (codex should): the ATX heading grammar is stated (CommonMark 4.2 — 0–3 spaces, 1–6 hashes, space/tab/EOL, optional closing run), with test_heading_lookalikes_are_not_headings and mutation heading-lookalike-accepted (62 rows: 60 + 2).
 - v1.57: Design audit v52 (codex clean; agy should 2): the AC-4.1–4.5 test row names LAUNCH_FAILED in the exit-2 class; the CleanupFailed row carries its os_error: detail line.
+- v1.58: Design audit v53 (codex must 1 should 1; agy must 1) + impl-plan audit v7 back-propagation (codex must 1 should 1): scanner event model is open/close/body/heading/prose with level and candidate; the grammar is verified against markdown-it-py 2.2.0 (14/14, plan §Measurements); find_heading is public and docsections delegates the section start as well as its end (seven public names; docsections.json seventh row docsections-heading-lookup-reverted); the alias refusal leaves closing to the backstop so the injected-close test can hold.

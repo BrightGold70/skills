@@ -238,7 +238,7 @@ fire), while the helper's own suite stays green under that revert, which is the 
 test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
 this row is the connection half, and the invariant requires both. **Ordering, since the
 source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
-**A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect. — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
+**A seventh, `docsections-heading-lookup-reverted`, pins the START of the section the same way** — `titled_section`'s own `re.search(r"(?m)^(?P<marks>#+) …")` restored while `find_heading` stays intact — and is killed by the same delegation spy, which records `find_heading` as well as `fence_aware_end`. **A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect. — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
 lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
 and records the named RED test in every mutation's `test` key before the task closes. A mutation
 without a `test` key, or a harness run that is deferred to "later", is the silent no-op this
@@ -258,7 +258,7 @@ also fail a named test. Only the pair distinguishes a wire that works from one t
 and neither is visible to a whole-module revert, which removes both sides at once.
 
 **Task-level API, and how the caller changes.** The importable surface is five functions plus
-`main` (all six in `__all__`) and two
+`main`, `find_heading` (all seven in `__all__`) and two
 frozen dataclasses (the design carries the full signatures; this is the contract the wire is
 planned against):
 
@@ -315,6 +315,7 @@ carries them fully qualified.
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned by a mutant that breaks it) |
 | `consumer-from-import` | the consumer's `import h_mad_doc_block_exec as dbe` becomes `from h_mad_doc_block_exec import extract, select, run_block` with bare calls | `test_consumer_calls_the_helper_module_qualified` — the source carries no `from h_mad_doc_block_exec import`, so the spies above stay observable (AC-6.5's precondition, pinned) |
 | `hand-rolled-extraction-widened` | a second `re.findall(r"```bash…")` is introduced on the executing path (`_gate_bash_block` falls back to it) | `test_only_the_exec_scan_hand_rolls_extraction` — exactly one `re.findall(r"```bash` remains in the file, the `:412` scan (AC-6.2's exemption cannot widen) |
+| (bound in `docsections.json`, not here) | `docsections-heading-lookup-reverted` | `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — `titled_section`'s local heading `re.search` restored with `find_heading` untouched; the spy's `find_heading` recorder sees no call |
 | (bound in `docsections.json`, not here) | `docsections-syspath-setup-removed` | `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — the delegating import's own `sys.path.insert` deleted; a fresh process with only the tests dir on `sys.path` must still import `docsections` (not a floor-tuple node: it lives in the new module) |
 | (bound in `docsections.json`, not here) | `docsections-delegation-reverted` | `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — listed here so the FR-6 table names all **seven** node IDs the AC-6.4 floor tuple counts |
 
@@ -596,6 +597,31 @@ toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which 
 duplicate bounder and imports the authoritative one. The tag was never the reason to change it;
 the duplicate bounder is.
 
+- **Scanner grammar corpus** — every fence and ATX rule the scanner implements, rendered through
+  markdown-it-py 2.2.0 (CommonMark preset) on the supported interpreter, 14 of 14 agreeing; the
+  script is a throwaway (`grammar_corpus.py`, one `md.render(src)` per case, a needle asserted on
+  the HTML), and its output is what the design's §Scanning cites:
+
+  ```
+  $ python3.11 -c "import markdown_it; print(markdown_it.__version__)"
+  2.2.0
+  $ python3.11 grammar_corpus.py
+  OK  opener at 3 spaces IS a fence                | '<pre><code class="language-bash">X\n</code></pre>'
+  OK  opener at 4 spaces is NOT a fence            | '<pre><code>```bash\n</code></pre>\n<p>X</p>'
+  OK  closer shorter than opener does not close    | '<pre><code>X\n```\nY\n</code></pre>'
+  OK  closer with trailing text does not close     | '<pre><code>X\n``` trailing\nY\n</code></pre>'
+  OK  closer at 4 spaces does not close            | '<pre><code>X\n    ```\nY\n</code></pre>'
+  OK  tilde does not close a backtick fence        | '<pre><code>X\n~~~\nY\n</code></pre>'
+  OK  body de-indented by opener indent (2)        | '<pre><code>a\nb\n c\n</code></pre>'
+  OK  #hashtag is not a heading                    | '<p>#hashtag</p>'
+  OK  seven hashes is not a heading                | '<p>####### x</p>'
+  OK  4-space-indented ## is not a heading         | '<pre><code>## x\n</code></pre>'
+  OK  3-space-indented ## IS a heading             | '<h2>x</h2>'
+  OK  closing hashes are stripped                  | '<h2>x</h2>'
+  OK  tab after hashes IS a heading                | '<h2>x</h2>'
+  OK  heading inside a fence is not a heading      | '<pre><code>## x\n</code></pre>'
+  ```
+
 ## Convention Prerequisites
 
 - Feature branch created at Phase 5c before any implementation commit.
@@ -751,3 +777,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.55: Design v1.53 back-propagation: docsections.json binding sentence; eight wire mutations (wire-revert-select, wire-revert-substitute).
 - v1.56: Plan re-audit v42 (codex must 1 should 1, both answered by impl-plan v1.3; agy clean) + design v1.54 back-propagation: _run_recipe naming.
 - v1.57: Design v1.56 back-propagation: 62 mutations (60 + 2).
+- v1.58: Design v1.58 back-propagation: scanner grammar corpus in §Measurements (markdown-it-py 2.2.0, 14/14); find_heading (seven public names); docsections.json seventh row.
