@@ -221,7 +221,11 @@ not opted in.
     no bytes. Tests: symlink, spelling, and `os.link` alias.
   - AC-3.10: A `--stdout`/`--stderr` path that cannot be written refuses with
     `DOCBLOCK: UNREADABLE reason=stream_path_unwritable` and exits 2, **and the block does not
-    run** — observable because a block with a side effect leaves none.
+    run** — observable because a block with a side effect leaves none. When the second
+    reservation fails after the first created a file, the first is closed and unlinked and the
+    helper reads back that the path is gone; if the rollback left it behind, the same verdict
+    carries a `leftover: <path>` detail line (tested by fault-injecting `os.unlink`), so a
+    refusal never silently leaves a new artifact.
   - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
     the *same* invocation immediately before the block. It is fixture setup, never doc content:
     the block's own text is unchanged and is what the doc says. **Composition is
@@ -387,8 +391,9 @@ not opted in.
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. Both (a) and (b) are driven by one real
     `os.setsid()` fixture, no mock; `os.killpg` is monkeypatched only for AC-4.6's
-    `PermissionError`-after-`poll()` case — one of exactly **seven** named fault injections this
-    suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, the module's
+    `PermissionError`-after-`poll()` case — one of exactly **eight** named fault injections this
+    suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, `os.unlink` for
+    the reservation rollback's read-back, the module's
     own `_final_write` seam for AC-3.8's post-run write failure, its `_close_stream` seam for
     the backstop close on a path where the final write never ran, and the recorded `Popen`
     instance's own `communicate`/`wait` for AC-4.6's `collect` stage — an instance-level injection
@@ -567,3 +572,4 @@ quoted
 - v1.39: Design audit v62 back-propagation: AC-4.6 covers an OSError from the helper's own communicate/drain/close/wait on the child as LAUNCH_FAILED stage=collect, tested by fault-injecting the recorded Popen instance.
 - v1.40: Design v1.66 back-propagation: seven named fault injections (the recorded Popen instance's communicate/wait for the collect stage).
 - v1.41: Design v1.67 back-propagation: AC-1.7 states heading text is compared after the CommonMark closing hash run is stripped (`## Text ##` == `## Text`).
+- v1.42: Design v1.69 back-propagation: AC-3.10's failed-second-reservation rollback is read back and reports `leftover: <path>`; eight named fault injections (os.unlink added).

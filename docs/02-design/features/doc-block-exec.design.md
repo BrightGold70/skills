@@ -65,7 +65,8 @@ caller (test, or operator on the CLI)
         ▼
    select(blocks, index) ─── POLICY: index<1 ──► BAD_INDEX ; 0 ──► NOT_FOUND ; >1 no index ──► AMBIGUOUS
         ▼ exactly one
-  substitute()  ─────────►  Block'             literal replace, count each key; a NEW Block
+  substitute()  ─────────►  (Block', counts)   literal replace, count each key; a NEW Block plus
+                                               the per-key counts (tuple[Block, dict[str, int]])
         │  every key present?  no ──► SUBST_MISSING
         ▼ yes
    run_block()
@@ -86,7 +87,7 @@ caller (test, or operator on the CLI)
         │                                                     [OSError from drain/close/wait ──► stage=collect]
         └── finally: rmtree(cwd) ──► read back: lexists? ──► CLEANUP_FAILED (outranks TIMEOUT)
         ▼
-     Result(rc, stdout, stderr, shell)
+     RunResult(rc, stdout, stderr, shell)
         ▼
    main() ─────────────►  one `DOCBLOCK:` line on stdout;  exit 0 on every verdict (RAN, every
                           refusal, TIMEOUT) | 2 only on UNREADABLE / CLEANUP_FAILED / LAUNCH_FAILED
@@ -506,7 +507,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 70 mutations (70 rows: 68 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 71 mutations (71 rows: 69 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -556,8 +557,8 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
    because they assert post-Task-5 state, `test_exactly_one_tagged_fence_in_the_tree` (the tag
    exists only after this task) and `test_suite_floor_holds` (its seven-node tuple exists only
-   after this task), both still living in `h-mad/tests/test_h_mad_doc_block_exec.py`**. `:412` in
-   the same file is deliberately untouched:
+   after this task), both still living in `h-mad/tests/test_h_mad_doc_block_exec.py`**. The text scan at
+   `h-mad/tests/test_h_mad_collect_report_docs.py:412` is deliberately untouched:
    it selects a *different*, untagged block (`exec codex`) and only inspects it, so it neither
    breaks nor belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour.
    Depends on 1–4. Tag and migration cannot be split: tagging the gate fence makes `:270`'s
@@ -737,7 +738,18 @@ must not leave behind. The loop is bounded (three round trips, then `StreamPathU
 what it resolves to. The descriptor is wrapped with `os.fdopen(fd, "a", encoding="utf-8")`. If the second reservation fails, the first
 handle is closed and — only if `O_EXCL` succeeded for it — unlinked, so a pre-existing artifact
 keeps every byte, a refusal leaves no new empty file, and there is no window in which another
-process's file could be mistaken for one this call created. The truncation is the final write itself:
+process's file could be mistaken for one this call created. **The rollback is verified, not
+assumed** (impl-plan audit v15): the reservation tracks `created` per arm and the rollback runs in
+its own `finally`-shaped step — close first, then unlink iff created, each guarded so a failure of
+one does not skip the other — and is followed by a read-back, `os.path.lexists(created_path)`;
+if the file this call created is still there, the same `stream_path_unwritable` verdict carries a
+`leftover: <path>` detail line, so the no-new-artifact guarantee is either true or reported as
+broken, never silently assumed. `test_rollback_unlink_failure_reports_leftover` gives `--stdout`
+a fresh path and `--stderr` a path under a regular file (the real `ENOTDIR`), patches `os.unlink`
+in the helper's namespace to raise `PermissionError` (the eighth named seam, Test Strategy), and
+asserts `UNREADABLE reason=stream_path_unwritable`, exit 2, a `leftover:` line naming the stdout
+path, that file present and empty, and no traceback; mutation `rollback-leftover-unreported`
+(the read-back removed, so the verdict never carries `leftover:`) is killed by it. The truncation is the final write itself:
 on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); truncate(); write(…);
 flush(); close()` — all five inside `_final_write`, **with the `close()` in a `finally`**: if
 `seek`, `truncate`, `write` or `flush` raises, the handle is still closed before the exception is
@@ -920,7 +932,7 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **Seven named fault-injection seams, each on a call whose *failure* is under test,
+stub out. **Eight named fault-injection seams, each on a call whose *failure* is under test,
 all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real — the seventh is
 instance-level rather than a module seam:** the AC-5.5
 `killpg` seam is patched only for AC-4.6's `reap` stage (`PermissionError` after `poll()`), since
@@ -942,7 +954,10 @@ close deterministically either. The seventh, for AC-4.6's `collect` stage, is th
 `Popen` instance's own bound `communicate` (first call raises `OSError(EIO)`, later calls pass
 through) and, separately, its `wait` — reached through the AC-5.6 recording pass-through, which
 observes the real constructor and stubs nothing, so `subprocess.Popen` itself stays real
-(design audit v62). The drain race needs no mock, because a real
+(design audit v62). The eighth is `os.unlink` in the helper's namespace, patched to raise
+`PermissionError` for the reservation rollback's read-back (`test_rollback_unlink_failure_reports_leftover`),
+because a directory writable at create time cannot be made unwritable between the two arms of one
+call. The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -967,7 +982,7 @@ that return value into the process exit, so the in-process code is the real code
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong, **and its own contract is pinned directly** — `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence` call `fence_aware_end` on hostile text and assert the section does not end at a heading quoted inside a `~~~` block or at a four-space-indented literal fence, since `docsections` consumes it as a section bounder, not through the extractor. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key is neither re-substituted nor mis-counted, in both map orders; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: stdout` / `failed: stderr` detail lines |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: stdout` / `failed: stderr` detail lines; `os.unlink` fault-injected on a failed second reservation → `stream_path_unwritable` with a `leftover: <path>` line, the created file present and empty, no traceback |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path **and a preamble file containing an invalid UTF-8 byte** → `UNREADABLE reason=preamble_unreadable`, and the block leaves no side effect |
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
@@ -1084,6 +1099,7 @@ exactly what the base Mutation verification invariant forbids.
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `indented-closer-accepted` | the scanner closes a fence on a marker run preceded by four or more spaces | `test_indented_closer_does_not_close` (AC-1.6 — the four-space ```` ```` ```` line stays body text and the fence ends at the next 0–3-space closer) |
+| `rollback-leftover-unreported` | the rollback's `lexists` read-back is removed, so a first-reservation file that the failed unlink left behind is never reported on the `stream_path_unwritable` verdict | `test_rollback_unlink_failure_reports_leftover` (AC-3.10) |
 | `stream-open-oserror-unwrapped` | the reservation region's `except OSError` is removed, so an `ENOTDIR`/`EACCES` on `os.open` (or an `OSError` from `fstat` or the rollback) escapes as a traceback | `test_stream_path_under_a_regular_file_refuses` (AC-3.10 — a real `ENOTDIR`, no injection; the verdict must be `stream_path_unwritable`, exit 2, no traceback) |
 | `backstop-close-unmapped` | the `except OSError` around `main`'s backstop `_close_stream` is removed, so a failing close on the timeout path escapes as a traceback | `test_backstop_close_failure_on_timeout_is_mapped` (AC-3.8 — `_close_stream` injected to raise under `TIMEOUT`; the verdict must be `stream_close_failed`, exit 2) |
 | `backstop-close-outranks-error` | the post-`finally` selection raises `StreamCloseFailed` even when an exit-2 error is already pending | `test_backstop_close_failure_does_not_outrank_a_refusal` (AC-3.8 — an aliased pair plus an injected close failure must still report `stream_paths_alias`) |
@@ -1091,7 +1107,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy rows, seventy mutations — sixty-eight of the helper's source (the AC-5.3 row, once
+Seventy-one rows, seventy-one mutations — sixty-nine of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1252,3 +1268,4 @@ mean the probe never created one.
 - v1.66: Impl-plan author contradictions after v1.65: the fault-injection list is seven seams (the collect stage's instance-level communicate/wait injection added); the exception table renders pgid on reap and collect, as the verdict table already did.
 - v1.67: Design audit v63 (codex must 1 should 1; agy should 1, REFUTED — REPO_ROOT is parents[2] of the test file, the skills root, so `h-mad/tests/test_docsections.py` from it is right): heading identity is the CommonMark-normalized text (closing hash run and trailing whitespace stripped) on both forms — the earlier 'exact match' sentence contradicted the §Scanning rule — with test_closing_hash_run_does_not_change_heading_identity and mutation closing-hash-run-kept (70 rows: 68 + 2); the plan's run_block API row names the collect stage.
 - v1.68: Impl-plan v1.15 back-propagation: the consumer-from-import row is one contiguous replacement at the call region (a from-import added beside the alias, every call bare) — the alias line and the call sites are not contiguous under a single str.replace.
+- v1.69: Design audit v64 (codex should 1 nit 1; agy must 1) + impl-plan audit v15 back-propagation: the :412 text scan is named with its file; the diagram shows substitute's (Block', counts) tuple and RunResult; the reservation rollback is verified by an lexists read-back that reports `leftover: <path>` on the stream_path_unwritable verdict, with test_rollback_unlink_failure_reports_leftover, mutation rollback-leftover-unreported and os.unlink as the eighth named seam — 71 rows (69 + 2).

@@ -390,7 +390,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 70 mutations with a full-node-ID `test` binding each — 68 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 71 mutations with a full-node-ID `test` binding each — 69 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -729,9 +729,17 @@ the duplicate bounder is.
   success:
 
   ```
-  python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
-  tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"      # gate on BOTH lines
+  hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
+  tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"      # gate on BOTH lines; rc=124 is the wrapper's expiry, not a suite result
   ```
+
+  **Every 5f command is bounded** through `hmad-dispatch run --timeout <s> -- …` (the base Portable
+  time bounds invariant; `timeout`/`gtimeout` are not macOS components): the wrapper propagates
+  the wrapped command's exit status and reports 124 on expiry — measured 2026-09-03,
+  `run --timeout 5 -- sh -c 'exit 3'` → rc 3, `run --timeout 1 -- sleep 3` → `run_timeout`, rc 124 —
+  so the captured status and the `SUITE:`/`MUTATION:` tokens survive it. Bounds: 1200 s for the
+  full suite (three times the 397 s baseline), 600 s for the scoped run and for each mutation-harness
+  invocation (the impl-plan's Phase 5f block carries the wrapped commands).
 
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
@@ -843,3 +851,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.67: Plan re-audit v53 clean (both surfaces) + design v1.65 back-propagation: 69 mutations (67 of the helper's source) after the two collect-stage rows.
 - v1.68: Plan re-audit v54 clean (both surfaces) + design v1.67 back-propagation: run_block's API row lists the collect stage; 70 mutations (68 of the helper's source).
 - v1.69: Impl-plan v1.15 back-propagation: consumer-from-import stated as one contiguous replacement at the call region, alias line untouched.
+- v1.70: Plan re-audit v55 (codex must 1; agy clean): every 5f command is bounded through hmad-dispatch run --timeout (rc propagates, 124 on expiry — measured); 71 mutations (69 of the helper's source) after the rollback read-back row.
