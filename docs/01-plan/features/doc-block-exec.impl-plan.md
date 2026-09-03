@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.61 — design cycle 57 / impl-plan cycle 9 back-propagation, commit 5589695)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.62)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.62 — design cycle 58 back-propagation, commit 9414341)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.63)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 67 rows, `doc_block_exec_wire.json` 8, `docsections.json` 7) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 67 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -159,28 +159,31 @@ the import. Re-point `docsections.json`: `fence-tracking-removed` and
 scanner's state transition and the bounder's heading match); the other two anchors
 (`offset-anchored-bound-runs-to-end-of-file`, `missing-heading-returns-empty-instead-of-failing`)
 stay in `tests/docsections.py`; the spec gains `"target_command": ["python3.11", "-m", "pytest", "-q"]`
-and **all seven** rows gain a `test` key (the full node ID, copied from `_killed_by`, which stays);
+and **all eight** rows gain a `test` key (the full node ID, copied from `_killed_by`, which stays);
 the two anchors that stay in `tests/docsections.py` are re-spelled to the delegating lines they now
 mutate (`offset-anchored-bound-runs-to-end-of-file` finds `return text[offset:_dbe.fence_aware_end(text, offset, level)]`;
 `missing-heading-returns-empty-instead-of-failing` finds `assert found, f"missing section {heading!r}"`).
-Add a fifth row `docsections-delegation-reverted`, a behaviour-compatible revert of BOTH calls
-with `_dbe` still imported and untouched. The harness applies one `str.replace` per row, so the
-row is one contiguous replacement: `find` is the source from `def titled_section(text: str, heading: str) -> str:`
-through `section_from`'s `return text[offset:_dbe.fence_aware_end(text, offset, level)]` (both
-call sites, docstrings verbatim — it matches exactly once); `replace` is that same text with two
-local definitions inserted before `def titled_section` — `def _fence_aware_end(text, start, level)`
-(the old `startswith("```")` toggle from today's `:31`) and `def _find_heading(text, heading)`
-(today's `:53` regex, returning `(match.end(), len(match.group("marks")))` or `None`) — and the
-two `_dbe.` call sites re-pointed at them (`found = _find_heading(text, heading)`,
-`_fence_aware_end(text, start, level)`, `_fence_aware_end(text, offset, level)`); the
-`import h_mad_doc_block_exec as _dbe` line is not in the `find` and stays. Under it the WIRE-PIN
-fails because neither `find_heading` nor `fence_aware_end` on the `sys.modules` fake is called;
-the helper's own behaviour tests (`extract`/`select`/`fence_aware_end`/`find_heading`) stay
-green; the designed exceptions are the source guard `test_docsections_has_no_second_bounder`
-(restoring a local toggle IS the second bounder it exists to refuse — design v1.55 §Components)
-and the two docsections-side hostile tests that reject exactly the old logic
-(`test_docsections_unbalanced_four_backtick_fence`, `test_titled_section_ignores_a_heading_inside_a_fence`);
-the row's `test` key stays the WIRE-PIN. Add a sixth row
+Add a fifth row `docsections-delegation-reverted`, a **connection-only** revert: the callee is
+untouched and no local bounder is restored. `find` is the one line
+`import h_mad_doc_block_exec as _dbe  # noqa: E402` (it matches exactly once); `replace` is
+```python
+import importlib.util as _ilu  # noqa: E402
+_spec = _ilu.spec_from_file_location("h_mad_doc_block_exec", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "h_mad_doc_block_exec.py"))
+_dbe = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_dbe)
+```
+(`os` is already imported at the top of the delta) — the same file, loaded as a private instance
+that `exec_module` never registers in `sys.modules` and that the import system never consults, so
+`titled_section` and `section_from` still do the real work through a second, byte-identical
+bounder. Under it the WIRE-PIN fails because its recording fake sits in `sys.modules` and the
+reload re-binds `_dbe` to the private instance, not the fake — neither recorder is ever called;
+**every other test stays green**: the helper's own behaviour tests
+(`extract`/`select`/`fence_aware_end`/`find_heading`), the two docsections-side hostile tests
+(`test_docsections_unbalanced_four_backtick_fence`, `test_titled_section_ignores_a_heading_inside_a_fence`)
+and the source guard `test_docsections_has_no_second_bounder` (the source still defines no
+`_fence_aware_end` and scans no marker run). The row's `test` key is the WIRE-PIN. Measured
+2026-09-03 on a two-module scratch pair with the scaffold below: the shared-import caller records
+`['find_heading', 'fence_aware_end']`, the file-path caller records `[]`, both return the same
+section. Add a sixth row
 `docsections-syspath-setup-removed`: `find` is the `sys.path.insert` line shown in the delta below, `replace` is the
 comment `# sys.path setup removed`; killed by
 `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` (the `import` then
@@ -188,13 +191,27 @@ fails with `ModuleNotFoundError` in the subprocess). Add a seventh row
 `docsections-heading-lookup-reverted`: `find` is the `found = _dbe.find_heading(text, heading)` line,
 `replace` restores the local regex (`match = re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$", text); found = (match.end(), len(match.group("marks"))) if match else None`),
 `find_heading` untouched — killed by the WIRE-PIN, whose `find_heading` record then stays empty
-(the harness's single `find`/`replace` per row fits: one line becomes one line). The killer of the
-sixth row must live in a file that still
+(the harness's single `find`/`replace` per row fits: one line becomes one line). Add an eighth row
+`docsections-local-bounder-restored`, the behaviour-restoring revert the source guard exists to
+refuse, as one contiguous replacement: `find` is the source from
+`def titled_section(text: str, heading: str) -> str:` through `section_from`'s
+`return text[offset:_dbe.fence_aware_end(text, offset, level)]` (both call sites, docstrings
+verbatim — it matches exactly once); `replace` is that same text with `import re` and two local
+definitions inserted before `def titled_section` — `def _fence_aware_end(text, start, level)`
+(the old `startswith("```")` toggle from today's `:31`) and `def _find_heading(text, heading)`
+(today's `:53` regex, returning `(match.end(), len(match.group("marks")))` or `None`) — and the
+three `_dbe.` references at the two call sites re-pointed at them (`found = _find_heading(text, heading)`,
+`_fence_aware_end(text, start, level)`, `_fence_aware_end(text, offset, level)`); the
+`import h_mad_doc_block_exec as _dbe` line is not in the `find` and stays. Its `test` key is
+`tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder`, which goes red on
+the restored `_fence_aware_end` definition; the WIRE-PIN and the two hostile tests also go red
+under it, which is why this row cannot serve as the isolated-wire proof and the fifth row can
+(design audit v58). The killer of the sixth row must live in a file that still
 **collects** under the mutant: `test_docsections.py` imports `docsections` at module level, so
 there the mutant is a collection error, which the harness scores as a refusal, not a kill
 (`h_mad_mutation_harness.py:660–669`); `test_h_mad_doc_block_exec.py` imports only `dbe` and
 never imports `docsections` at module level (it reads that file's source as text), so its named
-test reaches its assertion.
+test reaches its assertion; the eighth row's killer lives in the same file for the same reason.
 
 **Code structure**:
 ```python
@@ -307,7 +324,7 @@ def select(blocks: Sequence[Block], index: int | None = None) -> Block: ...
 
 ```python
 # h-mad/tests/docsections.py  (delta)
-import os, re, sys
+import os, sys                                        # `re` goes with the local regex it served
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 import h_mad_doc_block_exec as _dbe  # noqa: E402
 
@@ -391,7 +408,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.9 `test_index_zero_refuses`: `select(blocks, 0)` and `select(blocks, -1)` raise `BadIndex` carrying the value, and no lookup happened (the blocks list may be empty).
 - [ ] AC-3.7 `test_unknown_info_key_refuses` (`shell=fish`, `mode=x` → `BadInfoString` with that token) and `test_duplicate_info_tokens_refuse` (`hmad:exec hmad:exec`, `shell=strict shell=plain` → `BadInfoString` naming the repeated token); `test_untagged_fence_info_string_is_never_inspected` (` ```bash --frozen ` untagged raises nothing).
 - [ ] AC-3.12 `test_invalid_utf8_document_is_unreadable`: a document file containing byte `0xff` → `DocUnreadable` (and, once Task 4 lands, `UNREADABLE reason=doc_unreadable` on the CLI — the CLI half is added in Task 4).
-- [ ] `docsections.json` reports `ALL_CAUGHT` with seven rows, each with a `test` key, under `target_command` (`docsections-heading-lookup-reverted` is killed by the WIRE-PIN's empty `find_heading` record, `find_heading` itself untouched); under `docsections-delegation-reverted` the WIRE-PIN fails and every test in `test_h_mad_doc_block_exec.py` stays green EXCEPT `test_docsections_has_no_second_bounder` (the source guard doing its job) and the two docsections-side hostile tests that reject the restored old logic, `test_docsections_unbalanced_four_backtick_fence` and `test_titled_section_ignores_a_heading_inside_a_fence` (the mutation's `test` key stays the WIRE-PIN).
+- [ ] `docsections.json` reports `ALL_CAUGHT` with eight rows, each with a `test` key, under `target_command` (`docsections-heading-lookup-reverted` is killed by the WIRE-PIN's empty `find_heading` record, `find_heading` itself untouched); under `docsections-delegation-reverted` the WIRE-PIN fails and **every** other test stays green — all of `test_docsections.py`'s pre-existing tests and all of `test_h_mad_doc_block_exec.py`, the source guard `test_docsections_has_no_second_bounder` and the two docsections-side hostile tests `test_docsections_unbalanced_four_backtick_fence` and `test_titled_section_ignores_a_heading_inside_a_fence` included (the mutation's `test` key is the WIRE-PIN); under `docsections-local-bounder-restored` the source guard goes red (its `test` key), as do the WIRE-PIN and the two hostile tests.
 
 **Mutation rows added to `doc_block_exec.json`** (mechanism per the design's Test Plan table):
 `tag-check-removed`, `fence-run-length-ignored`, `section-bound-ignores-level`,
@@ -405,8 +422,8 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 `≥`), `heading-level-pin-ignored` (the full form matching on text alone, ignoring the hash count)
 — 22 rows.
 **Rows in `docsections.json`** after this task: the four existing (two re-anchored) plus
-`docsections-delegation-reverted`, `docsections-syspath-setup-removed` and
-`docsections-heading-lookup-reverted` — 7 rows.
+`docsections-delegation-reverted`, `docsections-syspath-setup-removed`,
+`docsections-heading-lookup-reverted` and `docsections-local-bounder-restored` — 8 rows.
 
 **Dependencies on other tasks**: None.
 
@@ -414,13 +431,13 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - Every test in `test_h_mad_doc_block_exec.py` fails at RED — the module does not exist, so the file's own `import h_mad_doc_block_exec as dbe` raises `ModuleNotFoundError` at collection. That includes `test_docsections_has_no_second_bounder` (which would also fail on its source assertion), `test_docsections_unbalanced_four_backtick_fence` and `test_titled_section_ignores_a_heading_inside_a_fence` (which would also fail because the old toggle mis-bounds and the old regex picks a fenced heading) and the two import tests, which are **insensitive to the docsections delta** (they pass against the unchanged, stdlib-only `docsections.py` as soon as their file collects) and are carried as **regression guards** for the import arrangement the delegating import introduces; their teeth are the `docsections-syspath-setup-removed` mutation, not RED.
 - In `test_docsections.py`: the WIRE-PIN — its only new test — fails on its call-sequence assertion (no recorder was ever called: the unchanged caller still uses its local `re.search` and its private `_fence_aware_end`).
 - All pre-existing `test_docsections.py` tests are regression guards and must pass at RED.
-Wire-scoped revert at 5e: apply `docsections-delegation-reverted` (the one-replacement shim above:
-local `_find_heading` + `_fence_aware_end` restored and both call sites re-pointed, the `_dbe`
-import untouched), leave the helper and the tests intact — the WIRE-PIN must fail (no call reaches
-the fake); every test in `test_h_mad_doc_block_exec.py` stays green EXCEPT
-`test_docsections_has_no_second_bounder` (the source guard doing its job) and the two
-docsections-side hostile tests that reject the old logic (`test_docsections_unbalanced_four_backtick_fence`,
-`test_titled_section_ignores_a_heading_inside_a_fence`); the mutation's `test` key stays the WIRE-PIN.
+Wire-scoped revert at 5e: apply `docsections-delegation-reverted` (the one-line replacement above:
+the shared import swapped for a private `spec_from_file_location` instance of the same file, no
+local bounder restored), leave the helper and the tests intact — the WIRE-PIN must fail (its
+`sys.modules` fake is never bound, so no call reaches it) and **every other test stays green**,
+`test_docsections_has_no_second_bounder` and the two docsections-side hostile tests included; the
+mutation's `test` key stays the WIRE-PIN. The local-restore revert is the separate eighth row,
+`docsections-local-bounder-restored`, and is not the 5e wire revert.
 
 ---
 
@@ -827,4 +844,5 @@ tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                     
 - v1.6: Impl-plan audit v6 (codex should 2; agy clean): provenance header at design v1.56 / plan v1.57; the ATX heading grammar stated and recognised once in _fence_events as a heading event, with test_heading_lookalikes_are_not_headings and heading-lookalike-accepted (62 rows).
 - v1.7: Impl-plan audit v7 (codex must 1 should 1; agy clean) + design audit v53: find_heading is public and titled_section delegates the section start (WIRE-PIN records both calls; docsections.json seventh row); scanner event model stated as the design v1.58 does; the alias refusal leaves closing to the backstop; provenance at design/plan v1.58, grammar corpus cited.
 - v1.8: Impl-plan audit v8 (codex must 2 should 1; agy clean): boundary predicate >= start with test_adjacent_heading_bounds_the_section and adjacent-heading-skipped (63 rows); the delegation-revert shim restores both local functions in one replacement; one canonical test key per row; heading differential cited; provenance at design/plan v1.60.
+- v1.10: Design audit v58 back-propagation (codex must 1): docsections-delegation-reverted is connection-only — find = the shared import line, replace = a private spec_from_file_location instance of the callee (measured on a scratch pair: recorders [] under the mutant, behaviour unchanged) — with every other test green, the source guard included; the old local-restore shim becomes the eighth row docsections-local-bounder-restored bound to the source guard (docsections.json 8 rows); the docsections delta drops the unused re import.
 - v1.9: Impl-plan audit v9 (codex must 2 should 1; agy must 1 should 1) + design v1.61: find_heading's two input forms with heading-level-pin-ignored; _FenceEvent start/end offsets; complete variable-field list; stream: detail on stream_close_failed; mktemp/allow-abbrev/stream-write mutations (67 rows); wire-revert-run imports subprocess; the drain records, never raises.
