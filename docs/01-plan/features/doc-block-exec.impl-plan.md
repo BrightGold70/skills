@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.66 — design cycle 62 / impl-plan cycle 13 back-propagation, commit 41c3789)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.40) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.67)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.68 — design cycle 63 / impl-plan cycle 14 back-propagation, commit 707aaaa)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.41) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.69)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 69 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 70 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -28,7 +28,7 @@ Every guard the design names carries a mutation row bound to one named test; the
   `subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True)` where
   `REPO_ROOT = Path(__file__).resolve().parents[2]` and `SCRIPT = REPO_ROOT / "h-mad" / "scripts" / "h_mad_doc_block_exec.py"`,
   so exit codes are the real process's — marked `(subprocess)` in the ACs. A verdict that needs
-  one of the six seam injections (`_final_write`, `_close_stream`, `tempfile.mkdtemp`, `os.chmod`,
+  one of the six module-level seam injections (`_final_write`, `_close_stream`, `tempfile.mkdtemp`, `os.chmod`,
   `shutil.rmtree`, `os.killpg`) **or the instance-level `Popen` wrapper below**
   calls `dbe.main(argv)` **in-process** — its return value is the
   exit code and `capsys` captures the `DOCBLOCK:` and detail lines — because a `monkeypatch`
@@ -38,7 +38,7 @@ Every guard the design names carries a mutation row bound to one named test; the
 - **Fixtures are hostile**: markdown strings written to `tmp_path`, with mixed heading levels,
   fences quoting fences, a path containing a space, a body with CRLF, and a key containing regex
   metacharacters.
-- **Fault injections — six module-level seams, all via `monkeypatch`, `subprocess` never mocked**:
+- **Fault injections — six of the seven are module-level seams, all via `monkeypatch`, `subprocess` never mocked**:
   `os.killpg` (AC-4.6 reap only), `shutil.rmtree` (in the helper's namespace), `tempfile.mkdtemp`,
   `os.chmod`, the module's `_final_write(handle, text)` seam, and the module's
   `_close_stream(handle)` seam. Recording pass-throughs of `subprocess.Popen` and `os.open` are
@@ -55,10 +55,13 @@ Every guard the design names carries a mutation row bound to one named test; the
   delegates to `bound` on every later call. The wrap must happen inside the pass-through, because
   `run_block` calls `communicate` immediately after `Popen` returns and the test never holds the
   instance before that. `wait` is wrapped the same way for
-  `test_drain_wait_oserror_is_launch_failed_collect`. This form is **not** one of the six named
-  seams and is not a `monkeypatch.setattr` on the helper's namespace; design v1.65 §Test Strategy
-  and spec v1.39 both still say "exactly six named fault injections", which their own new §Execution
-  paragraph contradicts — flagged for design cycle 63, not resolved here.
+  `test_drain_wait_oserror_is_launch_failed_collect`. **One authoritative taxonomy, seven named
+  fault injections** (design v1.67 §Test Strategy, spec v1.41): six are module-level
+  `monkeypatch.setattr` seams in the helper's namespace — `os.killpg`, `shutil.rmtree`,
+  `tempfile.mkdtemp`, `os.chmod`, `_final_write`, `_close_stream` — and the seventh is this
+  instance-level wrapper, which is installed by the recording pass-through rather than by patching
+  a module attribute. It is the only injection that is not a module seam, which is why the CLI
+  transport rule above names it separately from the six.
 - **Mutation spec** `h-mad/tests/mutation-specs/doc_block_exec.json`: `root` is `../..`,
   `command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_doc_block_exec.py", "-q"]`,
   `target_command` is `["python3.11", "-m", "pytest", "-q"]`, every mutation has a `test` key that is
@@ -108,11 +111,16 @@ heading line (the heading event's `end`) and its level; `None` when absent; `Amb
 when more than one matches; found **among the scanner's `heading` events only**, so a line inside
 any fence is never a heading match and a fenced example quoting the requested heading cannot become
 the section start (design v1.61 §Scanning). **`heading` has two accepted forms, and each real caller
-uses one**: the **full line form** `## Text` — matches a heading event whose text after the hash run
-(closing hashes stripped, trailing whitespace stripped) equals `Text` AND whose level equals the hash
-count; this is what `extract`, the CLI `--heading`, and Task 5's `_gate_block` pass — and the **bare
-form** `Text` — matches on text at any level; this is `docsections.titled_section`'s unchanged
-contract. `extract` maps `None` to an empty candidate list and never raises on absence — bounds the section at the next
+uses one**: the **full line form** `## Text` — matches a heading event whose **normalized text**
+equals `Text` AND whose level equals the hash count; this is what `extract`, the CLI `--heading`,
+and Task 5's `_gate_block` pass — and the **bare
+form** `Text` — matches the same normalized text at any level; this is `docsections.titled_section`'s unchanged
+contract. **Normalized text** is the CommonMark §4.2 form and is what both sides of every
+comparison use: the line after the opening hash run, with the optional closing hash run (preceded
+by a space) and trailing whitespace stripped. The comparison is never against the raw source line,
+so `## Text ##` and `## Text` are one and the same heading on **both** forms, and a document
+holding both has **two** of it — `AmbiguousHeading(2)`, not one match (design v1.67 §Scanning,
+design audit v63; the design's earlier "exact match" wording contradicted this and was withdrawn). `extract` maps `None` to an empty candidate list and never raises on absence — bounds the section at the next
 `heading` event of the same or shallower level, and
 returns every **tagged** fence between those offsets — an event with `candidate` true (a backtick
 opener whose first info word is `bash`; `extract` never reads `marker`) whose info string carries the
@@ -342,8 +350,11 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
 def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     """(the heading event's `end` offset, its level) for the matching heading event; None when
     absent; AmbiguousHeading(n) when more than one matches. `heading` is either the full line
-    form '## Text' (text AND level must match) or the bare 'Text' (any level —
-    docsections.titled_section's contract). Searches the scanner's `heading` events only."""
+    form '## Text' (normalized text AND level must match) or the bare 'Text' (normalized text at
+    any level — docsections.titled_section's contract). Normalized text is CommonMark §4.2: the
+    optional closing hash run and trailing whitespace are stripped, so '## Text ##' and '## Text'
+    are one heading and a document holding both raises AmbiguousHeading(2). Searches the scanner's
+    `heading` events only."""
 
 def extract(doc: str | Path, heading: str) -> list[Block]: ...   # calls find_heading, then bounds
 def select(blocks: Sequence[Block], index: int | None = None) -> Block: ...
@@ -421,6 +432,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.4 `test_index_selects_and_past_end_is_not_found`: `select(blocks, 2)` returns the second; `select(blocks, 3)` on two raises `BlockNotFound`.
 - [ ] AC-1.5 `test_section_owns_deeper_headings`: a `##` section containing `###` sub-headings with a tagged fence under one of them yields that fence; the next `##` (and a `#`) ends it.
 - [ ] AC-1.5 `test_find_heading_accepts_full_and_bare_forms`: on a document with `## Text`, `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) return the same `(end, 2)`; on a document whose only `Text` heading is `### Text`, `find_heading(text, "## Text")` is `None` while the bare form returns `(end, 3)`.
+- [ ] AC-1.5/1.7 `test_closing_hash_run_does_not_change_heading_identity`: pins the normalization rule from both sides. On a document whose only heading is `## Text ##`, both `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) find it and return the same `(end, 2)` — the closing run is stripped before the comparison, so the raw line is never what is matched. On a document holding both `## Text` and `## Text ##`, the full form raises `AmbiguousHeading` with `n == 2`, because the two lines normalize to the same heading rather than to two distinct ones (design v1.67 §Scanning, design audit v63).
 - [ ] AC-1.5 `test_adjacent_heading_bounds_the_section`: `## A` immediately followed by `## B` whose section holds a tagged block — `extract(doc, "## A")` (full form) is `[]`, and with `start, level = find_heading(text, "## A")`, `fence_aware_end(text, start, level) == start` (the adjacent heading's line starts exactly at `start` and is a boundary).
 - [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `# hashtag`, `## x` or the seven-run line in the full form yields no heading match; every `extract`/`find_heading` argument in this file's ACs is the full form unless it says bare).
 - [ ] AC-1.5/1.6 `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading appears first inside a ```` ```markdown ```` fence with a tagged block under that quoted copy, then for real with a tagged block under it; `extract` returns only the block under the real heading (the fenced copy is a `body` line, never a heading match, and the tagged block under it is never a candidate).
@@ -446,8 +458,14 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 `prefix-fence-state-skipped`, `backtick-in-info-accepted`, `tilde-fence-not-tracked`,
 `heading-match-ignores-fence-state`, `heading-lookalike-accepted` (grammar loosened to
 `line.lstrip().startswith("#")`), `adjacent-heading-skipped` (boundary predicate `>` instead of
-`≥`), `heading-level-pin-ignored` (the full form matching on text alone, ignoring the hash count)
-— 22 rows.
+`≥`), `heading-level-pin-ignored` (the full form matching on text alone, ignoring the hash count),
+`closing-hash-run-kept` (`_fence_events` leaves the optional closing hash run in a heading event's
+text, so `## Text ##` no longer satisfies a `## Text` request and a `## Text`/`## Text ##` pair
+counts as one heading instead of two; killed by
+`tests/test_h_mad_doc_block_exec.py::test_closing_hash_run_does_not_change_heading_identity`, which
+goes red on both of its sides — the sole `## Text ##` document stops matching, and the mixed
+document stops raising `AmbiguousHeading(2)`)
+— 23 rows.
 **Rows in `docsections.json`** after this task: the four existing (two re-anchored) plus
 `docsections-delegation-reverted`, `docsections-syspath-setup-removed`,
 `docsections-heading-lookup-reverted` and `docsections-local-bounder-restored` — 8 rows.
@@ -772,13 +790,13 @@ if __name__ == "__main__": sys.exit(main())
 `stream-write-oserror-unwrapped` (the `except OSError` mapping around `_final_write` and its
 read-back removed, so a write failure escapes as a traceback; killed by
 `test_stream_write_failure_after_the_run_is_a_refusal`) — 21 rows. With Tasks 1, 2, 3 that is
-22 + 5 + 21 + 21 = **69 rows**, 67 of the helper's source and 2 of `SKILL.md`, matching design v1.65.
+23 + 5 + 21 + 21 = **70 rows**, 68 of the helper's source and 2 of `SKILL.md`, matching design v1.67.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 69 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 70 rows
 before this task is GREEN.
 
 ---
@@ -857,7 +875,7 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
 
 **Acceptance Criteria**:
 - [ ] AC-6.1 `test_exactly_one_tagged_fence_in_the_tree` (in `test_h_mad_doc_block_exec.py`): opening fences carrying `hmad:exec` across `h-mad/` and `handoff/` excluding any `archive/` path, counted with the module's own `_fence_events`, equal exactly 1.
-- [ ] AC-6.2 `test_exec_block_scan_performs_no_execution` (a spy on `dbe.run_block` records no call while the `:412` assertions run) and `test_only_the_exec_scan_hand_rolls_extraction` (exactly one `re.findall(r"```bash` in the file's source, and it is not inside `_gate_block`/`_gate_bash_block`/`_run_recipe`).
+- [ ] AC-6.2 `test_exec_block_scan_performs_no_execution`: it installs a spy over `dbe.run_block` and a recording pass-through over `dbe.subprocess.run`, then **drives the scan by calling `test_exec_codex_dispatch_carries_out_log_and_timeout()` directly** — the `:403` test that owns the `:412` scan, which takes no fixtures and so is callable as a plain function — and asserts both recorders are empty. Calling the existing test rather than re-implementing its body is what keeps `exec-scan-executes`'s anchor valid: the mutant is applied inside that function, so a killer that re-implemented the scan locally would never see it. **This `run_block` spy is the one spy in this document that is NOT a recording pass-through**: it records `(block, kwargs)`, returns `None`, and never calls the real `dbe.run_block`. A pass-through here would execute the exec block from inside the killer itself under `exec-scan-executes`, which is exactly what the row's safety note forbids — the same class of rule as binding `real_rmtree`/`real_killpg` before their patches. And `test_only_the_exec_scan_hand_rolls_extraction` (exactly one `re.findall(r"```bash` in the file's source, and it is not inside `_gate_block`/`_gate_bash_block`/`_run_recipe`).
 - [ ] AC-6.3 the four existing behaviours — `COLLECT: OK` guard before gating, delivered-report `GATE: PASS`, undelivered `report_not_collected` halt without reaching the gate, no shell-killing bare `exit` — still pass, driven through the preamble boundary.
 - [ ] AC-6.4 `test_suite_floor_holds` (in `test_h_mad_doc_block_exec.py`): `subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=REPO_ROOT, env={**os.environ, "DOCBLOCK_FLOOR_INNER": "1"})` — **from the repository root**, the cwd the baseline was measured in (`python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1` → `2747 tests collected`, re-measured 2026-09-03; the same command from `h-mad/` reports 2485, a different rootdir and a different number) — with `DOCBLOCK_FLOOR_INNER=1` making the inner instance of this test skip; asserts the collected count ≥ `2747` + the collected count of `h-mad/tests/test_h_mad_doc_block_exec.py` alone (a second `--collect-only` from the same cwd) + 7, and that each of the seven named node IDs is present: the six consumer tests in `h-mad/tests/test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) plus `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`. Seven is exact: those are the only node IDs this feature adds to pre-existing files — every other new test, including the docsections-side ones, lives in the new module and is counted by its own collect (plan §Measurements).
 - [ ] AC-6.5 WIRE-PIN 1 (`test_gate_block_resolves_through_doc_block_exec`): `monkeypatch.setattr(dbe, "extract", spy_extract)` and `monkeypatch.setattr(dbe, "select", spy_select)`, each a recording pass-through to the real function (bound before patching) — calling `_gate_block()` must record exactly one `extract` call with `(SKILL_MD, "## Second surface — the codex leg")` and exactly one `select` call whose first argument **is** the list `extract` returned (identity, `is`) and whose `index` is `None`; the returned block is the one `select` returned. WIRE-PIN 2 (`test_recipe_runs_through_run_block`): `monkeypatch.setattr(dbe, "substitute", spy_substitute)` (a recording pass-through to the real `substitute`) and `monkeypatch.setattr(dbe, "run_block", spy_run)` where `spy_run` records `(block, kwargs)` and returns `dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")` — calling `_run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)` must record exactly one `substitute` call with the gate block (`text` equal to `_gate_bash_block()`) and the one-key map `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(SCRIPT_DIR / "h_mad_audit_gate.py"))}`, and exactly one `run_block` call whose block **is** the block `substitute` returned, whose `preamble` contains `COLLECT_OUT=$(`, and whose `timeout == 60.0`. `test_consumer_calls_the_helper_module_qualified`: the consumer's source has no `from h_mad_doc_block_exec import`.
@@ -986,13 +1004,57 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
     Killed by `test_only_the_exec_scan_hand_rolls_extraction` — two `re.findall(r"```bash` now
     remain in the file rather than the one `:412` scan. Both WIRE-PINs stay green, because the
     `try` arm succeeds on the real tree.
-  - `exec-scan-executes` — the `:412` text scan is made to run its block through `dbe.run_block`;
-    killed by `test_exec_block_scan_performs_no_execution`, which asserts `:412` calls neither
-    `run_block` nor `subprocess`.
-  - `consumer-from-import` — the consumer's `import h_mad_doc_block_exec as dbe` becomes
-    `from h_mad_doc_block_exec import extract, select, run_block` with bare calls; killed by
-    `test_consumer_calls_the_helper_module_qualified`, since the source must carry no
-    `from h_mad_doc_block_exec import` for the spies to stay observable.
+  - `exec-scan-executes` — the `:412` text scan is made to run its selected block through
+    `dbe.run_block`. `find` is the one line that follows the scan,
+    `    assert exec_block, "Second surface must dispatch the codex leg via exec"` (verified at HEAD
+    `8599e28`: it occurs exactly once in the file, and the scan's own generator line
+    `(b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b)` at `:412`
+    is likewise unique — the migration leaves both untouched, which is why they are still valid
+    anchors at GREEN). `replace` is
+    ```python
+        assert exec_block, "Second surface must dispatch the codex leg via exec"
+        dbe.run_block(
+            dbe.Block(text=exec_block, shell="plain", lineno=0, info=""), timeout=1.0
+        )
+    ```
+    `shell="plain"` is deliberate: the exec block is not `-euo pipefail`-safe, so `strict` would
+    change the behaviour being pinned rather than only adding the execution. All four `Block` fields
+    are given, so the call is type-correct and raises no `TypeError`. Killed by
+    `test_exec_block_scan_performs_no_execution`, whose `dbe.run_block` spy — installed **before**
+    it drives the scan — records exactly the call the guard says can never happen. **Safety, stated
+    from the harness source rather than assumed**: on the expected path the harness scores with
+    `target_command + [mutation["test"]]` (`h_mad_mutation_harness.py:606–607`), so only the killer
+    runs and its spy absorbs the call. But when a named test **passes** under its mutant the harness
+    re-runs the whole-file `command` with the mutant still applied
+    (`h_mad_mutation_harness.py:679`), and in that run
+    `test_exec_codex_dispatch_carries_out_log_and_timeout` (the `:403` test that owns the scan) has
+    no spy installed. `timeout=1.0` is therefore the real bound on this row, not the scoring path:
+    it caps the dispatch at one second if the killer is ever mis-implemented and the survivor branch
+    is taken. Do not raise it, and do not apply this mutation by hand with the whole file selected.
+  - `consumer-from-import` — the consumer's `import h_mad_doc_block_exec as dbe` spelling is
+    replaced by a bare `from h_mad_doc_block_exec import` and every `dbe.` **call** in the delta is re-pointed at the
+    bare names. One replacement suffices because all four call sites are contiguous: `find` is the
+    Task 5 code-structure text from `def _gate_block() -> dbe.Block:` through
+    `    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)` verbatim — `_gate_bash_block`
+    sits inside that region and is carried through unchanged — and it matches exactly once. `replace`
+    is that same text with the line
+    `from h_mad_doc_block_exec import extract, select, run_block, substitute  # noqa: E402`
+    inserted before `def _gate_block`, and the four calls re-pointed to
+    `select(extract(SKILL_MD, "## Second surface — the codex leg"))`, `substitute(` and
+    `run_block(subbed, preamble=preamble, timeout=60.0)`. The two `-> dbe.Block` / `-> dbe.RunResult`
+    annotations stay as they are and never break: the consumer carries
+    `from __future__ import annotations` at its `:8`, so annotations are strings and are never
+    evaluated, and this row leaves the alias import at `:23` in place. Behaviour is unchanged — the
+    bare names are the same function objects — so every recipe regression stays green. Killed by
+    `test_consumer_calls_the_helper_module_qualified` on its source predicate, the row's `test` key,
+    since the file now contains `from h_mad_doc_block_exec import`. **Three other tests go red with
+    it, by construction, and that collateral red is the hazard the spelling guard exists to
+    prevent**: the bare names were bound at import time, so
+    `monkeypatch.setattr(dbe, "extract", spy_extract)` and the other three spies are never observed,
+    which reds WIRE-PIN 1 and WIRE-PIN 2; and `test_gate_block_refuses_an_untagged_recipe` reds too,
+    because its patched `dbe.extract` returning `[]` is likewise bypassed, so the real `extract`
+    resolves the tagged block and `dbe.BlockNotFound` is never raised. All three stay regression
+    tests, not this row's key.
 
   All eight mechanisms are the plan's FR-6 table's, and under each of the four reverts
   `test_h_mad_doc_block_exec.py` stays green. The eight rows bind to the same six named tests as
@@ -1040,7 +1102,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=69
+python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=70
 python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
@@ -1063,3 +1125,4 @@ tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                     
 - v1.12: Impl-plan audit v11 (codex must 1; agy must 1) + design v1.64: docsections-delegation-reverted registers its private instance as sys.modules['_h_mad_doc_block_exec_private'] before exec_module (a frozen dataclass under from __future__ annotations fails to load unregistered — reproduced on 3.11.8); RunResult built with keyword arguments; AC-1.7 gains test_bare_form_duplicate_headings_refuse.
 - v1.13: Impl-plan audit v12 (codex clean; agy must 2, 44 tool calls): Task 5's wire-row bullet carries the exact tag-tolerant regex for wire-revert-extract and the mechanisms of wire-unconditional, exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened inline, as the plan's FR-6 table states them.
 - v1.14: Impl-plan audit v13 (codex must 1; agy clean) + design audit v62 back-propagation (design v1.65): the four Task 5 wire-revert rows carry type-correct replacement bodies with their exact find/replace text — a four-field dbe.Block from the tag-tolerant regex, a local BlockNotFound/AmbiguousBlock ordinal policy, an inline subprocess.run over subbed.text returning a four-field dbe.RunResult under a function-local import, and a str.replace wrapped back into a Block — so each mutant fails only on its WIRE-PIN's call record and the recipe regressions stay green; Task 3 gains the stage=collect mapping for the helper's own communicate/drain/close/wait with its three precedence rules and explicit __context__ assignment, the tests test_communicate_oserror_is_launch_failed_collect and test_drain_wait_oserror_is_launch_failed_collect (instance-level Popen wrapper, escapee fixture for the wait leg) and the rows collect-oserror-unmapped / drain-oserror-unmapped (Task 3 21 rows; 22 + 5 + 21 + 21 = 69, 67 of the helper's source); VERDICT_TABLE gains LAUNCH_FAILED stage=collect (22 heads, 16 subprocess + 6 in-process producers) and SKILL.md a per-stage registry row.
+- v1.15: Impl-plan audit v14 (codex must 1 should 1; agy clean) + design audit v63 back-propagation (design v1.67): Task 5's exec-scan-executes and consumer-from-import rows gain exact-once find anchors and complete type-correct replace bodies — the :412 scan's assert line grows a dbe.run_block call on a four-field dbe.Block (shell=plain, timeout=1.0, safe only because the harness runs the row's test key alone with the spy installed), and the _gate_block-through-_run_recipe region becomes one replacement carrying a bare from-import with the four calls re-pointed, which reds the spelling guard and, by construction, both WIRE-PINs; AC-6.2 states that the killer drives the scan by calling test_exec_codex_dispatch_carries_out_log_and_timeout() directly; the fault-injection taxonomy is one authoritative seven (six module-level seams plus the instance-level Popen wrapper), the stale six-versus-seven deferral dropped; heading identity is the CommonMark-normalized text on both forms, with test_closing_hash_run_does_not_change_heading_identity and mutation closing-hash-run-kept (Task 1 23 rows; 23 + 5 + 21 + 21 = 70, 68 of the helper's source).
