@@ -461,7 +461,11 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    drain-with-timeout → close pipes → `wait(timeout=DRAIN_SECONDS)` iff the group was signalled;
    the AC-4.6 reap test asserts the bounded return, which is what proves that branch skips the
    wait). `test_wait_after_kill_is_bounded` wraps the recorded instance's `wait` to record its
-   `timeout` keyword and raise `subprocess.TimeoutExpired` under a timed-out block, and asserts the
+   `timeout` keyword and raise `subprocess.TimeoutExpired` under a timed-out block on the AC-5.5
+   escapee fixture — needed so the drain expires first: on a drain that succeeds, CPython's
+   `communicate` calls `self.wait()` internally and the wrapper would fire on that call instead of
+   the helper's own (impl-plan v1.18 derivation), and the recorded keyword is what proves which
+   call was intercepted — and asserts the
    recorded keyword equals `DRAIN_SECONDS`, `LAUNCH_FAILED stage=reap` with `pgid:` in the detail,
    a `BlockTimeout` `__context__`, the cwd gone, and the return inside `timeout + 2 * DRAIN_SECONDS + 2`
    s (its `finally` reaps the real group through `real_killpg`); mutations `wait-unbounded` (the
@@ -1308,3 +1312,4 @@ mean the probe never created one.
 - v1.71: Design audit v65 (codex must 1; agy clean) + impl-plan audit v16 back-propagation: the design's own verification commands are bounded through hmad-dispatch run (600 s scoped/harness, 1200 s full suite); StreamPathUnwritable is StreamPathUnwritable(leftover=None), raised from the OSError; the pre-kill poll() has its own OSError guard mapped to stage=collect (test_poll_oserror_is_launch_failed_collect, mutation poll-oserror-unmapped) — 72 rows (70 + 2).
 - v1.72: Impl-plan v1.17 back-propagation: the TimeoutExpired handler records the pending BlockTimeout on entry, before poll(); the drain records nothing.
 - v1.73: Design audit v66 (codex must 1; agy clean) + impl-plan audit v17 back-propagation: the post-kill wait is wait(timeout=DRAIN_SECONDS), its expiry LAUNCH_FAILED stage=reap with the pending outcome as __context__ (test_wait_after_kill_is_bounded; wait-unbounded, wait-expiry-unmapped — 74 rows, 72 + 2; helper wall time at most timeout + 2·DRAIN_SECONDS); one canonical eight-item fault-injection list — seven module seams plus the Popen instance wrapper for communicate/wait/poll — repeated by the in-process main(argv) sentence.
+- v1.74: Impl-plan v1.18 back-propagation: test_wait_after_kill_is_bounded runs on the escapee fixture so the helper's own wait, not communicate's internal one, is the intercepted call; the two guards on that wait are separate except clauses.
