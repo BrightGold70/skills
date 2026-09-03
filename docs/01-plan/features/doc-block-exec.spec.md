@@ -92,9 +92,13 @@ not opted in.
     substituting that string for a local path, the executed block contains the local path and not
     the original.
   - AC-2.2: Given a map whose key does not occur in the block, nothing is executed, the CLI prints
-    `DOCBLOCK: SUBST_MISSING key=<key>` and exits 0.
-  - AC-2.3: The refusal names the offending key; with two absent keys, both are named on their own
-    detail lines.
+    `DOCBLOCK: SUBST_MISSING keys=<n>` — `<n>` the number of absent keys, the same shape as
+    `SUBST_OVERLAP keys=<n>`, so the verdict line never has to pick one key to name — and exits 0.
+    An **empty** map is a no-op, not a refusal: `substitute(block, {})` returns an equivalent
+    `Block` and `{}` without compiling any alternation (a zero-key alternation would match the
+    empty string), and a CLI invocation with no `--subst` takes that path.
+  - AC-2.3: The refusal names every offending key, one `missing_key: <k>` detail line each in
+    block order; with two absent keys, `keys=2` and both are named.
   - AC-2.4: Substitution is literal, not regex — a key containing regex metacharacters
     (`.`, `*`, `[`) is matched and replaced literally.
   - AC-2.5: A key occurring more than once in the block is replaced at **every** occurrence, and
@@ -155,7 +159,10 @@ not opted in.
     as a traceback. Stream artifact files are written UTF-8 the same way.
   - AC-3.7: An unrecognised info-string key (e.g. `shell=fish`, `mode=x`) on a fence that
     **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key=<k>` — and exits 0, rather than
-    being ignored as a default. A fence **without** the tag is never a candidate and its info
+    being ignored as a default; so is a **duplicated** recognised token — `hmad:exec hmad:exec`
+    or `shell=strict shell=plain` — because a parser that silently kept the first or the last
+    would run the block under a mode nobody unambiguously chose (`BAD_INFO key=<k>` naming the
+    repeated token; tested both ways). A fence **without** the tag is never a candidate and its info
     string is never validated: an untagged ` ```bash --frozen `, or any other prose-y info string
     elsewhere in the tree, must not make this tool refuse. Validation follows opt-in.
   - AC-3.8: `--stdout <path>` and `--stderr <path>` are **optional**; given, each receives that
@@ -526,3 +533,4 @@ quoted
 - v1.30: Design audit v25 (codex must 1 should 1; agy clean): AC-3.8 names the atomic create-or-open ownership rule and the single closure path for held handles.
 - v1.31: Design audit v26 (agy must 4 should 1; codex must 1): AC-2.6 makes substitution simultaneous with counts on the original text, closing the map-order dependency sequential replacement had; AC-6.4's tuple is six tests.
 - v1.32: Design audit v27 (codex must 2; agy must 2 should 2): AC-2.6's discriminating fixture (A B -> B C in both orders); AC-3.8 read-back verification of every written artifact; AC-6.4's tuple is seven across two files.
+- v1.33: Design audit v28 (codex must 1 should 2; agy must 2 should 1): SUBST_MISSING carries keys=<n> like SUBST_OVERLAP; an empty map is a no-op; duplicated info-string tokens refuse as BAD_INFO.

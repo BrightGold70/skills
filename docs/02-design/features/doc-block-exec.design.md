@@ -135,8 +135,11 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
   `extract` — not an error, simply not a candidate.
 - `shell=strict` (the default when absent) → `bash -euo pipefail -c`.
 - `shell=plain` → `bash -c`, which is how an operator's paste actually runs.
-- Any other token, or `shell=` with any other value, is `BAD_INFO` — but **only on a fence that
-  carries `hmad:exec`**. Validation follows opt-in: an untagged fence is not a candidate, so its
+- Any other token, or `shell=` with any other value, is `BAD_INFO` — and so is a **duplicated**
+  recognised token (`hmad:exec hmad:exec`, `shell=strict shell=plain`), refused deterministically
+  as `BAD_INFO key=<the repeated token>` rather than resolved first-wins or last-wins, because a
+  mode nobody unambiguously chose must not run (`test_duplicate_info_tokens_refuse`, mutation
+  `duplicate-info-token-last-wins`) — but **only on a fence that carries `hmad:exec`**. Validation follows opt-in: an untagged fence is not a candidate, so its
   info string is never inspected and an unrelated ` ```bash --frozen ` elsewhere in the tree can
   never make this tool refuse. On a tagged fence it is **not** ignored: a typo'd key that silently
   falls back to a default runs the block under a mode nobody chose.
@@ -203,7 +206,12 @@ names a block that does not exist, whereas `0` is not an ordinal at all.
 **Replacement is simultaneous, and counts are taken on the original text** (AC-2.6). Every key is
 counted against `block.text` as written, and the replacement is one pass over that text — a
 single compiled alternation of the escaped keys, `re.sub("|".join(map(re.escape, keys)), lambda
-m: subs[m.group(0)], text)` — so replaced text is never re-scanned. That is what makes the result
+m: subs[m.group(0)], text)` — so replaced text is never re-scanned. **An empty map short-circuits
+before that line**: `substitute(block, {})` returns `(dataclasses.replace(block), {})` — a
+zero-key alternation is `""`, which matches the empty string at every position and would raise
+`KeyError("")` from the callback — and this is the ordinary path for a CLI invocation with no
+`--subst`, so it is covered by both an API test and a zero-`--subst` CLI test
+(`test_empty_substitution_map_is_a_no_op`, mutation `empty-map-not-short-circuited`). That is what makes the result
 order-independent: with `A→B` and `B→C` on a block containing `A B`, the outcome is `B C`
 whatever the map's iteration order, whereas the sequential count-then-replace an earlier draft
 prescribed yields `C C` when `A` is replaced first and `B C` when `B` is — an outcome that
@@ -366,7 +374,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 41 source mutations (41 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 43 mutations (43 rows: 41 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -376,25 +384,39 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 
 ## Implementation Order
 
-1. **Task 1 — scanner + info-string grammar, and the bounder's second consumer.** `extract`,
-   `Block`, `fence_aware_end` with the full fence rule, tag and key validation — **and, in the same
-   task, `h-mad/tests/docsections.py` drops `_fence_aware_end` and delegates through
-   `_dbe.fence_aware_end`, with `docsections.json` re-pointed, converted to named-test form and
-   run to `ALL_CAUGHT`** (the author-together ordering the plan requires: the bounder and the spec
-   that mutates it land in one task). Satisfies FR-1 (incl. AC-1.8) and AC-3.7. New-behaviour
-   shape, plus one wire.
-2. **Task 2 — substitution.** `substitute` with occurrence counts and missing-key collection.
+1. **Task 1 — scanner, selection, info-string grammar, and the bounder's second consumer.** In
+   `h-mad/scripts/h_mad_doc_block_exec.py` (new): `Block`, `fence_aware_end` with the full fence
+   rule, `extract`, **`select`** (the ordinal policy — `BlockNotFound`, `AmbiguousBlock`,
+   `BadIndex` — without which `main` has no specified way from `list[Block]` to the one `Block`
+   `substitute` and `run_block` take), tag and key validation; tests in
+   `h-mad/tests/test_h_mad_doc_block_exec.py` (new) and the matching rows of
+   `h-mad/tests/mutation-specs/doc_block_exec.json` (new). **In the same task**,
+   `h-mad/tests/docsections.py` drops `_fence_aware_end` and delegates through
+   `_dbe.fence_aware_end`, and `h-mad/tests/mutation-specs/docsections.json` is re-pointed,
+   converted to named-test form and run to `ALL_CAUGHT` (the author-together ordering the plan
+   requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. New-behaviour shape, plus one wire.
+2. **Task 2 — substitution.** `substitute` in `h-mad/scripts/h_mad_doc_block_exec.py`: simultaneous
+   replacement, counts on the original text, missing-key collection, overlap and empty-key
+   refusal, the empty-map no-op; its tests and mutation rows in the same two files as Task 1.
    Satisfies FR-2. Depends on Task 1 only for `Block`.
-3. **Task 3 — execution and bounding.** `run_block`, temp cwd, shell modes, process-group timeout.
-   Satisfies FR-3 and FR-5. Depends on Task 1.
-4. **Task 4 — CLI and registry.** `main(argv)`, every verdict line in the table below, stream-path pre-check, and
-   the `SKILL.md` registry entry pinned bidirectionally. Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
-5. **Task 5 — the wire.** Tag the Second-surface gate fence **and** migrate the executing call
-   site (`:270` plus `run_recipe`) in one task. `:412` is deliberately untouched: it selects a
-   *different*, untagged block (`exec codex`) and only inspects it, so it neither breaks nor
-   belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour. Depends on
-   1–4. Tag and migration cannot be split: tagging the gate fence makes `:270`'s `re.findall`
-   match zero blocks.
+3. **Task 3 — execution and bounding.** `run_block` and **`RunResult`** in
+   `h-mad/scripts/h_mad_doc_block_exec.py`: temp cwd (`mkdtemp` + `chmod`, `cwd` `None` until
+   created), shell modes, preamble composition, the `poll()`-then-`killpg` process-group timeout,
+   bounded drain, pending-outcome cleanup selection, `LaunchFailed`/`CleanupFailed`; tests and
+   mutation rows as above. Satisfies FR-3 and FR-5. Depends on Task 1.
+4. **Task 4 — CLI and registry.** `main(argv)` in `h-mad/scripts/h_mad_doc_block_exec.py`: every
+   verdict line in the table below, argument-value validation, the two-arm stream reservation,
+   descriptor alias check, `_final_write` with read-back verification, one closure path; and the
+   Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two `SKILL.md`
+   mutation rows land here). Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
+5. **Task 5 — the wire.** Tag the Second-surface gate fence in `h-mad/SKILL.md` **and** migrate
+   the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` (`_gate_bash_block`
+   at `:270` plus `run_recipe`) in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
+   (new) and the six named tests in that file. `:412` in the same file is deliberately untouched:
+   it selects a *different*, untagged block (`exec codex`) and only inspects it, so it neither
+   breaks nor belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour.
+   Depends on 1–4. Tag and migration cannot be split: tagging the gate fence makes `:270`'s
+   `re.findall` match zero blocks.
 
 ## Data Model / Schema Changes
 
@@ -578,7 +600,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: BAD_INDEX index=<n>` | 0 | `--index` below 1, or not an integer |
 | `DOCBLOCK: BAD_TIMEOUT value=<v>` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
 | `DOCBLOCK: BAD_SUBST arg=<raw>` (+ `duplicate_key: <k>`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
-| `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 0 | a key is absent from the block |
+| `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: <k>` per key, block order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 0 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` name one inode (`fstat` on the reserved handles) |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
@@ -623,7 +645,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index=<n>` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
 | `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; repeat refused) **and `substitute`, for an empty key** — the one rule lives in the API | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
-| `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING key=<k>` + a detail line per key |
+| `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (wraps `OSError`, and its bounded-retry exhaustion) | `UNREADABLE reason=stream_path_unwritable` |
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
@@ -728,6 +750,8 @@ test pins the wire, not the callee — and the harness records both runs.
 | `replacement-sequential` | replacement becomes a per-key `str.replace` loop in map order, so a value containing another key is re-scanned | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A B` must yield `B C` for **both** map orders; the sequential mutant yields `C C` in the `A`-first order, and both keys occur so a missing-key precheck cannot mask it) |
 | `subst-split-on-every-equals` | `--subst` split on every `=` | `test_subst_value_may_contain_equals` (AC-2.8) |
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
+| `empty-map-not-short-circuited` | the empty-map guard is removed, so `{}` compiles a `""` alternation | `test_empty_substitution_map_is_a_no_op` (AC-2.2) |
+| `duplicate-info-token-last-wins` | a repeated recognised token overwrites instead of refusing | `test_duplicate_info_tokens_refuse` (AC-3.7) |
 | `unknown-info-key-ignored` | an unrecognised token falls back to strict | `test_unknown_info_key_refuses` (AC-3.7) |
 | `strict-flags-dropped` | `bash -c` always, never `-euo pipefail` | `test_unset_variable_fails_under_strict` (AC-3.3) |
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
@@ -759,9 +783,10 @@ test pins the wire, not the callee — and the harness records both runs.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Forty-one rows, forty-one mutations — every row is a source mutation of the helper (the
-AC-5.3 row, once described as a fixture-copy self-check, is now a real argv mutation the source
-scan must catch); the two AC-4.5 rows are the
+Forty-three rows, forty-three mutations — forty-one of the helper's source (the AC-5.3 row, once
+described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
+**two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
+mutates source; those two AC-4.5 rows are the
 manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
@@ -885,3 +910,4 @@ mean the probe never created one.
 - v1.32: Design audit v25 (codex must 1 should 1; agy clean): two-arm create-or-open loop (exclusive create, else open without O_CREAT, ENOENT restarts) so every created file is recorded; one closure path for both reservations across every exit, with its test.
 - v1.33: Design audit v26 (codex must 1; agy must 4 should 1): cwd is None until mkdtemp returns; simultaneous single-pass substitution with the replacement-sequential mutation; os.open wording in the exception and mutation tables; closer-trailing-text rule and mutation; docsections migration assigned to Task 1; six consumer-file tests; 40 rows.
 - v1.34: Design audit v27 (codex must 2; agy must 2 should 2): substitution fixture discriminates the sequential mutant; artifacts are read back and compared after close (final-write-not-verified, 41 rows); StreamWriteFailed and LaunchFailed carry the fields the dispatcher prints; pgid on the reap verdict; seven-test floor tuple.
+- v1.35: Design audit v28 (codex must 1 should 2; agy must 2 should 1 + nit): empty-map short-circuit with its mutation; duplicate info tokens refused; SUBST_MISSING keys=<n>; mutation accounting (41 source + 2 SKILL.md = 43 rows); Implementation Order names select, RunResult and every exact file path.
