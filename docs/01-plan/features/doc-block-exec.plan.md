@@ -305,7 +305,10 @@ three existing callers keep their types**: a new `_gate_block() -> dbe.Block` re
 (`:281`'s `.index`/slicing and `:368`'s `.splitlines()`, measured) are untouched, and "nothing else
 in the file moves" stays true;
 `run_recipe(...)`, hoisted to the module-level `_run_recipe(...)` so a pin can spy it, stops returning `subprocess.CompletedProcess[str]` and returns the helper's
-`RunResult`, calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
+`RunResult`, deriving its two script paths itself — `collector = SCRIPT_DIR / "h_mad_collect_report.py"`
+and `gate = SCRIPT_DIR / "h_mad_audit_gate.py"`, the locals today's nested `run_recipe` computes
+the same way, so the hoist leaves no unbound name and "nothing else in the file moves" still holds
+(`SCRIPT_DIR` is already module-level) — calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
 shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
 `dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>, timeout=60.0)` — substitution is a separate step that returns a new `Block`, so `run_block` never
 substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
@@ -390,7 +393,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 71 mutations with a full-node-ID `test` binding each — 69 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 72 mutations with a full-node-ID `test` binding each — 70 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -852,3 +855,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.68: Plan re-audit v54 clean (both surfaces) + design v1.67 back-propagation: run_block's API row lists the collect stage; 70 mutations (68 of the helper's source).
 - v1.69: Impl-plan v1.15 back-propagation: consumer-from-import stated as one contiguous replacement at the call region, alias line untouched.
 - v1.70: Plan re-audit v55 (codex must 1; agy clean): every 5f command is bounded through hmad-dispatch run --timeout (rc propagates, 124 on expiry — measured); 71 mutations (69 of the helper's source) after the rollback read-back row.
+- v1.71: Plan re-audit v56 (codex should 1; agy clean) + design v1.71 back-propagation: the hoisted _run_recipe derives collector/gate from SCRIPT_DIR itself; 72 mutations (70 of the helper's source).

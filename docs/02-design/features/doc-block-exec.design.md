@@ -84,7 +84,7 @@ caller (test, or operator on the CLI)
         │                                                 poll() first, else a zombie-only group is EPERM on macOS]
         │                                                 ──► drain communicate(DRAIN_SECONDS)
         │                                                     [expired: close pipes, wait()] ──► TIMEOUT
-        │                                                     [OSError from drain/close/wait ──► stage=collect]
+        │                                                     [OSError from poll()/drain/close/wait ──► stage=collect]
         └── finally: rmtree(cwd) ──► read back: lexists? ──► CLEANUP_FAILED (outranks TIMEOUT)
         ▼
      RunResult(rc, stdout, stderr, shell)
@@ -405,9 +405,18 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    later steps are best-effort under a pending `collect`: an `OSError` from any of them is attached
    as the pending error's `__context__` rather than replacing it, except a non-`ESRCH` `killpg`
    error, which is the `reap` stage and replaces it (the `collect` error becoming its `__context__`).
-   When the drain's close or `wait` raises under an ordinary timeout, the pending `BlockTimeout` is
-   replaced by `LaunchFailed("collect", …)` with the `BlockTimeout` set as its `__context__` —
-   `stage=collect` ranks with `stage=reap` in the precedence above. Cleanup and the read-back then
+   When the pre-kill `poll()`, the drain's close or the `wait` raises under an ordinary timeout, the
+   pending `BlockTimeout` is replaced by `LaunchFailed("collect", …)` with the `BlockTimeout` set
+   as its `__context__` — `stage=collect` ranks with `stage=reap` in the precedence above. The
+   `poll()` has its own guard (impl-plan audit v16): an `OSError` there records the `collect`
+   outcome and the kill still proceeds — `killpg` is attempted without the reaped-zombie
+   knowledge `poll()` would have given, so a `PermissionError` on a zombie-only group is then the
+   `reap` stage, replacing `collect` with it as `__context__`, and `ProcessLookupError` is still
+   already-reaped. `test_poll_oserror_is_launch_failed_collect` wraps the recorded instance's
+   `poll` to raise `OSError(errno.ECHILD, …)` under a timed-out block and asserts `stage=collect`
+   with a `BlockTimeout` `__context__`, `pgid:` in the detail, the cwd gone and the group gone
+   (`real_killpg(pgid, 0)` → `ProcessLookupError`); mutation `poll-oserror-unmapped` (that guard
+   removed, so the failure escapes as a traceback with the group unkilled) is killed by it. Cleanup and the read-back then
    run as usual, so a removal that fails is still `CLEANUP_FAILED` with the `LaunchFailed` as
    `__cause__`. Two tests, both through the AC-5.6 recording pass-through so the instance is in
    hand: `test_communicate_oserror_is_launch_failed_collect` wraps the recorded instance's bound
@@ -507,7 +516,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 71 mutations (71 rows: 69 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 72 mutations (72 rows: 70 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -912,7 +921,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; repeat refused) **and `substitute`, for an empty key** — the one rule lives in the API | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
-| `StreamPathUnwritable(err, leftover=None)` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (wraps `OSError`, and its bounded-retry exhaustion); `leftover` set when the rollback read-back finds the created file still present | `UNREADABLE reason=stream_path_unwritable` (+ `leftover: <path>` when set) |
+| `StreamPathUnwritable(leftover=None)` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (raised `from` the `OSError`, which is its `__cause__`; also its bounded-retry exhaustion, with no cause); `leftover` set when the rollback read-back finds the created file still present; constructible with no arguments, as the type-walk tests require | `UNREADABLE reason=stream_path_unwritable` (+ `leftover: <path>` when set) |
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
 | `StreamWriteFailed(written, failed, skipped, verify=None)` | `main`, writing a stream to its held handle after the run, or verifying it by read-back | `UNREADABLE reason=stream_write_failed` + `written:`/`failed:`/`skipped:` detail lines from its fields, and `verify: <stream>` when the read-back disagreed |
@@ -987,7 +996,7 @@ that return value into the process exit, so the in-process code is the real code
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path, cleanup_error)` with `cleanup_error` the `PermissionError` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid; because `dbe.os` is the process-global `os` module, the test binds `real_killpg = os.killpg` **before** `monkeypatch.setattr(dbe.os, "killpg", fake)` and its `finally` uses that bound original to send `SIGKILL` to the recorded pgid and to assert the group is gone (`real_killpg(pgid, 0)` raising `ProcessLookupError`), so neither the teardown nor the assertion goes through the fake; `communicate` fault-injected on the recorded `Popen` instance (first call raises `OSError(EIO)`, later calls pass through) under a block that would otherwise `RAN` → `LAUNCH_FAILED stage=collect`, exit 2, `pgid:` in the detail, cwd gone, group gone (`real_killpg(pgid, 0)` → `ProcessLookupError`); `proc.wait` fault-injected under a timed-out, signalled block → `stage=collect` with the `BlockTimeout` as `__context__`, within the drain bound; each carries an `os_error:` detail line and no `rc=` |
+| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid; because `dbe.os` is the process-global `os` module, the test binds `real_killpg = os.killpg` **before** `monkeypatch.setattr(dbe.os, "killpg", fake)` and its `finally` uses that bound original to send `SIGKILL` to the recorded pgid and to assert the group is gone (`real_killpg(pgid, 0)` raising `ProcessLookupError`), so neither the teardown nor the assertion goes through the fake; `communicate` fault-injected on the recorded `Popen` instance (first call raises `OSError(EIO)`, later calls pass through) under a block that would otherwise `RAN` → `LAUNCH_FAILED stage=collect`, exit 2, `pgid:` in the detail, cwd gone, group gone (`real_killpg(pgid, 0)` → `ProcessLookupError`); `proc.wait` fault-injected under a timed-out, signalled block → `stage=collect` with the `BlockTimeout` as `__context__`, within the drain bound; `proc.poll` fault-injected under a timed-out block → `stage=collect` with the `BlockTimeout` as `__context__`, the group still killed and gone; each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE`, `CLEANUP_FAILED` and `LAUNCH_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
@@ -1083,6 +1092,7 @@ exactly what the base Mutation verification invariant forbids.
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
 | `drain-oserror-unmapped` | the guard around the post-kill drain, the pipe closes and the `wait()` is removed, so a failure there escapes past the pending `BlockTimeout` | `test_drain_wait_oserror_is_launch_failed_collect` (AC-4.6) |
+| `poll-oserror-unmapped` | the guard around the pre-kill `poll()` is removed, so a `waitpid` failure escapes as a traceback with the group unkilled | `test_poll_oserror_is_launch_failed_collect` (AC-4.6) |
 | `killpg-replaced-by-kill` | `proc.kill()` instead of `os.killpg(proc.pid, …)` | `test_in_group_descendant_is_reaped` (AC-5.2) |
 | `poll-before-killpg-removed` | `proc.poll()` before `killpg` is gone, so the natural race reports `LAUNCH_FAILED stage=reap` (EPERM on a zombie-only group) instead of `TIMEOUT` | `test_timeout_survives_a_group_that_already_emptied` (AC-5.5) |
 | `killpg-esrch-uncaught` | `ProcessLookupError` from `killpg` propagates | `test_timeout_survives_a_group_that_already_emptied` (AC-5.5) |
@@ -1107,7 +1117,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-one rows, seventy-one mutations — sixty-nine of the helper's source (the AC-5.3 row, once
+Seventy-two rows, seventy-two mutations — seventy of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1118,12 +1128,14 @@ this table against the landed spec.
 Verification commands:
 
 ```bash
-python3.11 -m pytest h-mad/tests/test_h_mad_doc_block_exec.py -q
-python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec.json
-python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec_wire.json
-python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/docsections.json   # re-pointed anchors, named-test form: ALL_CAUGHT required
-python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?   # full suite, run alone
-tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                           # gate on both lines
+# every command bounded through the reachable dispatcher (base Portable time bounds invariant);
+# `hmad-dispatch run` propagates the wrapped status and returns 124 on expiry (measured 2026-09-03)
+hmad-dispatch run --timeout 600  -- python3.11 -m pytest h-mad/tests/test_h_mad_doc_block_exec.py -q
+hmad-dispatch run --timeout 600  -- python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec.json
+hmad-dispatch run --timeout 600  -- python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec_wire.json
+hmad-dispatch run --timeout 600  -- python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/docsections.json   # re-pointed anchors, named-test form: ALL_CAUGHT required
+hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?   # full suite, run alone
+tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                           # gate on both lines; rc=124 is the wrapper's expiry, not a suite result
 ```
 
 AC-5.2 is measured, not asserted by inspection: the block records its own descendant's PID before
@@ -1270,3 +1282,4 @@ mean the probe never created one.
 - v1.68: Impl-plan v1.15 back-propagation: the consumer-from-import row is one contiguous replacement at the call region (a from-import added beside the alias, every call bare) — the alias line and the call sites are not contiguous under a single str.replace.
 - v1.69: Design audit v64 (codex should 1 nit 1; agy must 1) + impl-plan audit v15 back-propagation: the :412 text scan is named with its file; the diagram shows substitute's (Block', counts) tuple and RunResult; the reservation rollback is verified by an lexists read-back that reports `leftover: <path>` on the stream_path_unwritable verdict, with test_rollback_unlink_failure_reports_leftover, mutation rollback-leftover-unreported and os.unlink as the eighth named seam — 71 rows (69 + 2).
 - v1.70: Impl-plan v1.16 back-propagation: the verdict and exception tables carry the `leftover: <path>` detail line and StreamPathUnwritable's leftover field.
+- v1.71: Design audit v65 (codex must 1; agy clean) + impl-plan audit v16 back-propagation: the design's own verification commands are bounded through hmad-dispatch run (600 s scoped/harness, 1200 s full suite); StreamPathUnwritable is StreamPathUnwritable(leftover=None), raised from the OSError; the pre-kill poll() has its own OSError guard mapped to stage=collect (test_poll_oserror_is_launch_failed_collect, mutation poll-oserror-unmapped) — 72 rows (70 + 2).
