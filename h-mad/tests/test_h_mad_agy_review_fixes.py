@@ -133,49 +133,67 @@ def test_the_5e_no_verdict_row_covers_codex_not_just_agy() -> None:
 # --- S2: name the trap AND give the escape --------------------------------
 
 
-def test_the_revert_sequence_makes_untracked_files_stashable() -> None:
+def test_the_revert_sequence_reaches_untracked_files() -> None:
     text = _norm(SKILL)
-    # Assert the RUNNABLE line, not a mention. `git add -N` also appears in the
-    # prose explaining it, so a bare substring check stays green while the actual
-    # command is deleted from the block an agent copies — a mutation proved it.
-    assert "git add -N -- <production-paths>" in text, (
-        "without intent-to-add, `git stash push` stashes nothing and exits 0 on a "
-        "new module — the revert silently no-ops and certifies GREEN"
+    # Assert the RUNNABLE line, not a mention: the failing forms are deliberately
+    # quoted in the measured table beside this block, so a bare substring check on
+    # "stash push" stays green while the command an agent copies is wrong.
+    #
+    # Measured on git 2.50.1 (Apple Git-155), scratch repo, one untracked new.py:
+    #   git stash push -- new.py                 -> rc 1, "pathspec ... did not match"
+    #   git add -N; git stash push -- new.py     -> rc 1, "Entry 'new.py' not uptodate"
+    #   git add -N; git stash push -u -- new.py  -> rc 1, same "not uptodate"
+    #   git stash push -u -- new.py              -> rc 0, stashed, file removed
+    # So `-u` is load-bearing and `git add -N` is the thing that breaks it. The
+    # earlier recipe had both halves wrong and this test pinned the wrong one.
+    assert "git stash push -u -- <production-paths>" in text, (
+        "the revert must use the -u form; plain `git stash push` refuses an "
+        "untracked path (rc=1) and never reverts the new module"
     )
-    assert "git stash push -- <production-paths>" in text, "the revert command itself is gone"
+    assert "git add -N -- <production-paths>" not in text, (
+        "`git add -N` before the stash makes it fail `Entry ... not uptodate` — "
+        "and -u does NOT rescue an add -N'd file, so the fix is to DROP add -N, "
+        "not to add a flag beside it"
+    )
     assert "git stash pop" in text, "a revert with no documented restore loses the work"
+    # The readback must be existence, not `git diff --quiet`: for an untracked file
+    # the latter reports CLEAN with the file still in the worktree — measured — so
+    # it is precisely the check that cannot see an unlanded revert.
+    assert "[ ! -e <one-production-path> ]" in text, (
+        "the revert readback must be an existence check; `git diff --quiet` is "
+        "trivially clean for an untracked path and certifies a revert that never ran"
+    )
 
 
-def test_every_site_naming_the_stash_hazard_also_gives_the_fix() -> None:
-    # The test above pins ONE site, and that is exactly how this regressed: the
-    # `git add -N` fix was applied to SKILL.md's revert block while three other
-    # places went on naming the hazard with no way to avoid it — including
-    # codex-verifier-prompt.md, handed to an independent agent that cannot see
-    # SKILL.md at all. A site-scoped assertion is a weak test: it stayed green
-    # for all three. Enforce the invariant across every site instead.
+def test_every_file_prescribing_a_stash_revert_uses_the_u_form() -> None:
+    # A site-scoped assertion is how this regressed the first time: the fix landed
+    # in SKILL.md's revert block while three other places went on prescribing the
+    # broken sequence — including codex-verifier-prompt.md, handed to an
+    # independent agent that cannot see SKILL.md at all.
+    #
+    # Keyed on the COMMAND, not on a prose phrase. The previous guard keyed on
+    # "stashes nothing and exits 0", which turned out to be a false description of
+    # the hazard (git refuses loudly, rc=1), so re-wording the prose would have
+    # silently emptied the guard's search set. The command is the invariant.
+    #
+    # File-scoped rather than window-scoped, because SKILL.md's measured table
+    # quotes each FAILING form on its own line by design; a window check would
+    # flag the documentation of the failure as the failure.
     gaps = []
     for path in sorted(SKILL_DIR.rglob("*.md")):
-        if "docs/handoffs" in str(path):
+        rel = str(path.relative_to(SKILL_DIR))
+        if "handoffs" in rel or "archive" in rel:
             continue
-        lines = path.read_text(errors="replace").splitlines()
-        for i, line in enumerate(lines):
-            if "stashes nothing" not in line:
-                continue
-            window = "\n".join(lines[max(0, i - 2):i + 6])
-            # Only an actual INSTANCE of the hazard needs the fix beside it, and an
-            # instance always names the command it is about. A doc that merely quotes
-            # the phrase while teaching reviewers to hunt for this shape is not
-            # committing it — `agy-skill-reviewer-prompt.md` lists "stashes nothing"
-            # among the phrasings to grep for, and the first version of this guard
-            # flagged it. Found only when the two branches were merged: the guard
-            # lived on one, the prompt on the other, so neither side failed alone.
-            if "git stash push" not in window:
-                continue
-            if "add -N" not in window:
-                gaps.append(f"{path.relative_to(SKILL_DIR)}:{i + 1}")
+        text = path.read_text(errors="replace")
+        if "git stash push" not in text:
+            continue
+        if "git stash push -u" not in text:
+            gaps.append(f"{rel} (no -u form)")
+        if "git add -N -- <paths>" in text or "git add -N -- <production-paths>" in text:
+            gaps.append(f"{rel} (still prescribes the add -N that breaks the stash)")
     assert not gaps, (
-        "these name the `git stash push` hazard without the `git add -N` fix that "
-        f"avoids it — an agent given the rule and not the means improvises: {gaps}"
+        "every file that prescribes a stash revert must prescribe the working form "
+        f"(`git stash push -u`), since the others exit 1 and revert nothing: {gaps}"
     )
 
 

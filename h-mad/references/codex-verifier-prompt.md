@@ -43,10 +43,12 @@ Perform the revert test defined in SKILL.md §5e.
    ships. Revert the **connection alone** (`<INLINE_WIRE>` — the call site / import / registration /
    propagated argument), leaving the callee and every test file intact, and re-run the module tests.
    The pin `<INLINE_WIRE_PIN>` MUST fail. **Assert the revert landed before reporting** — re-read the
-   file and confirm the connection is gone; `git stash push -- <paths>` stashes nothing and exits 0
-   when a listed path is untracked, so a revert that never happened reports as a pass. Run
-   `git add -N -- <paths>` first — intent-to-add makes an untracked file stashable without
-   committing it, which is what actually closes that hole. Restore, then
+   file and confirm the connection is gone, because a revert that never happened reports as a pass.
+   Use `git stash push -u -- <paths>`: plain `git stash push -- <paths>` refuses an untracked path
+   (rc=1), and `git add -N` beforehand breaks the stash rather than enabling it — measured on git
+   2.50.1, `add -N` then `stash push` (with or without `-u`) fails `Entry '<f>' not uptodate`.
+   Read it back with an **existence** check (`[ ! -e <path> ]`), never `git diff --quiet`, which is
+   trivially clean for an untracked file. Restore with `git stash pop`, then
    mutate the other direction: force the connection to fire unconditionally and confirm the
    fall-through/negative test fails. A green module suite under either mutation is a FAILED property
    → `STATUS: BLOCKED`; the connection is unenforced and no other Phase-5 gate is scoped to see it.
