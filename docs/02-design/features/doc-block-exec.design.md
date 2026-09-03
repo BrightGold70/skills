@@ -3,7 +3,7 @@
 ## Executive Summary
 
 A single stdlib-only module, `h-mad/scripts/h_mad_doc_block_exec.py`, exposing `extract` / `select` / `substitute` / `run_block` / `find_heading` /
-`fence_aware_end` / `main` (the seven functions in `__all__`, beside `Block`, `RunResult` and the exception hierarchy — 28 public names), which selects a bash fence by (document, heading, `hmad:exec`
+`fence_aware_end` / `main` (the seven functions in `__all__`, beside `Block`, `RunResult` and the exception hierarchy — 29 public names), which selects a bash fence by (document, heading, `hmad:exec`
 tag, optional ordinal), applies an explicit substitution map, and runs the block via
 `subprocess.Popen(start_new_session=True)` in a `mkdtemp` cwd — printing one `DOCBLOCK:` verdict
 line and refusing on every condition under which it would measure nothing.
@@ -685,7 +685,7 @@ def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     AmbiguousHeading(n) when more than one matches."""
 ```
 
-`__all__` names all seven functions, plus `Block`, `RunResult` and every `DocBlockError` subclass — 28 names — so a consumer catches `dbe.BlockNotFound` through the public surface (design audit v76: the impl-plan's Task 1 enumerates them). `fence_aware_end` and `find_heading` are public on purpose:
+`__all__` names all seven functions, plus `Block`, `RunResult` and every `DocBlockError` subclass — 29 names (`BadArgs` included) — so a consumer catches `dbe.BlockNotFound` through the public surface (design audit v76: the impl-plan's Task 1 enumerates them). `fence_aware_end` and `find_heading` are public on purpose:
 `docsections.titled_section` calls `find_heading` in place of its own `re.search` heading regex
 and then `fence_aware_end` in place of the deleted `_fence_aware_end`; `docsections.section_from`
 calls `fence_aware_end` with the same `(text, start, level)` arguments. A heading `find_heading`
@@ -1411,3 +1411,4 @@ mean the probe never created one.
 - v1.83: Design audit v74 (codex nit; agy clean) + impl-plan audit v25 back-propagation: duplicate-heading-takes-first has one test key (the bare-form duplicate test is a regression test on the same guard); the Executive Summary names all seven public names.
 - v1.84: Design audit v75 (codex must 1; agy must 1 at 16 tool calls) + plan audit v66 / impl-plan audit v26 back-propagation: six docsections.json rows bind into test_docsections.py (4 + delegation + heading-lookup), two into the new module's file; --subst =V prints arg="=V" under the quoted grammar; find_heading's two forms are told apart by the request (full form first), a title beginning with an ATX prefix is reachable only in full form — test_heading_form_precedence_full_wins, mutation form-precedence-bare-first (79 rows: 77 + 2).
 - v1.85: Design audit v76 (codex must 2; agy must 1 on the impl-plan) + plan audit v67 / impl-plan audit v27 back-propagation: __all__ is 28 names (seven functions, two dataclasses, the exception hierarchy); argparse grammar errors are BAD_ARGS verdicts, exit 0 (test_malformed_invocation_is_a_verdict, argparse-error-unrouted); the full-form request predicate is the scanner's own (space, tab or EOL) with test_full_form_request_accepts_tab_and_eol and request-predicate-space-only; concurrent replacement of the caller's artifact path is a stated non-goal with an lstat/fstat identity check before the rollback unlink — 81 rows (79 + 2).
+- v1.86: __all__ is 29 names once BadArgs joins the exception hierarchy (28 was counted before v1.85 added it).

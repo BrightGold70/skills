@@ -292,7 +292,7 @@ passes, and making the call site unconditional — resolving a block regardless 
 also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
 and neither is visible to a whole-module revert, which removes both sides at once.
 
-**Task-level API, and how the caller changes.** The importable surface is 28 names in
+**Task-level API, and how the caller changes.** The importable surface is 29 names (`BadArgs` included) in
 `__all__` — the seven functions `extract`, `select`, `substitute`, `run_block`, `fence_aware_end`,
 `find_heading` and `main`, plus `Block`, `RunResult` and every `DocBlockError` subclass, so callers
 catch `dbe.BlockNotFound` through the public surface (design v1.85) — of which the functions and the two
@@ -891,3 +891,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.79: Plan re-audit v64 clean (both surfaces) + design v1.82 back-propagation: _field's second escaping pass; 78 mutations (76 of the helper's source).
 - v1.80: Plan re-audit v66 (codex must 1; agy clean): find_heading's API row states both input forms and their precedence; 79 mutations (77 of the helper's source).
 - v1.81: Plan re-audit v67 (codex must 1; agy must 1): BAD_ARGS routing; __all__ is 28 names; find_heading's request predicate is the scanner's; the AC-6.4 gate block runs from the repository root as the spec spells it; 81 mutations (79 of the helper's source).
+- v1.82: __all__ is 29 names (BadArgs included).
