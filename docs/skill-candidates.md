@@ -1315,3 +1315,46 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   loudly here, but the version-bump case wrote nothing while the *next* command still ran. —
   recurrence: 3 — candidate: no (practice, not an artefact: quote the expansion or use an array;
   captured in `docs/learnings.md` and the auto-memory store)
+
+## 2026-09-04 — coder-teammate-audit-surface-and-5b-gating-round (scout)
+
+Reconciled first: census reports 9 open `yes` rows. Four re-verified against source this pass and
+all four are genuinely still open — `:1290` audit-cycle second-surface mode (no `--surface` in
+`hmad-dispatch.sh`), `:1230` doc-embedded mutation anchor after editing its block (no rule in
+`h-mad/SKILL.md`; this session hit the exact defect — a `docsections.json` `replace` naming a
+variable the migrated body no longer binds), `:1257` version-history claim vs body, and `:1298` AC
+count staleness. `:1298` is the interesting one: the rule it asks for ("counts are derived, never
+carried") now exists — but only in `.claude/agents/{design,plan}-author.md`, which is **gitignored**,
+so it does not survive a clone and the row stays open. The other five open rows were not
+individually re-verified this pass; that is stated rather than left implied.
+
+- **a measured value must carry the commit it was measured at**: hit FOUR distinct ways in one
+  session — six `SKILL.md` line pins stale by 93 lines, a suite floor stale by one test (which let
+  exactly one pre-existing test be deleted with the guard green), a figure *derived* from a
+  measurement (`"three times the 397 s baseline"`) that did not move when the baseline was
+  re-measured to 383 s, and two agents disagreeing about a file because each measured it at a
+  different instant. A lint over plan/design docs for a bare numeric claim with no adjacent command
+  or commit would catch the first three — recurrence: 4 — candidate: yes
+- **a census without its command drifts unnoticed and cannot be adjudicated**: the plan's
+  extractor-census control said "21 `.py` files contain a fence literal"; two readers measuring "the
+  same" thing got 3 and 23 because they ran different commands, and the document named neither. The
+  fix that ended it was writing the command inline. Same shape as the row above but distinct: that
+  one is about *when* a number was true, this one is about *what was counted* — recurrence: 2 —
+  candidate: yes
+- **freeze the tree for the duration of a teammate audit round**: a teammate auditor reads the
+  WORKING TREE, unlike codex which reads a frozen assembled prompt. Committing mid-round made all
+  three auditors return line numbers correct for what they read and mislabelled by the base commit
+  they were given, and the orchestrator then relayed the wrong number onward. Belongs as a rule in
+  `h-mad/SKILL.md` §5b rather than as a new skill — recurrence: 1 (but cost a full round's numbers)
+  — candidate: maybe
+- **cross-check any AC that two concurrent authors touched**: three authors running in parallel,
+  each correctly measuring, produced two incompatible definitions of one acceptance criterion (25 vs
+  30 files). Neither could see it; it surfaced only because the orchestrator read both reports
+  against each other. The file-scoping rule (one author, one document) is what keeps this tractable,
+  but the cross-check has no home yet — recurrence: 1 — candidate: maybe
+- **`.claude/agents/` is gitignored, so agent definitions do not survive a clone**: four agents
+  (`doc-auditor`, `design-author`, `plan-author`, `implplan-author`) now carry measured process
+  knowledge — the failure classes that produced this session's findings — and none of it is in
+  version control. Already biting: row `:1298` above stays open precisely because its rule lives
+  only there. Options are tracking them under `h-mad/agents/` and symlinking, or accepting
+  machine-local — recurrence: 1 — candidate: yes

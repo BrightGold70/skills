@@ -158,10 +158,18 @@ that judgement should be revisited rather than inherited.
 - **Inherited, all unchanged and not started** — #3 two `hmad-dispatch.sh` wrapper bugs (HemaSuite
   `cfc79129`); #5 101 classified skill-candidate rows in HemaSuite's stores; #7 `docsections.py`
   `_fence_aware_end` dedupe (closes with doc-block-exec 5e); #8 skill-candidate row "pytest run
-  leaks exec-pane agy panes"; #9 `docs/skill-candidates.md` census — **scout skipped again this
-  closeout**; #16 `collect-report --out` fallback; #22 `exec agy` hang after report (HemaSuite
-  `45db0187`, taken over by `cd979362`, not reproduced in ~70 agy execs across two sessions). Same
-  location block as above.
+  leaks exec-pane agy panes"; #16 `collect-report --out` fallback; #22 `exec agy` hang after report
+  (HemaSuite `45db0187`, taken over by `cd979362`, not reproduced in ~70 agy execs across two
+  sessions). Same location block as above.
+- **#9 skill-candidates census — PARTLY DISCHARGED, scout ran this closeout** after three
+  consecutive skips. Census reconciled first as the protocol requires (9 open `yes`); four rows
+  re-verified against source and all four are genuinely still open; **five rows were not
+  individually re-verified and that is stated in the file rather than left implied**; five new rows
+  appended for this session. What remains of #9 is those five unverified rows.
+- **The scout surfaced a cost that is already being paid:** row `:1298` asks for a "counts are
+  derived, never carried" rule. That rule now exists — but only in
+  `.claude/agents/{design,plan}-author.md`, which is gitignored, so the row cannot be closed. The
+  `.claude/` gap below is not hypothetical; it is already blocking a backlog row.
 - **`.claude/agents/` is gitignored**, so `doc-auditor`, `design-author`, `plan-author` and
   `implplan-author` are **machine-local and do not survive a fresh clone**. Four agents now carry
   real measured process knowledge and none of it is in version control. Worth deciding whether that
