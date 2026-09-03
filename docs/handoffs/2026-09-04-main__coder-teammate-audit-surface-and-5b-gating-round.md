@@ -121,6 +121,19 @@ its own evidence is that a loaded context reviewing its own work is the weakest 
   raises. The extractor-census control is **resolved**: `git grep -l '```' -- '*.py'` → 21 at
   `6b4df35`, **23** today; my earlier `grep -rl '```bash' --include='*.py'` → 3 measured a
   different quantity. The command is now inline in the plan.
+- **#13 agy's document-audit pass — evidence-first, or out of the gate. Not started, but this
+  session produced the decisive data, so it is now a decision waiting on an operator rather than a
+  question waiting on evidence.** Over HemaSuite `#18` c45–75 the split was agy 6 fabricated of 11
+  must-fixes vs codex 0 of 25. This session added the other half: agy is **not uniformly hollow**,
+  and its evidence count sorts it. In one round its design pass ran **58** tool calls and found a
+  real defect both teammate passes missed (missing trailing colons on two API signatures, `quote:`
+  spans verified); its plan pass ran **2** — the report-file floor — and returned a PASS
+  contributing nothing; its impl-plan pass ran 6 and produced a must-fix rejected on three grounds.
+  So the fix is an **evidence gate, not removal**: score an agy pass by tool count and treat a
+  low-evidence pass as a non-verdict rather than a clean. That also makes the union honest, which
+  dropping the surface would not. Note agy now emits `quote:` lines unprompted since `ff0a278`, so
+  the fabrication check is cheaper than when #13 was filed. `repo: /Users/kimhawk/orca/skills ·
+  branch: main · worktree: /Users/kimhawk/orca/skills`.
 - **Inherited, all unchanged and not started** — #3 two `hmad-dispatch.sh` wrapper bugs (HemaSuite
   `cfc79129`); #5 101 classified skill-candidate rows in HemaSuite's stores; #7 `docsections.py`
   `_fence_aware_end` dedupe (closes with doc-block-exec 5e); #8 skill-candidate row "pytest run
