@@ -19,15 +19,22 @@ the migration is cheapest while there is a single consumer to migrate.
 ## Scope
 
 In scope: one new helper module with an importable API and a verdict-token CLI; one info-string
-tag convention on bash fences; the tagging of exactly one existing fence; and the migration of the
+tag convention on bash fences; the tagging of exactly one existing fence; the migration of the
 **one executing** call site that hand-rolls this today in
-`h-mad/tests/test_h_mad_collect_report_docs.py` (`:270` plus `run_recipe` at `:309`).
+`h-mad/tests/test_h_mad_collect_report_docs.py` (`:270` plus `run_recipe` at `:309`); and — the
+scope increase the design audit forced, tagged AC-1.8 — `h-mad/tests/docsections.py` dropping its
+duplicate bounder to delegate to the authoritative one, with the three deliverables that carries
+(`docsections.py`, `mutation-specs/docsections.json`, `test_docsections.py`). §Deliverables and
+§Implementation Strategy carry it too, and a scope increase absent from §Scope is the surface a
+downstream reader — or a 5c task split — reads first.
 
 User-visible behaviour: an operator can run a documented recipe under test by hand with a single
 command; a fence carrying the tag is executable and every other fence in the tree is not.
 
-**Transport of the three reported values.** The CLI prints exactly one `DOCBLOCK:` verdict line —
-one *physical* line whatever the inputs: every dynamic field (`heading=`, `arg=`, `index=`, keys,
+**Transport of the three reported values.** Every invocation that judges input prints exactly one
+`DOCBLOCK:` verdict line — one *physical* line whatever the inputs, with `--help` alone excepted
+(it keeps argparse's exit-0 help text and emits **zero** `DOCBLOCK:` lines; the carve-out is stated
+in full in the CLI-contract paragraph below): every dynamic field (`heading=`, `arg=`, `index=`, keys,
 paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, as a double-quoted
 JSON string (`json.dumps(str(value), ensure_ascii=False)` plus a second pass escaping every
 remaining `Cc`/`Zl`/`Zp` character — DEL, the C1 range with U+0085, U+2028/U+2029 — which
@@ -67,6 +74,12 @@ parser's overridden `error()` to `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0 — 
 non-`DOCBLOCK` exit (`--help` alone excepted: it keeps argparse's exit-0 help text and emits no
 `DOCBLOCK:` line, which is why the contract is stated with that carve-out in spec AC-5.6, design
 §API and impl-plan §Conventions; this document was the one of the four the v1.31 sweep missed).
+**The carve-out has three surfaces in this plan, and the sweep is by claim rather than by phrase**:
+this paragraph, the transport paragraph's "one *physical* line whatever the inputs" above, and
+§Implementation Strategy's "the CLI prints exactly one verdict line" — every sentence that
+quantifies over inputs or over emitted lines is a surface of it, which is why the v1.84 fix
+grepping one phrasing landed on one of the three. The residual: `--help` is the **only** such
+exception, and a second one would need the same three-surface edit.
 **`exit_on_error` stays at argparse's default `True`** — an earlier draft said `False`, which
 suppresses argparse's own `except ArgumentError: self.error(...)` so a *missing option value*
 raised `argparse.ArgumentError` past the override and out of `main` as a non-`DOCBLOCK` traceback;
@@ -168,11 +181,14 @@ requires, so the FR-6 migration is impossible without a preamble parameter.
 ## Implementation Strategy
 
 One layer changes: `h-mad/scripts/` gains a module, `h-mad/tests/` gains its suite and a mutation
-spec, `h-mad/SKILL.md` gains a Helper-scripts registry entry and one tagged fence, and one existing
-test file loses its hand-rolled extraction.
+spec, `h-mad/SKILL.md` gains a Helper-scripts registry entry and one tagged fence, one existing
+test file loses its hand-rolled extraction, and `h-mad/tests/docsections.py` loses its duplicate
+bounder (with its own mutation spec and test file) — the AC-1.8 scope increase the paragraph
+below states in full.
 
 The patterns to follow are already established in this repository and are not being invented here:
-a helper exposes importable functions plus a thin CLI; the CLI prints exactly one verdict line;
+a helper exposes importable functions plus a thin CLI; the CLI prints exactly one verdict line for
+every invocation that judges input (`--help` alone excepted — see the CLI contract under §Scope);
 every verdict — `RAN` and every refusal that judged readable input, `TIMEOUT` included — exits 0,
 and exit 2 is reserved for the operational-error class the base invariant reserves non-zero for
 — "missing/unreadable input" is its example; `UNREADABLE`, `CLEANUP_FAILED` and `LAUNCH_FAILED`
@@ -230,7 +246,15 @@ one-for-one: `titled_section` computes `(start, level) = _dbe.find_heading(text,
 `text[start:_dbe.fence_aware_end(text, start, level)]` — its local heading `re.search` is deleted with
 `_fence_aware_end` — and `section_from` returns
 `text[offset:_dbe.fence_aware_end(text, offset, level)]` — module-qualified, as the paragraph
-below requires; `_fence_aware_end` is deleted. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
+below requires; `_fence_aware_end` is deleted. **The replacement is one-for-one at the call site,
+not byte-for-byte in the returned body, and the difference is a decision rather than a 5d
+discovery**: today's `(?m)^(?P<marks>#+) {heading}\s*$` ends its match *before* the heading line's
+newline whenever a non-blank line follows immediately (with a blank line after the heading the two
+agree), while `find_heading` returns the offset *past* the heading line — so the returned section
+loses one leading `\n` in that case. The leading newline is intentionally dropped: all five
+`titled_section`/`section_from` assertions in `h-mad/tests/test_docsections.py` are
+`in`/`not in`/`raises` and none pins bytes, which is what "no existing test pins the old
+behaviour" above rests on. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
 repo root (collected **alone**), and an isolated `python3 -c "import docsections"` with the tests
 directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves with the code:**
 `h-mad/tests/mutation-specs/docsections.json` anchors **two** of its four mutations
@@ -301,7 +325,10 @@ and neither is visible to a whole-module revert, which removes both sides at onc
 
 **Task-level API, and how the caller changes.** The importable surface is 29 names (`BadArgs` included) in
 `__all__` — the seven functions `extract`, `select`, `substitute`, `run_block`, `fence_aware_end`,
-`find_heading` and `main`, plus `Block`, `RunResult` and every `DocBlockError` subclass, so callers
+`find_heading` and `main`, plus `Block`, `RunResult` and **the whole `DocBlockError` hierarchy — the
+base class and its 19 subclasses** (7 + 2 + 20 = 29; the seven-plus-two-plus-*subclasses* reading
+gives 28 and is the error the design names at `docs/02-design/features/doc-block-exec.design.md:689`
+— omitting the base costs callers the umbrella `except dbe.DocBlockError`), so callers
 catch `dbe.BlockNotFound` through the public surface (design v1.85) — of which the functions and the two
 frozen dataclasses (the design carries the full signatures; this is the contract the wire is
 planned against):
@@ -316,7 +343,13 @@ planned against):
 | `find_heading` | `(text: str, heading: str) -> tuple[int, int] \| None` | offset just past the matching ATX heading line and its level, found among the scanner's heading events only — never inside a fence; `None` when absent; `AmbiguousHeading(n)` on more than one. **`heading` takes one of two forms, told apart by the request itself, full form first**: a request that parses as an ATX line by the scanner's own predicate — 0–3 spaces, 1–6 `#`, then a space, a tab or end of line (`## Text`, `##\tText`, a title-less `##`; what `extract` and the CLI `--heading` pass) matches on normalized title **and** level; any other request (`Text`, what `docsections.titled_section` passes) is the bare form and matches the title at any level. A title that itself begins with an ATX prefix is reachable only in full form — the one exclusion, harmless to every live caller (design §Scanning; `test_heading_form_precedence_full_wins`, mutation `form-precedence-bare-first`) |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower whose line starts at an offset `>= start` (an adjacent heading bounds the section at `start` itself), skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length **followed by nothing but spaces or tabs**, a backtick opener voided by any backtick in its info string (CommonMark; measured on both renderers — `backtick-in-info-accepted` / `test_backtick_in_info_string_is_not_an_opener`) (a ```` ```trailing ```` line is body text, not a closer — otherwise a quoting fence closes on paper and its quoted `hmad:exec` is read as executable; hostile fixture `test_closer_with_trailing_text_does_not_close`, mutation `closer-trailing-text-accepted`), opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; **fence state is established over complete source lines through the line containing `start` — never a `text[:start]` slice, which can cut a line after its marker run and fake a closer — and boundaries are considered only at line starts after `start`**, so `start` may lie inside an open fence (the arbitrary offsets `docsections.section_from` passes) and a fenced `#` after it is never a boundary (`test_bounder_from_an_offset_inside_a_fence`, mutation `prefix-fence-state-skipped`); the bounder `extract` uses and `docsections` delegates to (AC-1.8). **The fence grammar has one home**: a private generator `_fence_events(text)` that both `extract` and `fence_aware_end` consume, so the two surfaces cannot diverge by construction; the fence-grammar mutations anchor in it, `test_fence_events_trace_on_every_hostile_fixture` asserts its exact event trace over every hostile fixture, and `scanner-duplicated-in-consumer` (a private fence toggle regrown inside `extract`) is killed by `test_extract_has_no_fence_state_of_its_own`, a source assertion. Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
 
-`h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
+`h-mad/tests/test_h_mad_collect_report_docs.py` changes in the resolver and the runner only —
+**stated as what does not move rather than as a count**, since the paragraph's own list runs to
+five edit regions and Success Criteria adds six new test functions to the same file, so any
+bare count contradicts its own enumeration. What does not move is the load-bearing claim, and it
+is what makes the two text-pin callers safe: the three `_gate_bash_block()` callers (`:281`,
+`:310`, `:368`, measured) keep their types, `:412` keeps its `re.findall` text scan, and
+`.returncode` is read nowhere in the file (measured), so nothing maps to `.rc`. And **every call
 is module-qualified**: the file adds `import h_mad_doc_block_exec as dbe` after its existing
 `sys.path.insert(0, str(SCRIPT_DIR))` and never `from h_mad_doc_block_exec import …`, because a
 pre-bound alias is invisible to a spy installed on the module (`monkeypatch.setattr(dbe,
@@ -421,7 +454,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 81 mutations with a full-node-ID `test` binding each — 79 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 81 mutations with a full-node-ID `test` binding each — **80 of the helper's source and 1 of `h-mad/SKILL.md`**. The split is not carried: it is re-derived from the matrix's own mechanism column, by counting the rows that name `SKILL.md` as **the mutation target**, so a row added later re-derives instead of drifting. Today exactly one does — `registry-row-removed`, "one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`)". The AC-4.5 pin still has two directions and therefore two rows, but only one of them mutates the registry: the other, `detail-line-undocumented`, mutates the **helper** ("the helper renames one emitted detail line (`missing_key:` → `absent_key:`)"), so its `file` key is the helper's source, not `SKILL.md` — an implementer who writes `"file": "h-mad/SKILL.md"` there gets an anchor that cannot match, which the harness refuses. Each row's `test` binding is enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan", under the bolded lead-in "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry" (a lead-in paragraph inside the `## Test Plan` heading, not a heading of its own), which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -476,6 +509,21 @@ Control, to show the counter is not under-matching — the same sweep counting o
 the counting line replaced by
 `if l.startswith('```') and len(l) > 3 and l[3].isalpha()` (an opener with any language word).
 
+**This census is corpus-invariant, and that was measured rather than assumed.** The script above
+walks a filesystem glob, which returns the 30 `*.md` files rather than the tracked 25 (§Scanning's
+corpus, stated with the heading measurements below). Re-run at `1861157` over both: `68 across 10
+files`, control `83`, **identical on each** — the five `.pytest_cache/README.md` artifacts carry no
+fence at all, so unlike the heading counts this one never depended on which corpus was walked.
+
+**AC-6.1's tree sweep is deliberately NOT this filter, and must not be harmonised with it.** The
+spec reaches AC-6.1's scope by reference to this census ("the same sweep as the plan's fence
+census"), so the distinction has to be stated here or the reference imports the wrong one: the
+census is a one-off human measurement and may use `git ls-files`, but AC-6.1's sweep is a **test**
+that must still count a newly written, not-yet-tracked `.md` under the two roots — precisely the
+document a `git ls-files` sweep would miss and the guard exists to catch. It therefore excludes
+build output by excluding any path with a **dot-directory component** instead (design v1.93
+§AC-6.1). Two realisations of one exclusion, on purpose.
+
 **Re-measured 2026-09-03 at `a469493`, from the repository root: `68 across 10 files`, control
 `83` — unchanged.** A plan audit reported `49 across 2 files` (27 in `h-mad/SKILL.md`, 22 in
 `handoff/SKILL.md`); that is the count the script returns when run from a **subdirectory**, where
@@ -492,8 +540,22 @@ h-mad/tests/test_h_mad_collect_report_docs.py:412:        (b for b in re.findall
 ```
 
 A broader grep for the bare literal returns five hits; the other three are inline fixture strings
-(`test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551`), not extractors. Control:
-21 `.py` files contain a fence literal, so the narrow pattern is not under-matching. One further
+(`test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551`), not extractors. Control —
+**the command, not just the number**, because this was the one figure in this plan carried without
+one, and that is what let it drift unnoticed:
+
+```
+$ git grep -l '```' -- '*.py' | wc -l
+23
+```
+
+**23** `.py` files contain **a fence literal of any language** (measured at `1861157`; the quantity
+is deliberately the broad one — `git grep -l '```bash' -- '*.py' | wc -l` returns **3**, the *bash*
+fence literal, a different and narrower measurement, and either serves the argument, so the one
+meant is named). So the narrow pattern is not under-matching. The number was carried as a bare
+`21`: that was its true value at `6b4df35`, and `b59e05e` — the same commit that
+moved the suite floor from 2747 to 2748 — moved this control to 23 too, and only the floor was
+re-measured. Re-run the command rather than trusting the number. One further
 consumer reads `SKILL.md` and was checked directly rather than inferred — `h-mad/tests/docsections.py:37`
 bounds fences with `stripped.startswith("```")`, a **prefix** match, so an info-string tag does not
 disturb it.
@@ -656,31 +718,70 @@ toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which 
 duplicate bounder and imports the authoritative one. The tag was never the reason to change it;
 the duplicate bounder is.
 
+- **The corpus for every `*.md`-scoped measurement below is the tracked one**, defined as design
+  v1.93 §Scanning defines it — `git ls-files -- h-mad handoff` filtered to `*.md` with `archive/`
+  excluded, **25 files** — and not a filesystem glob. The glob returns **30**: the five extra are
+  untracked, gitignored `.pytest_cache/README.md` artifacts, which exist only on a tree where
+  pytest has run and each carry `# pytest cache directory #`. Those five are build output, they are
+  not documents this feature reads, and they made the heading measurements irreproducible on a
+  clean clone. Every figure below is therefore given on both corpora, so the contamination is
+  visible rather than assumed away:
+
+  ```
+  $ git ls-files -- h-mad handoff | grep '\.md$' | grep -v '/archive/' | wc -l
+  25
+  ```
+
 - **Heading selector differential** — the old `docsections.titled_section` regex
-  (`^(?P<marks>#+) …\s*$`) against the CommonMark ATX selector `find_heading` implements, over every
-  `*.md` under `h-mad/` and `handoff/` excluding `archive/`, fence-aware on the new side
-  (throwaway `heading_differential.py`, one `re.match` per line per selector):
+  (`^(?P<marks>#+) …\s*$`) against the CommonMark ATX selector `find_heading` implements, fence-aware
+  on the new side (throwaway `heading_differential.py`, one `re.match` per line per selector),
+  re-derived at `1861157` over both corpora:
 
   ```
   $ python3.11 heading_differential.py
-  files=30 both=266 old_only=76 new_only=0
+  --- TRACKED (git ls-files)
+  files=25 both=263 old_only=76 new_only=0
+  softening shapes: closing_hash=0 tab_form=0 titleless=0
+  --- GLOB (filesystem)
+  files=30 both=268 old_only=76 new_only=0
+  softening shapes: closing_hash=5 tab_form=0 titleless=0
   OLD-ONLY h-mad/SKILL.md 83 # WIRING: PASS
   OLD-ONLY h-mad/SKILL.md 84 # WIRING: FAIL issues=1  +  detail lines
-  OLD-ONLY h-mad/SKILL.md 164 # start_fresh — the feature does not exist yet, so create it
+  OLD-ONLY h-mad/SKILL.md 85 # WIRING: UNKNOWN reason=no_settings      (exit 2 — nothing was read)
   ```
 
-  `new_only=0`: the base Guard-narrowing invariant's "every softened outcome" set is empty on this
-  corpus — `##\tx` and `## x ##` are accepted by the new selector in principle and occur nowhere.
-  `old_only=76`: all 76 are `#` comment lines inside fenced code the old regex read as headings; the
-  migration narrows the guard.
+  `new_only=0` and `old_only=76` hold on **both** corpora, so the differential's two load-bearing
+  conclusions never depended on the contamination. `old_only=76`: all 76 are `#` comment lines
+  inside fenced code the old regex read as headings; the migration narrows the guard.
+
+  **The `new_only=0` justification did depend on it, and is restated correctly.** The base
+  Guard-narrowing invariant's "every softened outcome" set is about heading *identity*, not about
+  which lines are recognised — a `## x ##` line is a heading to both selectors and lands in `both`,
+  never in `new_only`, while only the new selector strips the closing run and so answers a request
+  for `x`. Counted as identities: over the tracked 25 the softened shapes are `closing_hash=0
+  tab_form=0 titleless=0`, so the set is genuinely empty. Over the glob 30 `closing_hash=5` — the
+  five `# pytest cache directory #` lines, one per `.pytest_cache/README.md`. The old text claimed
+  `## x ##` "occurs nowhere" while measuring a corpus in which it occurred five times; the claim is
+  true of the corpus this feature actually reads, and was false of the corpus that was measured.
+
+  **`both` moved 266 → 268 on the glob (261 → 263 tracked), and nothing is wrong with either.**
+  The `266` was correct when recorded at `1f5b30e`; `h-mad/SKILL.md` has since gained exactly two
+  `###` headings — "Close the class, never the instance" (`e8eaf6f`) and "Record a rejected finding
+  in the rejections ledger, never in a gated document" (`ff0a278`/`11a7db7`) — measured by diffing
+  the heading lines between the two revisions. `both` is not a conclusion this plan rests on; it
+  drifts with any documentation edit under the two roots, which is why the command is recorded
+  beside it and the number is not to be carried.
 - **Setext census** — the ATX-only assumption measured directly rather than through the selector
   differential (both of whose selectors ignore Setext): a fence-aware scan for a `===`/`---`
   underline line immediately after a paragraph line (CommonMark §4.3; YAML front matter skipped;
-  list, table, blockquote and indented-code lines are not paragraphs) over the same corpus (`*.md`
-  under `h-mad/` and `handoff/` excluding `archive/`; throwaway `setext_census.py`, 2026-09-03):
+  list, table, blockquote and indented-code lines are not paragraphs) over the same corpus, run in
+  the same script as the differential above and re-derived at `1861157` on both readings of it:
 
   ```
-  $ python3.11 setext_census.py
+  $ python3.11 heading_differential.py
+  --- TRACKED (git ls-files)
+  files=25 setext_headings=0
+  --- GLOB (filesystem)
   files=30 setext_headings=0
   ```
 
@@ -739,7 +840,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **49**, re-derived at spec v1.35 by
+- Every AC in the spec passes an automated test — **49**, re-derived at spec v1.53 by
   `grep -cE '^  - AC-[0-9]+\.[0-9]+:' docs/01-plan/features/doc-block-exec.spec.md`. **The grep is
   the assertion, not this sentence**: the count went stale three times when it was carried as a
   bare number, so it is re-derived on every spec bump — but a spec bump that leaves the count at
@@ -786,8 +887,14 @@ the duplicate bounder is.
   the wrapped command's exit status and reports 124 on expiry — measured 2026-09-03,
   `run --timeout 5 -- sh -c 'exit 3'` → rc 3, `run --timeout 1 -- sleep 3` → `run_timeout`, rc 124 —
   so the captured status and the `SUITE:`/`MUTATION:` tokens survive it. Bounds: 1200 s for the
-  full suite (three times the 397 s baseline), 600 s for the scoped run and for each mutation-harness
-  invocation (the impl-plan's Phase 5f block carries the wrapped commands).
+  full suite (three times the **383 s** baseline quoted above at `e8eaf6f` — `2748 passed in
+  383.05s`; the bound was written as "three times the 397 s baseline" when the baseline was
+  `2747 passed in 397.40s` at `6b4df35`, and the v1.84 re-measurement updated the quoted output
+  without sweeping this sentence, which is exactly the number-corrected-in-prose-but-stale-beside-
+  its-command class the floor fix set out to close — re-derive it from the quoted output at 5c
+  rather than carrying it), 600 s for the scoped run and for each mutation-harness
+  invocation (the impl-plan's Phase 5f block carries the wrapped commands; it carries the stale
+  `397 s` too, which is the author's to sweep).
 
   So AC-6.4's floor is 2748 collected and the same number passing (at `e8eaf6f`; re-measure at 5c), plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
@@ -916,3 +1023,5 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.82: __all__ is 29 names (BadArgs included).
 - v1.83: Plan re-audit v69 (codex must 1; agy clean) + impl-plan audit v29: FR-6's caller pseudocode binds substituted_block from substitute's tuple; the unreadable-preamble test is test_unreadable_preamble_path_refuses.
 - v1.84: Plan audit v73 (teammate surface, advisory). MUST 1: the AC-6.4 suite-floor baseline was stale by one — 2747/2485 measured at 6b4df35, but b59e05e added a test and the real counts at e8eaf6f are 2748/2486, so the floor asserted >= 2747 + … against a real 2748 and exactly one pre-existing test could be deleted with the floor green, falsifying the bullet's own no-hidden-deletion guarantee. Re-measured, and the drift is now closed as a class rather than a number: the count travels with the commit it was measured at and MUST be re-measured at 5c branch time. MUST 2: this was the one document of four stating the exit-code contract without the --help carve-out (the impl-plan swept it at v1.31, the plan was not swept with it); carve-out added, plus exit_on_error at the default per design v1.91. Also: 'tagging makes re.findall match zero blocks' is measured false — 4 blocks before, 3 after, and what empties is the h_mad_audit_gate.py filter, so the loud failure is _gate_bash_block's assert gating.
+- v1.85: Plan audit v74 (teammate surface; the agy leg returned PASS at tools=2, the report-file floor, so it contributed nothing). MUST 1: the doc_block_exec.json deliverable row split its 81 rows 79 helper-source + 2 SKILL.md, but the design matrix it names as the authoritative list has exactly ONE row whose mechanism names SKILL.md as the mutation target (registry-row-removed at design :1256) — counted independently: 81 data rows at design :1178-1258, 1 naming SKILL.md. The second AC-4.5 direction, detail-line-undocumented, mutates the HELPER ('the helper renames one emitted detail line'), so its file key is the helper's source and "h-mad/SKILL.md" there is an anchor the harness refuses. Split corrected to 80 + 1, and the split is now re-derived from the matrix's mechanism column rather than carried. The design's own summary paragraph under the matrix still says 79 + 2 and contradicts its matrix; the impl-plan carries the same pair at :1234/:1268 — reported to the orchestrator, not edited here. MUST 2 (rule 7, this document's own instance): the 5f bound cited 'three times the 397 s baseline' while the baseline quoted eleven lines above had been re-measured at v1.84 to '2748 passed in 383.05s' — 397.40s was the value at 6b4df35, so the number was corrected in the quoted command output and left stale in the prose that derives from it. Now 383 s with the drift named; the impl-plan carries the same stale 397 s at :1796. CENSUS (rule 2): the extractor-census control was the one figure in this plan with no command; it is now cited as `git grep -l '```' -- '*.py' | wc -l` -> 23 at 1861157 (21 at 6b4df35; b59e05e, the same commit that moved the suite floor, moved this too), with the narrower bash-literal reading (3) named so the quantity meant is unambiguous. SHOULD: 'changes at exactly two points' replaced by what does NOT move (the three _gate_bash_block callers keep their types, :412 keeps re.findall, .returncode is read nowhere), since the paragraph's own list runs to five regions; Scope names the AC-1.8 docsections scope increase and its three deliverables, and the Implementation Strategy opening sentence carried the same omission and is fixed with it; __all__'s enumeration reads 'the whole DocBlockError hierarchy — the base class and its 19 subclasses' per design :689, since the seven-plus-two-plus-subclasses reading gives 28; the --help carve-out swept by claim to all three surfaces (transport, CLI contract, Implementation Strategy) with the residual stated. NITS: titled_section's replacement is one-for-one at the call site and intentionally drops one leading newline; the design's matrix is a bolded lead-in, not a heading. Also re-derived: AC count 49 at spec v1.53, fence census 68/10 with control 83, extractor census 2 hits / 5 bare-literal hits — all unchanged.
+- v1.86: Design v1.93 back-propagation (raised by design-author-1, verified by the orchestrator): every *.md-scoped heading measurement in Measurements cited a 30-file corpus that is 25 tracked files plus 5 untracked, gitignored .pytest_cache/README.md artifacts — build output that exists only where pytest has run, so files=30/both=266/setext_headings=0 were not reproducible on a clean clone, and the plan contradicted the design from v1.93 on. The corpus is now defined as the design's: git ls-files -- h-mad handoff filtered to *.md with archive/ excluded, 25 files, with the command cited. Re-derived independently at 1861157 (throwaway heading_differential.py, one re.match per line per selector, fence-aware on the new side), both corpora reported side by side so the contamination stays visible: TRACKED files=25 both=263 old_only=76 new_only=0 setext_headings=0, softening closing_hash=0 tab_form=0 titleless=0; GLOB files=30 both=268 old_only=76 new_only=0 setext_headings=0, softening closing_hash=5 tab_form=0 titleless=0. So the two load-bearing conclusions (new_only=0, old_only=76) hold on BOTH corpora and never depended on the contamination — but the new_only=0 JUSTIFICATION did: the old text said '## x ##' occurs nowhere while measuring a corpus holding five of them ('# pytest cache directory #', one per README). Restated correctly: the Guard-narrowing 'softened outcome' set is about heading IDENTITY, not line recognition — a '## x ##' line is a heading to both selectors and lands in both, never new_only, and only the new selector strips the closing run; counted as identities the set is empty over the tracked 25 and is 5 over the glob 30. The both=266 -> 268 delta chased rather than carried: 266 was correct at 1f5b30e, and h-mad/SKILL.md has since gained exactly two ### headings, 'Close the class, never the instance' (e8eaf6f) and 'Record a rejected finding in the rejections ledger, never in a gated document' (ff0a278/11a7db7), measured by diffing the heading lines between the revisions; both is not a conclusion this plan rests on and drifts with any doc edit, so its command travels with it. Also swept by value rather than fixing the two named instances: the fence census (68 across 10 files, control 83) is the third *.md-scoped count and was re-run on both corpora — identical on each, because the five artifacts carry no fence, so it is corpus-invariant and that is now measured rather than assumed. NOT harmonised, deliberately: AC-6.1's tree sweep is not git ls-files — the spec reaches its scope by reference to this census, so the plan now states why the two realisations differ, namely that a test must still count a newly written, not-yet-tracked .md under the two roots (exactly what git ls-files misses and the guard exists to catch), and excludes build output by a dot-directory component instead.

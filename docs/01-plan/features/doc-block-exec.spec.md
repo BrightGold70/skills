@@ -433,8 +433,20 @@ not opted in.
 - **Acceptance Criteria**:
   - AC-6.1: The Second-surface gate block in `h-mad/SKILL.md` carries the `hmad:exec` tag, **and
     it is the only fence in the tree that does**: a test counts opening fences carrying the tag
-    across `h-mad/` and `handoff/` (excluding `archive/`, the same sweep as the plan's fence
-    census) and asserts exactly one, so a second opt-in fence cannot arrive by accident.
+    and asserts exactly one, so a second opt-in fence cannot arrive by accident. **The sweep is
+    stated here rather than by reference**: `*.md` files under `h-mad/` and `handoff/`, excluding
+    any `archive/` path and any dot-directory. Two things this pins that a reference could not.
+    The `*.md` restriction is load-bearing — the scanner is a markdown scanner, and the feature's
+    own test module carries column-0 tagged fences inside triple-quoted fixtures, which an
+    unrestricted sweep counts as openers and which would make this AC unpassable at GREEN. And the
+    dot-directory exclusion is **deliberately not `git ls-files`**, which is what §Scanning's
+    measurement corpus uses: a measurement should describe the tracked tree, but this guard must
+    still catch a tagged fence in a document that has been written and not yet committed — that is
+    precisely the accident it exists to refuse. Earlier drafts reached this scope only by pointing
+    at "the plan's fence census", which at the time was a filesystem glob contaminated by
+    gitignored `.pytest_cache/README.md` artifacts; a reference inherits whatever the referent
+    becomes, so both halves are spelled out. Residual: a generated `.md` written inside these roots
+    outside a dot-directory is counted, and a tagged fence in a non-`.md` file is not.
   - AC-6.2: The **executing** path resolves its block through `h_mad_doc_block_exec`: `:270`'s
     hand-rolled `re.findall` and `run_recipe`'s inline `subprocess` are both gone. `:412` keeps a
     text scan and that is correct, not a leftover — it inspects an untagged block it must never
@@ -459,7 +471,7 @@ not opted in.
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
-    Phase-5f gate command, `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?   # from the REPOSITORY ROOT: the 2747 baseline is the root count; from h-mad/ the same command collects 2485; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
+    Phase-5f gate command, `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?   # from the REPOSITORY ROOT: the 2748 baseline is the root count; from h-mad/ the same command collects 2486; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
     the last line must read `N passed` with no failures **and** `SUITE: rc=0` — the exit status is
     captured before `tail`, because a bare pipe reports `tail`'s status and lets a red suite print
     as success.
@@ -603,3 +615,5 @@ quoted
 - v1.51: Design v1.84 back-propagation: the empty-key CLI refusal prints arg="=V" (quoted).
 - v1.52: Design v1.85 back-propagation: BAD_ARGS verdict for argparse grammar errors (no non-DOCBLOCK exit); AC-3.10 states the concurrent-replacement non-goal and the identity check.
 - v1.53: Plan audit v73 / design audit v82 back-propagation (teammate surface, advisory). AC-6.4's floor baseline re-measured to 2748 at e8eaf6f (was 2747 at 6b4df35; b59e05e moved it), with the commit now travelling with the number. AC-5.6 states exit_on_error at argparse's default True — with False a missing option value raises argparse.ArgumentError past the overridden error() and escapes main as a non-DOCBLOCK exit.
+- v1.54: Plan audit v74 back-propagation. AC-6.4's embedded Phase-5f gate command still carried the pre-fix 2747/2485 pair in its comment while the AC body around it said 2748/2486 — so the same AC stated both. My v1.53 sweep updated the prose and missed the number inside the command comment, which is the sixth instance this session of a value swept in one surface and not another; the plan's rule 7 (sweep every surface that states a value, including inside embedded commands and table cells) is the general form.
+- v1.55: Design v1.93 back-propagation. AC-6.1 states its own sweep instead of reaching it by reference to the plan's fence census: *.md under h-mad/ and handoff/, excluding archive/ and any dot-directory. The reference was the defect, not the scope — that census was a filesystem glob contaminated by gitignored .pytest_cache/README.md artifacts, and a reference inherits whatever its referent becomes. Both halves are now pinned here with their reasons: the *.md restriction, because the feature's own test module carries column-0 tagged fences in triple-quoted fixtures that an unrestricted sweep would count; and the dot-directory exclusion rather than git ls-files, deliberately different from the measurement corpus, because this guard must still catch a tagged fence in a document written but not yet committed. Residual stated.

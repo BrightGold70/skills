@@ -170,11 +170,23 @@ exact offsets without a second line walk, CRLF included), the opener's marker ch
 indentation and info string,
 and a scanner-derived `candidate` flag (a backtick opener whose first info word is `bash`), so
 no consumer re-recognises a fence or a heading. **The `titled_section` migration was measured as a differential before it was prescribed** — the old
-`re.search` heading regex against the new selector over every `*.md` under `h-mad/` and `handoff/`
-(30 files, `archive/` excluded): `new_only=0` (nothing the old guard refused is newly accepted; the
+`re.search` heading regex against the new selector over every **tracked** `*.md` under `h-mad/` and
+`handoff/`: `new_only=0` (nothing the old guard refused is newly accepted; the
 theoretical softenings `##\tx` and `## x ##` have zero instances) and `old_only=76`, every one a `#`
 comment line inside a fence the old regex mistook for a heading — the migration narrows the guard
-(plan §Measurements, "Heading selector differential"). **Every grammar rule the scanner implements was
+(plan §Measurements, "Heading selector differential"). **The corpus is 25 files, and it is defined
+by `git ls-files -- h-mad handoff` filtered to `*.md` with `archive/` excluded — not by a filesystem
+glob, which returns 30 on any tree where pytest has run.** The five extras are gitignored build
+output (`h-mad/.pytest_cache/README.md`, `h-mad/scripts/.pytest_cache/README.md`,
+`h-mad/tests/.pytest_cache/README.md`, `handoff/.pytest_cache/README.md`,
+`handoff/tests/.pytest_cache/README.md`), and they are not neutral: each carries
+`# pytest cache directory #` on line 1 — the closing-hash shape `## x ##` at level 1 — so on the
+30-file glob that softening has **five** instances and the sentence above is false. The
+Guard-narrowing invariant's "account for every softened outcome" set is empty only over tracked
+files. Measured at `1861157`: both softening shapes 0 over the 25 (5 closing-hash over the 30, both
+tab-form 0); `new_only=0` and `old_only=76` hold on both corpora.
+Every count in this document over "the `*.md` files of `h-mad/` and `handoff/`" is this tracked
+corpus, so a clean clone reproduces it. **Every grammar rule the scanner implements was
 rendered through markdown-it-py — both the interpreter-local 2.2.0 and the 4.2.0 the spec's
 tagged-fence probe used, CommonMark preset on each — before it was written down — 14 of 14 agree on
 both versions; the corpus and its output are in the plan's §Measurements ("Scanner
@@ -302,8 +314,9 @@ limitation**: a Setext heading (text underlined with `===`/`---`) is not recogni
 using them would bound wrongly rather than loudly. Every document in the migration corpus is ATX —
 measured directly (plan §Measurements "Setext census", 2026-09-03: a fence-aware scan for a
 `===`/`---` underline immediately after a paragraph line, CommonMark §4.3, YAML front matter
-skipped, over the same 30 `*.md` under `h-mad/` and `handoff/` excluding `archive/`, finds
-`setext_headings=0`; the heading-selector differential cannot show this, since both of its
+skipped, over the same 25 tracked `*.md` under `h-mad/` and `handoff/` excluding `archive/`, finds
+`setext_headings=0` (re-run at `1861157`; the 30-file glob also gives 0, so this number is the one
+measurement the contamination did not move); the heading-selector differential cannot show this, since both of its
 selectors ignore Setext) — and after AC-1.8 `docsections.py` calls this same bounder, so the assumption has exactly one home
 and cannot drift between two implementations (the differential test an earlier draft named here
 is the one this document explains is not achievable). The section ends at the next line that is a
@@ -554,7 +567,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 81 mutations (81 rows: 79 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 81 mutations (81 rows: 80 of the helper's source, 1 of `h-mad/SKILL.md` — `registry-row-removed`, the only row whose mechanism names `SKILL.md` as the file the harness edits; re-derive from the matrix's mechanism column, never from this cell), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -591,8 +604,11 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `--subst` syntax), the strict-UTF-8 pre-spawn read of `--preamble-file` (`PreambleUnreadable`),
    the two-arm stream reservation,
    descriptor alias check, `_final_write` with read-back verification, one closure path; and the
-   Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two `SKILL.md`
-   mutation rows land here). Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
+   Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two AC-4.5
+   mutation rows land here — `registry-row-removed`, which mutates `SKILL.md`, and
+   `detail-line-undocumented`, which mutates the **helper**; they are one pair by AC, not by file,
+   and calling them "the two `SKILL.md` rows" is the 79+2 miscount this document carried).
+   Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
 5. **Task 5 — the wire.** Tag the Second-surface gate fence in `h-mad/SKILL.md` **and** migrate
    the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` — a new
    `_gate_block() -> dbe.Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
@@ -609,7 +625,14 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    it selects a *different*, untagged block (`exec codex`) and only inspects it, so it neither
    breaks nor belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour.
    Depends on 1–4. Tag and migration cannot be split: tagging the gate fence makes `:270`'s
-   `re.findall` match zero blocks.
+   `re.findall` — which requires `\n` immediately after ` ```bash ` — match **3 of the section's
+   4 blocks instead of 4** (re-measured at `1861157`, unchanged from `e8eaf6f`: before the tag
+   4 blocks, 1 of them gating; after, 3 blocks, 0 gating). **What goes to zero is the
+   `h_mad_audit_gate.py` filter on the next line, so the loud failure is `_gate_bash_block`'s
+   `assert gating`, not an empty `findall`** — an implementer looking for the latter will not find
+   it and will read the RED as unexplained. It fails loudly rather than silently, which is the good
+   case, but it is still a broken suite if the two are separated across tasks (plan v1.84, which
+   corrected this same sentence there).
 
 ## Data Model / Schema Changes
 
@@ -657,8 +680,19 @@ def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, 
     so a bad map is refused before any stream artifact is reserved."""
 
 def run_block(block: Block, *, preamble: str | None = None,
-              timeout: float = 30.0) -> RunResult
-def main(argv: Sequence[str] | None = None) -> int
+              timeout: float = 30.0) -> RunResult:
+    """Execution. Spawns exactly ONE `bash -c` (the block alone, or preamble and
+    block combined) in a fresh temp cwd, bounded by `timeout` seconds. `RunResult.rc`
+    is that child's exit code — never this tool's verdict. Never substitutes: the
+    block it is handed is the block it runs. Raises BadTimeout, BlockTimeout,
+    LaunchFailed or CleanupFailed."""
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI. Selection is `select(extract(...), index)`, then substitute, then
+    run_block. Writes one `DOCBLOCK:` line to stdout and returns the process exit
+    code: 0 on every verdict — RAN, every refusal and TIMEOUT — and 2 only on
+    UNREADABLE, CLEANUP_FAILED and LAUNCH_FAILED. `--help` alone is argparse's own
+    output and exit 0, the one exit-0 path that emits no `DOCBLOCK:` line."""
 
 def fence_aware_end(text: str, start: int, level: int) -> int:
     """Offset of the next ATX heading at `level` or shallower after `start`,
@@ -1132,7 +1166,7 @@ that return value into the process exit, so the in-process code is the real code
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value="<v>"`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`, **no mock**: the block is `python3 ESC_PATH & exit 0` where `ESC_PATH` is replaced through the substitution map with the absolute path of an `esc.py` the test writes under its own `tmp_path` (the AC-5.2 idiom — the child's cwd is a fresh private directory, so nothing can be placed in it beforehand; the substituted absolute path is what makes the fixture executable) and `esc.py` calls `os.setsid()`, writes its pid to an absolute path outside the cwd, and sleeps holding stdout — `communicate` times out, `poll()` reaps the zombie leader, `killpg` raises `ProcessLookupError`, the drain times out, pipes close, `wait()` returns at once → `TIMEOUT`, cwd absent, no traceback; the test kills the escapee in `finally`; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + 2 * DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally`; `test_wait_after_kill_is_bounded`: the recorded instance's `wait` records its `timeout` keyword (`== DRAIN_SECONDS`) and raises `TimeoutExpired` → `LAUNCH_FAILED stage=reap`, `pgid:` in the detail, `BlockTimeout` as `__context__`, cwd gone, within `timeout + 2 * DRAIN_SECONDS + 2` s |
-| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across the `*.md` files of `h-mad/` and `handoff/`, excluding `archive/`** (`test_exactly_one_tagged_fence_in_the_tree`, the plan's census sweep asserting cardinality 1). **The `*.md` restriction is load-bearing and was missing until design v1.92**: `_fence_events` is a markdown scanner, and by Task 5 the feature's own `h-mad/tests/test_h_mad_doc_block_exec.py` has landed under `h-mad/` carrying a column-0 tagged bash opener inside triple-quoted fixtures (AC-1.1, AC-1.5, AC-1.7, AC-3.7), which an unrestricted sweep counts as openers -- so the AC could not pass at Task 5 GREEN, and its RED reason ("zero tagged fences") was false for the same reason. A `.py` triple-quoted fixture is a false positive by construction, and one fixture is a deliberately unbalanced four-backtick fence, so a whole-file `.py` scan is not even additive. Residual: a tagged fence added to a non-`.md` file is out of scope of this count by design, and a `.md` file added outside `h-mad/`/`handoff/` is likewise uncounted; no `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `run_recipe`), and **exactly one** remaining in the file — the `:412` text scan, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2748` (the baseline **re-measured at `e8eaf6f`**, from the repository root with `cwd=REPO_ROOT` -- the same command run from `h-mad/` collects 2486, a different tree, not the baseline; design audit v68 agy). It was `2747`/`2485` at `6b4df35` and `b59e05e` then added a test, which left the floor asserting `>= 2747` against a real 2748 and so permitted exactly one silent deletion; **the number therefore travels with the commit it was measured at and is re-measured at 5c branch time** (plan v1.84, spec v1.53) + the collected count of `test_h_mad_doc_block_exec.py` alone + 7, the seven being the named node IDs added to existing files — six in `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) and `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — each asserted present; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
+| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across the `*.md` files of `h-mad/` and `handoff/`, excluding `archive/`** (`test_exactly_one_tagged_fence_in_the_tree`, the plan's census sweep asserting cardinality 1). **The `*.md` restriction is load-bearing and was missing until design v1.92**: `_fence_events` is a markdown scanner, and by Task 5 the feature's own `h-mad/tests/test_h_mad_doc_block_exec.py` has landed under `h-mad/` carrying a column-0 tagged bash opener inside triple-quoted fixtures (AC-1.1, AC-1.5, AC-1.7, AC-3.7), which an unrestricted sweep counts as openers -- so the AC could not pass at Task 5 GREEN, and its RED reason ("zero tagged fences") was false for the same reason. A `.py` triple-quoted fixture is a false positive by construction, and one fixture is a deliberately unbalanced four-backtick fence, so a whole-file `.py` scan is not even additive. **The sweep excludes build output by excluding any path with a dot-directory component** (`.pytest_cache/README.md` is the live instance — five of them exist on any tree where pytest has run, and a filesystem glob without this filter returns 30 `*.md` where `git ls-files` returns 25; §Scanning states the same exclusion for the heading and Setext measurements, which realise it as `git ls-files` because a one-off human measurement has no reason not to). The two realisations differ on purpose: a test must still count a **newly written, not-yet-tracked** `.md` under the two roots, which is exactly the doc a `git ls-files` sweep would miss and this guard exists to catch. Residual, stated in full: a tagged fence added to a non-`.md` file is out of scope of this count by design; a `.md` file added outside `h-mad/`/`handoff/` is likewise uncounted; and a generated `.md` written under the two roots *outside* a dot-directory does enter the count — correctly, since it is then part of the executed documentation surface, but noisily if a tool starts emitting one. **Documenting the tag convention is subject to the same count**: the plan carries "`hmad:exec` fence info-string tag convention" as a deliverable and this design is its only home, so if it is ever written into an `.md` under `h-mad/` or `handoff/`, the example opener must use the four-space-indented literal (never an opener by this document's own grammar, §Scanning) or it becomes a second tagged fence and fails AC-6.1. No `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `_run_recipe`), and **exactly one** remaining in the file — the `:412` text scan, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2748` (the baseline **re-measured at `e8eaf6f`**, from the repository root with `cwd=REPO_ROOT` -- the same command run from `h-mad/` collects 2486, a different tree, not the baseline; design audit v68 agy). It was `2747`/`2485` at `6b4df35` and `b59e05e` then added a test, which left the floor asserting `>= 2747` against a real 2748 and so permitted exactly one silent deletion; **the number therefore travels with the commit it was measured at and is re-measured at 5c branch time** (plan v1.84, spec v1.53) + the collected count of `test_h_mad_doc_block_exec.py` alone + 7, the seven being the named node IDs added to existing files — six in `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) and `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — each asserted present; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 
 **Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry.** Every
@@ -1257,11 +1291,19 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan is green on the real helper and goes RED on this mutant |
 
-Eighty-one rows, eighty-one mutations — seventy-nine of the helper's source (the AC-5.3 row, once
-described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
-**two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
-mutates source; those two AC-4.5 rows are the
-manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
+Eighty-one rows, eighty-one mutations — **eighty of the helper's source and exactly one of
+`h-mad/SKILL.md`**. **The split is derived from the mechanism column above, never carried**: count
+the rows whose mechanism names `SKILL.md` as the file the harness edits. Exactly one does
+(`registry-row-removed` — "one remedy row deleted from the `SKILL.md` Helper-scripts entry"); its
+AC-4.5 partner `detail-line-undocumented` mutates the **helper**, renaming an emitted detail line
+(`missing_key:` → `absent_key:`) so an emittable line loses its row. The two are the
+manifest-integrity guard's two directions of the bidirectional pin, but they sit in *different*
+files, and the split follows the file, not the AC. (The AC-5.3 row, once described as a
+fixture-copy self-check, is likewise a real argv mutation of the helper's source that the source
+scan must catch.) **This paragraph previously read "seventy-nine … two of `h-mad/SKILL.md`" and was
+the origin the plan and impl-plan copied**; the concrete failure mode is that a
+`"file": "h-mad/SKILL.md"` anchor on `detail-line-undocumented` is an anchor the mutation harness
+refuses, because the string it must replace lives in the helper. A guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
 
@@ -1346,8 +1388,30 @@ mean the probe never created one.
 - **Connection enforcement** — complies: FR-6 is declared a wiring task with a `WIRE`/`WIRE-PIN`
   and two-direction discrimination (AC-6.5/AC-6.6); a whole-module revert is explicitly not
   sufficient, because it removes both sides at once.
+- **Single-source contract** — complies on the invariant's FIRST branch for the rule this feature
+  owns: section bounding has exactly one authoritative implementation (`fence_aware_end` on
+  `_fence_events`) and `h-mad/tests/docsections.py` calls it (AC-1.8), replacing both its duplicate
+  `_fence_aware_end` and `titled_section`'s local heading regex. **The claim is scoped to that rule,
+  and the scope is stated because the tree holds three further hand-rolled `##`-slicers that the
+  consumer census behind it — a grep for `from docsections import` — cannot see by construction**:
+  `_titled_section` (`h-mad/tests/test_h_mad_context_budget_docs.py:69`, eight call sites),
+  `section_text` (`h-mad/tests/test_h_mad_batch_doc_rules.py:26`) and `_section`
+  (`h-mad/tests/test_h_mad_collect_report_docs.py:40`, reached through `_second_surface()`). None is
+  a surface applying *this* rule: each is a test-local assertion helper slicing one document for its
+  own pins, all three are fence-blind, and the invariant scopes to "a rule applied by more than one
+  surface", not to every function that finds a `##`. They are also not drop-ins — measured at
+  `1861157`: `_titled_section` anchors on a substring, so `docsections.titled_section(SKILL_MD,
+  "Run-context ceiling")` raises `AssertionError: missing section` where the real heading is
+  `## Run-context ceiling — halt the run at 80%`. **Migrating them is deliberately out of this
+  feature's scope**; what is in scope is that after Task 5 `_section`/`_second_surface()` no longer
+  sits on the executing path — `_gate_block()` calls `dbe.extract(SKILL_MD, "## Second surface — the
+  codex leg")` directly — so the one slicer that was reached by executed code is left serving text
+  pins only.
 - **Assumption verification** — complies: the plan's `## Measurements` section carries both cited
-  commands with their observed output, and the design adds no uncited measured claim.
+  commands with their observed output, and the design adds no uncited measured claim. The two
+  heading measurements are re-derived here over the tracked corpus (§Scanning) because the
+  filesystem glob behind the plan's `files=30` is not reproducible on a clean clone; the plan's
+  §Measurements still states 30 and is owed the same sweep.
 
 ## Version History
 
@@ -1444,3 +1508,4 @@ mean the probe never created one.
 - v1.90: Design audit v79 (codex must 1; agy clean at 21 tool calls) + impl-plan audit v30: the reservation summary names the two-arm os.open protocol, not plain open(path, "a"); Task 1 is the wiring shape.
 - v1.91: Design audit v82 (teammate surface, advisory — codex quota-blocked). MUST: the parser's exit_on_error=False cannot emit BAD_ARGS for a missing option value — it suppresses argparse's own except ArgumentError: self.error(...), so ArgumentError escapes main as a non-DOCBLOCK traceback, on one of the two inputs test_malformed_invocation_is_a_verdict drives; measured on 3.11.8 and independently re-probed. exit_on_error now stays at the default True, with the five-shape table and the residual (anything argparse raises outside error()) stated; argparse-error-unrouted becomes true as written at the default. __all__'s enumeration said 'every DocBlockError subclass — 29' where subclasses number 19 (7+2+19=28); it now names the hierarchy (base + 19) and calls out the 28 misreading.
 - v1.92: Impl-plan v1.32 back-propagation (audit v33, teammate surface). AC-6.1's tree sweep is restricted to *.md, matching the plan census it is bound to. Unrestricted it counted the feature's own test-module fixtures (a column-0 tagged bash opener inside triple-quoted strings) as openers, so the AC could not pass at Task 5 GREEN and its stated RED reason was false; the residual is now stated. Also swept here what v1.91 missed: the AC-6.1-6.6 row still carried the stale 2747/2485 floor. It is 2748/2486 at e8eaf6f, with the commit travelling with the number and re-measurement required at 5c branch time.
+- v1.93: Design audit v83, gating round, two surfaces (teammate must 2 should 4; agy must 1). MUST 1 (teammate): Task 5's split rationale was measured false and contradicted the paired plan one revision after plan v1.84 corrected it — tagging the gate fence leaves :270's re.findall matching 3 of the section's 4 blocks, not zero; re-measured independently at 1861157 (before 4 blocks/1 gating, after 3/0), and the loud failure is _gate_bash_block's assert gating, since what empties is the h_mad_audit_gate.py filter. MUST 2 (teammate): every heading measurement cited a 30-file *.md corpus that is 25 tracked files plus 5 untracked, gitignored .pytest_cache/README.md artifacts, each carrying '# pytest cache directory #' — five instances of the closing-hash softening the document claims has none, so the Guard-narrowing accounting was false and files=30/old_only=76/setext_headings=0 were reproducible only after pytest had run. The corpus is now defined as git ls-files -- h-mad handoff filtered to *.md with archive/ excluded (25 files); re-measured at 1861157: new_only=0, old_only=76, setext_headings=0, both softening shapes 0 over the 25 and 5 closing-hash over the 30. AC-6.1's sweep states a dot-directory exclusion (a test must still count a newly written untracked doc, which git ls-files would miss) and its residual now names generated .md inside the roots. MUST 3 (agy): run_block and main in the API block lacked trailing colons — two invalid-Python signatures; both now carry a colon and a docstring sourced from this document's own contract, and all 3 python fences ast.parse (2 of 3 at 1861157). SHOULD: the Single-source contract is added to Invariant Compliance, naming the three test-local ##-slicers the consumer census cannot see, which branch covers them and why (measured: _titled_section is not a drop-in — titled_section cannot find 'Run-context ceiling'), and stating that after Task 5 _second_surface() leaves the executing path; the convention deliverable's AC-6.1 exposure gets its sentence at the residual. NIT: run_recipe -> _run_recipe on the post-migration executing path. MUST 4 (team lead, from plan-author): the prose contradicted the mutation matrix on the 81-row split, and this document was the origin the plan and impl-plan copied. Re-derived by counting the matrix's mechanism column at 1861157 rather than reading it: two mutation tables, the wire table at 8 rows (0 naming SKILL.md) and doc_block_exec.json at 81 rows of which exactly 1 names SKILL.md as the file the harness edits (registry-row-removed). The split is 80 + 1, not 79 + 2. Its AC-4.5 partner detail-line-undocumented mutates the HELPER (missing_key: -> absent_key:), so the pair is one by AC and not by file; a \"file\": \"h-mad/SKILL.md\" anchor on it would be an anchor the harness refuses. Fixed at the two sites named (the deliverables cell and the summary paragraph under the matrix) and at a THIRD the sweep found and the brief did not: Task 4's Implementation Order called them \"the two SKILL.md mutation rows\". Each site now states how the split is derived so the next reader re-counts. Owed elsewhere and routed, not edited here: the plan's Measurements still says files=30, the spec's AC-6.1 reaches its scope by reference to that census, the impl-plan pins the 2748 floor at b7d0d77 where three documents pin e8eaf6f, and the impl-plan's AC-6.1 sweep is spelled as a bare filesystem glob.
