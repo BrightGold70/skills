@@ -42,10 +42,16 @@ print the streams inline and break every consumer that parses the verdict line.
 **The CLI contract, in full.** `h_mad_doc_block_exec.py <doc> --heading <h> [--index N]
 [--subst K=V]... [--preamble-file <path>] [--shell-timeout SECONDS] [--stdout PATH]
 [--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
-parser-rejection test. `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
+parser-rejection test, **and no abbreviated spellings**: the parser is built with
+`allow_abbrev=False`, so `--shell-t` or `--pre` are rejected rather than silently accepted as
+undocumented aliases (test: `test_cli_rejects_abbreviated_options`). `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
 2, block not run (test: `test_cli_unreadable_preamble_refuses_before_running`, whose block has a
-side effect the test asserts is absent). The registry entry carries a detail row for that reason
+side effect the test asserts is absent). The preamble and the block are composed as
+`preamble.rstrip("\n") + "\n" + block.text` — one newline boundary, always — so a preamble file
+that lacks a trailing newline cannot fuse with the recipe's first line
+(test: `test_preamble_without_trailing_newline_still_precedes_the_block`, whose preamble sets a
+variable and ends without `\n`, and whose block's first line reads it). The registry entry carries a detail row for that reason
 like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
 reserved at the pre-check**: the writability check *is* `open(path, "w")` — it creates or
 truncates the file exactly as a shell `>` would, and the handle stays open through the run and is
@@ -493,3 +499,4 @@ design begins.
 - v1.16: Plan re-audit v11: specify the tests/->scripts/ import (self-contained sys.path insert, collect-alone test, docsections.json re-point); cite the AC-5.2 in-group/escape/ProcessLookupError probe with its command and output; add the task-level API and caller map; name the FR-6 wire tests and the mutation each kills; track the AC count to 46 (spec v1.13); add the cleanup-verification risk row.
 - v1.17: Plan re-audit v12 (codex must 2 should 1; agy clean): name the bounder fence_aware_end(text, start, level) -> int and its two call replacements in docsections; make every consumer call module-qualified (dbe.*) so the wire spies observe it, pinned by a no-from-import test; cite the collected and passing baseline (2747/2747 at 6b4df35) with commands.
 - v1.18: Plan re-audit v13 (codex must 3 should 1; agy clean): state the full CLI contract including --preamble-file and its pre-spawn refusal; cite the AC-3.14 cleanup probe (python3.11, euid 501) and add the root-skip plus fault-injected fallbacks; replace 'anchors pinned at impl-plan time' with the author-together / re-read / harness / named-RED ordering; define stream overwrite and reservation semantics (stream_write_failed).
+- v1.19: Plan re-audit v14 (codex must 1 should 1; agy clean): preamble/block composition rule with its no-final-newline test; allow_abbrev=False with an abbreviated-option rejection test.

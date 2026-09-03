@@ -140,7 +140,11 @@ not opted in.
     run** — observable because a block with a side effect leaves none.
   - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
     the *same* invocation immediately before the block. It is fixture setup, never doc content:
-    the block's own text is unchanged and is what the doc says. Without it the executing migration
+    the block's own text is unchanged and is what the doc says. **Composition is
+    `preamble.rstrip("\n") + "\n" + block.text`** — a newline boundary is always inserted, so a
+    preamble file without a trailing newline cannot fuse with the recipe's first token, and a
+    preamble that ends in one does not gain a blank line; a test drives the no-final-newline case.
+    Without it the executing migration
     is impossible — the Second-surface gate block reads `COLLECT_OUT`, which today's `run_recipe`
     supplies by running the real collector first. Measured on the real block, one variable changed:
 
@@ -327,3 +331,4 @@ not opted in.
 - v1.12: Plan re-audit v9: refuse duplicate headings (AC-1.7) — invariants.example.md has two; cite the controlled preamble pair, which also narrows the earlier 'aborts on unbound variable' claim to 'cannot reach GATE: PASS'.
 - v1.13: Plan audit v11 + design audit v5 (codex must 2+4, agy must 9): AC-1.9 ordinal-below-1 refusal (BAD_INDEX), AC-3.14 verified cleanup (CLEANUP_FAILED), AC-5.5 timeout races (killpg ProcessLookupError, bounded drain against an escapee); AC-1.8 names the self-contained sys.path import and its collect-alone test; AC-4.2 lists every exit-2 verdict. 46 ACs.
 - v1.14: Plan re-audit v13 back-propagation: AC-3.8 states overwrite semantics and the post-run stream_write_failed refusal; AC-3.14's CleanupFailed carries its cause.
+- v1.15: Plan re-audit v14: AC-3.11 states the preamble/block composition rule (one newline boundary, always) and its no-trailing-newline test.
