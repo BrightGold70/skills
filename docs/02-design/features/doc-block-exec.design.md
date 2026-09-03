@@ -146,8 +146,23 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 
 ### Scanning (`extract`)
 
-One pass over the lines, carrying `in_fence`, **the opening fence's marker character (backtick
-or tilde) and its run length**. CommonMark fences come in both flavours, `~~~` closes only a `~~~`
+**One private scanner, two consumers.** The fence grammar below is implemented exactly once, as
+a private generator `_fence_events(text)` that walks the document and yields, per line, whether
+the line is a fence opener, a fence closer, or body/prose, together with the opener's marker
+character, run length, indentation and info string. `extract` consumes it to find candidates and
+`fence_aware_end` consumes it to bound a section (from `text[:start]` onward, which is how its
+prefix-state contract is met); neither function carries fence state of its own. That is what
+makes the two surfaces unable to disagree by construction — a change to marker kind, run length,
+indentation, the closer rule or prefix state lands in one place — and it is where every
+fence-grammar mutation row anchors (`fence-run-length-ignored`, `tilde-fence-not-tracked`,
+`indented-opener-accepted`, `closer-trailing-text-accepted`, `prefix-fence-state-skipped`), so
+each mutant is observed by both consumers' tests. A construct-complete parity test,
+`test_extract_and_bounder_agree_on_every_hostile_fixture`, runs every hostile fixture (balanced
+and unbalanced four-backtick, tilde-quoted backtick, indented literal, trailing-text closer,
+offset-inside-a-fence) through both functions and asserts the set of candidate openers `extract`
+sees equals the set of fence spans `fence_aware_end` skipped — belt over the braces, so a future
+second implementation would be caught rather than merely discouraged. The scanner carries
+`in_fence`, **the opening fence's marker character (backtick or tilde) and its run length**. CommonMark fences come in both flavours, `~~~` closes only a `~~~`
 fence, and a tilde fence can quote a backtick fence verbatim — measured through GitHub's renderer
 in the spec's Assumptions: a `~~~` block containing ` ```bash hmad:exec ` renders as a plain code
 block. Tilde fences are tracked for bounding only; a **candidate** is always a backtick fence whose
@@ -489,8 +504,11 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
 
 `__all__` names all six. `fence_aware_end` is public on purpose: `docsections.titled_section`
 and `docsections.section_from` call it in place of the deleted `_fence_aware_end` with the same
-`(text, start, level)` arguments, so the two re-pointed `docsections.json` mutations target this
-function's fence-state update and heading match.
+`(text, start, level)` arguments. Both it and `extract` are thin consumers of the private
+`_fence_events(text)` generator (§Scanning), the single home of the fence grammar; the two
+re-pointed `docsections.json` mutations therefore target `_fence_events`'s state transition and
+`fence_aware_end`'s heading match, and every fence-grammar row of `doc_block_exec.json` anchors in
+`_fence_events` too, where one mutant is seen by both consumers.
 
 `main` is `select(extract(...), index)`. A caller that genuinely wants all candidates calls
 `extract` alone — which is not a sweep, because it is still scoped to one document and one
@@ -942,3 +960,4 @@ mean the probe never created one.
 - v1.38: Design audit v32 (both surfaces clean; agy nit): the AC-6.1 cardinality test is named.
 - v1.39: Design audit v33 (codex clean; agy must 1 + nits): the API prose lists BadSubstArg and BadTimeout.
 - v1.40: Design audit v34 (codex must 1; agy must 1 + nits): exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened added to the wire spec (six); stray line break in the setattr call joined.
+- v1.41: Design audit v35 (codex must 1; agy clean): one private fence scanner, _fence_events, consumed by both extract and fence_aware_end — the fence-grammar mutations anchor in it and a construct-complete parity test runs every hostile fixture through both consumers.
