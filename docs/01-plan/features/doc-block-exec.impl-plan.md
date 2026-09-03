@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.79 — design cycle 70 / impl-plan cycle 21 back-propagation, commit dadf546)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.45) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.75)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.79 — design cycle 71 / impl-plan cycle 22 back-propagation, commit 9f3260e)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.45) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.76)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -216,10 +216,10 @@ untouched and no local bounder is restored. `find` is the one line
 `import h_mad_doc_block_exec as _dbe  # noqa: E402` (it matches exactly once); `replace` is
 ```python
 import importlib.util as _ilu  # noqa: E402
-_spec = _ilu.spec_from_file_location("_h_mad_doc_block_exec_private", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "h_mad_doc_block_exec.py"))
+_spec = _ilu.spec_from_file_location("_h_mad_doc_block_exec_private", str(Path(__file__).resolve().parents[1] / "scripts" / "h_mad_doc_block_exec.py"))
 _dbe = _ilu.module_from_spec(_spec); sys.modules[_spec.name] = _dbe; _spec.loader.exec_module(_dbe)
 ```
-(`os` and `sys` are already imported at the top of the delta) — the same file, loaded as a private
+(`sys` and `Path` are already imported at the top of the delta, and the replacement reuses the delta's one path idiom) — the same file, loaded as a private
 instance registered in `sys.modules` only under `_h_mad_doc_block_exec_private`, a name the import
 system never resolves for `h_mad_doc_block_exec`. The registration is required, not cosmetic:
 under `from __future__ import annotations` dataclass processing dereferences
@@ -239,7 +239,9 @@ and the source guard `test_docsections_has_no_second_bounder` (the source still 
 `from __future__ import annotations`: the shared-import caller records
 `['find_heading', 'fence_aware_end']`, the file-path caller records `[]`, both return the same
 section. Add a sixth row
-`docsections-syspath-setup-removed`: `find` is the `sys.path.insert` line shown in the delta below, `replace` is the
+`docsections-syspath-setup-removed`: `find` is the one line
+`sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` exactly as the delta
+below writes it (the design's spelling, so the anchor and the landed source cannot drift apart), `replace` is the
 comment `# sys.path setup removed`; killed by
 `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` (the `import` then
 fails with `ModuleNotFoundError` in the subprocess). Add a seventh row
@@ -278,7 +280,7 @@ import argparse, dataclasses, io, json, math, os, re, shutil, signal, stat, subp
 #   signal.SIGKILL, stat.S_ISREG, subprocess.Popen/PIPE/TimeoutExpired, sys.exit, tempfile.mkdtemp,
 #   json.dumps (the _field renderer). `unicodedata` is NOT imported: json.dumps escapes every
 #   control character itself, so the category test it was there for is gone (design v1.78). The test-file
-#   deltas carry their own (`os, re, sys` in docsections.py; `importlib, sys, types` in the
+#   deltas carry their own (`sys` and `pathlib.Path` in docsections.py; `importlib, sys, types` in the
 #   test_docsections.py scaffold; the consumer already imports `re, shlex, sys, Path` at its :10–:13).
 from dataclasses import dataclass
 from pathlib import Path
@@ -402,9 +404,13 @@ def select(blocks: Sequence[Block], index: int | None = None) -> Block: ...
 
 ```python
 # h-mad/tests/docsections.py  (delta)
-import os, sys                                        # `re` goes with the local regex it served
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import sys                                            # `re` goes with the local regex it served
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import h_mad_doc_block_exec as _dbe  # noqa: E402
+# ^ the design's spelling verbatim (design v1.79 §Scanning, line 43) and the same idiom every
+#   test under h-mad/tests/ uses for SCRIPT_DIR. `os` is no longer needed: `resolve()` does the
+#   absolute-path work `os.path.abspath` did, and `parents[1]` the `..` join (impl-plan audit v22).
 
 def titled_section(text: str, heading: str) -> str:
     found = _dbe.find_heading(text, heading)          # replaces the local re.search at :53
@@ -862,11 +868,10 @@ field names + 11 `DETAIL_KEYS`), **seven stay bare** — exactly the design's li
 and **the other 18 are rendered through `_field` and therefore quoted**: the head fields
 `heading=`, `index=`, `value=`, `arg=`, `key=`, `seconds=`, `path=`, and every one of the 11
 detail values (`missing_key:`, `overlap:`, `duplicate_key:`, `os_error:`, `pgid:`, `written:`,
-`failed:`, `skipped:`, `verify:`, `stream:`, `leftover:`). `seconds=` and `pgid:` are
-helper-produced numbers that the design's bare list does **not** name, so they are quoted here:
-quoting a number never enables a forgery and the grammar below parses it either way, whereas
-silently adding them to the bare list would widen an exemption the design did not grant. Flagged
-for the next design cycle to confirm or to name them bare explicitly.
+`failed:`, `skipped:`, `verify:`, `stream:`, `leftover:`). `seconds=` and `pgid:` are helper-produced numbers that the
+design's bare list does **not** name, so they are quoted. That was raised as an open question in
+impl-plan v1.22 and is now **settled**: design v1.79 states the bare list is **exhaustive** and
+that every other field, `seconds=` and `pgid:` included, is quoted. No exemption is pending.
 **The line grammar is therefore** `DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")*`, and
 a consumer that splits on it recovers every field. Two attacks are closed, not one. A `--heading`
 of `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` cannot start a second line — the newline is
@@ -1305,9 +1310,23 @@ hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_blo
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=77
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
-hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
+# the full suite runs at the REPOSITORY ROOT, not in h-mad/ — see the note below
+( cd "$(git rev-parse --show-toplevel)" \
+  && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?
 tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                                  # gate on both
 ```
+
+**The two roots are different on purpose** (plan audit v62). The scoped run and the three
+mutation-harness runs stay in `h-mad/`, because their arguments are `h-mad`-relative:
+`tests/test_h_mad_doc_block_exec.py`, `scripts/h_mad_mutation_harness.py` and the three
+`tests/mutation-specs/*.json` paths. The **full suite must run at the repository root**, because
+that is the cwd the `2747` baseline was measured in and the cwd AC-6.4's floor is defined against:
+the same `pytest -q -p no:cacheprovider` from `h-mad/` picks a different rootdir and collects
+**2485**, so a green run there would satisfy the gate while silently measuring 262 fewer tests —
+it cannot establish the pass half at all. The subshell `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider )`
+does that without disturbing the `cd h-mad` the earlier lines rely on, and the redirect and
+`RC=$?` sit outside it, so the log still lands and `$?` is still the wrapper's propagated status
+for pytest, not the subshell's `cd`.
 
 **Every 5f command is bounded** through the `hmad-dispatch run --timeout` wrapper shown in the
 block above, with the concrete bound on each line (the base Portable
@@ -1316,7 +1335,9 @@ from invoking either — the wrapper is outside the module's source, so the sour
 The wrapper propagates the wrapped command's exit status and returns 124 on expiry, and it passes
 stdout and stderr through unchanged — re-measured 2026-09-03: `run --timeout 5 -- sh -c 'exit 3'`
 → rc 3; `run --timeout 1 -- sleep 3` → `run_timeout`, rc 124; `run --timeout 5 -- sh -c 'echo hi'`
-redirected to a file writes `hi` to that file. So `RC=$?` still captures pytest's own status, the
+redirected to a file writes `hi` to that file. The full-suite line's subshell form was measured the
+same way on 2026-09-03: `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 5 -- sh -c 'echo hi; exit 3' ) > log; RC=$?`
+gave `RC=3` with `hi` in the log, so the `cd` does not swallow the status. So `RC=$?` still captures pytest's own status, the
 outer `>` redirect still lands the suite log, and the `MUTATION:` and `SUITE:` tokens are read
 exactly as before. Bounds: 600 s for the scoped run and for each of the three harness runs, 1200 s
 for the full suite (three times its 397 s baseline). **`rc=124` is the wrapper's expiry, not a suite
@@ -1348,3 +1369,4 @@ into the log.
 - v1.20: Impl-plan audit v19 (codex must 1; agy clean) + design v1.76 back-propagation: the forge test's case (3) is rebuilt on AC-3.10's fixture with the newline moved into the CREATED artifact's name — --stdout a fresh tmp_path file whose name contains \n (a legal POSIX file-name byte, verified on this platform with O_CREAT|O_EXCL + lexists), --stderr under a regular file for the real ENOTDIR on the second arm, os.unlink injected as AC-3.10 injects it — because the previous spelling put the newline on a FIRST-arm ENOTDIR path, which creates nothing and so has no leftover to report, and would have failed against a correct implementation rather than against the mutant; field-escape-removed's discriminator is now stated explicitly (the raw newline in heading=, missing_key: and the leftover: path each split one verdict into two physical lines, so the exactly-one-DOCBLOCK:-line assertion fails on all three cases and the escaped-payload assertion fails independently of how a consumer splits lines); AC-6.4 states that 2747 is the repository-root count and that 2485 from h-mad/ is never a substitute for it. Counts unchanged at 75 rows. The AC header now marks case (3) as injected: os.unlink (cases (1) and (2) need none), correcting a fix-introduced claim of 'no injection' that the rebuilt fixture made false.
 - v1.21: Impl-plan audit v20 (codex must 1, low-evidence — REFUTED, and the ground is now pinned) + design v1.77 back-propagation: a new Conventions bullet states WHEN each doc_block_exec.json row's payload is fixed, quoting the design's §Test Plan sentence verbatim — the mechanism and the full-node-ID test key are fixed now, the file, exact-once find and replace are written at 5e from the landed source of the task that just went GREEN, because h_mad_doc_block_exec.py does not exist until 5d and quoting anchors into unwritten source would be the placeholder class this document forbids (a missed find scores a refusal, not a kill, h_mad_mutation_harness.py:609-623); docsections.json and doc_block_exec_wire.json carry payloads already only because their anchors sit in files that exist at HEAD. main refuses the empty --subst key ITSELF while building the map, with raw the argument as given, so --subst =V prints arg==V; substitute keeps BadSubstArg('') for API callers and main never reaches it; test_subst_empty_key_is_bad_subst now states that assertion and mutation cli-empty-key-delegated pins the CLI side, discriminated from Task 2's empty-key-accepted-by-api by which side is mutated (Task 4 24 rows; 23 + 5 + 24 + 24 = 76, 74 of the helper's source).
 - v1.22: Impl-plan audit v21 (codex should 1; agy no report) + design v1.78 / plan audit v61 / design audit v70 back-propagation: _field now renders json.dumps(str(value), ensure_ascii=False) — a DOUBLE-QUOTED JSON string with the quotes in the output — so a printable value cannot forge a field token either, closing the gap control-character escaping alone left; of the 25 rendering slots exactly SEVEN stay bare (rc=, blocks=, count=, keys=, shell=, stage=, reason=, the design's list verbatim) and the other 18 are quoted, seconds= and pgid: among them because the design's bare list does not name them and quoting a number never enables a forgery (flagged for the next design cycle); the line grammar DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")* is stated, json replaces unicodedata in the module imports, every example verdict line showing a dynamic value is re-spelled in quoted form, the SKILL.md registry rows show the value form, and the forge test's payload assertion moves inside the quotes; new test test_dynamic_field_cannot_forge_a_token asserts by PARSING the NOT_FOUND line under the grammar to exactly {heading: 'x rc=0'} with no rc field (a substring check would pass under the mutant), with row field-quoting-removed discriminated from field-escape-removed in both directions (Task 4 25 rows; 23 + 5 + 24 + 25 = 77, 75 of the helper's source). Task 5's wire-spec sentence no longer claims each revert's ONLY failure is its WIRE-PIN: the test key is the WIRE-PIN for all four and the helper's suite stays green under all four, but wire-revert-extract necessarily also reds test_only_the_exec_scan_hand_rolls_extraction and test_gate_block_refuses_an_untagged_recipe, which the row already documented and the summary contradicted.
+- v1.23: Plan audit v62 (codex must 1, which names THIS document) + impl-plan audit v22 (codex should 1; agy clean) + design v1.79 back-propagation: the Phase-5f full-suite gate now runs at the REPOSITORY ROOT — ( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > log; RC=$? — because the block's opening cd h-mad made it collect 2485 instead of the 2747 baseline AC-6.4's floor is defined against, so a green run there measured 262 fewer tests and could not establish the pass half; the scoped run and the three harness runs stay in h-mad/ since their arguments are h-mad-relative, and the subshell form was MEASURED (RC=3 propagated through the cd, log written) rather than assumed. One path idiom in the docsections delta: the design's spelling sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts")) verbatim, with the docsections-syspath-setup-removed anchor quoting that exact line and the fifth row's spec_from_file_location path using the same Path form, so os is dropped from the delta's imports and pathlib.Path added. The seconds=/pgid: quoting question v1.22 left open is closed: design v1.79 makes the bare list exhaustive and quotes both, as v1.22 had chosen. Counts unchanged at 77.
