@@ -32,9 +32,10 @@ paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, as
 JSON string (`json.dumps(value, ensure_ascii=False)`: `"`, `\` and every control character
 escaped, everything else verbatim), so a caller- or document-controlled value can neither start a
 second `DOCBLOCK:` line nor forge a field token inside it — `--heading 'x rc=0'` renders as
-`heading="x rc=0"`, one quoted value, never a bare `rc=` on a refusal line (AC-4.3); helper-
-constrained fields (`rc=<n>`, `blocks=<n>`, `shell=`, `stage=`, `count=`, `keys=`) stay bare
-(design v1.78 §Verdict lines; `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives
+`heading="x rc=0"`, one quoted value, never a bare `rc=` on a refusal line (AC-4.3); the bare
+list is exhaustive and exactly the design's — `rc=`, `blocks=`, `count=`, `keys=`, `shell=`, `stage=`,
+`reason=` — and every other field, the helper-produced numbers `seconds=` and `pgid:` included, is
+JSON-quoted (design v1.79 §Verdict lines; `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives
 a newline-bearing `--heading`, `--subst` and a newline-named created `--stdout` artifact on the
 AC-3.10 rollback fixture, `test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'`;
 mutations `field-escape-removed`, `field-quoting-removed`) — that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
@@ -267,13 +268,14 @@ source guard has a named RED of its own (the WIRE-PIN and the two hostile tests 
 under it; its `test` key is the guard, whose file imports `docsections` only inside test
 functions and so still collects under the mutant). The re-pointed callee mutations are the behaviour half;
 this row is the connection half, and the invariant requires both. **Ordering, since the
-source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
-**A seventh, `docsections-heading-lookup-reverted`, pins the START of the section the same way** — `titled_section`'s own `re.search(r"(?m)^(?P<marks>#+) …")` restored while `find_heading` stays intact — and is killed by the same delegation spy, which records `find_heading` as well as `fence_aware_end`. **A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect. — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
+source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5 — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
 lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
 and records the named RED test in every mutation's `test` key before the task closes. A mutation
 without a `test` key, or a harness run that is deferred to "later", is the silent no-op this
 invariant forbids, and the 5e gate scores `ALL_CAUGHT` on the pytest summary, not on the harness's
 exit code.
+
+**A seventh, `docsections-heading-lookup-reverted`, pins the START of the section the same way** — `titled_section`'s own `re.search(r"(?m)^(?P<marks>#+) …")` restored while `find_heading` stays intact — and is killed by the same delegation spy, which records `find_heading` as well as `fence_aware_end`. **A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect.
 
 **FR-6 is a wiring task, not a new-behaviour task, and is planned as one.** Its deliverable is a
 *connection* — the migrated call sites reaching `h_mad_doc_block_exec` — and the Connection
@@ -879,3 +881,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.73: Plan re-audit v58 (codex must 1) + impl-plan audit v18 back-propagation: the reap sequence and its probe prose carry the bounded wait(timeout=DRAIN_SECONDS) and its stage=reap expiry; 75 mutations (73 of the helper's source) with the field-escape row.
 - v1.74: Plan re-audit v60 (codex must 1): FR-4's transport paragraph carries the one-physical-line escaping rule, its test and mutation from design v1.75; 76 mutations (74 of the helper's source).
 - v1.75: Plan re-audit v61 (codex must 3 nit 1): the substitute API row and FR-4 carry the two-layer empty-key rule; FR-4 carries the quoted-JSON field rule with test_dynamic_field_cannot_forge_a_token and field-quoting-removed; AC-6.4's floor test runs with cwd=REPO_ROOT; the __all__ seven are listed; 77 mutations (75 of the helper's source).
+- v1.76: Plan re-audit v62 (codex must 2; agy clean) + design audit v71 nit: the bare-field list is the design's exhaustive seven (reason= included; seconds=/pgid: quoted); the docsections ordering paragraph is un-spliced (the sixth/seventh-row sentences now follow it as their own paragraph).
