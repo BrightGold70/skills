@@ -71,8 +71,9 @@ caller (test, or operator on the CLI)
         ├── mkdtemp() + chmod(0o700) ────── cwd   (mkdtemp alone is 0700 & ~umask;
         │                                          chmod fails ──► pending LAUNCH_FAILED stage=mkdtemp,
         │                                          then the SAME finally-cleanup + read-back selection)
-        ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], start_new_session=True,
-        │         text=True, encoding="utf-8", errors="replace")
+        ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], cwd=cwd, start_new_session=True,
+        │         text=True, encoding="utf-8", errors="replace")   # cwd=cwd is what makes the
+        │                                                            # temp dir the block's cwd
         ├── communicate(timeout) ─── TimeoutExpired ──► poll() ──► killpg(SIGKILL) [ESRCH = already reaped;
         │                                                 poll() first, else a zombie-only group is EPERM on macOS]
         │                                                 ──► drain communicate(DRAIN_SECONDS)
@@ -161,12 +162,16 @@ makes the two surfaces unable to disagree by construction — a change to marker
 indentation, the closer rule or prefix state lands in one place — and it is where every
 fence-grammar mutation row anchors (`fence-run-length-ignored`, `tilde-fence-not-tracked`,
 `indented-opener-accepted`, `closer-trailing-text-accepted`, `prefix-fence-state-skipped`), so
-each mutant is observed by both consumers' tests. A construct-complete parity test,
-`test_extract_and_bounder_agree_on_every_hostile_fixture`, runs every hostile fixture (balanced
-and unbalanced four-backtick, tilde-quoted backtick, indented literal, trailing-text closer,
-offset-inside-a-fence) through both functions and asserts the set of candidate openers `extract`
-sees equals the set of fence spans `fence_aware_end` skipped — belt over the braces, so a future
-second implementation would be caught rather than merely discouraged. The scanner carries
+each mutant is observed by both consumers' tests. The parity guard is observable at the scanner, not through the two public APIs (which expose
+only tagged candidates and one boundary offset): `test_fence_events_trace_on_every_hostile_fixture`
+runs every hostile fixture (balanced and unbalanced four-backtick, tilde-quoted backtick,
+backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence) through
+`_fence_events` and asserts the exact event trace — which lines open, which close, which are body —
+and two per-consumer tests then assert `extract`'s candidates and `fence_aware_end`'s boundary on
+the same fixtures; a second scanner could not pass the trace test by accident, and the mutation
+`scanner-duplicated-in-consumer` (a private fence toggle re-introduced inside `extract`) is killed
+by `test_extract_has_no_fence_state_of_its_own`, a source assertion that only `_fence_events`
+mentions the marker runs. The scanner carries
 `in_fence`, **the opening fence's marker character (backtick or tilde) and its run length**. CommonMark fences come in both flavours, `~~~` closes only a `~~~`
 fence, and a tilde fence can quote a backtick fence verbatim — measured through GitHub's renderer
 in the spec's Assumptions: a `~~~` block containing ` ```bash hmad:exec ` renders as a plain code
@@ -388,7 +393,10 @@ restores the subdirectory's mode and removes the tree in its own `finally`, so t
 leak what it just proved the helper cannot remove.
 
 `stdout` and `stderr` are captured separately (`subprocess.PIPE` each) and never merged. **The
-launch is text-mode, and the policy is explicit**: `Popen(…, text=True, encoding="utf-8",
+launch names the cwd explicitly** — `Popen(…, cwd=cwd, …)`: creating and chmodding the directory
+does nothing to the child's working directory by itself, and without the keyword the block runs
+wherever the caller does, which is the repository (AC-3.1/3.2 fail silently); the
+`cwd-not-passed` mutation pins it. **The launch is text-mode, and the policy is explicit**: `Popen(…, text=True, encoding="utf-8",
 errors="replace")`, so `communicate()` returns `str` (which is what `RunResult` promises and what
 the held artifact handles — opened `encoding="utf-8"` — accept), non-ASCII output round-trips, and
 an undecodable byte becomes U+FFFD instead of a `UnicodeDecodeError` escaping the helper (AC-3.6).
@@ -403,7 +411,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 52 mutations (52 rows: 50 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 54 mutations (54 rows: 52 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -444,7 +452,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    mutation rows land here). Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
 5. **Task 5 — the wire.** Tag the Second-surface gate fence in `h-mad/SKILL.md` **and** migrate
    the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` — a new
-   `_gate_block() -> Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
+   `_gate_block() -> dbe.Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
    str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
    `run_recipe` — in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
    (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
@@ -827,6 +835,8 @@ exactly what the base Mutation verification invariant forbids.
 | `doc-decode-error-unwrapped` | the document read drops `UnicodeDecodeError` from the `DocUnreadable` wrap (or reads with `errors="replace"`) | `test_invalid_utf8_document_is_unreadable` (AC-3.12) |
 | `preamble-decode-error-unwrapped` | the preamble read drops `UnicodeDecodeError` from the `PreambleUnreadable` wrap | `test_invalid_utf8_preamble_is_unreadable` (AC-3.12) |
 | `unknown-info-key-ignored` | an unrecognised token falls back to strict | `test_unknown_info_key_refuses` (AC-3.7) |
+| `cwd-not-passed` | `cwd=cwd` is dropped from the `Popen` call, so the block runs in the caller's cwd | `test_block_runs_in_the_temp_cwd` (AC-3.1 — `pwd` is neither the repo root nor the document's directory, and is gone afterwards) |
+| `scanner-duplicated-in-consumer` | `extract` regrows a private fence toggle instead of consuming `_fence_events` | `test_extract_has_no_fence_state_of_its_own` (AC-1.8 single-source) |
 | `strict-flags-dropped` | `bash -c` always, never `-euo pipefail` | `test_unset_variable_fails_under_strict` (AC-3.3) |
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
@@ -862,7 +872,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Fifty-two rows, fifty-two mutations — fifty of the helper's source (the AC-5.3 row, once
+Fifty-four rows, fifty-four mutations — fifty-two of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1000,3 +1010,4 @@ mean the probe never created one.
 - v1.43: Plan re-audit v32 back-propagation: Task 5 and the wire-revert-extract row name _gate_block.
 - v1.44: Design audit v38 (codex must 1; agy clean): backtick-in-info prohibition in _fence_events, measured on both renderers, with its mutation (50 rows).
 - v1.45: Design audit v39 (codex must 1; agy must 1 should 1): the existing-file reservation arm opens O_NONBLOCK and every reserved descriptor must be a regular file (a reader-less FIFO refuses bounded), with two mutations (52 rows); the two post-Task-5 tests are authored in Task 5; the wire-revert-extract row names the tag-tolerant regex.
+- v1.46: Design audit v40 (codex must 2; agy clean + nits): Popen passes cwd=cwd, with the cwd-not-passed mutation; the parity guard becomes a scanner event-trace test plus a no-fence-state source assertion on extract (54 rows); _gate_block returns dbe.Block.
