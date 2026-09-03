@@ -27,7 +27,13 @@ User-visible behaviour: an operator can run a documented recipe under test by ha
 command; a fence carrying the tag is executable and every other fence in the tree is not.
 
 **Transport of the three reported values.** The CLI prints exactly one `DOCBLOCK:` verdict line —
-that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
+one *physical* line whatever the inputs: every dynamic field (`heading=`, `arg=`, `index=`, keys,
+paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, that rewrites `\r`,
+`\n` and every other control character to its `\xNN`/`\uNNNN` escape, so a caller- or
+document-controlled value can never start a second `DOCBLOCK:` line (design v1.75 §Verdict lines;
+`test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives a newline-bearing `--heading`,
+`--subst` and a newline-named created `--stdout` artifact on the AC-3.10 rollback fixture;
+mutation `field-escape-removed`) — that contract is not weakened. `rc` is a field on that line. The block's `stdout` and `stderr` are
 **separate artifacts, not part of the verdict line**: returned as distinct fields from the
 importable API, and on the CLI written to paths given by **optional** `--stdout <path>` /
 `--stderr <path>` arguments. Omitted, the streams are simply not written — the API is the primary
@@ -393,7 +399,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 75 mutations with a full-node-ID `test` binding each — 73 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 76 mutations with a full-node-ID `test` binding each — 74 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -864,3 +870,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.71: Plan re-audit v56 (codex should 1; agy clean) + design v1.71 back-propagation: the hoisted _run_recipe derives collector/gate from SCRIPT_DIR itself; 72 mutations (70 of the helper's source).
 - v1.72: Plan re-audit v57 clean (both surfaces) + design v1.73 back-propagation: 74 mutations (72 of the helper's source) after the bounded-wait rows.
 - v1.73: Plan re-audit v58 (codex must 1) + impl-plan audit v18 back-propagation: the reap sequence and its probe prose carry the bounded wait(timeout=DRAIN_SECONDS) and its stage=reap expiry; 75 mutations (73 of the helper's source) with the field-escape row.
+- v1.74: Plan re-audit v60 (codex must 1): FR-4's transport paragraph carries the one-physical-line escaping rule, its test and mutation from design v1.75; 76 mutations (74 of the helper's source).

@@ -535,7 +535,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 75 mutations (75 rows: 73 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 76 mutations (76 rows: 74 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -957,7 +957,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading=<h>` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index=<n>` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
-| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; repeat refused) **and `substitute`, for an empty key** — the one rule lives in the API | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
+| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg==V` — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable(leftover=None)` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (raised `from` the `OSError`, which is its `__cause__`; also its bounded-retry exhaustion, with no cause); `leftover` set when the rollback read-back finds the created file still present; constructible with no arguments, as the type-walk tests require | `UNREADABLE reason=stream_path_unwritable` (+ `leftover: <path>` when set) |
@@ -1105,6 +1105,7 @@ exactly what the base Mutation verification invariant forbids.
 | `replacement-sequential` | replacement becomes a per-key `str.replace` loop in map order, so a value containing another key is re-scanned | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A B` must yield `B C` for **both** map orders; the sequential mutant yields `C C` in the `A`-first order, and both keys occur so a missing-key precheck cannot mask it) |
 | `subst-split-on-every-equals` | `--subst` split on every `=` | `test_subst_value_may_contain_equals` (AC-2.8) |
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
+| `cli-empty-key-delegated` | `main` stops refusing the empty key while building the map and lets `substitute` raise `BadSubstArg("")`, so the verdict prints `arg=` instead of the raw `arg==V` | `test_cli_subst_refusals` (AC-2.8 — the `--subst =V` case asserts `arg==V`) |
 | `empty-map-not-short-circuited` | the empty-map guard is removed, so `{}` compiles a `""` alternation | `test_empty_substitution_map_is_a_no_op` (AC-2.2) |
 | `duplicate-info-token-last-wins` | a repeated recognised token overwrites instead of refusing | `test_duplicate_info_tokens_refuse` (AC-3.7) |
 | `index-nonint-unmapped` | `main` lets a non-integer `--index` raise `ValueError` instead of `BAD_INDEX` | `test_non_integer_index_is_bad_index` (AC-1.9/5.6 — values are the contract's, grammar is argparse's) |
@@ -1165,7 +1166,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-five rows, seventy-five mutations — seventy-three of the helper's source (the AC-5.3 row, once
+Seventy-six rows, seventy-six mutations — seventy-four of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1336,3 +1337,4 @@ mean the probe never created one.
 - v1.74: Impl-plan v1.18 back-propagation: test_wait_after_kill_is_bounded runs on the escapee fixture so the helper's own wait, not communicate's internal one, is the intercepted call; the two guards on that wait are separate except clauses.
 - v1.75: Design audit v67 (codex must 1, 10 tool calls; agy clean): every dynamic field in a verdict or detail line passes through one escaper, `_field`, that escapes control characters, so no input can forge a second `DOCBLOCK:` line — test_newline_in_dynamic_fields_cannot_forge_a_verdict_line, mutation field-escape-removed — 75 rows (73 + 2).
 - v1.76: Design audit v68 (codex clean; agy must 1 REFUTED — 2485 is the count from h-mad/, the 2747 baseline is from the repository root; pinned in the AC-6.4 row) + impl-plan audit v19 back-propagation: the forge test's leftover case uses a newline-named stdout path the first arm creates, a second-arm ENOTDIR and the os.unlink injection, since a first-arm failure creates nothing.
+- v1.77: Design audit v69 (codex clean; agy must 2 at 42 tool calls — one REFUTED: the named tests and a 'Task 6' exist in no document; one held): main refuses an empty --subst key itself while building the map, with the raw argument, and substitute keeps the API refusal — the same predicate pinned twice (cli-empty-key-delegated added, 76 rows: 74 + 2).
