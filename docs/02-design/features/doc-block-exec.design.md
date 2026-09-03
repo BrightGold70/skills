@@ -597,7 +597,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `_gate_block() -> dbe.Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
    str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
    `run_recipe`, hoisted out of its enclosing test to a module-level
-   `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` — calling `dbe.run_block(subbed, preamble=preamble, timeout=60.0)`, an explicit bound the wire pin asserts — so a wire pin can call and spy it
+   `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` — unpacking `subbed, _counts = dbe.substitute(block, {…})` — `substitute` returns a `(Block, counts)` tuple (AC-2.7), and only the `Block` reaches the runner — and calling `dbe.run_block(subbed, preamble=preamble, timeout=60.0)`, an explicit bound the wire pin asserts — so a wire pin can call and spy it
    (its two call sites read only `.stdout`/`.stderr`, which `RunResult` carries) — in one task, with
    `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
    (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
@@ -1188,7 +1188,7 @@ exactly what the base Mutation verification invariant forbids.
 | `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_char_device_refuses` (AC-3.10 — `/dev/null` opens, so the check is reached; a reader-less FIFO fails at `open` and never reaches it) |
 | `stream-open-blocking` | `O_NONBLOCK` is dropped from the existing-file arm, so a reader-less FIFO blocks the open forever | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10 — the test's own bounded wait is what makes this mutant RED rather than a hang; it runs the CLI in a subprocess with `timeout=5` and treats expiry as failure) |
 | `stream-alias-check-removed` | the `fstat` `(st_dev, st_ino)` comparison is gone | `test_hard_linked_stream_paths_refuse` (AC-3.9) |
-| `mktemp-invocation-planted` | `tempfile.mkdtemp()` is replaced by `subprocess.run(["mktemp", "-d"], …)` — valid Python and exactly the forbidden invocation | `test_no_mktemp_invocation_in_source` (AC-3.13 — the argv-token/command-word scan goes RED on the real helper) |
+| `mktemp-invocation-planted` | `tempfile.mkdtemp()` is replaced by `subprocess.run(["mktemp", "-d"], …)` — valid Python and exactly the forbidden invocation | `test_no_mktemp_invocation_in_source` (AC-3.13 — the argv-token/command-word scan is green on the real helper and goes RED on this mutant) |
 | `chmod-0700-removed` | `os.chmod(cwd, 0o700)` after `mkdtemp` is gone | `test_cwd_mode_is_0700_under_hostile_umask` (AC-3.13) |
 | `cleanup-errors-ignored` | `ignore_errors=True` restored | `test_cleanup_failure_carries_the_os_error` (AC-3.14) |
 | `cleanup-readback-removed` | the `lexists` read-back is gone | `test_cleanup_readback_catches_silent_retention` (AC-3.14) |
@@ -1229,7 +1229,7 @@ exactly what the base Mutation verification invariant forbids.
 | `backstop-close-outranks-error` | the post-`finally` selection raises `StreamCloseFailed` even when an exit-2 error is already pending | `test_backstop_close_failure_does_not_outrank_a_refusal` (AC-3.8 — an aliased pair plus an injected close failure must still report `stream_paths_alias`) |
 | `registry-row-removed` | one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`) | `test_every_emittable_line_has_a_registry_row` (AC-4.5) |
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
-| `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
+| `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan is green on the real helper and goes RED on this mutant |
 
 Eighty-one rows, eighty-one mutations — seventy-nine of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
@@ -1412,3 +1412,4 @@ mean the probe never created one.
 - v1.84: Design audit v75 (codex must 1; agy must 1 at 16 tool calls) + plan audit v66 / impl-plan audit v26 back-propagation: six docsections.json rows bind into test_docsections.py (4 + delegation + heading-lookup), two into the new module's file; --subst =V prints arg="=V" under the quoted grammar; find_heading's two forms are told apart by the request (full form first), a title beginning with an ATX prefix is reachable only in full form — test_heading_form_precedence_full_wins, mutation form-precedence-bare-first (79 rows: 77 + 2).
 - v1.85: Design audit v76 (codex must 2; agy must 1 on the impl-plan) + plan audit v67 / impl-plan audit v27 back-propagation: __all__ is 28 names (seven functions, two dataclasses, the exception hierarchy); argparse grammar errors are BAD_ARGS verdicts, exit 0 (test_malformed_invocation_is_a_verdict, argparse-error-unrouted); the full-form request predicate is the scanner's own (space, tab or EOL) with test_full_form_request_accepts_tab_and_eol and request-predicate-space-only; concurrent replacement of the caller's artifact path is a stated non-goal with an lstat/fstat identity check before the rollback unlink — 81 rows (79 + 2).
 - v1.86: __all__ is 29 names once BadArgs joins the exception hierarchy (28 was counted before v1.85 added it).
+- v1.87: Design audit v77 (codex must 1; agy must 1 at 13 tool calls): Task 5 unpacks substitute's (Block, counts) tuple before run_block; the two source-scan rows say the scan is green on the real helper and RED on the mutant (the earlier wording inverted it).
