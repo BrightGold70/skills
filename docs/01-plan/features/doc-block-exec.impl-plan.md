@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.63 — design cycle 59 / impl-plan cycle 10 back-propagation, commit c0a1ba4)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.64)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.64 — design cycle 60 / impl-plan cycle 11 back-propagation, commit 172bd8f)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.65)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -168,11 +168,17 @@ untouched and no local bounder is restored. `find` is the one line
 `import h_mad_doc_block_exec as _dbe  # noqa: E402` (it matches exactly once); `replace` is
 ```python
 import importlib.util as _ilu  # noqa: E402
-_spec = _ilu.spec_from_file_location("h_mad_doc_block_exec", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "h_mad_doc_block_exec.py"))
-_dbe = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_dbe)
+_spec = _ilu.spec_from_file_location("_h_mad_doc_block_exec_private", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "h_mad_doc_block_exec.py"))
+_dbe = _ilu.module_from_spec(_spec); sys.modules[_spec.name] = _dbe; _spec.loader.exec_module(_dbe)
 ```
-(`os` is already imported at the top of the delta) — the same file, loaded as a private instance
-that `exec_module` never registers in `sys.modules` and that the import system never consults, so
+(`os` and `sys` are already imported at the top of the delta) — the same file, loaded as a private
+instance registered in `sys.modules` only under `_h_mad_doc_block_exec_private`, a name the import
+system never resolves for `h_mad_doc_block_exec`. The registration is required, not cosmetic:
+under `from __future__ import annotations` dataclass processing dereferences
+`sys.modules[cls.__module__]` (`dataclasses._is_type`), so an unregistered instance of a module
+with a frozen `@dataclass` raises `AttributeError: 'NoneType' object has no attribute '__dict__'`
+at load — measured on 3.11.8 (impl-plan audit v11); registered under the private name it loads
+and the WIRE-PIN still records `[]`. So
 `titled_section` and `section_from` still do the real work through a second, byte-identical
 bounder. Under it the WIRE-PIN fails because its recording fake sits in `sys.modules` and the
 reload re-binds `_dbe` to the private instance, not the fake — neither recorder is ever called;
@@ -181,7 +187,8 @@ reload re-binds `_dbe` to the private instance, not the fake — neither recorde
 (`test_docsections_unbalanced_four_backtick_fence`, `test_titled_section_ignores_a_heading_inside_a_fence`)
 and the source guard `test_docsections_has_no_second_bounder` (the source still defines no
 `_fence_aware_end` and scans no marker run). The row's `test` key is the WIRE-PIN. Measured
-2026-09-03 on a two-module scratch pair with the scaffold below: the shared-import caller records
+2026-09-03 on a two-module scratch pair with the scaffold below and a frozen-dataclass callee under
+`from __future__ import annotations`: the shared-import caller records
 `['find_heading', 'fence_aware_end']`, the file-path caller records `[]`, both return the same
 section. Add a sixth row
 `docsections-syspath-setup-removed`: `find` is the `sys.path.insert` line shown in the delta below, `replace` is the
@@ -398,7 +405,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `# hashtag`, `## x` or the seven-run line in the full form yields no heading match; every `extract`/`find_heading` argument in this file's ACs is the full form unless it says bare).
 - [ ] AC-1.5/1.6 `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading appears first inside a ```` ```markdown ```` fence with a tagged block under that quoted copy, then for real with a tagged block under it; `extract` returns only the block under the real heading (the fenced copy is a `body` line, never a heading match, and the tagged block under it is never a candidate).
 - [ ] AC-1.6 `test_quoted_tag_inside_longer_fence_is_not_an_opener`: a four-backtick fence whose body contains ` ```bash hmad:exec ` yields no candidate from the quoted line; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener`: same inside `~~~`; `test_indented_literal_tag_is_not_a_candidate`: `    ```bash hmad:exec` (four spaces) is never a candidate; `test_backtick_in_info_string_is_not_an_opener`: ```` ```bash hmad:exec `x` ```` is inert — not a candidate, not `BadInfoString`, and the following ``` line opens a fence; `test_closer_with_trailing_text_does_not_close`: a ```` ```trailing ```` line inside a quoting fence does not close it; `test_indented_closer_does_not_close`: a ```` ``` ```` line at four spaces inside a bash fence stays in the body and the fence ends at the next 0–3-space closer; `test_indented_fence_body_is_deindented`: openers at 1, 2 and 3 spaces yield bodies with that indentation stripped, and a body line indented less than the opener loses only what it has.
-- [ ] AC-1.7 `test_duplicate_headings_refuse`: two identical `###` headings (fixture mirrors `h-mad/invariants.example.md`), requested in the full form → `AmbiguousHeading` with `n == 2`.
+- [ ] AC-1.7 `test_duplicate_headings_refuse`: two identical `###` headings (fixture mirrors `h-mad/invariants.example.md`), requested in the full form → `AmbiguousHeading` with `n == 2`; `test_bare_form_duplicate_headings_refuse`: `## Text` and `### Text` in one document, `find_heading(text, "Text")` (bare form) → `AmbiguousHeading` with `n == 2` — the deliberate tightening over the old `re.search` first-match (design §Scanning; both live `titled_section` targets in `h-mad/SKILL.md` measured unique, so no caller acquires the refusal).
 - [ ] AC-1.8 (bounder's own contract) `test_bounder_ignores_a_heading_inside_a_tilde_fence`, `test_bounder_ignores_an_indented_literal_fence`, `test_bounder_from_an_offset_inside_a_fence` (`start` inside an open fence; a fenced `#` after it does not end the section), `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (`start` immediately after the three backticks of a ```` ```trailing ```` body line; the next fenced `#` still does not end the section), `test_fence_events_trace_on_every_hostile_fixture` (exact event trace — kind, marker, run, indent, info, candidate, level AND the `start`/`end` offsets of every line, on LF and CRLF copies of each fixture — over: balanced and unbalanced four-backtick, tilde-quoted backtick, backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence), `test_extract_has_no_fence_state_of_its_own` (source assertion on marker-run **recognition**: the literals ```` ``` ```` and `~~~`, the run-length regex, any `in_fence` toggle, and the ATX heading regex (a `#{1,6}` pattern or any `startswith("#")` test) appear in exactly one function body, `_fence_events`; consumers may read `_FenceEvent.kind`/`.marker`/`.run`/`.indent`/`.info`/`.candidate`, and `extract` selects on `.candidate`, never on `.marker`).
 - [ ] AC-1.8 (the wire) `test_docsections_delegates_to_the_authoritative_bounder` (WIRE-PIN, in `test_docsections.py`, scaffold above): on the fenced fixture `titled_section` records exactly one `find_heading` call with `(text, heading)` and one `fence_aware_end` call with `(text, start, level)`, and `section_from` records one `fence_aware_end` call with `(text, offset, level)` on the `sys.modules` fake; its RED reason is the assertion on the call record, never an import error.
 - [ ] AC-1.8 `test_titled_section_ignores_a_heading_inside_a_fence` (in `test_h_mad_doc_block_exec.py`, function-local `import docsections`): a document whose requested heading first appears quoted inside a ```` ``` ```` fence and then for real — `titled_section(doc, heading)` (bare form, `titled_section`'s contract) returns the real section's body (the old `re.search` at `docsections.py:53` picked the fenced copy).
@@ -513,7 +520,7 @@ runs `shutil.rmtree(cwd)` (no `ignore_errors`) when `cwd is not None`, recording
 (`cleanup_error is not None` or `os.path.lexists(cwd)`) → raise `CleanupFailed(cwd, cleanup_error)`
 `from pending` (so `__cause__` is the pending `BlockTimeout`/`LaunchFailed` when there is one, else
 `cleanup_error`); elif `pending is not None` → raise it; else return
-`RunResult(rc=proc.returncode, stdout, stderr, shell=block.shell)`. `run_block` never substitutes.
+`RunResult(rc=proc.returncode, stdout=stdout, stderr=stderr, shell=block.shell)`. `run_block` never substitutes.
 
 **Code structure**:
 ```python
@@ -847,3 +854,4 @@ tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                     
 - v1.9: Impl-plan audit v9 (codex must 2 should 1; agy must 1 should 1) + design v1.61: find_heading's two input forms with heading-level-pin-ignored; _FenceEvent start/end offsets; complete variable-field list; stream: detail on stream_close_failed; mktemp/allow-abbrev/stream-write mutations (67 rows); wire-revert-run imports subprocess; the drain records, never raises.
 - v1.10: Design audit v58 back-propagation (codex must 1): docsections-delegation-reverted is connection-only — find = the shared import line, replace = a private spec_from_file_location instance of the callee (measured on a scratch pair: recorders [] under the mutant, behaviour unchanged) — with every other test green, the source guard included; the old local-restore shim becomes the eighth row docsections-local-bounder-restored bound to the source guard (docsections.json 8 rows); the docsections delta drops the unused re import.
 - v1.11: Impl-plan audit v10 (codex must 2 nit 1; agy clean): docsections-heading-lookup-reverted's one-line replace carries its own `import re;` (the delta dropped the import, so the restored regex would have raised NameError — a fix-introduced defect); 5f expects mutations=8 for docsections.json; version history back in ascending order.
+- v1.12: Impl-plan audit v11 (codex must 1; agy must 1) + design v1.64: docsections-delegation-reverted registers its private instance as sys.modules['_h_mad_doc_block_exec_private'] before exec_module (a frozen dataclass under from __future__ annotations fails to load unregistered — reproduced on 3.11.8); RunResult built with keyword arguments; AC-1.7 gains test_bare_form_duplicate_headings_refuse.
