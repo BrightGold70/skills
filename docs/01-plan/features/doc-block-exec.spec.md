@@ -210,7 +210,8 @@ not opted in.
     exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
     `CleanupFailed(path, cleanup_error)` — the `cleanup_error` attribute is the `OSError` when
     one was raised, `None` when only the read-back caught a silent retention; `__cause__` is the
-    pending `BlockTimeout` when the run had also timed out, else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
+    pending outcome when there was one — the `BlockTimeout`, or a `LaunchFailed` from the reap
+    stage — else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
     (a timeout that also leaves an unremovable cwd reports `CLEANUP_FAILED`, tested as one case) —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
@@ -300,8 +301,10 @@ not opted in.
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
-    its test injects the fault by monkeypatching `os.killpg` — the one permitted mock in this
-    suite, named as such; (b) is driven by a real `os.setsid()` descendant.
+    its test injects the fault by monkeypatching `os.killpg` — one of exactly **three** named
+    fault injections this suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`; the
+    design's Test Strategy bounds the list, and `subprocess` is never mocked); (b) is driven by a
+    real `os.setsid()` descendant.
 
 ### FR-6: Migrate the existing inline harness onto the helper
 
@@ -335,9 +338,10 @@ not opted in.
     `2747` (collected and passing at `6b4df35`, cited in the plan with its commands); the
     feature's additions are the collected count of the new module
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
-    alone) plus a fixed tuple of the named new node IDs added to existing files
-    (`test_h_mad_collect_report_docs.py`, `test_docsections.py`), each of which the test asserts
-    exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
+    alone) plus a fixed tuple of the named new node IDs added to an existing file — the five wire
+    and exemption tests in `test_h_mad_collect_report_docs.py`, enumerated in the plan; every other
+    new test, AC-1.8's delegation and collect-alone pins included, lives in the new module — each
+    of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
@@ -432,3 +436,4 @@ not opted in.
 - v1.19: Design audit v9 (codex must 3 should 1; agy clean): AC-4.6 maps the helper's own mkdtemp/Popen/killpg failures to LAUNCH_FAILED; AC-3.9 compares (st_dev, st_ino) on the opened descriptors so hard links are caught with no check-to-open window; AC-3.14 names cleanup_error and the __cause__ rule; AC-6.4's gate command captures pytest's status before tail. 48 ACs.
 - v1.20: Design audit v10 (codex must 2 should 1, agy must 1): AC-3.12 reads the preamble and the document as strict UTF-8 and maps a decode failure to UNREADABLE.
 - v1.21: Design audit v11 (codex must 3; agy must 1): AC-2.8 gives --subst a parser contract (split once on the first '=', empty key and repeat refused as BAD_SUBST); AC-3.13 adds os.chmod(cwd, 0o700) because mkdtemp alone is 0700 & ~umask (measured 0o0 under umask 0777) and tests under a hostile umask; AC-4.6's reap test reaps what it launched and the unsignalable-group policy is stated. 49 ACs.
+- v1.22: Design audit v12 (codex must 2; agy must 3): AC-5.5 names the three permitted fault injections instead of 'the one'; AC-3.14's __cause__ rule includes a reap-stage LaunchFailed; AC-6.4's tuple is the five consumer-file tests only.

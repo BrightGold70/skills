@@ -565,7 +565,9 @@ Verification commands:
 python3.11 -m pytest h-mad/tests/test_h_mad_doc_block_exec.py -q
 python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec.json
 python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/doc_block_exec_wire.json
-python3.11 -m pytest -q          # full suite, run alone
+python3.11 h-mad/scripts/h_mad_mutation_harness.py h-mad/tests/mutation-specs/docsections.json   # re-pointed anchors, named-test form: ALL_CAUGHT required
+python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?   # full suite, run alone
+tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                           # gate on both lines
 ```
 
 AC-5.2 is measured, not asserted by inspection: the block records its own descendant's PID before
@@ -618,7 +620,8 @@ mean the probe never created one.
   token; **exit 0 on every verdict**, refusals and `TIMEOUT` included, so a declined run never
   registers as a tool failure; exit 2 only for genuine operational errors — `UNREADABLE` (input
   that could not be read, an artifact path that could not be written or reserved, a write that
-  failed) and `CLEANUP_FAILED`. A caller reads the token, never `$?`. An earlier draft exited 2 on
+  failed), `CLEANUP_FAILED` and `LAUNCH_FAILED` (the helper's own `mkdtemp`/`Popen`/`killpg`
+  raised). A caller reads the token, never `$?`. An earlier draft exited 2 on
   every refusal after `MUTATION: PRECHECK_FAILED`; that copied the minority precedent, and the
   gate and assembler (`GATE: FAIL` / `ASSEMBLE: HALT`, both exit 0) are the rule.
 - **No new external dependency** — complies: no new CLI, no package. `bash` is already assumed by
@@ -660,3 +663,4 @@ mean the probe never created one.
 - v1.17: Design audit v9 (codex must 3 should 1; agy clean): LaunchFailed for mkdtemp/Popen/non-ESRCH killpg with a reap stage that never waits unboundedly; alias judged on fstat of the reserved handles; CleanupFailed carries cleanup_error separately from __cause__; three named fault injections plus the real empty-PATH spawn failure; the suite gate captures RC before tail.
 - v1.18: Design audit v10 (codex must 2 should 1, agy must 1): four post-spawn outcomes with LAUNCH_FAILED stage=reap placed in the precedence; the exception table names descriptor-level alias detection and the reservation open, matching the Detailed Design; DocUnreadable and PreambleUnreadable wrap UnicodeDecodeError under strict UTF-8.
 - v1.19: Design audit v11 (codex must 3; agy must 1 + 2 nits): chmod 0o700 after mkdtemp with the umask probe; reap-failure policy and the test teardown that reaps the launched group; BAD_SUBST parser contract with BadSubstArg; main's order puts the alias check after reservation; substitute wording and the API raises list corrected.
+- v1.20: Design audit v12 (codex must 2; agy must 3): verification commands run the docsections.json harness and the status-preserving suite gate; Invariant Compliance names LAUNCH_FAILED among the exit-2 classes.
