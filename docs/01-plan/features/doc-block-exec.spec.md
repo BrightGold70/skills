@@ -59,7 +59,9 @@ not opted in.
     Measured through GitHub's own renderer (`POST /markdown`, below): a `~~~` block quoting
     ` ```bash hmad:exec ` renders as a plain code block, not as an opened bash fence.
   - AC-1.7: **Duplicate headings refuse.** If the document contains more than one heading whose
-    text and level both match, nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>
+    text and level both match — text compared after the CommonMark closing hash run and trailing
+    whitespace are stripped, so `## Text ##` and `## Text` are the same heading and two such lines
+    are duplicates — nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>
     heading=<h>`, exit 0. Two identical headings share one address, and silently taking the first would run a
     tagged block from the wrong section — the same silent-wrong-answer shape the tag exists to
     prevent, one level up, and the tag cannot repair an ambiguous *section* selector. Not
@@ -564,3 +566,4 @@ quoted
 - v1.38: Design audit v43 back-propagation: AC-3.8 adds the backstop-close failure verdict stream_close_failed with its precedence; the named-injection list is six with the _close_stream seam.
 - v1.39: Design audit v62 back-propagation: AC-4.6 covers an OSError from the helper's own communicate/drain/close/wait on the child as LAUNCH_FAILED stage=collect, tested by fault-injecting the recorded Popen instance.
 - v1.40: Design v1.66 back-propagation: seven named fault injections (the recorded Popen instance's communicate/wait for the collect stage).
+- v1.41: Design v1.67 back-propagation: AC-1.7 states heading text is compared after the CommonMark closing hash run is stripped (`## Text ##` == `## Text`).

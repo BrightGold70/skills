@@ -243,8 +243,11 @@ That is what makes AC-1.6 structural rather than a special case: a body quoting
 ` ```bash hmad:exec ` is inside a fence and is never read as an opener, and a *longer* enclosing
 fence keeps it that way.
 
-Heading bounding: locate the line equal to `heading` (exact match, stripped of trailing
-whitespace) **among the scanner's `heading` events** — a line inside any fence is never a
+Heading bounding: locate the heading event whose **normalized text** matches `heading` — a
+heading event's text is the line after its opening hash run with the optional closing hash run
+(preceded by a space) and trailing whitespace stripped, per CommonMark §4.2, so `## Text ##` and
+`## Text` are one and the same heading, and a document holding both has two of it — **among the
+scanner's `heading` events** — a line inside any fence is never a
 heading event, and this lookup is the public `find_heading(text, heading) -> tuple[int, int] | None`
 (the offset just past the heading line and its level; `None` when absent; `AmbiguousHeading` on
 more than one) that `extract` and `docsections.titled_section` both call. **`heading` has two
@@ -260,7 +263,13 @@ this module exists to remove. No live caller acquires the refusal — measured 2
 `titled_section` targets in `h-mad/SKILL.md` (`Phase 5 (Implementation) sub-steps`,
 `Helper scripts (…)`) occur once, and `h-mad/SKILL.md` has 0 duplicated bare heading texts.
 `test_find_heading_accepts_full_and_bare_forms` pins both and that the full form refuses a
-level mismatch; mutation `heading-level-pin-ignored` (the full form matching any level), so the section START is
+level mismatch; mutation `heading-level-pin-ignored` (the full form matching any level).
+`test_closing_hash_run_does_not_change_heading_identity` pins the identity rule from both sides:
+on a document whose only heading is `## Text ##`, `find_heading(text, "## Text")` and the bare
+form both find it, and on a document holding `## Text` and `## Text ##` the full form raises
+`AmbiguousHeading(2)`; mutation `closing-hash-run-kept` (the scanner leaves the closing run in the
+heading text, so `## Text ##` no longer satisfies `## Text` and the pair counts one) is killed by
+it (design audit v63). So the section START is
 found by one implementation exactly as its END is — so a fenced example that quotes `## <the requested heading>` cannot become the
 section start and hand a later real tagged block to the wrong address
 (`test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading
@@ -497,7 +506,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 69 mutations (69 rows: 67 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 70 mutations (70 rows: 68 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -1017,6 +1026,7 @@ exactly what the base Mutation verification invariant forbids.
 | `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
 | `adjacent-heading-skipped` | the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address | `test_adjacent_heading_bounds_the_section` (AC-1.5 — the first section has no candidate and `fence_aware_end(text, start, level) == start`) |
 | `heading-level-pin-ignored` | `find_heading` matches the full `## Text` form on text alone, ignoring the hash count | `test_find_heading_accepts_full_and_bare_forms` (AC-1.5 — `### Text` must not satisfy `## Text`) |
+| `closing-hash-run-kept` | `_fence_events` leaves the optional closing hash run in a heading event's text, so `## Text ##` no longer matches `## Text` and a `## Text`/`## Text ##` pair counts as one | `test_closing_hash_run_does_not_change_heading_identity` (AC-1.5/1.7) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
 | `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse`, `test_bare_form_duplicate_headings_refuse` (AC-1.7) |
 | `select-first-on-ambiguous` | `select` returns `blocks[0]` when >1 and no index | `test_two_tagged_blocks_without_index_are_ambiguous` (AC-1.3) |
@@ -1081,7 +1091,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Sixty-nine rows, sixty-nine mutations — sixty-seven of the helper's source (the AC-5.3 row, once
+Seventy rows, seventy mutations — sixty-eight of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1240,3 +1250,4 @@ mean the probe never created one.
 - v1.64: Design audit v60 (codex must 1 should 1; agy clean) + impl-plan audit v11 back-propagation: the ATX-only assumption is measured directly (Setext census: 30 files, 0 Setext headings) instead of inferred from the selector differential; the bare form's duplicate refusal is stated as a deliberate tightening over the old first-match with test_bare_form_duplicate_headings_refuse (live titled_section targets measured unique); the connection-only revert registers its private instance in sys.modules under a private spec name (dataclass processing needs it — AttributeError measured without).
 - v1.65: Design audit v62 (codex must 1; agy clean): an OSError from the helper's own communicate, the post-kill drain, the pipe closes or the wait is LAUNCH_FAILED stage=collect (ranked with stage=reap; the child then killed and reaped as a timed-out one) with test_communicate_oserror_is_launch_failed_collect / test_drain_wait_oserror_is_launch_failed_collect and mutations collect-oserror-unmapped / drain-oserror-unmapped — 69 rows (67 + 2).
 - v1.66: Impl-plan author contradictions after v1.65: the fault-injection list is seven seams (the collect stage's instance-level communicate/wait injection added); the exception table renders pgid on reap and collect, as the verdict table already did.
+- v1.67: Design audit v63 (codex must 1 should 1; agy should 1, REFUTED — REPO_ROOT is parents[2] of the test file, the skills root, so `h-mad/tests/test_docsections.py` from it is right): heading identity is the CommonMark-normalized text (closing hash run and trailing whitespace stripped) on both forms — the earlier 'exact match' sentence contradicted the §Scanning rule — with test_closing_hash_run_does_not_change_heading_identity and mutation closing-hash-run-kept (70 rows: 68 + 2); the plan's run_block API row names the collect stage.
