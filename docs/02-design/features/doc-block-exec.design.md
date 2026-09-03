@@ -59,7 +59,7 @@ caller (test, or operator on the CLI)
         ▼
    select(blocks, index) ─── POLICY: index<1 ──► BAD_INDEX ; 0 ──► NOT_FOUND ; >1 no index ──► AMBIGUOUS
         ▼ exactly one
-  substitute()  ─────────►  text'              literal replace, count each key
+  substitute()  ─────────►  Block'             literal replace, count each key; a NEW Block
         │  every key present?  no ──► SUBST_MISSING
         ▼ yes
    run_block()
@@ -74,19 +74,30 @@ caller (test, or operator on the CLI)
         ▼
      Result(rc, stdout, stderr, shell)
         ▼
-   main() ─────────────►  one `DOCBLOCK:` line on stdout;  exit 0 (RAN) | 2 (else)
+   main() ─────────────►  one `DOCBLOCK:` line on stdout;  exit 0 on every verdict (RAN, every
+                          refusal, TIMEOUT) | 2 only on UNREADABLE / CLEANUP_FAILED
 ```
 
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
 validation, ordinal validation, timeout validation, preamble readability and stream-path
 writability are all checked **before** `bash` is spawned, and no stream artifact is truncated
-before a successful run. **Exactly three exit-2 verdicts can follow a spawn, in this precedence:**
-`CLEANUP_FAILED` (raised from the read-back after `finally`, so it outranks everything), then
-`TIMEOUT`, then `UNREADABLE reason=stream_write_failed` (only reachable on the path that would
-otherwise print `RAN`, because streams are written only after a successful, cleaned-up run). All
-three are operational errors about the run itself, so none carries `rc=`, and on the first two
-nothing is written to any artifact; nothing that ran is reported as a measurement unless the cwd
-is gone *and* every promised artifact exists.
+before a successful run. **Exactly three non-`RAN` outcomes can follow a spawn, in this
+precedence:** `CLEANUP_FAILED` (exit 2 — selected after cleanup and read-back have run, so it
+outranks everything), then `TIMEOUT` (exit 0 — a measured fact about the block), then
+`UNREADABLE reason=stream_write_failed` (exit 2 — only reachable on the path that would otherwise
+print `RAN`, because streams are written only after a successful, cleaned-up run). None carries
+`rc=`, and on the first two nothing is written to any artifact; nothing that ran is reported as a
+measurement unless the cwd is gone *and* every promised artifact exists. **The precedence is a
+control-flow design, not a hope:** `run_block` never raises from inside the timeout handler. It
+records a *pending* outcome — `pending = BlockTimeout(timeout)` after the reap, or the `RunResult`
+— runs cleanup in `finally` (which records an `OSError` and never raises), then, after the
+`try`/`finally` has completed, reads the cwd back and **selects** the final outcome: `CleanupFailed(cwd,
+cause)` raised `from pending` if the directory persists, else the pending `BlockTimeout` re-raised,
+else the result returned. A `raise` inside the handler would propagate straight past the
+read-back — Python runs `finally` and then continues unwinding — which is exactly the ordering
+bug this paragraph replaces. `test_cleanup_failure_outranks_timeout` drives the combined case
+(`mkdir keep && chmod 000 keep && sleep 300`, `timeout=1`) and asserts `CleanupFailed` whose
+`__cause__` is the `BlockTimeout`.
 
 ## Detailed Design
 
@@ -160,7 +171,7 @@ replaced (AC-2.5).
 
 **Overlapping keys refuse** (AC-2.7). If any key is a substring of another, the result depends on
 iteration order, and a silently order-dependent answer is the failure class this whole feature
-exists to catch. `SUBST_OVERLAP keys=<n>` with a detail line per offending pair, exit 2, nothing
+exists to catch. `SUBST_OVERLAP keys=<n>` with a detail line per offending pair, exit 0, nothing
 executed — rather than picking an order and documenting it, which only moves the surprise. `<n>`
 counts the **distinct keys implicated**, not the pairs (`a`, `ab`, `abc` → `keys=3`, three pairs);
 each unordered pair appears once as `overlap: <shorter> <longer>`, and the lines are sorted by
@@ -216,8 +227,10 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
 `ignore_errors` — runs in `finally`, so the temp directory is removed on the normal path, the
 timeout path, and an exception path alike; its `OSError`, if any, is caught and recorded there
 rather than raised from inside `finally` (which would replace whatever exception was in flight).
-After the `try`, the helper reads the directory back: `os.path.lexists(cwd)` must be false. If it
-is not — a recorded `OSError`, or a directory that is somehow still there — `CleanupFailed(cwd,
+Because the timeout handler *records* `BlockTimeout` as a pending outcome rather than raising it
+(see the precedence paragraph under Architecture Overview), control always reaches the statement
+after the `try`/`finally`, where the helper reads the directory back: `os.path.lexists(cwd)` must be
+false. If it is not — a recorded `OSError`, or a directory that is somehow still there — `CleanupFailed(cwd,
 cause)` is raised, carrying the recorded `OSError` (or `None` when nothing was raised and the
 read-back alone caught it), and `main` prints `DOCBLOCK: CLEANUP_FAILED path=<p>`, exit 2. **The
 two guards are separately mutation-tested, because the read-back makes `ignore_errors` look
@@ -232,9 +245,11 @@ and `rmtree(…, ignore_errors=True)` measurably retains the whole tree with no 
 the supported interpreter — python 3.11.8, darwin, euid 501; command and output in the plan's
 §Measurements). That silent retention is the mutation-verification invariant's
 "a completed run reported over an unverified mutation", and it is what the old `ignore_errors=True`
-did. **Precedence:** a cleanup failure outranks a `BlockTimeout` on the same run — both exit 2,
-neither carries `rc=`, and a retained directory is state the operator must act on whereas the
-timeout is already implied by the retained directory's contents being partial. The fixture test
+did. **Precedence:** a cleanup failure outranks a `BlockTimeout` on the same run — the pending
+`BlockTimeout` becomes `CleanupFailed`'s `__cause__` — because a retained directory is state the
+operator must act on (exit 2, an operational error) whereas the timeout is a verdict about the
+block (exit 0) already implied by the retained directory's partial contents; neither carries
+`rc=`. The fixture test
 restores the subdirectory's mode and removes the tree in its own `finally`, so the suite does not
 leak what it just proved the helper cannot remove.
 
@@ -316,9 +331,13 @@ def select(blocks: Sequence[Block], index: int | None = None) -> Block
     BlockNotFound (0 candidates, or index past the end) or AmbiguousBlock(n)
     (>1 with no index)."""
 
-def substitute(text: str, subs: Mapping[str, str]) -> tuple[str, dict[str, int]]
-def run_block(block: Block, *, subs: Mapping[str, str] | None = None,
-              preamble: str | None = None, timeout: float = 30.0) -> RunResult
+def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]
+    """Returns a NEW Block (dataclasses.replace) whose text has every key replaced,
+    plus the per-key counts. run_block never substitutes: main calls this first,
+    so a bad map is refused before any stream artifact is reserved."""
+
+def run_block(block: Block, *, preamble: str | None = None,
+              timeout: float = 30.0) -> RunResult
 def main(argv: Sequence[str] | None = None) -> int
 
 def fence_aware_end(text: str, start: int, level: int) -> int
@@ -378,8 +397,9 @@ one `DOCBLOCK:` line; only an unknown option or a missing value reaches argparse
 the documented single non-`DOCBLOCK` exit 2.
 
 **Stream artifacts: reserved last, never truncated by an open, written through the held handle.**
-The order in `main` is extract → select → substitute → validate (info string, index, timeout,
-preamble, alias) → **reserve** → spawn. Reservation opens `--stdout` then `--stderr` with
+The order in `main` is `extract` → `select` → `substitute` → the remaining validations (timeout,
+preamble readability, alias — the info string is validated inside `extract`, the ordinal inside
+`select`) → **reserve** → spawn. Reservation opens `--stdout` then `--stderr` with
 `open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
 never empties an existing one, so there is no moment at which one artifact is truncated while the
 other is still unreserved. If the second open fails, the first handle is closed and — only if this
@@ -399,25 +419,34 @@ Verdict lines, one per run:
 | line | exit | when |
 |---|---|---|
 | `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict\|plain>` | 0 | the block ran (any `rc`) |
-| `DOCBLOCK: NOT_FOUND heading=<h>` | 2 | no tagged block, or `--index` past the end |
-| `DOCBLOCK: AMBIGUOUS blocks=<n> heading=<h>` | 2 | >1 tagged block, no `--index` |
-| `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading=<h>` | 2 | >1 heading matches text+level |
-| `DOCBLOCK: BAD_INDEX index=<n>` | 2 | `--index` below 1, or not an integer |
-| `DOCBLOCK: BAD_TIMEOUT value=<v>` | 2 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
-| `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 2 | a key is absent from the block |
-| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 2 | one key is a substring of another |
+| `DOCBLOCK: NOT_FOUND heading=<h>` | 0 | no tagged block, or `--index` past the end |
+| `DOCBLOCK: AMBIGUOUS blocks=<n> heading=<h>` | 0 | >1 tagged block, no `--index` |
+| `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading=<h>` | 0 | >1 heading matches text+level |
+| `DOCBLOCK: BAD_INDEX index=<n>` | 0 | `--index` below 1, or not an integer |
+| `DOCBLOCK: BAD_TIMEOUT value=<v>` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
+| `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 0 | a key is absent from the block |
+| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 0 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` resolve to one path |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
-| `DOCBLOCK: BAD_INFO key=<k>` | 2 | unrecognised info-string token |
-| `DOCBLOCK: TIMEOUT seconds=<n>` | 2 | the block outran its bound (either race in AC-5.5 included) |
+| `DOCBLOCK: BAD_INFO key=<k>` | 0 | unrecognised info-string token |
+| `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
-`RAN` is the only line carrying `rc=`; `AMBIGUOUS` is the only cannot-judge carrying `blocks=`.
-`blocks=`, `count=`, `index=`, `value=` and `seconds=` are diagnostic values saying *why* judgement failed,
-which the count rule permits — a measured-result count (`rc=`) is what it forbids. Every exit-2
-line above is the list AC-4.2 enumerates, and the test that walks this table is what keeps the two
-from drifting apart.
+The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
+→ `select` (which validates the ordinal) → `substitute` → the remaining validations that belong to
+no earlier step (timeout, preamble readability, stream-path alias) → reserve both stream handles →
+spawn. Nothing is reserved until every refusal that can be made from the inputs has been made.
+
+`RAN` is the only line carrying `rc=`; `AMBIGUOUS` is the only refusal carrying `blocks=`.
+`blocks=`, `count=`, `index=`, `value=` and `seconds=` are diagnostic values saying *why* the tool
+declined or the block did not finish, which the count rule permits — a measured-result count
+(`rc=`) is what it forbids. **The exit column follows the base Audit-gate signal discipline
+invariant**: every verdict — `RAN`, every refusal of readable input, and `TIMEOUT` — exits 0, so no
+refusal ever registers as a tool failure in the orchestrator's harness; exit 2 is reserved for the
+two operational classes the invariant names, `UNREADABLE` (input that could not be read, a path
+that could not be written or reserved, a write that failed) and `CLEANUP_FAILED`. AC-4.2 pins that
+partition row by row, and the test that walks this table is what keeps the two from drifting.
 
 ## Error Handling Strategy
 
@@ -478,17 +507,17 @@ are the real process's, not a return value — the same shape `test_skill_candid
 |---|---|
 | AC-1.1–1.7 | tagged-vs-untagged selection; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
-| AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 2, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
+| AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
 | AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path)` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** cannot-judge in the verdict table exits 2 (the test enumerates the table rather than hardcoding a count, so adding a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
+| AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE` and `CLEANUP_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
-| AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 2, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
+| AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`: `os.killpg` monkeypatched to raise `ProcessLookupError` → still `TIMEOUT`, cwd absent, no traceback; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
-| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither), where `test_suite_floor_holds` computes the floor as `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + the length of a fixed tuple of the named node IDs added to existing files, each asserted present; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
+| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + 5, the five being the named node IDs added to `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`), each asserted present; the pass half is the Phase-5f gate command run alone outside the suite; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 Verification commands:
 
@@ -545,8 +574,13 @@ mean the probe never created one.
 - **Skill manifest integrity** — complies: `SKILL.md` gains a Helper-scripts registry entry in the
   same commit that adds the module, and AC-4.5 pins the entry to the emittable detail lines in
   both directions.
-- **Audit-gate signal discipline** — complies: one `DOCBLOCK:` token, exit 0 on the verdict, exit 2
-  only where nothing was measured; a caller reads the token, never `$?`.
+- **Audit-gate signal discipline** — complies, on the invariant's own partition: one `DOCBLOCK:`
+  token; **exit 0 on every verdict**, refusals and `TIMEOUT` included, so a declined run never
+  registers as a tool failure; exit 2 only for genuine operational errors — `UNREADABLE` (input
+  that could not be read, an artifact path that could not be written or reserved, a write that
+  failed) and `CLEANUP_FAILED`. A caller reads the token, never `$?`. An earlier draft exited 2 on
+  every refusal after `MUTATION: PRECHECK_FAILED`; that copied the minority precedent, and the
+  gate and assembler (`GATE: FAIL` / `ASSEMBLE: HALT`, both exit 0) are the rule.
 - **No new external dependency** — complies: no new CLI, no package. `bash` is already assumed by
   every recipe in this skill.
 - **Portable time bounds** — complies: the bound is Python's own (`Popen.communicate(timeout=…)`).
@@ -582,3 +616,4 @@ mean the probe never created one.
 - v1.13: Plan re-audit v14 back-propagation: composition rule in the preamble paragraph; allow_abbrev=False on the parser; Test Plan rows for both.
 - v1.14: Design audit v6 (agy must 1, codex must 2 should 2): composition uses text-prime (substituted); Popen text=True utf-8 replace; timeout validated finite and positive before spawn (BadTimeout/BAD_TIMEOUT); stream artifacts probed for append then reserved after every check; tree-wide single-tag cardinality test; Test Plan rows for each.
 - v1.15: Design audit v7 (codex must 4 should 1; agy clean): reservation last, append-mode, truncate at the final write, created-file unlink on a failed second reservation; three post-spawn exit-2 verdicts with explicit precedence; SUBST_OVERLAP keys= and ordering defined; docsections.json named-test form; computed AC-6.4 floor.
+- v1.16: Design audit v8 (codex must 3 should 1, agy must 2): exit-code partition per the base invariant in the verdict table, diagram and Invariant Compliance; pending-outcome control flow so CLEANUP_FAILED really outranks TIMEOUT, with the combined test; substitute returns a new Block and run_block never substitutes; main's order corrected; floor test runs collect-only in a subprocess with an env guard and the pass half is the out-of-suite gate command; the five consumer-file node IDs enumerated.

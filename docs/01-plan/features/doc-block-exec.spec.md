@@ -29,11 +29,11 @@ not opted in.
     that policy — because a single function typed to return one block while also handling 0 and
     many is the contradiction the design audit surfaced.
   - AC-1.2: Given a section containing only untagged ` ```bash ` fences, extraction yields zero
-    blocks and the CLI prints `DOCBLOCK: NOT_FOUND` and exits 2.
+    blocks and the CLI prints `DOCBLOCK: NOT_FOUND` and exits 0 — a refusal is a verdict (FR-4).
   - AC-1.3: Given a section with two tagged blocks and no ordinal supplied, the CLI prints
-    `DOCBLOCK: AMBIGUOUS blocks=2` and exits 2, executing nothing.
+    `DOCBLOCK: AMBIGUOUS blocks=2` and exits 0, executing nothing.
   - AC-1.4: With the same document, `--index 2` selects the second tagged block; `--index 3`
-    prints `DOCBLOCK: NOT_FOUND` and exits 2.
+    prints `DOCBLOCK: NOT_FOUND` and exits 0.
   - AC-1.5: The section boundary is the next **ATX** heading (`#`-prefixed) at the same or
     shallower level; a tagged fence under a *later* heading is not returned for the earlier
     heading. **Setext headings (underlined with `===`/`---`) are explicitly out of scope and not
@@ -45,7 +45,7 @@ not opted in.
     backtick run** — a four-backtick fence legitimately contains ``` lines as body text.
   - AC-1.7: **Duplicate headings refuse.** If the document contains more than one heading whose
     text and level both match, nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>`,
-    exit 2. Two identical headings share one address, and silently taking the first would run a
+    exit 0. Two identical headings share one address, and silently taking the first would run a
     tagged block from the wrong section — the same silent-wrong-answer shape the tag exists to
     prevent, one level up, and the tag cannot repair an ambiguous *section* selector. Not
     hypothetical: `h-mad/invariants.example.md` already carries `### Unified-facade routing` and
@@ -65,7 +65,7 @@ not opted in.
     collected alone and when `docsections` is imported from an unrelated cwd, never through
     another module's `sys.path` side effect. A test collects it alone to prove that.
   - AC-1.9: **An ordinal below 1 refuses.** `--index 0` and `--index -1` print
-    `DOCBLOCK: BAD_INDEX index=<n>` and exit 2, executing nothing; `select(blocks, 0)` raises
+    `DOCBLOCK: BAD_INDEX index=<n>` and exit 0, executing nothing; `select(blocks, 0)` raises
     `BadIndex(0)`. Left to a conventional `blocks[index - 1]`, `0` silently addresses the *last*
     tagged block and a negative value some other one — a wrong block run without a word, the
     shape the explicit address exists to prevent. Past-the-end stays `NOT_FOUND` (AC-1.4): that
@@ -80,7 +80,7 @@ not opted in.
     substituting that string for a local path, the executed block contains the local path and not
     the original.
   - AC-2.2: Given a map whose key does not occur in the block, nothing is executed, the CLI prints
-    `DOCBLOCK: SUBST_MISSING key=<key>` and exits 2.
+    `DOCBLOCK: SUBST_MISSING key=<key>` and exits 0.
   - AC-2.3: The refusal names the offending key; with two absent keys, both are named on their own
     detail lines.
   - AC-2.4: Substitution is literal, not regex — a key containing regex metacharacters
@@ -92,7 +92,7 @@ not opted in.
     cannot inflate or deflate a reported count.
   - AC-2.7: Overlapping keys refuse rather than resolve by order — if any key is a substring of
     another, nothing is executed and the CLI prints `DOCBLOCK: SUBST_OVERLAP keys=<n>` with a
-    detail line naming each overlapping pair, and exits 2. `<n>` is the number of **distinct keys
+    detail line naming each overlapping pair, and exits 0. `<n>` is the number of **distinct keys
     implicated** (three keys where one contains both others → `keys=3`, two pairs); the detail
     lines are `overlap: <shorter> <longer>`, one per unordered pair, sorted lexicographically by
     `(shorter, longer)`, so the diagnostic is deterministic and the registry can pin it.
@@ -125,7 +125,7 @@ not opted in.
     (`printf '\xff'`) yields U+FFFD in that position rather than a `UnicodeDecodeError` escaping
     as a traceback. Stream artifact files are written UTF-8 the same way.
   - AC-3.7: An unrecognised info-string key (e.g. `shell=fish`, `mode=x`) on a fence that
-    **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key=<k>` — and exits 2, rather than
+    **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key=<k>` — and exits 0, rather than
     being ignored as a default. A fence **without** the tag is never a candidate and its info
     string is never validated: an untagged ` ```bash --frozen `, or any other prose-y info string
     elsewhere in the tree, must not make this tool refuse. Validation follows opt-in.
@@ -189,29 +189,42 @@ not opted in.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
     exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
     `CleanupFailed(path)` — carrying the `OSError` when one was raised, `None` when only the
-    read-back caught a silent retention — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2 —
+    read-back caught a silent retention — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
+    (a timeout that also leaves an unremovable cwd reports `CLEANUP_FAILED`, tested as one case) —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
     (`mkdir keep && chmod 000 keep`); measured on this machine, `shutil.rmtree` raises
     `PermissionError` on it and `ignore_errors=True` retains the whole tree with no signal. A
     cleanup failure outranks a timeout on the same run: a retained directory is state the
-    operator must act on, and both exit 2 anyway.
+    operator must act on; it is also the operational error (exit 2) where a timeout is a verdict
+    (exit 0), so the exit code follows the precedence rather than contradicting it.
 
 ### FR-4: Verdict-token CLI following the established gate contract
 
-- **Description**: The CLI prints one `DOCBLOCK:` line. Running the block successfully is the only
-  verdict; everything that measured nothing is a cannot-judge. A cannot-judge carries no count
-  that could be read as a **measured result** — never `rc=` — but may carry a *diagnostic* count
-  saying why it could not judge, which is why `AMBIGUOUS` carries `blocks=<n>` (AC-4.4). Same shape
-  as this skill's existing `ANCHORS_DRIFTED`/`MUTATION: PRECHECK_FAILED`, which exit 2 carrying
-  counts so the verdict word chooses the first action without hiding the other finding.
+- **Description**: The CLI prints one `DOCBLOCK:` line, and the exit code follows the base
+  **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
+  refusal that judged a readable input and declined to run it (`NOT_FOUND`, `AMBIGUOUS`,
+  `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `SUBST_MISSING`, `SUBST_OVERLAP`),
+  and `TIMEOUT`, which is a measured fact about the block (it did not finish) rather than a fault
+  of the tool. **Exit 2 is reserved for genuine operational errors**, the invariant's own words:
+  `UNREADABLE` (a document, preamble or stream path that could not be read, written or reserved,
+  or a stream write that failed) and `CLEANUP_FAILED` (the helper could not honour its own
+  disposable-cwd contract). A non-zero exit for a refusal would register as a tool failure in the
+  orchestrator's harness — the failure mode the invariant names — so the earlier draft, which exited
+  2 on every refusal after `ANCHORS_DRIFTED`/`MUTATION: PRECHECK_FAILED`, followed the minority
+  precedent; the gate and the assembler (`GATE: FAIL`, `ASSEMBLE: HALT`, both exit 0) are the rule.
+  A refusal carries no count that could be read as a **measured result** — never `rc=` — but may
+  carry a *diagnostic* count saying why it declined, which is why `AMBIGUOUS` carries `blocks=<n>`
+  (AC-4.4). Callers read the token, never `$?`.
 - **Acceptance Criteria**:
   - AC-4.1: A successful run prints `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict|plain>` and exits
     **0**, including when the block's own `rc` is non-zero — the block's rc is data, not the tool's
     verdict.
-  - AC-4.2: `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`,
-    `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `CLEANUP_FAILED` and `UNREADABLE`
-    each exit 2.
+  - AC-4.2: **The exit-code partition is pinned.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`,
+    `BAD_INDEX`, `BAD_TIMEOUT`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
+    exit **0**; `UNREADABLE` (every `reason=`) and `CLEANUP_FAILED` each exit **2**. A test
+    enumerates the verdict table and asserts the code of every row, so a row cannot move between
+    the two classes unnoticed.
   - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
     non-measurement as a measured zero.
   - AC-4.4: `AMBIGUOUS` carries `blocks=<n>`; no other cannot-judge carries `blocks=`.
@@ -224,7 +237,8 @@ not opted in.
 - **Description**: Every run is time-bounded. `timeout`/`gtimeout` are forbidden by the skill's own
   rules and are not used; the bound is Python's own.
 - **Acceptance Criteria**:
-  - AC-5.1: A block that sleeps past the bound returns `DOCBLOCK: TIMEOUT seconds=<n>` and exits 2.
+  - AC-5.1: A block that sleeps past the bound returns `DOCBLOCK: TIMEOUT seconds=<n>` and exits 0
+    — the hang is a measured fact about the recipe, like a non-zero `rc`, not a tool fault.
   - AC-5.2: After a timeout, **no descendant remaining in the launched process group** is alive —
     the whole group is reaped, not just the direct child. The claim is bounded deliberately: a
     descendant that leaves the group (`os.setsid()`, or a `setsid` binary where one exists) is
@@ -236,7 +250,7 @@ not opted in.
   - AC-5.4: The temp cwd is removed after a timeout, exactly as after a normal run.
   - AC-5.6: **The bound is validated before anything is spawned.** `timeout` must be a finite
     number greater than zero: `0`, a negative value, `nan`, `inf` and a non-numeric
-    `--shell-timeout` argument all refuse with `DOCBLOCK: BAD_TIMEOUT value=<v>`, exit 2, block
+    `--shell-timeout` argument all refuse with `DOCBLOCK: BAD_TIMEOUT value=<v>`, exit 0, block
     not run — `run_block` raises `BadTimeout(value)` before `Popen`. Left to `argparse` and
     `communicate`, a negative value raises `ValueError` *after* the spawn and `inf` makes the
     promised bound unbounded. On the CLI the value is taken as a string and validated by `main`,
@@ -249,7 +263,7 @@ not opted in.
     reproduced on a reaped leader — is treated as "already reaped", never a traceback; (b) the
     post-kill drain `communicate` itself times out because an out-of-group descendant (AC-5.2's
     escapee) still holds the pipes — the helper closes both pipes, reaps the leader, and reports
-    `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 2, and the cwd is gone. Total
+    `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
     its test injects the fault by monkeypatching `os.killpg` — the one permitted mock in this
@@ -289,9 +303,14 @@ not opted in.
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
     alone) plus a fixed tuple of the named new node IDs added to existing files
     (`test_h_mad_collect_report_docs.py`, `test_docsections.py`), each of which the test asserts
-    exists. The test asserts `full_collected >= 2747 + new_module + len(tuple)` and the same for
-    the pass count, so a deleted pre-existing test lowers the left side below the floor and
-    cannot hide behind the additions.
+    exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
+    from a `--collect-only` subprocess (collection never executes tests, so the suite does not
+    recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
+    belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
+    Phase-5f gate command, `python3.11 -m pytest -q -p no:cacheprovider | tail -1`, run alone by
+    the orchestrator and recorded in the report, which must read `N passed` with no failures.
+    A deleted pre-existing test lowers the collected count below the floor and cannot hide behind
+    the additions.
   - AC-6.5: **Connection discrimination.** Reverting the connection alone — the import of
     `h_mad_doc_block_exec` and the call to it in `test_h_mad_collect_report_docs.py`, leaving the
     helper and its own tests intact — makes a named test in that file fail. The helper's own suite
@@ -373,3 +392,4 @@ not opted in.
 - v1.15: Plan re-audit v14: AC-3.11 states the preamble/block composition rule (one newline boundary, always) and its no-trailing-newline test.
 - v1.16: Design audit v6 (agy must 1, codex must 2 should 2): AC-3.11 composes the preamble with the substituted text; AC-5.6 validates the bound before spawn (BAD_TIMEOUT) and states the values-vs-grammar CLI policy; AC-3.6 pins UTF-8/replace str streams; AC-6.1 asserts tree-wide tag cardinality 1; AC-3.8 probes stream paths without truncation and reserves after every check. 47 ACs.
 - v1.17: Design audit v7 (codex must 4 should 1; agy clean): AC-3.8 reserves both streams in append mode after every refusal and truncates only at the final write; AC-6.4's floor is computed (2747 + new module + named tuple); AC-2.7 defines keys= as distinct keys and orders the overlap lines.
+- v1.18: Design audit v8 (codex must 3 should 1, agy must 2): exit codes follow the Audit-gate signal discipline invariant — every verdict incl. refusals and TIMEOUT exits 0, only UNREADABLE and CLEANUP_FAILED exit 2 (FR-4, AC-4.2 pins the partition row by row); AC-3.14 names the timeout-plus-cleanup case; AC-6.4's collected floor is in-suite via collect-only and the pass half is the out-of-suite gate command.

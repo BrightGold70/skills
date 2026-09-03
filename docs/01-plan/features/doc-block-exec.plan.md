@@ -59,8 +59,9 @@ that lacks a trailing newline cannot fuse with the recipe's first line
 variable and ends without `\n`, and whose block's first line reads it). The registry entry carries a detail row for that reason
 like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
 reserved after every check, and no open ever truncates**: after extraction, selection,
-substitution and every pre-spawn validation (info string, index, timeout, preamble, alias) have
-passed, both paths are opened for *append* and the handles held — append creates a missing file
+substitution and every remaining pre-spawn validation (timeout, preamble readability, alias —
+the info string was validated inside `extract` and the ordinal inside `select`) have passed, both
+paths are opened for *append* and the handles held — append creates a missing file
 and never empties an existing one. The truncation is the final write itself, `seek(0);
 truncate(); write`, on those held handles after a successful run. So a failure to reserve the
 second path finds the first untouched (a file this call created is unlinked again; a pre-existing
@@ -117,7 +118,9 @@ test file loses its hand-rolled extraction.
 
 The patterns to follow are already established in this repository and are not being invented here:
 a helper exposes importable functions plus a thin CLI; the CLI prints exactly one verdict line;
-a verdict exits 0 and a cannot-judge exits 2; the registry entry and the emittable detail lines
+every verdict — `RAN` and every refusal that judged readable input, `TIMEOUT` included — exits 0,
+and exit 2 is reserved for the operational errors the base invariant names (`UNREADABLE`,
+`CLEANUP_FAILED`); the registry entry and the emittable detail lines
 are pinned to each other bidirectionally; and every guard gets a mutation that must be caught by a
 named test.
 
@@ -126,9 +129,12 @@ carry no count that could be read as a **measured result**: never an `rc=`, neve
 because that is how "nothing was measured" gets read as "measured, and clean". It **may** carry a
 *diagnostic* count explaining why it could not judge. The distinction is already load-bearing
 elsewhere in this skill rather than being invented for this feature: `ANCHORS_DRIFTED` and
-`ANCHORS_UNREADABLE` both exit 2 and both carry `drifted=`/`unreadable=`, and
-`MUTATION: PRECHECK_FAILED` exits 2 carrying `specs=`/`drifted=`/`unreadable=` — in each case so
-the verdict word chooses the first action without hiding the other finding. `AMBIGUOUS blocks=<n>`
+`ANCHORS_UNREADABLE` both carry `drifted=`/`unreadable=`, and `MUTATION: PRECHECK_FAILED` carries
+`specs=`/`drifted=`/`unreadable=` — in each case so the verdict word chooses the first action
+without hiding the other finding. (Those helpers also exit 2 on a cannot-judge; this feature does
+**not** copy that, because the base Audit-gate signal discipline invariant reserves non-zero for
+unreadable input, and the gate and assembler — the documented rule — exit 0 on a rejection. FR-4
+states the partition.) `AMBIGUOUS blocks=<n>`
 is that same shape: `n` is the number of candidate blocks that *made* the address ambiguous and is
 the datum the operator needs to pass `--index`, not a result. So AC-4.4 stands and this sentence
 was the error; AC-4.3 (no cannot-judge carries `rc=`) is the invariant that actually matters.
@@ -206,8 +212,8 @@ planned against):
 |---|---|---|
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
-| `substitute` | `(text: str, subs: Mapping[str, str]) -> tuple[str, dict[str, int]]` | raises `MissingSubstitution`, `OverlappingSubstitution` |
-| `run_block` | `(block, *, subs=None, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `BlockTimeout`, `CleanupFailed` |
+| `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `MissingSubstitution`, `OverlappingSubstitution` |
+| `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `BlockTimeout`, `CleanupFailed` |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
@@ -219,8 +225,10 @@ test asserts the consumer's source carries no `from h_mad_doc_block_exec import`
 discrimination cannot be lost by a later tidy-up. `_gate_bash_block` becomes
 `dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
 `run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
-`RunResult`, calling `dbe.run_block(block, subs={"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
-shlex.quote(str(gate))}, preamble=<the COLLECT_OUT line it builds today>)`. Its four assertions
+`RunResult`, calling `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
+shlex.quote(str(gate))})` and then `dbe.run_block(substituted, preamble=<the COLLECT_OUT line it
+builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
+substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
 nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
 moves; `:412` keeps `re.findall` on purpose.
@@ -436,7 +444,8 @@ the duplicate bounder is.
 ## Convention Prerequisites
 
 - Feature branch created at Phase 5c before any implementation commit.
-- Verdict-token discipline: read the token, never `$?`; a cannot-judge carries no count readable
+- Verdict-token discipline: read the token, never `$?`; every verdict exits 0 and only
+  `UNREADABLE`/`CLEANUP_FAILED` exit 2 (FR-4, AC-4.2); a refusal carries no count readable
   as a **measured result** (never `rc=`), though it may carry a diagnostic count saying why it
   could not judge — see the count rule under Implementation Strategy, and AC-4.3/AC-4.4.
 - Every guard mutation-tested with a per-mutation named test, scored on the pytest summary.
@@ -477,10 +486,17 @@ the duplicate bounder is.
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
   `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone, plus a fixed tuple
-  of the named node IDs added to `test_h_mad_collect_report_docs.py` and `test_docsections.py`
-  (each asserted to exist). `test_suite_floor_holds` asserts
-  `full_collected >= 2747 + new_module + len(tuple)` and the same for passing, so a deleted
-  pre-existing test cannot hide behind the additions.
+  of the named node IDs added to an existing file — **exactly these five**, all in
+  `h-mad/tests/test_h_mad_collect_report_docs.py`: `test_gate_block_resolves_through_doc_block_exec`,
+  `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`,
+  `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`
+  (each asserted to exist). Every other new test — FR-1..5, AC-1.8's delegation and
+  collect-alone pins, the CLI table walk — lives in the new module and is counted by the collector.
+  `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + 5` from a
+  `--collect-only` subprocess, which never executes tests and so cannot recurse (an env guard
+  `DOCBLOCK_FLOOR_INNER=1` also makes any inner instance skip); the *pass* half is the Phase-5f
+  gate command run alone, outside the suite, and recorded in the report. A deleted pre-existing
+  test cannot hide behind the additions.
 - `git status --porcelain` is unchanged across a run of a block that writes files.
 - No hand-written ` ```bash ` extraction remains on the **executing** path of
   `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` both route through
@@ -528,3 +544,4 @@ design begins.
 - v1.19: Plan re-audit v14 (codex must 1 should 1; agy clean): preamble/block composition rule with its no-final-newline test; allow_abbrev=False with an abbreviated-option rejection test.
 - v1.20: Design audit v6 back-propagation: composition with the substituted text; probe-then-reserve stream artifacts; BAD_TIMEOUT and the values-vs-grammar CLI policy; RunResult streams are UTF-8/replace str.
 - v1.21: Design audit v7 back-propagation: append-mode reservation after every check with truncation at the final write, and its four tests; docsections.json converts all four mutations to the named-test form; the AC-6.4 floor is computed by test_suite_floor_holds.
+- v1.22: Design audit v8 back-propagation: exit-code partition per the base invariant; substitute returns a new Block and run_block takes no subs; the five named consumer-file tests enumerated; floor test topology (collect-only subprocess, env guard, pass half outside the suite); main's order corrected (info string in extract, ordinal in select).
