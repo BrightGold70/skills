@@ -158,11 +158,13 @@ not opted in.
     **overwritten** — truncated at the final write, as a shell `>` would — never appended; and a
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
-    over an artifact that does not exist. Streams are written stdout first, then stderr, and a
-    failure on the second **leaves the first as written** — no rollback, because the old artifact
-    was truncated in place and there is nothing to roll back to — with the detail line
-    `written: stdout` / `failed: stderr` naming the state of each, so the operator knows which
-    artifact is current (tested by failing the second write only). The final write goes through
+    over an artifact that does not exist. Streams are written stdout first, then stderr. A failure
+    on the **first** skips the second (`failed: stdout` / `skipped: stderr` — the stderr artifact
+    keeps its previous contents untouched); a failure on the **second** leaves the first as
+    written (`written: stdout` / `failed: stderr`) — no rollback, because the old artifact was
+    truncated in place and there is nothing to roll back to. The detail lines name the state of
+    each artifact so the operator knows which is current, and each of `written:`, `failed:` and
+    `skipped:` has a registry row (tested by failing the first write only, and the second only). The final write goes through
     one named module function, `_final_write(handle, text)` — which seeks, truncates, writes,
     **flushes and closes** the handle inside the region mapped to `stream_write_failed`, because a
     buffered `TextIOWrapper` may not hit the OS until `flush()`/`close()` and an error surfacing
@@ -294,8 +296,11 @@ not opted in.
     text, exit 2, and the cwd (if one was created) is still cleaned up. Tests: `mkdtemp`
     fault-injected to raise; `PATH` set to an empty directory so `bash` cannot be found (real, no
     mock); `os.killpg` fault-injected to raise `PermissionError` under a timed-out block — **and
-    that test reaps what it launched**: the fake records the pgid it was asked to signal and the
-    test's `finally` sends the real `SIGKILL` to it, then asserts the group is gone, so the test
+    that test reaps what it launched**: `run_block` owns its `Popen` and exposes no handle, so the
+    test wraps `subprocess.Popen` in a recording pass-through (the real constructor, its instance
+    recorded — an observation, not a fault injection, the same seam AC-5.6 uses), and its
+    `finally` sends the real `SIGKILL` to the recorded pgid, calls `wait()` on the recorded
+    handle to reap the zombie leader, then asserts the group is gone, so the test
     cannot recreate the orphan-process incident this feature cites. For a *genuinely*
     unsignalable group the helper's policy is diagnostic, not containment: the verdict's detail
     carries `pgid=<n>` so the operator can act, and this is the one documented case in which a
@@ -504,3 +509,4 @@ quoted
 - v1.26: Design audit v17 (codex must 1; agy pass UNVERIFIED, dispatch rc=1): AC-1.6 states the CommonMark 0-3 space indentation rule for openers and closers; a four-space-indented literal tag is never a candidate.
 - v1.27: Design audit v21 (codex must 1): AC-5.5(a) is reproduced by a real fixture — a leader that exits behind an os.setsid() escapee — and the helper polls before killpg, because killpg on a zombie-only group raises PermissionError on macOS (measured); os.killpg is injected only for AC-4.6.
 - v1.28: Design audit v23 (codex should 1; agy must 2 should 2): AC-1.5 no longer names the impossible differential test; _final_write flushes and closes inside the mapped region; CLEANUP_FAILED carries an os_error detail line.
+- v1.29: Design audit v24 (codex must 1 should 1; agy nit): AC-3.8 specifies the stdout-first failure branch (failed/skipped detail lines with registry rows); AC-4.6's reap test obtains its handle through the recording Popen pass-through and states the teardown order.

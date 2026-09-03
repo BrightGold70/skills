@@ -158,8 +158,11 @@ examples. So:
 - an opener is recognised only when its marker run is preceded by **0–3 spaces** (CommonMark
   §4.5): four or more spaces make the line an indented code block, so a literal
   `    ```bash hmad:exec` is never an opener and never a candidate — the security boundary AC-1.6
-  states, restated for indentation; the same 0–3 rule applies to a closer, and up to the
-  opener's indentation is stripped from each body line;
+  states, restated for indentation; the same 0–3 rule applies to a closer, and **`extract`
+  normalises the body**: up to the opener's indentation is stripped from each body line (a line
+  indented less than the opener loses only what it has), so the `Block.text` returned is the
+  CommonMark content of the fence, not its source bytes — recognising the fence but returning
+  un-normalised text is its own defect, with its own test and mutation (`body-indent-not-stripped`);
 - an opening fence records its marker character and `n = len(run)`; while open, only a line
   whose leading run is of the **same character** and ≥ `n` **and** carries no info string closes
   it;
@@ -273,12 +276,17 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    pgid and returns bounded rather than pretending; this is the one documented case in which a
    launched process may outlive the call. **The test for it must not become that case**: its fake
    `killpg` (the AC-4.6 injection, the only remaining use of the `os.killpg` seam) records the pgid
-   and raises `PermissionError`, and the test's `finally` sends the real `os.killpg(pgid, SIGKILL)`,
-   calls `proc.wait()` on the handle it holds, and asserts `ProcessLookupError` on a follow-up
-   `os.killpg(pgid, 0)` — the `wait()` is what reaps the zombie leader, without which the
-   assertion could never pass (measured: `os.kill(pid, 0)` succeeds on a zombie); CPython's
-   `Popen.__del__` never kills a live child, so without that teardown the fault-injected test
-   would leave a `sleep` running after it returned.
+   and raises `PermissionError`. **`run_block` owns its `Popen` and exposes no handle**, so the
+   test obtains one through the same recording pass-through AC-5.6 uses: `monkeypatch.setattr(
+   dbe.subprocess, "Popen", recording_popen)`, where `recording_popen(*a, **kw)` calls the real
+   `subprocess.Popen`, appends the instance to a list the test holds, and returns it unchanged —
+   an observation of the real call, not a fault injection, restored by `monkeypatch` on exit. The
+   teardown order in the test's `finally` is then exact: (1) real `os.killpg(pgid, SIGKILL)` on
+   the recorded pgid; (2) `recorded.wait()` on the recorded handle, which reaps the zombie leader
+   (measured: `os.kill(pid, 0)` succeeds on a zombie, so no assertion can pass before this step);
+   (3) assert `os.killpg(pgid, 0)` raises `ProcessLookupError`. CPython's `Popen.__del__` never
+   kills a live child, so without that teardown the fault-injected test would leave a `sleep`
+   running after it returned.
 2. **The post-kill drain does not finish.** After `killpg` a second `communicate` collects what
    the group wrote before dying; but a descendant that left the group (AC-5.2's `os.setsid()`
    escapee) still holds the inherited pipes, so that `communicate` can block for as long as the
@@ -347,7 +355,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 38 source mutations (38 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 39 source mutations (39 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -505,7 +513,12 @@ can therefore only be an error on an open descriptor (disk full, I/O error) and 
 because the artifact the caller was promised does not exist. **The writes are ordered and the
 partial state is reported, not rolled back**: stdout is written first, then stderr; if the second
 fails, the first stays as written (its old contents were truncated in place, so there is nothing
-to restore) and the detail lines read `written: stdout` / `failed: stderr`. **Both writes go
+to restore) and the detail lines read `written: stdout` / `failed: stderr`; **if the first
+(stdout) fails, the second is not attempted** — its artifact keeps its previous contents, since
+nothing has touched it — and the detail lines read `failed: stdout` / `skipped: stderr`. All
+three detail keys (`written:`, `failed:`, `skipped:`) have registry rows (AC-4.5), and each branch
+has its test (`test_first_stream_write_failure_skips_the_second`,
+`test_second_stream_write_failure_leaves_the_first_as_written`). **Both writes go
 through one module function, `_final_write(handle, text)`** — the seam the AC-3.8 tests
 fault-inject, since no real mechanism makes a held descriptor fail deterministically on macOS
 (no `/dev/full`). **Aliasing is judged on the opened
@@ -551,8 +564,9 @@ declined or the block did not finish, which the count rule permits — a measure
 (`rc=`) is what it forbids. **The exit column follows the base Audit-gate signal discipline
 invariant**: every verdict — `RAN`, every refusal of readable input, and `TIMEOUT` — exits 0, so no
 refusal ever registers as a tool failure in the orchestrator's harness; exit 2 is reserved for the
-three operational classes the invariant names, `UNREADABLE` (input that could not be read, a path
-that could not be written or reserved, a write that failed) and `CLEANUP_FAILED`. AC-4.2 pins that
+three operational classes the invariant's non-zero rule covers: `UNREADABLE` (input that could not
+be read, a path that could not be written or reserved, a write that failed), `CLEANUP_FAILED` and
+`LAUNCH_FAILED`. AC-4.2 pins that
 partition row by row, and the test that walks this table is what keeps the two from drifting.
 
 ## Error Handling Strategy
@@ -697,6 +711,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
 | `chmod-failure-unwrapped` | a failing `os.chmod` propagates and the created cwd is left behind | `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (AC-3.13/4.6) |
 | `chmod-rollback-unguarded` | the chmod failure removes the cwd outside the `finally` selection, so a failing removal is a traceback | `test_chmod_rollback_failure_is_cleanup_failed` (AC-3.13/3.14) |
+| `body-indent-not-stripped` | `extract` returns fence body lines with the opener's indentation still on them | `test_indented_fence_body_is_deindented` (AC-1.6 — exact text at 1, 2 and 3 spaces, plus a body line indented less than the opener) |
 | `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_bounder_ignores_an_indented_literal_fence` (AC-1.8 — the bounder's own contract; `test_indented_literal_tag_is_not_a_candidate` pins the extractor side of the same rule under AC-1.6) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
@@ -705,7 +720,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Thirty-eight rows, thirty-eight mutations — every row is a source mutation of the helper (the
+Thirty-nine rows, thirty-nine mutations — every row is a source mutation of the helper (the
 AC-5.3 row, once described as a fixture-copy self-check, is now a real argv mutation the source
 scan must catch); the two AC-4.5 rows are the
 manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
@@ -827,3 +842,4 @@ mean the probe never created one.
 - v1.28: Design audit v21 (codex must 1; agy should 3): poll() before killpg, the AC-5.5 race driven by a real fixture with no mock, the AC-4.6 reap test's teardown waits on the handle it holds; poll-before-killpg-removed mutation (38 rows); FR-4 summary names three operational classes; extract's doc is a path.
 - v1.29: Design audit v22 (codex must 2; agy clean + 2 nits): the binding rule (root, command, target_command, full node IDs) stated for all three specs; the AC-5.3 row is a real argv mutation; the wire spec's three mutations enumerated.
 - v1.30: Design audit v23 (codex should 1; agy must 2 should 2): the two bounder-contract tests bind the tilde and indentation mutations; fence_aware_end's docstring states the full rule; _final_write flushes and closes inside the mapped region; O_EXCL creation detection; CLEANUP_FAILED os_error detail; the stale differential-test phrase removed.
+- v1.31: Design audit v24 (codex must 1 should 1; agy nit): the AC-4.6 reap test's handle seam (recording Popen pass-through) and exact teardown order; stdout-first write-failure branch; body de-indentation in extract with body-indent-not-stripped (39 rows); the three-classes sentence lists three.

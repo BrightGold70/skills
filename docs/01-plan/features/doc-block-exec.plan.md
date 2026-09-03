@@ -53,8 +53,11 @@ validated by `main` and map to verdict lines — `--index` non-integer or below 
 before any spawn; argparse's own usage error covers only *grammar* (unknown option, missing
 value) and is the documented single non-`DOCBLOCK` exit. `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
-2, block not run (test: `test_cli_unreadable_preamble_refuses_before_running`, whose block has a
-side effect the test asserts is absent). The preamble and the block are composed as
+2, block not run — for a path that cannot be read **and** for a file that is not valid UTF-8,
+since the preamble is read strictly and text that will execute is never silently repaired (tests:
+`test_cli_unreadable_preamble_refuses_before_running` and
+`test_cli_invalid_utf8_preamble_refuses_before_running`, each with a block whose side effect the
+test asserts is absent; the document gets the same treatment under `doc_unreadable`). The preamble and the block are composed as
 `preamble.rstrip("\n") + "\n" + text′`, with `text′` the block text *after* substitution, so the
 preamble precedes what actually runs — one newline boundary, always — so a preamble file
 that lacks a trailing newline cannot fuse with the recipe's first line
@@ -65,8 +68,16 @@ reserved after every check, and no open ever truncates**: after extraction, sele
 substitution and every remaining pre-spawn validation (timeout, preamble readability — the info
 string was validated inside `extract` and the ordinal inside `select`) have passed, both paths are
 opened for *append*, the handles held, and only then compared for aliasing on their descriptors — append creates a missing file
-and never empties an existing one. The truncation is the final write itself, `seek(0);
-truncate(); write`, on those held handles after a successful run. So a failure to reserve the
+and never empties an existing one. The truncation is the final write itself — `seek(0);
+truncate(); write; flush(); close()`, all five inside the module's `_final_write(handle, text)`,
+because a buffered `TextIOWrapper` may defer the OS write until `flush()`/`close()` and an error
+surfacing at a close outside the mapped region would be a traceback rather than
+`stream_write_failed` — on those held handles after a successful run. Writes are ordered stdout
+then stderr; a failure on stdout skips stderr (`failed: stdout` / `skipped: stderr`), a failure on
+stderr leaves stdout as written (`written: stdout` / `failed: stderr`), and every one of those
+detail lines has a registry row (tests: `test_stream_write_failure_after_the_run_is_a_refusal`,
+`test_first_stream_write_failure_skips_the_second`,
+`test_second_stream_write_failure_leaves_the_first_as_written`). So a failure to reserve the
 second path finds the first untouched (a file this call created is unlinked again; a pre-existing
 one keeps every byte), a refusal anywhere earlier touches neither, and a run ending in `TIMEOUT`
 or `CLEANUP_FAILED` writes nothing to either. "Reserved, then failed the write" can therefore only
@@ -239,6 +250,7 @@ planned against):
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
+| `extract` body normalisation | *(rule on `extract`, not a function)* | a selected fence's body is de-indented by **up to the opener's indentation** per line, as CommonMark specifies — an opener indented 1–3 spaces yields body text with those leading spaces removed and no more; recognising the fence correctly but returning un-normalised text is the gap this row closes. Test `test_indented_fence_body_is_deindented` (exact-text fixture at 1, 2 and 3 spaces, and a body line indented *less* than the opener, which is left as is); mutation `body-indent-not-stripped` |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length, opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; the bounder `extract` uses and `docsections` delegates to (AC-1.8). Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
@@ -327,7 +339,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 38 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 39 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -345,7 +357,7 @@ by decision rather than by omission.
 | A recipe's side effects reach the working tree | Medium | Every run in a fresh `tempfile.mkdtemp()` cwd, removed afterwards; pinned by asserting the tree is byte-identical across a run that writes files |
 | "Run under `mktemp -d`" is read as the shell utility, acquiring an external dependency | Medium | The phrase came verbatim from the candidate row and is a stdlib call here: AC-3.13 asserts `tempfile.mkdtemp()`, mode `0o700`, and no `mktemp` invocation in the source |
 | A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver. Two races on that path are handled, not hoped away (AC-5.5): `killpg` on a group that already emptied raises `ProcessLookupError` (measured) and is read as "already reaped"; a drain `communicate` that an escapee keeps open is itself bounded, after which the pipes are closed and the leader reaped |
-| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` raises and `ignore_errors=True` retains the tree — command and output under Measurements. The permission fixture is skipped under root (`euid == 0`, where mode bits do not bind) and a deterministic fault injection runs everywhere: `shutil.rmtree` monkeypatched in the helper's namespace to raise `OSError`, and separately to silently do nothing, so both guards — the recorded error and the read-back — each have a mutation only they kill |
+| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure — with an `os_error: <text>` detail line whenever an `OSError` was recorded, so the diagnostic is never lost (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` raises and `ignore_errors=True` retains the tree — command and output under Measurements. The permission fixture is skipped under root (`euid == 0`, where mode bits do not bind) and a deterministic fault injection runs everywhere: `shutil.rmtree` monkeypatched in the helper's namespace to raise `OSError`, and separately to silently do nothing, so both guards — the recorded error and the read-back — each have a mutation only they kill |
 | The strict default hides the very defect class that motivated the feature | Medium | `shell=plain` is declarable per fence, and the shell-killing `exit` case is pinned as an explicit acceptance criterion |
 | An unknown info-string key silently falls back to a default mode | Medium | Unknown keys refuse rather than default |
 | The carried "68 fences" figure is stale | Low | Re-measured this session; command and output cited below under Measurements |
@@ -648,3 +660,4 @@ design begins.
 - v1.32: Plan re-audit v17 (codex must 2 should 1; agy clean) + design audit v21: fence_aware_end's contract names tilde runs and the 0-3 indentation rule with its tests and mutations; mutation-spec binding rule (root, command, target_command, full node IDs) for both new specs; extract's doc is a path; the naturally-emptied-group probe cited with poll()-first; five functions plus main; 37 mutations.
 - v1.33: Plan re-audit v18 (codex must 1; agy clean): docsections.json test keys are full node IDs; 38 source mutations; FR-4 summary states the invariant's class rather than claiming it names the tokens.
 - v1.34: Plan re-audit v19 (both surfaces clean; agy nit): the delegation spy is installed on docsections._dbe.
+- v1.35: Plan re-audit v20 (codex must 2; agy clean): the body de-indentation rule on extract with its test and mutation; _final_write flushes and closes inside the mapped region; both stream-failure branches; invalid-UTF-8 preamble test; CLEANUP_FAILED os_error detail; 39 mutations.
