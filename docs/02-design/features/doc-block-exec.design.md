@@ -73,7 +73,8 @@ caller (test, or operator on the CLI)
         │                                          then the SAME finally-cleanup + read-back selection)
         ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], start_new_session=True,
         │         text=True, encoding="utf-8", errors="replace")
-        ├── communicate(timeout) ─── TimeoutExpired ──► killpg(SIGKILL) [ESRCH = already reaped]
+        ├── communicate(timeout) ─── TimeoutExpired ──► poll() ──► killpg(SIGKILL) [ESRCH = already reaped;
+        │                                                 poll() first, else a zombie-only group is EPERM on macOS]
         │                                                 ──► drain communicate(DRAIN_SECONDS)
         │                                                     [expired: close pipes, wait()] ──► TIMEOUT
         └── finally: rmtree(cwd) ──► read back: lexists? ──► CLEANUP_FAILED (outranks TIMEOUT)
@@ -247,17 +248,22 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
 
 **Two races remain on that path, and both are handled rather than left to a traceback** (AC-5.5):
 
-1. **The group empties between `TimeoutExpired` and `killpg`.** `os.killpg` then raises
-   `ProcessLookupError` — measured on an already-reaped leader (plan §Measurements, last line).
-   The helper catches exactly that exception and treats it as "already reaped" — and the test
-   that injects it models that state rather than merely asserting it: its fake `killpg` calls
-   the real `os.killpg(pgid, SIGKILL)`, polls `os.kill(pgid, 0)` until `ProcessLookupError`, and
-   only then raises `ProcessLookupError` itself, so the drain sees a genuinely empty group and
-   nothing is left running (a fake that only raised would leave the timed-out `sleep` alive and
-   the drain or `wait()` hanging on it — the stub would not model the state production consumes).
-   "Already reaped" is the
-   state the kill wanted. Any other `OSError` (a `PermissionError`, in practice unreachable on
-   one's own child but not impossible) is **not** allowed to escape as a traceback: the helper
+1. **The group empties between `TimeoutExpired` and `killpg`.** The helper first calls
+   `proc.poll()` — non-blocking, it reaps the leader if it has already exited — and only then
+   `os.killpg(proc.pid, SIGKILL)`, catching `ProcessLookupError` as "already reaped". **The
+   `poll()` is load-bearing, not tidiness**: a leader that exited is a zombie until reaped, and
+   measured on macOS, `killpg` on a zombie-only group raises `PermissionError`, not
+   `ProcessLookupError` (plan §Measurements, the naturally-emptied-group probe); after `poll()`
+   the same call raises `ProcessLookupError`. Without the `poll()` the natural race would be
+   misreported as `LAUNCH_FAILED stage=reap` (the `poll-before-killpg-removed` mutation).
+   **The test needs no fake**: `test_timeout_survives_a_group_that_already_emptied` runs a leader
+   that starts an `os.setsid()` descendant holding stdout and exits at once; `communicate` times
+   out on the escapee's pipe, `poll()` reaps the zombie, `killpg` raises `ProcessLookupError`, the
+   drain times out, the pipes close, `wait()` returns at once, and the verdict is `TIMEOUT` with
+   the cwd gone — the test kills the escapee from its pid file in `finally`. That one real fixture
+   drives both AC-5.5 races. Any other `OSError` from `killpg` *after* `poll()` (a
+   `PermissionError` on a genuinely live child one cannot signal) is **not** allowed to escape as a
+   traceback: the helper
    still runs the bounded drain and closes the pipes, does **not** `wait()` (a child it could not
    signal is not something to wait on unboundedly), records `LaunchFailed("reap", err)` as the
    pending outcome with `pgid=<n>` in its detail, and lets cleanup and the read-back run as usual
@@ -265,10 +271,13 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    helper has no signal that would work where `SIGKILL` to the group did not, so it reports the
    pgid and returns bounded rather than pretending; this is the one documented case in which a
    launched process may outlive the call. **The test for it must not become that case**: its fake
-   `killpg` records the pgid and raises, and the test's `finally` sends the real
-   `os.killpg(pgid, SIGKILL)` and asserts `ProcessLookupError` on a follow-up `os.kill(pgid, 0)`
-   — CPython's `Popen.__del__` never kills a live child, so without that teardown the
-   fault-injected test would leave a `sleep` running after it returned.
+   `killpg` (the AC-4.6 injection, the only remaining use of the `os.killpg` seam) records the pgid
+   and raises `PermissionError`, and the test's `finally` sends the real `os.killpg(pgid, SIGKILL)`,
+   calls `proc.wait()` on the handle it holds, and asserts `ProcessLookupError` on a follow-up
+   `os.killpg(pgid, 0)` — the `wait()` is what reaps the zombie leader, without which the
+   assertion could never pass (measured: `os.kill(pid, 0)` succeeds on a zombie); CPython's
+   `Popen.__del__` never kills a live child, so without that teardown the fault-injected test
+   would leave a `sleep` running after it returned.
 2. **The post-kill drain does not finish.** After `killpg` a second `communicate` collects what
    the group wrote before dying; but a descendant that left the group (AC-5.2's `os.setsid()`
    escapee) still holds the inherited pipes, so that `communicate` can block for as long as the
@@ -337,7 +346,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 36 mutations plus the AC-5.3 self-check (37 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 37 mutations plus the AC-5.3 self-check (38 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -391,7 +400,8 @@ lives. Split, each has one job:
 
 ```python
 def extract(doc: str | Path, heading: str) -> list[Block]:
-    """Pure scan. Returns every tagged block under `heading`, possibly empty.
+    """Pure scan. `doc` is a PATH (a str is converted with Path), read as
+    strict UTF-8 — never document text. Returns every tagged block under `heading`, possibly empty.
     Raises DocUnreadable, BadInfoString or AmbiguousHeading — never on candidate count."""
 
 def select(blocks: Sequence[Block], index: int | None = None) -> Block:
@@ -530,7 +540,7 @@ declined or the block did not finish, which the count rule permits — a measure
 (`rc=`) is what it forbids. **The exit column follows the base Audit-gate signal discipline
 invariant**: every verdict — `RAN`, every refusal of readable input, and `TIMEOUT` — exits 0, so no
 refusal ever registers as a tool failure in the orchestrator's harness; exit 2 is reserved for the
-two operational classes the invariant names, `UNREADABLE` (input that could not be read, a path
+three operational classes the invariant names, `UNREADABLE` (input that could not be read, a path
 that could not be written or reserved, a write that failed) and `CLEANUP_FAILED`. AC-4.2 pins that
 partition row by row, and the test that walks this table is what keeps the two from drifting.
 
@@ -574,9 +584,9 @@ Unit tests only, at the module boundary; no mocking of `subprocess`, because the
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
 stub out. **Five named exceptions, all fault injections on a call whose *failure* is under test,
 all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real:** the AC-5.5
-`killpg` race is a timing window between `TimeoutExpired` and the kill that no fixture can hold
-open, so its test patches `os.killpg` to raise `ProcessLookupError` (and, for AC-4.6's `reap`
-stage, `PermissionError`); the AC-3.14 cleanup guards are exercised by patching `shutil.rmtree`
+`killpg` seam is patched only for AC-4.6's `reap` stage (`PermissionError` after `poll()`), since
+the AC-5.5 race itself is reproduced by a real fixture (a leader that exits at once behind an
+`os.setsid()` escapee) and needs no mock; the AC-3.14 cleanup guards are exercised by patching `shutil.rmtree`
 in the helper's namespace — once to raise `OSError`, once to do nothing — because a real
 permission failure is skipped under root and the two guards need mutants only one of them kills;
 and AC-4.6's `mkdtemp` stage patches `tempfile.mkdtemp` to raise and, separately, `os.chmod` to
@@ -611,8 +621,8 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid and the test's `finally` sends the real `SIGKILL` to it and asserts the group is gone; each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE` and `CLEANUP_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
-| AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
-| AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`: `os.killpg` monkeypatched with a fake that **really kills the group, waits for it to empty, then** raises `ProcessLookupError` → still `TIMEOUT`, cwd absent, no traceback, nothing left running (asserted with `os.kill(pgid, 0)` in `finally`); `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
+| AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
+| AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`, **no mock**: the block is `python3 esc.py & exit 0` where `esc.py` calls `os.setsid()`, writes its pid to an absolute path outside the cwd, and sleeps holding stdout — `communicate` times out, `poll()` reaps the zombie leader, `killpg` raises `ProcessLookupError`, the drain times out, pipes close, `wait()` returns at once → `TIMEOUT`, cwd absent, no traceback; the test kills the escapee in `finally`; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
 | AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `run_recipe`), and **exactly one** remaining in the file — the `:412` text scan, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + 5, the five being the named node IDs added to `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`), each asserted present; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 
@@ -651,6 +661,7 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `killpg-replaced-by-kill` | `proc.kill()` instead of `os.killpg(proc.pid, …)` | `test_in_group_descendant_is_reaped` (AC-5.2) |
+| `poll-before-killpg-removed` | `proc.poll()` before `killpg` is gone, so the natural race reports `LAUNCH_FAILED stage=reap` (EPERM on a zombie-only group) instead of `TIMEOUT` | `test_timeout_survives_a_group_that_already_emptied` (AC-5.5) |
 | `killpg-esrch-uncaught` | `ProcessLookupError` from `killpg` propagates | `test_timeout_survives_a_group_that_already_emptied` (AC-5.5) |
 | `drain-unbounded` | the post-kill `communicate` has no timeout | `test_timeout_drain_is_bounded_against_an_escapee` (AC-5.5) |
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
@@ -664,7 +675,7 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
 
-Thirty-seven rows: thirty-six mutations plus the AC-5.3 self-check — the two AC-4.5 rows are the
+Thirty-eight rows: thirty-seven mutations plus the AC-5.3 self-check — the two AC-4.5 rows are the
 manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
@@ -781,3 +792,4 @@ mean the probe never created one.
 - v1.25: Design audit v17 (codex must 1): 0-3 space indentation rule in the scanner, its hostile fixture and mutation (35 rows).
 - v1.26: Design audit v18 (codex must 2 should 1 nit 1; agy clean): AC-4.5 gets two mutations (registry row removed, detail line undocumented); the delegation wire is module-qualified and mutation-pinned; the reap-failure branch is stated never to wait (37 rows).
 - v1.27: Design audit v19 (codex must 1; agy see report): the AC-6 test row scopes the no-re.findall assertion to the executing path and pins the :412 scan as the single remaining occurrence.
+- v1.28: Design audit v21 (codex must 1; agy should 3): poll() before killpg, the AC-5.5 race driven by a real fixture with no mock, the AC-4.6 reap test's teardown waits on the handle it holds; poll-before-killpg-removed mutation (38 rows); FR-4 summary names three operational classes; extract's doc is a path.

@@ -223,17 +223,18 @@ passes, and making the call site unconditional — resolving a block regardless 
 also fail a named test. Only the pair distinguishes a wire that works from one that fires always,
 and neither is visible to a whole-module revert, which removes both sides at once.
 
-**Task-level API, and how the caller changes.** The importable surface is five functions and two
+**Task-level API, and how the caller changes.** The importable surface is five functions plus
+`main` (all six in `__all__`) and two
 frozen dataclasses (the design carries the full signatures; this is the contract the wire is
 planned against):
 
 | symbol | signature | returns / raises |
 |---|---|---|
-| `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
+| `extract` | `(doc: str \| Path, heading: str) -> list[Block]` — `doc` is always a **path** (`str` accepted and converted with `Path`), read strictly as UTF-8; document *text* is never accepted, so `DocUnreadable` is deterministic for every caller | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
-| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
+| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length, opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; the bounder `extract` uses and `docsections` delegates to (AC-1.8). Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
 is module-qualified**: the file adds `import h_mad_doc_block_exec as dbe` after its existing
@@ -251,6 +252,17 @@ substitutes and `main` can refuse a bad map before it reserves any artifact. Its
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
 nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
 moves; `:412` keeps `re.findall` on purpose.
+
+**Binding, for both new mutation specs — the harness executes `target_command + [test]`, so a
+bare function name is not runnable and a `test` key without `target_command` is a spec error.**
+`root` is `../..` (commands run from `h-mad/`, as `docsections.json` does), `target_command` is
+`["python3.11", "-m", "pytest", "-q"]`, and every `test` key is a full node ID:
+`tests/test_h_mad_doc_block_exec.py::<name>` for every row of `doc_block_exec.json` (whose
+`command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_doc_block_exec.py", "-q"]`), and
+`tests/test_h_mad_collect_report_docs.py::<name>` for every row of `doc_block_exec_wire.json`
+(whose `command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py",
+"-q"]`). The names in the tables below and in the design are the `<name>` half; the impl-plan
+carries them fully qualified.
 
 **FR-6 wire tests and the mutations each kills** — `h-mad/tests/mutation-specs/doc_block_exec_wire.json`:
 
@@ -310,7 +322,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 36 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 37 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -454,6 +466,51 @@ cleaned by the test's finally: True
 Under root the mode bits do not bind and the raise does not occur, so the test skips the
 permission fixture there and the fault-injected variants carry the AC (Risks table).
 
+**The naturally emptied group (AC-5.5), and why `poll()` comes first.** The race the design
+handles — the group is already gone when the reap runs — was assumed to surface as
+`ProcessLookupError`. Measured, it does not on macOS unless the leader is reaped first: a leader
+that has exited is a zombie, and `killpg` on a zombie-only group raises `PermissionError`; after
+`proc.poll()` reaps it the same call raises `ProcessLookupError`. The fixture is a leader that
+starts an `os.setsid()` descendant holding stdout and exits at once — no mock — and the same run
+shows the drain timing out on the escapee's pipe and `wait()` returning immediately:
+
+```
+$ python3.11 -u - <<'PY'
+import os, signal, subprocess, sys, tempfile, time
+d = tempfile.mkdtemp(); child = os.path.join(d, "esc.py"); pidf = os.path.join(d, "pid")
+open(child, "w").write(f"import os,time\nos.setsid()\nopen({pidf!r},'w').write(str(os.getpid()))\ntime.sleep(300)\n")
+p = subprocess.Popen(["bash", "-c", f"{sys.executable} {child} & exit 0"], start_new_session=True,
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+for _ in range(200):
+    if os.path.exists(pidf) and open(pidf).read().strip(): break
+    time.sleep(0.05)
+esc = int(open(pidf).read())
+try: p.communicate(timeout=1.0)
+except subprocess.TimeoutExpired:
+    print("TimeoutExpired (escapee %d holds the pipe; leader exited)" % esc)
+    try: os.killpg(p.pid, signal.SIGKILL); print("killpg BEFORE poll: no error")
+    except OSError as e: print("killpg BEFORE poll:", type(e).__name__)
+    rc = p.poll(); print("poll() reaped the zombie leader, rc =", rc)
+    try: os.killpg(p.pid, signal.SIGKILL); print("killpg AFTER poll: no error")
+    except OSError as e: print("killpg AFTER poll:", type(e).__name__, "<- group empty")
+    t0 = time.monotonic()
+    try: p.communicate(timeout=1.0); print("drain finished")
+    except subprocess.TimeoutExpired:
+        p.stdout.close(); p.stderr.close(); p.wait(); print("drain timed out at %.1fs -> pipes closed, wait() returned rc %s at once" % (time.monotonic()-t0, p.returncode))
+os.kill(esc, signal.SIGKILL); print("escapee reaped by the probe; python", sys.version.split()[0], sys.platform)
+PY
+TimeoutExpired (escapee 96921 holds the pipe; leader exited)
+killpg BEFORE poll: PermissionError
+poll() reaped the zombie leader, rc = 0
+killpg AFTER poll: ProcessLookupError <- group empty
+drain timed out at 1.0s -> pipes closed, wait() returned rc 0 at once
+escapee reaped by the probe; python 3.11.8 darwin
+```
+
+So the reap sequence is `poll()` → `killpg` (catch `ProcessLookupError`) → bounded drain → close
+pipes → `wait()`; without the `poll()` the natural race reports `LAUNCH_FAILED stage=reap` instead
+of `TIMEOUT`, which is the mutation `poll-before-killpg-removed` and the test that kills it.
+
 **That measurement stands and is no longer the whole story:** a later design cycle found the same
 toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which is why
 `docsections.py` now appears under Deliverables and Implementation Strategy — it drops its
@@ -583,3 +640,4 @@ design begins.
 - v1.29: Design audit v17 back-propagation: 34 mutations plus the self-check.
 - v1.30: Design audit v18 (codex must 2 should 1 nit 1; agy clean): docsections delegates through a module-qualified alias and carries its own wire mutation (docsections-delegation-reverted); importer census corrected to three files with the command; 36 mutations plus the self-check.
 - v1.31: Plan re-audit v16 (codex clean + 1 nit; agy must 1 + 1 nit): substitute's row names BadSubstArg; five functions, not four; AC anchor cites spec v1.26.
+- v1.32: Plan re-audit v17 (codex must 2 should 1; agy clean) + design audit v21: fence_aware_end's contract names tilde runs and the 0-3 indentation rule with its tests and mutations; mutation-spec binding rule (root, command, target_command, full node IDs) for both new specs; extract's doc is a path; the naturally-emptied-group probe cited with poll()-first; five functions plus main; 37 mutations.

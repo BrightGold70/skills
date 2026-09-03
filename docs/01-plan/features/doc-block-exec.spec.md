@@ -323,21 +323,23 @@ not opted in.
     error remains only for *grammar* — an unknown option or a missing value — and is documented
     as the one non-`DOCBLOCK` exit.
   - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
-    tested: (a) the group has already emptied by the time `killpg` runs — `ProcessLookupError`,
-    reproduced on a reaped leader — is treated as "already reaped", never a traceback (its test's
-    fake `killpg` first sends the real `SIGKILL` to the group and waits for it to empty, *then*
-    raises, so the injected exception models the state production reads it as and nothing is left
-    running); (b) the
+    tested: (a) the group has already emptied by the time `killpg` runs. **The helper calls
+    `proc.poll()` before `killpg`**, because a leader that exited is a zombie until reaped and,
+    measured on macOS, `killpg` on a zombie-only group raises `PermissionError`, not
+    `ProcessLookupError`; after `poll()` reaps it the same call raises `ProcessLookupError`, which
+    is treated as "already reaped", never a traceback. **The test needs no fake**: a leader that
+    starts an `os.setsid()` descendant holding stdout and exits at once produces exactly this
+    state (plan §Measurements cites the probe), and the same fixture drives (b); (b) the
     post-kill drain `communicate` itself times out because an out-of-group descendant (AC-5.2's
     escapee) still holds the pipes — the helper closes both pipes, reaps the leader, and reports
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
-    bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
-    its test injects the fault by monkeypatching `os.killpg` — one of exactly **five** named
-    fault injections this suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`,
-    `os.chmod`, and the module's own `_final_write` seam for AC-3.8's post-run write failure; the
-    design's Test Strategy bounds the list, and `subprocess` is never mocked); (b) is driven by a
-    real `os.setsid()` descendant.
+    bounded" holds against an escapee too. Both (a) and (b) are driven by one real
+    `os.setsid()` fixture, no mock; `os.killpg` is monkeypatched only for AC-4.6's
+    `PermissionError`-after-`poll()` case — one of exactly **five** named fault injections this
+    suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod`, and the module's
+    own `_final_write` seam for AC-3.8's post-run write failure; the design's Test Strategy bounds
+    the list, and `subprocess` is never mocked).
 
 ### FR-6: Migrate the existing inline harness onto the helper
 
@@ -495,3 +497,4 @@ quoted
 - v1.24: Design audit v15 (codex must 5 should 2; agy clean + 1 nit): AC-1.6 covers tilde fences; AC-3.14's failure rule is 'recorded error OR read-back present'; the renderer assumption is now MEASURED on GitHub's POST /markdown and on markdown-it-py, command and output cited; AC-3.8 orders the writes, reports partial state, and names the _final_write seam (fifth injection); AC-2.8's empty-key rule lives in substitute; AC-1.7 carries heading=.
 - v1.25: Design audit v16 (codex must 3; agy clean): AC-5.5's killpg fake really empties the group before raising; AC-3.13's chmod rollback goes through the ordinary cleanup selection so a failing removal is CLEANUP_FAILED.
 - v1.26: Design audit v17 (codex must 1; agy pass UNVERIFIED, dispatch rc=1): AC-1.6 states the CommonMark 0-3 space indentation rule for openers and closers; a four-space-indented literal tag is never a candidate.
+- v1.27: Design audit v21 (codex must 1): AC-5.5(a) is reproduced by a real fixture — a leader that exits behind an os.setsid() escapee — and the helper polls before killpg, because killpg on a zombie-only group raises PermissionError on macOS (measured); os.killpg is injected only for AC-4.6.
