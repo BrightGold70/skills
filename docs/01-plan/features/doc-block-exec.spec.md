@@ -218,7 +218,9 @@ not opted in.
     `0o700 & ~umask` — measured, `umask 0777` gives mode `0o0` — so the chmod is what makes the AC
     true rather than environment-dependent. The test sets `os.umask(0o777)` around the call and
     restores it in `finally`. A chmod that fails is `LAUNCH_FAILED stage=mkdtemp` (AC-4.6) after
-    the directory is removed — tested by fault-injecting `os.chmod` to raise and asserting the
+    the directory is removed — through the same recorded-error-plus-read-back cleanup selection as
+    every other path, so a rollback whose removal itself fails is `CLEANUP_FAILED` (with the
+    `LaunchFailed` as `__cause__`), never a traceback (tested by injecting both) — tested by fault-injecting `os.chmod` to raise and asserting the
     verdict, the `os_error:` detail, and that the just-created directory is gone; the guard has
     its own mutation. The
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
@@ -316,7 +318,10 @@ not opted in.
     as the one non-`DOCBLOCK` exit.
   - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
     tested: (a) the group has already emptied by the time `killpg` runs — `ProcessLookupError`,
-    reproduced on a reaped leader — is treated as "already reaped", never a traceback; (b) the
+    reproduced on a reaped leader — is treated as "already reaped", never a traceback (its test's
+    fake `killpg` first sends the real `SIGKILL` to the group and waits for it to empty, *then*
+    raises, so the injected exception models the state production reads it as and nothing is left
+    running); (b) the
     post-kill drain `communicate` itself times out because an out-of-group descendant (AC-5.2's
     escapee) still holds the pipes — the helper closes both pipes, reaps the leader, and reports
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
@@ -482,3 +487,4 @@ quoted
 - v1.22: Design audit v12 (codex must 2; agy must 3): AC-5.5 names the three permitted fault injections instead of 'the one'; AC-3.14's __cause__ rule includes a reap-stage LaunchFailed; AC-6.4's tuple is the five consumer-file tests only.
 - v1.23: Design audit v14 (codex must 5; agy must 2): the renderer-inertness assumption is marked specification-backed but unmeasured (no multi-word fence in the tree, no local renderer) with a Phase-5 operator check; AC-5.5 names four permitted fault injections (os.chmod added); AC-3.13's chmod failure is tested and mutation-covered.
 - v1.24: Design audit v15 (codex must 5 should 2; agy clean + 1 nit): AC-1.6 covers tilde fences; AC-3.14's failure rule is 'recorded error OR read-back present'; the renderer assumption is now MEASURED on GitHub's POST /markdown and on markdown-it-py, command and output cited; AC-3.8 orders the writes, reports partial state, and names the _final_write seam (fifth injection); AC-2.8's empty-key rule lives in substitute; AC-1.7 carries heading=.
+- v1.25: Design audit v16 (codex must 3; agy clean): AC-5.5's killpg fake really empties the group before raising; AC-3.13's chmod rollback goes through the ordinary cleanup selection so a failing removal is CLEANUP_FAILED.
