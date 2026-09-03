@@ -102,8 +102,10 @@ not opted in.
   - AC-2.6: **Substitution is simultaneous and counts are taken on the original text.** Every
     key is counted against the block as written, and all replacements happen in one pass that
     never re-scans replaced text, so a value that contains another key's text is neither
-    re-substituted nor counted: with `A→B` and `B→C` on a block containing only `A`, the result is
-    `B` and `B` reports `SUBST_MISSING` regardless of map order. (An earlier draft prescribed
+    re-substituted nor counted: with `A→B` and `B→C` on a block containing `A B`, the result is
+    `B C` **in both map orders** (a sequential implementation yields `C C` when `A` is replaced
+    first — the discriminating case — and both keys are present, so no missing-key precheck can
+    mask the difference). (An earlier draft prescribed
     sequential count-then-replace, which made the outcome depend on iteration order — the very
     class AC-2.7 refuses overlapping keys to avoid.)
   - AC-2.7: Overlapping keys refuse rather than resolve by order — if any key is a substring of
@@ -170,7 +172,11 @@ not opted in.
     each artifact so the operator knows which is current, and each of `written:`, `failed:` and
     `skipped:` has a registry row (tested by failing the first write only, and the second only). The final write goes through
     one named module function, `_final_write(handle, text)` — which seeks, truncates, writes,
-    **flushes and closes** the handle inside the region mapped to `stream_write_failed`, because a
+    **flushes and closes** the handle inside the region mapped to `stream_write_failed` — and after
+    the close each requested artifact is **read back and compared byte-for-byte to the stream
+    text**, a missing or mismatching artifact refusing with `stream_write_failed` and a
+    `verify: <stream>` detail line, so a write that silently did nothing cannot be reported as
+    `RAN` — because a
     buffered `TextIOWrapper` may not hit the OS until `flush()`/`close()` and an error surfacing
     at a close outside that region would be a traceback — and which is the seam the test
     fault-injects; no other mechanism can make a held descriptor fail deterministically on this
@@ -389,9 +395,10 @@ not opted in.
     `2747` (collected and passing at `6b4df35`, cited in the plan with its commands); the
     feature's additions are the collected count of the new module
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
-    alone) plus a fixed tuple of the named new node IDs added to an existing file — the **six**
-    wire and exemption tests in `test_h_mad_collect_report_docs.py`, enumerated in the plan; every other
-    new test, AC-1.8's delegation and collect-alone pins included, lives in the new module — each
+    alone) plus a fixed tuple of the named new node IDs added to existing files — the **seven**
+    enumerated in the plan: six wire and exemption tests in `test_h_mad_collect_report_docs.py`
+    and the delegation spy test in `test_docsections.py`; every other new test, the collect-alone
+    pins included, lives in the new module — each
     of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
@@ -518,3 +525,4 @@ quoted
 - v1.29: Design audit v24 (codex must 1 should 1; agy nit): AC-3.8 specifies the stdout-first failure branch (failed/skipped detail lines with registry rows); AC-4.6's reap test obtains its handle through the recording Popen pass-through and states the teardown order.
 - v1.30: Design audit v25 (codex must 1 should 1; agy clean): AC-3.8 names the atomic create-or-open ownership rule and the single closure path for held handles.
 - v1.31: Design audit v26 (agy must 4 should 1; codex must 1): AC-2.6 makes substitution simultaneous with counts on the original text, closing the map-order dependency sequential replacement had; AC-6.4's tuple is six tests.
+- v1.32: Design audit v27 (codex must 2; agy must 2 should 2): AC-2.6's discriminating fixture (A B -> B C in both orders); AC-3.8 read-back verification of every written artifact; AC-6.4's tuple is seven across two files.

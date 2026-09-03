@@ -204,10 +204,10 @@ names a block that does not exist, whereas `0` is not an ordinal at all.
 counted against `block.text` as written, and the replacement is one pass over that text — a
 single compiled alternation of the escaped keys, `re.sub("|".join(map(re.escape, keys)), lambda
 m: subs[m.group(0)], text)` — so replaced text is never re-scanned. That is what makes the result
-order-independent: with `A→B` and `B→C` on a block containing only `A`, the outcome is `B` and
-`B` is `SUBST_MISSING` whatever the map's iteration order, whereas the sequential
-count-then-replace an earlier draft prescribed yielded `C` in one order and `SUBST_MISSING` in
-the other — exactly the order-dependent surprise AC-2.7 refuses overlapping keys to avoid,
+order-independent: with `A→B` and `B→C` on a block containing `A B`, the outcome is `B C`
+whatever the map's iteration order, whereas the sequential count-then-replace an earlier draft
+prescribed yields `C C` when `A` is replaced first and `B C` when `B` is — an outcome that
+depends on dict order, exactly the surprise AC-2.7 refuses overlapping keys to avoid,
 re-created one step later. Overlap refusal (below) is what makes the alternation unambiguous, so
 no key can match inside another. Each reported count is the number of matches in the original
 text, which is the number replaced (AC-2.5).
@@ -366,7 +366,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 40 source mutations (40 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 41 source mutations (41 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -529,7 +529,13 @@ on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); trun
 flush(); close()` — all five inside `_final_write`, because a buffered `TextIOWrapper` may defer
 the OS write (and even the truncate) until `flush()` or `close()`, and an `OSError` surfacing at a
 close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
-so an existing artifact is overwritten, never appended. On `TIMEOUT` or `CLEANUP_FAILED` nothing is
+so an existing artifact is overwritten, never appended. **The write is then verified, not
+trusted**: after `_final_write` returns, `main` re-reads each requested artifact
+(`Path(path).read_text(encoding="utf-8")`) and compares it to the stream text; a missing file or a
+mismatch is `StreamWriteFailed` with `verify: <stream>` in its detail, so a writer that silently
+did nothing — or an artifact that vanished between close and verdict — can never be reported as
+`RAN` (the base mutation-verification rule, applied to the helper's own output; mutation
+`final-write-not-verified`). On `TIMEOUT` or `CLEANUP_FAILED` nothing is
 written to either handle and pre-existing artifacts are untouched. A failure *in* that final write
 can therefore only be an error on an open descriptor (disk full, I/O error) and maps to
 `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2; the `rc` is not reported,
@@ -579,7 +585,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: BAD_INFO key=<k>` | 0 | unrecognised info-string token |
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
-| `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
+| `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` (+ `pgid: <n>` when `stage=reap`) | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
 | `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
 The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
@@ -622,10 +628,10 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamPathUnwritable` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (wraps `OSError`, and its bounded-retry exhaustion) | `UNREADABLE reason=stream_path_unwritable` |
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
-| `StreamWriteFailed` | `main`, writing a stream to its held handle after the run | `UNREADABLE reason=stream_write_failed` |
+| `StreamWriteFailed(written, failed, skipped, verify=None)` | `main`, writing a stream to its held handle after the run, or verifying it by read-back | `UNREADABLE reason=stream_write_failed` + `written:`/`failed:`/`skipped:` detail lines from its fields, and `verify: <stream>` when the read-back disagreed |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` |
-| `LaunchFailed(stage, err)` | `run_block` — `mkdtemp`, `Popen`, or a non-`ESRCH` `killpg` error, wrapped | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap>` + `os_error: <text>` |
+| `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, or a non-`ESRCH` `killpg` error, wrapped; `pgid` set on the `reap` stage | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap>` + `os_error: <text>` (+ `pgid: <n>` on `reap`) |
 
 `main` catches `DocBlockError` and dispatches on type, so adding an exception without a verdict
 line is a `KeyError` in the mapping table rather than a silent traceback — and a test asserts every
@@ -679,7 +685,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`, **no mock**: the block is `python3 esc.py & exit 0` where `esc.py` calls `os.setsid()`, writes its pid to an absolute path outside the cwd, and sleeps holding stdout — `communicate` times out, `poll()` reaps the zombie leader, `killpg` raises `ProcessLookupError`, the drain times out, pipes close, `wait()` returns at once → `TIMEOUT`, cwd absent, no traceback; the test kills the escapee in `finally`; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
-| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `run_recipe`), and **exactly one** remaining in the file — the `:412` text scan, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + 6, the six being the named node IDs added to `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`), each asserted present; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
+| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `run_recipe`), and **exactly one** remaining in the file — the `:412` text scan, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2747` + the collected count of `test_h_mad_doc_block_exec.py` alone + 7, the seven being the named node IDs added to existing files — six in `test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) and `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — each asserted present; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 
 **Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry.** Every
@@ -719,7 +725,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `index-below-one-accepted` | `index < 1` reaches `blocks[index - 1]` | `test_index_zero_refuses` (AC-1.9) |
 | `missing-key-silently-skipped` | a zero-count key is not collected | `test_absent_key_refuses` (AC-2.2) |
 | `overlap-resolved-by-order` | substring keys proceed in iteration order | `test_overlapping_keys_refuse` (AC-2.7) |
-| `replacement-sequential` | replacement becomes a per-key `str.replace` loop, so a value containing another key is re-scanned and the outcome depends on map order | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A` yields `B` and `SUBST_MISSING key=B` in both map orders) |
+| `replacement-sequential` | replacement becomes a per-key `str.replace` loop in map order, so a value containing another key is re-scanned | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A B` must yield `B C` for **both** map orders; the sequential mutant yields `C C` in the `A`-first order, and both keys occur so a missing-key precheck cannot mask it) |
 | `subst-split-on-every-equals` | `--subst` split on every `=` | `test_subst_value_may_contain_equals` (AC-2.8) |
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
 | `unknown-info-key-ignored` | an unrecognised token falls back to strict | `test_unknown_info_key_refuses` (AC-3.7) |
@@ -727,6 +733,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
+| `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
 | `stream-alias-check-removed` | the `fstat` `(st_dev, st_ino)` comparison is gone | `test_hard_linked_stream_paths_refuse` (AC-3.9) |
 | `chmod-0700-removed` | `os.chmod(cwd, 0o700)` after `mkdtemp` is gone | `test_cwd_mode_is_0700_under_hostile_umask` (AC-3.13) |
@@ -752,7 +759,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Forty rows, forty mutations — every row is a source mutation of the helper (the
+Forty-one rows, forty-one mutations — every row is a source mutation of the helper (the
 AC-5.3 row, once described as a fixture-copy self-check, is now a real argv mutation the source
 scan must catch); the two AC-4.5 rows are the
 manifest-integrity guard's own, one per direction of the bidirectional pin; a guard added later without a
@@ -877,3 +884,4 @@ mean the probe never created one.
 - v1.31: Design audit v24 (codex must 1 should 1; agy nit): the AC-4.6 reap test's handle seam (recording Popen pass-through) and exact teardown order; stdout-first write-failure branch; body de-indentation in extract with body-indent-not-stripped (39 rows); the three-classes sentence lists three.
 - v1.32: Design audit v25 (codex must 1 should 1; agy clean): two-arm create-or-open loop (exclusive create, else open without O_CREAT, ENOENT restarts) so every created file is recorded; one closure path for both reservations across every exit, with its test.
 - v1.33: Design audit v26 (codex must 1; agy must 4 should 1): cwd is None until mkdtemp returns; simultaneous single-pass substitution with the replacement-sequential mutation; os.open wording in the exception and mutation tables; closer-trailing-text rule and mutation; docsections migration assigned to Task 1; six consumer-file tests; 40 rows.
+- v1.34: Design audit v27 (codex must 2; agy must 2 should 2): substitution fixture discriminates the sequential mutant; artifacts are read back and compared after close (final-write-not-verified, 41 rows); StreamWriteFailed and LaunchFailed carry the fields the dispatcher prints; pgid on the reap verdict; seven-test floor tuple.
