@@ -238,7 +238,15 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # 3150 -> 96,891 B, past the frontier.) Was 2850/3150 until the 2026-08-25
     # candidate-batch added four rules to invariants.base.md (+4,724 B to EVERY
     # prompt: at 2850 the fixture measured 94,715 B, past the frontier). Measured
-    # after: 2645 -> 90,000 B, mid-band; 2945 -> 96,900 B, past the frontier. Was 3047/3347 after §"Guard narrowing"
+    # after: 2645 -> 90,000 B, mid-band; 2945 -> 96,900 B, past the frontier.
+    # Was 2645/2945 until the 2026-09-03 `quote:` evidence-marker rule added 1,365 B
+    # to the template, which is head-duplicated, so +2,730 B to EVERY prompt.
+    # Measured after: 2440 -> 90,008 B, mid-band; 2740 -> 96,908 B, past the
+    # frontier. NOTE the fixture was already 62 B under the ceiling before that
+    # edit -- measured directly against the pre-change template, 2645 -> 91,993 B.
+    # A drift this close reads as a pass right up until it doesn't, so the anchor
+    # deserves re-measuring whenever the template or invariants move, not only when
+    # this test goes red. Was 3047/3347 after §"Guard narrowing"
     # added 2,037 B on 2026-08-09: at the previous 3136 the fixture measured
     # 93,005 B, past the frontier, so the filler drops ~89 lines at ~23 B/line.
     # Was 3136/3436 after §"Wrapper–runtime reconciliation" added 1,583 B on
@@ -246,11 +254,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # the frontier. Was 3200/3500 after the 2026-07-30 re-anchor to the 92,055 B
     # confirmed-answered frontier, and 2000/2200 before that against the old
     # 61,493 B ceiling.
-    approaching, mid = size_of(2645)
+    approaching, mid = size_of(2440)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2945)
+    past, big = size_of(2740)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer

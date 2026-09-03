@@ -160,6 +160,27 @@ Output schema (exact, no other top-level sections):
 - <style/clarity issue>
   *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
 
+Quoting rule (Must-fix and Should-fix): **if a finding asserts what a document says, prove it.**
+Add an indented `quote:` line under that bullet naming the file and carrying the span copied
+verbatim out of it:
+
+    - <issue> — <why it breaks the invariant>
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
+The `quote:` line is a continuation of its bullet, never a new `- ` bullet — a leading `- ` would
+be scored as a second finding. Use one `quote:` line per document the finding names.
+
+This exists because backticks alone are ambiguous. Reviewers correctly backtick three other kinds
+of span — code they are **proposing** as the fix, test inputs they **constructed**, and commands
+they **ran** — and those legitimately do not occur in the document. Measured over 37 must-fixes:
+43% of *real* findings carry a backticked span absent from the document, so absence alone proves
+nothing and no automatic check can be built on it. `quote:` is the marker that separates a claim
+about the document from everything else you are entitled to write in backticks.
+
+A finding that asserts document content with no `quote:` line is not rejected automatically, but it
+is the first thing the orchestrator re-derives from source — and a `quote:` span that does not occur
+in the file it names is a finding withdrawn, not a finding to argue.
+
 Report file (preferred delivery under Orca — the orchestrator fills the path below, or leaves it empty):
 
 <REPORT_FILE_PATH>

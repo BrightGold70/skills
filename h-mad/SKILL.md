@@ -1003,6 +1003,35 @@ Cheap and mechanical: for each finding, open the file and line it names and conf
 what the finding says it says. Most premises check out in seconds, and the ones that do not are
 where the expensive mistakes live.
 
+### Record a rejected finding in the rejections ledger, never in a gated document
+
+When a premise does not hold and you reject the finding, write it to
+`docs/<phase-dir>/features/<feature>.<phase>.rejections.md` — one entry per rejection, naming the
+cycle, the surface, the claim, and the evidence that refuted it. **Never pass that ledger as
+`--gated`.** It is a record *about* the audit, not a document the audit judged.
+
+The rejection does **not** go in the gated document's Version History, which is where it naturally
+wants to go — the Version History is the session log, and a rejection feels like part of it. Two
+measured reasons it must not:
+
+- **It costs a second cycle.** The exit gate needs two consecutive both-clean cycles on
+  *byte-identical* documents. Recording a rejection edits a gated file, so a rejection-only cycle
+  changes the bytes and resets the streak: a fabricated finding costs two cycles, not one. Measured
+  on HemaSuite `#18 gateway-consolidation` Phase 4 — streak-1 was reached at cycles 59, 65, 70, 73
+  and 75 and lost every time, c73→c74 to a fabrication specifically.
+- **It launders the fabrication into evidence.** Writing the rejected claim into the gated file
+  makes the fabricated span *occur* in that file. Any later check that scores a finding's quoted
+  evidence against the document it names then reads the fabrication back as legitimate. Measured
+  2026-09-03 against the same corpus: a citation check that scores 1 of 6 against the prompts the
+  reviewers actually read scores **0 of 6** against today's `design.md`, entirely because the
+  rejections were recorded there. Full numbers:
+  `docs/03-analysis/hmad-audit-evidence-gate.measurement.md`.
+
+The same measurement is why there is **no** automatic evidence check in `h_mad_audit_gate.py`: no
+span-occurrence rule separates a fabricated citation from a reviewer's *proposed* code, its
+constructed test inputs, or a command it ran. Catching 4 of 6 fabrications costs 13 of 31 real
+must-fixes. Rejection stays a human judgement; the ledger is where it is recorded.
+
 ## Never gate on one audit pass
 
 **Agreement between two passes is not a stopping signal; it is one observation repeated.** Dispatch
