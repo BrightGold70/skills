@@ -281,7 +281,8 @@ not opted in.
 - **Description**: The CLI prints one `DOCBLOCK:` line, and the exit code follows the base
   **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
   refusal that judged a readable input and declined to run it (`NOT_FOUND`, `AMBIGUOUS`,
-  `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `SUBST_MISSING`, `SUBST_OVERLAP`),
+  `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `BAD_SUBST`, `SUBST_MISSING`,
+  `SUBST_OVERLAP`),
   and `TIMEOUT`, which is a measured fact about the block (it did not finish) rather than a fault
   of the tool. **Exit 2 is reserved for genuine operational errors**, the invariant's own words:
   `UNREADABLE` (a document, preamble or stream path that could not be read, written or reserved,
@@ -534,3 +535,4 @@ quoted
 - v1.31: Design audit v26 (agy must 4 should 1; codex must 1): AC-2.6 makes substitution simultaneous with counts on the original text, closing the map-order dependency sequential replacement had; AC-6.4's tuple is six tests.
 - v1.32: Design audit v27 (codex must 2; agy must 2 should 2): AC-2.6's discriminating fixture (A B -> B C in both orders); AC-3.8 read-back verification of every written artifact; AC-6.4's tuple is seven across two files.
 - v1.33: Design audit v28 (codex must 1 should 2; agy must 2 should 1): SUBST_MISSING carries keys=<n> like SUBST_OVERLAP; an empty map is a no-op; duplicated info-string tokens refuse as BAD_INFO.
+- v1.34: Design audit v29 back-propagation: FR-4's exit-0 list names BAD_SUBST.
