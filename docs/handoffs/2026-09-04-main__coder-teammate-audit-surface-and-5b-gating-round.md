@@ -63,7 +63,28 @@ its own evidence is that a loaded context reviewing its own work is the weakest 
 
 ## Next Steps
 
-1. **Round three of the 5b gating loop, from a fresh full-context session.** Assemble design c85 /
+**Priority re-ordered 2026-09-04 by operator decision: the audit loop's efficacy comes before the
+feature it is auditing.** The reasoning is that doc-block-exec has consumed 83 design / 74 plan / 34
+impl-plan cycles, and the measured breakdown says that number is dominated by *how* cycles are
+spent, not by how defective the documents are. Sum of avoidable on one 22-cycle run: **~14 of 22**.
+So the backlog is now tiered P1–P5, and the P1 items are the ones that change cycles-per-defect:
+
+| tier | items | what it buys, measured |
+|---|---|---|
+| **P1** | #20 pre-dispatch precheck + author teammates · #17 reviewer effort contract · #11 delta self-review · #13 agy evidence gate | 6 of 8 first-cycle findings were preventable before dispatch; median **1** must-fix per cycle against a prompt asking for all of them; **~half** of all must-fixes are fix-introduced; the second surface was hollow in **21 of 22** passes so the union was carried by one leg |
+| **P2** | #21 spec-author · #14 behavioural premises carry commands · #15 ack-sidecar softening · #6 audit-cycle second-surface mode | one false premise survived 10 cycles; a byte-exact ack match costs a cycle per re-wording |
+| **P3** | #16 collect-report fallback · #3 wrapper bugs · #22 exec agy hang | recovery friction, not cycle count |
+| **P4** | #23 round three · #24 gate + 5c · #25 5d/5e · #7 docsections dedupe · #27 evidence check | the feature, now downstream of the loop that audits it |
+| **P5** | #9 scout census · #8 skill-candidate row · #5 HemaSuite rows | backlog |
+
+**The tension to be aware of, since it is a real cost:** P1 delays 5b. #17 and #14 edit
+`audit-prompt.template.md` / `invariants.base.md`, which are inlined into every prompt, so they
+move the size-band fixture and must be landed *between* rounds, never during one. The judgement is
+that a loop which converges is worth more than one more round of a loop that has not converged in
+83 cycles — but if 5b is time-critical for a downstream reason this session does not know about,
+that judgement should be revisited rather than inherited.
+
+1. **[P4-a] Round three of the 5b gating loop, from a fresh full-context session.** Assemble design c85 /
    plan c76 / impl-plan c35 at `a1059e5` (numbering past the teammate cycles), dispatch a
    `doc-auditor` teammate per phase **and** the agy leg, gate on the union. Tell each auditor it is
    gating. **Freeze the tree for the duration.** Same commands as this session used —
