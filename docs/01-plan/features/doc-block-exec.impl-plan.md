@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.70 — design cycle 64 / impl-plan cycle 15 back-propagation, commit 2a5acee)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.42) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.70)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.72 — design cycle 65 / impl-plan cycle 16 back-propagation, commit aaf0b5a)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.42) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.71)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 71 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 72 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -55,7 +55,9 @@ Every guard the design names carries a mutation row bound to one named test; the
   delegates to `bound` on every later call. The wrap must happen inside the pass-through, because
   `run_block` calls `communicate` immediately after `Popen` returns and the test never holds the
   instance before that. `wait` is wrapped the same way for
-  `test_drain_wait_oserror_is_launch_failed_collect`. **One authoritative taxonomy, eight named
+  `test_drain_wait_oserror_is_launch_failed_collect`, and `poll` for
+  `test_poll_oserror_is_launch_failed_collect`. All three are the **same** instance-level injection
+  — one seam, three bound methods — so the taxonomy below stays at eight, not ten. **One authoritative taxonomy, eight named
   fault injections** (design v1.69 §Test Strategy, spec v1.42): seven are module-level
   `monkeypatch.setattr` seams in the helper's namespace — `os.killpg`, `shutil.rmtree`,
   `tempfile.mkdtemp`, `os.chmod`, `os.unlink`, `_final_write`, `_close_stream` — and the eighth is
@@ -314,11 +316,15 @@ class LaunchFailed(DocBlockError):
     # stages and stays None on "mkdtemp"/"spawn" (design v1.65 exception table + verdict table)
 # raised by main's stream and preamble handling (Task 4)                       — 5
 class StreamPathUnwritable(DocBlockError):
-    def __init__(self, leftover: str | None = None): ...   # zero-argument construction stays
-    # valid, so AC-4.2's subclass walk still builds a representative instance; attribute .leftover
-    # is the path a
-    # failed reservation rollback left behind (AC-3.10 read-back); None on every other raise site,
-    # and main emits the `leftover:` detail line only when it is set
+    def __init__(self, leftover: str | None = None): ...
+    # The design's exception table agrees (v1.71, impl-plan audit v16): the signature is
+    # StreamPathUnwritable(leftover=None) — there is no `err` positional, and no raise site in this
+    # document passes one. Zero-argument construction stays valid, so AC-4.2's subclass walk still
+    # builds a representative instance. `.leftover` is the path a failed reservation rollback left
+    # behind (AC-3.10 read-back); None on every other raise site, and main emits the `leftover:`
+    # detail line only when it is set. The OSError travels as __cause__, not as a field: the
+    # reservation raises `StreamPathUnwritable(leftover) from err`, while bounded-retry exhaustion is
+    # raised with no cause.
 class StreamPathsAlias(DocBlockError): ...
 class PreambleUnreadable(DocBlockError): ...
 class StreamWriteFailed(DocBlockError):
@@ -492,6 +498,9 @@ local bounder restored), leave the helper and the tests intact — the WIRE-PIN 
 mutation's `test` key stays the WIRE-PIN. The local-restore revert is the separate eighth row,
 `docsections-local-bounder-restored`, and is not the 5e wire revert.
 
+**RED gate** (run BEFORE any production code, two dispatches because at RED `test_h_mad_doc_block_exec.py` raises `ModuleNotFoundError` at **collection** and pytest then runs nothing else in that command):
+`hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` must report the collection error, and separately `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_docsections.py -q` must show the WIRE-PIN failing on its call-sequence assertion with every pre-existing test in that file passing. Splitting the two files is what makes the second observation possible at all. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
+
 ---
 
 ## Task 2: substitution
@@ -535,6 +544,8 @@ def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, 
 **Expected RED split**: all nine tests fail with `AttributeError` (`substitute` absent; its three
 exceptions already exist from Task 1); expected passing = 0; the Task 1 tests are regression guards and stay green.
 
+**RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — the nine new tests fail with `AttributeError` and every Task 1 test still passes. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
+
 ---
 
 ## Task 3: execution and bounding
@@ -558,8 +569,10 @@ means already reaped; any other `OSError` records `LaunchFailed("reap", err, pgi
 then a bounded drain `communicate(timeout=DRAIN_SECONDS)`, on whose own `TimeoutExpired` the helper
 closes `proc.stdout`/`proc.stderr` itself and calls `proc.wait()` **only** if the group was
 signalled or already gone (never on the `reap` branch); the post-kill drain — finished or timed out
-— **records** `BlockTimeout(timeout)` as the pending outcome exactly as the ordinary timeout path
-does, unless a `LaunchFailed("reap")` was recorded (design v1.61 §Execution).
+— **records nothing of its own**: the `BlockTimeout(timeout)` recorded on entry to the handler (see
+the ordering note below) simply survives it, unless one of the precedence rules below has already
+replaced it with a `LaunchFailed` at the `reap` or `collect` stage (design v1.61 §Execution,
+as amended by v1.71).
 
 **The helper's own I/O on the child is mapped by the same taxonomy** (design v1.65 §Execution,
 design audit v62). The first `communicate(timeout=timeout)` is guarded by `except OSError as err`
@@ -568,7 +581,23 @@ beside its `except subprocess.TimeoutExpired`: the guard records
 sequence the timeout path runs** — `proc.poll()`, `os.killpg(proc.pid, signal.SIGKILL)` with
 `ProcessLookupError` meaning already reaped, the bounded drain `communicate(timeout=DRAIN_SECONDS)`,
 and on that drain's `TimeoutExpired` the pipe closes plus `proc.wait()` **iff** the group was
-signalled or already gone. Three precedence rules govern what those later steps may do to the
+signalled or already gone. **The pre-kill `proc.poll()` carries its own `except OSError` guard**
+(design v1.71, impl-plan audit v16): the failure records the `collect` outcome and **the kill still
+proceeds**, now without the reaped-zombie knowledge `poll()` would have supplied — so a
+`PermissionError` from `killpg` on a zombie-only group is then the `reap` stage, replacing that
+`collect` with the `collect` error as its `__context__`, while `ProcessLookupError` still means
+already-reaped.
+
+**Ordering derived from the precedence rules, not stated separately by the design**: the
+`TimeoutExpired` handler records `pending = BlockTimeout(timeout)` **on entry**, before `poll()`,
+rather than at the end of the drain. The design's rule that a `poll()`/close/`wait` failure
+"replaces the pending `BlockTimeout`" is only satisfiable if that object already exists when the
+failure happens; recording it at the end would leave `__context__` as `None` and
+`test_poll_oserror_is_launch_failed_collect` would fail on it. This changes no precedence and no
+verdict — an untroubled timeout path still raises the same `BlockTimeout` — only the moment the
+object comes into being.
+
+Four precedence rules govern what those later steps may do to the
 pending outcome, and each `__context__` below is **assigned explicitly** (`err.__context__ = pending`),
 because nothing is ever raised inside the handler and Python's implicit chaining therefore never
 fires:
@@ -576,9 +605,13 @@ fires:
 `__context__` and does **not** replace it;
 (b) a non-`ESRCH` `killpg` error is the `reap` stage and **replaces** the pending `collect`, the
 `collect` error becoming the new `LaunchFailed("reap", err, pgid=proc.pid)`'s `__context__`;
-(c) under an **ordinary** timeout, an `OSError` from the drain `communicate`, from either pipe
+(c) under an **ordinary** timeout, an `OSError` from the pre-kill `proc.poll()`, from the drain
+`communicate`, from either pipe
 close, or from `proc.wait()` **replaces** the pending `BlockTimeout(timeout)` with
-`LaunchFailed("collect", err, pgid=proc.pid)` whose `__context__` is that `BlockTimeout`.
+`LaunchFailed("collect", err, pgid=proc.pid)` whose `__context__` is that `BlockTimeout`;
+(d) rule (b) applies **after** a failed `poll()` exactly as it does otherwise — the kill is still
+attempted, so a zombie-only group's `PermissionError` becomes `reap` and takes the just-recorded
+`collect` as its `__context__`.
 `stage=collect` ranks with `stage=reap` in the precedence (both exit 2, one rank, below
 `CleanupFailed`), so cleanup and the read-back still run as usual and a removal that fails is still
 `CleanupFailed` with the `LaunchFailed` as `__cause__`. Nothing raises
@@ -610,9 +643,9 @@ def run_block(block: Block, *, preamble: str | None = None, timeout: float = 30.
 ```
 
 **Acceptance Criteria** (every test here calls `dbe.run_block` in-process at the API — none goes
-through the CLI; the ten that inject a fault are marked `(in-process, injected: ` + the seam`)` so the
-transport split in the Conventions is visible per test — eight of the ten patch one of the six
-module-level seams, and the two `stage=collect` tests use the instance-level `Popen` wrapper the
+through the CLI; the eleven that inject a fault are marked `(in-process, injected: ` + the seam`)` so the
+transport split in the Conventions is visible per test — eight of the eleven patch one of the seven
+module-level seams, and the three `stage=collect` tests use the instance-level `Popen` wrapper the
 Conventions describe. **Every test that patches
 `dbe.shutil.rmtree` binds `real_rmtree = shutil.rmtree` BEFORE `monkeypatch.setattr(dbe.shutil, "rmtree", fake)`**
 — `dbe.shutil` is the process-global module, so without the binding the teardown would call the
@@ -631,6 +664,7 @@ as AC-4.6's `real_killpg`; the five such tests are named with `real_rmtree` belo
 - [ ] AC-4.6 `test_mkdtemp_failure_is_a_verdict` (in-process, injected: `tempfile.mkdtemp` injected → `LaunchFailed("mkdtemp")`, nothing to clean); `test_spawn_failure_is_a_verdict` (`PATH` = empty dir → `LaunchFailed("spawn")`, cwd gone); `test_reap_failure_is_a_verdict_within_the_drain_bound` (in-process, injected: `os.killpg`): `real_killpg = os.killpg` bound **before** `monkeypatch.setattr(dbe.os, "killpg", fake)`; `fake` records the pgid and raises `PermissionError`; `Popen` wrapped in a recording pass-through; `sleep 300` under `timeout=1` → `LaunchFailed("reap", pgid=proc.pid)` raised within `1 + DRAIN_SECONDS + 2` s; teardown in `finally`: `real_killpg(pgid, SIGKILL)`, `recorded.wait()`, then assert `real_killpg(pgid, 0)` raises `ProcessLookupError`.
 - [ ] AC-4.6 `test_communicate_oserror_is_launch_failed_collect` (in-process, injected: the recorded `Popen` instance's bound `communicate`): the test binds `real_killpg = os.killpg` **before** anything is patched, then installs the recording `Popen` pass-through with `monkeypatch.setattr(dbe.subprocess, "Popen", recording_popen)`, where `recording_popen` calls the real `subprocess.Popen`, appends the instance to a list the test holds, shadows `inst.communicate` with a wrapper that raises `OSError(errno.EIO, "Input/output error")` on its **first** call and delegates to the saved bound method afterwards, and returns the instance (the wrap happens inside the pass-through because `run_block` calls `communicate` immediately after `Popen` returns; the test file imports `errno`). Under a block that would otherwise `RAN` (`echo hi`, default `timeout`), `dbe.run_block` raises `LaunchFailed` with `stage == "collect"`, `err.errno == errno.EIO`, `pgid == recorded.pid` and no `RunResult` returned; the cwd — read from the pass-through's recorded `cwd` keyword argument — is gone; and the group is gone — `real_killpg(pgid, 0)` raises `ProcessLookupError`, because the helper killed and reaped the child as a timed-out one — which is the test's last substantive assertion, with a `finally` that sends `real_killpg(pgid, signal.SIGKILL)` ignoring `ProcessLookupError` so a surviving group is never left behind when the assertion fails.
 - [ ] AC-4.6 `test_drain_wait_oserror_is_launch_failed_collect` (in-process, injected: the recorded `Popen` instance's bound `wait`): the same pass-through, wrapping `inst.wait` instead — first call raises `OSError(errno.EIO, "Input/output error")`, later calls delegate, so the teardown's own `recorded.wait()` passes through. The **escapee fixture is required, not optional**: `Popen.communicate()` calls `self.wait()` internally after a successful read, so under a plain `sleep 300` the wrapper would fire from inside the drain rather than from the helper's own `proc.wait()`. The block is AC-5.5's `python3 ESC_PATH PID_PATH & sleep 300` with `esc.py` and the pid path delivered through the substitution map, run at `timeout=1`: the leader is signalled, the `os.setsid()` escapee holds the pipes, the drain `communicate(timeout=DRAIN_SECONDS)` raises `TimeoutExpired` before reaching its internal wait, the helper closes both pipes and calls `proc.wait()` on the signalled branch, and that call trips the wrapper — precedence rule (c). The raised error is a `LaunchFailed` with `stage == "collect"`, `pgid == recorded.pid`, and `__context__` an instance of `dbe.BlockTimeout`, returned within `1 + DRAIN_SECONDS + 2` s wall time, with the block's cwd gone; in `finally` the test reads the pid file, sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`, then calls `recorded.wait()`.
+- [ ] AC-4.6 `test_poll_oserror_is_launch_failed_collect` (in-process, injected: the recorded `Popen` instance's bound `poll`): the same recording pass-through and the same `_raise_once` shape, wrapping `inst.poll` instead — first call raises `OSError(errno.ECHILD, "No child processes")`, later calls delegate. The wrapper intercepts exactly the helper's one call, because `Popen`'s own internals use `_internal_poll` and never `self.poll()`. Under `sleep 300` at `timeout=1` the first `communicate` raises `TimeoutExpired`, the handler records the pending `BlockTimeout`, and the guarded `poll()` then raises: the pending outcome becomes `LaunchFailed` with `stage == "collect"`, `pgid == recorded.pid` and `__context__` an instance of `dbe.BlockTimeout` (precedence rule (c)); the kill proceeds and the block's cwd is gone. **Teardown matters more here than in the other two `collect` tests**, because `poll-oserror-unmapped` leaves the group unkilled: `finally` sends `real_killpg(pgid, signal.SIGKILL)` ignoring `ProcessLookupError`, then `recorded.wait()` to reap the leader, and only then asserts `real_killpg(pgid, 0)` raises `ProcessLookupError` — the same order as the AC-4.6 reap test.
 - [ ] AC-5.1 `test_sleeping_block_times_out`: `sleep 300`, `timeout=1` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s.
 - [ ] AC-5.2 `test_in_group_descendant_is_reaped`: block text `sleep 300 & echo $! > PID_PATH; sleep 300`, run as `dbe.run_block(dbe.substitute(block, {"PID_PATH": str(pid_file)})[0], timeout=1)` where `pid_file` is under the test's `tmp_path` — the substitution map is how the absolute path reaches the block, because the child's cwd is a fresh private directory nothing can be placed in beforehand → after the timeout the pid read from `pid_file` is gone: `os.kill(pid, 0)` raises `ProcessLookupError`; `finally` reads the pid file if present and sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`.
 - [ ] AC-5.3 `test_no_timeout_invocation_in_source`: no argv token or shell command word `timeout`/`gtimeout` in the module source (a substring match on `timeout=`/`TimeoutExpired`/`BlockTimeout`/`--shell-timeout` must not trip it).
@@ -652,11 +686,17 @@ a pipe-read failure escapes as a traceback with the child unreaped; killed by
 `tests/test_h_mad_doc_block_exec.py::test_communicate_oserror_is_launch_failed_collect`),
 `drain-oserror-unmapped` (the guard around the post-kill drain, the two pipe closes and the `wait()`
 removed, so a failure there escapes past the pending `BlockTimeout`; killed by
-`tests/test_h_mad_doc_block_exec.py::test_drain_wait_oserror_is_launch_failed_collect`) — 21 rows.
-The two `collect` rows discriminate mutually: under `collect-oserror-unmapped` the drain test still
-sees a `TimeoutExpired` from its first `communicate`, not an `OSError`, so it stays green; under
-`drain-oserror-unmapped` the communicate test's later steps raise nothing (the child is already
-killed and reaped, so the drain returns), so it stays green.
+`tests/test_h_mad_doc_block_exec.py::test_drain_wait_oserror_is_launch_failed_collect`),
+`poll-oserror-unmapped` (the guard around the pre-kill `proc.poll()` removed, so a `waitpid`
+failure escapes as a traceback with the group unkilled; killed by
+`tests/test_h_mad_doc_block_exec.py::test_poll_oserror_is_launch_failed_collect`) — 22 rows.
+The three `collect` rows discriminate mutually, each staying green under the other two: the poll
+test's first `communicate` raises `TimeoutExpired` rather than an `OSError`, so
+`collect-oserror-unmapped` does not touch it, and its drain returns promptly once the group is
+killed, so `drain-oserror-unmapped` does not either; the communicate and drain tests never wrap
+`poll`, so `poll-oserror-unmapped` leaves both green; and under `drain-oserror-unmapped` the
+communicate test's later steps raise nothing at all, because the child is already killed and reaped
+by the time the drain runs.
 
 **Dependencies on other tasks**: Task 1 (`Block`); Task 2 only for the two
 compose-with-substitution tests, which call `substitute` first.
@@ -666,6 +706,8 @@ compose-with-substitution tests, which call `substitute` first.
 except `test_no_timeout_invocation_in_source` and `test_no_mktemp_invocation_in_source`, which are
 **regression guards** that pass from the first run (the source scan finds nothing in a module that
 does not yet spawn); expected passing = 2; Tasks 1–2 tests stay green.
+
+**RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — every Task 3 test fails except the two source-scan guards, which pass, and Tasks 1–2 stay green. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
 
 ---
 
@@ -693,7 +735,9 @@ Reservation, per path, is a two-arm loop bounded to three round trips: `os.open(
 `S_ISREG` else it is closed and refused; the handle is `os.fdopen(fd, "a", encoding="utf-8")`. If the
 second reservation fails, the first handle is closed and unlinked **only if** created. The whole
 stage — both loops, the `fstat` checks, the rollback — is one `try/except OSError` mapped to
-`StreamPathUnwritable`; loop exhaustion maps there too.
+`StreamPathUnwritable`, raised **`from` that `OSError`** so it travels as `__cause__` rather than as
+a constructor field; loop exhaustion maps there too, raised **with no cause** because no `OSError`
+attended it (design v1.71 exception table).
 **The rollback is verified, not assumed** (design v1.69, impl-plan audit v15). `created` is tracked
 **per arm**, so the rollback only ever unlinks a path this call brought into existence. The rollback
 itself is a `finally`-shaped step rather than a straight line: **close first, then unlink iff
@@ -821,14 +865,16 @@ mutant, so the `leftover:` line is the only thing that discriminates it),
 `stream-write-oserror-unwrapped` (the `except OSError` mapping around `_final_write` and its
 read-back removed, so a write failure escapes as a traceback; killed by
 `test_stream_write_failure_after_the_run_is_a_refusal`) — 22 rows. With Tasks 1, 2, 3 that is
-23 + 5 + 21 + 22 = **71 rows**, 69 of the helper's source and 2 of `SKILL.md`, matching design v1.69.
+23 + 5 + 22 + 22 = **72 rows**, 70 of the helper's source and 2 of `SKILL.md`, matching design v1.71.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 71 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 72 rows
 before this task is GREEN.
+
+**RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — every Task 4 test fails and Tasks 1–3 stay green. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
 
 ---
 
@@ -856,7 +902,7 @@ reduce `_gate_bash_block() -> str` to `_gate_block().text` so its two text-pin c
 and rewriting the installed gate path with `str.replace` at `:312` — to a module-level
 `_run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult`. Its body:
 `collector = SCRIPT_DIR / "h_mad_collect_report.py"` and `gate = SCRIPT_DIR / "h_mad_audit_gate.py"`
-(the two locals the closure captured from the test, now derived from the module-level
+(the two locals the closure captured from the test, now derived inside `_run_recipe` itself from the module-level
 `SCRIPT_DIR`); `block = _gate_block()`;
 `subbed, _ = dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))})`
 (the checkout-path rewrite, now through the helper); the existing `preamble` f-string unchanged
@@ -1126,6 +1172,8 @@ record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green
 recipe regression tests in the consumer stay green;
 then the opposite direction (`wire-unconditional`) must fail `test_gate_block_refuses_an_untagged_recipe`.
 
+**RED gate** (one command per file; both collect at RED, since the WIRE-PINs fail with a runtime `NameError` rather than an import error): `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_collect_report_docs.py -q` shows both WIRE-PINs and `test_gate_block_refuses_an_untagged_recipe` failing on `NameError` with the four AC-6.3 behaviours and `test_consumer_calls_the_helper_module_qualified` passing, and `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` shows `test_exactly_one_tagged_fence_in_the_tree` failing and `test_suite_floor_holds` passing. Judge both commands against the full set of failures and passes the split above lists — `test_only_the_exec_scan_hand_rolls_extraction` (failing) and `test_exec_block_scan_performs_no_execution` (passing) included — not against this shorter sketch. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
+
 ---
 
 ## Verification (Phase 5f)
@@ -1133,7 +1181,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=71
+hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=72
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
@@ -1173,3 +1221,4 @@ into the log.
 - v1.14: Impl-plan audit v13 (codex must 1; agy clean) + design audit v62 back-propagation (design v1.65): the four Task 5 wire-revert rows carry type-correct replacement bodies with their exact find/replace text — a four-field dbe.Block from the tag-tolerant regex, a local BlockNotFound/AmbiguousBlock ordinal policy, an inline subprocess.run over subbed.text returning a four-field dbe.RunResult under a function-local import, and a str.replace wrapped back into a Block — so each mutant fails only on its WIRE-PIN's call record and the recipe regressions stay green; Task 3 gains the stage=collect mapping for the helper's own communicate/drain/close/wait with its three precedence rules and explicit __context__ assignment, the tests test_communicate_oserror_is_launch_failed_collect and test_drain_wait_oserror_is_launch_failed_collect (instance-level Popen wrapper, escapee fixture for the wait leg) and the rows collect-oserror-unmapped / drain-oserror-unmapped (Task 3 21 rows; 22 + 5 + 21 + 21 = 69, 67 of the helper's source); VERDICT_TABLE gains LAUNCH_FAILED stage=collect (22 heads, 16 subprocess + 6 in-process producers) and SKILL.md a per-stage registry row.
 - v1.15: Impl-plan audit v14 (codex must 1 should 1; agy clean) + design audit v63 back-propagation (design v1.67): Task 5's exec-scan-executes and consumer-from-import rows gain exact-once find anchors and complete type-correct replace bodies — the :412 scan's assert line grows a dbe.run_block call on a four-field dbe.Block (shell=plain, timeout=1.0, safe only because the harness runs the row's test key alone with the spy installed), and the _gate_block-through-_run_recipe region becomes one replacement carrying a bare from-import with the four calls re-pointed, which reds the spelling guard and, by construction, both WIRE-PINs; AC-6.2 states that the killer drives the scan by calling test_exec_codex_dispatch_carries_out_log_and_timeout() directly; the fault-injection taxonomy is one authoritative seven (six module-level seams plus the instance-level Popen wrapper), the stale six-versus-seven deferral dropped; heading identity is the CommonMark-normalized text on both forms, with test_closing_hash_run_does_not_change_heading_identity and mutation closing-hash-run-kept (Task 1 23 rows; 23 + 5 + 21 + 21 = 70, 68 of the helper's source).
 - v1.16: Impl-plan audit v15 (codex should 1 nit 1; agy clean) + plan audit v55 (codex must 1) + design v1.69 back-propagation: Task 4's failed-second-reservation rollback is verified, not assumed — created tracked per arm, close-then-unlink each guarded so one failure does not skip the other, then an os.path.lexists read-back whose leftover path rides the same stream_path_unwritable verdict as a leftover: detail line (StreamPathUnwritable gains a leftover=None constructor, DETAIL_KEYS 11, a SKILL.md row), with test_rollback_unlink_failure_reports_leftover and mutation rollback-leftover-unreported (Task 4 22 rows; 23 + 5 + 21 + 22 = 71, 69 of the helper's source) and os.unlink as the eighth named seam; every Phase 5f command is bounded through hmad-dispatch run --timeout (600 s scoped and per harness, 1200 s full suite), the wrapper's status propagation, 124-on-expiry and stdout passthrough re-measured 2026-09-03 so RC=$? and the MUTATION:/SUITE: tokens survive; the :412 scan is named with its file; the _FenceEvent comment says event.start >= start.
+- v1.17: Impl-plan audit v16 (codex must 2 should 1; agy clean) + design v1.71 back-propagation: StreamPathUnwritable is confirmed as StreamPathUnwritable(leftover=None) with no err positional at any raise site, the OSError travelling as __cause__ via `raise ... from err` and bounded-retry exhaustion raised with no cause (the design's table now agrees, so the cross-document contradiction is closed); Task 3's pre-kill proc.poll() gains its own except OSError guard mapped to stage=collect, the TimeoutExpired handler records the pending BlockTimeout ON ENTRY so a poll failure has something to replace (a derivation — recording it at the end would leave __context__ None), rule (c) names poll beside drain/close/wait and a new rule (d) keeps killpg's reap precedence after a failed poll, with test_poll_oserror_is_launch_failed_collect (instance wrapper on the recorded Popen's poll, kill-then-wait-then-assert teardown because the mutant leaves the group unkilled) and mutation poll-oserror-unmapped, the three collect rows now discriminating mutually (Task 3 22 rows; 23 + 5 + 22 + 22 = 72, 70 of the helper's source; Task 3 injecting tests 11; the poll/communicate/wait wrappers are one instance-level seam, so the taxonomy stays at eight); each of Tasks 1-5 gains a bounded RED gate run before production code, judged on the pytest summary and recorded to the 5d --out file, with Task 1 split into two dispatches because its new module's ModuleNotFoundError is a collection error that would otherwise hide the docsections WIRE-PIN's RED; _run_recipe's collector and gate locals named as derived inside the function.
