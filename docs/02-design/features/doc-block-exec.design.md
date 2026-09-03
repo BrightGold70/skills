@@ -328,7 +328,7 @@ iteration order, and a silently order-dependent answer is the failure class this
 exists to catch. `SUBST_OVERLAP keys=<n>` with a detail line per offending pair, exit 0, nothing
 executed — rather than picking an order and documenting it, which only moves the surprise. `<n>`
 counts the **distinct keys implicated**, not the pairs (`a`, `ab`, `abc` → `keys=3`, three pairs);
-each unordered pair appears once as `overlap: "<shorter>" <longer>`, and the lines are sorted by
+each unordered pair appears once as `overlap: "<shorter>" "<longer>"`, and the lines are sorted by
 `(shorter, longer)`, so the same map always produces the same diagnostic.
 
 Any key with a count of zero is collected; if the collection is non-empty nothing is executed and
@@ -928,10 +928,10 @@ returns its input unchanged) is killed by it.
 | `DOCBLOCK: BAD_TIMEOUT value="<v>"` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
 | `DOCBLOCK: BAD_SUBST arg="<raw>"` (+ `duplicate_key: "<k>"`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: "<k>"` per key, map insertion order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
-| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" <b>` per pair | 0 | one key is a substring of another |
+| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" "<b>"` per pair | 0 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` name one inode (`fstat` on the reserved handles) |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
-| `DOCBLOCK: BAD_INFO key=<k>` | 0 | unrecognised info-string token |
+| `DOCBLOCK: BAD_INFO key="<k>"` | 0 | unrecognised info-string token |
 | `DOCBLOCK: TIMEOUT seconds="<n>"` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path="<p>"` + `os_error: "<text>"` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: "<text>"` (+ `pgid: "<n>"` when `stage=reap` or `stage=collect`) | 2 | the helper's own `mkdtemp`/`Popen`/`killpg`, or its `communicate`/drain/pipe-close/`wait` on the child (`stage=collect`), raised — never a traceback |
@@ -965,7 +965,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | exception | raised by | verdict line |
 |---|---|---|
 | `DocUnreadable` | `extract` (wraps `OSError` **and `UnicodeDecodeError`** — the document is read as strict UTF-8) | `UNREADABLE reason=doc_unreadable` |
-| `BadInfoString(key)` | `extract` | `BAD_INFO key=<k>` |
+| `BadInfoString(key)` | `extract` | `BAD_INFO key="<k>"` |
 | `BlockNotFound` | `select` | `NOT_FOUND heading="<h>"` |
 | `AmbiguousBlock(n)` | `select` | `AMBIGUOUS blocks=<n> heading="<h>"` |
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading="<h>"` |
@@ -1356,3 +1356,4 @@ mean the probe never created one.
 - v1.78: Design audit v70 (codex must 1) + plan audit v61 back-propagation: dynamic fields are rendered as double-quoted JSON strings (json.dumps, ensure_ascii=False), so a printable value cannot forge a field token either — test_dynamic_field_cannot_forge_a_token, mutation field-quoting-removed (77 rows: 75 + 2); helper-constrained int/enum fields stay bare and the line grammar is stated.
 - v1.79: Impl-plan v1.22 back-propagation: the bare-field list is exhaustive; seconds= and pgid: are quoted like every other non-listed field.
 - v1.80: Design audit v72 (codex should 1; agy must 2 at 3 tool calls — int quoting held, the 'type-walk' phrase was this document's own error): _field stringifies before json.dumps so numbers are quoted; StreamPathUnwritable's zero-argument construction is justified by its raise site, not by a walk that instantiates nothing; every verdict/detail example rewritten in the quoted grammar (`heading="<h>"`, `os_error: "<text>"`, `written: "stdout"`).
+- v1.81: Impl-plan v1.24 back-propagation: `key=` (BAD_INFO) and both halves of `overlap:` are quoted like every non-exempt field.

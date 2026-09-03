@@ -883,3 +883,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.75: Plan re-audit v61 (codex must 3 nit 1): the substitute API row and FR-4 carry the two-layer empty-key rule; FR-4 carries the quoted-JSON field rule with test_dynamic_field_cannot_forge_a_token and field-quoting-removed; AC-6.4's floor test runs with cwd=REPO_ROOT; the __all__ seven are listed; 77 mutations (75 of the helper's source).
 - v1.76: Plan re-audit v62 (codex must 2; agy clean) + design audit v71 nit: the bare-field list is the design's exhaustive seven (reason= included; seconds=/pgid: quoted); the docsections ordering paragraph is un-spliced (the sixth/seventh-row sentences now follow it as their own paragraph).
 - v1.77: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar.
+- v1.78: Design v1.81 back-propagation: `key=` and both `overlap:` elements quoted.

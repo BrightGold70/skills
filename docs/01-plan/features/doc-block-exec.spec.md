@@ -123,7 +123,7 @@ not opted in.
     another, nothing is executed and the CLI prints `DOCBLOCK: SUBST_OVERLAP keys=<n>` with a
     detail line naming each overlapping pair, and exits 0. `<n>` is the number of **distinct keys
     implicated** (three keys where one contains both others → `keys=3`, two pairs); the detail
-    lines are `overlap: "<shorter>" <longer>`, one per unordered pair, sorted lexicographically by
+    lines are `overlap: "<shorter>" "<longer>"`, one per unordered pair, sorted lexicographically by
     `(shorter, longer)`, so the diagnostic is deterministic and the registry can pin it.
     Order-dependent substitution is the silent-wrong-answer shape this feature exists to avoid.
   - AC-2.8: **`--subst` has a parser contract.** Each value is split **once, on the first `=`**:
@@ -168,10 +168,10 @@ not opted in.
     (`printf '\xff'`) yields U+FFFD in that position rather than a `UnicodeDecodeError` escaping
     as a traceback. Stream artifact files are written UTF-8 the same way.
   - AC-3.7: An unrecognised info-string key (e.g. `shell=fish`, `mode=x`) on a fence that
-    **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key=<k>` — and exits 0, rather than
+    **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key="<k>"` — and exits 0, rather than
     being ignored as a default; so is a **duplicated** recognised token — `hmad:exec hmad:exec`
     or `shell=strict shell=plain` — because a parser that silently kept the first or the last
-    would run the block under a mode nobody unambiguously chose (`BAD_INFO key=<k>` naming the
+    would run the block under a mode nobody unambiguously chose (`BAD_INFO key="<k>"` naming the
     repeated token; tested both ways). A fence **without** the tag is never a candidate and its info
     string is never validated: an untagged ` ```bash --frozen `, or any other prose-y info string
     elsewhere in the tree, must not make this tool refuse. Validation follows opt-in.
@@ -590,3 +590,4 @@ quoted
 - v1.44: Design v1.75 back-propagation: FR-4's one-line contract holds for every input — dynamic fields are control-character-escaped.
 - v1.45: Design v1.78 back-propagation: AC-2.8 authorizes the two-layer empty-key rule (main refuses with the raw argument; substitute is the API guard); FR-4's dynamic fields are quoted JSON strings so no value forges a token.
 - v1.46: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar; _field stringifies before json.dumps.
+- v1.47: Design v1.81 back-propagation: `key=` and both `overlap:` elements quoted.
