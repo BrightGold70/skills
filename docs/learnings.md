@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-03 · gotcha · [0.7] · `python,dataclasses,importlib,mutation-spec,doc-block-exec,session:2026-09-03` — exec_module w/o sys.modules[spec.name]=m fails for a module with a frozen @dataclass under from __future__ import annotations: dataclasses._is_type derefs sys.modules[cls.__module__] (3.11). Register a private name before exec_module.
 - 2026-09-03 · pattern · [0.7] · `h-mad,audit,doc-block-exec,handoff:2026-09-03-doc-block-exec-gated-and-audit-loop-takeover,markdown` — A renderer corpus (markdown-it-py, CommonMark preset) and an old-vs-new selector differential over the repo's own docs each take one command and end a grammar argument a reviewer would otherwise re-raise every cycle.
 - 2026-09-03 · gotcha · [0.5] · `h-mad,audit,doc-block-exec,handoff:2026-09-03-doc-block-exec-gated-and-audit-loop-takeover,hmad-dispatch` — collect-report --out fallback did not fire: codex wrote a 0-byte report file plus .done while --out held the full sentinel report (design c58); recover with h_mad_extract_report.py <out> --feature --phase --cycle.
 - 2026-09-03 · pattern · [0.7] · `h-mad,audit,doc-block-exec,handoff:2026-09-03-doc-block-exec-gated-and-audit-loop-takeover` — Design and plan gates are coupled through shared counts and sentences; run design+plan+impl-plan audits as one parallel 6-leg round (~6 min) instead of serially, or every design fix costs a plan cycle later.

@@ -396,7 +396,7 @@ by decision rather than by omission.
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
 | Migrated `h-mad/tests/test_h_mad_collect_report_docs.py` (executing path only) | tests | FR-6 |
 | `h-mad/tests/docsections.py` — drop its duplicate bounder, import the authoritative one | tests | FR-1 (AC-1.8) |
-| `h-mad/tests/mutation-specs/docsections.json` — re-point the two bounder mutations at the authoritative module | mutation spec | FR-1 (AC-1.8) |
+| `h-mad/tests/mutation-specs/docsections.json` — re-point the two bounder mutations at the authoritative module, convert every row to the named-test form (`target_command` + a full-node-ID `test` key), and add the four connection rows `docsections-delegation-reverted`, `docsections-syspath-setup-removed`, `docsections-heading-lookup-reverted`, `docsections-local-bounder-restored` — 8 rows | mutation spec | FR-1 (AC-1.8) |
 | `h-mad/tests/test_docsections.py` — gains the delegation spy test that kills `docsections-delegation-reverted` | tests | FR-1 (AC-1.8), AC-6.4 |
 
 ## Risks and Mitigation
@@ -839,3 +839,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.63: Design v1.62 back-propagation (design audit v58 codex must 1): docsections-delegation-reverted is connection-only (a private spec_from_file_location instance replaces the shared import); the WIRE-PIN's mechanism is stated as the impl-plan has it — a sys.modules fake bound by importlib.reload, since a setattr spy on docsections._dbe cannot see this revert; eighth row docsections-local-bounder-restored bound to the source guard.
 - v1.64: Plan re-audit v50 clean (both surfaces) + design v1.63 back-propagation: the WIRE-PIN's finally-path restoration of sys.modules and the docsections reload is stated here too.
 - v1.65: Design v1.64 back-propagation: Setext census added to §Measurements (files=30 setext_headings=0); the connection-only revert's private sys.modules registration stated.
+- v1.66: Plan re-audit v52 (codex clean; agy should 1): the docsections.json deliverables row names the named-test conversion and the four connection rows (8 rows).
