@@ -155,7 +155,9 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 **One private scanner, two consumers.** The fence grammar below is implemented exactly once, as
 a private generator `_fence_events(text)` that walks the document and yields, per line, one of
 five kinds — fence `open`, fence `close`, fence `body`, ATX `heading` (with its `level`), or
-`prose` — together with the opener's marker character, run length, indentation and info string,
+`prose` — together with the line's `start`/`end` character offsets (so both public consumers return
+exact offsets without a second line walk, CRLF included), the opener's marker character, run length,
+indentation and info string,
 and a scanner-derived `candidate` flag (a backtick opener whose first info word is `bash`), so
 no consumer re-recognises a fence or a heading. **The `titled_section` migration was measured as a differential before it was prescribed** — the old
 `re.search` heading regex against the new selector over every `*.md` under `h-mad/` and `handoff/`
@@ -163,8 +165,9 @@ no consumer re-recognises a fence or a heading. **The `titled_section` migration
 theoretical softenings `##\tx` and `## x ##` have zero instances) and `old_only=76`, every one a `#`
 comment line inside a fence the old regex mistook for a heading — the migration narrows the guard
 (plan §Measurements, "Heading selector differential"). **Every grammar rule the scanner implements was
-rendered through markdown-it-py 2.2.0 (CommonMark preset) before it was written down — 14 of 14
-agree with the renderer; the corpus and its output are in the plan's §Measurements ("Scanner
+rendered through markdown-it-py — both the interpreter-local 2.2.0 and the 4.2.0 the spec's
+tagged-fence probe used, CommonMark preset on each — before it was written down — 14 of 14 agree on
+both versions; the corpus and its output are in the plan's §Measurements ("Scanner
 grammar corpus").** `extract` consumes it to find candidates and
 `fence_aware_end` consumes it to bound a section — feeding the scanner **complete source lines
 from the top of the document through the line that contains `start`**, then considering a
@@ -235,7 +238,13 @@ Heading bounding: locate the line equal to `heading` (exact match, stripped of t
 whitespace) **among the scanner's `heading` events** — a line inside any fence is never a
 heading event, and this lookup is the public `find_heading(text, heading) -> tuple[int, int] | None`
 (the offset just past the heading line and its level; `None` when absent; `AmbiguousHeading` on
-more than one) that `extract` and `docsections.titled_section` both call, so the section START is
+more than one) that `extract` and `docsections.titled_section` both call. **`heading` has two
+accepted forms, and each real caller uses one**: the full line form `## Text` (what `extract` and
+the CLI's `--heading` pass) matches a heading event whose text after the hash run — closing hashes
+stripped — equals `Text` **and** whose level equals the hash count; the bare form `Text` (what
+`docsections.titled_section` passes today, its contract unchanged) matches on text at any level.
+`test_find_heading_accepts_full_and_bare_forms` pins both and that the full form refuses a
+level mismatch; mutation `heading-level-pin-ignored` (the full form matching any level), so the section START is
 found by one implementation exactly as its END is — so a fenced example that quotes `## <the requested heading>` cannot become the
 section start and hand a later real tagged block to the wrong address
 (`test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading
@@ -384,7 +393,8 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    `wait()` would be unbounded (the state machine is: drain-with-timeout → close pipes → `wait()`
    iff the group was signalled; the AC-4.6 reap test asserts the bounded return, which is what
    proves that branch skips the wait),
-   and raises `BlockTimeout` as it would have anyway. The escapee is outside the reap by AC-5.2's
+   and records `BlockTimeout` as the pending outcome exactly as the ordinary timeout path does —
+   nothing raises inside the handler, so the post-`finally` read-back still runs. The escapee is outside the reap by AC-5.2's
    stated scope; what this bounds is the *helper's* wall time, which is now at most
    `timeout + DRAIN_SECONDS` plus process teardown, so FR-5's "every run is bounded" holds against
    an escapee rather than only against a well-behaved block. Partial output from a timed-out
@@ -444,7 +454,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 63 mutations (63 rows: 61 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 67 mutations (67 rows: 65 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -569,9 +579,11 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
 
 ```python
 def find_heading(text: str, heading: str) -> tuple[int, int] | None:
-    """Offset just past the ATX heading line equal to `heading` (stripped) and its
-    level, found among the scanner's heading events only — never inside a fence.
-    None when absent; raises AmbiguousHeading(n) when more than one matches."""
+    """Offset just past the matching ATX heading line and its level, found among
+    the scanner's heading events only — never inside a fence. `heading` is either
+    the full line form '## Text' (text AND level must match) or the bare 'Text'
+    (any level; docsections.titled_section's contract). None when absent; raises
+    AmbiguousHeading(n) when more than one matches."""
 ```
 
 `__all__` names all seven. `fence_aware_end` and `find_heading` are public on purpose:
@@ -741,7 +753,7 @@ the outcome after the block has completed. **Precedence, the same rule as cleanu
 error outranks a verdict, and the first operational error wins.** If a `close_error` was recorded
 and the pending outcome is a `BlockTimeout` (exit 0) — or there is no pending exception at all —
 `StreamCloseFailed(stream, close_error)` is raised `from` the pending outcome and printed as
-`DOCBLOCK: UNREADABLE reason=stream_close_failed` + `os_error: <text>`, exit 2; if the pending
+`DOCBLOCK: UNREADABLE reason=stream_close_failed` + `stream: <name>` + `os_error: <text>`, exit 2; if the pending
 outcome is already an exit-2 `DocBlockError` (`CleanupFailed`, `LaunchFailed`, `StreamPathsAlias`,
 `StreamWriteFailed`), that error is raised unchanged and the close error is attached as its
 `__context__`. (On the `RAN` path `_final_write` has closed both handles inside its own mapped
@@ -797,7 +809,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` (+ `pgid: <n>` when `stage=reap`) | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
-| `DOCBLOCK: UNREADABLE reason=<r>` (+ `written:`/`failed:`/`skipped:` detail lines and `verify: <stream>` when the read-back disagreed, for `r=stream_write_failed`; + `os_error: <text>` when `r=stream_close_failed`) | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed`, `stream_close_failed` (a backstop close of a held handle failed on a path where the final write never ran; an exit-2 error already pending wins instead) |
+| `DOCBLOCK: UNREADABLE reason=<r>` (+ `written:`/`failed:`/`skipped:` detail lines and `verify: <stream>` when the read-back disagreed, for `r=stream_write_failed`; + `stream: <name>` and `os_error: <text>` when `r=stream_close_failed`) | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed`, `stream_close_failed` (a backstop close of a held handle failed on a path where the final write never ran; an exit-2 error already pending wins instead) |
 
 The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
 → `select` (which validates the ordinal) → `--subst` syntax → `substitute` → the remaining
@@ -840,7 +852,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
 | `StreamWriteFailed(written, failed, skipped, verify=None)` | `main`, writing a stream to its held handle after the run, or verifying it by read-back | `UNREADABLE reason=stream_write_failed` + `written:`/`failed:`/`skipped:` detail lines from its fields, and `verify: <stream>` when the read-back disagreed |
-| `StreamCloseFailed(stream, close_error)` | `main`, selected after its reservation `try`/`finally` when the backstop `_close_stream` raised and no exit-2 error was pending (a pending `BlockTimeout` becomes `__cause__`) | `UNREADABLE reason=stream_close_failed` + `os_error: <text>` |
+| `StreamCloseFailed(stream, close_error)` | `main`, selected after its reservation `try`/`finally` when the backstop `_close_stream` raised and no exit-2 error was pending (a pending `BlockTimeout` becomes `__cause__`) | `UNREADABLE reason=stream_close_failed` + `stream: <name>` + `os_error: <text>` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set |
 | `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, or a non-`ESRCH` `killpg` error, wrapped; `pgid` set on the `reap` stage | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap>` + `os_error: <text>` (+ `pgid: <n>` on `reap`) |
@@ -955,6 +967,7 @@ exactly what the base Mutation verification invariant forbids.
 | `section-bound-ignores-level` | the section ends at the next heading of *any* level | `test_section_owns_deeper_headings` (AC-1.5) |
 | `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
 | `adjacent-heading-skipped` | the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address | `test_adjacent_heading_bounds_the_section` (AC-1.5 — the first section has no candidate and `fence_aware_end(text, start, level) == start`) |
+| `heading-level-pin-ignored` | `find_heading` matches the full `## Text` form on text alone, ignoring the hash count | `test_find_heading_accepts_full_and_bare_forms` (AC-1.5 — `### Text` must not satisfy `## Text`) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
 | `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse` (AC-1.7) |
 | `select-first-on-ambiguous` | `select` returns `blocks[0]` when >1 and no index | `test_two_tagged_blocks_without_index_are_ambiguous` (AC-1.3) |
@@ -984,10 +997,13 @@ exactly what the base Mutation verification invariant forbids.
 | `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
 | `stream-open-blocking` | `O_NONBLOCK` is dropped from the existing-file arm, so a reader-less FIFO blocks the open forever | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10 — the test's own bounded wait is what makes this mutant RED rather than a hang; it runs the CLI in a subprocess with `timeout=5` and treats expiry as failure) |
 | `stream-alias-check-removed` | the `fstat` `(st_dev, st_ino)` comparison is gone | `test_hard_linked_stream_paths_refuse` (AC-3.9) |
+| `mktemp-invocation-planted` | `tempfile.mkdtemp()` is replaced by `subprocess.run(["mktemp", "-d"], …)` — valid Python and exactly the forbidden invocation | `test_no_mktemp_invocation_in_source` (AC-3.13 — the argv-token/command-word scan goes RED on the real helper) |
 | `chmod-0700-removed` | `os.chmod(cwd, 0o700)` after `mkdtemp` is gone | `test_cwd_mode_is_0700_under_hostile_umask` (AC-3.13) |
 | `cleanup-errors-ignored` | `ignore_errors=True` restored | `test_cleanup_failure_carries_the_os_error` (AC-3.14) |
 | `cleanup-readback-removed` | the `lexists` read-back is gone | `test_cleanup_readback_catches_silent_retention` (AC-3.14) |
 | `precedence-timeout-raised-in-handler` | `BlockTimeout` raised inside the handler instead of recorded as pending | `test_cleanup_failure_outranks_timeout_injected` (AC-3.14) |
+| `allow-abbrev-restored` | the parser is built with `allow_abbrev=True` (the argparse default), so `--shell-t 5` silently aliases `--shell-timeout` | `test_parser_rejects_all_dir_and_abbreviations` (AC-4.2 — the abbreviated spelling must be a usage error) |
+| `stream-write-oserror-unwrapped` | the `except OSError` mapping around `_final_write` and its read-back is removed, so a write failure escapes as a traceback | `test_stream_write_failure_after_the_run_is_a_refusal` (AC-3.8 — the injected failure must print `stream_write_failed`, exit 2, no traceback) |
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
@@ -1014,7 +1030,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Sixty-three rows, sixty-three mutations — sixty-one of the helper's source (the AC-5.3 row, once
+Sixty-seven rows, sixty-seven mutations — sixty-five of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1167,3 +1183,4 @@ mean the probe never created one.
 - v1.58: Design audit v53 (codex must 1 should 1; agy must 1) + impl-plan audit v7 back-propagation (codex must 1 should 1): scanner event model is open/close/body/heading/prose with level and candidate; the grammar is verified against markdown-it-py 2.2.0 (14/14, plan §Measurements); find_heading is public and docsections delegates the section start as well as its end (seven public names; docsections.json seventh row docsections-heading-lookup-reverted); the alias refusal leaves closing to the backstop so the injected-close test can hold.
 - v1.59: Design audit v54 (codex must 2; agy must 1 should 1): the UNREADABLE verdict row carries stream_write_failed's detail lines; Implementation Order Task 1 lists _fence_events and find_heading.
 - v1.60: Plan re-audit v46 (codex must 1 should 1) + impl-plan audit v8 back-propagation (codex must 2 should 1): the boundary predicate is start-offset >= start so an adjacent heading bounds the section (test_adjacent_heading_bounds_the_section, adjacent-heading-skipped; 63 rows: 61 + 2); the titled_section migration cited as a measured differential (new_only=0, old_only=76 fenced comments); one canonical test key for final-write-close-not-in-finally; _run_recipe passes timeout=60.0.
+- v1.61: Design audit v57 (codex must 1; agy must 1 should 1) + plan v48 and impl-plan v9 back-propagation: find_heading accepts the full '## Text' (level-pinned) and bare 'Text' forms with test_find_heading_accepts_full_and_bare_forms / heading-level-pin-ignored; _FenceEvent carries start/end offsets; the drain records BlockTimeout (never raises in the handler); mktemp-invocation-planted, allow-abbrev-restored and stream-write-oserror-unwrapped rows (67 rows: 65 + 2); stream: detail on stream_close_failed; the grammar corpus cited on markdown-it-py 2.2.0 and 4.2.0.

@@ -47,7 +47,7 @@ parser-rejection test. `--subst` values are split once on the first `=` (a value
 `duplicate_key:` detail for the repeat), judged before anything is reserved (AC-2.8). There are
 **no abbreviated spellings**: the parser is built with
 `allow_abbrev=False`, so `--shell-t` or `--pre` are rejected rather than silently accepted as
-undocumented aliases (test: `test_cli_rejects_abbreviated_options`). Argument *values* are
+undocumented aliases (test: `test_parser_rejects_all_dir_and_abbreviations`). Argument *values* are
 validated by `main` and map to verdict lines — `--index` non-integer or below 1 → `BAD_INDEX`,
 `--shell-timeout` non-numeric, non-finite or not positive → `BAD_TIMEOUT value=<v>` (AC-5.6), both
 before any spawn; argparse's own usage error covers only *grammar* (unknown option, missing
@@ -371,7 +371,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 63 mutations with a full-node-ID `test` binding each — 61 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 67 mutations with a full-node-ID `test` binding each — 65 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -618,7 +618,8 @@ the duplicate bounder is.
   `old_only=76`: all 76 are `#` comment lines inside fenced code the old regex read as headings; the
   migration narrows the guard.
 - **Scanner grammar corpus** — every fence and ATX rule the scanner implements, rendered through
-  markdown-it-py 2.2.0 (CommonMark preset) on the supported interpreter, 14 of 14 agreeing; the
+  markdown-it-py 2.2.0 (interpreter-local) AND 4.2.0 (the spec's throwaway-venv version, installed
+  with `pip install --target` for this run), CommonMark preset on both, 14 of 14 agreeing on each; the
   script is a throwaway (`grammar_corpus.py`, one `md.render(src)` per case, a needle asserted on
   the HTML), and its output is what the design's §Scanning cites:
 
@@ -801,3 +802,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.59: Plan re-audit v45 (codex must 1) + design v1.59 back-propagation: titled_section's replacement calls find_heading for (start, level); find_heading in the API table.
 - v1.60: Plan re-audit v46 (codex must 1 should 1; agy clean): heading selector differential in §Measurements (30 files, new_only=0, old_only=76); run_block timeout=60.0 in the migration; 63 mutations.
 - v1.61: Plan re-audit v47 (codex must 2; agy clean): the bounder wording and its API row carry the >= start predicate; the delegation-revert claim names the source-guard exception.
+- v1.62: Plan re-audit v48 (codex must 1 should 1; agy clean) + design v1.61 back-propagation: 67 mutations; test_parser_rejects_all_dir_and_abbreviations named on both surfaces; corpus on both renderer versions.
