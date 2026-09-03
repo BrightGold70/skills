@@ -69,7 +69,7 @@ there is no non-`DOCBLOCK` exit (design v1.85; `test_malformed_invocation_is_a_v
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
 2, block not run — for a path that cannot be read **and** for a file that is not valid UTF-8,
 since the preamble is read strictly and text that will execute is never silently repaired (tests:
-`test_cli_unreadable_preamble_refuses_before_running` and
+`test_unreadable_preamble_path_refuses` and
 `test_invalid_utf8_preamble_is_unreadable` — the node ID the design's `preamble-decode-error-unwrapped` mutation binds, one name on every surface — each with a block whose side effect the
 test asserts is absent; the document gets the same treatment under `doc_unreadable`). The preamble and the block are composed as
 `preamble.rstrip("\n") + "\n" + text′`, with `text′` the block text *after* substitution, so the
@@ -326,7 +326,7 @@ in the file moves" stays true;
 and `gate = SCRIPT_DIR / "h_mad_audit_gate.py"`, the locals today's nested `run_recipe` computes
 the same way, so the hoist leaves no unbound name and "nothing else in the file moves" still holds
 (`SCRIPT_DIR` is already module-level) — calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
-shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
+shlex.quote(str(gate))})` — bound as `substituted_block, _counts = dbe.substitute(…)`, since it returns `(Block, counts)` and only the `Block` reaches the runner — and then
 `dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>, timeout=60.0)` — substitution is a separate step that returns a new `Block`, so `run_block` never
 substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
@@ -892,3 +892,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.80: Plan re-audit v66 (codex must 1; agy clean): find_heading's API row states both input forms and their precedence; 79 mutations (77 of the helper's source).
 - v1.81: Plan re-audit v67 (codex must 1; agy must 1): BAD_ARGS routing; __all__ is 28 names; find_heading's request predicate is the scanner's; the AC-6.4 gate block runs from the repository root as the spec spells it; 81 mutations (79 of the helper's source).
 - v1.82: __all__ is 29 names (BadArgs included).
+- v1.83: Plan re-audit v69 (codex must 1; agy clean) + impl-plan audit v29: FR-6's caller pseudocode binds substituted_block from substitute's tuple; the unreadable-preamble test is test_unreadable_preamble_path_refuses.

@@ -1195,7 +1195,7 @@ exactly what the base Mutation verification invariant forbids.
 | `cleanup-readback-removed` | the `lexists` read-back is gone | `test_cleanup_readback_catches_silent_retention` (AC-3.14) |
 | `precedence-timeout-raised-in-handler` | `BlockTimeout` raised inside the handler instead of recorded as pending | `test_cleanup_failure_outranks_timeout_injected` (AC-3.14) |
 | `argparse-error-unrouted` | the parser's `error()` override is removed, so an unknown option or a missing value exits 2 through argparse's usage text with no `DOCBLOCK:` line | `test_malformed_invocation_is_a_verdict` (AC-4.1) |
-| `allow-abbrev-restored` | the parser is built with `allow_abbrev=True` (the argparse default), so `--shell-t 5` silently aliases `--shell-timeout` | `test_parser_rejects_all_dir_and_abbreviations` (AC-4.2 — the abbreviated spelling must be a usage error) |
+| `allow-abbrev-restored` | the parser is built with `allow_abbrev=True` (the argparse default), so `--shell-t 5` silently aliases `--shell-timeout` | `test_parser_rejects_all_dir_and_abbreviations` (AC-4.2 — the abbreviated spelling must be a `BAD_ARGS` verdict — one `DOCBLOCK:` line, exit 0, no usage text (design v1.85)) |
 | `stream-write-oserror-unwrapped` | the `except OSError` mapping around `_final_write` and its read-back is removed, so a write failure escapes as a traceback | `test_stream_write_failure_after_the_run_is_a_refusal` (AC-3.8 — the injected failure must print `stream_write_failed`, exit 2, no traceback) |
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
@@ -1415,3 +1415,4 @@ mean the probe never created one.
 - v1.86: __all__ is 29 names once BadArgs joins the exception hierarchy (28 was counted before v1.85 added it).
 - v1.87: Design audit v77 (codex must 1; agy must 1 at 13 tool calls): Task 5 unpacks substitute's (Block, counts) tuple before run_block; the two source-scan rows say the scan is green on the real helper and RED on the mutant (the earlier wording inverted it).
 - v1.88: Impl-plan v1.29 back-propagation: the bounded-wait test's TimeoutExpired is constructed with cmd and timeout (a bare constructor call raises TypeError).
+- v1.89: Impl-plan audit v29 back-propagation: allow-abbrev-restored's expected outcome is a BAD_ARGS verdict, not a usage error; the unreadable-preamble test is test_unreadable_preamble_path_refuses everywhere.
