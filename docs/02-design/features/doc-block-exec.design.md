@@ -63,7 +63,7 @@ caller (test, or operator on the CLI)
         │  every key present?  no ──► SUBST_MISSING
         ▼ yes
    run_block()
-        ├── mkdtemp(0700) ──────────────── cwd
+        ├── mkdtemp() + chmod(0o700) ────── cwd   (mkdtemp alone is 0700 & ~umask)
         ├── validate timeout: finite, > 0 ──► else BAD_TIMEOUT (before spawn)
         ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], start_new_session=True,
         │         text=True, encoding="utf-8", errors="replace")
@@ -186,7 +186,10 @@ every missing key gets its own detail line.
 
 ### Execution
 
-`tempfile.mkdtemp()` (mode 0700 by construction) is the cwd. `start_new_session=True` puts the
+`tempfile.mkdtemp()` **followed by `os.chmod(cwd, 0o700)`** is the cwd. `mkdtemp` alone gives
+`0o700 & ~umask` — probed: under `umask 0777` it yields mode `0o0` — so "0700 by construction",
+which an earlier draft claimed, was only true under the default umask; the chmod makes AC-3.13
+true everywhere, and a chmod that fails removes the directory and is `LaunchFailed("mkdtemp")`. `start_new_session=True` puts the
 child in its own process group, which is what makes the timeout path able to reap grandchildren
 rather than orphaning them. That failure was observed in this repository this session and the
 count is cited rather than recalled — four orphaned `hmad-dispatch exec-pane agy` processes, PIDs
@@ -217,8 +220,15 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    one's own child but not impossible) is **not** allowed to escape as a traceback: the helper
    still runs the bounded drain and closes the pipes, does **not** `wait()` (a child it could not
    signal is not something to wait on unboundedly), records `LaunchFailed("reap", err)` as the
-   pending outcome with the pid in its detail, and lets cleanup and the read-back run as usual
-   (AC-4.6).
+   pending outcome with `pgid=<n>` in its detail, and lets cleanup and the read-back run as usual
+   (AC-4.6). **Policy for a genuinely unsignalable group is diagnostic, not containment**: the
+   helper has no signal that would work where `SIGKILL` to the group did not, so it reports the
+   pgid and returns bounded rather than pretending; this is the one documented case in which a
+   launched process may outlive the call. **The test for it must not become that case**: its fake
+   `killpg` records the pgid and raises, and the test's `finally` sends the real
+   `os.killpg(pgid, SIGKILL)` and asserts `ProcessLookupError` on a follow-up `os.kill(pgid, 0)`
+   — CPython's `Popen.__del__` never kills a live child, so without that teardown the
+   fault-injected test would leave a `sleep` running after it returned.
 2. **The post-kill drain does not finish.** After `killpg` a second `communicate` collects what
    the group wrote before dying; but a descendant that left the group (AC-5.2's `os.setsid()`
    escapee) still holds the inherited pipes, so that `communicate` can block for as long as the
@@ -375,7 +385,8 @@ preamble is shell text run in the same invocation immediately before the block, 
 doc never claimed to define is bound before the recipe reads it — measured: without it the run still exits 0, still halts, and never reaches `GATE: PASS` — and it is deliberately a
 separate parameter rather than string-concatenation by the caller, so the doc's text and the
 fixture's text never blur. **Composition is `preamble.rstrip("\n") + "\n" + text′`** when a
-preamble is given, and `text′` alone otherwise — where `text′` is `substitute(block.text, subs)`,
+preamble is given, and `text′` alone otherwise — where `text′` is the `.text` of the `Block`
+that `substitute(block, subs)` returns,
 the text that will actually run, never the unsubstituted fence body (the diagram's `text'`): the
 preamble is prepended *after* substitution, so a substituted path stays substituted when a preamble
 is present. Exactly one newline separates them, so a
@@ -411,8 +422,9 @@ the documented single non-`DOCBLOCK` exit 2.
 
 **Stream artifacts: reserved last, never truncated by an open, written through the held handle.**
 The order in `main` is `extract` → `select` → `substitute` → the remaining validations (timeout,
-preamble readability, alias — the info string is validated inside `extract`, the ordinal inside
-`select`) → **reserve** → spawn. Reservation opens `--stdout` then `--stderr` with
+preamble readability — the info string is validated inside `extract`, the ordinal inside
+`select`, and `--subst` syntax before `substitute` is called) → **reserve** → **alias check on the
+reserved descriptors** → spawn. Reservation opens `--stdout` then `--stderr` with
 `open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
 never empties an existing one, so there is no moment at which one artifact is truncated while the
 other is still unreserved. If the second open fails, the first handle is closed and — only if this
@@ -442,6 +454,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading=<h>` | 0 | >1 heading matches text+level |
 | `DOCBLOCK: BAD_INDEX index=<n>` | 0 | `--index` below 1, or not an integer |
 | `DOCBLOCK: BAD_TIMEOUT value=<v>` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
+| `DOCBLOCK: BAD_SUBST arg=<raw>` (+ `duplicate_key: <k>`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 0 | a key is absent from the block |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 0 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` resolve to one path |
@@ -453,9 +466,11 @@ Verdict lines, one per run:
 | `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
 The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
-→ `select` (which validates the ordinal) → `substitute` → the remaining validations that belong to
-no earlier step (timeout, preamble readability, stream-path alias) → reserve both stream handles →
-spawn. Nothing is reserved until every refusal that can be made from the inputs has been made.
+→ `select` (which validates the ordinal) → `--subst` syntax → `substitute` → the remaining
+validations that belong to no earlier step (timeout, preamble readability) → reserve both stream
+handles → alias check on the reserved descriptors (`os.fstat`, the only place it *can* happen) →
+spawn. Nothing is reserved until every refusal that can be made from the inputs alone has been
+made; the alias refusal is the one that needs the reservation, and it still precedes the spawn.
 
 `RAN` is the only line carrying `rc=`; `AMBIGUOUS` is the only refusal carrying `blocks=`.
 `blocks=`, `count=`, `index=`, `value=` and `seconds=` are diagnostic values saying *why* the tool
@@ -483,6 +498,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading=<h>` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index=<n>` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
+| `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map (split once on the first `=`; empty key or repeat refused) | `BAD_SUBST arg=<raw>` + `duplicate_key: <k>` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING key=<k>` + a detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable` | `main`'s stream reservation — the `open(path, "a")` itself (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
@@ -533,9 +549,10 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
 | AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
-| AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
+| AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
+| AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path, cleanup_error)` with `cleanup_error` the `PermissionError` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone; each carries an `os_error:` detail line and no `rc=` |
+| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid and the test's `finally` sends the real `SIGKILL` to it and asserts the group is gone; each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE` and `CLEANUP_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
@@ -642,3 +659,4 @@ mean the probe never created one.
 - v1.16: Design audit v8 (codex must 3 should 1, agy must 2): exit-code partition per the base invariant in the verdict table, diagram and Invariant Compliance; pending-outcome control flow so CLEANUP_FAILED really outranks TIMEOUT, with the combined test; substitute returns a new Block and run_block never substitutes; main's order corrected; floor test runs collect-only in a subprocess with an env guard and the pass half is the out-of-suite gate command; the five consumer-file node IDs enumerated.
 - v1.17: Design audit v9 (codex must 3 should 1; agy clean): LaunchFailed for mkdtemp/Popen/non-ESRCH killpg with a reap stage that never waits unboundedly; alias judged on fstat of the reserved handles; CleanupFailed carries cleanup_error separately from __cause__; three named fault injections plus the real empty-PATH spawn failure; the suite gate captures RC before tail.
 - v1.18: Design audit v10 (codex must 2 should 1, agy must 1): four post-spawn outcomes with LAUNCH_FAILED stage=reap placed in the precedence; the exception table names descriptor-level alias detection and the reservation open, matching the Detailed Design; DocUnreadable and PreambleUnreadable wrap UnicodeDecodeError under strict UTF-8.
+- v1.19: Design audit v11 (codex must 3; agy must 1 + 2 nits): chmod 0o700 after mkdtemp with the umask probe; reap-failure policy and the test teardown that reaps the launched group; BAD_SUBST parser contract with BadSubstArg; main's order puts the alias check after reservation; substitute wording and the API raises list corrected.

@@ -97,6 +97,14 @@ not opted in.
     lines are `overlap: <shorter> <longer>`, one per unordered pair, sorted lexicographically by
     `(shorter, longer)`, so the diagnostic is deterministic and the registry can pin it.
     Order-dependent substitution is the silent-wrong-answer shape this feature exists to avoid.
+  - AC-2.8: **`--subst` has a parser contract.** Each value is split **once, on the first `=`**:
+    the key is everything before it, the value everything after (so a value may itself contain
+    `=`, and `K=` is a legal empty value). A value with no `=`, or an empty key (`=V`), refuses with
+    `DOCBLOCK: BAD_SUBST arg=<raw>`; the same key given twice refuses with
+    `DOCBLOCK: BAD_SUBST arg=<raw>` plus a `duplicate_key: <k>` detail line, never a last-wins
+    overwrite. Both exit 0 (a refusal of readable input), execute nothing, and are judged before
+    any artifact is reserved. Tests: `--subst K`, `--subst =V`, `--subst K=a --subst K=b`, and
+    `--subst K=a=b` (value `a=b`).
 
 ### FR-3: Execute in a disposable cwd under a declared shell mode
 
@@ -189,8 +197,13 @@ not opted in.
     with `DOCBLOCK: UNREADABLE reason=preamble_unreadable` and does not run the block. The document
     itself is read the same way, so a malformed document is `UNREADABLE reason=doc_unreadable`, not
     a traceback; a test feeds each an invalid byte.
-  - AC-3.13: The temp directory is created by `tempfile.mkdtemp()` and its mode is `0o700`
-    (`stat.S_IMODE(os.stat(d).st_mode) == 0o700`), observed from inside the running block. The
+  - AC-3.13: The temp directory is created by `tempfile.mkdtemp()` **followed by
+    `os.chmod(cwd, 0o700)`**, and its mode is `0o700` (`stat.S_IMODE(os.stat(d).st_mode) == 0o700`),
+    observed from inside the running block **under a hostile umask**: `mkdtemp` alone yields
+    `0o700 & ~umask` — measured, `umask 0777` gives mode `0o0` — so the chmod is what makes the AC
+    true rather than environment-dependent. The test sets `os.umask(0o777)` around the call and
+    restores it in `finally`. A chmod that fails is `LAUNCH_FAILED stage=mkdtemp` (AC-4.6) after
+    the directory is removed. The
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
@@ -229,7 +242,7 @@ not opted in.
     **0**, including when the block's own `rc` is non-zero — the block's rc is data, not the tool's
     verdict.
   - AC-4.2: **The exit-code partition is pinned.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`,
-    `BAD_INDEX`, `BAD_TIMEOUT`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
+    `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
     exit **0**; `UNREADABLE` (every `reason=`), `CLEANUP_FAILED` and `LAUNCH_FAILED` each exit **2**. A test
     enumerates the verdict table and asserts the code of every row, so a row cannot move between
     the two classes unnoticed.
@@ -245,7 +258,13 @@ not opted in.
     `DOCBLOCK: LAUNCH_FAILED stage=<mkdtemp|spawn|reap>` with a detail line carrying the OS error
     text, exit 2, and the cwd (if one was created) is still cleaned up. Tests: `mkdtemp`
     fault-injected to raise; `PATH` set to an empty directory so `bash` cannot be found (real, no
-    mock); `os.killpg` fault-injected to raise `PermissionError` under a timed-out block.
+    mock); `os.killpg` fault-injected to raise `PermissionError` under a timed-out block — **and
+    that test reaps what it launched**: the fake records the pgid it was asked to signal and the
+    test's `finally` sends the real `SIGKILL` to it, then asserts the group is gone, so the test
+    cannot recreate the orphan-process incident this feature cites. For a *genuinely*
+    unsignalable group the helper's policy is diagnostic, not containment: the verdict's detail
+    carries `pgid=<n>` so the operator can act, and this is the one documented case in which a
+    launched process may outlive the call.
 
 ### FR-5: Bounded execution without an external time-bounder
 
@@ -412,3 +431,4 @@ not opted in.
 - v1.18: Design audit v8 (codex must 3 should 1, agy must 2): exit codes follow the Audit-gate signal discipline invariant — every verdict incl. refusals and TIMEOUT exits 0, only UNREADABLE and CLEANUP_FAILED exit 2 (FR-4, AC-4.2 pins the partition row by row); AC-3.14 names the timeout-plus-cleanup case; AC-6.4's collected floor is in-suite via collect-only and the pass half is the out-of-suite gate command.
 - v1.19: Design audit v9 (codex must 3 should 1; agy clean): AC-4.6 maps the helper's own mkdtemp/Popen/killpg failures to LAUNCH_FAILED; AC-3.9 compares (st_dev, st_ino) on the opened descriptors so hard links are caught with no check-to-open window; AC-3.14 names cleanup_error and the __cause__ rule; AC-6.4's gate command captures pytest's status before tail. 48 ACs.
 - v1.20: Design audit v10 (codex must 2 should 1, agy must 1): AC-3.12 reads the preamble and the document as strict UTF-8 and maps a decode failure to UNREADABLE.
+- v1.21: Design audit v11 (codex must 3; agy must 1): AC-2.8 gives --subst a parser contract (split once on the first '=', empty key and repeat refused as BAD_SUBST); AC-3.13 adds os.chmod(cwd, 0o700) because mkdtemp alone is 0700 & ~umask (measured 0o0 under umask 0777) and tests under a hostile umask; AC-4.6's reap test reaps what it launched and the unsignalable-group policy is stated. 49 ACs.

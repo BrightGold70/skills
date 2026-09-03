@@ -42,7 +42,10 @@ print the streams inline and break every consumer that parses the verdict line.
 **The CLI contract, in full.** `h_mad_doc_block_exec.py <doc> --heading <h> [--index N]
 [--subst K=V]... [--preamble-file <path>] [--shell-timeout SECONDS] [--stdout PATH]
 [--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
-parser-rejection test, **and no abbreviated spellings**: the parser is built with
+parser-rejection test. `--subst` values are split once on the first `=` (a value may contain `=`;
+`K=` is an empty value); no `=`, an empty key, or a repeated key is `BAD_SUBST arg=<raw>` (exit 0,
+`duplicate_key:` detail for the repeat), judged before anything is reserved (AC-2.8). There are
+**no abbreviated spellings**: the parser is built with
 `allow_abbrev=False`, so `--shell-t` or `--pre` are rejected rather than silently accepted as
 undocumented aliases (test: `test_cli_rejects_abbreviated_options`). Argument *values* are
 validated by `main` and map to verdict lines — `--index` non-integer or below 1 → `BAD_INDEX`,
@@ -59,9 +62,9 @@ that lacks a trailing newline cannot fuse with the recipe's first line
 variable and ends without `\n`, and whose block's first line reads it). The registry entry carries a detail row for that reason
 like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
 reserved after every check, and no open ever truncates**: after extraction, selection,
-substitution and every remaining pre-spawn validation (timeout, preamble readability, alias —
-the info string was validated inside `extract` and the ordinal inside `select`) have passed, both
-paths are opened for *append* and the handles held — append creates a missing file
+substitution and every remaining pre-spawn validation (timeout, preamble readability — the info
+string was validated inside `extract` and the ordinal inside `select`) have passed, both paths are
+opened for *append*, the handles held, and only then compared for aliasing on their descriptors — append creates a missing file
 and never empties an existing one. The truncation is the final write itself, `seek(0);
 truncate(); write`, on those held handles after a successful run. So a failure to reserve the
 second path finds the first untouched (a file this call created is unlinked again; a pre-existing
@@ -215,7 +218,7 @@ planned against):
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `MissingSubstitution`, `OverlappingSubstitution` |
-| `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `BlockTimeout`, `CleanupFailed` |
+| `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
@@ -469,7 +472,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **48 as of spec v1.19**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **49 as of spec v1.21**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
@@ -557,3 +560,4 @@ design begins.
 - v1.21: Design audit v7 back-propagation: append-mode reservation after every check with truncation at the final write, and its four tests; docsections.json converts all four mutations to the named-test form; the AC-6.4 floor is computed by test_suite_floor_holds.
 - v1.22: Design audit v8 back-propagation: exit-code partition per the base invariant; substitute returns a new Block and run_block takes no subs; the five named consumer-file tests enumerated; floor test topology (collect-only subprocess, env guard, pass half outside the suite); main's order corrected (info string in extract, ordinal in select).
 - v1.23: Design audit v9 back-propagation: descriptor-level alias check; the suite gate command captures the exit status; AC count 48 (spec v1.19).
+- v1.24: Design audit v11 back-propagation: --subst contract in the CLI paragraph; alias check after reservation; LaunchFailed in the run_block row; AC count 49 (spec v1.21).
