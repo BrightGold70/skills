@@ -1003,6 +1003,47 @@ Cheap and mechanical: for each finding, open the file and line it names and conf
 what the finding says it says. Most premises check out in seconds, and the ones that do not are
 where the expensive mistakes live.
 
+### Close the class, never the instance
+
+Once a premise checks out, classify the finding before you fix it: is it a **singleton**, or one
+**instance of an open-ended set**? Launch APIs, alias forms, escape sequences, error kinds, file
+extensions — anything a reviewer can keep producing new members of. For a singleton, fix it and move
+on. For an instance of a class, the fix is not the instance:
+
+1. **Name the axis** the class ranges over, in the document.
+2. **Write a rule over that axis** — a pattern over the resolved target, not the member the reviewer
+   happened to name.
+3. **State the residual exactly** — what the rule provably does *not* cover, spelled out as a
+   concrete category, never "and similar" or an implied "etc.".
+4. **Say in the response which of the three you did**, so the next reviewer audits the rule and the
+   residual instead of proposing member N+1.
+
+Skip any of the three and a reviewer supplies the next member next cycle, one per cycle, and each
+one costs a full round trip.
+
+**Measured — HemaSuite `#18 gateway-consolidation` plan audit, cycles 20–29** (reports
+`gateway-consolidation.plan.audit.v{20,23..29}.codex.md`, plan Version History v1.25–v1.30). Seven
+cycles went to one guard's scanner coverage, and they ran on **two** axes, not one:
+
+- **Axis 1 — the spawn-API set.** c20, c23, c24, one API family per cycle. Closed at v1.25 by
+  replacing the enumerated list with *a pattern over the resolved target* — "any `subprocess.*`,
+  any `asyncio.create_subprocess_*`, `os.{system,popen,exec*,spawn*,posix_spawn*}`, `pty.spawn`
+  … rather than a list that loses one API per audit cycle".
+- **Axis 2 — how a callee resolves to a target.** Generalising axis 1 *opened* this one, and the
+  same enumeration ran again: c26 function-local imports, c27 one-hop assignment aliases, c28
+  transitive aliases, c29 literal `getattr`. Four more cycles.
+
+Axis 2 did **not** close by generalising a third time. It closed at v1.30 when the residual was
+stated exactly — *"the static-scanner residual is stated exactly as computed callees, so scanner
+coverage stops being an open series."* **Step 3 is the one that ends the series**, and step 1 is why:
+a rule with no named axis silently has more axes than you think, and generalising the first one just
+moves the enumeration to the second.
+
+Two neighbouring cycles look like this series and are not — count them against their own causes, not
+this rule: c25 was fix-introduced (a pattern written at c20 missed `self._resolve_cli()`), and c18
+was a behavioural premise stated without a command. The brief that filed this rule folded both in
+and reported nine; re-derived from the reports, the enumeration itself is seven.
+
 ### Record a rejected finding in the rejections ledger, never in a gated document
 
 When a premise does not hold and you reject the finding, write it to a ledger that sits **beside
@@ -1792,6 +1833,10 @@ assembling by hand because the script is unavailable:
     The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
     - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+      "Revise" is where §"Close the class, never the instance" applies: before writing the fix,
+      decide whether each bullet is a singleton or one member of an open-ended set, and for a set
+      write the rule **and** the exactly-stated residual. Fixing the member the reviewer named is
+      what turns one defect into a seven-cycle series.
 
     **Pass `--gated <doc>` for every document the audit judged, and read the stamp back before relying on the PASS.** The gate reads the *audit file* and never the document the audit was about, so a PASS survives every later edit to the thing it passed — including the edits that fix the previous cycle. Measured: a design that gated clean twice produced 9 findings on the next cycle, and 4 of them were created by the fixes for the cycle before. `--gated` is repeatable and a cycle that gates a design **and** an impl-plan must name both; a stamp is written only on PASS (a stamp over a FAIL would let the readback report `CURRENT` for a verdict that blocked), and a gated file that cannot be read yields `GATE: UNSTAMPABLE` and writes nothing rather than recording a verdict over content the gate never saw. Then:
     ```bash
