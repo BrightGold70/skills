@@ -435,3 +435,15 @@ class TestReportFileDeliveryAdvice:
 
         assert "never gate on it" in text.lower() or "never gate an audit on" in text.lower()
         assert "`result.status`" in text
+
+
+def test_double_brace_inside_a_fence_is_content_not_a_conditional():
+    """A verbatim `{{` inside a fenced block (an impl-plan's literal mutation payload
+    quoting `rf"^#{{1,{level}}} "`) must not halt the preflight; a surviving
+    `{{ONLY:…}}` outside any fence still must."""
+    inside = "prose\n```python\nx = re.match(rf\"^#{{1,{level}}} \", line)\n```\nmore\n"
+    assert not [p for p in preflight(inside, {}) if p.startswith("unresolved_conditional")]
+    inside4 = "````\n```\n{{ still fenced\n````\nafter\n"
+    assert not [p for p in preflight(inside4, {}) if p.startswith("unresolved_conditional")]
+    outside = "prose\n{{ONLY:design}} leaked\n"
+    assert [p for p in preflight(outside, {}) if p.startswith("unresolved_conditional")]

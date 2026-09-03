@@ -95,13 +95,43 @@ def resolve(text: str, audit_type: str) -> str:
 
 # --- step 7.2 ----------------------------------------------------------------
 
+
+def _braces_outside_fences(text: str) -> list[str]:
+    """Lines carrying `{{` that are NOT inside a fenced code block.
+
+    A `{{ONLY:…}}` / `{{END-ONLY}}` directive is prose-level; an inlined document may
+    legitimately quote source such as `rf"^#{{1,{level}}} "` inside a ``` fence (an
+    impl-plan's literal mutation payload did, 2026-09-03), and that is content, not a
+    surviving conditional. Fence tracking follows CommonMark: an opener is 0-3 spaces
+    plus a run of 3+ backticks or tildes; the closer is a run of the same marker at
+    least as long, alone on its line.
+    """
+    import re as _re
+    leaked: list[str] = []
+    fence_char = ""
+    fence_len = 0
+    for ln in text.splitlines():
+        m = _re.match(r"^ {0,3}(`{3,}|~{3,})", ln)
+        if fence_char:
+            if m and m.group(1)[0] == fence_char and len(m.group(1)) >= fence_len \
+                    and ln.strip() == m.group(1).strip():
+                fence_char, fence_len = "", 0
+            continue
+        if m and (m.group(1)[0] == "~" or "`" not in ln[m.end():]):
+            fence_char, fence_len = m.group(1)[0], len(m.group(1))
+            continue
+        if "{{" in ln:
+            leaked.append(ln)
+    return leaked
+
+
 def preflight(text: str, inlined: dict[str, str]) -> list[str]:
     """Return the reasons this prompt must not be dispatched (empty == clean)."""
     problems = []
     if residual := [ln for ln in text.splitlines() if "<INLINE_" in ln]:
         problems.append(f"unfilled_slot: {residual[0].strip()[:80]!r}"
                         + (f" (+{len(residual) - 1} more)" if len(residual) > 1 else ""))
-    if leaked := [ln for ln in text.splitlines() if "{{" in ln]:
+    if leaked := _braces_outside_fences(text):
         problems.append(f"unresolved_conditional: {leaked[0].strip()[:80]!r}"
                         + (f" (+{len(leaked) - 1} more)" if len(leaked) > 1 else ""))
     for token in ("<AUDIT_SENTINEL>", "<REPORT_FILE_PATH>"):
