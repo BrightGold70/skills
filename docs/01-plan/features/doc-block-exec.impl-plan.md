@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.83 — design cycle 74 / impl-plan cycle 25 back-propagation, commit d718cde)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.50) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.79)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.84 — design cycle 75 / impl-plan cycle 26 back-propagation, commit cb20ba1)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.51) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.80)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 78 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 79 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -143,7 +143,18 @@ uses one**: the **full line form** `## Text` — matches a heading event whose *
 equals `Text` AND whose level equals the hash count; this is what `extract`, the CLI `--heading`,
 and Task 5's `_gate_block` pass — and the **bare
 form** `Text` — matches the same normalized text at any level; this is `docsections.titled_section`'s unchanged
-contract. **Normalized text** is the CommonMark §4.2 form and is what both sides of every
+contract. **The two forms are told apart by the request itself, full form first** (design v1.84,
+impl-plan audit v26): a request that parses as an ATX heading line — 0–3 leading spaces, a run of
+1–6 `#`, then a space — **IS** the full form, always; only a request that does not parse as one is
+read as the bare form. The predicate is the scanner's own, so there is one ATX rule in the module
+and the dispatch cannot drift from the recognition. There is exactly **one consequence worth
+documenting**: a heading whose visible title itself begins with an ATX prefix — `### ## Text`,
+whose title is `## Text` — is reachable only through its full form (`### ## Text`, level 3) and
+never through the bare form, because the request `## Text` is claimed by the full form first. That
+exclusion is harmless to every live caller, measured: none of `titled_section`'s targets begins
+with `#`. Without the precedence the request `## Text` would have two incompatible meanings at
+once — level-2 `Text`, and any-level `## Text` — and a document holding both would refuse as
+ambiguous rather than answer either. **Normalized text** is the CommonMark §4.2 form and is what both sides of every
 comparison use: the line after the opening hash run, with the optional closing hash run (preceded
 by a space) and trailing whitespace stripped. The comparison is never against the raw source line,
 so `## Text ##` and `## Text` are one and the same heading on **both** forms, and a document
@@ -478,7 +489,11 @@ def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     """(the heading event's `end` offset, its level) for the matching heading event; None when
     absent; AmbiguousHeading(n) when more than one matches. `heading` is either the full line
     form '## Text' (normalized text AND level must match) or the bare 'Text' (normalized text at
-    any level — docsections.titled_section's contract). Normalized text is CommonMark §4.2: the
+    any level — docsections.titled_section's contract). WHICH form a request is, is decided by
+    the request: if it parses as an ATX heading line (0-3 spaces, 1-6 '#', a space) it is the
+    full form, always; otherwise the bare form. So a heading whose title itself starts with an
+    ATX prefix ('### ## Text') is reachable only in full form, never bare — the one documented
+    exclusion (design v1.84). Normalized text is CommonMark §4.2: the
     optional closing hash run and trailing whitespace are stripped, so '## Text ##' and '## Text'
     are one heading and a document holding both raises AmbiguousHeading(2). Searches the scanner's
     `heading` events only."""
@@ -582,6 +597,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.4 `test_index_selects_and_past_end_is_not_found`: `select(blocks, 2)` returns the second; `select(blocks, 3)` on two raises `BlockNotFound`.
 - [ ] AC-1.5 `test_section_owns_deeper_headings`: a `##` section containing `###` sub-headings with a tagged fence under one of them yields that fence; the next `##` (and a `#`) ends it.
 - [ ] AC-1.5 `test_find_heading_accepts_full_and_bare_forms`: on a document with `## Text`, `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) return the same `(end, 2)`; on a document whose only `Text` heading is `### Text`, `find_heading(text, "## Text")` is `None` while the bare form returns `(end, 3)`.
+- [ ] AC-1.5 `test_heading_form_precedence_full_wins`: on one document holding **both** `### ## Text` (level 3, title `## Text`) and `## Text` (level 2, title `Text`) — `find_heading(text, "## Text")` returns the **level-2** heading only, because the request parses as an ATX line and is therefore the full form, matching title `Text` at level 2; `find_heading(text, "### ## Text")` returns the **level-3** heading only, matching title `## Text` at level 3; and **neither call raises `AmbiguousHeading`**. That last clause is what discriminates: under `form-precedence-bare-first` the request `## Text` also matches the level-3 heading's bare title and the call refuses as ambiguous, so a test asserting only the two positive results would pass against the mutant.
 - [ ] AC-1.5/1.7 `test_closing_hash_run_does_not_change_heading_identity`: pins the normalization rule from both sides. On a document whose only heading is `## Text ##`, both `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) find it and return the same `(end, 2)` — the closing run is stripped before the comparison, so the raw line is never what is matched. On a document holding both `## Text` and `## Text ##`, the full form raises `AmbiguousHeading` with `n == 2`, because the two lines normalize to the same heading rather than to two distinct ones (design v1.67 §Scanning, design audit v63).
 - [ ] AC-1.5 `test_adjacent_heading_bounds_the_section`: `## A` immediately followed by `## B` whose section holds a tagged block — `extract(doc, "## A")` (full form) is `[]`, and with `start, level = find_heading(text, "## A")`, `fence_aware_end(text, start, level) == start` (the adjacent heading's line starts exactly at `start` and is a boundary).
 - [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `# hashtag`, `## x` or the seven-run line in the full form yields no heading match; every `extract`/`find_heading` argument in this file's ACs is the full form unless it says bare).
@@ -613,13 +629,21 @@ stays a regression test — the Conventions bullet names the one other row with 
 `heading-match-ignores-fence-state`, `heading-lookalike-accepted` (grammar loosened to
 `line.lstrip().startswith("#")`), `adjacent-heading-skipped` (boundary predicate `>` instead of
 `≥`), `heading-level-pin-ignored` (the full form matching on text alone, ignoring the hash count),
+`form-precedence-bare-first` (`find_heading` tries the bare form first, or unions the two forms,
+so the request `## Text` also matches a `### ## Text` heading and the call refuses as ambiguous;
+killed by `tests/test_h_mad_doc_block_exec.py::test_heading_form_precedence_full_wins` on its
+no-`AmbiguousHeading` clause. It is discriminated from `heading-level-pin-ignored`, which makes
+the full form match any level: that mutant is caught by
+`test_find_heading_accepts_full_and_bare_forms`'s level-mismatch leg, and neither test goes red
+under the other's mutant, because this document's other heading fixtures hold no title beginning
+with an ATX prefix),
 `closing-hash-run-kept` (`_fence_events` leaves the optional closing hash run in a heading event's
 text, so `## Text ##` no longer satisfies a `## Text` request and a `## Text`/`## Text ##` pair
 counts as one heading instead of two; killed by
 `tests/test_h_mad_doc_block_exec.py::test_closing_hash_run_does_not_change_heading_identity`, which
 goes red on both of its sides — the sole `## Text ##` document stops matching, and the mixed
 document stops raising `AmbiguousHeading(2)`)
-— 23 rows.
+— 24 rows.
 **Rows in `docsections.json`** after this task: the four existing (two re-anchored) plus
 `docsections-delegation-reverted`, `docsections-syspath-setup-removed`,
 `docsections-heading-lookup-reverted` and `docsections-local-bounder-restored` — 8 rows.
@@ -1062,7 +1086,7 @@ if __name__ == "__main__": sys.exit(main())
 
 **Acceptance Criteria**:
 - [ ] AC-1.3/1.4/1.7/1.9 CLI halves (subprocess): `test_cli_ambiguous_prints_blocks_and_heading` (the line is `AMBIGUOUS blocks=2` followed by `heading=` and the `--heading` argument rendered as a quoted JSON string — `blocks=` bare because it is a helper-produced int, `heading=` quoted and holding the argument verbatim between the quotes; exit 0), `test_cli_index_past_end_is_not_found`, `test_cli_duplicate_headings_refuse` (`AMBIGUOUS_HEADING count=2`, nothing executed), `test_cli_index_zero_and_negative_are_bad_index` (`BAD_INDEX index="0"`/`"-1"` — `index=` is quoted, since `BadIndex` carries the raw argument and a non-integer is a legal input, exit 0, no side effect), `test_non_integer_index_is_bad_index`.
-- [ ] AC-2.2/2.3/2.7/2.8 CLI halves (subprocess): `test_cli_missing_keys_list_in_argument_order`, `test_cli_overlap_counts_distinct_keys`, `test_cli_no_subst_runs` (zero `--subst`), `test_subst_without_equals_is_bad_subst`, `test_subst_empty_key_is_bad_subst` (`--subst =V` → `BAD_SUBST arg="=V"`, the raw argument verbatim inside the quotes — the assertion that discriminates `main`'s own refusal from a delegated one, which would print `arg=`), `test_duplicate_substitution_key_refuses` (`duplicate_key: "K"`, quoted like every detail value), `test_subst_value_may_contain_equals` — each refusal executes nothing and reserves nothing (no artifact created).
+- [ ] AC-2.2/2.3/2.7/2.8 CLI halves (subprocess): `test_cli_missing_keys_list_in_argument_order`, `test_cli_overlap_counts_distinct_keys`, `test_cli_no_subst_runs` (zero `--subst`), `test_subst_without_equals_is_bad_subst`, `test_subst_empty_key_is_bad_subst` (`--subst =V` → `BAD_SUBST arg="=V"`, the raw argument verbatim inside the quotes — the assertion that discriminates `main`'s own refusal from a delegated one, which would print `arg=""`, an empty quoted value; under the quoted grammar there is no bare `arg==V` form to assert on), `test_duplicate_substitution_key_refuses` (`duplicate_key: "K"`, quoted like every detail value), `test_subst_value_may_contain_equals` — each refusal executes nothing and reserves nothing (no artifact created).
 - [ ] AC-3.7 (subprocess) `test_cli_unknown_info_key_is_bad_info`; AC-3.12 (subprocess) `test_invalid_utf8_document_is_unreadable` CLI half (`UNREADABLE reason=doc_unreadable`, exit 2) and `test_invalid_utf8_preamble_is_unreadable`, `test_unreadable_preamble_path_refuses` (`preamble_unreadable`, exit 2, no side effect); `test_cli_preamble_file_reaches_the_block`.
 - [ ] AC-3.8 (subprocess) `test_stream_paths_receive_the_streams` (two files differ for a block writing different text); `test_streams_optional`; `test_stream_paths_truncate_an_existing_file`; `test_streams_untouched_after_a_timeout`; (in-process main, each) `test_stream_write_failure_after_the_run_is_a_refusal` (`_final_write` injected to raise → `UNREADABLE reason=stream_write_failed`, exit 2, no `rc=`); `test_first_stream_write_failure_skips_the_second` (`_final_write` injected to raise on the first handle: `failed: "stdout"` / `skipped: "stderr"`, stderr bytes unchanged); `test_second_stream_write_failure_leaves_the_first_as_written` (`_final_write` injected to raise on the second handle: `written: "stdout"` / `failed: "stderr"`); `test_final_write_close_failure_is_mapped` (seam patched to call the real `_final_write` with a recording proxy whose `close` alone raises → `stream_write_failed`, `failed: "stdout"`, exit 2, no traceback; a regression test for `final-write-close-not-in-finally`, not its `test` key); `test_final_write_failure_before_close_still_closes` (proxy's `flush` and `close` both raise → same verdict and the proxy's `close` was called; the canonical `test` key of `final-write-close-not-in-finally`); `test_final_write_readback_catches_a_silent_no_op` (`_final_write` injected as a no-op → `stream_write_failed` with `verify: "stdout"`, `failed: "stdout"` / `skipped: "stderr"`, stderr bytes unchanged); `test_backstop_close_failure_on_timeout_is_mapped` (`_close_stream` injected to raise under `sleep 300`, `--shell-timeout 1`, `--stdout` given → `UNREADABLE reason=stream_close_failed`, a `stream: "stdout"` line and an `os_error: "<text>"` line, exit 2, no traceback, cwd gone); `test_backstop_close_failure_does_not_outrank_a_refusal` (same injection under an aliased pair → still `stream_paths_alias`, exit 2, no traceback); `test_stream_handles_are_closed_on_every_path` (recording `os.open` pass-through, `_final_write` injected for the first-write-failure leg; after `TIMEOUT` and after a first-write failure, `os.fstat` on each recorded fd raises `OSError`).
 - [ ] AC-3.9 (subprocess) `test_symlinked_stream_paths_refuse`, `test_dot_slash_spelling_refuses`, `test_hard_linked_stream_paths_refuse` (`os.link`): `UNREADABLE reason=stream_paths_alias`, exit 2, block not run, both handles closed (by the backstop `finally`), a created file unlinked.
@@ -1081,7 +1105,9 @@ if __name__ == "__main__": sys.exit(main())
 
 **Mutation rows added here**: `subst-split-on-every-equals`, `subst-duplicate-key-last-wins`,
 `cli-empty-key-delegated` (`main` stops refusing the empty key while building the map and lets
-`substitute` raise `BadSubstArg("")`, so the verdict prints `arg=` instead of the raw `arg==V`;
+`substitute` raise `BadSubstArg("")`, so the verdict prints `arg=""` — an empty quoted value —
+instead of the raw `arg="=V"` (design v1.84: under the quoted grammar the discriminator is
+`arg=""` versus `arg="=V"`, never a bare `arg==V`);
 killed by `tests/test_h_mad_doc_block_exec.py::test_subst_empty_key_is_bad_subst`.),
 `index-nonint-unmapped`, `timeout-nonnumeric-unmapped`, `preamble-decode-error-unwrapped`,
 `stream-reserved-with-truncation`, `final-write-close-not-in-finally`,
@@ -1135,13 +1161,13 @@ sole killer. Each row now has one killer that actually reaches its guard.
 above, by which side is mutated: that row removes `substitute`'s own guard and is killed by the API
 test, this one removes `main`'s and is killed by the CLI test, and neither killer touches the
 other's code path. With Tasks 1, 2, 3 that is
-23 + 5 + 24 + 26 = **78 rows**, 76 of the helper's source and 2 of `SKILL.md`, matching design v1.82.
+24 + 5 + 24 + 26 = **79 rows**, 77 of the helper's source and 2 of `SKILL.md`, matching design v1.84.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 78 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 79 rows
 before this task is GREEN.
 
 **RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — every Task 4 test fails and Tasks 1–3 stay green. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
@@ -1504,7 +1530,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=78
+hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=79
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 # the full suite runs at the REPOSITORY ROOT, not in h-mad/ — see the note below
@@ -1523,14 +1549,9 @@ the same `pytest -q -p no:cacheprovider` from `h-mad/` picks a different rootdir
 it cannot establish the pass half at all. The subshell `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider )`
 does that without disturbing the `cd h-mad` the earlier lines rely on, and the redirect and
 `RC=$?` sit outside it, so the log still lands and `$?` is still the wrapper's propagated status
-for pytest, not the subshell's `cd`.
-**The paired spec's AC-6.4 gate command does not yet carry this root pin** (spec v1.49 `:458`):
-it bounds correctly through `hmad-dispatch run --timeout 1200` and captures `RC=$?` and the
-`SUITE:` token exactly as this block does, but it has no `cd` to the repository root, so an
-operator running it from `h-mad/` — where the lines above leave them — would collect 2485 and
-reproduce the very defect plan audit v62 raised. This block is the stricter of the two and is what
-5f runs; flagged for back-propagation into the spec.
-
+for pytest, not the subshell's `cd`. The paired spec carries the same root-pinned subshell in its
+AC-6.4 gate command from v1.50 on (spec `:458`), so the three documents now agree and nothing is
+owed here (impl-plan audit v26).
 **Every 5f command is bounded** through the `hmad-dispatch run --timeout` wrapper shown in the
 block above, with the concrete bound on each line (the base Portable
 time bounds invariant; `timeout`/`gtimeout` are not macOS components, and AC-5.3 forbids the helper
@@ -1576,3 +1597,4 @@ into the log.
 - v1.24: Impl-plan audit v23 (codex must 1 nit 1; agy clean) + design v1.80 / design audit v72 back-propagation: the universal-renderer sentence no longer contradicts the bare grammar — of the 25 rendering slots, 18 dynamic values go through _field and 7 (rc, blocks, count, keys, shell, stage, reason) are rendered bare by construction as the exhaustive exemption, stated in both directions (no other field is bare, no bare field reaches _field); _field is json.dumps(str(value), ensure_ascii=False) with the str() called out as load-bearing, since json.dumps(3) emits a bare 3 and an int would otherwise leave the grammar unquoted; AC-4.2's subclass walk asserts membership BY CLASS and instantiates nothing, so StreamPathUnwritable's leftover=None default is justified by its raise site (the reservation raises it bare, from the OSError) rather than by a test, and no other subclass is forced to be zero-argument constructible; every example verdict and detail line is rewritten in the quoted grammar (failed: "stdout", skipped: "stderr", verify: "stdout", stream: "stdout", os_error: "<text>", pgid: "<n>", seconds="1.0"), including the joined written/skipped lists; DETAIL_KEYS lets tests enumerate all ELEVEN, not three. Two design-internal disagreements surfaced rather than silently absorbed: its verdict table still shows BAD_INFO key=<k> bare and overlap: "<a>" <b> half-quoted, both of which the design's own exhaustive list contradicts, so this document quotes them and flags the two table rows for the next design cycle. Counts unchanged at 77.
 - v1.25: Impl-plan audit v24 (codex must 1 nit 1; agy clean) + design v1.82 / design audit v73 back-propagation: docsections-local-bounder-restored and consumer-from-import now carry COMPLETE LITERAL find/replace payloads as fenced blocks, since both anchor in source that exists at HEAD plus deltas this document already writes out; the Task 1 delta gains titled_section's and section_from's real docstrings, quoted from docsections.py:46-52 and :60-65, so the delta and the local-bounder find are ONE literal shape (the nit). _field gains a SECOND PASS after json.dumps, rewriting every remaining Cc/Zl/Zp character to \uXXXX, because json.dumps leaves U+0085, U+2028, U+2029 and U+007F literal and str.splitlines() breaks on the first three — MEASURED here: one verdict line split into FOUR pieces without the pass and ONE with it — so unicodedata returns to the imports, with test_unicode_line_separators_cannot_split_a_verdict_line (asserting on .splitlines(), which is the splitter that breaks) and row c1-escape-removed, discriminated from field-escape-removed by character class. AC-3.10's two rows are re-bound: a reader-less FIFO fails at os.open with ENXIO and never reaches the S_ISREG check (measured), so nonregular-stream-accepted moves to the new test_stream_path_char_device_refuses (--stdout /dev/null, which opens and fstats as a character device — measured) and the FIFO test keeps stream-open-blocking alone; each row now has a killer that reaches its guard (Task 4 26 rows; 23 + 5 + 24 + 26 = 78, 76 of the helper's source). The local-bounder replace block sits in a FOUR-backtick fence: its restored toggle contains the literal ``` and a three-backtick fence closed on it, truncating the payload — caught by parsing every fenced python block in this document with ast, which is also how both find blocks were verified byte-identical to the deltas they anchor on.
 - v1.26: Impl-plan audit v25 (codex must 1 should 1; agy clean) + design v1.83 back-propagation: duplicate-heading-takes-first now names ONE test key, tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse, with test_bare_form_duplicate_headings_refuse demoted to a regression test on the same guard, stated at the row, at the AC and in the Conventions bullet — whose earlier claim that a sweep 'found no other row naming two tests' was FALSE and is replaced by the two pairs that actually exist (this one and final-write-close-not-in-finally). The docsections-local-bounder-restored provenance is corrected: _fence_aware_end IS today's :33-42 body character for character (only its :32 docstring omitted, which the source guard does not read), but _find_heading is NOT today's text — grep -c 'def _find_heading' on today's docsections.py returns 0, the lookup being an inline re.search inside titled_section at :53 — so the revert LIFTS that inline regex into a function to give the two re-pointed call sites a name, behaviour-identical (same pattern, same match.end(), same len(match.group('marks')), None where today falls through to its assert). The payload is unchanged; only the false provenance claim was. Also flagged: the spec's AC-6.4 gate command is bounded but carries no repository-root pin, so it would collect 2485 from h-mad/ — this document's 5f block keeps the pin and the divergence is noted for back-propagation. Counts unchanged at 78.
+- v1.27: Impl-plan audit v26 (codex must 1 should 1; agy clean) + design v1.84 / design audit v75 back-propagation: find_heading's two forms are told apart BY THE REQUEST, full form first — a request that parses as an ATX heading line (0-3 spaces, 1-6 #, a space) IS the full form, always, and only a non-parsing request is read as bare, using the scanner's own predicate so the dispatch cannot drift from the recognition; the one documented consequence is that a heading whose title itself begins with an ATX prefix (### ## Text) is reachable only in full form, harmless to every live caller (none of titled_section's targets begins with #, measured). Without the precedence the request ## Text had two incompatible meanings and a document holding both would refuse rather than answer. Added test_heading_form_precedence_full_wins (both lookups return their own heading and NEITHER raises AmbiguousHeading — that last clause is the discriminator, since a positives-only test would pass against the mutant) and row form-precedence-bare-first before closing-hash-run-kept, discriminated from heading-level-pin-ignored (Task 1 24 rows; 24 + 5 + 24 + 26 = 79, 77 of the helper's source). --subst =V prints arg="=V" under the quoted grammar and cli-empty-key-delegated's discriminator is arg="" versus arg="=V", never a bare arg==V. The 5f note claiming the spec lacked the repository-root pin is removed: spec v1.50 back-propagated it and :458 carries the same subshell, so the three documents agree.
