@@ -479,7 +479,8 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    drain-with-timeout → close pipes → `wait(timeout=DRAIN_SECONDS)` iff the group was signalled;
    the AC-4.6 reap test asserts the bounded return, which is what proves that branch skips the
    wait). `test_wait_after_kill_is_bounded` wraps the recorded instance's `wait` to record its
-   `timeout` keyword and raise `subprocess.TimeoutExpired` under a timed-out block on the AC-5.5
+   `timeout` keyword and raise `subprocess.TimeoutExpired(cmd=["bash"], timeout=DRAIN_SECONDS)` —
+the constructor requires both positional arguments (measured on 3.11.8; impl-plan v1.29) — under a timed-out block on the AC-5.5
    escapee fixture — needed so the drain expires first: on a drain that succeeds, CPython's
    `communicate` calls `self.wait()` internally and the wrapper would fire on that call instead of
    the helper's own (impl-plan v1.18 derivation), and the recorded keyword is what proves which
@@ -1413,3 +1414,4 @@ mean the probe never created one.
 - v1.85: Design audit v76 (codex must 2; agy must 1 on the impl-plan) + plan audit v67 / impl-plan audit v27 back-propagation: __all__ is 28 names (seven functions, two dataclasses, the exception hierarchy); argparse grammar errors are BAD_ARGS verdicts, exit 0 (test_malformed_invocation_is_a_verdict, argparse-error-unrouted); the full-form request predicate is the scanner's own (space, tab or EOL) with test_full_form_request_accepts_tab_and_eol and request-predicate-space-only; concurrent replacement of the caller's artifact path is a stated non-goal with an lstat/fstat identity check before the rollback unlink — 81 rows (79 + 2).
 - v1.86: __all__ is 29 names once BadArgs joins the exception hierarchy (28 was counted before v1.85 added it).
 - v1.87: Design audit v77 (codex must 1; agy must 1 at 13 tool calls): Task 5 unpacks substitute's (Block, counts) tuple before run_block; the two source-scan rows say the scan is green on the real helper and RED on the mutant (the earlier wording inverted it).
+- v1.88: Impl-plan v1.29 back-propagation: the bounded-wait test's TimeoutExpired is constructed with cmd and timeout (a bare constructor call raises TypeError).
