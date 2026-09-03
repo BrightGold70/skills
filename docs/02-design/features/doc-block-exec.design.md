@@ -150,8 +150,13 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 a private generator `_fence_events(text)` that walks the document and yields, per line, whether
 the line is a fence opener, a fence closer, or body/prose, together with the opener's marker
 character, run length, indentation and info string. `extract` consumes it to find candidates and
-`fence_aware_end` consumes it to bound a section (from `text[:start]` onward, which is how its
-prefix-state contract is met); neither function carries fence state of its own. That is what
+`fence_aware_end` consumes it to bound a section — feeding the scanner **complete source lines
+from the top of the document through the line that contains `start`**, then considering a
+boundary only at line starts strictly after `start`; never a `text[:start]` slice, which can cut a
+line right after its marker run and make a ```` ```trailing ```` body line look like a blank-tailed
+closer (hostile fixture: `start` placed immediately after the three backticks of that line inside
+an open fence; the next fenced `#` must still not end the section) — and neither function carries
+fence state of its own. That is what
 makes the two surfaces unable to disagree by construction — a change to marker kind, run length,
 indentation, the closer rule or prefix state lands in one place — and it is where every
 fence-grammar mutation row anchors (`fence-run-length-ignored`, `tilde-fence-not-tracked`,
@@ -392,7 +397,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 48 mutations (48 rows: 46 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 49 mutations (49 rows: 47 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -494,8 +499,11 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
     skipping fenced blocks under the full CommonMark fence rule: backtick AND
     tilde runs of >= 3, closed only by the same character at >= the opening
     length, opener and closer indented 0-3 spaces (4+ is an indented code
-    block, never a fence). Fence state is established over text[:start] first,
-    so `start` may lie anywhere -- inside an open fence included -- and a
+    block, never a fence). Fence state is established over COMPLETE lines
+    from the document start through the line containing `start` (never a
+    text[:start] slice, which can truncate a line after its marker run and
+    fake a closer); boundaries are considered only at line starts after
+    `start`. So `start` may lie anywhere -- inside an open fence included -- and a
     fenced `#` after an arbitrary offset is never read as a heading; that is
     the contract `docsections.section_from` needs for its symbol-anchored
     offsets. The bounder `extract` uses, exported so
@@ -819,7 +827,8 @@ exactly what the base Mutation verification invariant forbids.
 | `chmod-rollback-unguarded` | the chmod failure removes the cwd outside the `finally` selection, so a failing removal is a traceback | `test_chmod_rollback_failure_is_cleanup_failed` (AC-3.13/3.14) |
 | `body-indent-not-stripped` | `extract` returns fence body lines with the opener's indentation still on them | `test_indented_fence_body_is_deindented` (AC-1.6 — exact text at 1, 2 and 3 spaces, plus a body line indented less than the opener) |
 | `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_bounder_ignores_an_indented_literal_fence` (AC-1.8 — the bounder's own contract; `test_indented_literal_tag_is_not_a_candidate` pins the extractor side of the same rule under AC-1.6) |
-| `prefix-fence-state-skipped` | `fence_aware_end` starts its fence state at `start` instead of scanning `text[:start]` first | `test_bounder_from_an_offset_inside_a_fence` (AC-1.8 — `section_from` anchored inside a fenced block must not end at a fenced `#`) |
+| `prefix-state-truncated-mid-line` | the prefix is fed as `text[:start]` instead of whole lines through the line containing `start`, so a ```` ```trailing ```` line cut after its run reads as a closer | `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (AC-1.8) |
+| `prefix-fence-state-skipped` | `fence_aware_end` starts its fence state at `start` instead of scanning the lines before it | `test_bounder_from_an_offset_inside_a_fence` (AC-1.8 — `section_from` anchored inside a fenced block must not end at a fenced `#`) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
@@ -827,7 +836,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Forty-eight rows, forty-eight mutations — forty-six of the helper's source (the AC-5.3 row, once
+Forty-nine rows, forty-nine mutations — forty-seven of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -961,3 +970,4 @@ mean the probe never created one.
 - v1.39: Design audit v33 (codex clean; agy must 1 + nits): the API prose lists BadSubstArg and BadTimeout.
 - v1.40: Design audit v34 (codex must 1; agy must 1 + nits): exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened added to the wire spec (six); stray line break in the setattr call joined.
 - v1.41: Design audit v35 (codex must 1; agy clean): one private fence scanner, _fence_events, consumed by both extract and fence_aware_end — the fence-grammar mutations anchor in it and a construct-complete parity test runs every hostile fixture through both consumers.
+- v1.42: Design audit v36 (codex must 1; agy clean): prefix fence state from whole lines through the line containing start, boundaries only after start; hostile mid-line fixture and the prefix-state-truncated-mid-line mutation (49 rows).
