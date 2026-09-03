@@ -437,8 +437,10 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two `SKILL.md`
    mutation rows land here). Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
 5. **Task 5 — the wire.** Tag the Second-surface gate fence in `h-mad/SKILL.md` **and** migrate
-   the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` (`_gate_bash_block`
-   at `:270` plus `run_recipe`) in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
+   the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` — a new
+   `_gate_block() -> Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
+   str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
+   `run_recipe` — in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
    (new) and the six named tests in that file. `:412` in the same file is deliberately untouched:
    it selects a *different*, untagged block (`exec codex`) and only inspects it, so it neither
    breaks nor belongs behind an executor. Satisfies FR-6. **Wiring shape**, not new behaviour.
@@ -772,7 +774,7 @@ table, restated here so the design enumerates every spec it names):
 
 | mutation | mechanism | killed by (`test` key, under `tests/test_h_mad_collect_report_docs.py::`) |
 |---|---|---|
-| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall` instead of `dbe.extract`/`dbe.select`, helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
+| `wire-revert-extract` | `_gate_block` resolves its block with a local `re.findall` instead of `dbe.extract`/`dbe.select`, helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
 | `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` (AC-6.2) |
@@ -971,3 +973,4 @@ mean the probe never created one.
 - v1.40: Design audit v34 (codex must 1; agy must 1 + nits): exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened added to the wire spec (six); stray line break in the setattr call joined.
 - v1.41: Design audit v35 (codex must 1; agy clean): one private fence scanner, _fence_events, consumed by both extract and fence_aware_end — the fence-grammar mutations anchor in it and a construct-complete parity test runs every hostile fixture through both consumers.
 - v1.42: Design audit v36 (codex must 1; agy clean): prefix fence state from whole lines through the line containing start, boundaries only after start; hostile mid-line fixture and the prefix-state-truncated-mid-line mutation (49 rows).
+- v1.43: Plan re-audit v32 back-propagation: Task 5 and the wire-revert-extract row name _gate_block.

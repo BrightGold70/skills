@@ -269,10 +269,14 @@ is module-qualified**: the file adds `import h_mad_doc_block_exec as dbe` after 
 pre-bound alias is invisible to a spy installed on the module (`monkeypatch.setattr(dbe,
 "extract", spy)` observes `dbe.extract(...)` and observes nothing through a bare `extract`). A
 test asserts the consumer's source carries no `from h_mad_doc_block_exec import`, so the
-discrimination cannot be lost by a later tidy-up. `_gate_bash_block` becomes
-`dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
+discrimination cannot be lost by a later tidy-up. **The resolver splits in two so the file's
+three existing callers keep their types**: a new `_gate_block() -> dbe.Block` returns
+`dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))`, and the existing
+`_gate_bash_block() -> str` becomes `return _gate_block().text` — so the two text-pin callers
+(`:281`'s `.index`/slicing and `:368`'s `.splitlines()`, measured) are untouched, and "nothing else
+in the file moves" stays true;
 `run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
-`RunResult`, calling `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
+`RunResult`, calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
 shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
 `dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
 substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
@@ -295,7 +299,7 @@ carries them fully qualified.
 
 | mutation | mechanism | killed by |
 |---|---|---|
-| `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select` (the pre-migration regex made **tag-tolerant** with `[^\n]*` — the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail on the tagged fence, and the wire, not the regex, is what this mutant must discriminate; helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — `monkeypatch.setattr(dbe, "extract", spy)` on the consumer's module-qualified alias, and the spy must have been called (AC-6.5) |
+| `wire-revert-extract` | `_gate_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select` (and `_gate_bash_block` returns that string) (the pre-migration regex made **tag-tolerant** with `[^\n]*` — the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail on the tagged fence, and the wire, not the regex, is what this mutant must discriminate; helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — `monkeypatch.setattr(dbe, "extract", spy)` on the consumer's module-qualified alias, and the spy must have been called (AC-6.5) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and `monkeypatch.setattr(dbe, "run_block", spy)` fires (AC-6.5) |
 | `wire-unconditional` | the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences | `test_gate_block_refuses_an_untagged_recipe` — a fixture section whose gating block lacks the tag must raise `BlockNotFound` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned by a mutant that breaks it) |
@@ -700,3 +704,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.43: Plan re-audit v29 (both surfaces clean) + design audit v33 (agy must 1 + nits): the invalid-UTF-8 preamble test carries the matrix's node ID on every surface; select's Sequence[Block] hint; PATH placeholder.
 - v1.44: Plan re-audit v30 (both surfaces clean) + design audit v34 (codex must 1; agy must 1 + nits): the three wire guards get mutants (six wire mutations); test_docsections.py in Deliverables; run_block's keyword type hints.
 - v1.45: Plan re-audit v31 (both surfaces clean) + design audit v36 back-propagation: the bounder's prefix state is built from complete lines through the line containing start; 49 mutations.
+- v1.46: Plan re-audit v32 (codex must 1; agy clean): the resolver splits into _gate_block() -> Block and _gate_bash_block() -> str (= .text), so the file's two text-pin callers keep their type and nothing else moves; the wire mutation targets _gate_block.
