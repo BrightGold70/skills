@@ -147,8 +147,12 @@ not opted in.
   - AC-3.9: `--stdout` and `--stderr` naming the **same path** refuses with
     `DOCBLOCK: UNREADABLE reason=stream_paths_alias`, exits 2, and **does not run the block** —
     one file cannot hold two streams verbatim, so the alternative is silently merging or
-    truncating an artifact the caller was promised. Compared after resolution, so a symlink or a
-    `./x` versus `x` spelling is caught rather than passing on a string mismatch.
+    truncating an artifact the caller was promised. **Compared on the opened descriptors** —
+    `(st_dev, st_ino)` from `os.fstat` of the two reserved handles, after reservation and before
+    anything is written — so a symlink, a `./x` versus `x` spelling **and a hard link** are all
+    caught, and there is no check-to-open window in which two distinct strings can come to name
+    one inode. A refusal here closes both handles (unlinking one this call created) and touches
+    no bytes. Tests: symlink, spelling, and `os.link` alias.
   - AC-3.10: A `--stdout`/`--stderr` path that cannot be written refuses with
     `DOCBLOCK: UNREADABLE reason=stream_path_unwritable` and exits 2, **and the block does not
     run** — observable because a block with a side effect leaves none.
@@ -188,8 +192,9 @@ not opted in.
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
     exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
-    `CleanupFailed(path)` — carrying the `OSError` when one was raised, `None` when only the
-    read-back caught a silent retention — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
+    `CleanupFailed(path, cleanup_error)` — the `cleanup_error` attribute is the `OSError` when
+    one was raised, `None` when only the read-back caught a silent retention; `__cause__` is the
+    pending `BlockTimeout` when the run had also timed out, else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
     (a timeout that also leaves an unremovable cwd reports `CLEANUP_FAILED`, tested as one case) —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
@@ -222,7 +227,7 @@ not opted in.
     verdict.
   - AC-4.2: **The exit-code partition is pinned.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`,
     `BAD_INDEX`, `BAD_TIMEOUT`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
-    exit **0**; `UNREADABLE` (every `reason=`) and `CLEANUP_FAILED` each exit **2**. A test
+    exit **0**; `UNREADABLE` (every `reason=`), `CLEANUP_FAILED` and `LAUNCH_FAILED` each exit **2**. A test
     enumerates the verdict table and asserts the code of every row, so a row cannot move between
     the two classes unnoticed.
   - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
@@ -231,6 +236,13 @@ not opted in.
   - AC-4.5: Every detail line the script can emit has a matching remedy row in the Helper-scripts
     registry entry in `h-mad/SKILL.md`, and every row there corresponds to an emittable line
     (pinned bidirectionally by a test).
+  - AC-4.6: **The helper's own failures are verdicts too, never tracebacks.** Every `OSError` the
+    helper can raise on its own behalf — `tempfile.mkdtemp()` failing, `Popen` failing (`bash`
+    absent from `PATH`), a `killpg` error other than `ProcessLookupError` — maps to
+    `DOCBLOCK: LAUNCH_FAILED stage=<mkdtemp|spawn|reap>` with a detail line carrying the OS error
+    text, exit 2, and the cwd (if one was created) is still cleaned up. Tests: `mkdtemp`
+    fault-injected to raise; `PATH` set to an empty directory so `bash` cannot be found (real, no
+    mock); `os.killpg` fault-injected to raise `PermissionError` under a timed-out block.
 
 ### FR-5: Bounded execution without an external time-bounder
 
@@ -307,8 +319,10 @@ not opted in.
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
-    Phase-5f gate command, `python3.11 -m pytest -q -p no:cacheprovider | tail -1`, run alone by
-    the orchestrator and recorded in the report, which must read `N passed` with no failures.
+    Phase-5f gate command, `python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"`, run alone by the orchestrator and recorded in the report:
+    the last line must read `N passed` with no failures **and** `SUITE: rc=0` — the exit status is
+    captured before `tail`, because a bare pipe reports `tail`'s status and lets a red suite print
+    as success.
     A deleted pre-existing test lowers the collected count below the floor and cannot hide behind
     the additions.
   - AC-6.5: **Connection discrimination.** Reverting the connection alone — the import of
@@ -393,3 +407,4 @@ not opted in.
 - v1.16: Design audit v6 (agy must 1, codex must 2 should 2): AC-3.11 composes the preamble with the substituted text; AC-5.6 validates the bound before spawn (BAD_TIMEOUT) and states the values-vs-grammar CLI policy; AC-3.6 pins UTF-8/replace str streams; AC-6.1 asserts tree-wide tag cardinality 1; AC-3.8 probes stream paths without truncation and reserves after every check. 47 ACs.
 - v1.17: Design audit v7 (codex must 4 should 1; agy clean): AC-3.8 reserves both streams in append mode after every refusal and truncates only at the final write; AC-6.4's floor is computed (2747 + new module + named tuple); AC-2.7 defines keys= as distinct keys and orders the overlap lines.
 - v1.18: Design audit v8 (codex must 3 should 1, agy must 2): exit codes follow the Audit-gate signal discipline invariant — every verdict incl. refusals and TIMEOUT exits 0, only UNREADABLE and CLEANUP_FAILED exit 2 (FR-4, AC-4.2 pins the partition row by row); AC-3.14 names the timeout-plus-cleanup case; AC-6.4's collected floor is in-suite via collect-only and the pass half is the out-of-suite gate command.
+- v1.19: Design audit v9 (codex must 3 should 1; agy clean): AC-4.6 maps the helper's own mkdtemp/Popen/killpg failures to LAUNCH_FAILED; AC-3.9 compares (st_dev, st_ino) on the opened descriptors so hard links are caught with no check-to-open window; AC-3.14 names cleanup_error and the __cause__ rule; AC-6.4's gate command captures pytest's status before tail. 48 ACs.

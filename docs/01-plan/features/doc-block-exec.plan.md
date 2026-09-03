@@ -70,8 +70,10 @@ or `CLEANUP_FAILED` writes nothing to either. "Reserved, then failed the write" 
 mean a write error on an already-open descriptor (disk full, I/O error), which maps to
 `UNREADABLE reason=stream_write_failed`, exit 2, after the run — the block's `rc` is lost with the
 artifact, which is the honest outcome, since the artifact the caller was promised does not exist.
-Two paths that resolve to one file are refused before either is opened (AC-3.9), so distinct
-destinations cannot collapse between check and write. Tests:
+Two paths naming one file are refused on the *opened* descriptors — `(st_dev, st_ino)` of the
+two reserved handles compared before anything is written, so a hard link is caught as well as a
+symlink or a spelling, and there is no check-to-open window (AC-3.9). A refusal there closes both
+handles, unlinks one the call created, and touches no bytes. Tests:
 `test_stream_paths_truncate_an_existing_file` (a pre-existing file is overwritten, not appended),
 `test_stdout_survives_a_failed_stderr_reservation` (pre-existing `--stdout` bytes are identical
 after `--stderr` names an unwritable path, and a `--stdout` file the call created is gone),
@@ -467,7 +469,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **47 as of spec v1.17**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **48 as of spec v1.19**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
@@ -481,6 +483,15 @@ the duplicate bounder is.
   2747 tests collected in 2.03s
   $ python3.11 -m pytest -q -p no:cacheprovider | tail -1
   2747 passed in 397.40s (0:06:37)
+  ```
+
+  The second command is quoted as it was run for the baseline; as a **gate** it is written so the
+  exit status survives — a bare pipe reports `tail`'s status and would let a red suite print as
+  success:
+
+  ```
+  python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
+  tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"      # gate on BOTH lines
   ```
 
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
@@ -545,3 +556,4 @@ design begins.
 - v1.20: Design audit v6 back-propagation: composition with the substituted text; probe-then-reserve stream artifacts; BAD_TIMEOUT and the values-vs-grammar CLI policy; RunResult streams are UTF-8/replace str.
 - v1.21: Design audit v7 back-propagation: append-mode reservation after every check with truncation at the final write, and its four tests; docsections.json converts all four mutations to the named-test form; the AC-6.4 floor is computed by test_suite_floor_holds.
 - v1.22: Design audit v8 back-propagation: exit-code partition per the base invariant; substitute returns a new Block and run_block takes no subs; the five named consumer-file tests enumerated; floor test topology (collect-only subprocess, env guard, pass half outside the suite); main's order corrected (info string in extract, ordinal in select).
+- v1.23: Design audit v9 back-propagation: descriptor-level alias check; the suite gate command captures the exit status; AC count 48 (spec v1.19).
