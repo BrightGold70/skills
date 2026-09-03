@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.84 — design cycle 75 / impl-plan cycle 26 back-propagation, commit cb20ba1)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.51) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.80)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.86 — design cycle 76 / impl-plan cycle 27 back-propagation, commit 9c7d22d)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.52) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.82)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 79 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 81 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -127,7 +127,7 @@ Every guard the design names carries a mutation row bound to one named test; the
 **WIRE-PIN**: `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`
 
 **Description — new behaviour**: Create the module with its **complete** exception hierarchy —
-`DocBlockError` and its 18 subclasses (19 exception classes) with their constructors, listed in the code structure, so
+`DocBlockError` and its 19 subclasses (20 exception classes) with their constructors, listed in the code structure, so
 `__all__` is complete and `from h_mad_doc_block_exec import *` works at Task 1 GREEN; Tasks 2–4
 only reference them — the frozen `Block`
 dataclass (`RunResult` is Task 3's, beside `run_block`, per the design's Implementation Order), the private fence scanner `_fence_events`, the public bounder `fence_aware_end`, the public
@@ -145,9 +145,13 @@ and Task 5's `_gate_block` pass — and the **bare
 form** `Text` — matches the same normalized text at any level; this is `docsections.titled_section`'s unchanged
 contract. **The two forms are told apart by the request itself, full form first** (design v1.84,
 impl-plan audit v26): a request that parses as an ATX heading line — 0–3 leading spaces, a run of
-1–6 `#`, then a space — **IS** the full form, always; only a request that does not parse as one is
-read as the bare form. The predicate is the scanner's own, so there is one ATX rule in the module
-and the dispatch cannot drift from the recognition. There is exactly **one consequence worth
+1–6 `#`, then **a space, a tab or end of line** — **IS** the full form, always; only a request
+that does not parse as one is read as the bare form. **The predicate is literally the scanner's**,
+the same one `_fence_events` applies to a document line, called rather than restated, so there is
+one ATX rule in the module and the dispatch cannot drift from the recognition (design v1.85,
+impl-plan audit v27). The tab and end-of-line arms are not decoration: `##\tText` and a title-less
+`##` are both headings the scanner accepts, so a space-only request predicate would scan them as
+headings and then refuse to address them, leaving valid sections unreachable in full form. There is exactly **one consequence worth
 documenting**: a heading whose visible title itself begins with an ATX prefix — `### ## Text`,
 whose title is `## Text` — is reachable only through its full form (`### ## Text`, level 3) and
 never through the bare form, because the request `## Text` is claimed by the full form first. That
@@ -382,10 +386,10 @@ from typing import Callable, Iterator, Mapping, Sequence
 
 # `__all__` names only what is DEFINED at each task's GREEN, so a star-import works at every
 # task boundary: Task 1 lists Block, extract, select, fence_aware_end, find_heading and the 19
-# exception classes (24 names); Task 2 appends "substitute"; Task 3 appends "RunResult",
-# "run_block"; Task 4 appends "main" — 28 names when complete: the seven public functions
+# exception classes (25 names, BadArgs included); Task 2 appends "substitute"; Task 3 appends "RunResult",
+# "run_block"; Task 4 appends "main" — 29 names when complete: the seven public functions
 # (extract, select, substitute, run_block, main, fence_aware_end, find_heading — "all seven",
-# design §API) + Block + RunResult + 19 exceptions.
+# design §API) + Block + RunResult + 20 exceptions (BadArgs included — design v1.86 confirms 29).
 __all__ = [
     "Block", "extract", "select", "fence_aware_end", "find_heading",
     "DocBlockError", "DocUnreadable", "BadInfoString", "BlockNotFound", "AmbiguousBlock",
@@ -393,12 +397,12 @@ __all__ = [
     "BadSubstArg", "MissingSubstitution", "OverlappingSubstitution",
     "BadTimeout", "BlockTimeout", "CleanupFailed", "LaunchFailed",
     "StreamPathUnwritable", "StreamPathsAlias", "PreambleUnreadable", "StreamWriteFailed",
-    "StreamCloseFailed",
+    "StreamCloseFailed", "BadArgs",
 ]
 
 DRAIN_SECONDS = 5.0            # Task 3 uses it; declared here so the constant has one home
 
-# The complete hierarchy: DocBlockError + 18 subclasses (6 + 3 + 4 + 5), every one defined HERE (Task 1).
+# The complete hierarchy: DocBlockError + 19 subclasses (6 + 3 + 4 + 6), every one defined HERE (Task 1).
 class DocBlockError(Exception): ...
 # raised by extract / select (Task 1)                                         — 6
 class DocUnreadable(DocBlockError): ...
@@ -455,6 +459,11 @@ class StreamWriteFailed(DocBlockError):
     def __init__(self, written: list[str], failed: str, skipped: list[str], verify: str | None = None): ...
 class StreamCloseFailed(DocBlockError):
     def __init__(self, stream: str, close_error: OSError): ...
+# raised by main's argument parsing (Task 4)                                    — 1
+class BadArgs(DocBlockError):
+    def __init__(self, message: str): ...
+    # the parser's own error text, carried verbatim and rendered quoted as
+    # `BAD_ARGS message="<m>"`, exit 0 (design v1.85)
 
 @dataclass(frozen=True)
 class Block:
@@ -490,8 +499,9 @@ def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     absent; AmbiguousHeading(n) when more than one matches. `heading` is either the full line
     form '## Text' (normalized text AND level must match) or the bare 'Text' (normalized text at
     any level — docsections.titled_section's contract). WHICH form a request is, is decided by
-    the request: if it parses as an ATX heading line (0-3 spaces, 1-6 '#', a space) it is the
-    full form, always; otherwise the bare form. So a heading whose title itself starts with an
+    the request: if it parses as an ATX heading line by the SCANNER'S OWN predicate (0-3 spaces,
+    1-6 '#', then a space, a tab or end of line) it is the full form, always; otherwise the
+    bare form. So a heading whose title itself starts with an
     ATX prefix ('### ## Text') is reachable only in full form, never bare — the one documented
     exclusion (design v1.84). Normalized text is CommonMark §4.2: the
     optional closing hash run and trailing whitespace are stripped, so '## Text ##' and '## Text'
@@ -520,8 +530,8 @@ def titled_section(text: str, heading: str) -> str:
     `###` and every assertion about the later part would fail for the wrong
     reason.
     """
-    found = _dbe.find_heading(text, heading)          # replaces the local re.search at :53
-    assert found, f"missing section {heading!r}"      # the loud failure stays local
+    found = _dbe.find_heading(text, heading)
+    assert found, f"missing section {heading!r}"
     start, level = found
     return text[start:_dbe.fence_aware_end(text, start, level)]
 
@@ -534,6 +544,10 @@ def section_from(text: str, offset: int, level: int = 2) -> str:
     title to name.
     """
     return text[offset:_dbe.fence_aware_end(text, offset, level)]
+# The two call-site lines carry NO inline comments: `docsections-local-bounder-restored` anchors
+# on this exact region, and a comment here that is absent from its `find` would make the anchor
+# miss the landed source (impl-plan audit v27 agy). What those comments said belongs in the
+# prose above: `find_heading` replaces today's `re.search` at `:53`, and the `assert` stays local.
 # Both docstrings are today's, quoted verbatim from `h-mad/tests/docsections.py:46-52` and
 # `:60-65`, and both survive the migration unchanged — `titled_section`'s still describes the bare
 # form it keeps passing. They are shown here because `docsections-local-bounder-restored` anchors
@@ -597,6 +611,7 @@ hits `find_heading` then `fence_aware_end`, and `section_from` hits `fence_aware
 - [ ] AC-1.4 `test_index_selects_and_past_end_is_not_found`: `select(blocks, 2)` returns the second; `select(blocks, 3)` on two raises `BlockNotFound`.
 - [ ] AC-1.5 `test_section_owns_deeper_headings`: a `##` section containing `###` sub-headings with a tagged fence under one of them yields that fence; the next `##` (and a `#`) ends it.
 - [ ] AC-1.5 `test_find_heading_accepts_full_and_bare_forms`: on a document with `## Text`, `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) return the same `(end, 2)`; on a document whose only `Text` heading is `### Text`, `find_heading(text, "## Text")` is `None` while the bare form returns `(end, 3)`.
+- [ ] AC-1.5 `test_full_form_request_accepts_tab_and_eol`: the request predicate is the scanner's, so both of the scanner's non-space arms address a heading in full form. On a document whose heading is `##\tText` (a TAB after the hash run), `find_heading(text, "##\tText")` finds it at level 2; on a document whose heading is a title-less `##` (end of line after the hash run, title the empty string), `find_heading(text, "##")` finds it at level 2. Both are ATX headings the scanner already emits as `heading` events, so a space-only request predicate would scan them and then be unable to name them — which is what `request-predicate-space-only` mutates.
 - [ ] AC-1.5 `test_heading_form_precedence_full_wins`: on one document holding **both** `### ## Text` (level 3, title `## Text`) and `## Text` (level 2, title `Text`) — `find_heading(text, "## Text")` returns the **level-2** heading only, because the request parses as an ATX line and is therefore the full form, matching title `Text` at level 2; `find_heading(text, "### ## Text")` returns the **level-3** heading only, matching title `## Text` at level 3; and **neither call raises `AmbiguousHeading`**. That last clause is what discriminates: under `form-precedence-bare-first` the request `## Text` also matches the level-3 heading's bare title and the call refuses as ambiguous, so a test asserting only the two positive results would pass against the mutant.
 - [ ] AC-1.5/1.7 `test_closing_hash_run_does_not_change_heading_identity`: pins the normalization rule from both sides. On a document whose only heading is `## Text ##`, both `find_heading(text, "## Text")` (full form) and `find_heading(text, "Text")` (bare form) find it and return the same `(end, 2)` — the closing run is stripped before the comparison, so the raw line is never what is matched. On a document holding both `## Text` and `## Text ##`, the full form raises `AmbiguousHeading` with `n == 2`, because the two lines normalize to the same heading rather than to two distinct ones (design v1.67 §Scanning, design audit v63).
 - [ ] AC-1.5 `test_adjacent_heading_bounds_the_section`: `## A` immediately followed by `## B` whose section holds a tagged block — `extract(doc, "## A")` (full form) is `[]`, and with `start, level = find_heading(text, "## A")`, `fence_aware_end(text, start, level) == start` (the adjacent heading's line starts exactly at `start` and is a boundary).
@@ -629,6 +644,12 @@ stays a regression test — the Conventions bullet names the one other row with 
 `heading-match-ignores-fence-state`, `heading-lookalike-accepted` (grammar loosened to
 `line.lstrip().startswith("#")`), `adjacent-heading-skipped` (boundary predicate `>` instead of
 `≥`), `heading-level-pin-ignored` (the full form matching on text alone, ignoring the hash count),
+`request-predicate-space-only` (the full-form request predicate is narrowed to accept only a
+space after the hash run, while the scanner keeps accepting a space, a tab or end of line, so the
+requests `##\tText` and `##` fall through to the bare form and no longer select the headings the
+scanner emits for them; killed by
+`tests/test_h_mad_doc_block_exec.py::test_full_form_request_accepts_tab_and_eol`. It is the row
+that makes "the predicate is the scanner's" a checkable claim rather than a stylistic one),
 `form-precedence-bare-first` (`find_heading` tries the bare form first, or unions the two forms,
 so the request `## Text` also matches a `### ## Text` heading and the call refuses as ambiguous;
 killed by `tests/test_h_mad_doc_block_exec.py::test_heading_form_precedence_full_wins` on its
@@ -643,7 +664,7 @@ counts as one heading instead of two; killed by
 `tests/test_h_mad_doc_block_exec.py::test_closing_hash_run_does_not_change_heading_identity`, which
 goes red on both of its sides — the sole `## Text ##` document stops matching, and the mixed
 document stops raising `AmbiguousHeading(2)`)
-— 24 rows.
+— 25 rows.
 **Rows in `docsections.json`** after this task: the four existing (two re-anchored) plus
 `docsections-delegation-reverted`, `docsections-syspath-setup-removed`,
 `docsections-heading-lookup-reverted` and `docsections-local-bounder-restored` — 8 rows.
@@ -903,7 +924,13 @@ does not yet spawn); expected passing = 2; Tasks 1–2 tests stay green.
 **Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py`
 **Task shape**: `new-behaviour`
 
-**Description**: `main(argv)` parses with `argparse.ArgumentParser(allow_abbrev=False)`:
+**Description**: `main(argv)` parses with
+`argparse.ArgumentParser(allow_abbrev=False, exit_on_error=False)` whose `error()` is overridden to
+`raise BadArgs(message)` instead of exiting: an unknown option or a missing option value is a
+**verdict**, `DOCBLOCK: BAD_ARGS message="<m>"` at exit 0, not argparse's usage text at exit 2,
+because the Audit-gate signal discipline admits no non-`DOCBLOCK` exit and a malformed but readable
+invocation is input the helper declined (design v1.85, plan audit v67). `--help` alone keeps
+argparse's own exit-0 help. The parser takes:
 positional `doc`, `--heading` (required), `--index` (`type=str`), `--subst` (`action="append"`),
 `--preamble-file`, `--shell-timeout` (`type=str`, default `"30"`), `--stdout`, `--stderr`; no
 `--all`/`--dir`/glob argument exists. Order: `extract` → `select` (a non-integer `--index` is
@@ -938,7 +965,16 @@ attended it (design v1.71 exception table).
 itself is a `finally`-shaped step rather than a straight line: **close first, then unlink iff
 `created`, each guarded on its own** so a failure of the close does not skip the unlink and a
 failure of the unlink does not skip having closed. It is then followed by a read-back,
-`os.path.lexists(created_path)`; if the file this call created is still on disk, the **same**
+`os.path.lexists(created_path)`. **The rollback also refuses to delete what it did not create**
+(design v1.85): before the unlink it compares `os.lstat(path)`'s `(st_dev, st_ino)` with the
+identity `fstat` recorded on the reserved descriptor at creation, and on a **mismatch** it skips
+the unlink and reports the path as `leftover:` — someone else's file stands there now, and the
+inode this call created is already gone or renamed away. **That identity check is a policy
+constraint, not a mutation-backed guard, and carries no test by construction**: concurrent
+replacement of the caller's own artifact path between the two arms of one call is outside the
+threat model, its mismatch branch cannot be reached without a ninth seam interposed between two
+syscalls, and adding a seam for a stated non-goal is not warranted. Where the identity matches,
+the unlink proceeds and the read-back follows; if the file this call created is still on disk, the **same**
 `stream_path_unwritable` verdict carries a `leftover:` detail line naming that path. The verdict
 and the exit code do not change — only the detail line is added — so the no-new-artifact guarantee
 is either true or reported as broken, never silently assumed. `StreamPathUnwritable` therefore
@@ -973,8 +1009,8 @@ stream name and an `os_error: "<text>"` line carrying the error text, both quote
 and prints one `DOCBLOCK:` line per the verdict table plus detail lines, returning 0 or 2 per the
 partition; it never lets a `DocBlockError` or an `OSError` of its own escape. The verdict mapping
 is two module-level objects: `VERDICT_TABLE: dict[str, int]`, keyed by the **emitted line head at
-full granularity** (22 heads: `RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`,
-`BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`,
+full granularity** (23 heads: `RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`,
+`BAD_TIMEOUT`, `BAD_ARGS`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`,
 `CLEANUP_FAILED`, `LAUNCH_FAILED stage=mkdtemp`, `LAUNCH_FAILED stage=spawn`,
 `LAUNCH_FAILED stage=reap`, `LAUNCH_FAILED stage=collect`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`,
 `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`,
@@ -986,10 +1022,10 @@ looks the exit code up in `VERDICT_TABLE`, and appends the verdict's variable fi
 head — the complete list, derived from the design's verdict table (one entry per variable slot in a
 `DOCBLOCK:` line): `rc=`/`blocks=`/`shell=` (`RAN`), `blocks=` and `heading=` (`AMBIGUOUS`),
 `count=` and `heading=` (`AMBIGUOUS_HEADING`), `index=` (`BAD_INDEX`), `value=` (`BAD_TIMEOUT`),
-`arg=` (`BAD_SUBST`), `keys=` (`SUBST_MISSING`, `SUBST_OVERLAP`), `key=` (`BAD_INFO`), `seconds=`
+`arg=` (`BAD_SUBST`), `message=` (`BAD_ARGS`), `keys=` (`SUBST_MISSING`, `SUBST_OVERLAP`), `key=` (`BAD_INFO`), `seconds=`
 (`TIMEOUT`), `path=` (`CLEANUP_FAILED`), `stage=` (`LAUNCH_FAILED`), `reason=` (`UNREADABLE`) —
-14 field names. **Of this document's 25 rendering slots — those 14 head field names plus the 11
-`DETAIL_KEYS` values — exactly 18 dynamic values are rendered through one module-level renderer,
+15 field names. **Of this document's 26 rendering slots — those 15 head field names plus the 11
+`DETAIL_KEYS` values — exactly 19 dynamic values are rendered through one module-level renderer,
 `_field(value)`, and the other 7 are rendered bare by construction** (design v1.75/v1.78/v1.80,
 design audits v67, v70 and v72; impl-plan audit v23). The 7 bare ones are `rc`, `blocks`, `count`,
 `keys`, `shell`, `stage` and `reason`: ints and enums the helper itself produces, never derived
@@ -1010,10 +1046,10 @@ remaining character whose `unicodedata.category(ch)` is `Cc`, `Zl` or `Zp` to it
 escape; with that pass the same line splits into **one** piece (both figures measured
 2026-09-03). `unicodedata` therefore returns to the module import line beside `json`. `"` and `\` are escaped, `\r`, `\n` and every other control character are
 escaped, and everything else — spaces, `=`, non-ASCII — is verbatim inside the quotes.
-**The 18 quoted slots, enumerated** (the seven bare ones are listed above and are not repeated):
-the head fields `heading=`, `index=`, `value=`, `arg=`, `key=`, `seconds=`, `path=`, and every one
+**The 19 quoted slots, enumerated** (the seven bare ones are listed above and are not repeated):
+the head fields `heading=`, `index=`, `value=`, `arg=`, `message=`, `key=`, `seconds=`, `path=`, and every one
 of the 11 detail values — `missing_key:`, `overlap:`, `duplicate_key:`, `os_error:`, `pgid:`,
-`written:`, `failed:`, `skipped:`, `verify:`, `stream:`, `leftover:`. 7 + 18 = 25, the slot count
+`written:`, `failed:`, `skipped:`, `verify:`, `stream:`, `leftover:`. 7 + 19 = 26, the slot count
 this section derives. `seconds=` and `pgid:` are helper-produced numbers, and impl-plan v1.22 left
 open whether they should be bare; design v1.79 **settled** it by making the bare list exhaustive,
 so both are quoted and no exemption is pending.
@@ -1030,7 +1066,7 @@ of `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` cannot start a second line �
 escaped inside the quotes — and a `--heading` of `x rc=0` cannot forge a **field token** either:
 it renders as `heading="x rc=0"`, one quoted value, never a bare ` rc=0` on a refusal line, which
 is what AC-4.3 promises (plan audit v61: control-character escaping alone left that forgeable). `_field` is **private**: it is not in
-`__all__` (unchanged at 28 names), it is not a `VERDICT_TABLE` head or a `DETAIL_KEYS` entry, so
+`__all__` (29 names, `BadArgs` included), it is not a `VERDICT_TABLE` head or a `DETAIL_KEYS` entry, so
 AC-4.5's registry walk does not see it and `h-mad/SKILL.md` gains no row for it. The emittable detail keys are a module-level tuple `DETAIL_KEYS`, so tests can
 enumerate all eleven. `StreamWriteFailed`'s `written`/`skipped` lists are joined with a space
 before printing and then rendered through `_field` as one quoted value (`written: "stdout"`, or
@@ -1040,7 +1076,8 @@ and carries a table with one row per emittable line — every `DOCBLOCK:` token 
 key, `stream:` and `leftover:` included — each with a remedy, and each showing the value form the
 line grammar produces (a bare int/enum for the seven helper-constrained fields, a double-quoted
 JSON string everywhere else); because AC-4.5 matches **`VERDICT_TABLE` keys**, the
-table carries one row per `LAUNCH_FAILED stage=` head, `LAUNCH_FAILED stage=collect` included, not a
+table carries one row per `LAUNCH_FAILED stage=` head, `LAUNCH_FAILED stage=collect` included, and a
+row for the new `BAD_ARGS` head with its `message=` value form, not a
 single generic row with a placeholder stage (design v1.65's verdict table shows the generic
 spelling; the per-stage rows are what the impl-plan's head-granular table requires); the entry starts at the bullet ``- `h_mad_doc_block_exec.py` —`` and its
 table rows are the lines beginning `| \`` up to the next `- ` bullet.
@@ -1050,8 +1087,9 @@ table rows are the lines beginning `| \`` up to the next `- ` bullet.
 # raises StreamPathUnwritable, StreamPathsAlias, PreambleUnreadable, StreamWriteFailed,
 # StreamCloseFailed — defined in Task 1
 # __all__ += ["main"]
-VERDICT_TABLE: dict[str, int] = {          # emitted line head → exit code; 22 entries, listed in the description
+VERDICT_TABLE: dict[str, int] = {          # emitted line head → exit code; 23 entries, listed in the description
     "RAN": 0, "NOT_FOUND": 0, "AMBIGUOUS": 0, "AMBIGUOUS_HEADING": 0, "BAD_INDEX": 0, "BAD_TIMEOUT": 0,
+    "BAD_ARGS": 0,
     "BAD_SUBST": 0, "SUBST_MISSING": 0, "SUBST_OVERLAP": 0, "BAD_INFO": 0, "TIMEOUT": 0,
     "CLEANUP_FAILED": 2, "LAUNCH_FAILED stage=mkdtemp": 2, "LAUNCH_FAILED stage=spawn": 2, "LAUNCH_FAILED stage=reap": 2,
     "LAUNCH_FAILED stage=collect": 2,
@@ -1093,9 +1131,10 @@ if __name__ == "__main__": sys.exit(main())
 - [ ] AC-3.10 (subprocess) `test_stream_path_under_a_regular_file_refuses` (parent is a regular file → `stream_path_unwritable`, exit 2, no traceback, side-effect block left nothing); `test_stream_path_char_device_refuses` (subprocess, `--stdout /dev/null`: the reservation's first arm fails `O_EXCL` with `FileExistsError`, the second arm opens it under `O_WRONLY|O_APPEND|O_NONBLOCK` successfully, and the `fstat` then reports a **character device** — `S_ISREG` false — so the descriptor is closed and refused: `UNREADABLE reason=stream_path_unwritable`, exit 2, and a side-effect block left nothing. Measured 2026-09-03: `/dev/null` opens under those flags and `stat.S_ISREG` is `False`, `S_ISCHR` `True`); `test_stream_path_fifo_without_reader_refuses_bounded` (`os.mkfifo` path, CLI run with `timeout=5` in the test's `subprocess.run`, refusal within 1 s); `test_stdout_survives_a_failed_stderr_reservation` (pre-existing stdout byte-identical; a created stdout unlinked); `test_rollback_unlink_failure_reports_leftover` (in-process main, injected: `os.unlink`): `--stdout` is a **fresh** path under `tmp_path` so the first arm's `O_EXCL` succeeds and `created` is True, `--stderr` is a path **under a regular file** so the second arm fails with a real `ENOTDIR` and no injection is needed to reach the rollback; `monkeypatch.setattr(dbe.os, "unlink", fake)` where `fake` raises `PermissionError`, bound after `real_unlink = os.unlink` so the test's own `finally` can remove the leftover the injection deliberately created — the same rule as `real_rmtree` and `real_killpg`, and note that under this test the file is left behind **by design**, which is the state being asserted. Asserts `UNREADABLE reason=stream_path_unwritable`, exit 2, a `leftover:` detail line naming the stdout path exactly, that stdout path present and **empty** (zero bytes — the rollback closed the handle before the unlink was attempted, so nothing was written), and no traceback.
 - [ ] AC-4.1 (subprocess) `test_ran_line_and_exit_zero_with_nonzero_rc`: `DOCBLOCK: RAN rc=3 blocks=1 shell=plain`, exit 0 — all three fields are helper-constrained and therefore bare, so this line is unchanged by the quoting rule.
 - [ ] AC-4.1/4.3 `test_dynamic_field_cannot_forge_a_token` (in-process main, no injection): `--heading 'x rc=0'` on a document without that heading → the `NOT_FOUND` line. The assertion is a **parse under the line grammar**, not a substring check: split the tail after `DOCBLOCK: NOT_FOUND` into fields, each `<key>=<bare>` or `<key>="<json-string>"`, and assert the field map is exactly `{"heading": "x rc=0"}` — one field, its value the argument verbatim, and **no `rc` field at all**. A substring check would pass under the mutant (the text ` rc=0` is present either way), so the parse is what discriminates. This is the AC-4.3 promise stated positively: a cannot-judge line carries no `rc`, and a caller cannot manufacture one.
+- [ ] AC-4.1 `test_malformed_invocation_is_a_verdict` (in-process main, no injection): two malformed invocations, each its own `main(argv)` call and `capsys.readouterr()` — an **unknown option** (`--nope`) and a **missing option value** (`--heading` with nothing after it). Each yields exactly one `DOCBLOCK: BAD_ARGS message="<the parser's own text>"` line, **exit 0**, and **no usage text on stdout**. The no-usage clause is what discriminates `argparse-error-unrouted`: with the `error()` override removed argparse raises `SystemExit(2)` and prints its usage block, so a test asserting only the exit code could still pass if a caller mapped 2 onward.
 - [ ] AC-4.1 `test_unicode_line_separators_cannot_split_a_verdict_line` (in-process main, no injection): a `--heading` carrying U+0085, U+2028, U+2029 and U+007F on a document without that heading → the `NOT_FOUND` line. Assert that `capsys` stdout **`.splitlines()`** holds exactly **one** line starting with `DOCBLOCK:` — `.splitlines()` rather than `.split("\n")` is the whole point, since it is the splitter that breaks on the first three — and that all four characters appear inside the quoted `heading=` value as the escapes `\u0085`, `\u2028`, `\u2029` and `\u007f`. Measured before writing: without the second pass the same line `.splitlines()` into **four** pieces, with it into **one**, so this test is red against a `json.dumps`-only `_field` and green against the specified one.
 - [ ] AC-4.1 `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (in-process main; cases (1) and (2) need no injection, case (3) is **injected: `os.unlink`**, the same module seam AC-3.10's rollback test uses — `capsys` holds the lines; in-process because the assertion is on the emitted text, and three refusal paths are exercised in one test, each with its own `main(argv)` call and its own `capsys.readouterr()`): (1) `--heading` = `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` on a document without that heading → `NOT_FOUND`; (2) a `--subst` argument whose key and value each carry a `\n` → `SUBST_MISSING` when the key is well-formed but absent from the block, and `BAD_SUBST` for the malformed spelling, whose `arg=` then carries the raw argument; (3) the `leftover:` slot, built exactly as AC-3.10's `test_rollback_unlink_failure_reports_leftover` builds it, with the newline moved into the **created** artifact's name: `--stdout` is a **fresh** path under `tmp_path` whose **file name contains `\n`** (a newline is a legal POSIX file-name byte — verified on this platform: `os.open` with `O_CREAT|O_EXCL` creates it and `os.path.lexists` finds it), so the **first** arm succeeds and `created` is True; `--stderr` is a path **under a regular file**, so the **second** arm fails with the real `ENOTDIR`; `os.unlink` is injected to raise `PermissionError` exactly as AC-3.10 does, so the rollback read-back finds the created file still present → `UNREADABLE reason=stream_path_unwritable` carrying `leftover:` with the **escaped** name. **The newline must be on the created path, not on a first-arm failure** (impl-plan audit v19): a `--stdout` under a regular file fails the first arm, creates nothing, and therefore has no leftover to report at all, so that spelling would fail against a correct implementation rather than against the mutant. For each of the three, three assertions: **exactly one** line of the captured stdout starts with `DOCBLOCK:`; **no** line equals the forged `DOCBLOCK: RAN rc=0 blocks=1 shell=strict` string; and the payload appears **escaped inside the field's double quotes** — the emitted field is `heading="x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` — one quoted value whose interior holds the two characters `\` and `n` where the newline was, never a real newline. Under `field-escape-removed` **both** the first and third assertions fail on **all three** cases: the raw newline splits each verdict into two physical lines, and the escaped payload is absent. The third is stated separately because it does not depend on how a consumer splits lines, so the kill survives any change in that assumption.
-- [ ] AC-4.2 `test_verdict_table_exit_codes`: parametrised over the 22 `VERDICT_TABLE` heads with one producer each — a subprocess producer for the 16 heads a real input or real fault yields (`RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `LAUNCH_FAILED stage=spawn` via an empty `PATH`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`, `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`) and an in-process `main(argv)` producer for the 6 that need a fault injection (`CLEANUP_FAILED` via `shutil.rmtree` — `real_rmtree` bound first, retained cwd removed in `finally`, `LAUNCH_FAILED stage=mkdtemp` via `tempfile.mkdtemp`, `LAUNCH_FAILED stage=reap` via `os.killpg`, `LAUNCH_FAILED stage=collect` via the instance-level `Popen` wrapper of `test_communicate_oserror_is_launch_failed_collect` — the same `echo hi` block, the same `real_killpg` teardown, `UNREADABLE reason=stream_write_failed` via `_final_write`, `UNREADABLE reason=stream_close_failed` via `_close_stream`); either way the assertion compares the produced exit code (process exit or `main`'s return) with `VERDICT_TABLE[head]` and the emitted line starts with `DOCBLOCK: ` followed by the head; **for the `LAUNCH_FAILED stage=reap` and `LAUNCH_FAILED stage=collect` producers the captured output also carries a quoted `pgid: "<n>"` detail line** (the two stages on which `LaunchFailed` sets `pgid`; this is the only place `pgid:` is asserted at the CLI, the design's AC-4.6 row expecting it there); one assertion that `set(params) == set(VERDICT_TABLE)`; `test_every_docblockerror_subclass_has_a_verdict` (walk `DocBlockError.__subclasses__()` recursively and assert **membership by class**: each subclass is a `_VERDICT_FOR` key. **The walk instantiates nothing** — it constructs no exception and therefore imposes no constructor shape on any subclass, so the ones with required arguments keep them (design v1.80, design audit v72). Head-to-`VERDICT_TABLE` agreement is proved by `test_verdict_table_exit_codes` above, which produces each of the 22 heads for real; this test's job is only that no subclass is missing a renderer.)
+- [ ] AC-4.2 `test_verdict_table_exit_codes`: parametrised over the 23 `VERDICT_TABLE` heads with one producer each — a subprocess producer for the 17 heads a real input or real fault yields (`RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `BAD_ARGS` via an unknown option, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `LAUNCH_FAILED stage=spawn` via an empty `PATH`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`, `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`) and an in-process `main(argv)` producer for the 6 that need a fault injection (`CLEANUP_FAILED` via `shutil.rmtree` — `real_rmtree` bound first, retained cwd removed in `finally`, `LAUNCH_FAILED stage=mkdtemp` via `tempfile.mkdtemp`, `LAUNCH_FAILED stage=reap` via `os.killpg`, `LAUNCH_FAILED stage=collect` via the instance-level `Popen` wrapper of `test_communicate_oserror_is_launch_failed_collect` — the same `echo hi` block, the same `real_killpg` teardown, `UNREADABLE reason=stream_write_failed` via `_final_write`, `UNREADABLE reason=stream_close_failed` via `_close_stream`); either way the assertion compares the produced exit code (process exit or `main`'s return) with `VERDICT_TABLE[head]` and the emitted line starts with `DOCBLOCK: ` followed by the head; **for the `LAUNCH_FAILED stage=reap` and `LAUNCH_FAILED stage=collect` producers the captured output also carries a quoted `pgid: "<n>"` detail line** (the two stages on which `LaunchFailed` sets `pgid`; this is the only place `pgid:` is asserted at the CLI, the design's AC-4.6 row expecting it there); one assertion that `set(params) == set(VERDICT_TABLE)`; `test_every_docblockerror_subclass_has_a_verdict` (walk `DocBlockError.__subclasses__()` recursively and assert **membership by class**: each subclass is a `_VERDICT_FOR` key. **The walk instantiates nothing** — it constructs no exception and therefore imposes no constructor shape on any subclass, so the ones with required arguments keep them (design v1.80, design audit v72). Head-to-`VERDICT_TABLE` agreement is proved by `test_verdict_table_exit_codes` above, which produces each of the 22 heads for real; this test's job is only that no subclass is missing a renderer.)
 - [ ] AC-4.2 exit propagation (subprocess): `test_cli_exit_zero_propagates` (a document whose section has no tagged fence → `DOCBLOCK: NOT_FOUND`, process exit 0) and `test_cli_exit_two_propagates` (a document containing byte `0xff` → `DOCBLOCK: UNREADABLE reason=doc_unreadable`, process exit 2) — both compare the process exit with `VERDICT_TABLE[head]`, pinning that `sys.exit(main())` propagates `main`'s return value.
 - [ ] AC-4.3 (subprocess) `test_no_refusal_carries_rc`; AC-4.4 (subprocess) `test_only_ambiguous_carries_blocks`.
 - [ ] AC-4.5 `test_every_emittable_line_has_a_registry_row` (every `VERDICT_TABLE` key and every `DETAIL_KEYS` entry appears as the first backtick token of a row in the SKILL.md entry) and `test_registry_rows_cover_only_emittable_lines` (every row's first token is in that union).
@@ -1143,11 +1182,17 @@ whose other assertions — the verdict, the exit code, the file's presence — a
 mutant, so the `leftover:` line is the only thing that discriminates it),
 `stream-open-oserror-unwrapped`, `backstop-close-unmapped`,
 `backstop-close-outranks-error`, `registry-row-removed` (targets `h-mad/SKILL.md`),
-`detail-line-undocumented`, `allow-abbrev-restored` (the parser built with `allow_abbrev=True`, so
+`detail-line-undocumented`, `argparse-error-unrouted` (the `error()` override is removed, so argparse raises `SystemExit(2)`
+and prints usage instead of the `BAD_ARGS` verdict; killed by
+`tests/test_h_mad_doc_block_exec.py::test_malformed_invocation_is_a_verdict` on its no-usage and
+exit-0 clauses. It is discriminated from `allow-abbrev-restored`, which changes which
+invocations argparse rejects rather than how a rejection is reported: that row's killer feeds an
+abbreviation that must be refused, and this one feeds an invocation argparse refuses either way),
+`allow-abbrev-restored` (the parser built with `allow_abbrev=True`, so
 `--shell-t 5` aliases `--shell-timeout`; killed by `test_parser_rejects_all_dir_and_abbreviations`),
 `stream-write-oserror-unwrapped` (the `except OSError` mapping around `_final_write` and its
 read-back removed, so a write failure escapes as a traceback; killed by
-`test_stream_write_failure_after_the_run_is_a_refusal`) — 26 rows.
+`test_stream_write_failure_after_the_run_is_a_refusal`) — 27 rows.
 **Two AC-3.10 rows were re-bound this cycle** (design v1.82, design audit v73), because the FIFO
 fixture cannot kill both: measured 2026-09-03, a reader-less FIFO opened `O_WRONLY|O_APPEND|O_NONBLOCK`
 fails at `os.open` with **ENXIO** and never reaches the `S_ISREG` check, so it exercises the
@@ -1157,17 +1202,17 @@ whose `/dev/null` **does** open and **does** reach the check; `stream-open-block
 `O_NONBLOCK` dropped from the second arm) keeps
 `tests/test_h_mad_doc_block_exec.py::test_stream_path_fifo_without_reader_refuses_bounded` as its
 sole killer. Each row now has one killer that actually reaches its guard.
-`cli-empty-key-delegated` is discriminated from Task 2's `empty-key-accepted-by-api`, which is NOT one of the 26
+`cli-empty-key-delegated` is discriminated from Task 2's `empty-key-accepted-by-api`, which is NOT one of the 27
 above, by which side is mutated: that row removes `substitute`'s own guard and is killed by the API
 test, this one removes `main`'s and is killed by the CLI test, and neither killer touches the
 other's code path. With Tasks 1, 2, 3 that is
-24 + 5 + 24 + 26 = **79 rows**, 77 of the helper's source and 2 of `SKILL.md`, matching design v1.84.
+25 + 5 + 24 + 27 = **81 rows**, 79 of the helper's source and 2 of `SKILL.md`, matching design v1.86.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 79 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 81 rows
 before this task is GREEN.
 
 **RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — every Task 4 test fails and Tasks 1–3 stay green. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
@@ -1266,7 +1311,17 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
   `test_gate_block_does_not_exit_the_operators_shell`,
   `test_documented_gate_recipe_halts_instead_of_gating_an_empty_path`). Every `find` below is the
   code-structure text verbatim, indentation included, and matches the landed source exactly once
-  (the harness applies one `str.replace` pair per row). `dbe.Block` has **four** fields with no
+  (the harness applies one `str.replace` pair per row).
+  **Reading the fenced payloads in this bullet — a rule, because getting it wrong breaks every
+  anchor here** (impl-plan audit v27 agy). These blocks are nested inside a markdown list, so each
+  one carries **exactly 4 spaces of list indentation that are NOT part of the payload**. Strip 4
+  leading spaces from every line of a block and the result is the literal anchor text: a
+  module-level payload then starts at column 0 (`def _gate_block() -> dbe.Block:`), and a
+  function-body payload at column 4 (`    _bodies = re.findall(`), which is where the landed
+  source has them. Verified mechanically across all ten payload blocks in this bullet: the minimum
+  indent is 8 for every body payload and 4 for every module-level one, uniformly 4 more than the
+  source. Copy a block without stripping and the `find` misses — scored a refusal, not a kill —
+  and a `replace` lands an `IndentationError`. `dbe.Block` has **four** fields with no
   defaults (`text`, `shell`, `lineno`, `info`) and `dbe.RunResult` four (`rc`, `stdout`, `stderr`,
   `shell`), so every constructed value names all four.
   - `wire-revert-extract` — `_gate_block` resolves its block with a local, tag-tolerant regex
@@ -1410,9 +1465,13 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
     no spy installed. `timeout=1.0` is therefore the real bound on this row, not the scoring path:
     it caps the dispatch at one second if the killer is ever mis-implemented and the survivor branch
     is taken. Do not raise it, and do not apply this mutation by hand with the whole file selected.
-  - `consumer-from-import` — the consumer's `import h_mad_doc_block_exec as dbe` spelling is
-    replaced by a bare `from h_mad_doc_block_exec import` and every `dbe.` **call** in the delta is
-    re-pointed at the bare names. One replacement suffices because all four call sites are
+  - `consumer-from-import` — the consumer's module alias is **bypassed, not deleted**: a bare
+    `from h_mad_doc_block_exec import` is added inside the call region and every `dbe.` **call** in
+    the delta is re-pointed at the imported names, while the alias import at the consumer's `:23`
+    stays where it is. That is what the payload below does, and the earlier summary saying the
+    alias was "replaced" contradicted it (impl-plan audit v27 agy). Bypassing is what the guard
+    forbids and what makes the spies blind, so it is the right mutant; the alias must stay for the
+    two `-> dbe.Block` / `-> dbe.RunResult` annotations to resolve. One replacement suffices because all four call sites are
     contiguous. **Both payloads are literal here** (impl-plan audit v24); `file` is
     `tests/test_h_mad_collect_report_docs.py`. `find` is exactly the Task 5 code-structure region:
     ```python
@@ -1530,7 +1589,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=79
+hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=81
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 # the full suite runs at the REPOSITORY ROOT, not in h-mad/ — see the note below
@@ -1598,3 +1657,4 @@ into the log.
 - v1.25: Impl-plan audit v24 (codex must 1 nit 1; agy clean) + design v1.82 / design audit v73 back-propagation: docsections-local-bounder-restored and consumer-from-import now carry COMPLETE LITERAL find/replace payloads as fenced blocks, since both anchor in source that exists at HEAD plus deltas this document already writes out; the Task 1 delta gains titled_section's and section_from's real docstrings, quoted from docsections.py:46-52 and :60-65, so the delta and the local-bounder find are ONE literal shape (the nit). _field gains a SECOND PASS after json.dumps, rewriting every remaining Cc/Zl/Zp character to \uXXXX, because json.dumps leaves U+0085, U+2028, U+2029 and U+007F literal and str.splitlines() breaks on the first three — MEASURED here: one verdict line split into FOUR pieces without the pass and ONE with it — so unicodedata returns to the imports, with test_unicode_line_separators_cannot_split_a_verdict_line (asserting on .splitlines(), which is the splitter that breaks) and row c1-escape-removed, discriminated from field-escape-removed by character class. AC-3.10's two rows are re-bound: a reader-less FIFO fails at os.open with ENXIO and never reaches the S_ISREG check (measured), so nonregular-stream-accepted moves to the new test_stream_path_char_device_refuses (--stdout /dev/null, which opens and fstats as a character device — measured) and the FIFO test keeps stream-open-blocking alone; each row now has a killer that reaches its guard (Task 4 26 rows; 23 + 5 + 24 + 26 = 78, 76 of the helper's source). The local-bounder replace block sits in a FOUR-backtick fence: its restored toggle contains the literal ``` and a three-backtick fence closed on it, truncating the payload — caught by parsing every fenced python block in this document with ast, which is also how both find blocks were verified byte-identical to the deltas they anchor on.
 - v1.26: Impl-plan audit v25 (codex must 1 should 1; agy clean) + design v1.83 back-propagation: duplicate-heading-takes-first now names ONE test key, tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse, with test_bare_form_duplicate_headings_refuse demoted to a regression test on the same guard, stated at the row, at the AC and in the Conventions bullet — whose earlier claim that a sweep 'found no other row naming two tests' was FALSE and is replaced by the two pairs that actually exist (this one and final-write-close-not-in-finally). The docsections-local-bounder-restored provenance is corrected: _fence_aware_end IS today's :33-42 body character for character (only its :32 docstring omitted, which the source guard does not read), but _find_heading is NOT today's text — grep -c 'def _find_heading' on today's docsections.py returns 0, the lookup being an inline re.search inside titled_section at :53 — so the revert LIFTS that inline regex into a function to give the two re-pointed call sites a name, behaviour-identical (same pattern, same match.end(), same len(match.group('marks')), None where today falls through to its assert). The payload is unchanged; only the false provenance claim was. Also flagged: the spec's AC-6.4 gate command is bounded but carries no repository-root pin, so it would collect 2485 from h-mad/ — this document's 5f block keeps the pin and the divergence is noted for back-propagation. Counts unchanged at 78.
 - v1.27: Impl-plan audit v26 (codex must 1 should 1; agy clean) + design v1.84 / design audit v75 back-propagation: find_heading's two forms are told apart BY THE REQUEST, full form first — a request that parses as an ATX heading line (0-3 spaces, 1-6 #, a space) IS the full form, always, and only a non-parsing request is read as bare, using the scanner's own predicate so the dispatch cannot drift from the recognition; the one documented consequence is that a heading whose title itself begins with an ATX prefix (### ## Text) is reachable only in full form, harmless to every live caller (none of titled_section's targets begins with #, measured). Without the precedence the request ## Text had two incompatible meanings and a document holding both would refuse rather than answer. Added test_heading_form_precedence_full_wins (both lookups return their own heading and NEITHER raises AmbiguousHeading — that last clause is the discriminator, since a positives-only test would pass against the mutant) and row form-precedence-bare-first before closing-hash-run-kept, discriminated from heading-level-pin-ignored (Task 1 24 rows; 24 + 5 + 24 + 26 = 79, 77 of the helper's source). --subst =V prints arg="=V" under the quoted grammar and cli-empty-key-delegated's discriminator is arg="" versus arg="=V", never a bare arg==V. The 5f note claiming the spec lacked the repository-root pin is removed: spec v1.50 back-propagated it and :458 carries the same subshell, so the three documents agree.
+- v1.28: Impl-plan audit v27 (codex must 1; agy must 1 + should 2) + design v1.85/v1.86 and plan audit v67 back-propagation. The full-form request predicate is LITERALLY the scanner's — 0-3 spaces, 1-6 #, then a space, A TAB OR END OF LINE — called rather than restated, with test_full_form_request_accepts_tab_and_eol (a ##<TAB>Text heading and a title-less ##) and row request-predicate-space-only, because a space-only predicate scanned those headings and then could not name them. The Task 1 delta drops its two inline call-site comments so the delta and docsections-local-bounder-restored's find are byte-identical (re-verified programmatically); what the comments said moved to prose. BadArgs joins the hierarchy: the parser is ArgumentParser(allow_abbrev=False, exit_on_error=False) with error() overridden to raise it, rendered DOCBLOCK: BAD_ARGS message="<m>" at exit 0 so no non-DOCBLOCK exit survives, with test_malformed_invocation_is_a_verdict (unknown option, missing value; the NO-USAGE clause is the discriminator) and row argparse-error-unrouted. Dependent counts: exceptions 19->20, __all__ 28->29 (design v1.86 and plan v1.82 already say 29, so nothing is owed upstream), verdict heads 22->23, head fields 14->15 and rendering slots 25->26 (7 bare + 19 quoted, message= quoted), plus a BAD_ARGS registry row. The rollback compares os.lstat's (st_dev, st_ino) with the created descriptor's fstat identity before unlinking and reports leftover: on mismatch — stated as a POLICY constraint with no test by construction, since reaching it needs a ninth seam for an explicit non-goal. Two agy should-fixes also fixed: consumer-from-import's summary said the alias was 'replaced' while its payload BYPASSES it, and the ten fenced payloads in the wire bullet carry exactly 4 spaces of markdown-list indentation that are not part of the anchor — measured across all ten and now stated as a rule, since copying them unstripped makes every find miss. Task 1 25 rows, Task 4 27; 25 + 5 + 24 + 27 = 81, 79 of the helper's source.
