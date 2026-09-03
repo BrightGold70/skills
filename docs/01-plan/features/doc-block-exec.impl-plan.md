@@ -90,7 +90,9 @@ Every guard the design names carries a mutation row bound to one named test; the
   `python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json`
   and read the `MUTATION:` token — `ALL_CAUGHT` is required before the task is GREEN.
 - **When each row's payload is fixed — deliberate, not an omission** (impl-plan audit v20, whose
-  must-fix asked for all 76 payloads here and is REFUTED on this ground). The design's §Test Plan
+  must-fix asked for every `doc_block_exec.json` payload to be written here and is REFUTED on this
+  ground; the file held 76 rows at that cycle and holds 81 now, and the ground is unchanged by the
+  count). The design's §Test Plan
   sets the ordering verbatim: "Exact `find` anchors are set from the landed source in the same
   task that lands it (the author-together ordering the plan states for `docsections.json`), each
   exact-once; the mechanism column is what the anchor must express." So for
@@ -118,8 +120,8 @@ Every guard the design names carries a mutation row bound to one named test; the
   bullet made argparse usage errors "the only non-`DOCBLOCK:` exit 2", which contradicted Task 4,
   the design from v1.85 on and spec AC-5.6, and would have reintroduced exactly the non-verdict
   exit that `argparse-error-unrouted` and `test_malformed_invocation_is_a_verdict` exist to
-  prevent. A grammar error is a **verdict**: the parser is built `exit_on_error=False` with its
-  `error()` overridden to raise `BadArgs`, which `main` renders as
+  prevent. A grammar error is a **verdict**: the parser is built at argparse's **default
+  `exit_on_error` (`True`)** with its `error()` overridden to raise `BadArgs`, which `main` renders as
   `DOCBLOCK: BAD_ARGS message="<m>"` at **exit 0**. Exactly one invocation still leaves without a
   `DOCBLOCK:` line — `--help` alone, which keeps argparse's own help text — and it exits **0**,
   so it is outside exit 2 and the partition holds. No refusal line ever carries `rc=`.
@@ -238,8 +240,23 @@ scanner's state transition and the bounder's heading match); the other two ancho
 stay in `tests/docsections.py`; the spec gains `"target_command": ["python3.11", "-m", "pytest", "-q"]`
 and **all eight** rows gain a `test` key (the full node ID, copied from `_killed_by`, which stays);
 the two anchors that stay in `tests/docsections.py` are re-spelled to the delegating lines they now
-mutate (`offset-anchored-bound-runs-to-end-of-file` finds `return text[offset:_dbe.fence_aware_end(text, offset, level)]`;
-`missing-heading-returns-empty-instead-of-failing` finds `assert found, f"missing section {heading!r}"`).
+mutate — and **each row's `replace` is re-read against the migrated body in the same edit, never
+only its `find`** (four leading spaces on every payload below, the function-body indentation the
+landed source has):
+`offset-anchored-bound-runs-to-end-of-file` finds `    return text[offset:_dbe.fence_aware_end(text, offset, level)]`
+and **keeps** its existing `replace`, `    return text[offset:]`, which binds nothing and names
+nothing the migration removed;
+`missing-heading-returns-empty-instead-of-failing` finds `    assert found, f"missing section {heading!r}"`
+and its `replace` **changes** from today's `    if not match: return ""` to
+`    if not found: return ""`. Today's spelling is verified in
+`h-mad/tests/mutation-specs/docsections.json`, and the migrated `titled_section` binds `found`,
+`start` and `level` and no `match` at all (the delta below), so the unchanged payload would land a
+`NameError` in every `titled_section` call. The row would still be scored a kill — the named test
+goes red and `ran_and_failed` is satisfied at `h_mad_mutation_harness.py:660-670` — while measuring
+nothing about the loud `assert` its `_mechanism` claims to prove. **This is the same class v1.11
+already fixed once**, for `docsections-heading-lookup-reverted`, whose restored regex would have
+raised `NameError` because the delta had dropped the `import re`: re-pointing a row's `find`
+without re-reading its `replace` against the post-migration body.
 Add a fifth row `docsections-delegation-reverted`, a **connection-only** revert: the callee is
 untouched and no local bounder is restored. `find` is the one line
 `import h_mad_doc_block_exec as _dbe  # noqa: E402` (it matches exactly once); `replace` is
@@ -394,8 +411,9 @@ from pathlib import Path
 from typing import Callable, Iterator, Mapping, Sequence
 
 # `__all__` names only what is DEFINED at each task's GREEN, so a star-import works at every
-# task boundary: Task 1 lists Block, extract, select, fence_aware_end, find_heading and the 19
-# exception classes (25 names, BadArgs included); Task 2 appends "substitute"; Task 3 appends "RunResult",
+# task boundary: Task 1 lists Block, extract, select, fence_aware_end, find_heading and the 20
+# exception classes — DocBlockError and its 19 subclasses — for 25 names, BadArgs included
+# (5 + 20 = 25; the hierarchy is enumerated below). Task 2 appends "substitute"; Task 3 appends "RunResult",
 # "run_block"; Task 4 appends "main" — 29 names when complete: the seven public functions
 # (extract, select, substitute, run_block, main, fence_aware_end, find_heading — "all seven",
 # design §API) + Block + RunResult + 20 exceptions (BadArgs included — design v1.86 confirms 29).
@@ -528,8 +546,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import h_mad_doc_block_exec as _dbe  # noqa: E402
 # ^ the design's spelling verbatim (design v1.79 §Scanning, line 43) and the same idiom every
-#   test under h-mad/tests/ uses for SCRIPT_DIR. `os` is no longer needed: `resolve()` does the
-#   absolute-path work `os.path.abspath` did, and `parents[1]` the `..` join (impl-plan audit v22).
+#   test under h-mad/tests/ uses for SCRIPT_DIR. Today's docsections.py imports only `re`
+#   (verified: its two import lines are `from __future__ import annotations` and `import re`), and
+#   `re` goes with the local regex it served — so this delta's import line is entirely new.
 
 def titled_section(text: str, heading: str) -> str:
     """The named section's body, bounded by the next same-or-higher heading.
@@ -943,12 +962,23 @@ does not yet spawn); expected passing = 2; Tasks 1–2 tests stay green.
 **Task shape**: `new-behaviour`
 
 **Description**: `main(argv)` parses with
-`argparse.ArgumentParser(allow_abbrev=False, exit_on_error=False)` whose `error()` is overridden to
+`argparse.ArgumentParser(allow_abbrev=False)` whose `error()` is overridden to
 `raise BadArgs(message)` instead of exiting: an unknown option or a missing option value is a
 **verdict**, `DOCBLOCK: BAD_ARGS message="<m>"` at exit 0, not argparse's usage text at exit 2,
 because the Audit-gate signal discipline admits no non-`DOCBLOCK` exit and a malformed but readable
-invocation is input the helper declined (design v1.85, plan audit v67). `--help` alone keeps
-argparse's own exit-0 help. The parser takes:
+invocation is input the helper declined (design v1.85, plan audit v67). **`exit_on_error` is left at
+argparse's default (`True`), and that is load-bearing, not an omission** (design v1.91, plan v1.84,
+spec v1.53). `exit_on_error=False` — which this document specified through v1.32 — suppresses
+argparse's own `except ArgumentError: self.error(str(err))` wrapper around `_parse_known_args`, so a
+**missing option value** raises `argparse.ArgumentError` from inside the parse, never reaches the
+`error()` override, and escapes `main` as a non-`DOCBLOCK` traceback — and a missing option value is
+one of the two inputs `test_malformed_invocation_is_a_verdict` drives, so the setting would have
+broken the very AC it was written to serve. Re-measured on the pinned 3.11.8, `error()` overridden,
+all five grammar shapes: at the default, unknown option, missing value, missing required option,
+missing positional and the rejected abbreviation **all** raise `BadArgs`; under `exit_on_error=False`
+four of them do and the missing value escapes as `ArgumentError`. `--help` alone keeps
+argparse's own exit-0 help (measured at the default with the override installed: `SystemExit(0)`,
+help text on stdout — the override is never reached, because `--help` is not an error). The parser takes:
 positional `doc`, `--heading` (required), `--index` (`type=str`), `--subst` (`action="append"`),
 `--preamble-file`, `--shell-timeout` (`type=str`, default `"30"`), `--stdout`, `--stderr`; no
 `--all`/`--dir`/glob argument exists. Order: `extract` → `select` (a non-integer `--index` is
@@ -1158,7 +1188,7 @@ if __name__ == "__main__": sys.exit(main())
 - [ ] AC-4.5 `test_every_emittable_line_has_a_registry_row` (every `VERDICT_TABLE` key and every `DETAIL_KEYS` entry appears as the first backtick token of a row in the SKILL.md entry) and `test_registry_rows_cover_only_emittable_lines` (every row's first token is in that union).
 - [ ] AC-4.6 CLI halves: `test_cli_launch_failed_lines` — the `stage=spawn` leg (subprocess, empty `PATH`) and the `stage=mkdtemp` leg (in-process main, `tempfile.mkdtemp` injected), each its own `LAUNCH_FAILED stage=` head (`stage=` bare) with a quoted `os_error: "<text>"` line, exit 2, no `rc=` — reap and collect are covered in Task 3 at the API and here by the table test, which is where their `pgid:` detail line is asserted at the CLI.
 - [ ] AC-5.6 (subprocess) `test_cli_bad_timeout_values`: `0`, `-1`, `nan`, `inf`, `abc` → `BAD_TIMEOUT` followed by `value=` and the argument rendered as a quoted JSON string, holding it verbatim between the quotes; exit 0, no side effect, **and with `--stdout`/`--stderr` given: a path that did not exist is still absent afterwards, and a pre-existing file keeps its bytes** (validation ran before `_reserve`); `test_non_numeric_timeout_is_bad_timeout`.
-- [ ] Parser (subprocess) `test_parser_rejects_all_dir_and_abbreviations`: three rejected invocations, each yielding **one `DOCBLOCK: BAD_ARGS message="<m>"` line and exit 0** — never argparse's usage text and never a non-`DOCBLOCK` exit, because `exit_on_error=False` plus the `error()` override routes every grammar error through the verdict table (this AC formerly promised usage/exit 2, which contradicted the declared contract, the `VERDICT_TABLE`, the paired design and `argparse-error-unrouted`; impl-plan audit v28). The three: `--all` (an option this CLI does not define), `--dir x` (likewise), and **the abbreviation case, which needs a complete otherwise-valid argv** — `[doc, "--heading", "## Second surface — the codex leg", "--shell-t", "5"]` against a real fixture document. Completing the argv is what makes the case discriminating: under `allow-abbrev-restored` the parser accepts `--shell-t` as an alias for `--shell-timeout`, every required argument is already present, so the run **proceeds to whatever verdict the fixture produces** (a `RAN` or a `NOT_FOUND`, not a `BAD_ARGS`) — a visibly different outcome. With an incomplete argv the mutant would still fail, merely later and for a missing required argument, and the row would be caught by the wrong assertion. The assertion is therefore that the emitted head **is** `BAD_ARGS` for all three, not merely that the run failed.
+- [ ] Parser (subprocess) `test_parser_rejects_all_dir_and_abbreviations`: three rejected invocations, each yielding **one `DOCBLOCK: BAD_ARGS message="<m>"` line and exit 0** — never argparse's usage text and never a non-`DOCBLOCK` exit, because the `error()` override at argparse's **default `exit_on_error`** routes every grammar error through the verdict table — measured on 3.11.8 over all five grammar shapes, where `exit_on_error=False` would let a missing option value escape as `ArgumentError` (design v1.91) (this AC formerly promised usage/exit 2, which contradicted the declared contract, the `VERDICT_TABLE`, the paired design and `argparse-error-unrouted`; impl-plan audit v28). The three: `--all` (an option this CLI does not define), `--dir x` (likewise), and **the abbreviation case, which needs a complete otherwise-valid argv** — `[doc, "--heading", "## Second surface — the codex leg", "--shell-t", "5"]` against a real fixture document. Completing the argv is what makes the case discriminating: under `allow-abbrev-restored` the parser accepts `--shell-t` as an alias for `--shell-timeout`, every required argument is already present, so the run **proceeds to whatever verdict the fixture produces** (a `RAN` or a `NOT_FOUND`, not a `BAD_ARGS`) — a visibly different outcome. With an incomplete argv the mutant would still fail, merely later and for a missing required argument, and the row would be caught by the wrong assertion. The assertion is therefore that the emitted head **is** `BAD_ARGS` for all three, not merely that the run failed.
 
 **Mutation rows added here**: `subst-split-on-every-equals`, `subst-duplicate-key-last-wins`,
 `cli-empty-key-delegated` (`main` stops refusing the empty key while building the map and lets
@@ -1203,7 +1233,12 @@ mutant, so the `leftover:` line is the only thing that discriminates it),
 `detail-line-undocumented`, `argparse-error-unrouted` (the `error()` override is removed, so argparse raises `SystemExit(2)`
 and prints usage instead of the `BAD_ARGS` verdict; killed by
 `tests/test_h_mad_doc_block_exec.py::test_malformed_invocation_is_a_verdict` on its no-usage and
-exit-0 clauses. It is discriminated from `allow-abbrev-restored`, which changes which
+exit-0 clauses. **This mechanism is true as written only at argparse's default `exit_on_error`**,
+which is a second reason the default is load-bearing: the mutant was probed both ways on 3.11.8,
+and at the default both of the killer's inputs give `SystemExit(2)` with usage on stderr, while
+under `exit_on_error=False` the missing-value input gives `ArgumentError` instead — the row would
+still have gone red, but on a mechanism its own description denies, which is the wrong-catcher
+class. It is discriminated from `allow-abbrev-restored`, which changes which
 invocations argparse rejects rather than how a rejection is reported: that row's killer feeds an
 abbreviation that must be refused, and this one feeds an invocation argparse refuses either way),
 `allow-abbrev-restored` (the parser built with `allow_abbrev=True`, so
@@ -1253,8 +1288,57 @@ before this task is GREEN.
 **WIRE-PIN 2**: `h-mad/tests/test_h_mad_collect_report_docs.py::test_recipe_runs_through_run_block`
 
 **Description**: Change the Second-surface gate fence opener in `h-mad/SKILL.md` from ` ```bash `
-to ` ```bash hmad:exec ` (the block containing `h_mad_audit_gate.py` under §"Second surface — the
-codex leg" — the heading is at `h-mad/SKILL.md:1804`; the section holds four ```bash fences, opening at `:1809`, `:1822`, `:1832` and `:1845`, and the gating one — the only block containing `h_mad_audit_gate.py` (its gate line is `:1850`) — opens at `:1845`; the `exec codex` block stays untagged). In the consumer, add
+to ` ```bash hmad:exec `. **The target is located structurally, never by line number.** Through
+v1.31 this task pinned six `h-mad/SKILL.md` line numbers and every one of them went stale: the
+section heading sat at `:1804` when they were written, at `:1887` at commit `e8eaf6f`, and at
+`:1897` at `b7d0d77` — one commit later, a ten-line move in a single edit. `h-mad/SKILL.md` is
+edited most working sessions, so *any* line number written here is stale before 5d reads it. The
+axis is **where a line sits in a file that keeps growing above it**; the rule over that axis is a
+content predicate, and the three parts of the locator are:
+
+- **The window** — `h-mad/SKILL.md` from the line `## Second surface — the codex leg` up to (not
+  including) the next line beginning `## `.
+- **The target** — the ` ```bash ` opener of the fence in that window whose body contains
+  `h_mad_audit_gate.py`. That is the same predicate the consumer's pre-migration `:270` extraction
+  uses (`[b for b in _bodies if "h_mad_audit_gate.py" in b]`) and the one every `wire-revert-*`
+  payload in this task restates, so the locator and the mutants agree by construction. That opener
+  is the one line this task changes in production text.
+- **The block that stays untagged** — identified by content too: the fence whose body contains
+  `hmad-dispatch exec codex`. Never by ordinal. It is the *second* of the four fences today, and an
+  ordinal is exactly as perishable as a line number.
+
+Two invariants over that window, with **different failure actions**. *Load-bearing*: exactly one
+bash fence in the window contains `h_mad_audit_gate.py`. If the resolver below finds zero or more
+than one, halt and re-derive the target before editing anything — tagging a second gate-containing
+fence makes `dbe.select` raise `AmbiguousBlock` at GREEN and breaks AC-6.1, and a bare first-match
+would tag the wrong block. *Informational*: the window holds four bash fences and the gating one is
+the last of them (re-measured at `b7d0d77`, 2026-09-04). **The residual, stated exactly**: a fifth
+bash fence that does **not** contain `h_mad_audit_gate.py` changes nothing about the tagging and is
+not a reason to halt — it makes only the count of four stale, which is why the count is not the
+locator. The one addition that does need a decision is a fifth fence that *does* contain
+`h_mad_audit_gate.py`: that breaks the load-bearing invariant, and the implementer halts rather
+than guessing which fence the gate recipe means. Nothing else about the window is pinned here —
+not the fences' order, not their contents, not their offsets.
+
+Resolve the opener at 5d rather than reading a number from this document:
+
+````bash
+awk '/^## Second surface — the codex leg$/{w=1;next} w&&/^## /{exit} w' h-mad/SKILL.md \
+  | grep -c '^```bash'                                        # informational: expect 4
+awk '/^## Second surface — the codex leg$/{w=1;next} w&&/^## /{exit}
+     w&&/^```bash/{o=NR;f=1;next} w&&f&&/^```$/{f=0;next}
+     w&&f&&/h_mad_audit_gate\.py/{print o}' h-mad/SKILL.md
+````
+
+The second command prints the 1-based line number of the opener to change, and must print exactly
+one line — that is the load-bearing invariant, checked mechanically. The `f` flag confines the
+match to **fence bodies**, so prose in the window that merely names `h_mad_audit_gate.py` is not
+counted and a halt on more than one line really does mean a second gate-*containing fence*, which
+is what the halt text above claims (the section's closers are bare ``` at column 0). The number it
+prints is an *output* of the resolver, not a contract, and is deliberately not written down
+anywhere in this document. Both commands stay correct after the migration, because `/^```bash/`
+and `'^```bash'` are prefix matches and the tagged opener is ` ```bash hmad:exec `. In the
+consumer, add
 `import h_mad_doc_block_exec as dbe` (module-qualified; never `from h_mad_doc_block_exec import`) after the existing
 `sys.path.insert(0, str(SCRIPT_DIR))` at `:22`; replace the `:270` `re.findall` inside
 `_gate_bash_block` with `_gate_block() -> dbe.Block` = `dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))` (the full line form, level-pinned — `extract`'s form),
@@ -1320,10 +1404,10 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
 ```
 
 **Acceptance Criteria**:
-- [ ] AC-6.1 `test_exactly_one_tagged_fence_in_the_tree` (in `test_h_mad_doc_block_exec.py`): opening fences carrying `hmad:exec` across `h-mad/` and `handoff/` excluding any `archive/` path, counted with the module's own `_fence_events`, equal exactly 1.
-- [ ] AC-6.2 `test_exec_block_scan_performs_no_execution`: it installs a spy over `dbe.run_block` and a recording pass-through over `dbe.subprocess.run`, then **drives the scan by calling `test_exec_codex_dispatch_carries_out_log_and_timeout()` directly** — the `:403` test that owns the `:412` scan, which takes no fixtures and so is callable as a plain function — and asserts both recorders are empty. Calling the existing test rather than re-implementing its body is what keeps `exec-scan-executes`'s anchor valid: the mutant is applied inside that function, so a killer that re-implemented the scan locally would never see it. **This `run_block` spy is the one spy in this document that is NOT a recording pass-through**: it records `(block, kwargs)`, returns `None`, and never calls the real `dbe.run_block`. A pass-through here would execute the exec block from inside the killer itself under `exec-scan-executes`, which is exactly what the row's safety note forbids — the same class of rule as binding `real_rmtree`/`real_killpg` before their patches. And `test_only_the_exec_scan_hand_rolls_extraction` (exactly one `re.findall(r"```bash` in the file's source, and it is not inside `_gate_block`/`_gate_bash_block`/`_run_recipe`).
+- [ ] AC-6.1 `test_exactly_one_tagged_fence_in_the_tree` (in `test_h_mad_doc_block_exec.py`): opening fences carrying `hmad:exec` equal exactly 1, counted with the module's own `_fence_events` over **`*.md` files only** — the plan's census filters verbatim (`Path(REPO_ROOT).glob('*/**/*.md')`, keeping `p.parts[0] in ('h-mad', 'handoff')` and dropping any path with `'archive'` in `p.parts`; plan §"The fence census (68)"). **The `*.md` restriction is load-bearing, not tidiness, and it is the scope of the census this AC is bound to.** By Task 5, Tasks 1–4 have landed `h-mad/tests/test_h_mad_doc_block_exec.py` under `h-mad/`, and its fixtures carry ` ```bash hmad:exec ` as a column-0 line inside triple-quoted Python strings (AC-1.1's tagged/untagged pair, AC-1.5's section fixtures, AC-1.7's duplicate-heading fixture, AC-3.7's `shell=fish` and `hmad:exec hmad:exec` fixtures). By this feature's own grammar a 0–3-space marker run **is** an opener regardless of the enclosing file's suffix, so an unrestricted sweep counts every one of them and the AC could never pass at GREEN. Worse, the count would not even be the sum of the per-fixture counts: one fixture is a deliberately *unbalanced* four-backtick fence (`test_docsections_unbalanced_four_backtick_fence`), so a whole-file scan of the `.py` carries fence state across fixture boundaries. The scoping rule follows from what `_fence_events` is: a **markdown** scanner whose only inertness rules are markdown ones (a four-backtick fence, a `~~~` fence, a 4-space indent). A Python triple-quoted string is not one of them, so a non-`.md` holder of a fixture is a false positive **by construction**, not an accident of this feature. **Residual, stated exactly**: the sweep does not cover non-`.md` files under the two roots (`.py`, `.sh`, `.json`, `.txt`), `.md` files outside `h-mad/` and `handoff/` (this document and its siblings under `docs/` among them), or anything under `archive/`. The guard is "exactly one tagged fence in the executed documentation surface", not "in the repository" — the right scope, because a tagged fence is only ever reachable by a consumer that scans a `.md` doc. **The design carries the same unrestricted wording and needs the same back-propagation** (flagged, not edited here). Under this restriction the RED prediction below is true as stated: measured at `b7d0d77`, `grep -rn 'hmad:exec' h-mad/ handoff/` returns nothing, so before Task 5's SKILL.md edit the `.md` count is zero.
+- [ ] AC-6.2 `test_exec_block_scan_performs_no_execution`: it installs a spy over `dbe.run_block` and a recording pass-through over `dbe.subprocess.run`, then **drives the scan by calling `test_exec_codex_dispatch_carries_out_log_and_timeout()` directly** — the `:403` test that owns the `:412` scan, which takes no fixtures and so is callable as a plain function — and asserts both recorders are empty. Calling the existing test rather than re-implementing its body is what keeps `exec-scan-executes`'s anchor valid: the mutant is applied inside that function, so a killer that re-implemented the scan locally would never see it. **This `run_block` spy is the one spy in this document that is NOT a recording pass-through**: it records `(block, kwargs)`, returns `None`, and never calls the real `dbe.run_block`. A pass-through here would execute the exec block from inside the killer itself under `exec-scan-executes`, which is exactly what the row's safety note forbids — the same class of rule as binding `real_rmtree`/`real_killpg` before their patches. **Of the two recorders, the `dbe.run_block` spy is the discriminator and carries the whole kill; the `dbe.subprocess.run` recorder is a belt that `exec-scan-executes` cannot trip**, because `run_block` spawns through `subprocess.Popen` and never through `subprocess.run` (Task 3's code structure). It stays in the assertion as a guard against a *different* mutant — one that reaches for `subprocess.run` directly from the scan — and its emptiness must never be read as evidence about this row. And `test_only_the_exec_scan_hand_rolls_extraction` (exactly one `re.findall(r"```bash` in the file's source, and it is not inside `_gate_block`/`_gate_bash_block`/`_run_recipe`).
 - [ ] AC-6.3 the four existing behaviours — `COLLECT: OK` guard before gating, delivered-report `GATE: PASS`, undelivered `report_not_collected` halt without reaching the gate, no shell-killing bare `exit` — still pass, driven through the preamble boundary.
-- [ ] AC-6.4 `test_suite_floor_holds` (in `test_h_mad_doc_block_exec.py`): `subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=REPO_ROOT, env={**os.environ, "DOCBLOCK_FLOOR_INNER": "1"})` — **from the repository root**, the cwd the baseline was measured in (`python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1` → `2747 tests collected`, re-measured 2026-09-03; the same command from `h-mad/` reports 2485, a different rootdir and a different number). **`2747` is the repository-root count and only the repository-root count**: `cwd=REPO_ROOT` in the call above is load-bearing, and `2485` is never a substitute for it — a reviewer who runs the baseline from `h-mad/` gets 2485 and will read the floor as wrong when it is the directory that was wrong (observed, impl-plan cycle 19). With `DOCBLOCK_FLOOR_INNER=1` making the inner instance of this test skip; asserts the collected count ≥ `2747` + the collected count of `h-mad/tests/test_h_mad_doc_block_exec.py` alone (a second `--collect-only` from the same cwd) + 7, and that each of the seven named node IDs is present: the six consumer tests in `h-mad/tests/test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) plus `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`. Seven is exact: those are the only node IDs this feature adds to pre-existing files — every other new test, including the docsections-side ones, lives in the new module and is counted by its own collect (plan §Measurements).
+- [ ] AC-6.4 `test_suite_floor_holds` (in `test_h_mad_doc_block_exec.py`): `subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=REPO_ROOT, env={**os.environ, "DOCBLOCK_FLOOR_INNER": "1"})` — **from the repository root**, the cwd the baseline was measured in (`python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1` → `2748 tests collected`, re-measured 2026-09-04 at commit `b7d0d77`; the same command from `h-mad/` reports 2486, a different rootdir and a different number). **`2748` is the repository-root count and only the repository-root count**: `cwd=REPO_ROOT` in the call above is load-bearing, and `2486` is never a substitute for it — a reviewer who runs the baseline from `h-mad/` gets 2486 and will read the floor as wrong when it is the directory that was wrong (observed, impl-plan cycle 19). **The number is stated with the commit it was measured at, and it is RE-MEASURED at 5c branch time rather than copied from here — the same rule, and the same reason, as the SKILL.md line pins above.** A floor baseline is a count over a tree that keeps growing: 2747 was measured at `6b4df35`, `b59e05e` then added one test (`h-mad/tests/test_h_mad_assemble_audit.py`, verified: that commit adds exactly one test), and against a real 2748 the assertion `≥ 2747 + the module's own collected count + 7` silently permitted **one** deletion — a floor that is stale by N tolerates N deletions, and tolerates them invisibly, which is the one failure mode this AC exists to prevent. So the residual is stated exactly: a stale-by-N floor is not a failing test, it is a **weakened** one, and nothing in the suite can detect that. The implementer re-runs both commands at 5c, writes the two numbers with the 5c sha beside them, and uses the repository-root number as the constant; if it differs from 2748 that is expected drift, not a finding. With `DOCBLOCK_FLOOR_INNER=1` making the inner instance of this test skip; asserts the collected count ≥ the 5c-measured repository-root baseline (`2748` at `b7d0d77`) + the collected count of `h-mad/tests/test_h_mad_doc_block_exec.py` alone (a second `--collect-only` from the same cwd) + 7, and that each of the seven named node IDs is present: the six consumer tests in `h-mad/tests/test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) plus `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`. Seven is exact: those are the only node IDs this feature adds to pre-existing files — every other new test, including the docsections-side ones, lives in the new module and is counted by its own collect (plan §Measurements).
 - [ ] AC-6.5 WIRE-PIN 1 (`test_gate_block_resolves_through_doc_block_exec`): `monkeypatch.setattr(dbe, "extract", spy_extract)` and `monkeypatch.setattr(dbe, "select", spy_select)`, each a recording pass-through to the real function (bound before patching) — calling `_gate_block()` must record exactly one `extract` call with `(SKILL_MD, "## Second surface — the codex leg")` and exactly one `select` call whose first argument **is** the list `extract` returned (identity, `is`) and whose `index` is `None`; the returned block is the one `select` returned. WIRE-PIN 2 (`test_recipe_runs_through_run_block`): `monkeypatch.setattr(dbe, "substitute", spy_substitute)` (a recording pass-through to the real `substitute`) and `monkeypatch.setattr(dbe, "run_block", spy_run)` where `spy_run` records `(block, kwargs)` and returns `dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")` — calling `_run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)` must record exactly one `substitute` call with the gate block (`text` equal to `_gate_bash_block()`) and the one-key map `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(SCRIPT_DIR / "h_mad_audit_gate.py"))}`, and exactly one `run_block` call whose block **is** the block `substitute` returned, whose `preamble` contains `COLLECT_OUT=$(`, and whose `timeout == 60.0`. `test_consumer_calls_the_helper_module_qualified`: the consumer's source has no `from h_mad_doc_block_exec import`.
 - [ ] AC-6.6 `test_gate_block_refuses_an_untagged_recipe`: with `dbe.extract` monkeypatched to return `[]`, `_gate_block()` raises `dbe.BlockNotFound` (no legacy fallback).
 - [ ] `doc_block_exec_wire.json` reports `ALL_CAUGHT` over eight rows. **The four revert rows carry
@@ -1365,7 +1449,8 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
     `[^\n]*`, because the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail
     on the tagged fence and the wire, not the regex, is what this mutant must discriminate; the
     `"h_mad_audit_gate.py" in b` filter is the pre-migration one too and is **required** — the
-    section holds four ```bash fences and a bare `[0]` would return the wrong body and break
+    section holds several ```bash fences (four at `b7d0d77`) and the gating one is not the first,
+    so a bare `[0]` would return the wrong body and break
     `test_gate_block_guards_on_the_collect_token_before_gating` on its
     `block.index("h_mad_audit_gate.py")`. Returning
     a `dbe.Block` is what keeps `_gate_bash_block() -> _gate_block().text` a `str` for its two text
@@ -1468,8 +1553,8 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
     `try` arm succeeds on the real tree.
   - `exec-scan-executes` — the `:412` text scan is made to run its selected block through
     `dbe.run_block`. `find` is the one line that follows the scan,
-    `    assert exec_block, "Second surface must dispatch the codex leg via exec"` (verified at HEAD
-    `8599e28`: it occurs exactly once in the file, and the scan's own generator line
+    `    assert exec_block, "Second surface must dispatch the codex leg via exec"` (re-verified at
+    `b7d0d77`, 2026-09-04, with `grep -c` → 1: it occurs exactly once in the file, and the scan's own generator line
     `(b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b)` at `:412`
     is likewise unique — the migration leaves both untouched, which is why they are still valid
     anchors at GREEN). `replace` is
@@ -1583,8 +1668,9 @@ WIRE-PINs failing with `NameError` because `_gate_block` and `_run_recipe` did n
 proves the names are absent, not that the connection is (impl-plan audit v31). So Task 5's RED has
 two steps.
 
-**RED step 0 — a pure refactor, no `dbe` call, suite green.** Hoist today's legacy logic under the
-three new module-level names, so the callers exist and are callable before any pin runs:
+**RED step 0 — a pure refactor, no `dbe` call, no new test, suite green; its own commit, landed
+before the 5d RED dispatch.** Hoist today's legacy logic under the three new module-level names, so
+the callers exist and are callable before any pin runs:
 
 - `_gate_block() -> dbe.Block` resolves the block with today's `re.findall` over `_second_surface()`
   and today's `"h_mad_audit_gate.py" in b` filter, wrapping the body as
@@ -1600,8 +1686,23 @@ three new module-level names, so the callers exist and are callable before any p
 That scaffold is **exactly the composition of the four `wire-revert-*` bodies**, which the eight-row
 bullet above already writes out literally, so nothing new is invented here. Step 0 adds
 `import h_mad_doc_block_exec as dbe` — needed for the annotations and the three constructors, and
-for nothing else, since no `dbe` **call** exists yet — plus the six new tests. It changes no
-behaviour: the four AC-6.3 recipe behaviours pass across it.
+for nothing else, since no `dbe` **call** exists yet. It adds **no test**. It changes no
+behaviour: the four AC-6.3 recipe behaviours pass across it, and the suite is green when it lands.
+
+**Step 0 is a separate commit landed after Task 4 GREEN and before the Task 5 5d dispatch — it is
+not the first half of the RED commit.** The two readings give different RED gates, so the document
+picks one, and the reason is mechanical:
+`h-mad/tests/test_h_mad_collect_report_docs.py` is a Task 5 **Production file** (the task header
+lists it as one), and `h_mad_assemble_tdd.py --phase red` prints "Write failing tests only. Do not
+modify production code." into that same dispatch (`h_mad_assemble_tdd.py:230`). A refactor of that
+file cannot sit inside the RED dispatch without contradicting the directive the dispatch carries.
+So the order is: step 0 lands first, refactor only, suite green; then the 5d RED dispatch adds the
+**eight** new tests and nothing else — the six in `h-mad/tests/test_h_mad_collect_report_docs.py`
+(the two WIRE-PINs, `test_gate_block_refuses_an_untagged_recipe`,
+`test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`,
+`test_only_the_exec_scan_hand_rolls_extraction`) and the two in
+`h-mad/tests/test_h_mad_doc_block_exec.py` (`test_exactly_one_tagged_fence_in_the_tree`,
+`test_suite_floor_holds`), which is exactly the split the task header's **Test file** line states.
 
 **RED step 1 — the pins fail on their call records, with the callers present and working.**
 WIRE-PIN 1 fails because its `extract` and `select` spies record **nothing**: `_gate_block` resolves
@@ -1610,7 +1711,10 @@ the block without ever consulting the helper. WIRE-PIN 2 fails the same way on i
 is the contract. Alongside them: `test_gate_block_refuses_an_untagged_recipe` fails, because the
 legacy path resolves a block regardless of the tag and never raises `dbe.BlockNotFound`;
 `test_only_the_exec_scan_hand_rolls_extraction` fails (two `re.findall(r"```bash` remain, `:270`
-and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails (zero tagged fences).
+and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails on **zero** tagged fences — measured
+at `b7d0d77`, `grep -rn 'hmad:exec' h-mad/ handoff/` returns nothing, and under AC-6.1's `*.md`
+restriction the test module's own fixtures are out of scope, so the sweep is genuinely 0 until
+Task 5's SKILL.md edit lands.
 `test_consumer_calls_the_helper_module_qualified` passes if the alias was written module-qualified,
 which makes it a regression guard on the spelling; `test_exec_block_scan_performs_no_execution` and
 `test_suite_floor_holds` are regression guards that pass (the scan never executed, and the floor
@@ -1644,7 +1748,7 @@ record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green
 recipe regression tests in the consumer stay green;
 then the opposite direction (`wire-unconditional`) must fail `test_gate_block_refuses_an_untagged_recipe`.
 
-**RED gate** (run after RED step 0's refactor has landed and the suite is green again; one command per file, and both collect, since every name the tests touch already exists): `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_collect_report_docs.py -q` shows both WIRE-PINs failing **on their empty `dbe` call records** — never on a `NameError`, which is what makes this a wiring RED rather than a missing-symbol one — and `test_gate_block_refuses_an_untagged_recipe` failing because the legacy path resolves an untagged block, with the four AC-6.3 behaviours and `test_consumer_calls_the_helper_module_qualified` passing, and `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` shows `test_exactly_one_tagged_fence_in_the_tree` failing and `test_suite_floor_holds` passing. Judge both commands against the full set of failures and passes the split above lists — `test_only_the_exec_scan_hand_rolls_extraction` (failing) and `test_exec_block_scan_performs_no_execution` (passing) included — not against this shorter sketch. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
+**RED gate** (run after RED step 0's refactor commit has landed and the suite is green again — step 0 adds no test, so "green again" is unambiguous; one command per file, and both collect, since every name the tests touch already exists): `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_collect_report_docs.py -q` shows both WIRE-PINs failing **on their empty `dbe` call records** — never on a `NameError`, which is what makes this a wiring RED rather than a missing-symbol one — and `test_gate_block_refuses_an_untagged_recipe` failing because the legacy path resolves an untagged block, with the four AC-6.3 behaviours and `test_consumer_calls_the_helper_module_qualified` passing, and `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` shows `test_exactly_one_tagged_fence_in_the_tree` failing and `test_suite_floor_holds` passing. Judge both commands against the full set of failures and passes the split above lists — `test_only_the_exec_scan_hand_rolls_extraction` (failing) and `test_exec_block_scan_performs_no_execution` (passing) included — not against this shorter sketch. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
 
 ---
 
@@ -1666,9 +1770,9 @@ tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                     
 mutation-harness runs stay in `h-mad/`, because their arguments are `h-mad`-relative:
 `tests/test_h_mad_doc_block_exec.py`, `scripts/h_mad_mutation_harness.py` and the three
 `tests/mutation-specs/*.json` paths. The **full suite must run at the repository root**, because
-that is the cwd the `2747` baseline was measured in and the cwd AC-6.4's floor is defined against:
+that is the cwd the `2748` baseline was measured in and the cwd AC-6.4's floor is defined against:
 the same `pytest -q -p no:cacheprovider` from `h-mad/` picks a different rootdir and collects
-**2485**, so a green run there would satisfy the gate while silently measuring 262 fewer tests —
+**2486**, so a green run there would satisfy the gate while silently measuring 262 fewer tests —
 it cannot establish the pass half at all. The subshell `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider )`
 does that without disturbing the `cd h-mad` the earlier lines rely on, and the redirect and
 `RC=$?` sit outside it, so the log still lands and `$?` is still the wrapper's propagated status
@@ -1725,3 +1829,5 @@ into the log.
 - v1.29: Impl-plan audit v28 (codex must 1 should 1 nit 1; agy must 1 should 1) + design v1.87 back-propagation. The parser AC is rewritten to the declared contract: test_parser_rejects_all_dir_and_abbreviations now asserts one DOCBLOCK: BAD_ARGS message="<m>" line and exit 0 for each of --all, --dir x and the abbreviation, where it formerly promised argparse usage at exit 2 — a direct contradiction of the VERDICT_TABLE, the design and argparse-error-unrouted. The abbreviation case gets a COMPLETE otherwise-valid argv (doc, --heading, --shell-t 5) so that under allow-abbrev-restored the alias is accepted and the run proceeds to the fixture's own verdict, a visibly different outcome; with an incomplete argv the mutant would still fail, merely later and on a missing required argument, and the row would be caught by the wrong assertion. Both teardowns that wrote a bare SIGKILL argument to real_killpg now write signal.SIGKILL (SIGKILL is not imported, so the teardown would have raised NameError and left the group alive). Both wrapper descriptions now raise subprocess.TimeoutExpired(cmd=["bash"], timeout=dbe.DRAIN_SECONDS): the constructor is (cmd, timeout, output=None, stderr=None) and a zero-argument construction raises TypeError instead of simulating the timeout — MEASURED on the pinned 3.11.8, an agy should-fix the brief did not carry. Stale counts corrected: the verdict-table test produces each of the 23 heads (not 22) and _field renders 19 dynamic values (not 18). Design v1.87 made explicit: _run_recipe's tuple unpacking of dbe.substitute into subbed and a discarded count is required because substitute returns (Block, counts) and WIRE-PIN 2 asserts identity of the unpacked block, and the two source-scan rows are green on the real helper and RED only under the mutant. Counts unchanged at 81.
 - v1.30: Impl-plan audit v31 (codex must 1; agy clean) — design v1.90, spec v1.52 and plan v1.83 all clean on both surfaces this round, so this is the only document that changed. Task 5's RED is rebuilt in two steps so a wiring pin's RED is a CALLER-OBSERVABLE assertion rather than a missing symbol, which is this document's rule 5 and what h_mad_assemble_tdd.py:238-243 prints into every wiring dispatch. RED step 0 is a pure refactor with the suite green and no dbe CALL: today's legacy logic is hoisted under _gate_block (re.findall + the h_mad_audit_gate.py filter, wrapped as a four-field dbe.Block), _gate_bash_block (returning .text) and _run_recipe (str.replace back into a Block, then the inline subprocess.run returning a four-field dbe.RunResult under a function-local import) — exactly the composition of the four wire-revert-* bodies this document already spells out literally, so nothing new is invented. The RED commit adds the alias import, needed only for the annotations and the three constructors, plus the six tests. RED step 1 then has WIRE-PIN 1 failing on its empty extract/select record and WIRE-PIN 2 on its empty substitute/run_block record, with test_gate_block_refuses_an_untagged_recipe failing because the legacy path resolves an untagged block, test_only_the_exec_scan_hand_rolls_extraction and test_exactly_one_tagged_fence_in_the_tree failing, and the spelling, no-execution, floor and four AC-6.3 guards passing. The 5e connection-only revert is literally step 0's scaffold re-applied at GREEN, so each pin fails for the SAME empty call record at both ends — the symmetry is what proves the pins discriminate the connection rather than the presence of a name. The stale sentence calling that assertion the revert's failure mode 'not of RED' is corrected, and Task 5's RED gate line no longer expects NameError. Every row and count unchanged at 81.
 - v1.31: Design audit v81 (codex must 1, raised against THIS document; agy clean on the impl-plan at cycle 32, the codex impl-plan leg lost to a usage limit) — design v1.90, spec v1.52 and plan v1.83 all clean, so again this is the only document that changed. The Conventions "Exit-code partition" bullet still said argparse usage errors were the only non-DOCBLOCK: exit 2, which had been false since v1.28 gave the parser exit_on_error=False and an error() override raising BadArgs: it contradicted Task 4, the design from v1.85 on and spec AC-5.6, and following it would have reintroduced precisely the non-verdict exit that argparse-error-unrouted and test_malformed_invocation_is_a_verdict exist to prevent. The bullet now states that UNREADABLE, CLEANUP_FAILED and LAUNCH_FAILED are the whole of exit 2 and that nothing reaches exit 2 without a DOCBLOCK: line, names the grammar error as a BAD_ARGS verdict at exit 0, and accounts for the single remaining output with no DOCBLOCK: line — --help alone, which exits 0 and so sits outside the exit-2 partition. Swept the whole document with grep -nE 'Exit-code partition|usage error|non-`DOCBLOCK|argparse' and again with 'only non|exit 2' outside the Version History: that bullet was the sole stale site, every other passage (Task 4's description, the two parser ACs, the argparse-error-unrouted and allow-abbrev-restored rows) already stated the BAD_ARGS/exit-0 contract. Counts unchanged at 81.
+- v1.32: Impl-plan audit v33 (an ADVISORY teammate surface standing in for the quota-blocked codex leg; must 3, should 3, nit 4) — design v1.90, spec v1.52 and plan v1.83 are the team lead's this round (exit_on_error, the suite-floor baseline and the --help carve-out land there concurrently), so again only this document changed here. Task 5's WIRE target no longer pins ANY `h-mad/SKILL.md` line number: all six were stale, and the measurement is why the CLASS was closed instead of the instance — the section heading sat at `:1804` when those numbers were written, at `:1887` at `e8eaf6f` and at `:1897` at `b7d0d77` one commit later, a ten-line move in a single edit, with three more SKILL.md edits already queued. The axis is named (where a line sits in a file that keeps growing above it); the rule over it is a content predicate over a heading-to-next-H2 window — the ```bash opener whose body contains `h_mad_audit_gate.py`, which is the consumer's own pre-migration `:270` predicate and the one every `wire-revert-*` payload restates; the block that stays untagged is identified by content too (`hmad-dispatch exec codex`) rather than by ordinal, which is as perishable as a line number; and a two-command awk resolver is given, its match confined to fence bodies so the halt diagnosis is exactly true, whose printed line number is an OUTPUT, not a contract, and is deliberately written down nowhere. The residual is stated exactly: exactly-one-gate-fence-in-the-window is load-bearing and the implementer halts on 0 or more than 1; "four fences, gate last" is informational, and a fifth fence that does NOT contain the gate script is not a reason to halt. AC-6.1's sweep regains the `*.md` scope of the census it is bound to (the plan's glob and part-filters verbatim): by Task 5 the feature's own test module sits under `h-mad/` carrying column-0 ```bash hmad:exec fixtures inside triple-quoted Python strings (AC-1.1, AC-1.5, AC-1.7, AC-3.7), which by the stated grammar are openers regardless of the enclosing suffix, so the unrestricted sweep could never pass at GREEN — and one of those fixtures is a deliberately unbalanced four-backtick fence, so a whole-file scan would not even be the sum of the per-fixture counts. The scoping rule follows from what `_fence_events` IS: a markdown scanner whose only inertness rules are markdown ones, so a non-`.md` holder of a fixture is a false positive by construction. Residual named (non-`.md` files under the two roots, `.md` outside them, anything under `archive/`), and the RED reason "zero tagged fences" is now TRUE as stated — measured at `b7d0d77`, `grep -rn hmad:exec` over `h-mad/` and `handoff/` returns nothing. The DESIGN carries the same unrestricted wording and is FLAGGED for back-propagation, not edited here. `docsections.json`'s `missing-heading-returns-empty-instead-of-failing` is re-spelled on its REPLACE as well as its `find` — `    if not found: return ""` — because the migrated `titled_section` binds `found`, `start` and `level` and no `match` at all, so the shipped payload would have raised `NameError` in every call and the row would score ALL_CAUGHT while measuring nothing about the loud `assert` its mechanism claims to prove; that is the same class v1.11 fixed once for `docsections-heading-lookup-reverted`, and both re-pointed anchors now carry the four-space body indentation the landed source has. RED step 0 is disambiguated: it is its OWN commit, landed after Task 4 GREEN and BEFORE the 5d dispatch, refactor only, NO new test, suite green — because the consumer is a Task 5 Production file and `h_mad_assemble_tdd.py:230` prints "Write failing tests only. Do not modify production code." into the RED dispatch; the 5d dispatch then adds the eight new tests (six in the consumer, two in the helper module) and nothing else. Suite-floor baselines re-measured 2026-09-04 at `b7d0d77`: 2748 from the repository root and 2486 from `h-mad/`, the 262 delta unchanged. Four nits: the `__all__` comment now says 20 exception classes (5 + 20 = 25), agreeing with its own list and with the 29-name sentence two lines below; the docsections delta's "`os` is no longer needed" sentence is replaced by what the file actually imports (only `re`), since there is no `os` in the source being edited; `exec-scan-executes`'s anchor pin moves from `8599e28` to `b7d0d77` with both anchors re-verified exact-once by `grep -c`; the 76-payload reference is dated against today's 81; and AC-6.2 now names its discriminator — the `dbe.run_block` spy carries the whole kill, while the `dbe.subprocess.run` recorder is a belt `exec-scan-executes` cannot trip, because `run_block` spawns through `subprocess.Popen`. Every row and count unchanged at 81 (25 + 5 + 24 + 27), the wire spec at 8 and `docsections.json` at 8.
+- v1.33: Design v1.91 / plan v1.84 / spec v1.53 back-propagation (no impl-plan audit cycle; v1.32 had already landed when this arrived, so the exit_on_error resolution is its own revision). `exit_on_error` returns to argparse's DEFAULT (`True`) at all three sites that carried `exit_on_error=False` — the Conventions exit-code partition, Task 4's parser construction and the `test_parser_rejects_all_dir_and_abbreviations` AC. `exit_on_error=False` was the defect, not the contract: it suppresses argparse's own `except ArgumentError: self.error(str(err))` around `_parse_known_args`, so a MISSING OPTION VALUE raises `argparse.ArgumentError` inside the parse, never reaches the `error()` override, and escapes `main` as a non-`DOCBLOCK` traceback — and the missing option value is one of the two inputs `test_malformed_invocation_is_a_verdict` drives, so the setting broke the AC it was written to serve. Re-probed here on the pinned 3.11.8 rather than carried: with `error()` overridden, at the default all FIVE grammar shapes (unknown option, missing value, missing required option, missing positional, rejected abbreviation) raise `BadArgs`, while under `exit_on_error=False` four do and the missing value escapes as `ArgumentError`; `--help` at the default with the override installed still exits 0 with help text, because `--help` is not an error and never reaches the override — so the exit-code partition's `--help` carve-out is unchanged. `argparse-error-unrouted` needs no rewording but gains the sentence that makes it sound: the mutant was probed BOTH ways, and its stated mechanism ("the override is removed, so argparse raises `SystemExit(2)` and prints usage") holds at the default for both of the killer's inputs, while under `exit_on_error=False` the missing-value input gives `ArgumentError` instead — the row would still have gone red, but on a mechanism its own description denies, which is the wrong-catcher class. AC-6.4's floor stops being a bare number: it is stated WITH the commit it was measured at (2748 from the repository root, 2486 from `h-mad/`, at `b7d0d77`) and is RE-MEASURED at 5c branch time rather than copied from the document — the same rule as the SKILL.md line pins, for the same reason. The measured cost of the stale one is now recorded: 2747 came from `6b4df35`, `b59e05e` added exactly one test after it (verified: that commit adds one test to `h-mad/tests/test_h_mad_assemble_audit.py`), and against a real 2748 the assertion `>= 2747 + …` silently permitted one deletion. The residual is stated exactly — a floor stale by N is not a failing test but a WEAKENED one, tolerating N invisible deletions, and nothing in the suite can detect it; drift found at 5c is expected, not a finding. Every row and count unchanged at 81 (25 + 5 + 24 + 27), the wire spec at 8 and `docsections.json` at 8.
