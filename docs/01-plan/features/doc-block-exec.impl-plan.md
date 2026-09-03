@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.64 — design cycle 60 / impl-plan cycle 11 back-propagation, commit 172bd8f)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.66)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.66 — design cycle 62 / impl-plan cycle 13 back-propagation, commit 41c3789)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.40) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.67)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 67 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 69 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -29,7 +29,8 @@ Every guard the design names carries a mutation row bound to one named test; the
   `REPO_ROOT = Path(__file__).resolve().parents[2]` and `SCRIPT = REPO_ROOT / "h-mad" / "scripts" / "h_mad_doc_block_exec.py"`,
   so exit codes are the real process's — marked `(subprocess)` in the ACs. A verdict that needs
   one of the six seam injections (`_final_write`, `_close_stream`, `tempfile.mkdtemp`, `os.chmod`,
-  `shutil.rmtree`, `os.killpg`) calls `dbe.main(argv)` **in-process** — its return value is the
+  `shutil.rmtree`, `os.killpg`) **or the instance-level `Popen` wrapper below**
+  calls `dbe.main(argv)` **in-process** — its return value is the
   exit code and `capsys` captures the `DOCBLOCK:` and detail lines — because a `monkeypatch`
   cannot cross an exec boundary; marked `(in-process main)`. Two subprocess tests in Task 4
   (`test_cli_exit_zero_propagates`, `test_cli_exit_two_propagates`) pin that `sys.exit(main())`
@@ -37,11 +38,27 @@ Every guard the design names carries a mutation row bound to one named test; the
 - **Fixtures are hostile**: markdown strings written to `tmp_path`, with mixed heading levels,
   fences quoting fences, a path containing a space, a body with CRLF, and a key containing regex
   metacharacters.
-- **Fault injections — exactly six, all via `monkeypatch`, `subprocess` never mocked**:
+- **Fault injections — six module-level seams, all via `monkeypatch`, `subprocess` never mocked**:
   `os.killpg` (AC-4.6 reap only), `shutil.rmtree` (in the helper's namespace), `tempfile.mkdtemp`,
   `os.chmod`, the module's `_final_write(handle, text)` seam, and the module's
   `_close_stream(handle)` seam. Recording pass-throughs of `subprocess.Popen` and `os.open` are
   observations, not injections, and are allowed.
+- **The seventh injection form — instance-level, not a module seam** (design v1.65 §Execution, the
+  two `stage=collect` tests): the recording `subprocess.Popen` pass-through itself shadows one bound
+  method on the instance it is about to return. The test binds `real_popen = subprocess.Popen`
+  **before** `monkeypatch.setattr(dbe.subprocess, "Popen", recording_popen)` — the same rule the
+  `real_rmtree` and `real_killpg` bindings follow, and without it the pass-through recurses, because
+  `dbe.subprocess` is the process-global module. Then
+  `inst = real_popen(*a, **kw); inst.communicate = _raise_once(inst.communicate); return inst`
+  (an instance attribute shadows the class method; `Popen` defines no `__slots__`), where
+  `_raise_once(bound)` raises `OSError(errno.EIO, "Input/output error")` on its **first** call and
+  delegates to `bound` on every later call. The wrap must happen inside the pass-through, because
+  `run_block` calls `communicate` immediately after `Popen` returns and the test never holds the
+  instance before that. `wait` is wrapped the same way for
+  `test_drain_wait_oserror_is_launch_failed_collect`. This form is **not** one of the six named
+  seams and is not a `monkeypatch.setattr` on the helper's namespace; design v1.65 §Test Strategy
+  and spec v1.39 both still say "exactly six named fault injections", which their own new §Execution
+  paragraph contradicts — flagged for design cycle 63, not resolved here.
 - **Mutation spec** `h-mad/tests/mutation-specs/doc_block_exec.json`: `root` is `../..`,
   `command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_doc_block_exec.py", "-q"]`,
   `target_command` is `["python3.11", "-m", "pytest", "-q"]`, every mutation has a `test` key that is
@@ -280,7 +297,10 @@ class BlockTimeout(DocBlockError):
 class CleanupFailed(DocBlockError):
     def __init__(self, path: str, cleanup_error: OSError | None): ...
 class LaunchFailed(DocBlockError):
-    def __init__(self, stage: str, err: OSError, pgid: int | None = None): ...  # stage in {"mkdtemp","spawn","reap"}
+    def __init__(self, stage: str, err: OSError, pgid: int | None = None): ...
+    # attributes: .stage, .err, .pgid — all three are read by tests and by main's renderer
+    # stage in {"mkdtemp", "spawn", "reap", "collect"}; pgid is set on the "reap" and "collect"
+    # stages and stays None on "mkdtemp"/"spawn" (design v1.65 exception table + verdict table)
 # raised by main's stream and preamble handling (Task 4)                       — 5
 class StreamPathUnwritable(DocBlockError): ...
 class StreamPathsAlias(DocBlockError): ...
@@ -513,7 +533,29 @@ then a bounded drain `communicate(timeout=DRAIN_SECONDS)`, on whose own `Timeout
 closes `proc.stdout`/`proc.stderr` itself and calls `proc.wait()` **only** if the group was
 signalled or already gone (never on the `reap` branch); the post-kill drain — finished or timed out
 — **records** `BlockTimeout(timeout)` as the pending outcome exactly as the ordinary timeout path
-does, unless a `LaunchFailed("reap")` was recorded (design v1.61 §Execution). Nothing raises
+does, unless a `LaunchFailed("reap")` was recorded (design v1.61 §Execution).
+
+**The helper's own I/O on the child is mapped by the same taxonomy** (design v1.65 §Execution,
+design audit v62). The first `communicate(timeout=timeout)` is guarded by `except OSError as err`
+beside its `except subprocess.TimeoutExpired`: the guard records
+`LaunchFailed("collect", err, pgid=proc.pid)` as the pending outcome and then runs **the same
+sequence the timeout path runs** — `proc.poll()`, `os.killpg(proc.pid, signal.SIGKILL)` with
+`ProcessLookupError` meaning already reaped, the bounded drain `communicate(timeout=DRAIN_SECONDS)`,
+and on that drain's `TimeoutExpired` the pipe closes plus `proc.wait()` **iff** the group was
+signalled or already gone. Three precedence rules govern what those later steps may do to the
+pending outcome, and each `__context__` below is **assigned explicitly** (`err.__context__ = pending`),
+because nothing is ever raised inside the handler and Python's implicit chaining therefore never
+fires:
+(a) an `OSError` from any later step under a pending `collect` is attached as that pending error's
+`__context__` and does **not** replace it;
+(b) a non-`ESRCH` `killpg` error is the `reap` stage and **replaces** the pending `collect`, the
+`collect` error becoming the new `LaunchFailed("reap", err, pgid=proc.pid)`'s `__context__`;
+(c) under an **ordinary** timeout, an `OSError` from the drain `communicate`, from either pipe
+close, or from `proc.wait()` **replaces** the pending `BlockTimeout(timeout)` with
+`LaunchFailed("collect", err, pgid=proc.pid)` whose `__context__` is that `BlockTimeout`.
+`stage=collect` ranks with `stage=reap` in the precedence (both exit 2, one rank, below
+`CleanupFailed`), so cleanup and the read-back still run as usual and a removal that fails is still
+`CleanupFailed` with the `LaunchFailed` as `__cause__`. Nothing raises
 inside the handler; the pending outcome is raised only by the selection after the `finally`. The `finally`
 runs `shutil.rmtree(cwd)` (no `ignore_errors`) when `cwd is not None`, recording an `OSError` as
 `cleanup_error` and never raising. **After** the `try`/`finally`, select: if `cwd is not None` and
@@ -542,8 +584,10 @@ def run_block(block: Block, *, preamble: str | None = None, timeout: float = 30.
 ```
 
 **Acceptance Criteria** (every test here calls `dbe.run_block` in-process at the API — none goes
-through the CLI; the eight that inject a seam are marked `(in-process, injected: ` + the seam`)` so the
-transport split in the Conventions is visible per test. **Every test that patches
+through the CLI; the ten that inject a fault are marked `(in-process, injected: ` + the seam`)` so the
+transport split in the Conventions is visible per test — eight of the ten patch one of the six
+module-level seams, and the two `stage=collect` tests use the instance-level `Popen` wrapper the
+Conventions describe. **Every test that patches
 `dbe.shutil.rmtree` binds `real_rmtree = shutil.rmtree` BEFORE `monkeypatch.setattr(dbe.shutil, "rmtree", fake)`**
 — `dbe.shutil` is the process-global module, so without the binding the teardown would call the
 fake — **and removes a retained cwd with `real_rmtree(cwd)` in its `finally`**, the same pattern
@@ -559,6 +603,8 @@ as AC-4.6's `real_killpg`; the five such tests are named with `real_rmtree` belo
 - [ ] AC-3.13 `test_cwd_mode_is_0700_under_hostile_umask`: with `os.umask(0o777)` around the call (restored in `finally`), a block running `stat -f %Lp .` (darwin) / `stat -c %a .` (GNU) prints `700`; `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (in-process, injected: `os.chmod` injected to raise → `LaunchFailed("mkdtemp")` and the created directory is gone); `test_chmod_rollback_failure_is_cleanup_failed` (in-process, injected: `os.chmod` and `shutil.rmtree` both injected → `CleanupFailed` whose `__cause__` is the `LaunchFailed`; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_no_mktemp_invocation_in_source`.
 - [ ] AC-3.14 `test_cleanup_failure_is_reported` (`mkdir keep && chmod 000 keep` → `CleanupFailed` with `cleanup_error` a `PermissionError`; skipped when `euid == 0`; the test `chmod 700`s and removes the tree in its `finally`); `test_cleanup_failure_carries_the_os_error` (in-process, injected: `rmtree` injected to raise; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_readback_catches_silent_retention` (in-process, injected: `rmtree` injected as a no-op; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_error_after_successful_removal_is_still_a_failure` (in-process, injected: the fake calls `real_rmtree` — bound before the patch — then raises; `finally` calls `real_rmtree` under `ignore_errors=True` since the tree is already gone); `test_cleanup_failure_outranks_timeout_injected` (in-process, injected: `rmtree` raising under `sleep 300`, `timeout=1` → `CleanupFailed`, `__cause__` is the `BlockTimeout`, `cleanup_error` is the injected error, cwd read back present, removed in `finally` by `real_rmtree`, bound before the patch); `test_cleanup_failure_outranks_timeout` (real `chmod 000` fixture, skipped under root); `test_normal_run_reads_back_absent`.
 - [ ] AC-4.6 `test_mkdtemp_failure_is_a_verdict` (in-process, injected: `tempfile.mkdtemp` injected → `LaunchFailed("mkdtemp")`, nothing to clean); `test_spawn_failure_is_a_verdict` (`PATH` = empty dir → `LaunchFailed("spawn")`, cwd gone); `test_reap_failure_is_a_verdict_within_the_drain_bound` (in-process, injected: `os.killpg`): `real_killpg = os.killpg` bound **before** `monkeypatch.setattr(dbe.os, "killpg", fake)`; `fake` records the pgid and raises `PermissionError`; `Popen` wrapped in a recording pass-through; `sleep 300` under `timeout=1` → `LaunchFailed("reap", pgid=proc.pid)` raised within `1 + DRAIN_SECONDS + 2` s; teardown in `finally`: `real_killpg(pgid, SIGKILL)`, `recorded.wait()`, then assert `real_killpg(pgid, 0)` raises `ProcessLookupError`.
+- [ ] AC-4.6 `test_communicate_oserror_is_launch_failed_collect` (in-process, injected: the recorded `Popen` instance's bound `communicate`): the test binds `real_killpg = os.killpg` **before** anything is patched, then installs the recording `Popen` pass-through with `monkeypatch.setattr(dbe.subprocess, "Popen", recording_popen)`, where `recording_popen` calls the real `subprocess.Popen`, appends the instance to a list the test holds, shadows `inst.communicate` with a wrapper that raises `OSError(errno.EIO, "Input/output error")` on its **first** call and delegates to the saved bound method afterwards, and returns the instance (the wrap happens inside the pass-through because `run_block` calls `communicate` immediately after `Popen` returns; the test file imports `errno`). Under a block that would otherwise `RAN` (`echo hi`, default `timeout`), `dbe.run_block` raises `LaunchFailed` with `stage == "collect"`, `err.errno == errno.EIO`, `pgid == recorded.pid` and no `RunResult` returned; the cwd — read from the pass-through's recorded `cwd` keyword argument — is gone; and the group is gone — `real_killpg(pgid, 0)` raises `ProcessLookupError`, because the helper killed and reaped the child as a timed-out one — which is the test's last substantive assertion, with a `finally` that sends `real_killpg(pgid, signal.SIGKILL)` ignoring `ProcessLookupError` so a surviving group is never left behind when the assertion fails.
+- [ ] AC-4.6 `test_drain_wait_oserror_is_launch_failed_collect` (in-process, injected: the recorded `Popen` instance's bound `wait`): the same pass-through, wrapping `inst.wait` instead — first call raises `OSError(errno.EIO, "Input/output error")`, later calls delegate, so the teardown's own `recorded.wait()` passes through. The **escapee fixture is required, not optional**: `Popen.communicate()` calls `self.wait()` internally after a successful read, so under a plain `sleep 300` the wrapper would fire from inside the drain rather than from the helper's own `proc.wait()`. The block is AC-5.5's `python3 ESC_PATH PID_PATH & sleep 300` with `esc.py` and the pid path delivered through the substitution map, run at `timeout=1`: the leader is signalled, the `os.setsid()` escapee holds the pipes, the drain `communicate(timeout=DRAIN_SECONDS)` raises `TimeoutExpired` before reaching its internal wait, the helper closes both pipes and calls `proc.wait()` on the signalled branch, and that call trips the wrapper — precedence rule (c). The raised error is a `LaunchFailed` with `stage == "collect"`, `pgid == recorded.pid`, and `__context__` an instance of `dbe.BlockTimeout`, returned within `1 + DRAIN_SECONDS + 2` s wall time, with the block's cwd gone; in `finally` the test reads the pid file, sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`, then calls `recorded.wait()`.
 - [ ] AC-5.1 `test_sleeping_block_times_out`: `sleep 300`, `timeout=1` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s.
 - [ ] AC-5.2 `test_in_group_descendant_is_reaped`: block text `sleep 300 & echo $! > PID_PATH; sleep 300`, run as `dbe.run_block(dbe.substitute(block, {"PID_PATH": str(pid_file)})[0], timeout=1)` where `pid_file` is under the test's `tmp_path` — the substitution map is how the absolute path reaches the block, because the child's cwd is a fresh private directory nothing can be placed in beforehand → after the timeout the pid read from `pid_file` is gone: `os.kill(pid, 0)` raises `ProcessLookupError`; `finally` reads the pid file if present and sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`.
 - [ ] AC-5.3 `test_no_timeout_invocation_in_source`: no argv token or shell command word `timeout`/`gtimeout` in the module source (a substring match on `timeout=`/`TimeoutExpired`/`BlockTimeout`/`--shell-timeout` must not trip it).
@@ -574,7 +620,17 @@ as AC-4.6's `real_killpg`; the five such tests are named with `real_rmtree` belo
 `chmod-failure-unwrapped`, `chmod-rollback-unguarded`, `cleanup-error-ignored-when-tree-gone`,
 `timeout-invocation-planted`, `mktemp-invocation-planted` (`tempfile.mkdtemp()` replaced by
 `subprocess.run(["mktemp", "-d"], capture_output=True, text=True).stdout.strip()` — valid Python and
-exactly the forbidden invocation; killed by `test_no_mktemp_invocation_in_source`) — 19 rows.
+exactly the forbidden invocation; killed by `test_no_mktemp_invocation_in_source`),
+`collect-oserror-unmapped` (the `except OSError` around the first `communicate(timeout)` removed, so
+a pipe-read failure escapes as a traceback with the child unreaped; killed by
+`tests/test_h_mad_doc_block_exec.py::test_communicate_oserror_is_launch_failed_collect`),
+`drain-oserror-unmapped` (the guard around the post-kill drain, the two pipe closes and the `wait()`
+removed, so a failure there escapes past the pending `BlockTimeout`; killed by
+`tests/test_h_mad_doc_block_exec.py::test_drain_wait_oserror_is_launch_failed_collect`) — 21 rows.
+The two `collect` rows discriminate mutually: under `collect-oserror-unmapped` the drain test still
+sees a `TimeoutExpired` from its first `communicate`, not an `OSError`, so it stays green; under
+`drain-oserror-unmapped` the communicate test's later steps raise nothing (the child is already
+killed and reaped, so the drain returns), so it stays green.
 
 **Dependencies on other tasks**: Task 1 (`Block`); Task 2 only for the two
 compose-with-substitution tests, which call `substitute` first.
@@ -636,10 +692,10 @@ stream name and an `os_error:` line carrying the error text, so the operator lea
 and prints one `DOCBLOCK:` line per the verdict table plus detail lines, returning 0 or 2 per the
 partition; it never lets a `DocBlockError` or an `OSError` of its own escape. The verdict mapping
 is two module-level objects: `VERDICT_TABLE: dict[str, int]`, keyed by the **emitted line head at
-full granularity** (21 heads: `RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`,
+full granularity** (22 heads: `RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`,
 `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`,
 `CLEANUP_FAILED`, `LAUNCH_FAILED stage=mkdtemp`, `LAUNCH_FAILED stage=spawn`,
-`LAUNCH_FAILED stage=reap`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`,
+`LAUNCH_FAILED stage=reap`, `LAUNCH_FAILED stage=collect`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`,
 `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`,
 `UNREADABLE reason=stream_write_failed`, `UNREADABLE reason=stream_close_failed`) → exit code, and
 `_VERDICT_FOR: dict[type[DocBlockError], Callable[[DocBlockError], str]]`, mapping each exception
@@ -656,7 +712,10 @@ enumerate all three. `StreamWriteFailed`'s `written`/`skipped` lists are joined 
 before printing (`written: stdout`, never Python list syntax).
 The `h-mad/SKILL.md` Helper-scripts entry for `h_mad_doc_block_exec.py` states the CLI contract
 and carries a table with one row per emittable line — every `DOCBLOCK:` token and every detail
-key, `stream:` included — each with a remedy; the entry starts at the bullet ``- `h_mad_doc_block_exec.py` —`` and its
+key, `stream:` included — each with a remedy; because AC-4.5 matches **`VERDICT_TABLE` keys**, the
+table carries one row per `LAUNCH_FAILED stage=` head, `LAUNCH_FAILED stage=collect` included, not a
+single generic row with a placeholder stage (design v1.65's verdict table shows the generic
+spelling; the per-stage rows are what the impl-plan's head-granular table requires); the entry starts at the bullet ``- `h_mad_doc_block_exec.py` —`` and its
 table rows are the lines beginning `| \`` up to the next `- ` bullet.
 
 **Code structure**:
@@ -664,10 +723,11 @@ table rows are the lines beginning `| \`` up to the next `- ` bullet.
 # raises StreamPathUnwritable, StreamPathsAlias, PreambleUnreadable, StreamWriteFailed,
 # StreamCloseFailed — defined in Task 1
 # __all__ += ["main"]
-VERDICT_TABLE: dict[str, int] = {          # emitted line head → exit code; 21 entries, listed in the description
+VERDICT_TABLE: dict[str, int] = {          # emitted line head → exit code; 22 entries, listed in the description
     "RAN": 0, "NOT_FOUND": 0, "AMBIGUOUS": 0, "AMBIGUOUS_HEADING": 0, "BAD_INDEX": 0, "BAD_TIMEOUT": 0,
     "BAD_SUBST": 0, "SUBST_MISSING": 0, "SUBST_OVERLAP": 0, "BAD_INFO": 0, "TIMEOUT": 0,
     "CLEANUP_FAILED": 2, "LAUNCH_FAILED stage=mkdtemp": 2, "LAUNCH_FAILED stage=spawn": 2, "LAUNCH_FAILED stage=reap": 2,
+    "LAUNCH_FAILED stage=collect": 2,
     "UNREADABLE reason=doc_unreadable": 2, "UNREADABLE reason=preamble_unreadable": 2,
     "UNREADABLE reason=stream_paths_alias": 2, "UNREADABLE reason=stream_path_unwritable": 2,
     "UNREADABLE reason=stream_write_failed": 2, "UNREADABLE reason=stream_close_failed": 2,
@@ -692,11 +752,11 @@ if __name__ == "__main__": sys.exit(main())
 - [ ] AC-3.9 (subprocess) `test_symlinked_stream_paths_refuse`, `test_dot_slash_spelling_refuses`, `test_hard_linked_stream_paths_refuse` (`os.link`): `UNREADABLE reason=stream_paths_alias`, exit 2, block not run, both handles closed (by the backstop `finally`), a created file unlinked.
 - [ ] AC-3.10 (subprocess) `test_stream_path_under_a_regular_file_refuses` (parent is a regular file → `stream_path_unwritable`, exit 2, no traceback, side-effect block left nothing); `test_stream_path_fifo_without_reader_refuses_bounded` (`os.mkfifo` path, CLI run with `timeout=5` in the test's `subprocess.run`, refusal within 1 s); `test_stdout_survives_a_failed_stderr_reservation` (pre-existing stdout byte-identical; a created stdout unlinked).
 - [ ] AC-4.1 (subprocess) `test_ran_line_and_exit_zero_with_nonzero_rc`: `DOCBLOCK: RAN rc=3 blocks=1 shell=plain`, exit 0.
-- [ ] AC-4.2 `test_verdict_table_exit_codes`: parametrised over the 21 `VERDICT_TABLE` heads with one producer each — a subprocess producer for the 16 heads a real input or real fault yields (`RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `LAUNCH_FAILED stage=spawn` via an empty `PATH`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`, `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`) and an in-process `main(argv)` producer for the 5 that need a seam injection (`CLEANUP_FAILED` via `shutil.rmtree` — `real_rmtree` bound first, retained cwd removed in `finally`, `LAUNCH_FAILED stage=mkdtemp` via `tempfile.mkdtemp`, `LAUNCH_FAILED stage=reap` via `os.killpg`, `UNREADABLE reason=stream_write_failed` via `_final_write`, `UNREADABLE reason=stream_close_failed` via `_close_stream`); either way the assertion compares the produced exit code (process exit or `main`'s return) with `VERDICT_TABLE[head]` and the emitted line starts with `DOCBLOCK: ` followed by the head; one assertion that `set(params) == set(VERDICT_TABLE)`; `test_every_docblockerror_subclass_has_a_verdict` (walk `DocBlockError.__subclasses__()` recursively; each is a `_VERDICT_FOR` key, and each renderer's head for a representative instance is a `VERDICT_TABLE` key).
+- [ ] AC-4.2 `test_verdict_table_exit_codes`: parametrised over the 22 `VERDICT_TABLE` heads with one producer each — a subprocess producer for the 16 heads a real input or real fault yields (`RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `LAUNCH_FAILED stage=spawn` via an empty `PATH`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`, `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`) and an in-process `main(argv)` producer for the 6 that need a fault injection (`CLEANUP_FAILED` via `shutil.rmtree` — `real_rmtree` bound first, retained cwd removed in `finally`, `LAUNCH_FAILED stage=mkdtemp` via `tempfile.mkdtemp`, `LAUNCH_FAILED stage=reap` via `os.killpg`, `LAUNCH_FAILED stage=collect` via the instance-level `Popen` wrapper of `test_communicate_oserror_is_launch_failed_collect` — the same `echo hi` block, the same `real_killpg` teardown, `UNREADABLE reason=stream_write_failed` via `_final_write`, `UNREADABLE reason=stream_close_failed` via `_close_stream`); either way the assertion compares the produced exit code (process exit or `main`'s return) with `VERDICT_TABLE[head]` and the emitted line starts with `DOCBLOCK: ` followed by the head; **for the `LAUNCH_FAILED stage=reap` and `LAUNCH_FAILED stage=collect` producers the captured output also carries a `pgid:` detail line** (the two stages on which `LaunchFailed` sets `pgid`; this is the only place `pgid:` is asserted at the CLI, the design's AC-4.6 row expecting it there); one assertion that `set(params) == set(VERDICT_TABLE)`; `test_every_docblockerror_subclass_has_a_verdict` (walk `DocBlockError.__subclasses__()` recursively; each is a `_VERDICT_FOR` key, and each renderer's head for a representative instance is a `VERDICT_TABLE` key).
 - [ ] AC-4.2 exit propagation (subprocess): `test_cli_exit_zero_propagates` (a document whose section has no tagged fence → `DOCBLOCK: NOT_FOUND`, process exit 0) and `test_cli_exit_two_propagates` (a document containing byte `0xff` → `DOCBLOCK: UNREADABLE reason=doc_unreadable`, process exit 2) — both compare the process exit with `VERDICT_TABLE[head]`, pinning that `sys.exit(main())` propagates `main`'s return value.
 - [ ] AC-4.3 (subprocess) `test_no_refusal_carries_rc`; AC-4.4 (subprocess) `test_only_ambiguous_carries_blocks`.
 - [ ] AC-4.5 `test_every_emittable_line_has_a_registry_row` (every `VERDICT_TABLE` key and every `DETAIL_KEYS` entry appears as the first backtick token of a row in the SKILL.md entry) and `test_registry_rows_cover_only_emittable_lines` (every row's first token is in that union).
-- [ ] AC-4.6 CLI halves: `test_cli_launch_failed_lines` — the `stage=spawn` leg (subprocess, empty `PATH`) and the `stage=mkdtemp` leg (in-process main, `tempfile.mkdtemp` injected), each its own `LAUNCH_FAILED stage=` head with an `os_error:` line, exit 2, no `rc=` — reap is covered in Task 3 at the API and here by the table test.
+- [ ] AC-4.6 CLI halves: `test_cli_launch_failed_lines` — the `stage=spawn` leg (subprocess, empty `PATH`) and the `stage=mkdtemp` leg (in-process main, `tempfile.mkdtemp` injected), each its own `LAUNCH_FAILED stage=` head with an `os_error:` line, exit 2, no `rc=` — reap and collect are covered in Task 3 at the API and here by the table test, which is where their `pgid:` detail line is asserted at the CLI.
 - [ ] AC-5.6 (subprocess) `test_cli_bad_timeout_values`: `0`, `-1`, `nan`, `inf`, `abc` → `BAD_TIMEOUT value=` followed by the argument verbatim, exit 0, no side effect, **and with `--stdout`/`--stderr` given: a path that did not exist is still absent afterwards, and a pre-existing file keeps its bytes** (validation ran before `_reserve`); `test_non_numeric_timeout_is_bad_timeout`.
 - [ ] Parser (subprocess): `test_parser_rejects_all_dir_and_abbreviations` (`--all`, `--dir x`, `--shell-t 5` → argparse usage error, exit 2, no `DOCBLOCK:` line).
 
@@ -712,13 +772,13 @@ if __name__ == "__main__": sys.exit(main())
 `stream-write-oserror-unwrapped` (the `except OSError` mapping around `_final_write` and its
 read-back removed, so a write failure escapes as a traceback; killed by
 `test_stream_write_failure_after_the_run_is_a_refusal`) — 21 rows. With Tasks 1, 2, 3 that is
-22 + 5 + 19 + 21 = **67 rows**, 65 of the helper's source and 2 of `SKILL.md`, matching design v1.61.
+22 + 5 + 21 + 21 = **69 rows**, 67 of the helper's source and 2 of `SKILL.md`, matching design v1.65.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 67 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 69 rows
 before this task is GREEN.
 
 ---
@@ -802,7 +862,142 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
 - [ ] AC-6.4 `test_suite_floor_holds` (in `test_h_mad_doc_block_exec.py`): `subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=REPO_ROOT, env={**os.environ, "DOCBLOCK_FLOOR_INNER": "1"})` — **from the repository root**, the cwd the baseline was measured in (`python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1` → `2747 tests collected`, re-measured 2026-09-03; the same command from `h-mad/` reports 2485, a different rootdir and a different number) — with `DOCBLOCK_FLOOR_INNER=1` making the inner instance of this test skip; asserts the collected count ≥ `2747` + the collected count of `h-mad/tests/test_h_mad_doc_block_exec.py` alone (a second `--collect-only` from the same cwd) + 7, and that each of the seven named node IDs is present: the six consumer tests in `h-mad/tests/test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) plus `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`. Seven is exact: those are the only node IDs this feature adds to pre-existing files — every other new test, including the docsections-side ones, lives in the new module and is counted by its own collect (plan §Measurements).
 - [ ] AC-6.5 WIRE-PIN 1 (`test_gate_block_resolves_through_doc_block_exec`): `monkeypatch.setattr(dbe, "extract", spy_extract)` and `monkeypatch.setattr(dbe, "select", spy_select)`, each a recording pass-through to the real function (bound before patching) — calling `_gate_block()` must record exactly one `extract` call with `(SKILL_MD, "## Second surface — the codex leg")` and exactly one `select` call whose first argument **is** the list `extract` returned (identity, `is`) and whose `index` is `None`; the returned block is the one `select` returned. WIRE-PIN 2 (`test_recipe_runs_through_run_block`): `monkeypatch.setattr(dbe, "substitute", spy_substitute)` (a recording pass-through to the real `substitute`) and `monkeypatch.setattr(dbe, "run_block", spy_run)` where `spy_run` records `(block, kwargs)` and returns `dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")` — calling `_run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)` must record exactly one `substitute` call with the gate block (`text` equal to `_gate_bash_block()`) and the one-key map `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(SCRIPT_DIR / "h_mad_audit_gate.py"))}`, and exactly one `run_block` call whose block **is** the block `substitute` returned, whose `preamble` contains `COLLECT_OUT=$(`, and whose `timeout == 60.0`. `test_consumer_calls_the_helper_module_qualified`: the consumer's source has no `from h_mad_doc_block_exec import`.
 - [ ] AC-6.6 `test_gate_block_refuses_an_untagged_recipe`: with `dbe.extract` monkeypatched to return `[]`, `_gate_block()` raises `dbe.BlockNotFound` (no legacy fallback).
-- [ ] `doc_block_exec_wire.json` reports `ALL_CAUGHT` over eight rows: `wire-revert-extract` (`_gate_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select`, `_gate_bash_block` returning that string — the pre-migration regex made tag-tolerant with `[^\n]*`, because the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail on the tagged fence and the wire, not the regex, is what this mutant must discriminate; killed by WIRE-PIN 1's `extract` record), `wire-revert-select` (`_gate_block` keeps `dbe.extract` but takes `blocks[0]` / raises locally instead of calling `dbe.select`, callee intact — killed by WIRE-PIN 1's `select` record), `wire-revert-run` (`_run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block`; its `replace` text carries a function-local `import subprocess` — the hoisted `_run_recipe` has no module-level one, the current file imports it only inside the old test at `:304` — so the mutant fails WIRE-PIN 2 on the missing `dbe.run_block` record, never on `NameError`), `wire-revert-substitute` (`_run_recipe` rewrites the checkout path with `str.replace` instead of `dbe.substitute`, callee intact — killed by WIRE-PIN 2's `substitute` record), `wire-unconditional` (the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences; killed by `test_gate_block_refuses_an_untagged_recipe`), `exec-scan-executes` (the `:412` text scan is made to run its block through `dbe.run_block`; killed by `test_exec_block_scan_performs_no_execution`, which asserts `:412` calls neither `run_block` nor `subprocess`), `consumer-from-import` (the consumer's `import h_mad_doc_block_exec as dbe` becomes `from h_mad_doc_block_exec import extract, select, run_block` with bare calls; killed by `test_consumer_calls_the_helper_module_qualified` — the source carries no `from h_mad_doc_block_exec import`, so the spies stay observable), `hand-rolled-extraction-widened` (a second `re.findall(r"```bash…")` is introduced on the executing path, `_gate_bash_block` falling back to it; killed by `test_only_the_exec_scan_hand_rolls_extraction` — exactly one `re.findall(r"```bash` remains in the file, the `:412` scan) — mechanisms as the plan's FR-6 table states them — and under each of the four reverts `test_h_mad_doc_block_exec.py` stays green. The eight rows bind to the same six named tests as before (both new rows re-use the two existing pins); no new test name is introduced, so the seven-node floor tuple in AC-6.4 is unchanged.
+- [ ] `doc_block_exec_wire.json` reports `ALL_CAUGHT` over eight rows. **The four revert rows carry
+  type-correct replacement bodies** (impl-plan audit v13): each mutant's only failure is the named
+  WIRE-PIN's call record — never a `NameError`, `AttributeError` or `TypeError` — and each leaves
+  the three recipe regression tests green (`test_gate_block_guards_on_the_collect_token_before_gating`,
+  `test_gate_block_does_not_exit_the_operators_shell`,
+  `test_documented_gate_recipe_halts_instead_of_gating_an_empty_path`). Every `find` below is the
+  code-structure text verbatim, indentation included, and matches the landed source exactly once
+  (the harness applies one `str.replace` pair per row). `dbe.Block` has **four** fields with no
+  defaults (`text`, `shell`, `lineno`, `info`) and `dbe.RunResult` four (`rc`, `stdout`, `stderr`,
+  `shell`), so every constructed value names all four.
+  - `wire-revert-extract` — `_gate_block` resolves its block with a local, tag-tolerant regex
+    instead of `dbe.extract`/`dbe.select`, the callee untouched. `find` is the one line
+    `    return dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))`; `replace` is
+    ```python
+        _bodies = re.findall(r"```bash[^\n]*\n(.*?)```", _second_surface(), re.S)
+        _gating = [b for b in _bodies if "h_mad_audit_gate.py" in b]
+        return dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")
+    ```
+    The consumer already imports `re` at its `:10` and defines `_second_surface()` at its `:49`, so
+    the replacement carries no import. The regex is the pre-migration one made tag-tolerant with
+    `[^\n]*`, because the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail
+    on the tagged fence and the wire, not the regex, is what this mutant must discriminate; the
+    `"h_mad_audit_gate.py" in b` filter is the pre-migration one too and is **required** — the
+    section holds four ```bash fences and a bare `[0]` would return the wrong body and break
+    `test_gate_block_guards_on_the_collect_token_before_gating` on its
+    `block.index("h_mad_audit_gate.py")`. Returning
+    a `dbe.Block` is what keeps `_gate_bash_block() -> _gate_block().text` a `str` for its two text
+    pins and keeps the first argument of `_run_recipe`'s `dbe.substitute` call a `Block`. Killed by WIRE-PIN 1's
+    empty `extract` record. **Two other tests go red under it by construction**, and both stay
+    regression tests rather than the row's `test` key: `test_only_the_exec_scan_hand_rolls_extraction`
+    (a second `re.findall(r"```bash` now exists — hand-rolled extraction is exactly what that guard
+    forbids) and `test_gate_block_refuses_an_untagged_recipe` (a call site that no longer consults
+    `dbe.extract` cannot honour a patched `dbe.extract` returning `[]`). No revert of this wire can
+    avoid either, since both assert the absence of the thing the revert restores.
+  - `wire-revert-select` — `_gate_block` keeps `dbe.extract` but applies the ordinal policy locally,
+    the callee untouched. `find` is the same one line; `replace` is
+    ```python
+        _blocks = dbe.extract(SKILL_MD, "## Second surface — the codex leg")
+        if not _blocks:
+            raise dbe.BlockNotFound()
+        if len(_blocks) > 1:
+            raise dbe.AmbiguousBlock(len(_blocks))
+        return _blocks[0]
+    ```
+    `BlockNotFound` takes no constructor arguments (Task 1 defines it as a bare `DocBlockError`
+    subclass) and `AmbiguousBlock(n: int)` takes the count, so both raises are well-formed; mirroring
+    `select`'s no-index policy is what keeps `test_gate_block_refuses_an_untagged_recipe` green
+    under this row. Killed by WIRE-PIN 1's empty `select` record, and by nothing else.
+  - `wire-revert-run` — `_run_recipe` runs `bash` inline instead of calling `dbe.run_block`, the
+    callee untouched. `find` is the one line
+    `    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)`; `replace` is
+    ```python
+        import subprocess
+        p = subprocess.run(
+            ["bash", "-c", preamble + subbed.text],
+            capture_output=True, text=True, timeout=60.0,
+        )
+        return dbe.RunResult(rc=p.returncode, stdout=p.stdout, stderr=p.stderr, shell=subbed.shell)
+    ```
+    The `import subprocess` is function-local because the hoisted `_run_recipe` has no module-level
+    one — the current file imports `subprocess` only inside the old test at `:304`, and that body is
+    replaced by `_run_recipe` calls at GREEN. The composed script is `subbed.text`, not a bare
+    `script` name that does not exist in the hoisted function, and the return value is a
+    `dbe.RunResult` with all four fields, so the two `.stdout`/`.stderr` reads at `:340` and `:346`
+    keep working and the recipe regression stays green; the explicit `timeout=60.0` keeps the
+    mutant bounded now that WIRE-PIN 2's `spy_run` no longer short-circuits the run. Killed by
+    WIRE-PIN 2's empty `run_block` record.
+  - `wire-revert-substitute` — `_run_recipe` rewrites the checkout path with `str.replace` instead
+    of `dbe.substitute`, the callee untouched. `find` is the three lines
+    ```python
+        subbed, _ = dbe.substitute(
+            block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))}
+        )
+    ```
+    `replace` is
+    ```python
+        subbed = dbe.Block(
+            text=block.text.replace(
+                "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
+            ),
+            shell=block.shell,
+            lineno=block.lineno,
+            info=block.info,
+        )
+    ```
+    Building a `dbe.Block` rather than assigning the replaced `str` is what keeps the following
+    `dbe.run_block(subbed, preamble=preamble, timeout=60.0)` type-correct; the other three fields are carried from `block`, so the
+    executed shell mode is unchanged and the recipe regression stays green. Killed by WIRE-PIN 2's
+    empty `substitute` record.
+  The remaining four rows keep their v1.13 mechanisms; the two that spelled their body as an
+  ellipsis are made concrete here for the same reason the four reverts were.
+  - `wire-unconditional` — the call site grows a fallback, so an untagged gate block is still
+    resolved; the only way a call site can become tag-blind, since no helper API accepts untagged
+    fences. `find` is the one line
+    `    return dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))`; `replace` is
+    ```python
+        _blocks = dbe.extract(SKILL_MD, "## Second surface — the codex leg")
+        if _blocks:
+            return dbe.select(_blocks)
+        _bodies = re.findall(r"```bash[^\n]*\n(.*?)```", _second_surface(), re.S)
+        _gating = [b for b in _bodies if "h_mad_audit_gate.py" in b]
+        return dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")
+    ```
+    Killed by `test_gate_block_refuses_an_untagged_recipe`: with `dbe.extract` patched to return
+    `[]` the fallback resolves the block instead of raising `dbe.BlockNotFound`. Both WIRE-PINs stay
+    green, because on the real tree `extract` returns the tagged block and `select` is still called.
+    `test_only_the_exec_scan_hand_rolls_extraction` goes red with it, by construction — the fallback
+    is a second `re.findall(r"```bash` — and stays a regression test, not this row's `test` key.
+  - `hand-rolled-extraction-widened` — a second hand-rolled extraction appears on the executing
+    path. `find` is the two lines of the landed `_gate_bash_block`
+    (`def _gate_bash_block() -> str:` and `    return _gate_block().text`) — the landed function
+    carries **no docstring**, unlike today's `:267` version, which is what makes that two-line
+    anchor match exactly once; `replace` is
+    ```python
+    def _gate_bash_block() -> str:
+        try:
+            return _gate_block().text
+        except dbe.DocBlockError:
+            _bodies = re.findall(r"```bash[^\n]*\n(.*?)```", _second_surface(), re.S)
+            return [b for b in _bodies if "h_mad_audit_gate.py" in b][0]
+    ```
+    Killed by `test_only_the_exec_scan_hand_rolls_extraction` — two `re.findall(r"```bash` now
+    remain in the file rather than the one `:412` scan. Both WIRE-PINs stay green, because the
+    `try` arm succeeds on the real tree.
+  - `exec-scan-executes` — the `:412` text scan is made to run its block through `dbe.run_block`;
+    killed by `test_exec_block_scan_performs_no_execution`, which asserts `:412` calls neither
+    `run_block` nor `subprocess`.
+  - `consumer-from-import` — the consumer's `import h_mad_doc_block_exec as dbe` becomes
+    `from h_mad_doc_block_exec import extract, select, run_block` with bare calls; killed by
+    `test_consumer_calls_the_helper_module_qualified`, since the source must carry no
+    `from h_mad_doc_block_exec import` for the spies to stay observable.
+
+  All eight mechanisms are the plan's FR-6 table's, and under each of the four reverts
+  `test_h_mad_doc_block_exec.py` stays green. The eight rows bind to the same six named tests as
+  before (both new rows re-use the two existing pins); no new test name is introduced, so the
+  seven-node floor tuple in AC-6.4 is unchanged.
 
 **Dependencies on other tasks**: Tasks 1–4.
 
@@ -818,13 +1013,24 @@ remain, `:270` and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails (z
 expected to pass at RED (the scan never executed, and the floor counts collected tests, which RED
 already adds); the four AC-6.3 behaviours are regression guards too. The call-record assertion
 of each WIRE-PIN is the failure mode of the 5e wire-scoped revert, not of RED. Four revert
-directions, applied one at a time with helper and tests intact: (1) `wire-revert-extract` —
-restore the `re.findall` in `_gate_block` (WIRE-PIN 1 fails on its `extract` record); (2)
-`wire-revert-select` — keep `dbe.extract` in `_gate_block` but take `blocks[0]` / raise locally
-(WIRE-PIN 1 fails on its `select` record); (3) `wire-revert-run` — restore the inline
-`subprocess.run` in `_run_recipe` (WIRE-PIN 2 fails on its `run_block` record); (4)
-`wire-revert-substitute` — restore `str.replace` in `_run_recipe` (WIRE-PIN 2 fails on its
-`substitute` record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green;
+directions, applied one at a time with helper and tests intact, each with the replacement body
+spelled out in the eight-row bullet above and each type-correct at the consumer's boundary:
+(1) `wire-revert-extract` — restore the tag-tolerant `re.findall` plus the `h_mad_audit_gate.py`
+filter in `_gate_block`, returning the gating body wrapped as
+`dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")`
+so the consumer still receives a `Block` (WIRE-PIN 1 fails on its `extract` record; the source-shape
+guard and the untagged-refusal test go red with it, by construction, and stay regression tests);
+(2) `wire-revert-select` — keep `dbe.extract` in `_gate_block` but apply the ordinal policy locally,
+raising `dbe.BlockNotFound()` on none and `dbe.AmbiguousBlock(len(_blocks))` on more than one before
+taking `_blocks[0]` (WIRE-PIN 1 fails on its `select` record, and nothing else does); (3)
+`wire-revert-run` — restore the inline
+`subprocess.run(["bash", "-c", preamble + subbed.text], capture_output=True, text=True, timeout=60.0)`
+in `_run_recipe` under a function-local `import subprocess`, returning
+`dbe.RunResult(rc=p.returncode, stdout=p.stdout, stderr=p.stderr, shell=subbed.shell)` (WIRE-PIN 2 fails on its `run_block`
+record); (4) `wire-revert-substitute` — restore `str.replace` in `_run_recipe`, wrapped back into a
+`dbe.Block` carrying `block`'s `shell`, `lineno` and `info` (WIRE-PIN 2 fails on its `substitute`
+record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green and the three
+recipe regression tests in the consumer stay green;
 then the opposite direction (`wire-unconditional`) must fail `test_gate_block_refuses_an_untagged_recipe`.
 
 ---
@@ -834,7 +1040,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=67
+python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=69
 python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
@@ -856,3 +1062,4 @@ tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                     
 - v1.11: Impl-plan audit v10 (codex must 2 nit 1; agy clean): docsections-heading-lookup-reverted's one-line replace carries its own `import re;` (the delta dropped the import, so the restored regex would have raised NameError — a fix-introduced defect); 5f expects mutations=8 for docsections.json; version history back in ascending order.
 - v1.12: Impl-plan audit v11 (codex must 1; agy must 1) + design v1.64: docsections-delegation-reverted registers its private instance as sys.modules['_h_mad_doc_block_exec_private'] before exec_module (a frozen dataclass under from __future__ annotations fails to load unregistered — reproduced on 3.11.8); RunResult built with keyword arguments; AC-1.7 gains test_bare_form_duplicate_headings_refuse.
 - v1.13: Impl-plan audit v12 (codex clean; agy must 2, 44 tool calls): Task 5's wire-row bullet carries the exact tag-tolerant regex for wire-revert-extract and the mechanisms of wire-unconditional, exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened inline, as the plan's FR-6 table states them.
+- v1.14: Impl-plan audit v13 (codex must 1; agy clean) + design audit v62 back-propagation (design v1.65): the four Task 5 wire-revert rows carry type-correct replacement bodies with their exact find/replace text — a four-field dbe.Block from the tag-tolerant regex, a local BlockNotFound/AmbiguousBlock ordinal policy, an inline subprocess.run over subbed.text returning a four-field dbe.RunResult under a function-local import, and a str.replace wrapped back into a Block — so each mutant fails only on its WIRE-PIN's call record and the recipe regressions stay green; Task 3 gains the stage=collect mapping for the helper's own communicate/drain/close/wait with its three precedence rules and explicit __context__ assignment, the tests test_communicate_oserror_is_launch_failed_collect and test_drain_wait_oserror_is_launch_failed_collect (instance-level Popen wrapper, escapee fixture for the wait leg) and the rows collect-oserror-unmapped / drain-oserror-unmapped (Task 3 21 rows; 22 + 5 + 21 + 21 = 69, 67 of the helper's source); VERDICT_TABLE gains LAUNCH_FAILED stage=collect (22 heads, 16 subprocess + 6 in-process producers) and SKILL.md a per-stage registry row.
