@@ -445,8 +445,8 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 ## Implementation Order
 
 1. **Task 1 — scanner, selection, info-string grammar, and the bounder's second consumer.** In
-   `h-mad/scripts/h_mad_doc_block_exec.py` (new): `Block`, `fence_aware_end` with the full fence
-   rule, `extract`, **`select`** (the ordinal policy — `BlockNotFound`, `AmbiguousBlock`,
+   `h-mad/scripts/h_mad_doc_block_exec.py` (new): `Block`, the private `_fence_events` scanner,
+   `fence_aware_end` with the full fence rule, `find_heading`, `extract`, **`select`** (the ordinal policy — `BlockNotFound`, `AmbiguousBlock`,
    `BadIndex` — without which `main` has no specified way from `list[Block]` to the one `Block`
    `substitute` and `run_block` take), tag and key validation; tests in
    `h-mad/tests/test_h_mad_doc_block_exec.py` (new) and the matching rows of
@@ -785,7 +785,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` (+ `pgid: <n>` when `stage=reap`) | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
-| `DOCBLOCK: UNREADABLE reason=<r>` (+ `os_error: <text>` when `r=stream_close_failed`) | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed`, `stream_close_failed` (a backstop close of a held handle failed on a path where the final write never ran; an exit-2 error already pending wins instead) |
+| `DOCBLOCK: UNREADABLE reason=<r>` (+ `written:`/`failed:`/`skipped:` detail lines and `verify: <stream>` when the read-back disagreed, for `r=stream_write_failed`; + `os_error: <text>` when `r=stream_close_failed`) | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed`, `stream_close_failed` (a backstop close of a held handle failed on a path where the final write never ran; an exit-2 error already pending wins instead) |
 
 The order in `main` is `extract` (which validates the info string and refuses a duplicate heading)
 → `select` (which validates the ordinal) → `--subst` syntax → `substitute` → the remaining
@@ -1152,3 +1152,4 @@ mean the probe never created one.
 - v1.56: Impl-plan audit v6 back-propagation (codex should): the ATX heading grammar is stated (CommonMark 4.2 — 0–3 spaces, 1–6 hashes, space/tab/EOL, optional closing run), with test_heading_lookalikes_are_not_headings and mutation heading-lookalike-accepted (62 rows: 60 + 2).
 - v1.57: Design audit v52 (codex clean; agy should 2): the AC-4.1–4.5 test row names LAUNCH_FAILED in the exit-2 class; the CleanupFailed row carries its os_error: detail line.
 - v1.58: Design audit v53 (codex must 1 should 1; agy must 1) + impl-plan audit v7 back-propagation (codex must 1 should 1): scanner event model is open/close/body/heading/prose with level and candidate; the grammar is verified against markdown-it-py 2.2.0 (14/14, plan §Measurements); find_heading is public and docsections delegates the section start as well as its end (seven public names; docsections.json seventh row docsections-heading-lookup-reverted); the alias refusal leaves closing to the backstop so the injected-close test can hold.
+- v1.59: Design audit v54 (codex must 2; agy must 1 should 1): the UNREADABLE verdict row carries stream_write_failed's detail lines; Implementation Order Task 1 lists _fence_events and find_heading.
