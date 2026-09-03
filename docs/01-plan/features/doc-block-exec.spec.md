@@ -38,7 +38,8 @@ not opted in.
     shallower level; a tagged fence under a *later* heading is not returned for the earlier
     heading. **Setext headings (underlined with `===`/`---`) are explicitly out of scope and not
     recognised** — every document in these skills is ATX, `h-mad/tests/docsections.py` makes the
-    same assumption, and AC-1.8's differential test covers it from both sides. Stated here so the
+    same assumption, and after AC-1.8 both call the one authoritative bounder, so the assumption
+    has exactly one home rather than two that could drift. Stated here so the
     limitation is accepted rather than discovered.
   - AC-1.6: A tag appearing inside a fence body (a fence that quotes ` ```bash hmad:exec ` as
     text) is not treated as an opening fence, **including when the enclosing fence uses a longer
@@ -162,7 +163,10 @@ not opted in.
     was truncated in place and there is nothing to roll back to — with the detail line
     `written: stdout` / `failed: stderr` naming the state of each, so the operator knows which
     artifact is current (tested by failing the second write only). The final write goes through
-    one named module function, `_final_write(handle, text)`, which is the seam the test
+    one named module function, `_final_write(handle, text)` — which seeks, truncates, writes,
+    **flushes and closes** the handle inside the region mapped to `stream_write_failed`, because a
+    buffered `TextIOWrapper` may not hit the OS until `flush()`/`close()` and an error surfacing
+    at a close outside that region would be a traceback — and which is the seam the test
     fault-injects; no other mechanism can make a held descriptor fail deterministically on this
     platform (macOS has no `/dev/full`). **No open ever truncates.** After every other refusal
     has passed — including substitution — both paths are opened for *append* and the handles
@@ -240,7 +244,8 @@ not opted in.
     `CleanupFailed(path, cleanup_error)` — the `cleanup_error` attribute is the `OSError` when
     one was raised, `None` when only the read-back caught a silent retention; `__cause__` is the
     pending outcome when there was one — the `BlockTimeout`, or a `LaunchFailed` from the reap
-    stage — else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>` and exits 2
+    stage — else `cleanup_error` — and the CLI prints `DOCBLOCK: CLEANUP_FAILED path=<p>`, plus an
+    `os_error: <text>` detail line whenever `cleanup_error` is set, and exits 2
     (a timeout that also leaves an unremovable cwd reports `CLEANUP_FAILED`, tested as one case) —
     no `rc=`, because a run that left state behind is not the disposable measurement this FR
     promises. The fixture is a block that leaves an unreadable subdirectory
@@ -498,3 +503,4 @@ quoted
 - v1.25: Design audit v16 (codex must 3; agy clean): AC-5.5's killpg fake really empties the group before raising; AC-3.13's chmod rollback goes through the ordinary cleanup selection so a failing removal is CLEANUP_FAILED.
 - v1.26: Design audit v17 (codex must 1; agy pass UNVERIFIED, dispatch rc=1): AC-1.6 states the CommonMark 0-3 space indentation rule for openers and closers; a four-space-indented literal tag is never a candidate.
 - v1.27: Design audit v21 (codex must 1): AC-5.5(a) is reproduced by a real fixture — a leader that exits behind an os.setsid() escapee — and the helper polls before killpg, because killpg on a zombie-only group raises PermissionError on macOS (measured); os.killpg is injected only for AC-4.6.
+- v1.28: Design audit v23 (codex should 1; agy must 2 should 2): AC-1.5 no longer names the impossible differential test; _final_write flushes and closes inside the mapped region; CLEANUP_FAILED carries an os_error detail line.

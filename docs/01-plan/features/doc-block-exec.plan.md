@@ -202,7 +202,9 @@ form the harness can run as `target_command + [test]` — into that mutation's `
 test goes RED. **A fifth mutation pins the wire itself**: `docsections-delegation-reverted` restores a
 local `_fence_aware_end` in `tests/docsections.py` and calls it — the callee untouched — and is
 killed by `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`
-(`monkeypatch.setattr(_dbe, "fence_aware_end", spy)` then `titled_section(...)`; the spy must
+(`monkeypatch.setattr(docsections._dbe, "fence_aware_end", spy)` — the alias is
+`docsections.py`'s own module attribute, so the spy is installed on *that* reference, not on a
+second `import h_mad_doc_block_exec` in the test — then `titled_section(...)`; the spy must
 fire), while the helper's own suite stays green under that revert, which is the half proving the
 test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
 this row is the connection half, and the invariant requires both. **Ordering, since the
@@ -645,3 +647,4 @@ design begins.
 - v1.31: Plan re-audit v16 (codex clean + 1 nit; agy must 1 + 1 nit): substitute's row names BadSubstArg; five functions, not four; AC anchor cites spec v1.26.
 - v1.32: Plan re-audit v17 (codex must 2 should 1; agy clean) + design audit v21: fence_aware_end's contract names tilde runs and the 0-3 indentation rule with its tests and mutations; mutation-spec binding rule (root, command, target_command, full node IDs) for both new specs; extract's doc is a path; the naturally-emptied-group probe cited with poll()-first; five functions plus main; 37 mutations.
 - v1.33: Plan re-audit v18 (codex must 1; agy clean): docsections.json test keys are full node IDs; 38 source mutations; FR-4 summary states the invariant's class rather than claiming it names the tokens.
+- v1.34: Plan re-audit v19 (both surfaces clean; agy nit): the delegation spy is installed on docsections._dbe.

@@ -176,8 +176,9 @@ tree (`h-mad/invariants.example.md` has two of them), and picking one would exec
 from the wrong section. The opt-in tag guards *which block*; it cannot guard *which section*. **This is ATX-only by design and by
 limitation**: a Setext heading (text underlined with `===`/`---`) is not recognised, so a document
 using them would bound wrongly rather than loudly. Every document in these skills is ATX, and the
-AC-1.8 differential test covers the assumption from the other side — `docsections.py` makes the
-same one, so a divergence in either would surface there. The section ends at the next line that is a
+after AC-1.8 `docsections.py` calls this same bounder, so the assumption has exactly one home
+and cannot drift between two implementations (the differential test an earlier draft named here
+is the one this document explains is not achievable). The section ends at the next line that is a
 heading of the **same or shallower** level *and* is not inside a fence. Candidates are the tagged
 opening fences between those two offsets.
 
@@ -421,8 +422,11 @@ def main(argv: Sequence[str] | None = None) -> int
 
 def fence_aware_end(text: str, start: int, level: int) -> int:
     """Offset of the next ATX heading at `level` or shallower after `start`,
-    skipping fenced blocks with backtick-run tracking. The bounder `extract`
-    uses, exported so `h-mad/tests/docsections.py` can delegate to it (AC-1.8)."""
+    skipping fenced blocks under the full CommonMark fence rule: backtick AND
+    tilde runs of >= 3, closed only by the same character at >= the opening
+    length, opener and closer indented 0-3 spaces (4+ is an indented code
+    block, never a fence). The bounder `extract` uses, exported so
+    `h-mad/tests/docsections.py` can delegate to it (AC-1.8)."""
 ```
 
 `__all__` names all six. `fence_aware_end` is public on purpose: `docsections.titled_section`
@@ -483,10 +487,17 @@ preamble readability — the info string is validated inside `extract`, the ordi
 reserved descriptors** → spawn. Reservation opens `--stdout` then `--stderr` with
 `open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
 never empties an existing one, so there is no moment at which one artifact is truncated while the
-other is still unreserved. If the second open fails, the first handle is closed and — only if this
-call created the file (it did not exist before the open) — unlinked, so a pre-existing artifact
-keeps every byte and a refusal leaves no new empty file. The truncation is the final write itself:
-on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); truncate(); write(…)`,
+other is still unreserved. **Creation is detected atomically, not by an `exists()` check**: the
+reservation first tries `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` — success means
+this call created the file — and on `FileExistsError` retries without `O_EXCL`; the descriptor is
+wrapped with `os.fdopen(fd, "a", encoding="utf-8")`. If the second reservation fails, the first
+handle is closed and — only if `O_EXCL` succeeded for it — unlinked, so a pre-existing artifact
+keeps every byte, a refusal leaves no new empty file, and there is no window in which another
+process's file could be mistaken for one this call created. The truncation is the final write itself:
+on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); truncate(); write(…);
+flush(); close()` — all five inside `_final_write`, because a buffered `TextIOWrapper` may defer
+the OS write (and even the truncate) until `flush()` or `close()`, and an `OSError` surfacing at a
+close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
 so an existing artifact is overwritten, never appended. On `TIMEOUT` or `CLEANUP_FAILED` nothing is
 written to either handle and pre-existing artifacts are untouched. A failure *in* that final write
 can therefore only be an error on an open descriptor (disk full, I/O error) and maps to
@@ -523,7 +534,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
 | `DOCBLOCK: BAD_INFO key=<k>` | 0 | unrecognised info-string token |
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
-| `DOCBLOCK: CLEANUP_FAILED path=<p>` | 2 | the temp cwd could not be removed, or was read back present |
+| `DOCBLOCK: CLEANUP_FAILED path=<p>` + `os_error: <text>` when `cleanup_error` is set | 2 | the temp cwd could not be removed, or was read back present |
 | `DOCBLOCK: LAUNCH_FAILED stage=<s>` + `os_error: <text>` | 2 | the helper's own `mkdtemp`/`Popen`/`killpg` raised — never a traceback |
 | `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
@@ -610,7 +621,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | ACs | Tests |
 |---|---|
 | AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2 heading=<h>`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, a `~~~` fence quoting the tag, and a four-space-indented literal tag (an indented code block, never an opener); **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
-| AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
+| AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong, **and its own contract is pinned directly** — `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence` call `fence_aware_end` on hostile text and assert the section does not end at a heading quoted inside a `~~~` block or at a four-space-indented literal fence, since `docsections` consumes it as a section bounder, not through the extractor. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
 | AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: stdout` / `failed: stderr` detail lines |
@@ -686,8 +697,8 @@ test pins the wire, not the callee — and the harness records both runs.
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
 | `chmod-failure-unwrapped` | a failing `os.chmod` propagates and the created cwd is left behind | `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (AC-3.13/4.6) |
 | `chmod-rollback-unguarded` | the chmod failure removes the cwd outside the `finally` selection, so a failing removal is a traceback | `test_chmod_rollback_failure_is_cleanup_failed` (AC-3.13/3.14) |
-| `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_indented_literal_tag_is_not_a_candidate` (AC-1.6) |
-| `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a quoted ```bash opener inside one is a candidate | `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` (AC-1.6) |
+| `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_bounder_ignores_an_indented_literal_fence` (AC-1.8 — the bounder's own contract; `test_indented_literal_tag_is_not_a_candidate` pins the extractor side of the same rule under AC-1.6) |
+| `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `registry-row-removed` | one remedy row deleted from the `SKILL.md` Helper-scripts entry (the mutation targets `SKILL.md`) | `test_every_emittable_line_has_a_registry_row` (AC-4.5) |
@@ -815,3 +826,4 @@ mean the probe never created one.
 - v1.27: Design audit v19 (codex must 1; agy see report): the AC-6 test row scopes the no-re.findall assertion to the executing path and pins the :412 scan as the single remaining occurrence.
 - v1.28: Design audit v21 (codex must 1; agy should 3): poll() before killpg, the AC-5.5 race driven by a real fixture with no mock, the AC-4.6 reap test's teardown waits on the handle it holds; poll-before-killpg-removed mutation (38 rows); FR-4 summary names three operational classes; extract's doc is a path.
 - v1.29: Design audit v22 (codex must 2; agy clean + 2 nits): the binding rule (root, command, target_command, full node IDs) stated for all three specs; the AC-5.3 row is a real argv mutation; the wire spec's three mutations enumerated.
+- v1.30: Design audit v23 (codex should 1; agy must 2 should 2): the two bounder-contract tests bind the tilde and indentation mutations; fence_aware_end's docstring states the full rule; _final_write flushes and closes inside the mapped region; O_EXCL creation detection; CLEANUP_FAILED os_error detail; the stale differential-test phrase removed.
