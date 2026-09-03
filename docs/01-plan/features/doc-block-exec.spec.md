@@ -99,9 +99,13 @@ not opted in.
     (`.`, `*`, `[`) is matched and replaced literally.
   - AC-2.5: A key occurring more than once in the block is replaced at **every** occurrence, and
     the reported occurrence count equals the number replaced.
-  - AC-2.6: Counts are exact under sequential replacement: each key's count is taken immediately
-    before that key's own replacement, so a value that happens to contain another key's text
-    cannot inflate or deflate a reported count.
+  - AC-2.6: **Substitution is simultaneous and counts are taken on the original text.** Every
+    key is counted against the block as written, and all replacements happen in one pass that
+    never re-scans replaced text, so a value that contains another key's text is neither
+    re-substituted nor counted: with `A→B` and `B→C` on a block containing only `A`, the result is
+    `B` and `B` reports `SUBST_MISSING` regardless of map order. (An earlier draft prescribed
+    sequential count-then-replace, which made the outcome depend on iteration order — the very
+    class AC-2.7 refuses overlapping keys to avoid.)
   - AC-2.7: Overlapping keys refuse rather than resolve by order — if any key is a substring of
     another, nothing is executed and the CLI prints `DOCBLOCK: SUBST_OVERLAP keys=<n>` with a
     detail line naming each overlapping pair, and exits 0. `<n>` is the number of **distinct keys
@@ -385,8 +389,8 @@ not opted in.
     `2747` (collected and passing at `6b4df35`, cited in the plan with its commands); the
     feature's additions are the collected count of the new module
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
-    alone) plus a fixed tuple of the named new node IDs added to an existing file — the five wire
-    and exemption tests in `test_h_mad_collect_report_docs.py`, enumerated in the plan; every other
+    alone) plus a fixed tuple of the named new node IDs added to an existing file — the **six**
+    wire and exemption tests in `test_h_mad_collect_report_docs.py`, enumerated in the plan; every other
     new test, AC-1.8's delegation and collect-alone pins included, lives in the new module — each
     of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + len(tuple)`
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
@@ -513,3 +517,4 @@ quoted
 - v1.28: Design audit v23 (codex should 1; agy must 2 should 2): AC-1.5 no longer names the impossible differential test; _final_write flushes and closes inside the mapped region; CLEANUP_FAILED carries an os_error detail line.
 - v1.29: Design audit v24 (codex must 1 should 1; agy nit): AC-3.8 specifies the stdout-first failure branch (failed/skipped detail lines with registry rows); AC-4.6's reap test obtains its handle through the recording Popen pass-through and states the teardown order.
 - v1.30: Design audit v25 (codex must 1 should 1; agy clean): AC-3.8 names the atomic create-or-open ownership rule and the single closure path for held handles.
+- v1.31: Design audit v26 (agy must 4 should 1; codex must 1): AC-2.6 makes substitution simultaneous with counts on the original text, closing the map-order dependency sequential replacement had; AC-6.4's tuple is six tests.

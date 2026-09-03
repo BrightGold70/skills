@@ -198,9 +198,11 @@ one-for-one: `titled_section` returns
 below requires; `_fence_aware_end` is deleted. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
 repo root (collected **alone**), and an isolated `python3 -c "import docsections"` with the tests
 directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves with the code:**
-`h-mad/tests/mutation-specs/docsections.json` anchors three of its four mutations
-(`fence-tracking-removed`, `section-no-longer-owns-its-subsections`,
-`offset-anchored-bound-runs-to-end-of-file`) on lines that leave `tests/docsections.py`; the
+`h-mad/tests/mutation-specs/docsections.json` anchors **two** of its four mutations
+(`fence-tracking-removed`, `section-no-longer-owns-its-subsections`) on lines that leave
+`tests/docsections.py`; the other two (`offset-anchored-bound-runs-to-end-of-file`, which mutates
+`section_from`'s call, and `missing-heading-returns-empty-instead-of-failing`) anchor on lines
+that remain there; the
 first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py` — at its
 fence-state update and its heading match respectively, the same two guards they mutate today —
 the third stays (it mutates `section_from`'s call, which remains), and the harness's exact-once
@@ -255,7 +257,7 @@ planned against):
 | `substitute` | `(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]` | a new `Block` with the substituted text (frozen dataclass, `dataclasses.replace`), plus per-key counts; raises `BadSubstArg` (empty key — the rule lives here, AC-2.8), `MissingSubstitution`, `OverlappingSubstitution` |
 | `run_block` | `(block: Block, *, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `LaunchFailed` (mkdtemp/chmod, spawn, reap), `BlockTimeout`, `CleanupFailed` |
 | `extract` body normalisation | *(rule on `extract`, not a function)* | a selected fence's body is de-indented by **up to the opener's indentation** per line, as CommonMark specifies — an opener indented 1–3 spaces yields body text with those leading spaces removed and no more; recognising the fence correctly but returning un-normalised text is the gap this row closes. Test `test_indented_fence_body_is_deindented` (exact-text fixture at 1, 2 and 3 spaces, and a body line indented *less* than the opener, which is left as is); mutation `body-indent-not-stripped` |
-| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length, opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; the bounder `extract` uses and `docsections` delegates to (AC-1.8). Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
+| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length **followed by nothing but spaces or tabs** (a ```` ```trailing ```` line is body text, not a closer — otherwise a quoting fence closes on paper and its quoted `hmad:exec` is read as executable; hostile fixture `test_closer_with_trailing_text_does_not_close`, mutation `closer-trailing-text-accepted`), opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; the bounder `extract` uses and `docsections` delegates to (AC-1.8). Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
 is module-qualified**: the file adds `import h_mad_doc_block_exec as dbe` after its existing
@@ -343,7 +345,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 39 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 40 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -393,7 +395,9 @@ bash fences: 68 across 10 files
 ```
 
 Control, to show the counter is not under-matching — the same sweep counting opening fences of
-*every* language must return a strictly larger number, and does: **83**.
+*every* language must return a strictly larger number, and does: **83** — the same script with
+the counting line replaced by
+`if l.startswith('```') and len(l) > 3 and l[3].isalpha()` (an opener with any language word).
 
 **Re-measured 2026-09-03 at `a469493`, from the repository root: `68 across 10 files`, control
 `83` — unchanged.** A plan audit reported `49 across 2 files` (27 in `h-mad/SKILL.md`, 22 in
@@ -600,13 +604,11 @@ the duplicate bounder is.
   So AC-6.4's floor is 2747 collected and the same number passing, plus every test this feature
   adds — and "every test this feature adds" is computed, not estimated: the collected count of
   `h-mad/tests/test_h_mad_doc_block_exec.py` run through the collector alone, plus a fixed tuple
-  of the named node IDs added to an existing file — **exactly these five**, all in
-  `h-mad/tests/test_h_mad_collect_report_docs.py`: `test_gate_block_resolves_through_doc_block_exec`,
-  `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`,
-  `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`
+  of the named node IDs added to an existing file — **exactly these six**, all in
+  `h-mad/tests/test_h_mad_collect_report_docs.py`: `test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`
   (each asserted to exist). Every other new test — FR-1..5, AC-1.8's delegation and
   collect-alone pins, the CLI table walk — lives in the new module and is counted by the collector.
-  `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + 5` from a
+  `test_suite_floor_holds` asserts `full_collected >= 2747 + new_module + 6` from a
   `--collect-only` subprocess, which never executes tests and so cannot recurse (an env guard
   `DOCBLOCK_FLOOR_INNER=1` also makes any inner instance skip); the *pass* half is the Phase-5f
   gate command run alone, outside the suite, and recorded in the report. A deleted pre-existing
@@ -673,3 +675,4 @@ design begins.
 - v1.34: Plan re-audit v19 (both surfaces clean; agy nit): the delegation spy is installed on docsections._dbe.
 - v1.35: Plan re-audit v20 (codex must 2; agy clean): the body de-indentation rule on extract with its test and mutation; _final_write flushes and closes inside the mapped region; both stream-failure branches; invalid-UTF-8 preamble test; CLEANUP_FAILED os_error detail; 39 mutations.
 - v1.36: Plan re-audit v21 (codex must 2 should 1, one must REFUTED — the census re-measures 68/10 from the root, the reported 49/2 is a subdirectory run; agy clean + nit): the reservation protocol carried into the plan; the mutation matrix pointed at by section; _dbe. prefix in the docsections pseudocode.
+- v1.37: Plan re-audit v22 (codex should 1 + nit; agy clean): closer must be followed only by blanks, with its fixture and mutation; control census command cited; docsections.json is two-leave-two-stay; six consumer-file tests; 40 mutations.
