@@ -626,9 +626,23 @@ flush(); close()` — all five inside `_final_write`, **with the `close()` in a 
 mapped, and an error from that close is caught in the same region and mapped too (the first error
 wins, the close error is chained as `__context__`), so no descriptor and no traceback can escape
 past `stream_write_failed` — `main`'s outer `finally` is a backstop for the alias-refusal and
-timeout paths, never the mapping for a write failure. `test_final_write_failure_before_close_still_closes`
-fault-injects `flush` to raise and asserts the verdict, the closed handle, and no traceback;
-mutation `final-write-close-not-in-finally`. It is all inside `_final_write` because a buffered `TextIOWrapper` may defer
+timeout paths, never the mapping for a write failure. Two tests pin this, and neither can be
+satisfied by the outer `finally` closing the handle later. Both go through the **fifth named
+injection** — the `_final_write` seam — and add no sixth: the patched seam calls the real
+`_final_write` with a recording proxy around the held handle (every attribute forwarded, only
+`flush`/`close` overridden as the test directs, `close` marking the proxy closed and recording
+the call), so `main`'s outer `finally` still closes the *real* handle and never sees the proxy.
+`test_final_write_close_failure_is_mapped` makes the proxy's `close` alone raise `OSError`
+(`flush` succeeds) and asserts `main` returns 2, the verdict is `stream_write_failed` with
+`failed: stdout`, and no traceback reaches stderr — a `close()` outside the mapped region lets
+that error escape as a traceback. `test_final_write_failure_before_close_still_closes` makes
+**both** the proxy's `flush` and `close` raise and asserts the same verdict, no traceback, and
+that the proxy's `close` **was called** — which only `_final_write`'s own `finally` can do,
+because the outer `finally` holds the real handle. A `close()` moved out of the `finally` skips
+the close when `flush` raises: the verdict still maps, the outer `finally` closes the real
+handle, and the proxy's `close` is never called, so the assertion fails. Both tests are the kill
+for mutation `final-write-close-not-in-finally`; Phase 5e runs that mutant and records its RED
+in the mutation spec. It is all inside `_final_write` because a buffered `TextIOWrapper` may defer
 the OS write (and even the truncate) until `flush()` or `close()`, and an `OSError` surfacing at a
 close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
 so an existing artifact is overwritten, never appended. **The write is then verified, not
@@ -761,7 +775,9 @@ raise (AC-3.13's post-creation failure, which must remove the directory it just 
 `spawn` stage needs no mock: the test sets `PATH` to an empty directory and `bash` is genuinely
 not found. The fifth is the module's own `_final_write(handle, text)` seam, patched to raise
 `OSError` for AC-3.8's post-run write failure — the one call for which no real fault exists on
-this platform. The drain race needs no mock, because a real
+this platform — or patched to call the real `_final_write` with a recording proxy around the held
+handle whose `flush`/`close` raise (the close-in-`finally` tests), which is the same seam and the
+same injection, not a sixth. The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -851,7 +867,7 @@ exactly what the base Mutation verification invariant forbids.
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
-| `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally`, so a failing `flush` leaves the handle open and the close's error escapes | `test_final_write_failure_before_close_still_closes` (AC-3.8) |
+| `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally` (a plain statement after the `try`), so a failing `flush` skips the close inside the mapped region and a failing close's error escapes | `test_final_write_close_failure_is_mapped` (AC-3.8 — the recording proxy's `close` alone raises; the mutant prints a traceback instead of `stream_write_failed`) and `test_final_write_failure_before_close_still_closes` (AC-3.8 — the proxy's `flush` and `close` both raise; the mutant never calls the proxy's `close` from `_final_write`, and the outer `finally` closes the real handle, not the proxy) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
 | `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
@@ -1023,3 +1039,4 @@ mean the probe never created one.
 - v1.45: Design audit v39 (codex must 1; agy must 1 should 1): the existing-file reservation arm opens O_NONBLOCK and every reserved descriptor must be a regular file (a reader-less FIFO refuses bounded), with two mutations (52 rows); the two post-Task-5 tests are authored in Task 5; the wire-revert-extract row names the tag-tolerant regex.
 - v1.46: Design audit v40 (codex must 2; agy clean + nits): Popen passes cwd=cwd, with the cwd-not-passed mutation; the parity guard becomes a scanner event-trace test plus a no-fence-state source assertion on extract (54 rows); _gate_block returns dbe.Block.
 - v1.47: Design audit v41 (codex must 2; agy clean): _final_write closes in a finally with the close error mapped in the same region, plus its mutation (55 rows); the reader-less-FIFO ENXIO behaviour is cited from a probe on python 3.11.8/darwin.
+- v1.48: Design audit v42 (codex must 1; agy clean): final-write-close-not-in-finally is killed by an injected close failure — test_final_write_close_failure_is_mapped (close alone raises → mapped, no traceback) and test_final_write_failure_before_close_still_closes now injects flush AND close on a recording proxy handed through the _final_write seam and asserts the proxy's close was called, which the outer finally (holding the real handle) cannot produce; fifth injection reused, 55 rows unchanged.
