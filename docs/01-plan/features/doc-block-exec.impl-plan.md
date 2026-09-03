@@ -1,7 +1,7 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.76 — design cycle 68 / impl-plan cycle 19 back-propagation, commit 0c24cbf)
-> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.44) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.73)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.77 — design cycle 69 / impl-plan cycle 20 back-propagation, commit 06ad6b4)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.44) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.74)
 > Branch target: feature/doc-block-exec
 
 ## Executive Summary
@@ -13,7 +13,7 @@ single-source contract never has an intermediate commit with two bounders). Task
 (`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
 the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
 Every guard the design names carries a mutation row bound to one named test; the three specs
-(`doc_block_exec.json` 75 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+(`doc_block_exec.json` 76 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
 
 ## Conventions binding every task
 
@@ -83,6 +83,24 @@ Every guard the design names carries a mutation row bound to one named test; the
   as one replacement). Each task appends its rows; the file is created in Task 1. Run
   `python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json`
   and read the `MUTATION:` token — `ALL_CAUGHT` is required before the task is GREEN.
+- **When each row's payload is fixed — deliberate, not an omission** (impl-plan audit v20, whose
+  must-fix asked for all 76 payloads here and is REFUTED on this ground). The design's §Test Plan
+  sets the ordering verbatim: "Exact `find` anchors are set from the landed source in the same
+  task that lands it (the author-together ordering the plan states for `docsections.json`), each
+  exact-once; the mechanism column is what the anchor must express." So for
+  `doc_block_exec.json`: **the mechanism named beside each row is the contract and is fixed now**,
+  as is the row's `test` key (a full node ID, fixed now); the `file`, the exact-once `find` and the
+  `replace` are written **at 5e, from the landed source of the task that just went GREEN**.
+  `h-mad/scripts/h_mad_doc_block_exec.py` does not exist until 5d, so quoting anchors into it now
+  would mean inventing source text and then pinning mutations to text nobody has written — the
+  placeholder class this document forbids, and a `find` that misses is scored a refusal, not a
+  kill (`h_mad_mutation_harness.py:609–623`). The contrast is exact and is why the other two specs
+  look different: `docsections.json`'s and `doc_block_exec_wire.json`'s rows carry their `find`/
+  `replace` payloads **in this document already**, because their anchors sit in
+  `h-mad/tests/docsections.py` and `h-mad/tests/test_h_mad_collect_report_docs.py`, files that
+  exist at HEAD and can be quoted exactly. Nothing about the `ALL_CAUGHT` evidence is weakened by
+  this: every row is still one guard, one named killer, one exact-once anchor, and each task's
+  GREEN gate runs the harness over every row landed so far.
 - **Single source of the fence grammar**: marker-run **recognition** — the literals ```` ``` ```` and
   `~~~`, the run-length regex, and any `in_fence` toggle — lives in exactly one function body,
   `_fence_events`, and so does ATX heading recognition (the `heading` event kind); `extract` and
@@ -751,7 +769,16 @@ positional `doc`, `--heading` (required), `--index` (`type=str`), `--subst` (`ac
 `--preamble-file`, `--shell-timeout` (`type=str`, default `"30"`), `--stdout`, `--stderr`; no
 `--all`/`--dir`/glob argument exists. Order: `extract` → `select` (a non-integer `--index` is
 `BadIndex(raw)`; parsed ints go to `select`) → build the map from `--subst` (split once on the
-first `=`; no `=` or empty key → `BadSubstArg(raw)`; repeated key → `BadSubstArg(raw, duplicate_key=k)`)
+first `=`; no `=`, an **empty key**, or a repeated key are all refused **here, by `main`**, with
+`raw` the argument exactly as given: `BadSubstArg(raw)` for the first two and
+`BadSubstArg(raw, duplicate_key=k)` for the repeat. **`main` never delegates the empty key to
+`substitute`** (design v1.77, design audit v69 agy): `substitute` keeps its own `BadSubstArg("")`
+for an API caller that passes `{"": v}` directly, but `main` has already refused the raw argument
+by then, so that path is unreachable from the CLI. The difference is observable, which is why it is
+pinned: `--subst =V` must print `BAD_SUBST arg==V` — the raw argument, `=V` — whereas delegating to
+`substitute` would carry only the empty key and print `arg=`. One predicate, two places, one
+mutation row each: `empty-key-accepted-by-api` for `substitute` and `cli-empty-key-delegated` for
+`main`)
 → `substitute` → `_validate_timeout(args.shell_timeout)` (the shared validator from Task 3:
 `float()` conversion, `math.isfinite`, `> 0`, else `BadTimeout(raw)` — **before** `_reserve`, so no
 artifact exists for any input-only refusal; `run_block` re-validates the float it receives, and the
@@ -884,7 +911,7 @@ if __name__ == "__main__": sys.exit(main())
 
 **Acceptance Criteria**:
 - [ ] AC-1.3/1.4/1.7/1.9 CLI halves (subprocess): `test_cli_ambiguous_prints_blocks_and_heading` (`AMBIGUOUS blocks=2 heading=` followed by the `--heading` argument verbatim, exit 0), `test_cli_index_past_end_is_not_found`, `test_cli_duplicate_headings_refuse` (`AMBIGUOUS_HEADING count=2`, nothing executed), `test_cli_index_zero_and_negative_are_bad_index` (`BAD_INDEX index=0`/`-1`, exit 0, no side effect), `test_non_integer_index_is_bad_index`.
-- [ ] AC-2.2/2.3/2.7/2.8 CLI halves (subprocess): `test_cli_missing_keys_list_in_argument_order`, `test_cli_overlap_counts_distinct_keys`, `test_cli_no_subst_runs` (zero `--subst`), `test_subst_without_equals_is_bad_subst`, `test_subst_empty_key_is_bad_subst`, `test_duplicate_substitution_key_refuses` (`duplicate_key: K`), `test_subst_value_may_contain_equals` — each refusal executes nothing and reserves nothing (no artifact created).
+- [ ] AC-2.2/2.3/2.7/2.8 CLI halves (subprocess): `test_cli_missing_keys_list_in_argument_order`, `test_cli_overlap_counts_distinct_keys`, `test_cli_no_subst_runs` (zero `--subst`), `test_subst_without_equals_is_bad_subst`, `test_subst_empty_key_is_bad_subst` (`--subst =V` → `BAD_SUBST arg==V`, the raw argument verbatim — the assertion that discriminates `main`'s own refusal from a delegated one, which would print `arg=`), `test_duplicate_substitution_key_refuses` (`duplicate_key: K`), `test_subst_value_may_contain_equals` — each refusal executes nothing and reserves nothing (no artifact created).
 - [ ] AC-3.7 (subprocess) `test_cli_unknown_info_key_is_bad_info`; AC-3.12 (subprocess) `test_invalid_utf8_document_is_unreadable` CLI half (`UNREADABLE reason=doc_unreadable`, exit 2) and `test_invalid_utf8_preamble_is_unreadable`, `test_unreadable_preamble_path_refuses` (`preamble_unreadable`, exit 2, no side effect); `test_cli_preamble_file_reaches_the_block`.
 - [ ] AC-3.8 (subprocess) `test_stream_paths_receive_the_streams` (two files differ for a block writing different text); `test_streams_optional`; `test_stream_paths_truncate_an_existing_file`; `test_streams_untouched_after_a_timeout`; (in-process main, each) `test_stream_write_failure_after_the_run_is_a_refusal` (`_final_write` injected to raise → `UNREADABLE reason=stream_write_failed`, exit 2, no `rc=`); `test_first_stream_write_failure_skips_the_second` (`_final_write` injected to raise on the first handle: `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_second_stream_write_failure_leaves_the_first_as_written` (`_final_write` injected to raise on the second handle: `written: stdout` / `failed: stderr`); `test_final_write_close_failure_is_mapped` (seam patched to call the real `_final_write` with a recording proxy whose `close` alone raises → `stream_write_failed`, `failed: stdout`, exit 2, no traceback; a regression test for `final-write-close-not-in-finally`, not its `test` key); `test_final_write_failure_before_close_still_closes` (proxy's `flush` and `close` both raise → same verdict and the proxy's `close` was called; the canonical `test` key of `final-write-close-not-in-finally`); `test_final_write_readback_catches_a_silent_no_op` (`_final_write` injected as a no-op → `stream_write_failed` with `verify: stdout`, `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_backstop_close_failure_on_timeout_is_mapped` (`_close_stream` injected to raise under `sleep 300`, `--shell-timeout 1`, `--stdout` given → `UNREADABLE reason=stream_close_failed`, a `stream: stdout` line and an `os_error:` line, exit 2, no traceback, cwd gone); `test_backstop_close_failure_does_not_outrank_a_refusal` (same injection under an aliased pair → still `stream_paths_alias`, exit 2, no traceback); `test_stream_handles_are_closed_on_every_path` (recording `os.open` pass-through, `_final_write` injected for the first-write-failure leg; after `TIMEOUT` and after a first-write failure, `os.fstat` on each recorded fd raises `OSError`).
 - [ ] AC-3.9 (subprocess) `test_symlinked_stream_paths_refuse`, `test_dot_slash_spelling_refuses`, `test_hard_linked_stream_paths_refuse` (`os.link`): `UNREADABLE reason=stream_paths_alias`, exit 2, block not run, both handles closed (by the backstop `finally`), a created file unlinked.
@@ -900,6 +927,9 @@ if __name__ == "__main__": sys.exit(main())
 - [ ] Parser (subprocess): `test_parser_rejects_all_dir_and_abbreviations` (`--all`, `--dir x`, `--shell-t 5` → argparse usage error, exit 2, no `DOCBLOCK:` line).
 
 **Mutation rows added here**: `subst-split-on-every-equals`, `subst-duplicate-key-last-wins`,
+`cli-empty-key-delegated` (`main` stops refusing the empty key while building the map and lets
+`substitute` raise `BadSubstArg("")`, so the verdict prints `arg=` instead of the raw `arg==V`;
+killed by `tests/test_h_mad_doc_block_exec.py::test_subst_empty_key_is_bad_subst`.),
 `index-nonint-unmapped`, `timeout-nonnumeric-unmapped`, `preamble-decode-error-unwrapped`,
 `stream-reserved-with-truncation`, `final-write-close-not-in-finally`,
 `verify-deferred-past-second-write`, `final-write-not-verified`, `nonregular-stream-accepted`,
@@ -925,14 +955,18 @@ mutant, so the `leftover:` line is the only thing that discriminates it),
 `--shell-t 5` aliases `--shell-timeout`; killed by `test_parser_rejects_all_dir_and_abbreviations`),
 `stream-write-oserror-unwrapped` (the `except OSError` mapping around `_final_write` and its
 read-back removed, so a write failure escapes as a traceback; killed by
-`test_stream_write_failure_after_the_run_is_a_refusal`) — 23 rows. With Tasks 1, 2, 3 that is
-23 + 5 + 24 + 23 = **75 rows**, 73 of the helper's source and 2 of `SKILL.md`, matching design v1.75.
+`test_stream_write_failure_after_the_run_is_a_refusal`) — 24 rows.
+The new row is discriminated from Task 2's `empty-key-accepted-by-api`, which is NOT one of the 24
+above, by which side is mutated: that row removes `substitute`'s own guard and is killed by the API
+test, this one removes `main`'s and is killed by the CLI test, and neither killer touches the
+other's code path. With Tasks 1, 2, 3 that is
+23 + 5 + 24 + 24 = **76 rows**, 74 of the helper's source and 2 of `SKILL.md`, matching design v1.77.
 
 **Dependencies on other tasks**: Tasks 1, 2, 3.
 
 **Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
 CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
-regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 75 rows
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 76 rows
 before this task is GREEN.
 
 **RED gate**: `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` before any production code — every Task 4 test fails and Tasks 1–3 stay green. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
@@ -1242,7 +1276,7 @@ then the opposite direction (`wire-unconditional`) must fail `test_gate_block_re
 ```bash
 cd h-mad
 hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
-hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=75
+hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=76
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 600 -- python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=8
 hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
@@ -1286,3 +1320,4 @@ into the log.
 - v1.18: Impl-plan audit v17 (codex must 1; agy clean) + design audit v66 back-propagation (design v1.73): the fault-injection taxonomy is one canonical eight-item list stated identically to the design — seven module seams (os.killpg, shutil.rmtree, tempfile.mkdtemp, os.chmod, os.unlink, _final_write, _close_stream) plus the one Popen instance wrapper covering communicate/wait/poll — repeated verbatim by the in-process main(argv) transport rule, with the old seventh/eighth-form framing removed; the post-kill wait is proc.wait(timeout=DRAIN_SECONDS), its TimeoutExpired becoming LaunchFailed('reap', err, pgid) with err the TimeoutExpired itself with the pending BlockTimeout or collect as __context__, so LaunchFailed.err is typed OSError | subprocess.TimeoutExpired (the exact union, not BaseException) and os_error: renders str(err); helper wall time is now at most timeout + 2 * DRAIN_SECONDS, and the four existing wall-bound assertions move from 1 + DRAIN_SECONDS + 2 to 1 + 2 * DRAIN_SECONDS + 2; test_wait_after_kill_is_bounded (record-and-raise wrapper on the recorded instance's wait, escapee fixture required so the helper's own wait is the intercepted call, the recorded timeout keyword the discriminator) with rows wait-unbounded and wait-expiry-unmapped, stated as two SEPARATE except clauses on that one wait so each mutation removes exactly one (Task 3 24 rows; 23 + 5 + 24 + 22 = 74, 72 of the helper's source; Task 3 injecting tests 12; four-way mutual discrimination among the collect and bounded-wait rows).
 - v1.19: Impl-plan audit v18 (codex must 1 — the reap-sequence contradiction was in the PAIRED PLAN, fixed in plan v1.73; the audit cites impl-plan.md:575-581 as one of the correct sources, so this document needed no change for it and none was made) + design audit v67 back-propagation (design v1.75): every emitted dynamic value passes through one module-level escaper, _field(value), which rewrites \r, \n and every character whose unicodedata.category is Cc to its \xNN/\uNNNN escape and leaves everything else verbatim; all 14 head field names and all 11 DETAIL_KEYS values are routed through it with NO exemption list, so the rule is auditable as 'no value reaches the output un-escaped' rather than as a per-field judgement (the caller- or document-controlled ones it actually protects are heading=, index=, value=, arg=, key=, path=, missing_key:, duplicate_key:, overlap:, os_error: and leftover:); unicodedata added to the module import line; _field is private, so __all__ stays at 28 names and AC-4.5's registry walk gains no row; test_newline_in_dynamic_fields_cannot_forge_a_verdict_line (in-process main over three refusal paths, asserting one DOCBLOCK: line, no forged RAN line, and the payload present ESCAPED — the third assertion being what makes the row discriminating) with mutation field-escape-removed placed after rc-leaked-into-refusal as the design matrix orders it (Task 4 23 rows; 23 + 5 + 24 + 23 = 75, 73 of the helper's source).
 - v1.20: Impl-plan audit v19 (codex must 1; agy clean) + design v1.76 back-propagation: the forge test's case (3) is rebuilt on AC-3.10's fixture with the newline moved into the CREATED artifact's name — --stdout a fresh tmp_path file whose name contains \n (a legal POSIX file-name byte, verified on this platform with O_CREAT|O_EXCL + lexists), --stderr under a regular file for the real ENOTDIR on the second arm, os.unlink injected as AC-3.10 injects it — because the previous spelling put the newline on a FIRST-arm ENOTDIR path, which creates nothing and so has no leftover to report, and would have failed against a correct implementation rather than against the mutant; field-escape-removed's discriminator is now stated explicitly (the raw newline in heading=, missing_key: and the leftover: path each split one verdict into two physical lines, so the exactly-one-DOCBLOCK:-line assertion fails on all three cases and the escaped-payload assertion fails independently of how a consumer splits lines); AC-6.4 states that 2747 is the repository-root count and that 2485 from h-mad/ is never a substitute for it. Counts unchanged at 75 rows. The AC header now marks case (3) as injected: os.unlink (cases (1) and (2) need none), correcting a fix-introduced claim of 'no injection' that the rebuilt fixture made false.
+- v1.21: Impl-plan audit v20 (codex must 1, low-evidence — REFUTED, and the ground is now pinned) + design v1.77 back-propagation: a new Conventions bullet states WHEN each doc_block_exec.json row's payload is fixed, quoting the design's §Test Plan sentence verbatim — the mechanism and the full-node-ID test key are fixed now, the file, exact-once find and replace are written at 5e from the landed source of the task that just went GREEN, because h_mad_doc_block_exec.py does not exist until 5d and quoting anchors into unwritten source would be the placeholder class this document forbids (a missed find scores a refusal, not a kill, h_mad_mutation_harness.py:609-623); docsections.json and doc_block_exec_wire.json carry payloads already only because their anchors sit in files that exist at HEAD. main refuses the empty --subst key ITSELF while building the map, with raw the argument as given, so --subst =V prints arg==V; substitute keeps BadSubstArg('') for API callers and main never reaches it; test_subst_empty_key_is_bad_subst now states that assertion and mutation cli-empty-key-delegated pins the CLI side, discriminated from Task 2's empty-key-accepted-by-api by which side is mutated (Task 4 24 rows; 23 + 5 + 24 + 24 = 76, 74 of the helper's source).
