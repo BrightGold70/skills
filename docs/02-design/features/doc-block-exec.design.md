@@ -299,8 +299,8 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    launched process may outlive the call. **The test for it must not become that case**: its fake
    `killpg` (the AC-4.6 injection, the only remaining use of the `os.killpg` seam) records the pgid
    and raises `PermissionError`. **`run_block` owns its `Popen` and exposes no handle**, so the
-   test obtains one through the same recording pass-through AC-5.6 uses: `monkeypatch.setattr(
-   dbe.subprocess, "Popen", recording_popen)`, where `recording_popen(*a, **kw)` calls the real
+   test obtains one through the same recording pass-through AC-5.6 uses: `monkeypatch.setattr(dbe.subprocess, "Popen", recording_popen)`,
+   where `recording_popen(*a, **kw)` calls the real
    `subprocess.Popen`, appends the instance to a list the test holds, and returns it unchanged —
    an observation of the real call, not a fault injection, restored by `monkeypatch` on exit. The
    teardown order in the test's `finally` is then exact: (1) real `os.killpg(pgid, SIGKILL)` on
@@ -378,7 +378,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
 | Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 48 mutations (48 rows: 46 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
-| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
+| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
@@ -749,9 +749,14 @@ table, restated here so the design enumerates every spec it names):
 | `wire-revert-extract` | `_gate_bash_block` resolves its block with a local `re.findall` instead of `dbe.extract`/`dbe.select`, helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
 | `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
+| `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` (AC-6.2) |
+| `consumer-from-import` | `import h_mad_doc_block_exec as dbe` becomes a bare `from … import` with unqualified calls | `test_consumer_calls_the_helper_module_qualified` (AC-6.5 precondition) |
+| `hand-rolled-extraction-widened` | a second `re.findall(r"```bash…")` appears on the executing path | `test_only_the_exec_scan_hand_rolls_extraction` (AC-6.2) |
 
 Under the two reverts the helper's own suite must stay green — the half that proves the failing
-test pins the wire, not the callee — and the harness records both runs.
+test pins the wire, not the callee — and the harness records both runs. The three guard rows
+that were once listed as "(no mutation)" now carry mutants, because a guard without a mutant is
+exactly what the base Mutation verification invariant forbids.
 
 | mutation | guard it removes (mechanism) | killed by (`test` key) |
 |---|---|---|
@@ -936,3 +941,4 @@ mean the probe never created one.
 - v1.37: Design audit v31 (codex must 2): missing keys listed in map insertion order with a multi-key test; RunResult.rc is the spawned invocation's exit code.
 - v1.38: Design audit v32 (both surfaces clean; agy nit): the AC-6.1 cardinality test is named.
 - v1.39: Design audit v33 (codex clean; agy must 1 + nits): the API prose lists BadSubstArg and BadTimeout.
+- v1.40: Design audit v34 (codex must 1; agy must 1 + nits): exec-scan-executes, consumer-from-import and hand-rolled-extraction-widened added to the wire spec (six); stray line break in the setattr call joined.
