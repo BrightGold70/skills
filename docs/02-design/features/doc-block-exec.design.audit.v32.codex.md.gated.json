@@ -1,0 +1,8 @@
+{
+ "verdict": "PASS",
+ "files": {
+  "doc-block-exec.design.md": "4dcb71b5ce025e92b647db6e8ec15d4645b5a1bb9c52d3d2518bf637dd4beb69",
+  "../../01-plan/features/doc-block-exec.spec.md": "d514ef6fccd28e9e0d46cbc639f74344c139e09c70d90de78d7320f1bd7462ee",
+  "../../01-plan/features/doc-block-exec.plan.md": "39eeb68040610830f9f8bd0f7a8b5580971d44b07f9556efa38b026478bbba6c"
+ }
+}
