@@ -96,9 +96,13 @@ control-flow design, not a hope:** `run_block` never raises from inside the time
 records a *pending* outcome — `pending = BlockTimeout(timeout)` after the reap, or the `RunResult`
 — runs cleanup in `finally` (which records an `OSError` and never raises), then, after the
 `try`/`finally` has completed, reads the cwd back and **selects** the final outcome: `CleanupFailed(cwd,
-cleanup_error)` raised `from pending` if the directory persists (`__cause__` is the pending
-`BlockTimeout`/`LaunchFailed` when there is one, else `cleanup_error`), else the pending outcome
-re-raised, else the result returned. A `raise` inside the handler would propagate straight past the
+cleanup_error)` raised `from pending` **if a cleanup `OSError` was recorded OR the directory
+persists** — either alone (`__cause__` is the pending `BlockTimeout`/`LaunchFailed` when there is
+one, else `cleanup_error`), else the pending outcome re-raised, else the result returned. The
+"OR" is the rule: an `rmtree` that removed everything and then raised is still a failure
+(`test_cleanup_error_after_successful_removal_is_still_a_failure` injects exactly that), because
+"the tree is gone" and "the removal reported success" are different facts and the helper does not
+guess which one to believe. A `raise` inside the handler would propagate straight past the
 read-back — Python runs `finally` and then continues unwinding — which is exactly the ordering
 bug this paragraph replaces. **Two tests drive the combined case, and the one that carries the
 guard runs everywhere:** `test_cleanup_failure_outranks_timeout_injected` patches `shutil.rmtree`
@@ -133,15 +137,21 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 
 ### Scanning (`extract`)
 
-One pass over the lines, carrying `in_fence` **and the opening fence's backtick run length**. A
+One pass over the lines, carrying `in_fence`, **the opening fence's marker character (backtick
+or tilde) and its run length**. CommonMark fences come in both flavours, `~~~` closes only a `~~~`
+fence, and a tilde fence can quote a backtick fence verbatim — measured through GitHub's renderer
+in the spec's Assumptions: a `~~~` block containing ` ```bash hmad:exec ` renders as a plain code
+block. Tilde fences are tracked for bounding only; a **candidate** is always a backtick fence whose
+first info-string word is `bash`. A
 naive "any line starting with ``` toggles" is wrong and would corrupt the state on a document this
 feature must handle: CommonMark opens a fence with a run of *N* ≥ 3 backticks and closes it only
 with a run of ≥ *N*, so a fence opened with four backticks legitimately contains ``` lines as
 body text. This design's own documents contain exactly that shape, because they quote fenced
 examples. So:
 
-- an opening fence records `n = len(run)`; while open, only a line whose leading run is ≥ `n`
-  **and** carries no info string closes it;
+- an opening fence records its marker character and `n = len(run)`; while open, only a line
+  whose leading run is of the **same character** and ≥ `n` **and** carries no info string closes
+  it;
 - while `in_fence` is true, no line is examined as a heading or as an opener.
 
 That is what makes AC-1.6 structural rather than a special case: a body quoting
@@ -189,7 +199,9 @@ each unordered pair appears once as `overlap: <shorter> <longer>`, and the lines
 `(shorter, longer)`, so the same map always produces the same diagnostic.
 
 Any key with a count of zero is collected; if the collection is non-empty nothing is executed and
-every missing key gets its own detail line.
+every missing key gets its own detail line. **An empty key is refused here, in the API** —
+`BadSubstArg("")` — not only by the CLI parser: `str.replace("", v)` inserts `v` at every character
+boundary, and an in-process caller must meet the same wall `main` does.
 
 ### Execution
 
@@ -255,7 +267,7 @@ rather than raised from inside `finally` (which would replace whatever exception
 Because the timeout handler *records* `BlockTimeout` as a pending outcome rather than raising it
 (see the precedence paragraph under Architecture Overview), control always reaches the statement
 after the `try`/`finally`, where the helper reads the directory back: `os.path.lexists(cwd)` must be
-false. If it is not — a recorded `OSError`, or a directory that is somehow still there —
+false. If it is not — **or** an `OSError` was recorded, whichever alone —
 `CleanupFailed(cwd, cleanup_error)` is raised and `main` prints `DOCBLOCK: CLEANUP_FAILED path=<p>`,
 exit 2. **Its causal data is two named things, never one overloaded slot:** the `cleanup_error`
 attribute is the recorded `OSError`, or `None` when nothing was raised and the read-back alone
@@ -299,7 +311,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 28 mutations plus the AC-5.3 self-check (29 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 31 mutations plus the AC-5.3 self-check (32 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -443,7 +455,13 @@ so an existing artifact is overwritten, never appended. On `TIMEOUT` or `CLEANUP
 written to either handle and pre-existing artifacts are untouched. A failure *in* that final write
 can therefore only be an error on an open descriptor (disk full, I/O error) and maps to
 `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2; the `rc` is not reported,
-because the artifact the caller was promised does not exist. **Aliasing is judged on the opened
+because the artifact the caller was promised does not exist. **The writes are ordered and the
+partial state is reported, not rolled back**: stdout is written first, then stderr; if the second
+fails, the first stays as written (its old contents were truncated in place, so there is nothing
+to restore) and the detail lines read `written: stdout` / `failed: stderr`. **Both writes go
+through one module function, `_final_write(handle, text)`** — the seam the AC-3.8 tests
+fault-inject, since no real mechanism makes a held descriptor fail deterministically on macOS
+(no `/dev/full`). **Aliasing is judged on the opened
 descriptors** (AC-3.9): once both handles are held, `os.fstat` on each gives `(st_dev, st_ino)`,
 and equality is `StreamPathsAlias` — a symlink, a `./x`/`x` spelling and a **hard link** all
 collapse to one inode, and because the comparison is on the descriptors there is no
@@ -465,7 +483,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: BAD_SUBST arg=<raw>` (+ `duplicate_key: <k>`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 0 | a key is absent from the block |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 0 | one key is a substring of another |
-| `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` resolve to one path |
+| `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` name one inode (`fstat` on the reserved handles) |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
 | `DOCBLOCK: BAD_INFO key=<k>` | 0 | unrecognised info-string token |
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 0 | the block outran its bound (either race in AC-5.5 included) |
@@ -528,7 +546,7 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **Four named exceptions, all fault injections on a call whose *failure* is under test,
+stub out. **Five named exceptions, all fault injections on a call whose *failure* is under test,
 all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real:** the AC-5.5
 `killpg` race is a timing window between `TimeoutExpired` and the kill that no fixture can hold
 open, so its test patches `os.killpg` to raise `ProcessLookupError` (and, for AC-4.6's `reap`
@@ -538,7 +556,9 @@ permission failure is skipped under root and the two guards need mutants only on
 and AC-4.6's `mkdtemp` stage patches `tempfile.mkdtemp` to raise and, separately, `os.chmod` to
 raise (AC-3.13's post-creation failure, which must remove the directory it just created). The
 `spawn` stage needs no mock: the test sets `PATH` to an empty directory and `bash` is genuinely
-not found. The drain race needs no mock, because a real
+not found. The fifth is the module's own `_final_write(handle, text)` seam, patched to raise
+`OSError` for AC-3.8's post-run write failure — the one call for which no real fault exists on
+this platform. The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -553,11 +573,11 @@ are the real process's, not a return value — the same shape `test_skill_candid
 
 | ACs | Tests |
 |---|---|
-| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
+| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, and a `~~~` fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: stdout` / `failed: stderr` detail lines |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path **and a preamble file containing an invalid UTF-8 byte** → `UNREADABLE reason=preamble_unreadable`, and the block leaves no side effect |
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
@@ -608,9 +628,12 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `drain-unbounded` | the post-kill `communicate` has no timeout | `test_timeout_drain_is_bounded_against_an_escapee` (AC-5.5) |
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
 | `chmod-failure-unwrapped` | a failing `os.chmod` propagates and the created cwd is left behind | `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (AC-3.13/4.6) |
+| `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a quoted ```bash opener inside one is a candidate | `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` (AC-1.6) |
+| `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
+| `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
 
-Twenty-nine rows: twenty-eight mutations plus the AC-5.3 self-check; a guard added later without a
+Thirty-two rows: thirty-one mutations plus the AC-5.3 self-check; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
 
@@ -721,3 +744,4 @@ mean the probe never created one.
 - v1.20: Design audit v12 (codex must 2; agy must 3): verification commands run the docsections.json harness and the status-preserving suite gate; Invariant Compliance names LAUNCH_FAILED among the exit-2 classes.
 - v1.21: Design audit v13 (codex must 2; agy clean): the helper mutation spec is enumerated — 27 entries with mechanism and the named RED test each — and the timeout-vs-cleanup precedence is carried by an injected test that runs everywhere, with the permission fixture as its root-skipped sibling.
 - v1.22: Design audit v14 (codex must 5; agy must 2): timeout validated before mkdtemp in the diagram and prose; LAUNCH_FAILED in the diagram's partition; chmod-failure test and mutation (29 rows); invalid-UTF-8 document and preamble cases in the Test Plan; four named fault injections.
+- v1.23: Design audit v15 (codex must 5 should 2; agy clean): tilde fences tracked with the marker character; cleanup failure on recorded error OR read-back; _final_write seam as the fifth injection with ordered writes and reported partial state; empty key refused in substitute; alias row worded on inodes; three new mutations (32 rows).

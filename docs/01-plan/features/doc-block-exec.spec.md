@@ -42,10 +42,15 @@ not opted in.
     limitation is accepted rather than discovered.
   - AC-1.6: A tag appearing inside a fence body (a fence that quotes ` ```bash hmad:exec ` as
     text) is not treated as an opening fence, **including when the enclosing fence uses a longer
-    backtick run** — a four-backtick fence legitimately contains ``` lines as body text.
+    backtick run** — a four-backtick fence legitimately contains ``` lines as body text — **and
+    including when the enclosing fence is a tilde fence** (`~~~`), which CommonMark defines as a
+    fence too and which can quote a backtick fence verbatim. Tilde fences are tracked for bounding
+    only; a candidate is always a backtick fence with `bash` as its first info-string word.
+    Measured through GitHub's own renderer (`POST /markdown`, below): a `~~~` block quoting
+    ` ```bash hmad:exec ` renders as a plain code block, not as an opened bash fence.
   - AC-1.7: **Duplicate headings refuse.** If the document contains more than one heading whose
-    text and level both match, nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>`,
-    exit 0. Two identical headings share one address, and silently taking the first would run a
+    text and level both match, nothing is executed: `DOCBLOCK: AMBIGUOUS_HEADING count=<n>
+    heading=<h>`, exit 0. Two identical headings share one address, and silently taking the first would run a
     tagged block from the wrong section — the same silent-wrong-answer shape the tag exists to
     prevent, one level up, and the tag cannot repair an ambiguous *section* selector. Not
     hypothetical: `h-mad/invariants.example.md` already carries `### Unified-facade routing` and
@@ -104,7 +109,10 @@ not opted in.
     `DOCBLOCK: BAD_SUBST arg=<raw>` plus a `duplicate_key: <k>` detail line, never a last-wins
     overwrite. Both exit 0 (a refusal of readable input), execute nothing, and are judged before
     any artifact is reserved. Tests: `--subst K`, `--subst =V`, `--subst K=a --subst K=b`, and
-    `--subst K=a=b` (value `a=b`).
+    `--subst K=a=b` (value `a=b`). **The empty-key rule lives in the API, not only the CLI:**
+    `substitute(block, subs)` raises `BadSubstArg("")` for an empty key — `str.replace("", v)`
+    would insert `v` at every character boundary — so an in-process caller cannot bypass the
+    refusal the CLI enforces; `main` reaches the same rule through `substitute`.
 
 ### FR-3: Execute in a disposable cwd under a declared shell mode
 
@@ -143,7 +151,14 @@ not opted in.
     **overwritten** — truncated at the final write, as a shell `>` would — never appended; and a
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
-    over an artifact that does not exist. **No open ever truncates.** After every other refusal
+    over an artifact that does not exist. Streams are written stdout first, then stderr, and a
+    failure on the second **leaves the first as written** — no rollback, because the old artifact
+    was truncated in place and there is nothing to roll back to — with the detail line
+    `written: stdout` / `failed: stderr` naming the state of each, so the operator knows which
+    artifact is current (tested by failing the second write only). The final write goes through
+    one named module function, `_final_write(handle, text)`, which is the seam the test
+    fault-injects; no other mechanism can make a held descriptor fail deterministically on this
+    platform (macOS has no `/dev/full`). **No open ever truncates.** After every other refusal
     has passed — including substitution — both paths are opened for *append* and the handles
     held; the truncation is the final write itself (`seek(0); truncate(); write`) on those held
     handles, after a successful run. So a failure to reserve the second path finds the first
@@ -209,7 +224,11 @@ not opted in.
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
-    exception — the temp cwd is removed *and read back absent*. If removal fails, the API raises
+    exception — the temp cwd is removed *and read back absent*. **One rule selects the failure:
+    `CleanupFailed` is raised if a cleanup `OSError` was recorded OR the read-back finds the
+    directory present** — either alone suffices, so an `rmtree` that raised *after* removing
+    everything is still a failure (tested: a fault-injected `rmtree` that removes the tree and
+    then raises) and a silent retention is still a failure. On that rule the API raises
     `CleanupFailed(path, cleanup_error)` — the `cleanup_error` attribute is the `OSError` when
     one was raised, `None` when only the read-back caught a silent retention; `__cause__` is the
     pending outcome when there was one — the `BlockTimeout`, or a `LaunchFailed` from the reap
@@ -303,9 +322,9 @@ not opted in.
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
-    its test injects the fault by monkeypatching `os.killpg` — one of exactly **four** named
+    its test injects the fault by monkeypatching `os.killpg` — one of exactly **five** named
     fault injections this suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`,
-    `os.chmod`; the
+    `os.chmod`, and the module's own `_final_write` seam for AC-3.8's post-run write failure; the
     design's Test Strategy bounds the list, and `subprocess` is never mocked); (b) is driven by a
     real `os.setsid()` descendant.
 
@@ -393,16 +412,28 @@ not opted in.
 
 - `bash` is on PATH. Every recipe in these skills already assumes it.
 - The `hmad:exec` info string is inert to the markdown renderers in use. **Specification-backed,
-  not measured here**: CommonMark §4.5 (Fenced code blocks) defines the info string as the text
-  after the opening fence and states that its first word is what is used as the language, and
-  GitHub-flavoured Markdown inherits that rule; but this repository contains **no** fence with a
-  multi-word info string today (measured: `grep -rn '^```bash [^ ]' h-mad handoff` excluding
-  `archive/` → 0), so nothing in the tree demonstrates the two renderers' behaviour, and no local
-  renderer is installed to probe (`import markdown` → `ModuleNotFoundError`). The assumption is
-  therefore **unverified by observation** and is confirmed at Phase 5 by an operator step: after
-  the one tag lands, open `h-mad/SKILL.md` in the Claude Code viewer and on GitHub and confirm the
-  gate block still renders as bash. The exposure is one line, reversible by deleting the tag, and
-  the operator is asked to direct if either renderer misbehaves.
+  measured on GitHub's real renderer and on the CommonMark reference port** — the repository
+  itself contains no multi-word info string to point at (`grep -rn '^```bash [^ ]' h-mad handoff`
+  excluding `archive/` → 0), so the renderers were probed directly. GitHub's `POST /markdown`
+  endpoint is the renderer github.com uses:
+
+  ```
+  $ printf '%s' '{"text":"# T\n\n```bash hmad:exec shell=plain\necho hi\n```\n\n~~~\n```bash hmad:exec\nquoted\n```\n~~~\n","mode":"gfm"}' > /tmp/gh_md.json
+  $ curl -s -X POST -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" --data @/tmp/gh_md.json https://api.github.com/markdown
+  <h1>T</h1>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c1">echo</span> hi</pre></div>
+<pre class="notranslate"><code class="notranslate">```bash hmad:exec
+quoted
+```
+</code></pre>
+  ```
+
+  The tagged fence is highlighted as shell (`highlight-source-shell`), and the `~~~` block quoting
+  the tag is a plain code block — the two facts AC-1.6 and the info-string grammar rest on. The
+  CommonMark reference port agrees (`markdown-it-py 4.2.0`, throwaway venv:
+  `<code class="language-bash">` for the tagged fence, the tilde-quoted tag rendered as body). The
+  Claude Code viewer has no headless renderer to probe; it is a CommonMark viewer and the one-line
+  exposure is reversible, so it is confirmed by eye at Phase 5 after the tag lands.
 - The two extractors named in FR-6 are the only in-repo consumers that anchor on a bare
   ` ```bash\n ` opener in a file this feature tags. **Measured this session, tree-wide:**
 
@@ -450,3 +481,4 @@ not opted in.
 - v1.21: Design audit v11 (codex must 3; agy must 1): AC-2.8 gives --subst a parser contract (split once on the first '=', empty key and repeat refused as BAD_SUBST); AC-3.13 adds os.chmod(cwd, 0o700) because mkdtemp alone is 0700 & ~umask (measured 0o0 under umask 0777) and tests under a hostile umask; AC-4.6's reap test reaps what it launched and the unsignalable-group policy is stated. 49 ACs.
 - v1.22: Design audit v12 (codex must 2; agy must 3): AC-5.5 names the three permitted fault injections instead of 'the one'; AC-3.14's __cause__ rule includes a reap-stage LaunchFailed; AC-6.4's tuple is the five consumer-file tests only.
 - v1.23: Design audit v14 (codex must 5; agy must 2): the renderer-inertness assumption is marked specification-backed but unmeasured (no multi-word fence in the tree, no local renderer) with a Phase-5 operator check; AC-5.5 names four permitted fault injections (os.chmod added); AC-3.13's chmod failure is tested and mutation-covered.
+- v1.24: Design audit v15 (codex must 5 should 2; agy clean + 1 nit): AC-1.6 covers tilde fences; AC-3.14's failure rule is 'recorded error OR read-back present'; the renderer assumption is now MEASURED on GitHub's POST /markdown and on markdown-it-py, command and output cited; AC-3.8 orders the writes, reports partial state, and names the _final_write seam (fifth injection); AC-2.8's empty-key rule lives in substitute; AC-1.7 carries heading=.
