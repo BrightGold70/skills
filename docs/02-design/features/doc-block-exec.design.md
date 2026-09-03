@@ -374,12 +374,13 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 43 mutations (43 rows: 41 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 48 mutations (48 rows: 46 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
 | Delegating bounder | `h-mad/tests/docsections.py` | modify | import the authoritative bounder; drop the duplicate `_fence_aware_end` (AC-1.8) |
+| Delegation spy test | `h-mad/tests/test_docsections.py` | modify | gains `test_docsections_delegates_to_the_authoritative_bounder`, the killer of `docsections.json`'s wire mutation and one of the seven floor-tuple node IDs (AC-1.8, AC-6.4) |
 | Bounder mutation spec | `h-mad/tests/mutation-specs/docsections.json` | modify | re-point `fence-tracking-removed` and `section-no-longer-owns-its-subsections` at `scripts/h_mad_doc_block_exec.py`; the other two anchors stay in `tests/docsections.py`; all four gain a `test` key (from their `_killed_by`) under a `target_command`; a fifth, `docsections-delegation-reverted` (local bounder restored, callee intact), is the Connection-enforcement wire mutation, killed by `test_docsections_delegates_to_the_authoritative_bounder` with the helper suite still green |
 
 ## Implementation Order
@@ -392,9 +393,9 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `h-mad/tests/test_h_mad_doc_block_exec.py` (new) and the matching rows of
    `h-mad/tests/mutation-specs/doc_block_exec.json` (new). **In the same task**,
    `h-mad/tests/docsections.py` drops `_fence_aware_end` and delegates through
-   `_dbe.fence_aware_end`, and `h-mad/tests/mutation-specs/docsections.json` is re-pointed,
-   converted to named-test form and run to `ALL_CAUGHT` (the author-together ordering the plan
-   requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. New-behaviour shape, plus one wire.
+   `_dbe.fence_aware_end`, `h-mad/tests/test_docsections.py` gains the delegation spy test, and
+   `h-mad/tests/mutation-specs/docsections.json` is re-pointed, converted to named-test form and
+   run to `ALL_CAUGHT` (the author-together ordering the plan requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. New-behaviour shape, plus one wire.
 2. **Task 2 — substitution.** `substitute` in `h-mad/scripts/h_mad_doc_block_exec.py`: simultaneous
    replacement, counts on the original text, missing-key collection, overlap and empty-key
    refusal, the empty-map no-op; its tests and mutation rows in the same two files as Task 1.
@@ -402,10 +403,13 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 3. **Task 3 — execution and bounding.** `run_block` and **`RunResult`** in
    `h-mad/scripts/h_mad_doc_block_exec.py`: temp cwd (`mkdtemp` + `chmod`, `cwd` `None` until
    created), shell modes, preamble composition, the `poll()`-then-`killpg` process-group timeout,
-   bounded drain, pending-outcome cleanup selection, `LaunchFailed`/`CleanupFailed`; tests and
-   mutation rows as above. Satisfies FR-3 and FR-5. Depends on Task 1.
+   bounded drain, pending-outcome cleanup selection, and the exceptions those paths raise —
+   `BadTimeout`, `BlockTimeout`, `LaunchFailed`, `CleanupFailed`; tests and mutation rows as
+   above. Satisfies FR-3 and FR-5. Depends on Task 1.
 4. **Task 4 — CLI and registry.** `main(argv)` in `h-mad/scripts/h_mad_doc_block_exec.py`: every
-   verdict line in the table below, argument-value validation, the two-arm stream reservation,
+   verdict line in the table below, argument-value validation (`--index`, `--shell-timeout`,
+   `--subst` syntax), the strict-UTF-8 pre-spawn read of `--preamble-file` (`PreambleUnreadable`),
+   the two-arm stream reservation,
    descriptor alias check, `_final_write` with read-back verification, one closure path; and the
    Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two `SKILL.md`
    mutation rows land here). Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
@@ -471,7 +475,11 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
     skipping fenced blocks under the full CommonMark fence rule: backtick AND
     tilde runs of >= 3, closed only by the same character at >= the opening
     length, opener and closer indented 0-3 spaces (4+ is an indented code
-    block, never a fence). The bounder `extract` uses, exported so
+    block, never a fence). Fence state is established over text[:start] first,
+    so `start` may lie anywhere -- inside an open fence included -- and a
+    fenced `#` after an arbitrary offset is never read as a heading; that is
+    the contract `docsections.section_from` needs for its symbol-anchored
+    offsets. The bounder `extract` uses, exported so
     `h-mad/tests/docsections.py` can delegate to it (AC-1.8)."""
 ```
 
@@ -553,8 +561,11 @@ the OS write (and even the truncate) until `flush()` or `close()`, and an `OSErr
 close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
 so an existing artifact is overwritten, never appended. **The write is then verified, not
 trusted**: after `_final_write` returns, `main` re-reads each requested artifact
-(`Path(path).read_text(encoding="utf-8")`) and compares it to the stream text; a missing file or a
-mismatch is `StreamWriteFailed` with `verify: <stream>` in its detail, so a writer that silently
+(`Path(path).read_bytes()`) and compares those bytes to the exact bytes it wrote,
+`text.encode("utf-8", errors="replace")` — byte-for-byte, never a decoded `str` comparison, so a
+changed or malformed byte is a mismatch rather than a `UnicodeDecodeError` escaping the mapped
+region; a missing file, an `OSError` on the read, or a mismatch is `StreamWriteFailed` with
+`verify: <stream>` in its detail, so a writer that silently
 did nothing — or an artifact that vanished between close and verdict — can never be reported as
 `RAN` (the base mutation-verification rule, applied to the helper's own output; mutation
 `final-write-not-verified`). On `TIMEOUT` or `CLEANUP_FAILED` nothing is
@@ -752,6 +763,10 @@ test pins the wire, not the callee — and the harness records both runs.
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
 | `empty-map-not-short-circuited` | the empty-map guard is removed, so `{}` compiles a `""` alternation | `test_empty_substitution_map_is_a_no_op` (AC-2.2) |
 | `duplicate-info-token-last-wins` | a repeated recognised token overwrites instead of refusing | `test_duplicate_info_tokens_refuse` (AC-3.7) |
+| `index-nonint-unmapped` | `main` lets a non-integer `--index` raise `ValueError` instead of `BAD_INDEX` | `test_non_integer_index_is_bad_index` (AC-1.9/5.6 — values are the contract's, grammar is argparse's) |
+| `timeout-nonnumeric-unmapped` | `main` lets a non-numeric `--shell-timeout` raise instead of `BAD_TIMEOUT` | `test_non_numeric_timeout_is_bad_timeout` (AC-5.6) |
+| `doc-decode-error-unwrapped` | the document read drops `UnicodeDecodeError` from the `DocUnreadable` wrap (or reads with `errors="replace"`) | `test_invalid_utf8_document_is_unreadable` (AC-3.12) |
+| `preamble-decode-error-unwrapped` | the preamble read drops `UnicodeDecodeError` from the `PreambleUnreadable` wrap | `test_invalid_utf8_preamble_is_unreadable` (AC-3.12) |
 | `unknown-info-key-ignored` | an unrecognised token falls back to strict | `test_unknown_info_key_refuses` (AC-3.7) |
 | `strict-flags-dropped` | `bash -c` always, never `-euo pipefail` | `test_unset_variable_fails_under_strict` (AC-3.3) |
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
@@ -776,6 +791,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `chmod-rollback-unguarded` | the chmod failure removes the cwd outside the `finally` selection, so a failing removal is a traceback | `test_chmod_rollback_failure_is_cleanup_failed` (AC-3.13/3.14) |
 | `body-indent-not-stripped` | `extract` returns fence body lines with the opener's indentation still on them | `test_indented_fence_body_is_deindented` (AC-1.6 — exact text at 1, 2 and 3 spaces, plus a body line indented less than the opener) |
 | `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_bounder_ignores_an_indented_literal_fence` (AC-1.8 — the bounder's own contract; `test_indented_literal_tag_is_not_a_candidate` pins the extractor side of the same rule under AC-1.6) |
+| `prefix-fence-state-skipped` | `fence_aware_end` starts its fence state at `start` instead of scanning `text[:start]` first | `test_bounder_from_an_offset_inside_a_fence` (AC-1.8 — `section_from` anchored inside a fenced block must not end at a fenced `#`) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
@@ -783,7 +799,7 @@ test pins the wire, not the callee — and the harness records both runs.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Forty-three rows, forty-three mutations — forty-one of the helper's source (the AC-5.3 row, once
+Forty-eight rows, forty-eight mutations — forty-six of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -911,3 +927,4 @@ mean the probe never created one.
 - v1.33: Design audit v26 (codex must 1; agy must 4 should 1): cwd is None until mkdtemp returns; simultaneous single-pass substitution with the replacement-sequential mutation; os.open wording in the exception and mutation tables; closer-trailing-text rule and mutation; docsections migration assigned to Task 1; six consumer-file tests; 40 rows.
 - v1.34: Design audit v27 (codex must 2; agy must 2 should 2): substitution fixture discriminates the sequential mutant; artifacts are read back and compared after close (final-write-not-verified, 41 rows); StreamWriteFailed and LaunchFailed carry the fields the dispatcher prints; pgid on the reap verdict; seven-test floor tuple.
 - v1.35: Design audit v28 (codex must 1 should 2; agy must 2 should 1 + nit): empty-map short-circuit with its mutation; duplicate info tokens refused; SUBST_MISSING keys=<n>; mutation accounting (41 source + 2 SKILL.md = 43 rows); Implementation Order names select, RunResult and every exact file path.
+- v1.36: Design audit v30 (codex must 1 should 1; agy must 1 should 1 + nit): read-back compares bytes, never decoded text; fence_aware_end's prefix-state contract with test and mutation; test_docsections.py tracked in Components and Task 1; Task 3 names its exceptions, Task 4 the preamble read; four main/I-O mutation rows (48 rows).
