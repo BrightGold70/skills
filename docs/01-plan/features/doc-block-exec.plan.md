@@ -44,18 +44,26 @@ print the streams inline and break every consumer that parses the verdict line.
 [--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
 parser-rejection test, **and no abbreviated spellings**: the parser is built with
 `allow_abbrev=False`, so `--shell-t` or `--pre` are rejected rather than silently accepted as
-undocumented aliases (test: `test_cli_rejects_abbreviated_options`). `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
+undocumented aliases (test: `test_cli_rejects_abbreviated_options`). Argument *values* are
+validated by `main` and map to verdict lines — `--index` non-integer or below 1 → `BAD_INDEX`,
+`--shell-timeout` non-numeric, non-finite or not positive → `BAD_TIMEOUT value=<v>` (AC-5.6), both
+before any spawn; argparse's own usage error covers only *grammar* (unknown option, missing
+value) and is the documented single non-`DOCBLOCK` exit. `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
 **before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
 2, block not run (test: `test_cli_unreadable_preamble_refuses_before_running`, whose block has a
 side effect the test asserts is absent). The preamble and the block are composed as
-`preamble.rstrip("\n") + "\n" + block.text` — one newline boundary, always — so a preamble file
+`preamble.rstrip("\n") + "\n" + text′`, with `text′` the block text *after* substitution, so the
+preamble precedes what actually runs — one newline boundary, always — so a preamble file
 that lacks a trailing newline cannot fuse with the recipe's first line
 (test: `test_preamble_without_trailing_newline_still_precedes_the_block`, whose preamble sets a
 variable and ends without `\n`, and whose block's first line reads it). The registry entry carries a detail row for that reason
 like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
-reserved at the pre-check**: the writability check *is* `open(path, "w")` — it creates or
-truncates the file exactly as a shell `>` would, and the handle stays open through the run and is
-the handle the stream is finally written to. So "passed the pre-check, then failed the write" can
+reserved after every check**: each path is first probed writable without truncation (opened for
+append, closed) alongside the alias, index, timeout, info-string and preamble checks; only when
+all of them pass are both opened with `open(path, "w")` — creating or truncating exactly as a
+shell `>` would — and those handles stay open through the run and are what the streams are
+finally written to. So a refusal on any check leaves a pre-existing artifact intact, and a
+truncation is always followed by a run. So "passed the pre-check, then failed the write" can
 only mean a write error on an already-open descriptor (disk full, I/O error), which maps to
 `UNREADABLE reason=stream_write_failed`, exit 2, after the run — the block's `rc` is lost with the
 artifact, which is the honest outcome, since the artifact the caller was promised does not exist.
@@ -186,7 +194,7 @@ planned against):
 | `extract` | `(doc: str \| Path, heading: str) -> list[Block]` | every tagged block under the heading, possibly empty; raises `DocUnreadable`, `BadInfoString`, `AmbiguousHeading` — never on count |
 | `select` | `(blocks, index: int \| None = None) -> Block` | raises `BlockNotFound` (0, or past the end), `AmbiguousBlock(n)` (>1, no index), `BadIndex(n)` (index < 1) |
 | `substitute` | `(text: str, subs: Mapping[str, str]) -> tuple[str, dict[str, int]]` | raises `MissingSubstitution`, `OverlappingSubstitution` |
-| `run_block` | `(block, *, subs=None, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)`; raises `BlockTimeout`, `CleanupFailed` |
+| `run_block` | `(block, *, subs=None, preamble=None, timeout=30.0) -> RunResult` | `RunResult(rc, stdout, stderr, shell)` with `str` streams decoded UTF-8 `errors="replace"`; raises `BadTimeout` (before spawn), `BlockTimeout`, `CleanupFailed` |
 | `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, fence-aware with backtick-run tracking; the bounder `extract` uses and `docsections` delegates to (AC-1.8) |
 
 `h-mad/tests/test_h_mad_collect_report_docs.py` changes at exactly two points, and **every call
@@ -437,7 +445,7 @@ the duplicate bounder is.
 
 ## Success Criteria
 
-- Every AC in the spec passes an automated test — **46 as of spec v1.13**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
+- Every AC in the spec passes an automated test — **47 as of spec v1.16**. The count is version-anchored on purpose: it has gone stale three times in this feature's audit cycles, and a bare number cannot distinguish "a criterion was dropped" from "the plan was not re-counted". Re-derive it (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'`) whenever the spec version moves.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
@@ -500,3 +508,4 @@ design begins.
 - v1.17: Plan re-audit v12 (codex must 2 should 1; agy clean): name the bounder fence_aware_end(text, start, level) -> int and its two call replacements in docsections; make every consumer call module-qualified (dbe.*) so the wire spies observe it, pinned by a no-from-import test; cite the collected and passing baseline (2747/2747 at 6b4df35) with commands.
 - v1.18: Plan re-audit v13 (codex must 3 should 1; agy clean): state the full CLI contract including --preamble-file and its pre-spawn refusal; cite the AC-3.14 cleanup probe (python3.11, euid 501) and add the root-skip plus fault-injected fallbacks; replace 'anchors pinned at impl-plan time' with the author-together / re-read / harness / named-RED ordering; define stream overwrite and reservation semantics (stream_write_failed).
 - v1.19: Plan re-audit v14 (codex must 1 should 1; agy clean): preamble/block composition rule with its no-final-newline test; allow_abbrev=False with an abbreviated-option rejection test.
+- v1.20: Design audit v6 back-propagation: composition with the substituted text; probe-then-reserve stream artifacts; BAD_TIMEOUT and the values-vs-grammar CLI policy; RunResult streams are UTF-8/replace str.

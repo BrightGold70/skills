@@ -64,7 +64,9 @@ caller (test, or operator on the CLI)
         ▼ yes
    run_block()
         ├── mkdtemp(0700) ──────────────── cwd
-        ├── Popen(["bash", *flags, "-c", text'], start_new_session=True)
+        ├── validate timeout: finite, > 0 ──► else BAD_TIMEOUT (before spawn)
+        ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], start_new_session=True,
+        │         text=True, encoding="utf-8", errors="replace")
         ├── communicate(timeout) ─── TimeoutExpired ──► killpg(SIGKILL) [ESRCH = already reaped]
         │                                                 ──► drain communicate(DRAIN_SECONDS)
         │                                                     [expired: close pipes, wait()] ──► TIMEOUT
@@ -76,8 +78,9 @@ caller (test, or operator on the CLI)
 ```
 
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
-validation, ordinal validation, preamble readability and stream-path writability are all checked
-**before** `bash` is spawned. Exactly two exit-2 verdicts can follow a spawn — `TIMEOUT` and
+validation, ordinal validation, timeout validation, preamble readability and stream-path
+writability are all checked **before** `bash` is spawned, and stream artifacts are truncated only
+after the last of them passes. Exactly two exit-2 verdicts can follow a spawn — `TIMEOUT` and
 `CLEANUP_FAILED` — and both are operational errors about the run itself, so neither carries
 `rc=`; nothing that ran is reported as a measurement unless the cwd is gone.
 
@@ -228,7 +231,14 @@ timeout is already implied by the retained directory's contents being partial. T
 restores the subdirectory's mode and removes the tree in its own `finally`, so the suite does not
 leak what it just proved the helper cannot remove.
 
-`stdout` and `stderr` are captured separately (`subprocess.PIPE` each) and never merged.
+`stdout` and `stderr` are captured separately (`subprocess.PIPE` each) and never merged. **The
+launch is text-mode, and the policy is explicit**: `Popen(…, text=True, encoding="utf-8",
+errors="replace")`, so `communicate()` returns `str` (which is what `RunResult` promises and what
+the held artifact handles — opened `encoding="utf-8"` — accept), non-ASCII output round-trips, and
+an undecodable byte becomes U+FFFD instead of a `UnicodeDecodeError` escaping the helper (AC-3.6).
+**The bound is validated before the spawn** (AC-5.6): `timeout` must satisfy
+`math.isfinite(t) and t > 0`, else `BadTimeout(value)` — `communicate(timeout=-1)` raises
+`ValueError` only after the child exists, and `inf` is no bound at all.
 
 ## Components Changed / Added
 
@@ -325,8 +335,11 @@ test is the doc's block, unmodified; a recipe that consumes a variable its surro
 preamble is shell text run in the same invocation immediately before the block, so a variable the
 doc never claimed to define is bound before the recipe reads it — measured: without it the run still exits 0, still halts, and never reaches `GATE: PASS` — and it is deliberately a
 separate parameter rather than string-concatenation by the caller, so the doc's text and the
-fixture's text never blur. **Composition is `preamble.rstrip("\n") + "\n" + block.text`** when
-a preamble is given, and `block.text` alone otherwise: exactly one newline separates them, so a
+fixture's text never blur. **Composition is `preamble.rstrip("\n") + "\n" + text′`** when a
+preamble is given, and `text′` alone otherwise — where `text′` is `substitute(block.text, subs)`,
+the text that will actually run, never the unsubstituted fence body (the diagram's `text'`): the
+preamble is prepended *after* substitution, so a substituted path stays substituted when a preamble
+is present. Exactly one newline separates them, so a
 preamble file without a trailing newline cannot fuse with the recipe's first token and one with a
 trailing newline gains no blank line. **The combined invocation is what is measured** (AC-3.12): `rc`,
 `stdout` and `stderr` on the returned `RunResult` describe preamble-plus-block as one `bash -c`,
@@ -351,13 +364,20 @@ h_mad_doc_block_exec.py <doc> --heading <h> [--index N] [--subst K=V]...
 There is deliberately **no** `--all`, no `--dir`, and no glob-accepting argument. That absence is a
 requirement, not an oversight, and is pinned by a test asserting the parser rejects such input. The
 parser is `argparse.ArgumentParser(allow_abbrev=False)`, so the documented spellings are the only
-spellings — `--shell-t` is an error, not an alias — and a test asserts that too.
+spellings — `--shell-t` is an error, not an alias — and a test asserts that too. **Argument values
+are the contract's, argument grammar is argparse's**: `--index` and `--shell-timeout` are declared
+`type=str` and validated by `main` (`BAD_INDEX` / `BAD_TIMEOUT`), so a malformed value still gets
+one `DOCBLOCK:` line; only an unknown option or a missing value reaches argparse's usage error,
+the documented single non-`DOCBLOCK` exit 2.
 
-**Stream artifacts: reserved at the pre-check, overwritten, written through the held handle.** The
-writability pre-check is `open(path, "w")` on each of `--stdout`/`--stderr` — which creates or
-truncates the file exactly as a shell `>` does, so an existing artifact is overwritten, never
-appended — and the two handles stay open across the run and are what the streams are finally
-written to. A failure *after* the run can therefore only be a write on an open descriptor (disk
+**Stream artifacts: probed without truncation, reserved after every check, overwritten, written
+through the held handle.** The writability pre-check opens each of `--stdout`/`--stderr` for
+*append* and closes it — writable or not, nothing is emptied — and runs beside the alias, index,
+timeout, info-string and preamble checks. Only once all of them pass are both opened with
+`open(path, "w", encoding="utf-8")`, which creates or truncates exactly as a shell `>` does, so an
+existing artifact is overwritten, never appended, and a refusal on the second path can never have
+already emptied the first. Those two handles stay open across the run and are what the streams are
+finally written to. A failure *after* the run can therefore only be a write on an open descriptor (disk
 full, I/O error) and maps to `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2;
 the `rc` is not reported, because the artifact the caller was promised does not exist. Aliased
 paths are refused before either is opened (AC-3.9), so two distinct destinations cannot collapse
@@ -371,7 +391,8 @@ Verdict lines, one per run:
 | `DOCBLOCK: NOT_FOUND heading=<h>` | 2 | no tagged block, or `--index` past the end |
 | `DOCBLOCK: AMBIGUOUS blocks=<n> heading=<h>` | 2 | >1 tagged block, no `--index` |
 | `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading=<h>` | 2 | >1 heading matches text+level |
-| `DOCBLOCK: BAD_INDEX index=<n>` | 2 | `--index` below 1 |
+| `DOCBLOCK: BAD_INDEX index=<n>` | 2 | `--index` below 1, or not an integer |
+| `DOCBLOCK: BAD_TIMEOUT value=<v>` | 2 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
 | `DOCBLOCK: SUBST_MISSING key=<k>` + `missing_key: <k>` per key | 2 | a key is absent from the block |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 2 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` resolve to one path |
@@ -382,7 +403,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
 `RAN` is the only line carrying `rc=`; `AMBIGUOUS` is the only cannot-judge carrying `blocks=`.
-`blocks=`, `count=`, `index=` and `seconds=` are diagnostic values saying *why* judgement failed,
+`blocks=`, `count=`, `index=`, `value=` and `seconds=` are diagnostic values saying *why* judgement failed,
 which the count rule permits — a measured-result count (`rc=`) is what it forbids. Every exit-2
 line above is the list AC-4.2 enumerates, and the test that walks this table is what keeps the two
 from drifting apart.
@@ -401,7 +422,8 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `BlockNotFound` | `select` | `NOT_FOUND heading=<h>` |
 | `AmbiguousBlock(n)` | `select` | `AMBIGUOUS blocks=<n> heading=<h>` |
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading=<h>` |
-| `BadIndex(n)` | `select` | `BAD_INDEX index=<n>` |
+| `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index=<n>` |
+| `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING key=<k>` + a detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
 | `StreamPathUnwritable` | `main`'s pre-check (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
@@ -447,14 +469,15 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 2, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP` |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged; `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
-| AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a refusal on `--stderr` leaves a pre-existing `--stdout` file's bytes intact** (probe-then-reserve); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
+| AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path)` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** cannot-judge in the verdict table exits 2 (the test enumerates the table rather than hardcoding a count, so adding a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
+| AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 2, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by a `Popen` spy that must not fire — the third named fault-observation, read-only) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`: `os.killpg` monkeypatched to raise `ProcessLookupError` → still `TIMEOUT`, cwd absent, no traceback; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
-| AC-6.1–6.6 | tag present on the Second-surface fence; no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither); and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
+| AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across `h-mad/` and `handoff/` excluding `archive/`** (the plan's census sweep, asserting cardinality 1); no `re.findall(r"```bash` left in the consumer; the four migrated behaviours still pass; **the full suite passes AND its count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither); and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
 Verification commands:
 
@@ -546,3 +569,4 @@ mean the probe never created one.
 - v1.11: Plan re-audit v12 back-propagation: fence_aware_end signature in the API block and __all__; consumer calls module-qualified for the wire spies (Components + Test Plan).
 - v1.12: Plan re-audit v13 back-propagation: --preamble-file in the CLI line; stream artifacts reserved at pre-check with overwrite semantics and StreamWriteFailed; CleanupFailed carries its cause, with the two cleanup mutations and the tests that kill them; the second named fault injection (rmtree).
 - v1.13: Plan re-audit v14 back-propagation: composition rule in the preamble paragraph; allow_abbrev=False on the parser; Test Plan rows for both.
+- v1.14: Design audit v6 (agy must 1, codex must 2 should 2): composition uses text-prime (substituted); Popen text=True utf-8 replace; timeout validated finite and positive before spawn (BadTimeout/BAD_TIMEOUT); stream artifacts probed for append then reserved after every check; tree-wide single-tag cardinality test; Test Plan rows for each.

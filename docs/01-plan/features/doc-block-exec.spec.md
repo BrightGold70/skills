@@ -117,7 +117,10 @@ not opted in.
   - AC-3.5: A block whose pipeline fails mid-pipe returns non-zero under the strict default
     (`pipefail`) and rc 0 under `shell=plain`.
   - AC-3.6: The returned value carries `rc`, `stdout`, and `stderr` as separate fields; stdout and
-    stderr are not merged.
+    stderr are not merged. Both are `str`, decoded as UTF-8 with `errors="replace"`: a block that
+    prints non-ASCII text round-trips it, and a block that emits an undecodable byte
+    (`printf '\xff'`) yields U+FFFD in that position rather than a `UnicodeDecodeError` escaping
+    as a traceback. Stream artifact files are written UTF-8 the same way.
   - AC-3.7: An unrecognised info-string key (e.g. `shell=fish`, `mode=x`) on a fence that
     **carries `hmad:exec`** is a refusal — `DOCBLOCK: BAD_INFO key=<k>` — and exits 2, rather than
     being ignored as a default. A fence **without** the tag is never a candidate and its info
@@ -129,7 +132,10 @@ not opted in.
     **overwritten** — truncated at the pre-run check, as a shell `>` would — never appended; and a
     write that fails *after* the run (the artifact was reserved, the write itself failed) refuses
     with `DOCBLOCK: UNREADABLE reason=stream_write_failed`, exit 2, rather than reporting `RAN`
-    over an artifact that does not exist.
+    over an artifact that does not exist. The truncation happens only once every refusal has been
+    passed: both paths are first checked writable *without* truncating (opened for append and
+    closed), and only after every other check succeeds are they opened for writing — so a
+    refusal on the second path cannot have already emptied the first.
   - AC-3.9: `--stdout` and `--stderr` naming the **same path** refuses with
     `DOCBLOCK: UNREADABLE reason=stream_paths_alias`, exits 2, and **does not run the block** —
     one file cannot hold two streams verbatim, so the alternative is silently merging or
@@ -141,7 +147,10 @@ not opted in.
   - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
     the *same* invocation immediately before the block. It is fixture setup, never doc content:
     the block's own text is unchanged and is what the doc says. **Composition is
-    `preamble.rstrip("\n") + "\n" + block.text`** — a newline boundary is always inserted, so a
+    `preamble.rstrip("\n") + "\n" + text′`, where `text′` is the block's text *after* FR-2
+    substitution** — the preamble is prepended to what will actually run, never to the unsubstituted
+    fence body, so a substituted path is still substituted when a preamble is present (a test
+    drives both together). A newline boundary is always inserted, so a
     preamble file without a trailing newline cannot fuse with the recipe's first token, and a
     preamble that ends in one does not gain a blank line; a test drives the no-final-newline case.
     Without it the executing migration
@@ -192,8 +201,9 @@ not opted in.
   - AC-4.1: A successful run prints `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict|plain>` and exits
     **0**, including when the block's own `rc` is non-zero — the block's rc is data, not the tool's
     verdict.
-  - AC-4.2: `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `SUBST_MISSING`,
-    `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `CLEANUP_FAILED` and `UNREADABLE` each exit 2.
+  - AC-4.2: `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`,
+    `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `CLEANUP_FAILED` and `UNREADABLE`
+    each exit 2.
   - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
     non-measurement as a measured zero.
   - AC-4.4: `AMBIGUOUS` carries `blocks=<n>`; no other cannot-judge carries `blocks=`.
@@ -216,6 +226,16 @@ not opted in.
     no escape and was **vacuous**: that binary is absent on macOS, so it measured nothing.
   - AC-5.3: The source contains no invocation of `timeout` or `gtimeout`.
   - AC-5.4: The temp cwd is removed after a timeout, exactly as after a normal run.
+  - AC-5.6: **The bound is validated before anything is spawned.** `timeout` must be a finite
+    number greater than zero: `0`, a negative value, `nan`, `inf` and a non-numeric
+    `--shell-timeout` argument all refuse with `DOCBLOCK: BAD_TIMEOUT value=<v>`, exit 2, block
+    not run — `run_block` raises `BadTimeout(value)` before `Popen`. Left to `argparse` and
+    `communicate`, a negative value raises `ValueError` *after* the spawn and `inf` makes the
+    promised bound unbounded. On the CLI the value is taken as a string and validated by `main`,
+    so a non-numeric argument reaches the `DOCBLOCK:` contract rather than argparse's usage path;
+    the same policy makes a non-integer `--index` a `BAD_INDEX`. argparse's own exit-2 usage
+    error remains only for *grammar* — an unknown option or a missing value — and is documented
+    as the one non-`DOCBLOCK` exit.
   - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
     tested: (a) the group has already emptied by the time `killpg` runs — `ProcessLookupError`,
     reproduced on a reaped leader — is treated as "already reaped", never a traceback; (b) the
@@ -239,7 +259,10 @@ not opted in.
   `--out`/`--log`/`--timeout` — and running that block would dispatch a real agent, so it stays a
   text inspection deliberately. The executing migration and the first tag land together.
 - **Acceptance Criteria**:
-  - AC-6.1: The Second-surface gate block in `h-mad/SKILL.md` carries the `hmad:exec` tag.
+  - AC-6.1: The Second-surface gate block in `h-mad/SKILL.md` carries the `hmad:exec` tag, **and
+    it is the only fence in the tree that does**: a test counts opening fences carrying the tag
+    across `h-mad/` and `handoff/` (excluding `archive/`, the same sweep as the plan's fence
+    census) and asserts exactly one, so a second opt-in fence cannot arrive by accident.
   - AC-6.2: The **executing** path resolves its block through `h_mad_doc_block_exec`: `:270`'s
     hand-rolled `re.findall` and `run_recipe`'s inline `subprocess` are both gone. `:412` keeps a
     text scan and that is correct, not a leftover — it inspects an untagged block it must never
@@ -332,3 +355,4 @@ not opted in.
 - v1.13: Plan audit v11 + design audit v5 (codex must 2+4, agy must 9): AC-1.9 ordinal-below-1 refusal (BAD_INDEX), AC-3.14 verified cleanup (CLEANUP_FAILED), AC-5.5 timeout races (killpg ProcessLookupError, bounded drain against an escapee); AC-1.8 names the self-contained sys.path import and its collect-alone test; AC-4.2 lists every exit-2 verdict. 46 ACs.
 - v1.14: Plan re-audit v13 back-propagation: AC-3.8 states overwrite semantics and the post-run stream_write_failed refusal; AC-3.14's CleanupFailed carries its cause.
 - v1.15: Plan re-audit v14: AC-3.11 states the preamble/block composition rule (one newline boundary, always) and its no-trailing-newline test.
+- v1.16: Design audit v6 (agy must 1, codex must 2 should 2): AC-3.11 composes the preamble with the substituted text; AC-5.6 validates the bound before spawn (BAD_TIMEOUT) and states the values-vs-grammar CLI policy; AC-3.6 pins UTF-8/replace str streams; AC-6.1 asserts tree-wide tag cardinality 1; AC-3.8 probes stream paths without truncation and reserves after every check. 47 ACs.
