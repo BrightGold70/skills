@@ -238,7 +238,7 @@ fire), while the helper's own suite stays green under that revert, which is the 
 test pins the wire and not the callee. The re-pointed callee mutations are the behaviour half;
 this row is the connection half, and the invariant requires both. **Ordering, since the
 source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
-— the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
+**A sixth pins the import that carries the wire**: `docsections-syspath-setup-removed` deletes the `sys.path.insert` that makes `docsections.py`'s delegating import self-contained, and is killed by `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — a fresh `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — so collection can never depend on another module's `sys.path` side effect. — the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
 lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
 and records the named RED test in every mutation's `test` key before the task closes. A mutation
 without a `test` key, or a harness run that is deferred to "later", is the silent no-op this
@@ -313,6 +313,7 @@ carries them fully qualified.
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned by a mutant that breaks it) |
 | `consumer-from-import` | the consumer's `import h_mad_doc_block_exec as dbe` becomes `from h_mad_doc_block_exec import extract, select, run_block` with bare calls | `test_consumer_calls_the_helper_module_qualified` — the source carries no `from h_mad_doc_block_exec import`, so the spies above stay observable (AC-6.5's precondition, pinned) |
 | `hand-rolled-extraction-widened` | a second `re.findall(r"```bash…")` is introduced on the executing path (`_gate_bash_block` falls back to it) | `test_only_the_exec_scan_hand_rolls_extraction` — exactly one `re.findall(r"```bash` remains in the file, the `:412` scan (AC-6.2's exemption cannot widen) |
+| (bound in `docsections.json`, not here) | `docsections-syspath-setup-removed` | `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` — the delegating import's own `sys.path.insert` deleted; a fresh process with only the tests dir on `sys.path` must still import `docsections` (not a floor-tuple node: it lives in the new module) |
 | (bound in `docsections.json`, not here) | `docsections-delegation-reverted` | `tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder` — listed here so the FR-6 table names all **seven** node IDs the AC-6.4 floor tuple counts |
 
 Under `wire-revert-extract` and `wire-revert-run` the helper's own suite
@@ -744,3 +745,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.51: Design audit v43 back-propagation (spec v1.38): _close_stream backstop with the stream_close_failed selection and its two tests/mutations; the ENOTDIR reservation test; 59 mutations (57 + 2).
 - v1.52: Design audit v44 back-propagation: 60 mutations (58 + 2).
 - v1.53: Design v1.51 back-propagation: 61 mutations (59 + 2).
+- v1.54: Plan re-audit v40 (codex must 1; agy clean): docsections.json gains docsections-syspath-setup-removed bound to test_docsections_imports_from_an_unrelated_cwd (six rows).
