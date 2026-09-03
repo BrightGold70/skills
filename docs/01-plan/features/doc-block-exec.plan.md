@@ -67,7 +67,10 @@ like every other emittable line (AC-4.5). **Stream artifacts have overwrite sema
 reserved after every check, and no open ever truncates**: after extraction, selection,
 substitution and every remaining pre-spawn validation (timeout, preamble readability — the info
 string was validated inside `extract` and the ordinal inside `select`) have passed, both paths are
-opened for *append*, the handles held, and only then compared for aliasing on their descriptors — append creates a missing file
+reserved with the atomic create-or-open protocol the design specifies (exclusive create records
+ownership; `FileExistsError` → open the existing file *without* `O_CREAT`; `ENOENT` there →
+restart the exclusive create, so every file this call creates is recorded as created), the
+handles held, and only then compared for aliasing on their descriptors — append creates a missing file
 and never empties an existing one. The truncation is the final write itself — `seek(0);
 truncate(); write; flush(); close()`, all five inside the module's `_final_write(handle, text)`,
 because a buffered `TextIOWrapper` may defer the OS write until `flush()`/`close()` and an error
@@ -190,8 +193,9 @@ at `level` or shallower after `start`, ignoring fenced blocks with CommonMark ba
 tracking — exported in the module's `__all__` beside `extract`/`select`/`substitute`/`run_block`,
 and the same function `extract` uses to bound its own section. The two call sites replace
 one-for-one: `titled_section` returns
-`text[match.end():fence_aware_end(text, match.end(), level)]` and `section_from` returns
-`text[offset:fence_aware_end(text, offset, level)]`; `_fence_aware_end` is deleted. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
+`text[match.end():_dbe.fence_aware_end(text, match.end(), level)]` and `section_from` returns
+`text[offset:_dbe.fence_aware_end(text, offset, level)]` — module-qualified, as the paragraph
+below requires; `_fence_aware_end` is deleted. Two tests pin it: `pytest h-mad/tests/test_docsections.py -q` run as a subprocess from the
 repo root (collected **alone**), and an isolated `python3 -c "import docsections"` with the tests
 directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves with the code:**
 `h-mad/tests/mutation-specs/docsections.json` anchors three of its four mutations
@@ -339,7 +343,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 39 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 39 mutations, every one a source mutation with a full-node-ID `test` binding, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -390,6 +394,13 @@ bash fences: 68 across 10 files
 
 Control, to show the counter is not under-matching — the same sweep counting opening fences of
 *every* language must return a strictly larger number, and does: **83**.
+
+**Re-measured 2026-09-03 at `a469493`, from the repository root: `68 across 10 files`, control
+`83` — unchanged.** A plan audit reported `49 across 2 files` (27 in `h-mad/SKILL.md`, 22 in
+`handoff/SKILL.md`); that is the count the script returns when run from a **subdirectory**, where
+`p.parts[0]` is no longer `h-mad`/`handoff` for the nested references and only the two top-level
+`SKILL.md` files survive the filter. The script is correct from the root, which is where its
+`Path('.')` assumes it runs; a reviewer re-running it must do so from the root.
 
 **The extractor census (2).** The consumers that would break when a fence is tagged:
 
@@ -661,3 +672,4 @@ design begins.
 - v1.33: Plan re-audit v18 (codex must 1; agy clean): docsections.json test keys are full node IDs; 38 source mutations; FR-4 summary states the invariant's class rather than claiming it names the tokens.
 - v1.34: Plan re-audit v19 (both surfaces clean; agy nit): the delegation spy is installed on docsections._dbe.
 - v1.35: Plan re-audit v20 (codex must 2; agy clean): the body de-indentation rule on extract with its test and mutation; _final_write flushes and closes inside the mapped region; both stream-failure branches; invalid-UTF-8 preamble test; CLEANUP_FAILED os_error detail; 39 mutations.
+- v1.36: Plan re-audit v21 (codex must 2 should 1, one must REFUTED — the census re-measures 68/10 from the root, the reported 49/2 is a subdirectory run; agy clean + nit): the reservation protocol carried into the plan; the mutation matrix pointed at by section; _dbe. prefix in the docsections pseudocode.

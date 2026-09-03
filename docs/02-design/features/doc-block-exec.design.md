@@ -496,9 +496,16 @@ reserved descriptors** → spawn. Reservation opens `--stdout` then `--stderr` w
 `open(path, "a", encoding="utf-8")` and holds both handles: append creates a missing file and
 never empties an existing one, so there is no moment at which one artifact is truncated while the
 other is still unreserved. **Creation is detected atomically, not by an `exists()` check**: the
-reservation first tries `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` — success means
-this call created the file — and on `FileExistsError` retries without `O_EXCL`; the descriptor is
-wrapped with `os.fdopen(fd, "a", encoding="utf-8")`. If the second reservation fails, the first
+reservation is a two-arm loop: try `os.open(path, O_WRONLY | O_APPEND | O_CREAT | O_EXCL)` —
+success means this call created the file and records `created=True`; on `FileExistsError` try
+`os.open(path, O_WRONLY | O_APPEND)` **without `O_CREAT`** — success means a pre-existing file
+(`created=False`); on `FileNotFoundError` there (the file vanished between the two opens) go back
+to the exclusive-create arm. Because the second arm can never create, every file this call
+creates is created by the exclusive arm and recorded as such — a plain retry with `O_CREAT`
+would create a fresh file and mis-record it as pre-existing, which is exactly what a later refusal
+must not leave behind. The loop is bounded (three round trips, then `StreamPathUnwritable`), and
+`O_NOFOLLOW` is not used: a symlinked artifact path is legitimate and the alias check below judges
+what it resolves to. The descriptor is wrapped with `os.fdopen(fd, "a", encoding="utf-8")`. If the second reservation fails, the first
 handle is closed and — only if `O_EXCL` succeeded for it — unlinked, so a pre-existing artifact
 keeps every byte, a refusal leaves no new empty file, and there is no window in which another
 process's file could be mistaken for one this call created. The truncation is the final write itself:
@@ -521,7 +528,15 @@ has its test (`test_first_stream_write_failure_skips_the_second`,
 `test_second_stream_write_failure_leaves_the_first_as_written`). **Both writes go
 through one module function, `_final_write(handle, text)`** — the seam the AC-3.8 tests
 fault-inject, since no real mechanism makes a held descriptor fail deterministically on macOS
-(no `/dev/full`). **Aliasing is judged on the opened
+(no `/dev/full`). **Every held handle has exactly one closure path**: `main` holds the two
+reservations in a `try`/`finally` that spans the alias check, `run_block` and the final writes,
+and the `finally` closes any handle `_final_write` has not already closed (closing an
+already-closed handle is a no-op). So `TIMEOUT`, `CLEANUP_FAILED`, `LAUNCH_FAILED`, an alias
+refusal, and an exception inside the first `_final_write` all release both descriptors before
+`main` returns — a repeated CLI use in one process cannot leak descriptors and turn a later
+reservation into `stream_path_unwritable`. `test_stream_handles_are_closed_on_every_path` drives
+`TIMEOUT` and the first-write failure and asserts both descriptors are closed (via the recording
+`os.open` count and `fstat` raising `OSError` on the closed fds). **Aliasing is judged on the opened
 descriptors** (AC-3.9): once both handles are held, `os.fstat` on each gives `(st_dev, st_ino)`,
 and equality is `StreamPathsAlias` — a symlink, a `./x`/`x` spelling and a **hard link** all
 collapse to one inode, and because the comparison is on the descriptors there is no
@@ -843,3 +858,4 @@ mean the probe never created one.
 - v1.29: Design audit v22 (codex must 2; agy clean + 2 nits): the binding rule (root, command, target_command, full node IDs) stated for all three specs; the AC-5.3 row is a real argv mutation; the wire spec's three mutations enumerated.
 - v1.30: Design audit v23 (codex should 1; agy must 2 should 2): the two bounder-contract tests bind the tilde and indentation mutations; fence_aware_end's docstring states the full rule; _final_write flushes and closes inside the mapped region; O_EXCL creation detection; CLEANUP_FAILED os_error detail; the stale differential-test phrase removed.
 - v1.31: Design audit v24 (codex must 1 should 1; agy nit): the AC-4.6 reap test's handle seam (recording Popen pass-through) and exact teardown order; stdout-first write-failure branch; body de-indentation in extract with body-indent-not-stripped (39 rows); the three-classes sentence lists three.
+- v1.32: Design audit v25 (codex must 1 should 1; agy clean): two-arm create-or-open loop (exclusive create, else open without O_CREAT, ENOENT restarts) so every created file is recorded; one closure path for both reservations across every exit, with its test.

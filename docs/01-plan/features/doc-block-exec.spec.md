@@ -174,8 +174,10 @@ not opted in.
     has passed — including substitution — both paths are opened for *append* and the handles
     held; the truncation is the final write itself (`seek(0); truncate(); write`) on those held
     handles, after a successful run. So a failure to reserve the second path finds the first
-    untouched (a file this call *created* while reserving is unlinked again, a pre-existing one
-    keeps every byte), and a run that ends in `TIMEOUT` or `CLEANUP_FAILED` leaves pre-existing
+    untouched (a file this call *created* while reserving — known atomically, because creation
+    happens only through an exclusive-create open and an existing file is opened without
+    `O_CREAT` — is unlinked again, a pre-existing one keeps every byte; every held handle is
+    closed on every exit path of the run, so no descriptor outlives a refusal or a failure), and a run that ends in `TIMEOUT` or `CLEANUP_FAILED` leaves pre-existing
     artifacts exactly as they were, because nothing is written on those paths. Tests: a
     pre-existing `--stdout` file is byte-identical after `--stderr` fails to reserve, and after a
     timeout.
@@ -510,3 +512,4 @@ quoted
 - v1.27: Design audit v21 (codex must 1): AC-5.5(a) is reproduced by a real fixture — a leader that exits behind an os.setsid() escapee — and the helper polls before killpg, because killpg on a zombie-only group raises PermissionError on macOS (measured); os.killpg is injected only for AC-4.6.
 - v1.28: Design audit v23 (codex should 1; agy must 2 should 2): AC-1.5 no longer names the impossible differential test; _final_write flushes and closes inside the mapped region; CLEANUP_FAILED carries an os_error detail line.
 - v1.29: Design audit v24 (codex must 1 should 1; agy nit): AC-3.8 specifies the stdout-first failure branch (failed/skipped detail lines with registry rows); AC-4.6's reap test obtains its handle through the recording Popen pass-through and states the teardown order.
+- v1.30: Design audit v25 (codex must 1 should 1; agy clean): AC-3.8 names the atomic create-or-open ownership rule and the single closure path for held handles.
