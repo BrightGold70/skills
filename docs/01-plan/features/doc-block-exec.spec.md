@@ -46,6 +46,12 @@ not opted in.
     including when the enclosing fence is a tilde fence** (`~~~`), which CommonMark defines as a
     fence too and which can quote a backtick fence verbatim. Tilde fences are tracked for bounding
     only; a candidate is always a backtick fence with `bash` as its first info-string word.
+    **Indentation follows CommonMark too**: a fence opener may be indented by at most three
+    spaces; a line indented four or more spaces is an indented code block, never a fence, so a
+    literal `    ```bash hmad:exec` (four spaces) is body text of an indented code block and is
+    never a candidate — a hostile fixture pins it. A closer obeys the same 0–3 rule, and the
+    opener's indentation is stripped from body lines only up to that count, as CommonMark
+    specifies.
     Measured through GitHub's own renderer (`POST /markdown`, below): a `~~~` block quoting
     ` ```bash hmad:exec ` renders as a plain code block, not as an opened bash fence.
   - AC-1.7: **Duplicate headings refuse.** If the document contains more than one heading whose
@@ -488,3 +494,4 @@ quoted
 - v1.23: Design audit v14 (codex must 5; agy must 2): the renderer-inertness assumption is marked specification-backed but unmeasured (no multi-word fence in the tree, no local renderer) with a Phase-5 operator check; AC-5.5 names four permitted fault injections (os.chmod added); AC-3.13's chmod failure is tested and mutation-covered.
 - v1.24: Design audit v15 (codex must 5 should 2; agy clean + 1 nit): AC-1.6 covers tilde fences; AC-3.14's failure rule is 'recorded error OR read-back present'; the renderer assumption is now MEASURED on GitHub's POST /markdown and on markdown-it-py, command and output cited; AC-3.8 orders the writes, reports partial state, and names the _final_write seam (fifth injection); AC-2.8's empty-key rule lives in substitute; AC-1.7 carries heading=.
 - v1.25: Design audit v16 (codex must 3; agy clean): AC-5.5's killpg fake really empties the group before raising; AC-3.13's chmod rollback goes through the ordinary cleanup selection so a failing removal is CLEANUP_FAILED.
+- v1.26: Design audit v17 (codex must 1; agy pass UNVERIFIED, dispatch rc=1): AC-1.6 states the CommonMark 0-3 space indentation rule for openers and closers; a four-space-indented literal tag is never a candidate.

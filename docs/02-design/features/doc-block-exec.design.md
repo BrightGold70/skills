@@ -150,6 +150,11 @@ with a run of ≥ *N*, so a fence opened with four backticks legitimately contai
 body text. This design's own documents contain exactly that shape, because they quote fenced
 examples. So:
 
+- an opener is recognised only when its marker run is preceded by **0–3 spaces** (CommonMark
+  §4.5): four or more spaces make the line an indented code block, so a literal
+  `    ```bash hmad:exec` is never an opener and never a candidate — the security boundary AC-1.6
+  states, restated for indentation; the same 0–3 rule applies to a closer, and up to the
+  opener's indentation is stripped from each body line;
 - an opening fence records its marker character and `n = len(run)`; while open, only a line
   whose leading run is of the **same character** and ≥ `n` **and** carries no info string closes
   it;
@@ -323,7 +328,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 33 mutations plus the AC-5.3 self-check (34 rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 34 mutations plus the AC-5.3 self-check (35 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -585,7 +590,7 @@ are the real process's, not a return value — the same shape `test_skill_candid
 
 | ACs | Tests |
 |---|---|
-| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, and a `~~~` fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
+| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, a `~~~` fence quoting the tag, and a four-space-indented literal tag (an indented code block, never an opener); **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
@@ -642,12 +647,13 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
 | `chmod-failure-unwrapped` | a failing `os.chmod` propagates and the created cwd is left behind | `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (AC-3.13/4.6) |
 | `chmod-rollback-unguarded` | the chmod failure removes the cwd outside the `finally` selection, so a failing removal is a traceback | `test_chmod_rollback_failure_is_cleanup_failed` (AC-3.13/3.14) |
+| `indented-opener-accepted` | a run preceded by 4+ spaces is treated as an opener | `test_indented_literal_tag_is_not_a_candidate` (AC-1.6) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a quoted ```bash opener inside one is a candidate | `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` (AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
 
-Thirty-four rows: thirty-three mutations plus the AC-5.3 self-check; a guard added later without a
+Thirty-five rows: thirty-four mutations plus the AC-5.3 self-check; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
 
@@ -760,3 +766,4 @@ mean the probe never created one.
 - v1.22: Design audit v14 (codex must 5; agy must 2): timeout validated before mkdtemp in the diagram and prose; LAUNCH_FAILED in the diagram's partition; chmod-failure test and mutation (29 rows); invalid-UTF-8 document and preamble cases in the Test Plan; four named fault injections.
 - v1.23: Design audit v15 (codex must 5 should 2; agy clean): tilde fences tracked with the marker character; cleanup failure on recorded error OR read-back; _final_write seam as the fifth injection with ordered writes and reported partial state; empty key refused in substitute; alias row worded on inodes; three new mutations (32 rows).
 - v1.24: Design audit v16 (codex must 3; agy clean): the killpg fake models an empty group (kill, wait, then raise); duplicate-key gets its own mutation; the chmod rollback runs inside the same try/finally selection with its own mutation and test (34 rows).
+- v1.25: Design audit v17 (codex must 1): 0-3 space indentation rule in the scanner, its hostile fixture and mutation (35 rows).
