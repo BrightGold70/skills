@@ -223,8 +223,8 @@ the harness's named-test form at the same time**: today the spec carries only `c
 informational `_killed_by` per mutation, which the harness does not execute — it scores "did the
 suite go red", the form this repo has already seen ship a wrong-catcher as `ALL_CAUGHT`. The
 conversion adds `"target_command": ["python3.11", "-m", "pytest", "-q"]` and moves each
-`_killed_by` value — already a **full node ID**, `tests/test_docsections.py::<name>`, the only
-form the harness can run as `target_command + [test]` — into that mutation's `test` key
+`_killed_by` value — already a **full node ID**, `tests/test_docsections.py::<name>` for the four rows and the delegation row, the only
+form the harness can run as `target_command + [test]` (the sixth row's key names the new module's `test_docsections_imports_from_an_unrelated_cwd`) — into that mutation's `test` key
 (`tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section`,
 `…::test_a_section_owns_its_subsections`, `…::test_section_from_bounds_an_offset_anchored_pin`,
 `…::test_a_missing_heading_fails_loudly`), so every mutation is credited only when *its* named
@@ -308,7 +308,9 @@ carries them fully qualified.
 | mutation | mechanism | killed by |
 |---|---|---|
 | `wire-revert-extract` | `_gate_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select` (and `_gate_bash_block` returns that string) (the pre-migration regex made **tag-tolerant** with `[^\n]*` — the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail on the tagged fence, and the wire, not the regex, is what this mutant must discriminate; helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — `monkeypatch.setattr(dbe, "extract", spy)` on the consumer's module-qualified alias, and the spy must have been called (AC-6.5) |
+| `wire-revert-select` | `_gate_block` keeps `dbe.extract` but takes `blocks[0]` (or raises locally) instead of `dbe.select`, callee intact | `test_gate_block_resolves_through_doc_block_exec` — the pin also spies `dbe.select` (one call, the extracted list, `index=None`) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and `monkeypatch.setattr(dbe, "run_block", spy)` fires (AC-6.5) |
+| `wire-revert-substitute` | `_run_recipe` rewrites the installed gate path with `str.replace` instead of `dbe.substitute`, callee intact | `test_recipe_runs_through_run_block` — the pin also spies `dbe.substitute` (one call, the gate block, the one-key map) |
 | `wire-unconditional` | the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences | `test_gate_block_refuses_an_untagged_recipe` — a fixture section whose gating block lacks the tag must raise `BlockNotFound` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned by a mutant that breaks it) |
 | `consumer-from-import` | the consumer's `import h_mad_doc_block_exec as dbe` becomes `from h_mad_doc_block_exec import extract, select, run_block` with bare calls | `test_consumer_calls_the_helper_module_qualified` — the source carries no `from h_mad_doc_block_exec import`, so the spies above stay observable (AC-6.5's precondition, pinned) |
@@ -746,3 +748,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.52: Design audit v44 back-propagation: 60 mutations (58 + 2).
 - v1.53: Design v1.51 back-propagation: 61 mutations (59 + 2).
 - v1.54: Plan re-audit v40 (codex must 1; agy clean): docsections.json gains docsections-syspath-setup-removed bound to test_docsections_imports_from_an_unrelated_cwd (six rows).
+- v1.55: Design v1.53 back-propagation: docsections.json binding sentence; eight wire mutations (wire-revert-select, wire-revert-substitute).

@@ -426,7 +426,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
 | Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 61 mutations (61 rows: 59 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
-| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
+| Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
 | Migrated consumer | `h-mad/tests/test_h_mad_collect_report_docs.py` | modify | drop hand-rolled extraction (AC-6.2); calls are module-qualified (`import h_mad_doc_block_exec as dbe` → `dbe.extract`/`dbe.select`/`dbe.run_block`) so the wire spies observe them |
@@ -884,7 +884,9 @@ bare `test_*` name is a nonexistent path to pytest, so the names in the table be
 `<name>` half and the spec carries them qualified. The same rule binds the other two specs:
 `tests/test_h_mad_collect_report_docs.py::<name>` in `doc_block_exec_wire.json` (whose `command`
 is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`) and
-`tests/test_docsections.py::<name>` in `docsections.json`. Exact `find` anchors are set from the
+`tests/test_docsections.py::<name>` in `docsections.json` for the five rows killed there, while its sixth row,
+`docsections-syspath-setup-removed`, is bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd`
+(a `test` key is a full node ID and may name any collectable file; the harness runs `target_command + [test]`). Exact `find` anchors are set from the
 landed source in the same task that lands it (the author-together ordering the plan states for
 `docsections.json`), each exact-once; the mechanism column is what the anchor must express.
 `ALL_CAUGHT` is required for all three.
@@ -895,7 +897,9 @@ table, restated here so the design enumerates every spec it names):
 | mutation | mechanism | killed by (`test` key, under `tests/test_h_mad_collect_report_docs.py::`) |
 |---|---|---|
 | `wire-revert-extract` | `_gate_block` resolves its block with a local, tag-tolerant `re.findall(r"```bash[^\n]*\n(.*?)```")` instead of `dbe.extract`/`dbe.select` (tag-tolerant so the mutant still resolves the tagged block and the wire, not the regex, is what fails), helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
+| `wire-revert-select` | `_gate_block` keeps `dbe.extract` but picks `blocks[0]` (or raises locally) instead of calling `dbe.select`, callee intact | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5 — the same pin also spies `dbe.select` and asserts one call with the extracted list and `index=None`) |
 | `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
+| `wire-revert-substitute` | `_run_recipe` rewrites the checkout path with `str.replace` instead of `dbe.substitute`, callee intact | `test_recipe_runs_through_run_block` (AC-6.5 — the same pin also spies `dbe.substitute` and asserts one call with the gate block and the `{installed gate path: quoted checkout path}` map) |
 | `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` (AC-6.2) |
 | `consumer-from-import` | `import h_mad_doc_block_exec as dbe` becomes a bare `from … import` with unqualified calls | `test_consumer_calls_the_helper_module_qualified` (AC-6.5 precondition) |
@@ -1115,3 +1119,4 @@ mean the probe never created one.
 - v1.50: Design audit v44 (codex must 2 should 1; agy clean, low-evidence): the post-spawn taxonomy is five outcomes with stream_close_failed between LAUNCH_FAILED stage=reap and TIMEOUT; the AC-4.6 reap test binds real_killpg before patching the process-global os; artifact verification is per stream before the next write, with verify-deferred-past-second-write and the extended read-back test; 60 rows (58 + 2).
 - v1.51: Impl-plan audit v2 back-propagation (codex must 4): the heading match runs over the scanner's prose lines only, with test_requested_heading_quoted_inside_a_fence_is_not_a_section_start and mutation heading-match-ignores-fence-state (61 rows: 59 + 2); Test Strategy states the transport split — seam-injected verdicts through main(argv) in-process, every real-input verdict through the subprocess, two subprocess tests pinning sys.exit(main()).
 - v1.52: Plan re-audit v40 back-propagation (codex must 1): docsections.json carries a sixth row, docsections-syspath-setup-removed, killed by test_docsections_imports_from_an_unrelated_cwd in the new module.
+- v1.53: Design audit v47 (codex should 1; agy must 1) + impl-plan audit v3 back-propagation (codex must 1): the docsections.json binding sentence names the sixth row's cross-file key; the wire spec has eight mutations — wire-revert-select and wire-revert-substitute killed by the existing pins, which now also spy dbe.select and dbe.substitute.
