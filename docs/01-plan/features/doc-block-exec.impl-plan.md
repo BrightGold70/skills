@@ -1,6 +1,6 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.89 — design cycle 78 / impl-plan cycle 29 back-propagation, commit fa4dbf2)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.90 — design cycle 79 / impl-plan cycle 30 back-propagation, commit d545046)
 > Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.52) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.83)
 > Branch target: feature/doc-block-exec
 
