@@ -455,8 +455,10 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    `wait()` would be unbounded (the state machine is: drain-with-timeout → close pipes → `wait()`
    iff the group was signalled; the AC-4.6 reap test asserts the bounded return, which is what
    proves that branch skips the wait),
-   and records `BlockTimeout` as the pending outcome exactly as the ordinary timeout path does —
-   nothing raises inside the handler, so the post-`finally` read-back still runs. The escapee is outside the reap by AC-5.2's
+   and leaves the pending `BlockTimeout` in place — the `TimeoutExpired` handler records it **on
+   entry, before the `poll()`**, so a later `poll()`/drain/close/`wait` failure has a pending
+   outcome to replace and attach as `__context__` (impl-plan v1.17 derivation); the drain itself
+   records nothing — and nothing raises inside the handler, so the post-`finally` read-back still runs. The escapee is outside the reap by AC-5.2's
    stated scope; what this bounds is the *helper's* wall time, which is now at most
    `timeout + DRAIN_SECONDS` plus process teardown, so FR-5's "every run is bounded" holds against
    an escapee rather than only against a well-behaved block. Partial output from a timed-out
@@ -1283,3 +1285,4 @@ mean the probe never created one.
 - v1.69: Design audit v64 (codex should 1 nit 1; agy must 1) + impl-plan audit v15 back-propagation: the :412 text scan is named with its file; the diagram shows substitute's (Block', counts) tuple and RunResult; the reservation rollback is verified by an lexists read-back that reports `leftover: <path>` on the stream_path_unwritable verdict, with test_rollback_unlink_failure_reports_leftover, mutation rollback-leftover-unreported and os.unlink as the eighth named seam — 71 rows (69 + 2).
 - v1.70: Impl-plan v1.16 back-propagation: the verdict and exception tables carry the `leftover: <path>` detail line and StreamPathUnwritable's leftover field.
 - v1.71: Design audit v65 (codex must 1; agy clean) + impl-plan audit v16 back-propagation: the design's own verification commands are bounded through hmad-dispatch run (600 s scoped/harness, 1200 s full suite); StreamPathUnwritable is StreamPathUnwritable(leftover=None), raised from the OSError; the pre-kill poll() has its own OSError guard mapped to stage=collect (test_poll_oserror_is_launch_failed_collect, mutation poll-oserror-unmapped) — 72 rows (70 + 2).
+- v1.72: Impl-plan v1.17 back-propagation: the TimeoutExpired handler records the pending BlockTimeout on entry, before poll(); the drain records nothing.
