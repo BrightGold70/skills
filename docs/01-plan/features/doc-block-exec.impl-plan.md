@@ -1,6 +1,6 @@
 # Implementation Plan: doc-block-exec
 
-> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.90 — design cycle 79 / impl-plan cycle 30 back-propagation, commit d545046)
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.90 — design cycle 79 / impl-plan cycle 30 back-propagation, commit 5819206)
 > Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.52) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.83)
 > Branch target: feature/doc-block-exec
 
@@ -1568,18 +1568,54 @@ def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunR
 
 **Dependencies on other tasks**: Tasks 1–4.
 
-**Expected RED split** (in prose): the RED commit adds `import h_mad_doc_block_exec as dbe` to the
-consumer (the six new tests need the alias; the import alone wires nothing). Both WIRE-PINs then
-fail with `NameError` — `_gate_block` and `_run_recipe` are new module-level names that do not
-exist until GREEN; the callee `dbe.run_block`/`dbe.extract` exists, so this is never an import
-error. `test_gate_block_refuses_an_untagged_recipe` fails the same way; `test_consumer_calls_the_helper_module_qualified`
-passes at RED only if the alias import was written module-qualified (it is a regression guard on
-the spelling); `test_only_the_exec_scan_hand_rolls_extraction` fails (two `re.findall(r"```bash`
-remain, `:270` and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails (zero tagged fences);
-`test_exec_block_scan_performs_no_execution` and `test_suite_floor_holds` are **regression guards**
-expected to pass at RED (the scan never executed, and the floor counts collected tests, which RED
-already adds); the four AC-6.3 behaviours are regression guards too. The call-record assertion
-of each WIRE-PIN is the failure mode of the 5e wire-scoped revert, not of RED. Four revert
+**Expected RED split** (in prose). **A wiring pin's RED must be an assertion about the caller's
+observable behaviour, never a missing symbol** — this document's own rule, and the one
+`h_mad_assemble_tdd.py:238-243` prints into every wiring dispatch. An earlier draft had both
+WIRE-PINs failing with `NameError` because `_gate_block` and `_run_recipe` did not exist yet; that
+proves the names are absent, not that the connection is (impl-plan audit v31). So Task 5's RED has
+two steps.
+
+**RED step 0 — a pure refactor, no `dbe` call, suite green.** Hoist today's legacy logic under the
+three new module-level names, so the callers exist and are callable before any pin runs:
+
+- `_gate_block() -> dbe.Block` resolves the block with today's `re.findall` over `_second_surface()`
+  and today's `"h_mad_audit_gate.py" in b` filter, wrapping the body as
+  `dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")`.
+- `_gate_bash_block() -> str` returns `_gate_block().text`, so the two text pins at `:281` and
+  `:368` keep their string.
+- `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` is the hoisted inline path: today's
+  `str.replace` for the checkout-path rewrite wrapped back into a `dbe.Block`, then
+  `subprocess.run(["bash", "-c", preamble + subbed.text], capture_output=True, text=True, timeout=60.0)`
+  under a function-local `import subprocess`, returning
+  `dbe.RunResult(rc=p.returncode, stdout=p.stdout, stderr=p.stderr, shell=subbed.shell)`.
+
+That scaffold is **exactly the composition of the four `wire-revert-*` bodies**, which the eight-row
+bullet above already writes out literally, so nothing new is invented here. Step 0 adds
+`import h_mad_doc_block_exec as dbe` — needed for the annotations and the three constructors, and
+for nothing else, since no `dbe` **call** exists yet — plus the six new tests. It changes no
+behaviour: the four AC-6.3 recipe behaviours pass across it.
+
+**RED step 1 — the pins fail on their call records, with the callers present and working.**
+WIRE-PIN 1 fails because its `extract` and `select` spies record **nothing**: `_gate_block` resolves
+the block without ever consulting the helper. WIRE-PIN 2 fails the same way on its empty
+`substitute` and `run_block` records. Both failures are assertions about what the caller did, which
+is the contract. Alongside them: `test_gate_block_refuses_an_untagged_recipe` fails, because the
+legacy path resolves a block regardless of the tag and never raises `dbe.BlockNotFound`;
+`test_only_the_exec_scan_hand_rolls_extraction` fails (two `re.findall(r"```bash` remain, `:270`
+and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails (zero tagged fences).
+`test_consumer_calls_the_helper_module_qualified` passes if the alias was written module-qualified,
+which makes it a regression guard on the spelling; `test_exec_block_scan_performs_no_execution` and
+`test_suite_floor_holds` are regression guards that pass (the scan never executed, and the floor
+counts collected tests, which RED already adds); the four AC-6.3 behaviours are regression guards
+too.
+
+**The symmetry is the proof.** The 5e connection-only revert is literally RED step 0's scaffold
+re-applied to the GREEN tree: apply all four `wire-revert-*` bodies and the consumer is back to
+step 0, with the helper and every test untouched. A pin that goes red at RED for a missing call
+record and red again under the revert for the same missing call record is discriminating the
+**connection**, not the presence of a name. The call-record assertion of each WIRE-PIN is now the
+failure mode at **both** ends — RED step 1 and the 5e revert — which is the point; it was
+previously described as the revert's alone, when RED failed on a `NameError` instead. Four revert
 directions, applied one at a time with helper and tests intact, each with the replacement body
 spelled out in the eight-row bullet above and each type-correct at the consumer's boundary:
 (1) `wire-revert-extract` — restore the tag-tolerant `re.findall` plus the `h_mad_audit_gate.py`
@@ -1600,7 +1636,7 @@ record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green
 recipe regression tests in the consumer stay green;
 then the opposite direction (`wire-unconditional`) must fail `test_gate_block_refuses_an_untagged_recipe`.
 
-**RED gate** (one command per file; both collect at RED, since the WIRE-PINs fail with a runtime `NameError` rather than an import error): `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_collect_report_docs.py -q` shows both WIRE-PINs and `test_gate_block_refuses_an_untagged_recipe` failing on `NameError` with the four AC-6.3 behaviours and `test_consumer_calls_the_helper_module_qualified` passing, and `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` shows `test_exactly_one_tagged_fence_in_the_tree` failing and `test_suite_floor_holds` passing. Judge both commands against the full set of failures and passes the split above lists — `test_only_the_exec_scan_hand_rolls_extraction` (failing) and `test_exec_block_scan_performs_no_execution` (passing) included — not against this shorter sketch. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
+**RED gate** (run after RED step 0's refactor has landed and the suite is green again; one command per file, and both collect, since every name the tests touch already exists): `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_collect_report_docs.py -q` shows both WIRE-PINs failing **on their empty `dbe` call records** — never on a `NameError`, which is what makes this a wiring RED rather than a missing-symbol one — and `test_gate_block_refuses_an_untagged_recipe` failing because the legacy path resolves an untagged block, with the four AC-6.3 behaviours and `test_consumer_calls_the_helper_module_qualified` passing, and `hmad-dispatch run --timeout 600 -- python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q` shows `test_exactly_one_tagged_fence_in_the_tree` failing and `test_suite_floor_holds` passing. Judge both commands against the full set of failures and passes the split above lists — `test_only_the_exec_scan_hand_rolls_extraction` (failing) and `test_exec_block_scan_performs_no_execution` (passing) included — not against this shorter sketch. Judge it on the pytest summary, never on `$?` alone, and keep the recorded output beside the task as the 5d dispatch's `--out` file; `rc=124` is the wrapper's expiry, not a RED result. This is what `h_mad_assemble_tdd.py --phase red` dispatches, with `--test-path` set to the file named above, `--expect-fail` and `--expect-pass` set to the counts this split states for a new-behaviour task and omitted for a wiring task (Tasks 1 and 5 state their RED in prose, as the assembler allows), `--out` the recorded report kept beside the task, and `--timeout 600`.
 
 ---
 
@@ -1679,3 +1715,4 @@ into the log.
 - v1.27: Impl-plan audit v26 (codex must 1 should 1; agy clean) + design v1.84 / design audit v75 back-propagation: find_heading's two forms are told apart BY THE REQUEST, full form first — a request that parses as an ATX heading line (0-3 spaces, 1-6 #, a space) IS the full form, always, and only a non-parsing request is read as bare, using the scanner's own predicate so the dispatch cannot drift from the recognition; the one documented consequence is that a heading whose title itself begins with an ATX prefix (### ## Text) is reachable only in full form, harmless to every live caller (none of titled_section's targets begins with #, measured). Without the precedence the request ## Text had two incompatible meanings and a document holding both would refuse rather than answer. Added test_heading_form_precedence_full_wins (both lookups return their own heading and NEITHER raises AmbiguousHeading — that last clause is the discriminator, since a positives-only test would pass against the mutant) and row form-precedence-bare-first before closing-hash-run-kept, discriminated from heading-level-pin-ignored (Task 1 24 rows; 24 + 5 + 24 + 26 = 79, 77 of the helper's source). --subst =V prints arg="=V" under the quoted grammar and cli-empty-key-delegated's discriminator is arg="" versus arg="=V", never a bare arg==V. The 5f note claiming the spec lacked the repository-root pin is removed: spec v1.50 back-propagated it and :458 carries the same subshell, so the three documents agree.
 - v1.28: Impl-plan audit v27 (codex must 1; agy must 1 + should 2) + design v1.85/v1.86 and plan audit v67 back-propagation. The full-form request predicate is LITERALLY the scanner's — 0-3 spaces, 1-6 #, then a space, A TAB OR END OF LINE — called rather than restated, with test_full_form_request_accepts_tab_and_eol (a ##<TAB>Text heading and a title-less ##) and row request-predicate-space-only, because a space-only predicate scanned those headings and then could not name them. The Task 1 delta drops its two inline call-site comments so the delta and docsections-local-bounder-restored's find are byte-identical (re-verified programmatically); what the comments said moved to prose. BadArgs joins the hierarchy: the parser is ArgumentParser(allow_abbrev=False, exit_on_error=False) with error() overridden to raise it, rendered DOCBLOCK: BAD_ARGS message="<m>" at exit 0 so no non-DOCBLOCK exit survives, with test_malformed_invocation_is_a_verdict (unknown option, missing value; the NO-USAGE clause is the discriminator) and row argparse-error-unrouted. Dependent counts: exceptions 19->20, __all__ 28->29 (design v1.86 and plan v1.82 already say 29, so nothing is owed upstream), verdict heads 22->23, head fields 14->15 and rendering slots 25->26 (7 bare + 19 quoted, message= quoted), plus a BAD_ARGS registry row. The rollback compares os.lstat's (st_dev, st_ino) with the created descriptor's fstat identity before unlinking and reports leftover: on mismatch — stated as a POLICY constraint with no test by construction, since reaching it needs a ninth seam for an explicit non-goal. Two agy should-fixes also fixed: consumer-from-import's summary said the alias was 'replaced' while its payload BYPASSES it, and the ten fenced payloads in the wire bullet carry exactly 4 spaces of markdown-list indentation that are not part of the anchor — measured across all ten and now stated as a rule, since copying them unstripped makes every find miss. Task 1 25 rows, Task 4 27; 25 + 5 + 24 + 27 = 81, 79 of the helper's source.
 - v1.29: Impl-plan audit v28 (codex must 1 should 1 nit 1; agy must 1 should 1) + design v1.87 back-propagation. The parser AC is rewritten to the declared contract: test_parser_rejects_all_dir_and_abbreviations now asserts one DOCBLOCK: BAD_ARGS message="<m>" line and exit 0 for each of --all, --dir x and the abbreviation, where it formerly promised argparse usage at exit 2 — a direct contradiction of the VERDICT_TABLE, the design and argparse-error-unrouted. The abbreviation case gets a COMPLETE otherwise-valid argv (doc, --heading, --shell-t 5) so that under allow-abbrev-restored the alias is accepted and the run proceeds to the fixture's own verdict, a visibly different outcome; with an incomplete argv the mutant would still fail, merely later and on a missing required argument, and the row would be caught by the wrong assertion. Both teardowns that wrote a bare SIGKILL argument to real_killpg now write signal.SIGKILL (SIGKILL is not imported, so the teardown would have raised NameError and left the group alive). Both wrapper descriptions now raise subprocess.TimeoutExpired(cmd=["bash"], timeout=dbe.DRAIN_SECONDS): the constructor is (cmd, timeout, output=None, stderr=None) and a zero-argument construction raises TypeError instead of simulating the timeout — MEASURED on the pinned 3.11.8, an agy should-fix the brief did not carry. Stale counts corrected: the verdict-table test produces each of the 23 heads (not 22) and _field renders 19 dynamic values (not 18). Design v1.87 made explicit: _run_recipe's tuple unpacking of dbe.substitute into subbed and a discarded count is required because substitute returns (Block, counts) and WIRE-PIN 2 asserts identity of the unpacked block, and the two source-scan rows are green on the real helper and RED only under the mutant. Counts unchanged at 81.
+- v1.30: Impl-plan audit v31 (codex must 1; agy clean) — design v1.90, spec v1.52 and plan v1.83 all clean on both surfaces this round, so this is the only document that changed. Task 5's RED is rebuilt in two steps so a wiring pin's RED is a CALLER-OBSERVABLE assertion rather than a missing symbol, which is this document's rule 5 and what h_mad_assemble_tdd.py:238-243 prints into every wiring dispatch. RED step 0 is a pure refactor with the suite green and no dbe CALL: today's legacy logic is hoisted under _gate_block (re.findall + the h_mad_audit_gate.py filter, wrapped as a four-field dbe.Block), _gate_bash_block (returning .text) and _run_recipe (str.replace back into a Block, then the inline subprocess.run returning a four-field dbe.RunResult under a function-local import) — exactly the composition of the four wire-revert-* bodies this document already spells out literally, so nothing new is invented. The RED commit adds the alias import, needed only for the annotations and the three constructors, plus the six tests. RED step 1 then has WIRE-PIN 1 failing on its empty extract/select record and WIRE-PIN 2 on its empty substitute/run_block record, with test_gate_block_refuses_an_untagged_recipe failing because the legacy path resolves an untagged block, test_only_the_exec_scan_hand_rolls_extraction and test_exactly_one_tagged_fence_in_the_tree failing, and the spelling, no-execution, floor and four AC-6.3 guards passing. The 5e connection-only revert is literally step 0's scaffold re-applied at GREEN, so each pin fails for the SAME empty call record at both ends — the symmetry is what proves the pins discriminate the connection rather than the presence of a name. The stale sentence calling that assertion the revert's failure mode 'not of RED' is corrected, and Task 5's RED gate line no longer expects NameError. Every row and count unchanged at 81.
