@@ -81,12 +81,15 @@ caller (test, or operator on the CLI)
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
 validation, ordinal validation, timeout validation, preamble readability and stream-path
 writability are all checked **before** `bash` is spawned, and no stream artifact is truncated
-before a successful run. **Exactly three non-`RAN` outcomes can follow a spawn, in this
+before a successful run. **Exactly four non-`RAN` outcomes can follow a spawn, in this
 precedence:** `CLEANUP_FAILED` (exit 2 — selected after cleanup and read-back have run, so it
-outranks everything), then `TIMEOUT` (exit 0 — a measured fact about the block), then
+outranks everything), then `LAUNCH_FAILED stage=reap` (exit 2 — a timed-out block whose group
+could not be signalled; it outranks the timeout it implies because an unkillable child is the
+more urgent finding), then `TIMEOUT` (exit 0 — a measured fact about the block), then
 `UNREADABLE reason=stream_write_failed` (exit 2 — only reachable on the path that would otherwise
-print `RAN`, because streams are written only after a successful, cleaned-up run). None carries
-`rc=`, and on the first two nothing is written to any artifact; nothing that ran is reported as a
+print `RAN`, because streams are written only after a successful, cleaned-up run). The `mkdtemp`
+and `spawn` stages of `LAUNCH_FAILED` are pre-spawn by definition and sit outside this list. None
+of the four carries `rc=`, and on the first three nothing is written to any artifact; nothing that ran is reported as a
 measurement unless the cwd is gone *and* every promised artifact exists. **The precedence is a
 control-flow design, not a hope:** `run_block` never raises from inside the timeout handler. It
 records a *pending* outcome — `pending = BlockTimeout(timeout)` after the reap, or the `RunResult`
@@ -473,7 +476,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 
 | exception | raised by | verdict line |
 |---|---|---|
-| `DocUnreadable` | `extract` (wraps `OSError`) | `UNREADABLE reason=doc_unreadable` |
+| `DocUnreadable` | `extract` (wraps `OSError` **and `UnicodeDecodeError`** — the document is read as strict UTF-8) | `UNREADABLE reason=doc_unreadable` |
 | `BadInfoString(key)` | `extract` | `BAD_INFO key=<k>` |
 | `BlockNotFound` | `select` | `NOT_FOUND heading=<h>` |
 | `AmbiguousBlock(n)` | `select` | `AMBIGUOUS blocks=<n> heading=<h>` |
@@ -482,9 +485,9 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value=<v>` |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING key=<k>` + a detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
-| `StreamPathUnwritable` | `main`'s pre-check (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
-| `StreamPathsAlias` | `main`'s pre-check (resolved-path compare) | `UNREADABLE reason=stream_paths_alias` |
-| `PreambleUnreadable` | `main`'s pre-check (wraps `OSError` from reading `--preamble-file`) | `UNREADABLE reason=preamble_unreadable` |
+| `StreamPathUnwritable` | `main`'s stream reservation — the `open(path, "a")` itself (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
+| `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
+| `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
 | `StreamWriteFailed` | `main`, writing a stream to its held handle after the run | `UNREADABLE reason=stream_write_failed` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` |
@@ -638,3 +641,4 @@ mean the probe never created one.
 - v1.15: Design audit v7 (codex must 4 should 1; agy clean): reservation last, append-mode, truncate at the final write, created-file unlink on a failed second reservation; three post-spawn exit-2 verdicts with explicit precedence; SUBST_OVERLAP keys= and ordering defined; docsections.json named-test form; computed AC-6.4 floor.
 - v1.16: Design audit v8 (codex must 3 should 1, agy must 2): exit-code partition per the base invariant in the verdict table, diagram and Invariant Compliance; pending-outcome control flow so CLEANUP_FAILED really outranks TIMEOUT, with the combined test; substitute returns a new Block and run_block never substitutes; main's order corrected; floor test runs collect-only in a subprocess with an env guard and the pass half is the out-of-suite gate command; the five consumer-file node IDs enumerated.
 - v1.17: Design audit v9 (codex must 3 should 1; agy clean): LaunchFailed for mkdtemp/Popen/non-ESRCH killpg with a reap stage that never waits unboundedly; alias judged on fstat of the reserved handles; CleanupFailed carries cleanup_error separately from __cause__; three named fault injections plus the real empty-PATH spawn failure; the suite gate captures RC before tail.
+- v1.18: Design audit v10 (codex must 2 should 1, agy must 1): four post-spawn outcomes with LAUNCH_FAILED stage=reap placed in the precedence; the exception table names descriptor-level alias detection and the reservation open, matching the Detailed Design; DocUnreadable and PreambleUnreadable wrap UnicodeDecodeError under strict UTF-8.

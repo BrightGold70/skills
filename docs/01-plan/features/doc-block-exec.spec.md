@@ -184,8 +184,11 @@ not opted in.
   - AC-3.12: A run with a preamble reports `rc`/`stdout`/`stderr` for the combined invocation, and
     a preamble that itself fails is visible as that `rc` rather than being swallowed. On the CLI the
     preamble comes from `--preamble-file <path>`, a file rather than an inline string, so quoting
-    cannot corrupt it; an unreadable preamble file refuses with
-    `DOCBLOCK: UNREADABLE reason=preamble_unreadable` and does not run the block.
+    cannot corrupt it; an unreadable preamble file — unreadable as a file, **or not valid UTF-8**,
+    since it is read strictly and text that will be executed is never silently repaired — refuses
+    with `DOCBLOCK: UNREADABLE reason=preamble_unreadable` and does not run the block. The document
+    itself is read the same way, so a malformed document is `UNREADABLE reason=doc_unreadable`, not
+    a traceback; a test feeds each an invalid byte.
   - AC-3.13: The temp directory is created by `tempfile.mkdtemp()` and its mode is `0o700`
     (`stat.S_IMODE(os.stat(d).st_mode) == 0o700`), observed from inside the running block. The
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
@@ -408,3 +411,4 @@ not opted in.
 - v1.17: Design audit v7 (codex must 4 should 1; agy clean): AC-3.8 reserves both streams in append mode after every refusal and truncates only at the final write; AC-6.4's floor is computed (2747 + new module + named tuple); AC-2.7 defines keys= as distinct keys and orders the overlap lines.
 - v1.18: Design audit v8 (codex must 3 should 1, agy must 2): exit codes follow the Audit-gate signal discipline invariant — every verdict incl. refusals and TIMEOUT exits 0, only UNREADABLE and CLEANUP_FAILED exit 2 (FR-4, AC-4.2 pins the partition row by row); AC-3.14 names the timeout-plus-cleanup case; AC-6.4's collected floor is in-suite via collect-only and the pass half is the out-of-suite gate command.
 - v1.19: Design audit v9 (codex must 3 should 1; agy clean): AC-4.6 maps the helper's own mkdtemp/Popen/killpg failures to LAUNCH_FAILED; AC-3.9 compares (st_dev, st_ino) on the opened descriptors so hard links are caught with no check-to-open window; AC-3.14 names cleanup_error and the __cause__ rule; AC-6.4's gate command captures pytest's status before tail. 48 ACs.
+- v1.20: Design audit v10 (codex must 2 should 1, agy must 1): AC-3.12 reads the preamble and the document as strict UTF-8 and maps a decode failure to UNREADABLE.
