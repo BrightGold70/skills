@@ -203,7 +203,9 @@ not opted in.
     `0o700 & ~umask` — measured, `umask 0777` gives mode `0o0` — so the chmod is what makes the AC
     true rather than environment-dependent. The test sets `os.umask(0o777)` around the call and
     restores it in `finally`. A chmod that fails is `LAUNCH_FAILED stage=mkdtemp` (AC-4.6) after
-    the directory is removed. The
+    the directory is removed — tested by fault-injecting `os.chmod` to raise and asserting the
+    verdict, the `os_error:` detail, and that the just-created directory is gone; the guard has
+    its own mutation. The
     source contains no `mktemp` invocation — the same argv-token/shell-command-word test AC-5.3
     uses, so satisfying the prose by shelling out is caught rather than assumed away.
   - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
@@ -301,8 +303,9 @@ not opted in.
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
     wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
     bounded" holds against an escapee too. (a) is a timing window no fixture can hold open, so
-    its test injects the fault by monkeypatching `os.killpg` — one of exactly **three** named
-    fault injections this suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`; the
+    its test injects the fault by monkeypatching `os.killpg` — one of exactly **four** named
+    fault injections this suite permits (`os.killpg`, `shutil.rmtree`, `tempfile.mkdtemp`,
+    `os.chmod`; the
     design's Test Strategy bounds the list, and `subprocess` is never mocked); (b) is driven by a
     real `os.setsid()` descendant.
 
@@ -389,8 +392,17 @@ not opted in.
 ## Assumptions
 
 - `bash` is on PATH. Every recipe in these skills already assumes it.
-- The `hmad:exec` info string is inert to the markdown renderers in use — GitHub and the Claude
-  Code viewer both take the first info-string word as the language and ignore the remainder.
+- The `hmad:exec` info string is inert to the markdown renderers in use. **Specification-backed,
+  not measured here**: CommonMark §4.5 (Fenced code blocks) defines the info string as the text
+  after the opening fence and states that its first word is what is used as the language, and
+  GitHub-flavoured Markdown inherits that rule; but this repository contains **no** fence with a
+  multi-word info string today (measured: `grep -rn '^```bash [^ ]' h-mad handoff` excluding
+  `archive/` → 0), so nothing in the tree demonstrates the two renderers' behaviour, and no local
+  renderer is installed to probe (`import markdown` → `ModuleNotFoundError`). The assumption is
+  therefore **unverified by observation** and is confirmed at Phase 5 by an operator step: after
+  the one tag lands, open `h-mad/SKILL.md` in the Claude Code viewer and on GitHub and confirm the
+  gate block still renders as bash. The exposure is one line, reversible by deleting the tag, and
+  the operator is asked to direct if either renderer misbehaves.
 - The two extractors named in FR-6 are the only in-repo consumers that anchor on a bare
   ` ```bash\n ` opener in a file this feature tags. **Measured this session, tree-wide:**
 
@@ -437,3 +449,4 @@ not opted in.
 - v1.20: Design audit v10 (codex must 2 should 1, agy must 1): AC-3.12 reads the preamble and the document as strict UTF-8 and maps a decode failure to UNREADABLE.
 - v1.21: Design audit v11 (codex must 3; agy must 1): AC-2.8 gives --subst a parser contract (split once on the first '=', empty key and repeat refused as BAD_SUBST); AC-3.13 adds os.chmod(cwd, 0o700) because mkdtemp alone is 0700 & ~umask (measured 0o0 under umask 0777) and tests under a hostile umask; AC-4.6's reap test reaps what it launched and the unsignalable-group policy is stated. 49 ACs.
 - v1.22: Design audit v12 (codex must 2; agy must 3): AC-5.5 names the three permitted fault injections instead of 'the one'; AC-3.14's __cause__ rule includes a reap-stage LaunchFailed; AC-6.4's tuple is the five consumer-file tests only.
+- v1.23: Design audit v14 (codex must 5; agy must 2): the renderer-inertness assumption is marked specification-backed but unmeasured (no multi-word fence in the tree, no local renderer) with a Phase-5 operator check; AC-5.5 names four permitted fault injections (os.chmod added); AC-3.13's chmod failure is tested and mutation-covered.

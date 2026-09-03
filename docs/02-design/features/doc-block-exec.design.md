@@ -63,8 +63,9 @@ caller (test, or operator on the CLI)
         │  every key present?  no ──► SUBST_MISSING
         ▼ yes
    run_block()
-        ├── mkdtemp() + chmod(0o700) ────── cwd   (mkdtemp alone is 0700 & ~umask)
-        ├── validate timeout: finite, > 0 ──► else BAD_TIMEOUT (before spawn)
+        ├── validate timeout: finite, > 0 ──► else BAD_TIMEOUT  (BEFORE mkdtemp: nothing to clean up)
+        ├── mkdtemp() + chmod(0o700) ────── cwd   (mkdtemp alone is 0700 & ~umask;
+        │                                          chmod fails ──► rmdir ──► LAUNCH_FAILED stage=mkdtemp)
         ├── Popen(["bash", *flags, "-c", preamble ⊕ text'], start_new_session=True,
         │         text=True, encoding="utf-8", errors="replace")
         ├── communicate(timeout) ─── TimeoutExpired ──► killpg(SIGKILL) [ESRCH = already reaped]
@@ -75,7 +76,7 @@ caller (test, or operator on the CLI)
      Result(rc, stdout, stderr, shell)
         ▼
    main() ─────────────►  one `DOCBLOCK:` line on stdout;  exit 0 on every verdict (RAN, every
-                          refusal, TIMEOUT) | 2 only on UNREADABLE / CLEANUP_FAILED
+                          refusal, TIMEOUT) | 2 only on UNREADABLE / CLEANUP_FAILED / LAUNCH_FAILED
 ```
 
 Refusals are ordered so that nothing irreversible happens before the last one: info-string
@@ -287,8 +288,9 @@ launch is text-mode, and the policy is explicit**: `Popen(…, text=True, encodi
 errors="replace")`, so `communicate()` returns `str` (which is what `RunResult` promises and what
 the held artifact handles — opened `encoding="utf-8"` — accept), non-ASCII output round-trips, and
 an undecodable byte becomes U+FFFD instead of a `UnicodeDecodeError` escaping the helper (AC-3.6).
-**The bound is validated before the spawn** (AC-5.6): `timeout` must satisfy
-`math.isfinite(t) and t > 0`, else `BadTimeout(value)` — `communicate(timeout=-1)` raises
+**The bound is validated before the spawn — and before `mkdtemp`** (AC-5.6): `timeout` must
+satisfy `math.isfinite(t) and t > 0`, else `BadTimeout(value)`, raised while there is nothing to
+clean up, so the refusal can neither leak a directory nor need the read-back — `communicate(timeout=-1)` raises
 `ValueError` only after the child exists, and `inf` is no bound at all.
 
 ## Components Changed / Added
@@ -297,7 +299,7 @@ an undecodable byte becomes U+FFFD instead of a `UnicodeDecodeError` escaping th
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 27 named entries, each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 28 mutations plus the AC-5.3 self-check (29 rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -526,15 +528,17 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **Three named exceptions, all fault injections on a call whose *failure* is under test,
+stub out. **Four named exceptions, all fault injections on a call whose *failure* is under test,
 all via pytest's `monkeypatch` (restored on exit), all leaving `subprocess` real:** the AC-5.5
 `killpg` race is a timing window between `TimeoutExpired` and the kill that no fixture can hold
 open, so its test patches `os.killpg` to raise `ProcessLookupError` (and, for AC-4.6's `reap`
 stage, `PermissionError`); the AC-3.14 cleanup guards are exercised by patching `shutil.rmtree`
 in the helper's namespace — once to raise `OSError`, once to do nothing — because a real
 permission failure is skipped under root and the two guards need mutants only one of them kills;
-and AC-4.6's `mkdtemp` stage patches `tempfile.mkdtemp` to raise. The `spawn` stage needs no
-mock: the test sets `PATH` to an empty directory and `bash` is genuinely not found. The drain race needs no mock, because a real
+and AC-4.6's `mkdtemp` stage patches `tempfile.mkdtemp` to raise and, separately, `os.chmod` to
+raise (AC-3.13's post-creation failure, which must remove the directory it just created). The
+`spawn` stage needs no mock: the test sets `PATH` to an empty directory and `bash` is genuinely
+not found. The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -549,16 +553,16 @@ are the real process's, not a return value — the same shape `test_skill_candid
 
 | ACs | Tests |
 |---|---|
-| AC-1.1–1.7 | tagged-vs-untagged selection; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
+| AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag; **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
 | AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
-| AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
+| AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path **and a preamble file containing an invalid UTF-8 byte** → `UNREADABLE reason=preamble_unreadable`, and the block leaves no side effect |
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg=<raw>`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path, cleanup_error)` with `cleanup_error` the `PermissionError` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid and the test's `finally` sends the real `SIGKILL` to it and asserts the group is gone; each carries an `os_error:` detail line and no `rc=` |
+| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail — the fake records the pgid and the test's `finally` sends the real `SIGKILL` to it and asserts the group is gone; each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE` and `CLEANUP_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value=<v>`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the two-exception rule in Test Strategy stands) |
@@ -603,9 +607,10 @@ the mechanism column is what the anchor must express. `ALL_CAUGHT` is required.
 | `killpg-esrch-uncaught` | `ProcessLookupError` from `killpg` propagates | `test_timeout_survives_a_group_that_already_emptied` (AC-5.5) |
 | `drain-unbounded` | the post-kill `communicate` has no timeout | `test_timeout_drain_is_bounded_against_an_escapee` (AC-5.5) |
 | `timeout-validation-removed` | `math.isfinite(t) and t > 0` is gone | `test_nonpositive_timeout_refuses_before_spawn` (AC-5.6) |
+| `chmod-failure-unwrapped` | a failing `os.chmod` propagates and the created cwd is left behind | `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (AC-3.13/4.6) |
 | `no-timeout-invocation-guard-removed` | *(not a mutation of the helper — the AC-5.3 source scan is a test of the source, so its "mutation" is the test itself failing on a planted `timeout 5 bash` token in a fixture copy)* | `test_no_timeout_invocation_in_source` (AC-5.3) |
 
-Twenty-seven rows for twenty-six guards plus the AC-5.3 self-check; a guard added later without a
+Twenty-nine rows: twenty-eight mutations plus the AC-5.3 self-check; a guard added later without a
 row here is what the base Mutation verification invariant forbids, and the impl-plan audit reads
 this table against the landed spec.
 
@@ -715,3 +720,4 @@ mean the probe never created one.
 - v1.19: Design audit v11 (codex must 3; agy must 1 + 2 nits): chmod 0o700 after mkdtemp with the umask probe; reap-failure policy and the test teardown that reaps the launched group; BAD_SUBST parser contract with BadSubstArg; main's order puts the alias check after reservation; substitute wording and the API raises list corrected.
 - v1.20: Design audit v12 (codex must 2; agy must 3): verification commands run the docsections.json harness and the status-preserving suite gate; Invariant Compliance names LAUNCH_FAILED among the exit-2 classes.
 - v1.21: Design audit v13 (codex must 2; agy clean): the helper mutation spec is enumerated — 27 entries with mechanism and the named RED test each — and the timeout-vs-cleanup precedence is carried by an injected test that runs everywhere, with the permission fixture as its root-skipped sibling.
+- v1.22: Design audit v14 (codex must 5; agy must 2): timeout validated before mkdtemp in the diagram and prose; LAUNCH_FAILED in the diagram's partition; chmod-failure test and mutation (29 rows); invalid-UTF-8 document and preamble cases in the Test Plan; four named fault injections.

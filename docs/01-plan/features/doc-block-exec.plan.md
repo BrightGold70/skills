@@ -296,7 +296,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — the 27 entries and their `test` bindings are enumerated in the design's Test Plan |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 28 mutations plus the AC-5.3 self-check, each with its `test` binding, enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -563,3 +563,4 @@ design begins.
 - v1.23: Design audit v9 back-propagation: descriptor-level alias check; the suite gate command captures the exit status; AC count 48 (spec v1.19).
 - v1.24: Design audit v11 back-propagation: --subst contract in the CLI paragraph; alias check after reservation; LaunchFailed in the run_block row; AC count 49 (spec v1.21).
 - v1.25: Design audit v13 back-propagation: Deliverables and Success Criteria name all three mutation specs and point at the design's enumeration; the FR-6 pseudocode unpacks substitute's (Block, counts) tuple (agy nit).
+- v1.26: Design audit v14 back-propagation: helper mutation spec is 28 mutations plus the AC-5.3 self-check.
