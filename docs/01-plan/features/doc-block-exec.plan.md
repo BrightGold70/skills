@@ -393,7 +393,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 74 mutations with a full-node-ID `test` binding each — 72 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 75 mutations with a full-node-ID `test` binding each — 73 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -577,7 +577,8 @@ handles — the group is already gone when the reap runs — was assumed to surf
 that has exited is a zombie, and `killpg` on a zombie-only group raises `PermissionError`; after
 `proc.poll()` reaps it the same call raises `ProcessLookupError`. The fixture is a leader that
 starts an `os.setsid()` descendant holding stdout and exits at once — no mock — and the same run
-shows the drain timing out on the escapee's pipe and `wait()` returning immediately:
+shows the drain timing out on the escapee's pipe and `wait()` returning immediately (the probe's
+bare `p.wait()` is the measurement; the helper's own call is `wait(timeout=DRAIN_SECONDS)`, below):
 
 ```
 $ python3.11 -u - <<'PY'
@@ -613,7 +614,12 @@ escapee reaped by the probe; python 3.11.8 darwin
 ```
 
 So the reap sequence is `poll()` → `killpg` (catch `ProcessLookupError`) → bounded drain → close
-pipes → `wait()`; without the `poll()` the natural race reports `LAUNCH_FAILED stage=reap` instead
+pipes → `wait(timeout=DRAIN_SECONDS)`, taken only when the group was signalled: a delivered
+`SIGKILL` is not a completion deadline, so the wait is bounded like the drain, and its
+`TimeoutExpired` becomes `LAUNCH_FAILED stage=reap` with the pending `BlockTimeout` as
+`__context__` — the helper's wall time is at most `timeout + 2 * DRAIN_SECONDS` plus teardown
+(`test_wait_after_kill_is_bounded`; mutations `wait-unbounded`, `wait-expiry-unmapped` — design
+v1.73). Without the `poll()` the natural race reports `LAUNCH_FAILED stage=reap` instead
 of `TIMEOUT`, which is the mutation `poll-before-killpg-removed` and the test that kills it.
 
 **That measurement stands and is no longer the whole story:** a later design cycle found the same
@@ -857,3 +863,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.70: Plan re-audit v55 (codex must 1; agy clean): every 5f command is bounded through hmad-dispatch run --timeout (rc propagates, 124 on expiry — measured); 71 mutations (69 of the helper's source) after the rollback read-back row.
 - v1.71: Plan re-audit v56 (codex should 1; agy clean) + design v1.71 back-propagation: the hoisted _run_recipe derives collector/gate from SCRIPT_DIR itself; 72 mutations (70 of the helper's source).
 - v1.72: Plan re-audit v57 clean (both surfaces) + design v1.73 back-propagation: 74 mutations (72 of the helper's source) after the bounded-wait rows.
+- v1.73: Plan re-audit v58 (codex must 1) + impl-plan audit v18 back-propagation: the reap sequence and its probe prose carry the bounded wait(timeout=DRAIN_SECONDS) and its stage=reap expiry; 75 mutations (73 of the helper's source) with the field-escape row.

@@ -535,7 +535,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 74 mutations (74 rows: 72 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 75 mutations (75 rows: 73 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -882,7 +882,22 @@ and raises `StreamPathsAlias`; **it does not close the handles itself** — clos
 therefore not needed and is not performed; the earlier resolved-path comparison was both weaker
 and racy.)
 
-Verdict lines, one per run:
+Verdict lines, one per run. **Every dynamic field is rendered through one escaper, `_field(value)`**
+(design audit v67): `heading=<h>`, `arg=<raw>`, `missing_key: <k>`, `duplicate_key: <k>`,
+`overlap: …`, `os_error: <text>`, `path=<p>`, `leftover: <path>`, `stream: <name>`, `value=<v>`
+and every other caller- or document-controlled value pass through it, and it rewrites `\r`, `\n`
+and every other control character (Unicode category `Cc`) to its `\xNN`/`\uNNNN` escape, so
+no argument, key, heading or path can start a second line — a `--heading` of
+`"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"` yields exactly one `DOCBLOCK:` line, the
+`NOT_FOUND` one, with the newline visible as `\n` inside `heading=`. The rule is what keeps the
+one-line contract true for a machine consumer that greps `^DOCBLOCK:`; nothing else about the
+value is changed (spaces, quotes and non-ASCII pass verbatim). `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line`
+drives the CLI in-process with a newline-bearing `--heading`, a `--subst` key and value carrying
+`\n`, and a `--stdout` path with `\n` in its name (each on its own refusal path: `NOT_FOUND`,
+`SUBST_MISSING`/`BAD_SUBST`, `stream_path_unwritable` with `leftover:`), and asserts that
+`capsys` stdout holds exactly one line starting with `DOCBLOCK:`, that no line equals the forged
+`RAN` line, and that the escaped payload appears; mutation `field-escape-removed` (`_field`
+returns its input unchanged) is killed by it.
 
 | line | exit | when |
 |---|---|---|
@@ -1114,6 +1129,7 @@ exactly what the base Mutation verification invariant forbids.
 | `stream-write-oserror-unwrapped` | the `except OSError` mapping around `_final_write` and its read-back is removed, so a write failure escapes as a traceback | `test_stream_write_failure_after_the_run_is_a_refusal` (AC-3.8 — the injected failure must print `stream_write_failed`, exit 2, no traceback) |
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
+| `field-escape-removed` | `_field` returns its input unchanged, so a newline inside a heading, key, path or OS-error text starts a second `DOCBLOCK:` line | `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (AC-4.1) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
 | `drain-oserror-unmapped` | the guard around the post-kill drain, the pipe closes and the `wait()` is removed, so a failure there escapes past the pending `BlockTimeout` | `test_drain_wait_oserror_is_launch_failed_collect` (AC-4.6) |
@@ -1144,7 +1160,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-four rows, seventy-four mutations — seventy-two of the helper's source (the AC-5.3 row, once
+Seventy-five rows, seventy-five mutations — seventy-three of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1313,3 +1329,4 @@ mean the probe never created one.
 - v1.72: Impl-plan v1.17 back-propagation: the TimeoutExpired handler records the pending BlockTimeout on entry, before poll(); the drain records nothing.
 - v1.73: Design audit v66 (codex must 1; agy clean) + impl-plan audit v17 back-propagation: the post-kill wait is wait(timeout=DRAIN_SECONDS), its expiry LAUNCH_FAILED stage=reap with the pending outcome as __context__ (test_wait_after_kill_is_bounded; wait-unbounded, wait-expiry-unmapped — 74 rows, 72 + 2; helper wall time at most timeout + 2·DRAIN_SECONDS); one canonical eight-item fault-injection list — seven module seams plus the Popen instance wrapper for communicate/wait/poll — repeated by the in-process main(argv) sentence.
 - v1.74: Impl-plan v1.18 back-propagation: test_wait_after_kill_is_bounded runs on the escapee fixture so the helper's own wait, not communicate's internal one, is the intercepted call; the two guards on that wait are separate except clauses.
+- v1.75: Design audit v67 (codex must 1, 10 tool calls; agy clean): every dynamic field in a verdict or detail line passes through one escaper, `_field`, that escapes control characters, so no input can forge a second `DOCBLOCK:` line — test_newline_in_dynamic_fields_cannot_forge_a_verdict_line, mutation field-escape-removed — 75 rows (73 + 2).

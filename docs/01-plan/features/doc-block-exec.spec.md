@@ -298,7 +298,11 @@ not opted in.
 
 ### FR-4: Verdict-token CLI following the established gate contract
 
-- **Description**: The CLI prints one `DOCBLOCK:` line, and the exit code follows the base
+- **Description**: The CLI prints one `DOCBLOCK:` line — one physical line, whatever the inputs:
+  every dynamic field (`heading=`, `arg=`, keys, paths, OS-error text) is rendered with `\r`, `\n`
+  and other control characters escaped, so a caller- or document-controlled value can never start a
+  second `DOCBLOCK:` line (tested with newline-bearing `--heading`, `--subst` and `--stdout`
+  values) — and the exit code follows the base
   **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
   refusal that judged a readable input and declined to run it (`NOT_FOUND`, `AMBIGUOUS`,
   `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `BAD_SUBST`, `SUBST_MISSING`,
@@ -577,3 +581,4 @@ quoted
 - v1.41: Design v1.67 back-propagation: AC-1.7 states heading text is compared after the CommonMark closing hash run is stripped (`## Text ##` == `## Text`).
 - v1.42: Design v1.69 back-propagation: AC-3.10's failed-second-reservation rollback is read back and reports `leftover: <path>`; eight named fault injections (os.unlink added).
 - v1.43: Design v1.73 back-propagation: the drain allowance is 2·DRAIN_SECONDS (drain + bounded post-kill wait, expiry = LAUNCH_FAILED stage=reap); the instance-level injection names communicate/wait/poll.
+- v1.44: Design v1.75 back-propagation: FR-4's one-line contract holds for every input — dynamic fields are control-character-escaped.
