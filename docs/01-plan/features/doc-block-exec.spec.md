@@ -388,7 +388,9 @@ not opted in.
     post-kill drain `communicate` itself times out because an out-of-group descendant (AC-5.2's
     escapee) still holds the pipes — the helper closes both pipes, reaps the leader, and reports
     `TIMEOUT`. Either way the verdict is `DOCBLOCK: TIMEOUT`, exit 0, and the cwd is gone. Total
-    wall time is bounded by `timeout` plus a fixed drain allowance, so FR-5's "every run is
+    wall time is bounded by `timeout` plus a fixed drain allowance (`2 * DRAIN_SECONDS`: the drain
+    and the bounded post-kill `wait(timeout=DRAIN_SECONDS)`, whose expiry is `LAUNCH_FAILED
+    stage=reap`), so FR-5's "every run is
     bounded" holds against an escapee too. Both (a) and (b) are driven by one real
     `os.setsid()` fixture, no mock; `os.killpg` is monkeypatched only for AC-4.6's
     `PermissionError`-after-`poll()` case — one of exactly **eight** named fault injections this
@@ -396,7 +398,8 @@ not opted in.
     the reservation rollback's read-back, the module's
     own `_final_write` seam for AC-3.8's post-run write failure, its `_close_stream` seam for
     the backstop close on a path where the final write never ran, and the recorded `Popen`
-    instance's own `communicate`/`wait` for AC-4.6's `collect` stage — an instance-level injection
+    instance's own `communicate`/`wait`/`poll` for AC-4.6's `collect` stage and AC-5.5's bounded
+    post-kill wait — one instance-level injection, three methods, seven module seams beside it
     through the AC-5.6 recording pass-through, `subprocess.Popen` itself still real; the design's
     Test Strategy bounds the list, and `subprocess` is never mocked).
 
@@ -573,3 +576,4 @@ quoted
 - v1.40: Design v1.66 back-propagation: seven named fault injections (the recorded Popen instance's communicate/wait for the collect stage).
 - v1.41: Design v1.67 back-propagation: AC-1.7 states heading text is compared after the CommonMark closing hash run is stripped (`## Text ##` == `## Text`).
 - v1.42: Design v1.69 back-propagation: AC-3.10's failed-second-reservation rollback is read back and reports `leftover: <path>`; eight named fault injections (os.unlink added).
+- v1.43: Design v1.73 back-propagation: the drain allowance is 2·DRAIN_SECONDS (drain + bounded post-kill wait, expiry = LAUNCH_FAILED stage=reap); the instance-level injection names communicate/wait/poll.
