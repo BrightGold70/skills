@@ -97,8 +97,10 @@ not opted in.
     An **empty** map is a no-op, not a refusal: `substitute(block, {})` returns an equivalent
     `Block` and `{}` without compiling any alternation (a zero-key alternation would match the
     empty string), and a CLI invocation with no `--subst` takes that path.
-  - AC-2.3: The refusal names every offending key, one `missing_key: <k>` detail line each in
-    block order; with two absent keys, `keys=2` and both are named.
+  - AC-2.3: The refusal names every offending key, one `missing_key: <k>` detail line each, in
+    the **map's insertion order** (an absent key has no position in the block, so the map is the
+    only order that exists; on the CLI that is `--subst` argument order); with two absent keys,
+    `keys=2` and both are named in that order, pinned by a multi-key test.
   - AC-2.4: Substitution is literal, not regex — a key containing regex metacharacters
     (`.`, `*`, `[`) is matched and replaced literally.
   - AC-2.5: A key occurring more than once in the block is replaced at **every** occurrence, and
@@ -235,7 +237,11 @@ not opted in.
     both take the halt branch, so the unbound variable is a diagnostic rather than a hard abort.
     The consequence that matters is that without a supplied `COLLECT_OUT` the block can never
     reach the delivered-report `GATE: PASS` branch — which is precisely what AC-6.3 requires.
-  - AC-3.12: A run with a preamble reports `rc`/`stdout`/`stderr` for the combined invocation, and
+  - AC-3.12: A run with a preamble reports `rc`/`stdout`/`stderr` for the combined invocation —
+    **`RunResult.rc` is always the exit code of the one `bash -c` the helper spawned**, which is
+    the block's own code when there is no preamble and the combined code when there is; a strict
+    preamble that fails before the block runs is that `rc`, there being no separate block code to
+    report — and
     a preamble that itself fails is visible as that `rc` rather than being swallowed. On the CLI the
     preamble comes from `--preamble-file <path>`, a file rather than an inline string, so quoting
     cannot corrupt it; an unreadable preamble file — unreadable as a file, **or not valid UTF-8**,
@@ -536,3 +542,4 @@ quoted
 - v1.32: Design audit v27 (codex must 2; agy must 2 should 2): AC-2.6's discriminating fixture (A B -> B C in both orders); AC-3.8 read-back verification of every written artifact; AC-6.4's tuple is seven across two files.
 - v1.33: Design audit v28 (codex must 1 should 2; agy must 2 should 1): SUBST_MISSING carries keys=<n> like SUBST_OVERLAP; an empty map is a no-op; duplicated info-string tokens refuse as BAD_INFO.
 - v1.34: Design audit v29 back-propagation: FR-4's exit-0 list names BAD_SUBST.
+- v1.35: Design audit v31 (codex must 2; agy UNVERIFIED, dispatch timeout): AC-2.3 orders missing keys by map insertion; AC-3.12 defines rc as the exit code of the one spawned bash -c.

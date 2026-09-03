@@ -229,7 +229,10 @@ each unordered pair appears once as `overlap: <shorter> <longer>`, and the lines
 `(shorter, longer)`, so the same map always produces the same diagnostic.
 
 Any key with a count of zero is collected; if the collection is non-empty nothing is executed and
-every missing key gets its own detail line. **An empty key is refused here, in the API** —
+every missing key gets its own detail line, **in the map's insertion order** — an absent key has
+no position in the block, so the map (on the CLI, `--subst` argument order) is the only
+deterministic order there is; `test_two_missing_keys_are_listed_in_map_order` pins it. **An empty
+key is refused here, in the API** —
 `BadSubstArg("")` — not only by the CLI parser: `str.replace("", v)` inserts `v` at every character
 boundary, and an in-process caller must meet the same wall `main` does.
 
@@ -436,7 +439,8 @@ class Block:
 
 @dataclass(frozen=True)
 class RunResult:
-    rc: int          # the BLOCK's exit code — never the tool's verdict
+    rc: int          # exit code of the ONE `bash -c` spawned (block alone, or
+                     # preamble+block combined) — never the tool's verdict
     stdout: str
     stderr: str
     shell: str
@@ -611,7 +615,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: BAD_INDEX index=<n>` | 0 | `--index` below 1, or not an integer |
 | `DOCBLOCK: BAD_TIMEOUT value=<v>` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
 | `DOCBLOCK: BAD_SUBST arg=<raw>` (+ `duplicate_key: <k>`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
-| `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: <k>` per key, block order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
+| `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: <k>` per key, map insertion order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: <a> <b>` per pair | 0 | one key is a substring of another |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` name one inode (`fstat` on the reserved handles) |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
@@ -928,3 +932,4 @@ mean the probe never created one.
 - v1.34: Design audit v27 (codex must 2; agy must 2 should 2): substitution fixture discriminates the sequential mutant; artifacts are read back and compared after close (final-write-not-verified, 41 rows); StreamWriteFailed and LaunchFailed carry the fields the dispatcher prints; pgid on the reap verdict; seven-test floor tuple.
 - v1.35: Design audit v28 (codex must 1 should 2; agy must 2 should 1 + nit): empty-map short-circuit with its mutation; duplicate info tokens refused; SUBST_MISSING keys=<n>; mutation accounting (41 source + 2 SKILL.md = 43 rows); Implementation Order names select, RunResult and every exact file path.
 - v1.36: Design audit v30 (codex must 1 should 1; agy must 1 should 1 + nit): read-back compares bytes, never decoded text; fence_aware_end's prefix-state contract with test and mutation; test_docsections.py tracked in Components and Task 1; Task 3 names its exceptions, Task 4 the preamble read; four main/I-O mutation rows (48 rows).
+- v1.37: Design audit v31 (codex must 2): missing keys listed in map insertion order with a multi-key test; RunResult.rc is the spawned invocation's exit code.
