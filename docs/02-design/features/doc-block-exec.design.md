@@ -468,7 +468,10 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` — a new
    `_gate_block() -> dbe.Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
    str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
-   `run_recipe` — in one task, with `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
+   `run_recipe`, hoisted out of its enclosing test to a module-level
+   `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` so a wire pin can call and spy it
+   (its two call sites read only `.stdout`/`.stderr`, which `RunResult` carries) — in one task, with
+   `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
    (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
    because they assert post-Task-5 state, `test_exactly_one_tagged_fence_in_the_tree` (the tag
    exists only after this task) and `test_suite_floor_holds` (its seven-node tuple exists only
@@ -898,7 +901,7 @@ table, restated here so the design enumerates every spec it names):
 |---|---|---|
 | `wire-revert-extract` | `_gate_block` resolves its block with a local, tag-tolerant `re.findall(r"```bash[^\n]*\n(.*?)```")` instead of `dbe.extract`/`dbe.select` (tag-tolerant so the mutant still resolves the tagged block and the wire, not the regex, is what fails), helper untouched | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5) |
 | `wire-revert-select` | `_gate_block` keeps `dbe.extract` but picks `blocks[0]` (or raises locally) instead of calling `dbe.select`, callee intact | `test_gate_block_resolves_through_doc_block_exec` (AC-6.5 — the same pin also spies `dbe.select` and asserts one call with the extracted list and `index=None`) |
-| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
+| `wire-revert-run` | `_run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` (AC-6.5) |
 | `wire-revert-substitute` | `_run_recipe` rewrites the checkout path with `str.replace` instead of `dbe.substitute`, callee intact | `test_recipe_runs_through_run_block` (AC-6.5 — the same pin also spies `dbe.substitute` and asserts one call with the gate block and the `{installed gate path: quoted checkout path}` map) |
 | `wire-unconditional` | the call site grows `dbe.extract(...) or <legacy regex>`, so an untagged gate block is still resolved | `test_gate_block_refuses_an_untagged_recipe` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` (AC-6.2) |
@@ -1120,3 +1123,4 @@ mean the probe never created one.
 - v1.51: Impl-plan audit v2 back-propagation (codex must 4): the heading match runs over the scanner's prose lines only, with test_requested_heading_quoted_inside_a_fence_is_not_a_section_start and mutation heading-match-ignores-fence-state (61 rows: 59 + 2); Test Strategy states the transport split — seam-injected verdicts through main(argv) in-process, every real-input verdict through the subprocess, two subprocess tests pinning sys.exit(main()).
 - v1.52: Plan re-audit v40 back-propagation (codex must 1): docsections.json carries a sixth row, docsections-syspath-setup-removed, killed by test_docsections_imports_from_an_unrelated_cwd in the new module.
 - v1.53: Design audit v47 (codex should 1; agy must 1) + impl-plan audit v3 back-propagation (codex must 1): the docsections.json binding sentence names the sixth row's cross-file key; the wire spec has eight mutations — wire-revert-select and wire-revert-substitute killed by the existing pins, which now also spy dbe.select and dbe.substitute.
+- v1.54: Design audit v48 (codex should 1; agy clean): run_recipe is hoisted to the module-level _run_recipe in the migration, named consistently in Implementation Order and the wire table.

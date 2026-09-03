@@ -283,7 +283,7 @@ three existing callers keep their types**: a new `_gate_block() -> dbe.Block` re
 `_gate_bash_block() -> str` becomes `return _gate_block().text` — so the two text-pin callers
 (`:281`'s `.index`/slicing and `:368`'s `.splitlines()`, measured) are untouched, and "nothing else
 in the file moves" stays true;
-`run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
+`run_recipe(...)`, hoisted to the module-level `_run_recipe(...)` so a pin can spy it, stops returning `subprocess.CompletedProcess[str]` and returns the helper's
 `RunResult`, calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
 shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
 `dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
@@ -309,7 +309,7 @@ carries them fully qualified.
 |---|---|---|
 | `wire-revert-extract` | `_gate_block` resolves its block with a local `re.findall(r"```bash[^\n]*\n(.*?)```")` over `_second_surface()` instead of `dbe.extract`/`dbe.select` (and `_gate_bash_block` returns that string) (the pre-migration regex made **tag-tolerant** with `[^\n]*` — the literal pre-migration `re.findall(r"```bash\n(.*?)```")` would simply fail on the tagged fence, and the wire, not the regex, is what this mutant must discriminate; helper untouched) | `test_gate_block_resolves_through_doc_block_exec` — `monkeypatch.setattr(dbe, "extract", spy)` on the consumer's module-qualified alias, and the spy must have been called (AC-6.5) |
 | `wire-revert-select` | `_gate_block` keeps `dbe.extract` but takes `blocks[0]` (or raises locally) instead of `dbe.select`, callee intact | `test_gate_block_resolves_through_doc_block_exec` — the pin also spies `dbe.select` (one call, the extracted list, `index=None`) |
-| `wire-revert-run` | `run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and `monkeypatch.setattr(dbe, "run_block", spy)` fires (AC-6.5) |
+| `wire-revert-run` | `_run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block` | `test_recipe_runs_through_run_block` — the returned value is the helper's `RunResult`, and `monkeypatch.setattr(dbe, "run_block", spy)` fires (AC-6.5) |
 | `wire-revert-substitute` | `_run_recipe` rewrites the installed gate path with `str.replace` instead of `dbe.substitute`, callee intact | `test_recipe_runs_through_run_block` — the pin also spies `dbe.substitute` (one call, the gate block, the one-key map) |
 | `wire-unconditional` | the call site grows a fallback, `extract(...) or <legacy regex>`, so an untagged gate block is still resolved — the only way a call site can become tag-blind, since no helper API accepts untagged fences | `test_gate_block_refuses_an_untagged_recipe` — a fixture section whose gating block lacks the tag must raise `BlockNotFound` (AC-6.6) |
 | `exec-scan-executes` | the `:412` text scan is made to run its block through `dbe.run_block` | `test_exec_block_scan_performs_no_execution` — `:412` asserted to call neither `run_block` nor `subprocess` (AC-6.2's exemption, pinned by a mutant that breaks it) |
@@ -667,7 +667,7 @@ the duplicate bounder is.
   test cannot hide behind the additions.
 - `git status --porcelain` is unchanged across a run of a block that writes files.
 - No hand-written ` ```bash ` extraction remains on the **executing** path of
-  `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` both route through
+  `h-mad/tests/test_h_mad_collect_report_docs.py` — `:270` and `run_recipe` (hoisted to `_run_recipe`) both route through
   the helper. `:412` keeps its text scan **by decision**: it selects a different, untagged block
   (`exec codex`) that must never be run, so an executor which returns only tagged blocks cannot
   serve it. A test asserts `:412` performs no execution, so the exemption is pinned rather than
@@ -749,3 +749,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.53: Design v1.51 back-propagation: 61 mutations (59 + 2).
 - v1.54: Plan re-audit v40 (codex must 1; agy clean): docsections.json gains docsections-syspath-setup-removed bound to test_docsections_imports_from_an_unrelated_cwd (six rows).
 - v1.55: Design v1.53 back-propagation: docsections.json binding sentence; eight wire mutations (wire-revert-select, wire-revert-substitute).
+- v1.56: Plan re-audit v42 (codex must 1 should 1, both answered by impl-plan v1.3; agy clean) + design v1.54 back-propagation: _run_recipe naming.
