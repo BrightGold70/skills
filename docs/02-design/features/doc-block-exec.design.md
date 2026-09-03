@@ -207,12 +207,20 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
 timeout path, and an exception path alike; its `OSError`, if any, is caught and recorded there
 rather than raised from inside `finally` (which would replace whatever exception was in flight).
 After the `try`, the helper reads the directory back: `os.path.lexists(cwd)` must be false. If it
-is not — a recorded `OSError`, or a directory that is somehow still there — `CleanupFailed(cwd)`
-is raised, chained to the recorded error, and `main` prints `DOCBLOCK: CLEANUP_FAILED path=<p>`,
-exit 2. The failure is real and cheap to produce: a block that runs `mkdir keep && chmod 000 keep`
+is not — a recorded `OSError`, or a directory that is somehow still there — `CleanupFailed(cwd,
+cause)` is raised, carrying the recorded `OSError` (or `None` when nothing was raised and the
+read-back alone caught it), and `main` prints `DOCBLOCK: CLEANUP_FAILED path=<p>`, exit 2. **The
+two guards are separately mutation-tested, because the read-back makes `ignore_errors` look
+redundant:** `cleanup-errors-ignored` (restore `ignore_errors=True`) is killed by
+`test_cleanup_failure_carries_the_os_error`, which fault-injects an `rmtree` that raises and
+asserts `cause` is that error — under the mutation nothing is recorded, the read-back trips, and
+`cause` is `None`; `cleanup-readback-removed` (drop the `lexists` check) is killed by
+`test_cleanup_readback_catches_silent_retention`, which fault-injects an `rmtree` that does
+nothing and raises nothing — under the mutation the run reports `RAN` over a retained directory. The failure is real and cheap to produce: a block that runs `mkdir keep && chmod 000 keep`
 leaves a subdirectory `rmtree` cannot list, on which `rmtree` measurably raises `PermissionError`
 and `rmtree(…, ignore_errors=True)` measurably retains the whole tree with no signal (probed on
-this machine, Python 3.14, uid 501). That silent retention is the mutation-verification invariant's
+the supported interpreter — python 3.11.8, darwin, euid 501; command and output in the plan's
+§Measurements). That silent retention is the mutation-verification invariant's
 "a completed run reported over an unverified mutation", and it is what the old `ignore_errors=True`
 did. **Precedence:** a cleanup failure outranks a `BlockTimeout` on the same run — both exit 2,
 neither carries `rc=`, and a retained directory is state the operator must act on whereas the
@@ -333,11 +341,22 @@ CLI:
 
 ```
 h_mad_doc_block_exec.py <doc> --heading <h> [--index N] [--subst K=V]...
-                              [--shell-timeout SECONDS] [--stdout PATH] [--stderr PATH]
+                              [--preamble-file PATH] [--shell-timeout SECONDS]
+                              [--stdout PATH] [--stderr PATH]
 ```
 
 There is deliberately **no** `--all`, no `--dir`, and no glob-accepting argument. That absence is a
 requirement, not an oversight, and is pinned by a test asserting the parser rejects such input.
+
+**Stream artifacts: reserved at the pre-check, overwritten, written through the held handle.** The
+writability pre-check is `open(path, "w")` on each of `--stdout`/`--stderr` — which creates or
+truncates the file exactly as a shell `>` does, so an existing artifact is overwritten, never
+appended — and the two handles stay open across the run and are what the streams are finally
+written to. A failure *after* the run can therefore only be a write on an open descriptor (disk
+full, I/O error) and maps to `StreamWriteFailed` → `UNREADABLE reason=stream_write_failed`, exit 2;
+the `rc` is not reported, because the artifact the caller was promised does not exist. Aliased
+paths are refused before either is opened (AC-3.9), so two distinct destinations cannot collapse
+between the check and the write.
 
 Verdict lines, one per run:
 
@@ -355,7 +374,7 @@ Verdict lines, one per run:
 | `DOCBLOCK: BAD_INFO key=<k>` | 2 | unrecognised info-string token |
 | `DOCBLOCK: TIMEOUT seconds=<n>` | 2 | the block outran its bound (either race in AC-5.5 included) |
 | `DOCBLOCK: CLEANUP_FAILED path=<p>` | 2 | the temp cwd could not be removed, or was read back present |
-| `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable` |
+| `DOCBLOCK: UNREADABLE reason=<r>` | 2 | `doc_unreadable`, `stream_path_unwritable`, `stream_write_failed` |
 
 `RAN` is the only line carrying `rc=`; `AMBIGUOUS` is the only cannot-judge carrying `blocks=`.
 `blocks=`, `count=`, `index=` and `seconds=` are diagnostic values saying *why* judgement failed,
@@ -383,6 +402,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamPathUnwritable` | `main`'s pre-check (wraps `OSError`) | `UNREADABLE reason=stream_path_unwritable` |
 | `StreamPathsAlias` | `main`'s pre-check (resolved-path compare) | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-check (wraps `OSError` from reading `--preamble-file`) | `UNREADABLE reason=preamble_unreadable` |
+| `StreamWriteFailed` | `main`, writing a stream to its held handle after the run | `UNREADABLE reason=stream_write_failed` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds=<n>` |
 | `CleanupFailed(path)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path=<p>` |
 
@@ -397,11 +417,15 @@ Nothing is logged; the verdict line and the streams are the whole output contrac
 
 Unit tests only, at the module boundary; no mocking of `subprocess`, because the behaviours under
 test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely what a mock would
-stub out. **One named exception:** the AC-5.5 `killpg` race is a timing window between
-`TimeoutExpired` and the kill that no fixture can hold open, so its test injects the fault by
-monkeypatching `os.killpg` to raise `ProcessLookupError` (pytest's `monkeypatch`, restored on
-exit). That patches the one call whose *failure* is under test and leaves `subprocess` real; the
-drain race beside it needs no mock, because a real `os.setsid()` descendant holds the pipes open. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
+stub out. **Two named exceptions, both fault injections on a call whose *failure* is under test,
+both via pytest's `monkeypatch` (restored on exit), both leaving `subprocess` real:** the AC-5.5
+`killpg` race is a timing window between `TimeoutExpired` and the kill that no fixture can hold
+open, so its test patches `os.killpg` to raise `ProcessLookupError`; and the AC-3.14 cleanup
+guards are exercised by patching `shutil.rmtree` in the helper's namespace — once to raise
+`OSError`, once to do nothing — because a real permission failure is skipped under root and the
+two guards need mutants only one of them kills. The drain race needs no mock, because a real
+`os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
+`euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
 CRLF, and a key containing regex metacharacters.
 
@@ -418,10 +442,10 @@ are the real process's, not a return value — the same shape `test_skill_candid
 | AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index=<n>`, exit 2, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
 | AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key does not corrupt counts; overlapping keys refuse with `SUBST_OVERLAP` |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged; `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect** |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged; `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink and `./x` vs `x`) refuse before running; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; a stream handle closed under the helper after the run → `UNREADABLE reason=stream_write_failed` |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path → `UNREADABLE reason=preamble_unreadable` and the block leaves no side effect |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
-| AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path)` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=`; the test then `chmod 700`s and removes the tree in its own `finally`; a normal run reads back absent (also AC-3.1) |
+| AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path)` and the CLI prints `CLEANUP_FAILED path=<p>`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** cannot-judge in the verdict table exits 2 (the test enumerates the table rather than hardcoding a count, so adding a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`: `os.killpg` monkeypatched to raise `ProcessLookupError` → still `TIMEOUT`, cwd absent, no traceback; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally` |
@@ -515,3 +539,4 @@ mean the probe never created one.
 - v1.9: Narrow the preamble's set -u wording to what the controlled pair actually measured.
 - v1.10: Design audit v5 (codex must 4 + agy must 9, union): BAD_INDEX for ordinals below 1; verified cleanup with CLEANUP_FAILED and read-back, precedence over TIMEOUT; both timeout races specified (ProcessLookupError on killpg, bounded drain against an escapee, DRAIN_SECONDS); extract docstring no longer contradicts AmbiguousHeading; PreambleUnreadable mapped; AC-3.12 combined-invocation contract stated; Test Plan covers AC-1.7, 1.9, 3.11-3.14, 5.5 and the collect-alone import; docsections.json re-point; the one permitted monkeypatch named.
 - v1.11: Plan re-audit v12 back-propagation: fence_aware_end signature in the API block and __all__; consumer calls module-qualified for the wire spies (Components + Test Plan).
+- v1.12: Plan re-audit v13 back-propagation: --preamble-file in the CLI line; stream artifacts reserved at pre-check with overwrite semantics and StreamWriteFailed; CleanupFailed carries its cause, with the two cleanup mutations and the tests that kill them; the second named fault injection (rmtree).

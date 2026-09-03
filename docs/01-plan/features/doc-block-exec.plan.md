@@ -39,6 +39,27 @@ so a recipe is never executed only for its output to be discarded.
 Left unstated, an implementation can satisfy "one verdict line" while dropping the streams, or
 print the streams inline and break every consumer that parses the verdict line.
 
+**The CLI contract, in full.** `h_mad_doc_block_exec.py <doc> --heading <h> [--index N]
+[--subst K=V]... [--preamble-file <path>] [--shell-timeout SECONDS] [--stdout PATH]
+[--stderr PATH]`, and nothing else — no `--all`, `--dir` or glob argument, pinned by a
+parser-rejection test. `--preamble-file` is the CLI face of AC-3.11/3.12: `main` reads the file
+**before** any spawn, and an unreadable path maps to `UNREADABLE reason=preamble_unreadable`, exit
+2, block not run (test: `test_cli_unreadable_preamble_refuses_before_running`, whose block has a
+side effect the test asserts is absent). The registry entry carries a detail row for that reason
+like every other emittable line (AC-4.5). **Stream artifacts have overwrite semantics and are
+reserved at the pre-check**: the writability check *is* `open(path, "w")` — it creates or
+truncates the file exactly as a shell `>` would, and the handle stays open through the run and is
+the handle the stream is finally written to. So "passed the pre-check, then failed the write" can
+only mean a write error on an already-open descriptor (disk full, I/O error), which maps to
+`UNREADABLE reason=stream_write_failed`, exit 2, after the run — the block's `rc` is lost with the
+artifact, which is the honest outcome, since the artifact the caller was promised does not exist.
+Two paths that resolve to one file are refused before either is opened (AC-3.9), so distinct
+destinations cannot collapse between check and write. Tests:
+`test_stream_paths_truncate_an_existing_file` (a pre-existing file is overwritten, not appended)
+and `test_stream_write_failure_after_the_run_is_a_refusal` (the second open descriptor is closed
+under the helper's feet by the test — a deterministic stand-in for disk-full — and the verdict is
+`UNREADABLE reason=stream_write_failed`).
+
 **The fixture preamble is load-bearing, not a convenience.** A documented recipe may consume a
 variable the surrounding prose sets rather than the block itself — the Second-surface gate block
 reads `COLLECT_OUT`, supplied today by a preamble that runs the real collector. Measured (AC-3.11
@@ -129,10 +150,14 @@ directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves
 first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py` — at its
 fence-state update and its heading match respectively, the same two guards they mutate today —
 the third stays (it mutates `section_from`'s call, which remains), and the harness's exact-once
-anchor rule makes a missed re-point a refusal rather than a silent survivor. The exact `find`
-strings are pinned at impl-plan time against the landed source, because a plan cannot quote lines
-of a file that does not exist yet and a guessed anchor is the harness refusal this paragraph just
-promised.
+anchor rule makes a missed re-point a refusal rather than a silent survivor. **Ordering, since the
+source does not exist yet:** the module and its mutation specs are authored *together* in Phase 5
+— the same task that lands `fence_aware_end` re-points `docsections.json`, re-reads the landed
+lines to set each `find` to an exact-once anchor, runs `h_mad_mutation_harness.py` on both specs,
+and records the named RED test in every mutation's `test` key before the task closes. A mutation
+without a `test` key, or a harness run that is deferred to "later", is the silent no-op this
+invariant forbids, and the 5e gate scores `ALL_CAUGHT` on the pytest summary, not on the harness's
+exit code.
 
 **FR-6 is a wiring task, not a new-behaviour task, and is planned as one.** Its deliverable is a
 *connection* — the migrated call sites reaching `h_mad_doc_block_exec` — and the Connection
@@ -249,7 +274,7 @@ by decision rather than by omission.
 | A recipe's side effects reach the working tree | Medium | Every run in a fresh `tempfile.mkdtemp()` cwd, removed afterwards; pinned by asserting the tree is byte-identical across a run that writes files |
 | "Run under `mktemp -d`" is read as the shell utility, acquiring an external dependency | Medium | The phrase came verbatim from the candidate row and is a stdlib call here: AC-3.13 asserts `tempfile.mkdtemp()`, mode `0o700`, and no `mktemp` invocation in the source |
 | A timeout leaves orphan processes, as four `exec-pane` dispatches did in this repo | Medium | The full sequence, because `killpg(proc.pid, …)` only reaches a group the launch actually created: `Popen(…, start_new_session=True)` makes the child a group leader so its pgid **is** its pid → `communicate(timeout=…)` → on `TimeoutExpired`, `killpg(proc.pid, SIGKILL)` (never via `getpgid`, which races once the direct child has exited) → a second bounded `communicate` to drain → `rmtree(cwd)` in `finally`. Pinned by asserting no **in-group** descendant survives; a descendant that calls `os.setsid()` escapes any group kill — measured — so AC-5.2 is scoped to the group rather than claiming containment this design cannot deliver. Two races on that path are handled, not hoped away (AC-5.5): `killpg` on a group that already emptied raises `ProcessLookupError` (measured) and is read as "already reaped"; a drain `communicate` that an escapee keeps open is itself bounded, after which the pipes are closed and the leader reaped |
-| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` measurably raises and `ignore_errors=True` measurably retains the tree |
+| Cleanup fails and the run still reports success | Medium | `rmtree` without `ignore_errors`, a read-back that the cwd is absent, and `CLEANUP_FAILED path=<p>` exit 2 on failure (AC-3.14); the fixture is an unreadable subdirectory, on which `rmtree` raises and `ignore_errors=True` retains the tree — command and output under Measurements. The permission fixture is skipped under root (`euid == 0`, where mode bits do not bind) and a deterministic fault injection runs everywhere: `shutil.rmtree` monkeypatched in the helper's namespace to raise `OSError`, and separately to silently do nothing, so both guards — the recorded error and the read-back — each have a mutation only they kill |
 | The strict default hides the very defect class that motivated the feature | Medium | `shell=plain` is declarable per fence, and the shell-killing `exit` case is pinned as an explicit acceptance criterion |
 | An unknown info-string key silently falls back to a default mode | Medium | Unknown keys refuse rather than default |
 | The carried "68 fences" figure is stale | Low | Re-measured this session; command and output cited below under Measurements |
@@ -346,6 +371,35 @@ setsid binary on PATH: NONE
 killpg on an already-reaped group: ProcessLookupError
 ```
 
+**The cleanup fixture (AC-3.14).** The fixture block is `mkdir keep && chmod 000 keep`, and the
+claim the AC rests on is that `shutil.rmtree` raises on the result while `ignore_errors=True`
+retains it silently. Measured on the supported interpreter, as an unprivileged user:
+
+```
+$ python3.11 -u - <<'PY'
+import os, shutil, subprocess, sys, tempfile
+d = tempfile.mkdtemp()
+r = subprocess.run(["bash", "-euo", "pipefail", "-c", "mkdir keep && chmod 000 keep"], cwd=d)
+print("fixture block rc:", r.returncode, "| euid:", os.geteuid(), "| python:", sys.version.split()[0], "|", sys.platform)
+try:
+    shutil.rmtree(d); print("rmtree(d): removed with no error")
+except OSError as e:
+    print("rmtree(d) raised:", type(e).__name__, "on", os.path.basename(e.filename))
+print("retained after the raise:", os.path.lexists(d))
+shutil.rmtree(d, ignore_errors=True)
+print("retained after rmtree(d, ignore_errors=True):", os.path.lexists(d), "<- silent")
+os.chmod(os.path.join(d, "keep"), 0o700); shutil.rmtree(d); print("cleaned by the test's finally:", not os.path.lexists(d))
+PY
+fixture block rc: 0 | euid: 501 | python: 3.11.8 | darwin
+rmtree(d) raised: PermissionError on keep
+retained after the raise: True
+retained after rmtree(d, ignore_errors=True): True <- silent
+cleaned by the test's finally: True
+```
+
+Under root the mode bits do not bind and the raise does not occur, so the test skips the
+permission fixture there and the fault-injected variants carry the AC (Risks table).
+
 **That measurement stands and is no longer the whole story:** a later design cycle found the same
 toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which is why
 `docsections.py` now appears under Deliverables and Implementation Strategy — it drops its
@@ -438,3 +492,4 @@ design begins.
 - v1.15: Plan re-audit v10 (agy): reconcile the docsections measurement with the later decision to change that file — the tag was never the reason, the duplicate bounder is.
 - v1.16: Plan re-audit v11: specify the tests/->scripts/ import (self-contained sys.path insert, collect-alone test, docsections.json re-point); cite the AC-5.2 in-group/escape/ProcessLookupError probe with its command and output; add the task-level API and caller map; name the FR-6 wire tests and the mutation each kills; track the AC count to 46 (spec v1.13); add the cleanup-verification risk row.
 - v1.17: Plan re-audit v12 (codex must 2 should 1; agy clean): name the bounder fence_aware_end(text, start, level) -> int and its two call replacements in docsections; make every consumer call module-qualified (dbe.*) so the wire spies observe it, pinned by a no-from-import test; cite the collected and passing baseline (2747/2747 at 6b4df35) with commands.
+- v1.18: Plan re-audit v13 (codex must 3 should 1; agy clean): state the full CLI contract including --preamble-file and its pre-spawn refusal; cite the AC-3.14 cleanup probe (python3.11, euid 501) and add the root-skip plus fault-injected fallbacks; replace 'anchors pinned at impl-plan time' with the author-together / re-read / harness / named-RED ordering; define stream overwrite and reservation semantics (stream_write_failed).
