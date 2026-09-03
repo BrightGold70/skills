@@ -228,7 +228,10 @@ not opted in.
     reservation fails after the first created a file, the first is closed and unlinked and the
     helper reads back that the path is gone; if the rollback left it behind, the same verdict
     carries a `leftover: "<path>"` detail line (tested by fault-injecting `os.unlink`), so a
-    refusal never silently leaves a new artifact.
+    refusal never silently leaves a new artifact. Concurrent replacement of the caller's own artifact
+    path between the two reservations is outside the threat model (the paths are the caller's
+    scratch paths); the rollback compares the path's `lstat` identity with the created descriptor's
+    `fstat` identity and never unlinks a file it did not create.
   - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
     the *same* invocation immediately before the block. It is fixture setup, never doc content:
     the block's own text is unchanged and is what the doc says. **Composition is
@@ -313,7 +316,7 @@ not opted in.
   the exit code follows the base
   **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
   refusal that judged a readable input and declined to run it (`NOT_FOUND`, `AMBIGUOUS`,
-  `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_INFO`, `BAD_SUBST`, `SUBST_MISSING`,
+  `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_ARGS`, `BAD_INFO`, `BAD_SUBST`, `SUBST_MISSING`,
   `SUBST_OVERLAP`),
   and `TIMEOUT`, which is a measured fact about the block (it did not finish) rather than a fault
   of the tool. **Exit 2 is reserved for genuine operational errors**, the invariant's own words:
@@ -386,9 +389,10 @@ not opted in.
     `communicate`, a negative value raises `ValueError` *after* the spawn and `inf` makes the
     promised bound unbounded. On the CLI the value is taken as a string and validated by `main`,
     so a non-numeric argument reaches the `DOCBLOCK:` contract rather than argparse's usage path;
-    the same policy makes a non-integer `--index` a `BAD_INDEX`. argparse's own exit-2 usage
-    error remains only for *grammar* — an unknown option or a missing value — and is documented
-    as the one non-`DOCBLOCK` exit.
+    the same policy makes a non-integer `--index` a `BAD_INDEX`. argparse's own usage path is routed too: the parser is built with `exit_on_error=False` and its
+    `error()` raises `BadArgs(message)`, rendered as `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0, so an
+    unknown option or a missing value is a verdict and there is no non-`DOCBLOCK` exit (`--help`
+    alone keeps argparse's exit-0 help text).
   - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
     tested: (a) the group has already emptied by the time `killpg` runs. **The helper calls
     `proc.poll()` before `killpg`**, because a leader that exited is a zombie until reaped and,
@@ -597,3 +601,4 @@ quoted
 - v1.49: Plan audit v65 agy back-propagation: AC-6.4's gate command is bounded through hmad-dispatch run --timeout 1200 (1 occurrence(s) rewritten), as the plan and design already state.
 - v1.50: Impl-plan v1.26 back-propagation: AC-6.4's gate command runs from the repository root in a subshell (from h-mad/ it collects 2485, not the 2747 baseline); the subshell propagates the wrapped status (measured).
 - v1.51: Design v1.84 back-propagation: the empty-key CLI refusal prints arg="=V" (quoted).
+- v1.52: Design v1.85 back-propagation: BAD_ARGS verdict for argparse grammar errors (no non-DOCBLOCK exit); AC-3.10 states the concurrent-replacement non-goal and the identity check.

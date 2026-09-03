@@ -3,7 +3,7 @@
 ## Executive Summary
 
 A single stdlib-only module, `h-mad/scripts/h_mad_doc_block_exec.py`, exposing `extract` / `select` / `substitute` / `run_block` / `find_heading` /
-`fence_aware_end` / `main` (the seven names in `__all__`), which selects a bash fence by (document, heading, `hmad:exec`
+`fence_aware_end` / `main` (the seven functions in `__all__`, beside `Block`, `RunResult` and the exception hierarchy — 28 public names), which selects a bash fence by (document, heading, `hmad:exec`
 tag, optional ordinal), applies an explicit substitution map, and runs the block via
 `subprocess.Popen(start_new_session=True)` in a `mkdtemp` cwd — printing one `DOCBLOCK:` verdict
 line and refusing on every condition under which it would measure nothing.
@@ -257,7 +257,10 @@ the CLI's `--heading` pass) matches a heading event whose text after the hash ru
 stripped — equals `Text` **and** whose level equals the hash count; the bare form `Text` (what
 `docsections.titled_section` passes today) matches on text at any level. **The two forms are told
 apart by the request itself, full form first** (impl-plan audit v26): a request that parses as an
-ATX heading line — 0–3 spaces, 1–6 `#`, a space — IS the full form, always; only a request that
+ATX heading line — 0–3 spaces, 1–6 `#`, then a space, a tab or end of line: **the scanner's own
+ATX predicate, reused, so the dispatch cannot drift from the recognition** (impl-plan audit v27:
+a space-only request predicate would leave `##\tText` and a title-less `##` selectable by the
+scanner but unreachable by any request) — IS the full form, always; only a request that
 does not parse as one is the bare form. So a heading whose visible title itself begins with an
 ATX prefix (`### ## Text`, title `## Text`) is reachable only through its full form
 (`### ## Text` → level 3, title `## Text`) and never through the bare form — the one documented
@@ -267,7 +270,10 @@ with `#`). `test_heading_form_precedence_full_wins` pins it on a document holdin
 only, `find_heading(text, "### ## Text")` the level-3 one only, and neither raises
 `AmbiguousHeading`; mutation `form-precedence-bare-first` (the bare form is tried first, or the
 two matches are unioned, so the request `## Text` finds two headings and refuses) is killed by
-it — with one deliberate
+it; `test_full_form_request_accepts_tab_and_eol` pins the shared predicate — a `##\tText` heading
+requested as `##\tText` and a title-less `##` requested as `##` are both found in full form —
+and mutation `request-predicate-space-only` (the request side narrowed to a space, so those two
+requests fall to the bare form and miss) is killed by it — with one deliberate
 tightening over the `re.search` it replaces, which took the FIRST of several same-text headings:
 the bare form refuses duplicates at any level with `AmbiguousHeading(n)` exactly as the full form
 does (`test_bare_form_duplicate_headings_refuse`; the same guard `duplicate-heading-takes-first`
@@ -547,7 +553,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 79 mutations (79 rows: 77 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 81 mutations (81 rows: 79 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -679,7 +685,7 @@ def find_heading(text: str, heading: str) -> tuple[int, int] | None:
     AmbiguousHeading(n) when more than one matches."""
 ```
 
-`__all__` names all seven. `fence_aware_end` and `find_heading` are public on purpose:
+`__all__` names all seven functions, plus `Block`, `RunResult` and every `DocBlockError` subclass — 28 names — so a consumer catches `dbe.BlockNotFound` through the public surface (design audit v76: the impl-plan's Task 1 enumerates them). `fence_aware_end` and `find_heading` are public on purpose:
 `docsections.titled_section` calls `find_heading` in place of its own `re.search` heading regex
 and then `fence_aware_end` in place of the deleted `_fence_aware_end`; `docsections.section_from`
 calls `fence_aware_end` with the same `(text, start, level)` arguments. A heading `find_heading`
@@ -733,8 +739,16 @@ parser is `argparse.ArgumentParser(allow_abbrev=False)`, so the documented spell
 spellings — `--shell-t` is an error, not an alias — and a test asserts that too. **Argument values
 are the contract's, argument grammar is argparse's**: `--index` and `--shell-timeout` are declared
 `type=str` and validated by `main` (`BAD_INDEX` / `BAD_TIMEOUT`), so a malformed value still gets
-one `DOCBLOCK:` line; only an unknown option or a missing value reaches argparse's usage error,
-the documented single non-`DOCBLOCK` exit 2.
+one `DOCBLOCK:` line — **and so does a grammar error**: the parser is built with
+`exit_on_error=False` and its `error()` overridden to raise `BadArgs(message)`, a `DocBlockError`
+that `main` renders as `DOCBLOCK: BAD_ARGS message="<m>"`, exit 0, because a malformed but
+readable invocation is input the helper declined and the Audit-gate signal discipline admits no
+non-`DOCBLOCK` exit (plan audit v67; an earlier draft left argparse's exit-2 usage error as "the
+documented exception", which was a breach, not an exception). `--help` alone keeps argparse's
+exit-0 help text. `test_malformed_invocation_is_a_verdict` drives an unknown option and a missing
+option value in-process and asserts one `BAD_ARGS` line each, exit 0, and no usage text on stdout;
+mutation `argparse-error-unrouted` (the `error()` override removed, so argparse raises
+`SystemExit(2)` and prints usage) is killed by it.
 
 **Stream artifacts: reserved last, never truncated by an open, written through the held handle.**
 The order in `main` is `extract` → `select` → `substitute` → the remaining validations (timeout,
@@ -788,7 +802,16 @@ its own `finally`-shaped step — close first, then unlink iff created, each gua
 one does not skip the other — and is followed by a read-back, `os.path.lexists(created_path)`;
 if the file this call created is still there, the same `stream_path_unwritable` verdict carries a
 `leftover: "<path>"` detail line, so the no-new-artifact guarantee is either true or reported as
-broken, never silently assumed. `test_rollback_unlink_failure_reports_leftover` gives `--stdout`
+broken, never silently assumed. **Concurrent replacement of the caller's own artifact path is
+outside the threat model** (design audit v76): the two stream paths are the caller's scratch
+paths — the same trust AC-3.9's check-to-open note already assumes — and no seam can interpose
+between two syscalls of one call. The rollback still refuses to delete what it did not create:
+before the unlink it compares `os.lstat(path)`'s `(st_dev, st_ino)` with the reserved
+descriptor's `fstat` identity recorded at creation and, on a mismatch, skips the unlink and
+reports the path as `leftover:` (someone else's file stands there now; the inode this call
+created is already gone or renamed away). That identity check is a policy constraint rather than
+a mutation-backed guard: its mismatch branch cannot be reached by a test without a ninth seam
+between the two arms, and adding one for a stated non-goal is not warranted. `test_rollback_unlink_failure_reports_leftover` gives `--stdout`
 a fresh path and `--stderr` a path under a regular file (the real `ENOTDIR`), patches `os.unlink`
 in the helper's namespace to raise `PermissionError` (the eighth named seam, Test Strategy), and
 asserts `UNREADABLE reason=stream_path_unwritable`, exit 2, a `leftover:` line naming the stdout
@@ -947,6 +970,7 @@ returns its input unchanged) is killed by it.
 | `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading="<h>"` | 0 | >1 heading matches text+level |
 | `DOCBLOCK: BAD_INDEX index="<n>"` | 0 | `--index` below 1, or not an integer |
 | `DOCBLOCK: BAD_TIMEOUT value="<v>"` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
+| `DOCBLOCK: BAD_ARGS message="<m>"` | 0 | argparse grammar: an unknown option or a missing option value (the parser's `error()` is routed here; `--help` alone still prints help, exit 0) |
 | `DOCBLOCK: BAD_SUBST arg="<raw>"` (+ `duplicate_key: "<k>"`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: "<k>"` per key, map insertion order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" "<b>"` per pair | 0 | one key is a substring of another |
@@ -992,6 +1016,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `AmbiguousHeading(n)` | `extract` | `AMBIGUOUS_HEADING count=<n> heading="<h>"` |
 | `BadIndex(n)` | `select`, and `main` for a non-integer argument | `BAD_INDEX index="<n>"` |
 | `BadTimeout(value)` | `run_block` before `Popen`, and `main` for a non-numeric argument | `BAD_TIMEOUT value="<v>"` |
+| `BadArgs(message)` | `main`, from the parser's overridden `error()` (`exit_on_error=False`) | `BAD_ARGS message="<m>"` |
 | `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg="=V"` under the quoted-field grammar (design audit v75: never a bare `arg="=V"`) — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg="<raw>"` + `duplicate_key: "<k>"` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
 | `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
@@ -1130,6 +1155,7 @@ exactly what the base Mutation verification invariant forbids.
 | `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
 | `adjacent-heading-skipped` | the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address | `test_adjacent_heading_bounds_the_section` (AC-1.5 — the first section has no candidate and `fence_aware_end(text, start, level) == start`) |
 | `heading-level-pin-ignored` | `find_heading` matches the full `## Text` form on text alone, ignoring the hash count | `test_find_heading_accepts_full_and_bare_forms` (AC-1.5 — `### Text` must not satisfy `## Text`) |
+| `request-predicate-space-only` | the full-form request predicate accepts only a space after the hash run while the scanner accepts a space, a tab or end of line, so `##\tText` and `##` requests fall to the bare form and cannot select their headings | `test_full_form_request_accepts_tab_and_eol` (AC-1.5) |
 | `form-precedence-bare-first` | `find_heading` tries the bare form first (or unions both forms), so the request `## Text` also matches a `### ## Text` heading and refuses as ambiguous | `test_heading_form_precedence_full_wins` (AC-1.5) |
 | `closing-hash-run-kept` | `_fence_events` leaves the optional closing hash run in a heading event's text, so `## Text ##` no longer matches `## Text` and a `## Text`/`## Text ##` pair counts as one | `test_closing_hash_run_does_not_change_heading_identity` (AC-1.5/1.7) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
@@ -1167,6 +1193,7 @@ exactly what the base Mutation verification invariant forbids.
 | `cleanup-errors-ignored` | `ignore_errors=True` restored | `test_cleanup_failure_carries_the_os_error` (AC-3.14) |
 | `cleanup-readback-removed` | the `lexists` read-back is gone | `test_cleanup_readback_catches_silent_retention` (AC-3.14) |
 | `precedence-timeout-raised-in-handler` | `BlockTimeout` raised inside the handler instead of recorded as pending | `test_cleanup_failure_outranks_timeout_injected` (AC-3.14) |
+| `argparse-error-unrouted` | the parser's `error()` override is removed, so an unknown option or a missing value exits 2 through argparse's usage text with no `DOCBLOCK:` line | `test_malformed_invocation_is_a_verdict` (AC-4.1) |
 | `allow-abbrev-restored` | the parser is built with `allow_abbrev=True` (the argparse default), so `--shell-t 5` silently aliases `--shell-timeout` | `test_parser_rejects_all_dir_and_abbreviations` (AC-4.2 — the abbreviated spelling must be a usage error) |
 | `stream-write-oserror-unwrapped` | the `except OSError` mapping around `_final_write` and its read-back is removed, so a write failure escapes as a traceback | `test_stream_write_failure_after_the_run_is_a_refusal` (AC-3.8 — the injected failure must print `stream_write_failed`, exit 2, no traceback) |
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
@@ -1204,7 +1231,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-nine rows, seventy-nine mutations — seventy-seven of the helper's source (the AC-5.3 row, once
+Eighty-one rows, eighty-one mutations — seventy-nine of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1383,3 +1410,4 @@ mean the probe never created one.
 - v1.82: Design audit v73 (codex must 1 should 1; agy must 1 — held, measured): _field's second pass escapes Cc/Zl/Zp (DEL, C1 incl. U+0085, U+2028/9) with test_unicode_line_separators_cannot_split_a_verdict_line and c1-escape-removed (78 rows: 76 + 2); nonregular-stream-accepted is killed by test_stream_path_char_device_refuses (/dev/null opens, the fstat check is reached; a reader-less FIFO fails at open with ENXIO); inline examples in the quoted grammar.
 - v1.83: Design audit v74 (codex nit; agy clean) + impl-plan audit v25 back-propagation: duplicate-heading-takes-first has one test key (the bare-form duplicate test is a regression test on the same guard); the Executive Summary names all seven public names.
 - v1.84: Design audit v75 (codex must 1; agy must 1 at 16 tool calls) + plan audit v66 / impl-plan audit v26 back-propagation: six docsections.json rows bind into test_docsections.py (4 + delegation + heading-lookup), two into the new module's file; --subst =V prints arg="=V" under the quoted grammar; find_heading's two forms are told apart by the request (full form first), a title beginning with an ATX prefix is reachable only in full form — test_heading_form_precedence_full_wins, mutation form-precedence-bare-first (79 rows: 77 + 2).
+- v1.85: Design audit v76 (codex must 2; agy must 1 on the impl-plan) + plan audit v67 / impl-plan audit v27 back-propagation: __all__ is 28 names (seven functions, two dataclasses, the exception hierarchy); argparse grammar errors are BAD_ARGS verdicts, exit 0 (test_malformed_invocation_is_a_verdict, argparse-error-unrouted); the full-form request predicate is the scanner's own (space, tab or EOL) with test_full_form_request_accepts_tab_and_eol and request-predicate-space-only; concurrent replacement of the caller's artifact path is a stated non-goal with an lstat/fstat identity check before the rollback unlink — 81 rows (79 + 2).
