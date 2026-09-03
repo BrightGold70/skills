@@ -411,7 +411,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 54 mutations (54 rows: 52 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 55 mutations (55 rows: 53 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — six mutations: `wire-revert-extract`, `wire-revert-run`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -598,7 +598,10 @@ success means this call created the file and records `created=True`; on `FileExi
 `os.open(path, O_WRONLY | O_APPEND | O_NONBLOCK)` **without `O_CREAT`** — success means a
 pre-existing file (`created=False`); `O_NONBLOCK` is what keeps the open **bounded**: on a FIFO
 with no reader a blocking open never returns (no `DOCBLOCK:` line, no timeout — the block has not
-even been spawned), whereas with `O_NONBLOCK` it fails at once with `ENXIO`. Every descriptor from
+even been spawned), whereas with `O_NONBLOCK` it fails at once with `ENXIO` — measured on the
+supported interpreter (plan §Measurements cites the command): `OSError errno=6 (ENXIO) after
+0.0000s` on python 3.11.8 / darwin, and with a reader present the open succeeds and `fstat`
+reports `S_ISREG=False S_ISFIFO=True`, which is the case the regular-file check below refuses. Every descriptor from
 either arm is then `fstat`ed and must be a **regular file** (`stat.S_ISREG`); a FIFO, socket,
 device or directory is closed and refused as `StreamPathUnwritable`
 (`UNREADABLE reason=stream_path_unwritable`), checked on the descriptor rather than the path so
@@ -618,7 +621,14 @@ handle is closed and — only if `O_EXCL` succeeded for it — unlinked, so a pr
 keeps every byte, a refusal leaves no new empty file, and there is no window in which another
 process's file could be mistaken for one this call created. The truncation is the final write itself:
 on the `RAN` path, after cleanup succeeded, each held handle gets `seek(0); truncate(); write(…);
-flush(); close()` — all five inside `_final_write`, because a buffered `TextIOWrapper` may defer
+flush(); close()` — all five inside `_final_write`, **with the `close()` in a `finally`**: if
+`seek`, `truncate`, `write` or `flush` raises, the handle is still closed before the exception is
+mapped, and an error from that close is caught in the same region and mapped too (the first error
+wins, the close error is chained as `__context__`), so no descriptor and no traceback can escape
+past `stream_write_failed` — `main`'s outer `finally` is a backstop for the alias-refusal and
+timeout paths, never the mapping for a write failure. `test_final_write_failure_before_close_still_closes`
+fault-injects `flush` to raise and asserts the verdict, the closed handle, and no traceback;
+mutation `final-write-close-not-in-finally`. It is all inside `_final_write` because a buffered `TextIOWrapper` may defer
 the OS write (and even the truncate) until `flush()` or `close()`, and an `OSError` surfacing at a
 close *outside* the mapped region would escape as a traceback instead of `stream_write_failed` —
 so an existing artifact is overwritten, never appended. **The write is then verified, not
@@ -841,6 +851,7 @@ exactly what the base Mutation verification invariant forbids.
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
+| `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally`, so a failing `flush` leaves the handle open and the close's error escapes | `test_final_write_failure_before_close_still_closes` (AC-3.8) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
 | `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
@@ -872,7 +883,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Fifty-four rows, fifty-four mutations — fifty-two of the helper's source (the AC-5.3 row, once
+Fifty-five rows, fifty-five mutations — fifty-three of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1011,3 +1022,4 @@ mean the probe never created one.
 - v1.44: Design audit v38 (codex must 1; agy clean): backtick-in-info prohibition in _fence_events, measured on both renderers, with its mutation (50 rows).
 - v1.45: Design audit v39 (codex must 1; agy must 1 should 1): the existing-file reservation arm opens O_NONBLOCK and every reserved descriptor must be a regular file (a reader-less FIFO refuses bounded), with two mutations (52 rows); the two post-Task-5 tests are authored in Task 5; the wire-revert-extract row names the tag-tolerant regex.
 - v1.46: Design audit v40 (codex must 2; agy clean + nits): Popen passes cwd=cwd, with the cwd-not-passed mutation; the parity guard becomes a scanner event-trace test plus a no-fence-state source assertion on extract (54 rows); _gate_block returns dbe.Block.
+- v1.47: Design audit v41 (codex must 2; agy clean): _final_write closes in a finally with the close error mapped in the same region, plus its mutation (55 rows); the reader-less-FIFO ENXIO behaviour is cited from a probe on python 3.11.8/darwin.
