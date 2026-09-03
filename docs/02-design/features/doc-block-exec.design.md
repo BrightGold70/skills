@@ -157,13 +157,24 @@ a private generator `_fence_events(text)` that walks the document and yields, pe
 five kinds — fence `open`, fence `close`, fence `body`, ATX `heading` (with its `level`), or
 `prose` — together with the opener's marker character, run length, indentation and info string,
 and a scanner-derived `candidate` flag (a backtick opener whose first info word is `bash`), so
-no consumer re-recognises a fence or a heading. **Every grammar rule the scanner implements was
+no consumer re-recognises a fence or a heading. **The `titled_section` migration was measured as a differential before it was prescribed** — the old
+`re.search` heading regex against the new selector over every `*.md` under `h-mad/` and `handoff/`
+(30 files, `archive/` excluded): `new_only=0` (nothing the old guard refused is newly accepted; the
+theoretical softenings `##\tx` and `## x ##` have zero instances) and `old_only=76`, every one a `#`
+comment line inside a fence the old regex mistook for a heading — the migration narrows the guard
+(plan §Measurements, "Heading selector differential"). **Every grammar rule the scanner implements was
 rendered through markdown-it-py 2.2.0 (CommonMark preset) before it was written down — 14 of 14
 agree with the renderer; the corpus and its output are in the plan's §Measurements ("Scanner
 grammar corpus").** `extract` consumes it to find candidates and
 `fence_aware_end` consumes it to bound a section — feeding the scanner **complete source lines
 from the top of the document through the line that contains `start`**, then considering a
-boundary only at line starts strictly after `start`; never a `text[:start]` slice, which can cut a
+boundary at every line whose start offset is **≥ `start`** — a line that began before a
+mid-line `start` is excluded, and the line beginning exactly at `start` is included, which is the
+line adjacent to a heading `find_heading` returned (`test_adjacent_heading_bounds_the_section`: a
+heading immediately followed by a same-level heading that owns a tagged block yields no candidate
+for the first, and the bounder returns `start` itself; mutation `adjacent-heading-skipped`, the
+predicate `>` instead of `≥`, which would hand the next section's block to the wrong address);
+never a `text[:start]` slice, which can cut a
 line right after its marker run and make a ```` ```trailing ```` body line look like a blank-tailed
 closer (hostile fixture: `start` placed immediately after the three backticks of that line inside
 an open fence; the next fenced `#` must still not end the section) — and neither function carries
@@ -433,7 +444,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 62 mutations (62 rows: 60 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 63 mutations (63 rows: 61 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -477,7 +488,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `_gate_block() -> dbe.Block` resolving through `dbe.extract`/`dbe.select`, `_gate_bash_block() ->
    str` reduced to `_gate_block().text` so its two text-pin callers keep their string, and
    `run_recipe`, hoisted out of its enclosing test to a module-level
-   `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` so a wire pin can call and spy it
+   `_run_recipe(*, phase, cycle, report, root) -> dbe.RunResult` — calling `dbe.run_block(subbed, preamble=preamble, timeout=60.0)`, an explicit bound the wire pin asserts — so a wire pin can call and spy it
    (its two call sites read only `.stdout`/`.stderr`, which `RunResult` carries) — in one task, with
    `h-mad/tests/mutation-specs/doc_block_exec_wire.json`
    (new) and the six named tests in that file — **and, authored here rather than in Tasks 1–4
@@ -547,8 +558,9 @@ def fence_aware_end(text: str, start: int, level: int) -> int:
     block, never a fence). Fence state is established over COMPLETE lines
     from the document start through the line containing `start` (never a
     text[:start] slice, which can truncate a line after its marker run and
-    fake a closer); boundaries are considered only at line starts after
-    `start`. So `start` may lie anywhere -- inside an open fence included -- and a
+    fake a closer); a line is a candidate boundary iff its start offset is
+    >= `start` (the line adjacent to a heading is included; a line that began
+    before a mid-line `start` is not). So `start` may lie anywhere -- inside an open fence included -- and a
     fenced `#` after an arbitrary offset is never read as a heading; that is
     the contract `docsections.section_from` needs for its symbol-anchored
     offsets. The bounder `extract` uses, exported so
@@ -942,6 +954,7 @@ exactly what the base Mutation verification invariant forbids.
 | `fence-run-length-ignored` | any ``` line closes a fence, regardless of run length | `test_quoted_tag_inside_longer_fence_is_not_an_opener` (AC-1.6) |
 | `section-bound-ignores-level` | the section ends at the next heading of *any* level | `test_section_owns_deeper_headings` (AC-1.5) |
 | `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
+| `adjacent-heading-skipped` | the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address | `test_adjacent_heading_bounds_the_section` (AC-1.5 — the first section has no candidate and `fence_aware_end(text, start, level) == start`) |
 | `heading-match-ignores-fence-state` | the heading search runs over every line instead of the scanner's `prose` lines, so a fenced `## <heading>` starts the section | `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start` (AC-1.5/1.6 — the candidate must be the block under the real heading, and a tagged block under the fenced copy is never selected) |
 | `duplicate-heading-takes-first` | `AmbiguousHeading` never raised; first match wins | `test_duplicate_headings_refuse` (AC-1.7) |
 | `select-first-on-ambiguous` | `select` returns `blocks[0]` when >1 and no index | `test_two_tagged_blocks_without_index_are_ambiguous` (AC-1.3) |
@@ -964,7 +977,7 @@ exactly what the base Mutation verification invariant forbids.
 | `preamble-separator-dropped` | composition is `preamble + text′`, no newline | `test_preamble_without_trailing_newline_still_precedes_the_block` (AC-3.11) |
 | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
 | `stream-reserved-with-truncation` | the reservation's `os.open` flags gain `O_TRUNC` (or the loop is replaced by `open(path, "w")`), so reserving empties a pre-existing artifact | `test_stdout_survives_a_failed_stderr_reservation` (AC-3.8) |
-| `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally` (a plain statement after the `try`), so a failing `flush` skips the close inside the mapped region and a failing close's error escapes | `test_final_write_close_failure_is_mapped` (AC-3.8 — the recording proxy's `close` alone raises; the mutant prints a traceback instead of `stream_write_failed`) and `test_final_write_failure_before_close_still_closes` (AC-3.8 — the proxy's `flush` and `close` both raise; the mutant never calls the proxy's `close` from `_final_write`, and the outer `finally` closes the real handle, not the proxy) |
+| `final-write-close-not-in-finally` | `_final_write`'s `close()` is moved out of its `finally` (a plain statement after the `try`), so a failing `flush` skips the close inside the mapped region and a failing close's error escapes | `test_final_write_failure_before_close_still_closes` (AC-3.8 — the canonical `test` key: the proxy's `flush` and `close` both raise; the mutant never calls the proxy's `close` from `_final_write`, and the outer `finally` closes the real handle, not the proxy; `test_final_write_close_failure_is_mapped` — `close` alone raises, the mutant prints a traceback — also goes red and stays as a regression test on the same mutant, but the spec's one `test` key names the former) |
 | `verify-deferred-past-second-write` | `main` verifies both artifacts only after both `_final_write` calls, so stderr is truncated and written before a stdout verification failure is diagnosed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — the detail lines must read `failed: stdout` / `skipped: stderr` and the stderr artifact's bytes must be unchanged) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: stdout`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
@@ -1001,7 +1014,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Sixty-two rows, sixty-two mutations — sixty of the helper's source (the AC-5.3 row, once
+Sixty-three rows, sixty-three mutations — sixty-one of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1153,3 +1166,4 @@ mean the probe never created one.
 - v1.57: Design audit v52 (codex clean; agy should 2): the AC-4.1–4.5 test row names LAUNCH_FAILED in the exit-2 class; the CleanupFailed row carries its os_error: detail line.
 - v1.58: Design audit v53 (codex must 1 should 1; agy must 1) + impl-plan audit v7 back-propagation (codex must 1 should 1): scanner event model is open/close/body/heading/prose with level and candidate; the grammar is verified against markdown-it-py 2.2.0 (14/14, plan §Measurements); find_heading is public and docsections delegates the section start as well as its end (seven public names; docsections.json seventh row docsections-heading-lookup-reverted); the alias refusal leaves closing to the backstop so the injected-close test can hold.
 - v1.59: Design audit v54 (codex must 2; agy must 1 should 1): the UNREADABLE verdict row carries stream_write_failed's detail lines; Implementation Order Task 1 lists _fence_events and find_heading.
+- v1.60: Plan re-audit v46 (codex must 1 should 1) + impl-plan audit v8 back-propagation (codex must 2 should 1): the boundary predicate is start-offset >= start so an adjacent heading bounds the section (test_adjacent_heading_bounds_the_section, adjacent-heading-skipped; 63 rows: 61 + 2); the titled_section migration cited as a measured differential (new_only=0, old_only=76 fenced comments); one canonical test key for final-write-close-not-in-finally; _run_recipe passes timeout=60.0.

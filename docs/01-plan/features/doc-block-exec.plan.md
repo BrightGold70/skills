@@ -289,7 +289,7 @@ in the file moves" stays true;
 `run_recipe(...)`, hoisted to the module-level `_run_recipe(...)` so a pin can spy it, stops returning `subprocess.CompletedProcess[str]` and returns the helper's
 `RunResult`, calling `_gate_block()` and then `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
 shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
-`dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
+`dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>, timeout=60.0)` — substitution is a separate step that returns a new `Block`, so `run_block` never
 substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
 nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
@@ -371,7 +371,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 62 mutations with a full-node-ID `test` binding each — 60 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 63 mutations with a full-node-ID `test` binding each — 61 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -600,6 +600,23 @@ toggle mis-tracks an unbalanced inner quote inside a four-backtick fence, which 
 duplicate bounder and imports the authoritative one. The tag was never the reason to change it;
 the duplicate bounder is.
 
+- **Heading selector differential** — the old `docsections.titled_section` regex
+  (`^(?P<marks>#+) …\s*$`) against the CommonMark ATX selector `find_heading` implements, over every
+  `*.md` under `h-mad/` and `handoff/` excluding `archive/`, fence-aware on the new side
+  (throwaway `heading_differential.py`, one `re.match` per line per selector):
+
+  ```
+  $ python3.11 heading_differential.py
+  files=30 both=266 old_only=76 new_only=0
+  OLD-ONLY h-mad/SKILL.md 83 # WIRING: PASS
+  OLD-ONLY h-mad/SKILL.md 84 # WIRING: FAIL issues=1  +  detail lines
+  OLD-ONLY h-mad/SKILL.md 164 # start_fresh — the feature does not exist yet, so create it
+  ```
+
+  `new_only=0`: the base Guard-narrowing invariant's "every softened outcome" set is empty on this
+  corpus — `##\tx` and `## x ##` are accepted by the new selector in principle and occur nowhere.
+  `old_only=76`: all 76 are `#` comment lines inside fenced code the old regex read as headings; the
+  migration narrows the guard.
 - **Scanner grammar corpus** — every fence and ATX rule the scanner implements, rendered through
   markdown-it-py 2.2.0 (CommonMark preset) on the supported interpreter, 14 of 14 agreeing; the
   script is a throwaway (`grammar_corpus.py`, one `md.render(src)` per case, a needle asserted on
@@ -782,3 +799,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.57: Design v1.56 back-propagation: 62 mutations (60 + 2).
 - v1.58: Design v1.58 back-propagation: scanner grammar corpus in §Measurements (markdown-it-py 2.2.0, 14/14); find_heading (seven public names); docsections.json seventh row.
 - v1.59: Plan re-audit v45 (codex must 1) + design v1.59 back-propagation: titled_section's replacement calls find_heading for (start, level); find_heading in the API table.
+- v1.60: Plan re-audit v46 (codex must 1 should 1; agy clean): heading selector differential in §Measurements (30 files, new_only=0, old_only=76); run_block timeout=60.0 in the migration; 63 mutations.
