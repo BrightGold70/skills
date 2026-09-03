@@ -153,7 +153,7 @@ An opening fence is `` ```bash `` optionally followed by whitespace-separated to
 - `shell=plain` → `bash -c`, which is how an operator's paste actually runs.
 - Any other token, or `shell=` with any other value, is `BAD_INFO` — and so is a **duplicated**
   recognised token (`hmad:exec hmad:exec`, `shell=strict shell=plain`), refused deterministically
-  as `BAD_INFO key=<the repeated token>` rather than resolved first-wins or last-wins, because a
+  as `BAD_INFO key="<the repeated token>"` rather than resolved first-wins or last-wins, because a
   mode nobody unambiguously chose must not run (`test_duplicate_info_tokens_refuse`, mutation
   `duplicate-info-token-last-wins`) — but **only on a fence that carries `hmad:exec`**. Validation follows opt-in: an untagged fence is not a candidate, so its
   info string is never inspected and an unrelated ` ```bash --frozen ` elsewhere in the tree can
@@ -395,7 +395,7 @@ orphaned. `killpg(proc.pid, …)` still reaches the group.
    traceback: the helper
    still runs the bounded drain and closes the pipes, does **not** `wait()` (a child it could not
    signal is not something to wait on unboundedly), records `LaunchFailed("reap", err)` as the
-   pending outcome with `pgid=<n>` in its detail, and lets cleanup and the read-back run as usual
+   pending outcome with `pgid: "<n>"` in its detail, and lets cleanup and the read-back run as usual
    (AC-4.6). **The same mapping covers the helper's own I/O on the child** (design audit v62): an
    `OSError` from the first `communicate(timeout)`, from the drain `communicate(timeout=DRAIN_SECONDS)`,
    from closing `proc.stdout`/`proc.stderr`, or from the `wait()` — none of which the
@@ -535,7 +535,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 77 mutations (77 rows: 75 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 78 mutations (78 rows: 76 of the helper's source, 2 of `h-mad/SKILL.md`'s registry rows), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -753,11 +753,15 @@ either arm is then `fstat`ed and must be a **regular file** (`stat.S_ISREG`); a 
 device or directory is closed and refused as `StreamPathUnwritable`
 (`UNREADABLE reason=stream_path_unwritable`), checked on the descriptor rather than the path so
 there is no check-to-open race, and a file this call created that turns out non-regular cannot
-exist (an exclusive create makes a regular file). `test_stream_path_fifo_without_reader_refuses_bounded`
-makes a `os.mkfifo` path the `--stdout` and asserts the refusal arrives within a second and the
-block ran nothing; mutation `nonregular-stream-accepted` (the `S_ISREG` check removed) and
-`stream-open-blocking` (`O_NONBLOCK` dropped, which the same FIFO test catches by timing out its
-own bounded wait); on `FileNotFoundError` there (the file vanished between the two opens) go back
+exist (an exclusive create makes a regular file). `test_stream_path_char_device_refuses` makes
+`/dev/null` the `--stdout` — a character device that `os.open(O_WRONLY | O_APPEND | O_NONBLOCK)`
+opens successfully, so the `fstat` check is actually reached — and asserts the refusal and that
+the block ran nothing; it kills `nonregular-stream-accepted` (the `S_ISREG` check removed).
+`test_stream_path_fifo_without_reader_refuses_bounded` makes an `os.mkfifo` path the `--stdout`
+and asserts the refusal arrives within a second and the block ran nothing; a reader-less FIFO
+fails at the `open` itself with `ENXIO` under `O_NONBLOCK` (measured), so it never reaches the
+`fstat` check and cannot kill the `S_ISREG` mutant (design audit v73 agy) — what it kills is
+`stream-open-blocking` (`O_NONBLOCK` dropped, caught by timing out its own bounded wait); on `FileNotFoundError` there (the file vanished between the two opens) go back
 to the exclusive-create arm. Because the second arm can never create, every file this call
 creates is created by the exclusive arm and recorded as such — a plain retry with `O_CREAT`
 would create a fresh file and mis-record it as pre-existing, which is exactly what a later refusal
@@ -886,7 +890,7 @@ Verdict lines, one per run. **Every dynamic field is rendered through one escape
 (design audit v67): `heading="<h>"`, `arg="<raw>"`, `missing_key: "<k>"`, `duplicate_key: "<k>"`,
 `overlap: …`, `os_error: "<text>"`, `path="<p>"`, `leftover: "<path>"`, `stream: "<name>"`, `value="<v>"`
 and every other caller- or document-controlled value pass through it, and it renders the value as
-a **double-quoted JSON string** — `json.dumps(str(value), ensure_ascii=False)`, the value stringified FIRST so an `int`/`float` is quoted too (`json.dumps(3)` alone would emit a bare `3` — design audit v72 agy): `"` and `\` escaped,
+a **double-quoted JSON string** — `json.dumps(str(value), ensure_ascii=False)`, the value stringified FIRST so an `int`/`float` is quoted too (`json.dumps(3)` alone would emit a bare `3` — design audit v72 agy), **followed by a second pass** that rewrites every remaining character of Unicode category `Cc`, `Zl` or `Zp` to its `\uXXXX` escape — `json.dumps` escapes only C0 controls, and leaves DEL, the C1 range (U+0085 NEL included) and U+2028/U+2029 literal, every one of which `str.splitlines()` treats as a line boundary (measured: a heading carrying NEL, LS, PS and DEL splits into four lines after `json.dumps` alone — design audit v73): `"` and `\` escaped,
 `\r`, `\n` and every other control character escaped, everything else (spaces, `=`, non-ASCII)
 verbatim inside the quotes — so no argument, key, heading or path can start a second line **or
 forge a field token inside the line**: a `--heading` of `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"`
@@ -905,7 +909,12 @@ contract true for a machine consumer; `_field` is the only place a dynamic value
 `test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'` in-process and asserts the
 `NOT_FOUND` line parses under that grammar to exactly `heading` (`== "x rc=0"`) with no `rc`
 field; mutation `field-quoting-removed` (`_field` escapes control characters but emits the value
-bare, so the parse yields an `rc` field) is killed by it. `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line`
+bare, so the parse yields an `rc` field) is killed by it.
+`test_unicode_line_separators_cannot_split_a_verdict_line` drives a `--heading` carrying U+0085,
+U+2028, U+2029 and DEL and asserts `capsys` stdout `.splitlines()` has exactly one line, starting
+with `DOCBLOCK:`, with the four visible as `\u0085`, `\u2028`, `\u2029`, `\u007f` inside
+`heading="…"`; mutation `c1-escape-removed` (the second pass removed, so `json.dumps` alone
+renders and NEL stays literal) is killed by it. `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line`
 drives the CLI in-process with a newline-bearing `--heading`, a `--subst` key and value carrying
 `\n`, and — for the `leftover:` slot — a `--stdout` path with `\n` in its file name that the first
 arm creates (a fresh path under `tmp_path`; a newline is a legal POSIX file-name byte), with
@@ -1137,7 +1146,7 @@ exactly what the base Mutation verification invariant forbids.
 | `verify-deferred-past-second-write` | `main` verifies both artifacts only after both `_final_write` calls, so stderr is truncated and written before a stdout verification failure is diagnosed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — the detail lines must read `failed: "stdout"` / `skipped: "stderr"` and the stderr artifact's bytes must be unchanged) |
 | `final-write-not-verified` | the post-close read-back and comparison of each artifact is removed | `test_final_write_readback_catches_a_silent_no_op` (AC-3.8 — `_final_write` injected as a no-op that returns normally; the verdict must still be `stream_write_failed` with `verify: "stdout"`) |
 | `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
-| `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10) |
+| `nonregular-stream-accepted` | the `S_ISREG` check on the reserved descriptor is removed, so a FIFO/device/socket is accepted as an artifact | `test_stream_path_char_device_refuses` (AC-3.10 — `/dev/null` opens, so the check is reached; a reader-less FIFO fails at `open` and never reaches it) |
 | `stream-open-blocking` | `O_NONBLOCK` is dropped from the existing-file arm, so a reader-less FIFO blocks the open forever | `test_stream_path_fifo_without_reader_refuses_bounded` (AC-3.10 — the test's own bounded wait is what makes this mutant RED rather than a hang; it runs the CLI in a subprocess with `timeout=5` and treats expiry as failure) |
 | `stream-alias-check-removed` | the `fstat` `(st_dev, st_ino)` comparison is gone | `test_hard_linked_stream_paths_refuse` (AC-3.9) |
 | `mktemp-invocation-planted` | `tempfile.mkdtemp()` is replaced by `subprocess.run(["mktemp", "-d"], …)` — valid Python and exactly the forbidden invocation | `test_no_mktemp_invocation_in_source` (AC-3.13 — the argv-token/command-word scan goes RED on the real helper) |
@@ -1150,6 +1159,7 @@ exactly what the base Mutation verification invariant forbids.
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
 | `field-escape-removed` | `_field` returns its input unchanged, so a newline inside a heading, key, path or OS-error text starts a second `DOCBLOCK:` line | `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (AC-4.1) |
+| `c1-escape-removed` | `_field`'s second pass is removed, so DEL, C1 controls (U+0085) and U+2028/U+2029 stay literal inside the quotes and `splitlines()` sees more than one line | `test_unicode_line_separators_cannot_split_a_verdict_line` (AC-4.1) |
 | `field-quoting-removed` | `_field` escapes control characters but emits the value bare, without the JSON quotes, so `--heading 'x rc=0'` renders `heading=x rc=0` and a key/value consumer reads an `rc` field on a refusal | `test_dynamic_field_cannot_forge_a_token` (AC-4.1/4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
@@ -1181,7 +1191,7 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan goes RED on the real helper |
 
-Seventy-seven rows, seventy-seven mutations — seventy-five of the helper's source (the AC-5.3 row, once
+Seventy-eight rows, seventy-eight mutations — seventy-six of the helper's source (the AC-5.3 row, once
 described as a fixture-copy self-check, is a real argv mutation the source scan must catch) and
 **two of `h-mad/SKILL.md`**, the registry document, which the harness mutates exactly as it
 mutates source; those two AC-4.5 rows are the
@@ -1357,3 +1367,4 @@ mean the probe never created one.
 - v1.79: Impl-plan v1.22 back-propagation: the bare-field list is exhaustive; seconds= and pgid: are quoted like every other non-listed field.
 - v1.80: Design audit v72 (codex should 1; agy must 2 at 3 tool calls — int quoting held, the 'type-walk' phrase was this document's own error): _field stringifies before json.dumps so numbers are quoted; StreamPathUnwritable's zero-argument construction is justified by its raise site, not by a walk that instantiates nothing; every verdict/detail example rewritten in the quoted grammar (`heading="<h>"`, `os_error: "<text>"`, `written: "stdout"`).
 - v1.81: Impl-plan v1.24 back-propagation: `key=` (BAD_INFO) and both halves of `overlap:` are quoted like every non-exempt field.
+- v1.82: Design audit v73 (codex must 1 should 1; agy must 1 — held, measured): _field's second pass escapes Cc/Zl/Zp (DEL, C1 incl. U+0085, U+2028/9) with test_unicode_line_separators_cannot_split_a_verdict_line and c1-escape-removed (78 rows: 76 + 2); nonregular-stream-accepted is killed by test_stream_path_char_device_refuses (/dev/null opens, the fstat check is reached; a reader-less FIFO fails at open with ENXIO); inline examples in the quoted grammar.

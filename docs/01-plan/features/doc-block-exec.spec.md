@@ -303,7 +303,9 @@ not opted in.
 
 - **Description**: The CLI prints one `DOCBLOCK:` line — one physical line, whatever the inputs:
   every dynamic field (`heading=`, `arg=`, keys, paths, OS-error text) is rendered as a
-  double-quoted JSON string — `"`, `\` and every control character escaped, everything else
+  double-quoted JSON string — `"`, `\`, every C0 and C1 control (U+0085 included), DEL and the
+  Unicode line/paragraph separators U+2028/U+2029 escaped (anything `str.splitlines()` would
+  break on), everything else
   verbatim — so a caller- or document-controlled value can never start a second `DOCBLOCK:` line
   nor forge a field token such as ` rc=0` inside the line (`heading="x rc=0"` is one quoted
   value; helper-constrained fields such as `rc=<n>`, `blocks=<n>`, `shell=`, `stage=` stay bare);
@@ -591,3 +593,4 @@ quoted
 - v1.45: Design v1.78 back-propagation: AC-2.8 authorizes the two-layer empty-key rule (main refuses with the raw argument; substitute is the API guard); FR-4's dynamic fields are quoted JSON strings so no value forges a token.
 - v1.46: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar; _field stringifies before json.dumps.
 - v1.47: Design v1.81 back-propagation: `key=` and both `overlap:` elements quoted.
+- v1.48: Design v1.82 back-propagation: FR-4's escape set names C1 controls, DEL and U+2028/U+2029.

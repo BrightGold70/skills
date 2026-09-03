@@ -29,8 +29,9 @@ command; a fence carrying the tag is executable and every other fence in the tre
 **Transport of the three reported values.** The CLI prints exactly one `DOCBLOCK:` verdict line —
 one *physical* line whatever the inputs: every dynamic field (`heading=`, `arg=`, `index=`, keys,
 paths, OS-error text, `leftover:`) is rendered through one escaper, `_field`, as a double-quoted
-JSON string (`json.dumps(value, ensure_ascii=False)`: `"`, `\` and every control character
-escaped, everything else verbatim), so a caller- or document-controlled value can neither start a
+JSON string (`json.dumps(str(value), ensure_ascii=False)` plus a second pass escaping every
+remaining `Cc`/`Zl`/`Zp` character — DEL, the C1 range with U+0085, U+2028/U+2029 — which
+`json.dumps` leaves literal and `splitlines()` breaks on; everything else verbatim), so a caller- or document-controlled value can neither start a
 second `DOCBLOCK:` line nor forge a field token inside it — `--heading 'x rc=0'` renders as
 `heading="x rc=0"`, one quoted value, never a bare `rc=` on a refusal line (AC-4.3); the bare
 list is exhaustive and exactly the design's — `rc=`, `blocks=`, `count=`, `keys=`, `shell=`, `stage=`,
@@ -406,7 +407,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 77 mutations with a full-node-ID `test` binding each — 75 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 78 mutations with a full-node-ID `test` binding each — 76 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -884,3 +885,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.76: Plan re-audit v62 (codex must 2; agy clean) + design audit v71 nit: the bare-field list is the design's exhaustive seven (reason= included; seconds=/pgid: quoted); the docsections ordering paragraph is un-spliced (the sixth/seventh-row sentences now follow it as their own paragraph).
 - v1.77: Design v1.80 back-propagation: verdict/detail examples rewritten in the quoted-field grammar.
 - v1.78: Design v1.81 back-propagation: `key=` and both `overlap:` elements quoted.
+- v1.79: Plan re-audit v64 clean (both surfaces) + design v1.82 back-propagation: _field's second escaping pass; 78 mutations (76 of the helper's source).
