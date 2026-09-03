@@ -68,9 +68,15 @@ reserved after every check, and no open ever truncates**: after extraction, sele
 substitution and every remaining pre-spawn validation (timeout, preamble readability — the info
 string was validated inside `extract` and the ordinal inside `select`) have passed, both paths are
 reserved with the atomic create-or-open protocol the design specifies (exclusive create records
-ownership; `FileExistsError` → open the existing file *without* `O_CREAT`; `ENOENT` there →
-restart the exclusive create, so every file this call creates is recorded as created), the
-handles held, and only then compared for aliasing on their descriptors — append creates a missing file
+ownership; `FileExistsError` → open the existing file *without* `O_CREAT` **and with
+`O_NONBLOCK`**, so a reader-less FIFO fails at once with `ENXIO` instead of blocking before any
+`DOCBLOCK:` line or timeout can exist; `ENOENT` there → restart the exclusive create, so every file
+this call creates is recorded as created; every reserved descriptor is then `fstat`ed and must be
+a **regular file** — a FIFO, socket, device or directory refuses `stream_path_unwritable`, judged
+on the descriptor so there is no check-to-open race — tests
+`test_stream_path_fifo_without_reader_refuses_bounded` (an `os.mkfifo` `--stdout`, refusal within
+a second, block never run), mutations `nonregular-stream-accepted` and `stream-open-blocking`),
+the handles held, and only then compared for aliasing on their descriptors — append creates a missing file
 and never empties an existing one. The truncation is the final write itself — `seek(0);
 truncate(); write; flush(); close()`, all five inside the module's `_final_write(handle, text)` — the `close()` in a `finally`, so an `OSError` from any earlier step still releases the descriptor before the exception is mapped, and `main`'s own `try`/`finally` around both reservations closes whatever `_final_write` never reached —
 because a buffered `TextIOWrapper` may defer the OS write until `flush()`/`close()` and an error
@@ -209,7 +215,7 @@ directory on `sys.path` and an unrelated cwd. **The existing mutation spec moves
 that remain there; the
 first two re-point to the authoritative bounder in `scripts/h_mad_doc_block_exec.py` — at its
 fence-state update and its heading match respectively, the same two guards they mutate today —
-the third stays (it mutates `section_from`'s call, which remains), and the harness's exact-once
+the other two stay where they are, and the harness's exact-once
 anchor rule makes a missed re-point a refusal rather than a silent survivor. **All four convert to
 the harness's named-test form at the same time**: today the spec carries only `command` and an
 informational `_killed_by` per mutation, which the harness does not execute — it scores "did the
@@ -356,7 +362,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 52 mutations with a full-node-ID `test` binding each — 50 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — 54 mutations with a full-node-ID `test` binding each — 52 of the helper's source and 2 of `h-mad/SKILL.md`'s registry rows (the AC-4.5 pin has two directions); re-derived by counting the design's matrix rows, which is the authoritative list, each with its `test` binding, enumerated row by row — mutation name, mechanism, `tests/test_h_mad_doc_block_exec.py::<name>` — in the design's §"Test Plan" under the heading "Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry", which is the authoritative matrix this row points at |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -707,3 +713,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.46: Plan re-audit v32 (codex must 1; agy clean): the resolver splits into _gate_block() -> Block and _gate_bash_block() -> str (= .text), so the file's two text-pin callers keep their type and nothing else moves; the wire mutation targets _gate_block.
 - v1.47: Design audit v38 back-propagation: the bounder rule names the backtick-in-info prohibition; 50 mutations.
 - v1.48: Design audit v39 back-propagation: 52 mutations (50 + 2).
+- v1.49: Plan re-audit v35 (codex must 1; agy see report): the reservation paragraph carries O_NONBLOCK on the existing-file arm and the regular-file check with its FIFO test and two mutations; the stale 'third stays' fragment removed; 54 mutations.
