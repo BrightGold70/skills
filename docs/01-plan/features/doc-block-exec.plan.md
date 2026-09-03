@@ -231,8 +231,8 @@ discrimination cannot be lost by a later tidy-up. `_gate_bash_block` becomes
 `dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))` and returns a `Block`;
 `run_recipe(...)` stops returning `subprocess.CompletedProcess[str]` and returns the helper's
 `RunResult`, calling `dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py":
-shlex.quote(str(gate))})` and then `dbe.run_block(substituted, preamble=<the COLLECT_OUT line it
-builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
+shlex.quote(str(gate))})` — which returns `(Block, counts)` — and then
+`dbe.run_block(substituted_block, preamble=<the COLLECT_OUT line it builds today>)` — substitution is a separate step that returns a new `Block`, so `run_block` never
 substitutes and `main` can refuse a bad map before it reserves any artifact. Its four assertions
 migrate field-for-field — `.stdout`/`.stderr` keep their names, `.returncode` is not read today so
 nothing maps to `.rc` — and the `subprocess` import inside the test goes. Nothing else in the file
@@ -296,7 +296,7 @@ by decision rather than by omission.
 | `h-mad/scripts/h_mad_doc_block_exec.py` | module + CLI | FR-1, FR-2, FR-3, FR-4, FR-5 |
 | `hmad:exec` fence info-string tag convention | convention | FR-1 |
 | `h-mad/tests/test_h_mad_doc_block_exec.py` | tests | FR-1..FR-5 |
-| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 |
+| `h-mad/tests/mutation-specs/doc_block_exec.json` | mutation spec | FR-1..FR-5 — the 27 entries and their `test` bindings are enumerated in the design's Test Plan |
 | Wire mutations for the migrated call site (both directions), in `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | mutation spec | FR-6 |
 | Helper-scripts registry entry in `h-mad/SKILL.md` | docs | FR-4 |
 | Tag on the Second-surface gate fence in `h-mad/SKILL.md` | docs | FR-6 |
@@ -476,7 +476,8 @@ the duplicate bounder is.
 - FR-6's wire is discriminated in both directions: reverting the connection alone fails a named
   caller test while the helper's own suite still passes, and an unconditional call site fails a
   named test too.
-- The mutation spec reports `ALL_CAUGHT`, each mutation killed by its own named test.
+- All three mutation specs (`doc_block_exec.json`, `doc_block_exec_wire.json`, `docsections.json`)
+  report `ALL_CAUGHT`, each mutation killed by its own named `test`, scored on the pytest summary.
 - The full suite passes at no lower a count than the pre-change baseline plus this feature's tests.
   **The baseline is cited, not remembered** — measured at `6b4df35`, before any implementation
   commit, from the repo root:
@@ -561,3 +562,4 @@ design begins.
 - v1.22: Design audit v8 back-propagation: exit-code partition per the base invariant; substitute returns a new Block and run_block takes no subs; the five named consumer-file tests enumerated; floor test topology (collect-only subprocess, env guard, pass half outside the suite); main's order corrected (info string in extract, ordinal in select).
 - v1.23: Design audit v9 back-propagation: descriptor-level alias check; the suite gate command captures the exit status; AC count 48 (spec v1.19).
 - v1.24: Design audit v11 back-propagation: --subst contract in the CLI paragraph; alias check after reservation; LaunchFailed in the run_block row; AC count 49 (spec v1.21).
+- v1.25: Design audit v13 back-propagation: Deliverables and Success Criteria name all three mutation specs and point at the design's enumeration; the FR-6 pseudocode unpacks substitute's (Block, counts) tuple (agy nit).
