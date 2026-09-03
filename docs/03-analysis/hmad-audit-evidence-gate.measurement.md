@@ -107,7 +107,11 @@ Not pre-decided here: dropping a surface weakens the union that
 ## Reproduce
 
 ```bash
-# corpus (durable): ~/.h-mad-corpora/evidence-gate/prompts/   (64 prompts, c45-c76)
+# corpus  (durable): ~/.h-mad-corpora/evidence-gate/prompts/   (64 prompts, c45-c76)
+# scripts (durable): ~/.h-mad-corpora/evidence-gate/measure_spans.py, measure_spans2.py
 # reports (durable): HemaSuite .../gateway-consolidation.design.audit.v{45..77}.{agy,codex}.md
-# scripts (scratchpad, non-durable): measure_spans.py, measure_spans2.py
+#
+# Run with python3.11 (python3 has no pytest/importable test helpers here).
+# measure_spans.py  — rule 1: any absent backtick span.
+# measure_spans2.py — rule 2: absent span BY SHAPE CLASS, plus the per-fabrication detail.
 ```

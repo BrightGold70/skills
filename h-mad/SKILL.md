@@ -1005,10 +1005,14 @@ where the expensive mistakes live.
 
 ### Record a rejected finding in the rejections ledger, never in a gated document
 
-When a premise does not hold and you reject the finding, write it to
-`docs/<phase-dir>/features/<feature>.<phase>.rejections.md` — one entry per rejection, naming the
-cycle, the surface, the claim, and the evidence that refuted it. **Never pass that ledger as
-`--gated`.** It is a record *about* the audit, not a document the audit judged.
+When a premise does not hold and you reject the finding, write it to a ledger that sits **beside
+the document the audit judged** — `<feature>.design.rejections.md` next to
+`<feature>.design.md`, `<feature>.impl-plan.rejections.md` next to `<feature>.impl-plan.md`.
+(Beside it, not in a per-phase directory: `plan` and `impl-plan` share `docs/01-plan/features/`,
+so "the phase's directory" is ambiguous for exactly the two phases most often confused.) One entry
+per rejection, naming the cycle, the surface, the claim, and the evidence that refuted it.
+**Never pass that ledger as `--gated`.** It is a record *about* the audit, not a document the
+audit judged.
 
 The rejection does **not** go in the gated document's Version History, which is where it naturally
 wants to go — the Version History is the session log, and a rejection feels like part of it. Two
@@ -1800,6 +1804,11 @@ assembling by hand because the script is unavailable:
     python3 ~/.claude/skills/h-mad/scripts/h_mad_version_history.py <doc> \
       --version v1.<N> --text "Audit v<N> fixes from <audit-file> — <summary>."
     ```
+    **A cycle whose findings were all rejected has nothing to bump — do not bump it.** The Version
+    History records *fixes*; a rejection goes to `<feature>.<phase>.rejections.md`
+    (§"Record a rejected finding in the rejections ledger, never in a gated document"). Bumping
+    here for a rejection edits a gated file, which resets the both-clean streak and costs a second
+    cycle for a finding that was not real in the first place.
     Read the `VERSION-HISTORY:` token, not `$?` alone. This step runs once per cycle per doc, so it
     is the most-repeated edit in the loop and the one that fails most quietly: a `.replace()` whose
     anchor has drifted writes nothing and reports success, and appending at the end of a
