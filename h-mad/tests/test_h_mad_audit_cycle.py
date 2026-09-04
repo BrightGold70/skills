@@ -512,6 +512,9 @@ def test_collect_falls_back_to_out(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert collected_path.stat().st_size > 0
     assert collected_path.read_text(encoding="utf-8") == HOSTILE_REPORT
     assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
+    # No `--after-marker`: since #16 the flag is passed only when the --out file
+    # actually carries the dispatch boundary, and these fixtures do not. Passing it
+    # unconditionally is what made the fallback dead for every `exec` dispatch.
     assert extract_report_calls(extract_calls_path) == [
         [
             str(out_path),
@@ -545,6 +548,9 @@ def test_collect_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     assert delivered == "none"
     assert collected_path is None
     assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
+    # No `--after-marker`: since #16 the flag is passed only when the --out file
+    # actually carries the dispatch boundary, and these fixtures do not. Passing it
+    # unconditionally is what made the fallback dead for every `exec` dispatch.
     assert extract_report_calls(extract_calls_path) == [
         [
             str(report_path.with_suffix(".out")),
@@ -554,7 +560,6 @@ def test_collect_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
             "impl-plan",
             "--cycle",
             "9",
-            "--after-marker",
         ]
     ]
 
@@ -579,6 +584,9 @@ def test_collect_extract_report_operational_error_on_unexpected_nonzero(
         )
 
     assert report_wait_calls(wait_calls_path) == [[str(report_path), "--timeout", "1"]]
+    # No `--after-marker`: since #16 the flag is passed only when the --out file
+    # actually carries the dispatch boundary, and these fixtures do not. Passing it
+    # unconditionally is what made the fallback dead for every `exec` dispatch.
     assert extract_report_calls(extract_calls_path) == [
         [
             str(report_path.with_suffix(".out")),
@@ -588,7 +596,6 @@ def test_collect_extract_report_operational_error_on_unexpected_nonzero(
             "plan",
             "--cycle",
             "10",
-            "--after-marker",
         ]
     ]
 
@@ -2106,3 +2113,61 @@ def test_the_render_still_calls_an_empty_log_unreadable(tmp_path, capsys):
     log = tmp_path / "empty.ndjson"
     log.write_text("")
     assert ac.measure_effort(log)["readable"] is False
+
+
+# --- #16: the `--out` fallback was structurally dead for `exec` dispatches -----
+# `--after-marker` requires the dispatch boundary, which only the PANE transport
+# writes. Passing it unconditionally made extraction exit 2 on every `exec` --out
+# file, and `_run_extract_report` turns exit 2 into "" — so the fallback the verb
+# "always arms" could never fire on the transport it is armed on.
+
+
+_SENTINEL_REPORT = (
+    "AUDIT-demo-plan-v1-BEGIN\n"
+    "## Summary\nthe real answer\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n"
+    "AUDIT-demo-plan-v1-END\n"
+)
+
+
+def test_out_fallback_fires_for_an_exec_dispatch_with_no_boundary(tmp_path):
+    """The measured incident: a 0-byte report file plus its .done marker while
+    --out held the complete report. Collection answered MISSING."""
+    ac = audit_cycle()
+    out = tmp_path / "out.txt"
+    out.write_text("agent chatter\n" + _SENTINEL_REPORT)
+    text = ac._run_extract_report(out, feature="demo", phase="plan", cycle=1)
+    assert "the real answer" in text, "the exec --out fallback must extract without a boundary"
+
+
+def test_pane_scrape_still_skips_the_echoed_prompt(tmp_path):
+    """The reason --after-marker exists, and why dropping it would be wrong.
+
+    A pane scrape carries the prompt echoed above the boundary, and the prompt
+    contains its OWN sentinel pair. Extraction must take the answer below the
+    boundary, not the echo above it.
+    """
+    ac = audit_cycle()
+    out = tmp_path / "out.txt"
+    out.write_text(
+        "AUDIT-demo-plan-v1-BEGIN\nECHOED PROMPT NOT THE ANSWER\nAUDIT-demo-plan-v1-END\n"
+        "===HMAD-DISPATCH-BOUNDARY===\n" + _SENTINEL_REPORT
+    )
+    text = ac._run_extract_report(out, feature="demo", phase="plan", cycle=1)
+    assert "the real answer" in text
+    assert "ECHOED PROMPT" not in text, "the boundary must still be honoured when present"
+
+
+def test_a_zero_byte_report_with_its_marker_does_not_beat_a_good_out(tmp_path):
+    """End to end: the 0-byte-plus-.done shape must not be taken as delivery."""
+    ac = audit_cycle()
+    report = tmp_path / "empty.report.md"
+    report.write_text("")
+    (tmp_path / "empty.report.md.done").write_text("")
+    out = tmp_path / "out.txt"
+    out.write_text(_SENTINEL_REPORT)
+    delivered, path = ac.collect(
+        ac.PassSpec(index=1, report_path=report, out_path=out, rc=0, log_path=None),
+        grace=0.2, project_root=tmp_path, feature="demo", phase="plan", cycle=1,
+    )
+    assert delivered == "out", f"delivered={delivered}"
+    assert path is not None and "the real answer" in path.read_text()

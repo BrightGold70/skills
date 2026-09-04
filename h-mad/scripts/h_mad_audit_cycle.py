@@ -12,6 +12,7 @@ import sys
 from collections import namedtuple
 from pathlib import Path
 
+from h_mad_extract_report import DISPATCH_BOUNDARY
 from h_mad_review_evidence import scan
 
 
@@ -201,7 +202,37 @@ def _run_report_wait(report_path: Path, grace: float) -> bool:
 def _run_extract_report(
     out_path: Path, *, feature: str, phase: str, cycle: int
 ) -> str:
-    """Report text, or '' when nothing is there."""
+    """Report text, or '' when nothing is there.
+
+    `--after-marker` is passed ONLY when the file actually carries the dispatch
+    boundary, and that condition is the whole of #16.
+
+    The boundary is written by the PANE transport, where the prompt is echoed into
+    the scrape and the reader must skip past it — otherwise the sentinel pair
+    extracted is the one inside the prompt, not the agent's answer. An `exec`
+    dispatch has no echo, so its `--out` file has no boundary. Passing the flag
+    unconditionally therefore made `extract_report` exit 2 on every `exec` `--out`
+    file, which this function turns into `""` — and the fallback that the whole
+    verb "always arms" was structurally DEAD for the transport it is armed on.
+
+    Measured: a codex pass wrote a 0-byte report file plus its `.done` marker while
+    `--out` held the complete sentinel report; collection answered
+    `COLLECT: MISSING delivered=none` and the report had to be recovered by hand.
+    Reproduced end-to-end before this fix.
+
+    Dropping the flag entirely would be wrong in the other direction — it is what
+    stops a pane scrape yielding the prompt's own sentinel — so the condition is
+    the boundary's presence, which is exactly what distinguishes the two
+    transports. `extract` already takes the LAST BEGIN/END pair, so a file with no
+    boundary is still read from its end rather than its echo.
+    """
+    try:
+        has_boundary = DISPATCH_BOUNDARY in out_path.read_text(
+            encoding="utf-8", errors="replace"
+        )
+    except OSError:
+        has_boundary = False
+
     try:
         result = subprocess.run(
             [
@@ -214,7 +245,7 @@ def _run_extract_report(
                 phase,
                 "--cycle",
                 str(cycle),
-                "--after-marker",
+                *(["--after-marker"] if has_boundary else []),
             ],
             capture_output=True,
             text=True,
