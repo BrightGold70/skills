@@ -25,10 +25,25 @@ Before any feature-level operation, check:
    `python3 ~/.claude/skills/h-mad/scripts/h_mad_hook_wiring.py` and read the `WIRING:`
    token. This one never halts — see §"Wired, not just installed" — but it is not
    optional to *run*: an unwired gate is silent in exactly the way a passing one is.
-3. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
-4. Does `docs/.bkit-memory.json` exist?
+3. Are the **agents registered**? The five teammate definitions this skill dispatches
+   (§"Teammate authors", §"Teammate audit leg") live in `agents/` inside this checkout and are
+   reached through user-scope symlinks:
 
-If 3 or 4 is missing → run bootstrap automatically, then continue with the requested operation.
+   ```bash
+   for n in spec-author plan-author design-author implplan-author doc-auditor; do
+     ln -sfn "<checkout>/h-mad/agents/$n.md" "$HOME/.claude/agents/$n.md"
+   done
+   ```
+
+   A **project-scoped** `.claude/agents/<name>.md` shadows the user-scope link, so a copy left
+   there is a fork that drifts silently — remove it rather than editing it. Verify with
+   `head -2 ~/.claude/agents/<name>.md` naming the agent, not by trusting the link's presence.
+   Getting this wrong is not a halt: `Agent(subagent_type: "plan-author")` fails loudly with an
+   unknown agent type, so it announces itself.
+4. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
+5. Does `docs/.bkit-memory.json` exist?
+
+If 4 or 5 is missing → run bootstrap automatically, then continue with the requested operation.
 
 `INSTALL: FAIL` → **halt `bootstrap:install_broken`** and surface the detail lines. Do not
 bootstrap and do not proceed: the install is what decides *which* copy of every script and
@@ -229,9 +244,9 @@ yourself and correct the record with `h_mad_state_write.py`.
 See `references/phase-table.md` for the full gate table. Detailed inline protocols in `references/inline-protocols.md`.
 
 1. **Brainstorm** — run inline brainstorm protocol (`references/inline-protocols.md §Phase 1`). Output: `docs/01-plan/features/<feature>-brainstorm.md`. Wait for user approval.
-2. **Specify** — run inline spec protocol (`references/inline-protocols.md §Phase 2`). Output: `docs/01-plan/features/<feature>.spec.md`. Wait for user approval.
-3. **Plan + Audit-Plan** — run inline plan generation (`references/inline-protocols.md §Phase 3`). Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan via agy → awk gate → if must-fix > 0 OR should-fix > 0, surface bullets + wait for user revision → re-audit. **Exit ONLY when both must-fix = 0 AND should-fix = 0.** No cycle cap — the rationale is that if errors are already known (whether breakage-level or improvement-level), shipping them is worse than burning more cycles. Operator escape at any cycle: author `.audit.v<N+1>.md` with `## Acknowledged-not-fixed` section listing the should-fix items the operator chooses to defer, commit `[audit-override]`, and the gate treats those items as cleared.
-4. **Design + Audit-Design** — run inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3. Back-propagation: if design revision invalidates a plan decision, return to Phase 3 to re-clean, then re-enter Phase 4 audit from cycle 1.
+2. **Specify** — **dispatch the `spec-author` teammate** (§"Teammate authors"); the inline spec protocol (`references/inline-protocols.md §Phase 2`) is its contract, not yours to execute. Output: `docs/01-plan/features/<feature>.spec.md`. Wait for user approval.
+3. **Plan + Audit-Plan** — **dispatch the `plan-author` teammate** (§"Teammate authors"); the inline plan protocol (`references/inline-protocols.md §Phase 3`) is its contract. Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan via agy → awk gate → if must-fix > 0 OR should-fix > 0, surface bullets + wait for user revision → re-audit. **Exit ONLY when both must-fix = 0 AND should-fix = 0.** No cycle cap — the rationale is that if errors are already known (whether breakage-level or improvement-level), shipping them is worse than burning more cycles. Operator escape at any cycle: author `.audit.v<N+1>.md` with `## Acknowledged-not-fixed` section listing the should-fix items the operator chooses to defer, commit `[audit-override]`, and the gate treats those items as cleared.
+4. **Design + Audit-Design** — **dispatch the `design-author` teammate** (§"Teammate authors"); the inline design protocol (`references/inline-protocols.md §Phase 4`) is its contract. Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3. Back-propagation: if design revision invalidates a plan decision, return to Phase 3 to re-clean, then re-enter Phase 4 audit from cycle 1.
 5. **Implementation (autonomous)** — see Phase 5 sub-section below.
 6. **Verification (autonomous)** — run inline gap analysis (`references/inline-protocols.md §Phase 6`). If match rate < 90%, run inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. Loop until ≥90% AND 100% test pass. Phase 6a-prime is an agy architectural review before gap analysis.
 7. **Closure (autonomous)** — **run the precondition gate first; it is what makes the 6-before-7 ordering real rather than documented:**
@@ -368,7 +383,7 @@ create`, resolves the pane's live handle by joining the create response's `paneK
 no title/preview dependence, no manual pin (H5). Use `launch` when h-mad owns the
 agent; `pin`/`pin-agents` when adopting an existing pane.
 
-- **5a** — arm hook + generate impl-plan via inline impl-plan protocol (`references/inline-protocols.md §Phase 5`). Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
+- **5a** — arm hook, then **dispatch the `implplan-author` teammate** (§"Teammate authors"); the inline impl-plan protocol (`references/inline-protocols.md §Phase 5`) is its contract. Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same agy audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"). Write audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>.md`. Run awk gate. If must-fix > 0 OR should-fix > 0, regenerate impl-plan with both must-fix AND should-fix bullets appended; cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 
   **Then run the wire-pin gate — 5b is the last gate that can require it.** `python3 ~/.claude/skills/h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md --feature <feature>`. Read the `WIREPIN:` token, never `$?` (`UNSHAPED` exits 2 because it is a cannot-judge, not a verdict). On `WIREPIN: PASS`, 5b automatically registers each passing `wiring` task in `.h-mad/wires.jsonl`; without `--feature`, registration is skipped. `UNREADABLE` → halt `step5b:impl_plan_unreadable`: the gate could not read the file at all, so nothing was parsed — this token carries **no `tasks=`/`wiring=` counts** precisely so it cannot be mistaken for a verdict or routed by a count that was never measured; the stderr `ERROR:` names the path, which is almost always wrong rather than the plan. `UNSHAPED` → **read the `tasks=` count before choosing a remedy**: `tasks=N` with N>0 → halt `step5b:impl_plan_unshaped`, the plan declares no `Task shape` at all, so a wiring task in it is indistinguishable from new behaviour — regenerate against the current template; `tasks=0` → halt `step5b:impl_plan_no_tasks`, the parser saw no task header, so nothing is missing a field — you are almost certainly pointed at a legacy `.plan.md` or the design doc rather than the `.impl-plan.md`. `FAIL` has two causes and two different remedies, so **read the detail lines, not just the verdict**: an `unpinned:` line → halt `step5b:wire_pin_missing:<task>` and return to 5a to name the `WIRE`/`WIRE-PIN`; a `mislabeled:` line → halt `step5b:wire_pin_shape_mislabel:<task>` — the fields are already filled in, so nothing is missing to add and the missing-pin remedy would read as already satisfied. After 5b nothing downstream can tell a wired build from an unwired one, which is why the obligation is mechanical here and advisory nowhere.
@@ -1087,11 +1102,73 @@ span-occurrence rule separates a fabricated citation from a reviewer's *proposed
 constructed test inputs, or a command it ran. Catching 4 of 6 fabrications costs 13 of 31 real
 must-fixes. Rejection stays a human judgement; the ledger is where it is recorded.
 
+## Teammate authors — one author, one document, fresh context every time
+
+**You do not author a phase document in your own loaded context.** Phases 2, 3, 4 and 5a each
+dispatch a fresh-context teammate that owns exactly one file:
+
+| Phase | Document | Agent | Definition |
+|---|---|---|---|
+| 2 | `docs/01-plan/features/<feature>.spec.md` | `spec-author` | `agents/spec-author.md` |
+| 3 | `docs/01-plan/features/<feature>.plan.md` | `plan-author` | `agents/plan-author.md` |
+| 4 | `docs/02-design/features/<feature>.design.md` | `design-author` | `agents/design-author.md` |
+| 5a | `docs/01-plan/features/<feature>.impl-plan.md` | `implplan-author` | `agents/implplan-author.md` |
+
+```
+Agent(subagent_type: "plan-author", prompt: "<feature>; documents: <spec> <design> <current plan>;
+      audit reports for the cycle being answered: <paths>; orchestrator decisions: <none | list>")
+```
+
+The same routing applies to a **revision**, not only a first draft. A cycle's must-fixes go to the
+author that owns the document they land in; you relay findings and decisions, you do not apply
+them yourself.
+
+**Why.** The orchestrator writing a fix is the same context that wrote the defect, and it sweeps
+the value it is *thinking about* rather than the value that exists. Measured on one feature:
+83 design cycles, 74 plan cycles, 34 impl-plan cycles without meeting an exit gate, and roughly
+**half** of all must-fixes were introduced by the previous cycle's fix. In one session six defects
+in the orchestrator's own work were caught by fresh contexts and **none** by the orchestrator
+re-reading its own document. Each agent file states the failure class each of its rules closes;
+they are contracts, not style guides.
+
+### The four rules that are the ORCHESTRATOR's, not the author's
+
+An author cannot enforce any of these, because each one is a property of the round rather than of
+a document:
+
+1. **File scoping is the whole mechanism — one author, one document, and an author that finds
+   another document owes something REPORTS it.** Nothing is silently harmonised across documents.
+   That is what keeps parallel authoring tractable, and it is what creates duty 3.
+
+2. **Freeze the tree for the duration of a round.** Unlike a codex leg, which reads a frozen
+   assembled prompt, a teammate reads the **working tree**. Measured: a `SKILL.md` commit landed
+   mid-round and all three auditors returned line numbers correct for what they read and
+   mislabelled against the base commit they were given (`:1897` reported "at `e8eaf6f`", which is
+   `:1887`) — and the orchestrator then relayed the wrong number onward. Commit before the round
+   or after it, never during.
+
+3. **Cross-check any acceptance criterion two concurrent authors touched.** Running authors in
+   parallel produces contradictions neither can see. Measured: `design-author` added a
+   dot-directory exclusion to AC-6.1 (25 files) while `implplan-author` independently repaired the
+   same AC's rebase (30 files). Both measurements were correct and answered different questions. It
+   surfaced only because the two reports were read against each other. This duty has no other home.
+
+4. **A teammate's view of its sibling documents goes stale mid-round.** An author that read the
+   spec before your revision of it landed will report "nothing is owed to the spec" and
+   "contradictions: none" in good faith, and be wrong. Re-state what moved, or re-dispatch, rather
+   than believing a sibling-document claim made against a version you have since replaced.
+
 ## Never gate on one audit pass
 
 **Agreement between two passes is not a stopping signal; it is one observation repeated.** Dispatch
 **two** independent passes on the same assembled prompt and gate on the **union** of their must-fixes,
 falsifying each against source before acting on it.
+
+**Which two surfaces — routed by whether codex can run.** Codex available: `codex` + `agy`. Codex
+unavailable (§"Teammate audit leg"): `doc-auditor` teammate + `agy`, with the teammate holding
+codex's leg and **gating**. Never two passes of one surface, and never the teammate leg *plus*
+codex on the same phase at the same cycle — that is three reports, of which two share a model
+family, and the union stops meaning what the rule below says it means.
 
 Prefer two **different** surfaces. Measured across 15 cycles on one feature: a clean verdict was
 falsified **four** times, and seven consecutive `agy`+`agy` cycles produced a false gate that a single
@@ -1944,6 +2021,93 @@ else
 fi
 ```
 
+## Teammate audit leg — when codex is unavailable
+
+When the codex leg above cannot run, a fresh-context `doc-auditor` teammate takes its place in the
+union and **gates**. This is the audit-side twin of the Phase-5 authoring fallback, and it keys off
+the **same declaration** — there is no second switch to set or to forget:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_state_write.py docs/.bkit-memory.json \
+  --feature <feature> --set codex_status=exhausted        # available|unavailable|exhausted
+```
+
+or `HMAD_CODEX_UNAVAILABLE=1` for a one-off. **Falling back is explicit and auditable, never
+silent**, for the same reason it is at Phase 5: a false declaration is a visible lie in the state
+record rather than an invisible shortcut. Declare it, then read it back before you route on it —
+`available` routes to §"Second surface — the codex leg" and this section does not apply.
+
+Assemble the prompt exactly as the codex leg does — the assembler does not care which surface
+consumes its output — but stage the report under a `teammate` surface:
+
+```bash
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_teammate.report.md
+rm -f "$RP" "$RP.done"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
+  --feature <feature> --phase plan|design|impl-plan --cycle <N> \
+  --project-root <PROJECT_ROOT> \
+  --report-file "$RP" \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate.txt
+```
+
+Dispatch the teammate against the assembled prompt **by path**, never by pasting it — it is large,
+and a pasted copy is a second version of the prompt that no gate can trace:
+
+```
+Agent(subagent_type: "doc-auditor", prompt:
+  "PROMPT=/tmp/audit_<feature>_<phase>_cycle<N>_teammate.txt
+   REPORT=<the $RP above>
+   PROJECT_ROOT=<PROJECT_ROOT>
+   This pass is GATING.")
+```
+
+**Say `GATING` or `ADVISORY` in the dispatch.** The agent assumes gating when told neither, which
+is the safe direction, but a pass that is genuinely advisory and is told nothing spends gating-level
+care for no reason — and, worse, an orchestrator that never says it has no record of which it meant.
+
+Then collect and gate through the ordinary path. `--surface teammate` needs **no code change**: the
+discriminator token is open by design (§"Audit filename grammar"), and closing that set is what
+made 98 real audits invisible once already.
+
+```bash
+COLLECT_OUT=$(hmad-dispatch collect-report --surface teammate \
+  --feature <feature> --phase <phase> --cycle <N> \
+  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_teammate.out.txt \
+  --project-root <PROJECT_ROOT>)
+printf '%s\n' "$COLLECT_OUT"
+```
+
+Read the `COLLECT:` token exactly as the codex leg does — anything but `COLLECT: OK` is
+`<phase>:report_not_collected`, and only the path on the `COLLECT: OK` line is gateable.
+
+### What this leg does NOT license
+
+- **It is not a second opinion on itself.** The teammate shares a model family with the
+  orchestrator whose documents it is auditing, so its blind spots and yours correlate by
+  construction — the exact property the union of two surfaces exists to defeat. It is a *stand-in*
+  for an independent surface, not an independent surface.
+- **It has never been scored against a labelled corpus.** The surfaces it sits beside have numbers:
+  agy produced 6 fabricated must-fixes out of 11 over 30 cycles on one feature, codex 0 of 25 on
+  the same corpus. The teammate leg was escalated to gating on **yield** — 6 confirmed must-fixes
+  in one round that 82 codex + 72 agy + 32 impl-plan cycles had missed, including a CLI parser that
+  was structurally unable to emit the verdict its own named test asserts — not on measured
+  precision.
+- **So a codex round is owed before anything gated this way is treated as settled.** When codex
+  becomes available again, run one round with the real leg on the current tree *before* stamping.
+  It is the cheapest available check on the escalation decision, and skipping it converts a
+  documented workaround into an undocumented standard.
+- **It does not extend to Phase 5 production code.** 5d/5e authoring is governed by the TDD gate
+  hook and its own `codex_status` path (§"Codex authors Phase 5"); this section covers phase
+  *documents* only.
+
+**Do not drop the agy leg while running this one.** agy is not uniformly hollow, and its evidence
+count sorts it: in one round its design pass ran **58** tool calls and found a real defect both
+teammate passes missed, while its plan pass ran **2** — the report-file floor, meaning it read
+nothing — and returned a clean worth nothing. Same surface, same round, opposite value. Score the
+pass by its `Effort:` block (`h_mad_audit_cycle.py` renders `tools=/ok=/failed=/thinking=` and
+labels `low-evidence`), and treat a low-evidence pass as a **non-verdict** rather than a clean.
+A leg dropped for being sometimes-hollow takes its sometimes-real findings with it.
+
 ## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
 
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
@@ -2105,7 +2269,7 @@ file carries at most one of them:
 | Token | Written by | Meaning |
 |---|---|---|
 | `p1`, `p2`, … | `audit-cycle` | One pass of a single cycle's output, split across files. |
-| `codex`, `agy`, `claude`, … | whoever ran the audit | The surface that produced this audit. |
+| `codex`, `agy`, `teammate`, `claude`, … | whoever ran the audit | The surface that produced this audit. `teammate` is the `doc-auditor` leg (§"Teammate audit leg"). |
 
 Both kinds carry the **same** `v<N>`, so a cycle is one number no matter how many files record
 it. The surface half was an unwritten convention until it was documented here: 98 real audits
@@ -2136,6 +2300,8 @@ is the one returned.
 - `references/state-schema.md` — state schema details
 - `references/agent-substrate.md` — Agent dispatch substrate (cmux | orca) — hmad-dispatch verbs, detection, identity pins, pane launch
 - `references/orchestration-mode.md` — Orca structured orchestration and Phase-5 worktree fanout protocol
+- `agents/{spec,plan,design,implplan}-author.md` — the four phase-document authors (§"Teammate authors")
+- `agents/doc-auditor.md` — the teammate audit leg (§"Teammate audit leg")
 - `references/codex-implementer-prompt.md` — Phase 5d/5e Codex dispatch template
 - `references/agy-spec-reviewer-prompt.md` — Phase 5e-review agy dispatch template
 - `references/agy-architectural-reviewer-prompt.md` — Phase 6a-prime agy dispatch template
