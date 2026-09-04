@@ -688,6 +688,27 @@ quoted
   in the conclusion. Re-verify at implementation time rather than trusting these blocks; the point
   of citing them is that a reviewer can re-run them, not that they never go stale.
 
+  **Freeze-sha closure for this revision, stated once rather than re-stamping every pin.** Every
+  *tree*-derived figure in this document stamped `74e126f` is provably identical at `35698f9`,
+  because the two intervening commits touch only `docs/`:
+
+  ```
+  $ git diff --name-only 74e126f 35698f9 | grep -vc '^docs/'    # -> 0    (at 35698f9)
+  $ git diff --name-only 74e126f 35698f9 -- '*.py'              # -> (no output, at 35698f9)
+  ```
+
+  That closure covers the `*.py` censuses and the `h-mad/`+`handoff/` corpus counts; it does **not**
+  cover figures measured over *this file*, which is one of the `docs/` paths that moved —
+  `git log --oneline 74e126f..35698f9 -- "$S"` returns exactly one commit, `0aac0b7`, at `35698f9`.
+  Figures over this file are therefore re-run in the revision that ships them and stamped `35698f9`
+  where they appear. The `6`, `24`, `73` and `0` above were nevertheless re-executed at `35698f9`
+  rather than inferred, and each returned the value printed beside it.
+
+  `$S` throughout this section is the shell variable bound in the control block below to this
+  document's path. Every command here that names it must be run with that binding: an unbound `$S`
+  makes `grep -c` print `0` on stdout while the error goes to stderr, which is the null-read-as-
+  absence failure this whole rule exists to prevent.
+
   **How the members are found — an enumeration, because a value sweep cannot find them all.** The
   v1.56 pass swept the values it was *changing*, and §Out-of-Scope's fence count survived it into
   v1.57 for a structural reason worth stating, and verified rather than assumed: `git log -S'There
@@ -709,7 +730,9 @@ quoted
   **This enumeration is the single checker for this class rule, and the other documents of this
   feature attribute to it rather than re-word it — so it needs a stable address.** The address is
   the fenced block immediately above, and the needle is **line-anchored**, not a prose phrase:
-  `grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → `1` at `74e126f`. The
+  `grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → `1` at `74e126f`, and
+  re-run in this revision at `35698f9` → `1`, which is where uniqueness has to be checked because a
+  sibling edit in the same commit can break it. The
   anchoring is the whole point. A plain-substring needle on the awk program itself was tried first
   and measured at `2` in this file at `74e126f`, because the sentence publishing the needle
   reproduced it — the same duplication a later §Version History entry would cause. The anchored
@@ -717,32 +740,112 @@ quoted
   residuals, all concrete. (1) It is **file-scoped**; an attributing document must grep this path,
   never the tree, and must not assume the same needle is unique in a sibling document. (2) A second
   fenced block in this file opening a line with two spaces and `$ awk ` would make it `2`. That is
-  a specific and checkable risk, not a vague one: at `74e126f` the nine `^  $ ` command openers in
-  this document are `awk` ×1, `curl` ×1, `git` ×5, `printf` ×1 and `python3.11` ×1
-  (`grep -oE '^  \$ [a-zA-Z0-9._-]+' | sort | uniq -c`), so `awk` is the sole holder of its slot
-  and a new `awk` command in a fence is the one edit that breaks the needle. (3) The needle pins the block, not any clause inside it; a
+  a specific and checkable risk, not a vague one, and it **materialised while this revision was
+  being drafted**: the `path:line` shape grep added below was first written as an `awk` one-liner,
+  which took the needle to `2` and, because the control block further down extracts its pattern
+  through that same needle, silently broke the control as well. It was rewritten to open with `sed`
+  for that reason alone. The slot census, re-derived in this revision at `35698f9`, is 20 `^  $ `
+  command openers — `awk` ×1, `curl` ×1, `git` ×7, `pairs` ×1, `printf` ×2, `python3.11` ×1,
+  `RULE` ×1, `S` ×1, `sed` ×1, `split_only` ×3 and `while` ×1
+  (`grep -oE '^  \$ [a-zA-Z0-9._-]+' "$S" | sort | uniq -c`), so `awk` is again the sole holder of
+  its slot and a new `awk` command in a fence is the one edit that breaks the needle. (3) The needle pins the block, not any clause inside it; a
   document meaning the alternation specifically must say so in words.
 
   **It has been executed against controls, because a screen that never fires reads exactly like a
   clean document.** That is not hypothetical: a sibling screen for this same class shipped with
   `\btoday\b` inside an `awk` program, where `\b` is a backspace escape and not a word boundary,
   so that term matched nothing and its published before/after counts came from a screen blind to
-  one of its own forms. Run at `74e126f`, each string fed on stdin to the `grep -Ei` half:
+  one of its own forms. **A positive control and a true negative control, both run at `35698f9`,
+  against the form this revision ships.** A true negative is a *non-member the screen declines*; a
+  member it fails to print is a false negative and is reported separately below, never as "the
+  negative". The pattern is **not retyped** — it is extracted from the published block above by its
+  own anchored needle, so a control cannot silently drift from the checker it tests, and an empty
+  `$RULE` fails loud by turning every negative into a `MATCH`. Every one of the eight strings is a
+  **verbatim substring of this document's body**, not a paraphrase of one — a paraphrased control
+  proves only that the author can write a matching sentence:
 
   ```
-  # positives — each is a real member of this document
-  There are **68** tagged openers                            -> MATCH       (old and new)
-  the Second-surface section holds **seven** bash blocks     -> MATCH       (old and new)
-  16 headings, 2 of them duplicated                          -> MATCH       (old and new)
-  six hits with four non-extractors                          -> MATCH       (old and new)
-  Twenty-four tracked `.py` files contain a fence literal    -> NO MATCH old, MATCH new
-  # negatives — none states a tree-derived count
-  A block's declared shell mode is a property of the recipe  -> NO MATCH    (old and new)
-  the tag cannot repair an ambiguous section selector        -> NO MATCH    (old and new)
-  exit 0 and print the verdict token                         -> NO MATCH    (old and new)
+  $ S=docs/01-plan/features/doc-block-exec.spec.md
+  $ RULE=$(grep -E '^  \$ awk ' "$S" | sed "s/.*grep -Ei '//; s/'\$//")
+  $ while IFS= read -r s; do printf '%s\n' "$s" | grep -qEi "$RULE" && v=MATCH || v='NO MATCH'; printf '%-58s %s\n' "$s" "$v"; done <<'EOF'
+  is **73 openers**,
+  The Second-surface section holds **seven** bash blocks.
+  16 headings, 2 of them
+  returns six hits at `a8e0372` and still six at
+  Twenty-four tracked `.py` files contain a fence literal
+  A block's declared shell mode is a property of the recipe
+  the tag cannot repair an ambiguous *section* selector
+  and exits 0 — a refusal is a verdict (FR-4).
+  EOF
+  is **73 openers**,                                         MATCH
+  The Second-surface section holds **seven** bash blocks.    MATCH
+  16 headings, 2 of them                                     MATCH
+  returns six hits at `a8e0372` and still six at             MATCH
+  Twenty-four tracked `.py` files contain a fence literal    MATCH
+  A block's declared shell mode is a property of the recipe  NO MATCH
+  the tag cannot repair an ambiguous *section* selector      NO MATCH
+  and exits 0 — a refusal is a verdict (FR-4).               NO MATCH
   ```
 
-  The fourth positive is why the gap between the cardinal and the counted noun is now
+  Five positives, each a verbatim member of this document, all printed. Three true negatives, each
+  a verbatim sentence fragment of this document that states no count the rule governs, all
+  declined — and the third is the sharp one, because it carries a digit (`0`) and is declined on
+  the *noun*, which is the only boundary the screen enforces on its right-hand side. Verbatimness
+  is itself checked rather than asserted: deleting this fenced block from a copy and running
+  `grep -cF` for each string returns exactly `1` for all eight at `35698f9` in this revision —
+  `sed '/^  \$ S=docs/,/^  [^A-Za-z ]\{3\}$/d' "$S" > /tmp/nobody.md`, then
+  `grep -cF "$s" /tmp/nobody.md`. The closing address is written as three non-letter characters
+  rather than the fence literal so that publishing it here cannot close the code span it sits in;
+  its residual is that it would also stop at any other three-character non-letter line inside the
+  block, of which there is none.
+  None of the eight contains `measured` or `census`, so none is matched by the screen's two
+  free-standing alternatives — every verdict above exercises the cardinal-and-noun half, which is
+  the half under test. The fifth positive was `NO MATCH` under the `([a-z]+ )?` form this document
+  shipped through v1.57, which is how the gap defect was found: by executing the screen, not by
+  comparing it to a weaker alternative.
+
+  **Two blind forms, found rather than assumed, because "0 false negatives" from an unprobed screen
+  is not a measurement.** (i) One genuine false negative: the sentence stating that
+  `h-mad/invariants.example.md` *holds no fences at all* is a tree-derived zero carrying its own
+  command and sha, and the screen declines it, because the quantifier `no` is not a cardinal in the
+  alternation. Its locator is **line-anchored for the same reason the `awk` needle is**, and its
+  pattern carries no backtick so that quoting it here cannot break the code span:
+  `grep -cE '^ +.74e126f.\. That file holds' "$S"` → `1` at `35698f9`, in this revision. The
+  unanchored needle `holds no fences at all` returns `3` here, because this paragraph reproduces it
+  twice more — once describing the sentence, once publishing the needle. An author who publishes a
+  prose needle manufactures its own duplicates; anchoring is the only defence, because a prose copy
+  sits mid-line.
+  (ii) One shape demonstration that is *not* a missed member: AC-1.2's `extraction yields zero` /
+  `blocks` is design-derived and therefore outside this rule by the second exclusion below, but it
+  exhibits both blind shapes at once — `zero` absent from the alternation, and the counted noun on
+  the following line (anchored locator `grep -cE '^  - AC-1\.2:.*yields zero$' "$S"` → `1` at
+  `35698f9`, in this revision). Both are recorded as residuals (2) and (3) below rather than
+  patched, and the reason is stated there.
+
+  **The line-split class was probed systematically, not by the one instance that happened to be
+  noticed.** `grep` is line-scoped and this document hard-wraps at ~95 columns, so any cardinal
+  ending a line with its noun beginning the next scores `0`. The probe joins each adjacent line
+  pair, applies the same extracted `$RULE`, and prints only pairs where *neither* line matches
+  alone. It is published with a positive control first, because a probe that cannot fire reads
+  exactly like a document with nothing to find:
+
+  ```
+  $ pairs() { awk '/^## Version History/{exit} NR>1{print (NR-1)"+"NR": "prev" "$0} {prev=$0}' "$1"; }
+  $ split_only() { pairs "$1" | grep -Ei "$RULE" | while IFS= read -r j; do n=${j%%:*}; a=${n%%+*}; b=${n##*+}; sed -n "${a}p;${b}p" "$1" | grep -qEi "$RULE" || printf '%s\n' "$j"; done; }
+  $ printf 'a sentence ending in **seven**\ntagged openers\n## Version History\n' > /tmp/split_fixture.md
+  $ split_only /tmp/split_fixture.md
+  1+2: a sentence ending in **seven** tagged openers
+  $ split_only "$S"
+  ```
+
+  The probe fires on the synthetic split and returns **nothing** on this document at `35698f9`: no
+  member of this rule is currently split across a wrap. That null is admissible only because the
+  positive control immediately above it is non-empty — an unproven probe's zero would be
+  indistinguishable from a dead one. The probe inherits every residual of `$RULE` itself, so AC-1.2's
+  `zero` / `blocks` pair is invisible to it too — it is a two-line window over the same alternation,
+  not a wider screen.
+
+  The fifth positive is why the gap between the cardinal and the counted noun is now
   `([^ ]+ ){0,3}` and was `([a-z]+ )?` through v1.57: one optional *lowercase* word cannot span
   `tracked` **and** the backticked `` `.py` ``, so the enumeration was blind to a member sitting
   in the very paragraph that defines it. Widening recovers three members, **named rather than
@@ -751,7 +854,12 @@ quoted
   ordinal 4 and the insertion-before-block-4 hazard. It also admits two lines that state no
   tree-derived count — AC-1.9's `one — a wrong block` and FR-3's `8 with errors="replace"` — and
   those are the correct trade: this enumeration is read by a human, so an extra line costs a
-  glance and a miss costs a cycle.
+  glance and a miss costs a cycle. Re-verified in this revision at `35698f9`, and one correction to
+  how it is read: a reader who diffs the two forms mechanically sees **more lines than members**,
+  because the excess is this document quoting itself — the control block above reproduces the
+  `Twenty-four tracked .py files` string twice, once as input and once as output, and this
+  paragraph reproduces it and names the other four. The five named above are the members; the
+  difference between the two forms is not a member count.
 
   **The cardinal alternation is deliberate**: this document states
   most of its counts as words — `**seven** bash blocks`, `Twenty-four tracked .py files`, `six
@@ -760,25 +868,61 @@ quoted
   concrete categories. (1) A counted noun outside the closing alternation — the axis is *countable
   things this feature measures in the tree*, and the list is the finite set the document currently
   uses; a new noun must be added when it arrives, which is the enumeration's own maintenance cost
-  and is accepted. (2) A cardinal of one hundred or more written as words, which the alternation
-  stops below. (3) A gap of more than three space-delimited tokens between the cardinal and its
-  noun, which `{0,3}` stops below; the widened gap admits false positives by design, so the
-  bound is a readability limit and not a correctness one. The hit count is deliberately not
-  stated: it is a procedure, not a measurement, and any
+  and is accepted. (2) A quantity written in a word form the opening alternation does not list. The
+  axis is *word forms that stand where a cardinal stands*, and exactly three concrete categories sit
+  outside it: `zero`; the bare quantifiers `no` and `none`; and cardinals of one hundred or more,
+  which the alternation stops below. This is measured, not assumed — the `no` category has a live
+  member in this document, blind form (i) above. It is left open deliberately, and the trade is
+  measured rather than asserted: `no` is overwhelmingly an ordinary negation here (`no file` in
+  AC-3.2, `no API` in §Non-Functional Requirements, `no node` in FR-6), and
+  `awk '/^## Version History/{exit}{print}' "$S" | grep -oEi '\bno\b' | wc -l` → `75` at `35698f9`
+  in this revision, so admitting `no`/`none` would put up to 75 candidate lines in front of a reader
+  to recover the one known member. `zero` is the cheap half and is admitted to the alternation the
+  first time a tree-derived zero is written that way; none is today. (3) A
+  gap of more than three space-delimited tokens between the cardinal and its noun, which `{0,3}`
+  stops below — **including a newline**, since `grep` is line-scoped and this document hard-wraps at
+  ~95 columns, so a wrap between the two is an infinite gap and not a three-token one. Both halves
+  are probed rather than asserted: the token bound is what the fifth positive above exercises, and
+  the wrap half is what `split_only` above returns nothing for at `35698f9`. The widened gap admits
+  false positives by design, so the bound is a readability limit and not a correctness one. The hit
+  count is deliberately not stated: it is a procedure, not a measurement, and any
   edit to this document changes it, so a number here would falsify itself every cycle.
 
   Residual — three categories deliberately outside this rule, so their numbers are not swept.
   (1) Version History entries are a record of what was believed in their era and keep their
   era's numbers. (2) Counts of things that do not exist yet — the new module's collected count,
   the seven module seams of FR-5's injection list — are design-derived, not tree-derived, and move
-  only when the design moves. (3) `path:line` locators (`:270`, `:309`, `:412`, `docsections.py:37`)
-  are locators, not counts; all four were re-verified at `a8e0372`, at `335f535` and again at
-  `74e126f`, where they resolve to the `re.findall(r"```bash\n(.*?)```", section, re.S)` assignment,
-  the `def run_recipe(...)` signature, the `next(…)` generator filtering on `exec codex`, and
-  `if stripped.startswith("```"):` respectively. They are still line numbers and
-  will still drift, and rewriting them as structural locators is owed by this document, the design
-  and the plan **together** — done in one document alone it would read downstream as a
-  disagreement about which block is meant.
+  only when the design moves. (3) `path:line` locators are locators, not counts, so the count rule
+  does not reach them. **The scope rule, stated over the class rather than over an instance list,
+  because a value sweep only finds pins that already drifted:** every `path:line` pin in this
+  document body is derived by a *shape* grep, not enumerated by hand.
+
+  ```
+  $ sed '/^## Version History/,$d' "$S" | grep -cE '\.py:[0-9]+'    # -> 7   (at 35698f9, this revision)
+  ```
+
+  This paragraph deliberately **re-quotes none of them** — restating a pin here would inflate the
+  figure by the act of describing it, which is the self-quoting hazard that already cost this
+  document one needle. Read the seven off the command. The obligation over the class, which is what
+  makes a drifted pin cheap: **every one of them carries a content predicate or an enclosing symbol
+  on the same line**, so a drifted pin self-repairs under one `grep` of the predicate rather than
+  under a reader hunting a moved line. The split is 3 + 4. **Three of the seven are load-bearing** —
+  the two `re.findall` extractor assignments in the census output and the `startswith` fence bound
+  in §Assumptions — and each is printed beside the expression it names. **Four are illustrative**:
+  two inline fixture strings on one line, a comment quoting the literal, and two Phase-6 collectors,
+  each beside the role that identifies it; a drift in any of them changes no requirement. The fourth
+  load-bearing pin, the `run_recipe` signature FR-6 rests on, is written there as a bare ordinal
+  beside the symbol name and is therefore **outside** this grep — residual (a) below. All four
+  load-bearing pins were re-verified at `a8e0372`, at `335f535` and again at `74e126f`, and the
+  freeze-sha closure above carries them unchanged to `35698f9`. Two residuals on the shape grep,
+  both concrete. (a) It requires a `.py` suffix on the same line, so a bare-ordinal reference such
+  as the one FR-6 prose uses for the `run_recipe` signature, and any pin into a non-`.py` file, is
+  invisible to it; a bare ordinal is admissible only where the full pin appears on the same surface,
+  and FR-6's does. (b) It counts **lines carrying a pin, not pins** — the census line naming two
+  fixture strings contributes one. All seven are still line numbers and will still drift, and
+  rewriting them as structural locators is owed by this document, the design and the plan
+  **together** — done in one document alone it would read downstream as a disagreement about which
+  block is meant.
 - A block's declared shell mode is a property of the recipe, not of the caller, so it belongs on
   the fence rather than in the test.
 
@@ -843,3 +987,4 @@ quoted
 - v1.56: Round-three back-propagation of four findings raised against the plan (v75), design (v84) and impl-plan (v35), all of which land here. Findings 1+2 are one class, not two edits: every tree-derived count in this document now carries the exact runnable command that generates it AND the sha it was observed at, on the same surface as the number. The extractor census's control was 21 .py files with a fence literal and is 24 at a8e0372 (git grep -l '```' -- '*.py' | wc -l); it had already drifted through 23 unnoticed precisely because no generating command travelled with it, and the corpus is now git grep rather than a filesystem walk so gitignored and uncommitted artifacts cannot contaminate it. The broad literal sweep was five hits with three non-extractors and is six with four at a8e0372, the arrival being a prose comment in h_mad_precheck_doc.py. Neither total touches the census's conclusion, which is that exactly two consumers extract on a bare bash opener, so the conclusion is now stated apart from the control. Residual: Version History entries keep their era's numbers, design-derived counts of things that do not exist yet are out of class, and path:line locators are locators not counts. FR-6's Description carried the same stale block census the design carried: the Second-surface section holds seven bash blocks at a8e0372, not four, because 6db8e50 inserted a ## heading between the two string anchors _second_surface() bounds on. The ordinals are unchanged and are the load-bearing part -- the gate block is still 4 and the exec-codex block still 2, because the arrivals came after block 4. AC-6.4 no longer carries a total for its node tuple. The old 'seven enumerated in the plan' was nine, because Task 1's h-mad/scripts/h_mad_doc_block_exec.py adds one node to each of the two tests that parametrise over _SCANNED, and a floor short by two tolerates two invisible deletions. Rather than restate a number that drifts on any script add, the AC now fixes the membership rule over the axis -- consumer-file nodes, plus one node per glob-parametrised test per new h-mad/scripts file -- requires those nodes to pass and not merely be counted, and states the residual, including that a glob looping inside one test body adds coverage but no node.
 - v1.57: Round-four back-propagation of one plan finding (agy cycle 76) plus decision-sheet items B/C/D. Finding 1: Out-of-Scope's fence count was 68 and is 73 openers at 335f535, and it now carries both its generating command (git grep -c '^```bash' -- 'h-mad/*.md' 'handoff/*.md' ':!*/archive/*' | awk -F: '{s+=$NF} END {print s}') and the sha, plus the git ls-files ... | grep -c archive -> 0 that shows the archive exclusion selects nothing at this sha and is kept only against future widening. The interesting half is why the v1.56 sweep missed it: a value sweep fires on values that CHANGE, and 68 was never edited -- it drifted in place, in a non-normative section a walk of the FR/AC bodies never visits. The class rule therefore now carries its own ENUMERATION, independent of what changed, over the whole body up to the Version History boundary, keyed on SHAPE rather than on what changed, and its alternation covers spelled-out cardinals because this document states most of its counts as words (seven bash blocks, Twenty-four tracked .py files, six hits) so a digits-only enumeration would miss the majority of its own members. The drift story is verified, not asserted: git log -S'There are 68' returns exactly one commit, e58ef3a, so the number was written once and never edited, and the same command gives 68 at e58ef3a and 73 at 335f535 -- same command, same corpus, different tree. Two concrete residuals on the enumeration (a counted noun outside the closing alternation, and a cardinal of one hundred or more written as words) and a stated reason for carrying no hit count. AC-1.7's '16 headings, 2 duplicated' was the same class's second surviving member and now carries two commands and the sha, plus the evidence that invariants.example.md holds no fences so a raw line grep cannot miscount, and the residual that the commands compare raw lines so 2 is a floor. Decision B: FR-6 called the ordinals the load-bearing part; they are demoted to informational and the CONTENT PREDICATE is the contract, with the two predicates' differing cardinality stated separately (_gate_bash_block filters on h_mad_audit_gate.py and asserts exactly one; :412 filters on exec codex and takes the FIRST hit via next(..., '')), the ordinals' base named (1-based over the extractor's own re.findall on _second_surface()), and the era split stated: after FR-6 :270 addresses by heading plus tag and retires its predicate, :412 keeps its permanently. Decision C: the spec was SILENT on the closing-hash delimiter where the design has an oracle-backed rule, so AC-1.7 now states it, measured on markdown-it-py commonmark preset -- '## Text ##' -> 'Text', '## Text\t##' -> 'Text', '## Text##' -> 'Text##' -- the last being the case an unconditional right-strip of # gets wrong. Decision D: no seam ordinal exists in this document's body. Every count and path:line locator was re-derived at 335f535 and restamped: 6, 24, 7 [4] [2], the two-hit narrow extractor census, :270 :309 :412 docsections.py:37, the _SCANNED parametrise-twice 2, and the three *.py globs -- all unchanged.
 - v1.58: Round-five decision-sheet items E and F; no finding this round landed in this file. E (one rule, one checker): the count-enumeration in Assumptions is now the CANONICAL checker for the tree-derived-count class rule across all four documents, and it was EXECUTED against controls rather than published unrun -- because a sibling screen for this same class shipped with a backspace escape where a word boundary was meant and matched nothing. The controls found the same defect class here: the gap between a cardinal and its counted noun was one optional lowercase word, which cannot span 'tracked' and a backticked '.py', so the enumeration was blind to a member sitting in the paragraph that defines it. The gap is widened to three space-delimited tokens; the recovered members are NAMED, not counted, because both forms' totals move on every edit. Positive and negative control results are published beside the enumeration. F (locator uniqueness is commit-scoped): every locator this document publishes is now LINE-ANCHORED and re-verified at 74e126f -- the enumeration's needle is an anchored command opener at exactly 1 hit, and the AC-6.4 membership rule is addressed by its anchored AC label at exactly 1 hit, with all 49 AC body anchors verified collision-free. A plain-substring needle was tried first and MEASURED at 2, because the sentence publishing it reproduced it; that measurement is recorded as the reason the anchored form was chosen. Every tree count was re-derived at 74e126f and restamped, all unchanged: 73 openers and 0 archive paths, 24 tracked .py with a fence literal, 6 broad literal hits with the same 2-hit narrow extractor census, 16 headings with 2 duplicated and no fences in invariants.example.md, the _SCANNED parametrise 2 and the three *.py globs, and 7 [4] [2] from the second-surface extraction. The four path:line locators were re-verified at 74e126f and now record what each resolves to.
+- v1.59: Round six, decision A applied to this document's own enumeration at freeze sha 35698f9: the class-closure screen is now published with a positive control (5 members, all printed) and a true-negative control (3 non-members, all declined), both runnable, with the pattern extracted from the published block by its own anchored needle rather than retyped. Two blind forms named rather than a bare zero — the tree-derived zero written as 'no fences' (a genuine false negative) and AC-1.2's 'zero'/'blocks' wrap (design-derived, shape demonstration only) — and the line-split class probed systematically by split_only, which fires on a synthetic split and returns nothing here. Residuals restated over their axes and still three: (2) becomes word forms outside the alternation (zero, no/none, one hundred and above) with the trade measured at 75; (3) absorbs the newline as an infinite gap. Decision C closed as a class: path:line pins are now derived by a shape grep (7 lines) with the class obligation and two residuals stated, re-quoting none of them. Freeze-sha closure stated once (git diff --name-only 74e126f 35698f9 | grep -vc '^docs/' -> 0), and 6/24/73/0 nevertheless re-executed. Doc-scoped figures re-derived in this revision: awk needle 1, opener census 20, py-pin lines 7, no-tokens 75; the awk-slot residual materialised during drafting (the shape grep was first written as an awk one-liner, took the needle to 2 and broke the control's pattern extraction) and is recorded rather than hidden. The 'widening recovers three members' claim is re-verified and now says how to read it: a mechanical diff of the two forms returns more lines than members because this document quotes its own members, so count members by reading them. Late self-review caught three of my own defects before shipping and all three are fixed in this entry's revision: (a) all eight control strings were paraphrases and are now verbatim substrings, checked by deleting the control block from a copy and running grep -cF, which returns 1 for each; (b) the closure paragraph claimed this file changed in both intervening commits when git log 74e126f..35698f9 on this path returns exactly one, 0aac0b7; (c) the commands here depend on $S, whose unbound form prints 0 on stdout, so the binding is now stated where the section starts.

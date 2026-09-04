@@ -188,13 +188,33 @@ which is the whole of why the conclusion holds: `git diff --name-only a8e0372 74
 handoff` names exactly two files, both `.py` (`h-mad/scripts/h_mad_assemble_audit.py` and
 `h-mad/tests/test_h_mad_assemble_audit.py`), so the `*.md` corpus every measurement here runs
 over — including `h-mad/SKILL.md`, which the Task 5 census reads — is byte-identical between the
-two shas. **The unscoped form is not the trip-wire and must never be used as one**: run without
-`-- h-mad handoff` it names **13** files across these two shas, **11 of them `.md`**, and all 11
-are under `docs/` — this feature's own spec, plan, design and impl-plan, which lie outside both
-roots and enter no corpus measured here. An unscoped trip-wire would therefore fire on every
-revision of this document and train a reader to ignore it. Re-run **the scoped form** before
-trusting any figure below; if *it* ever names an `.md`, every count carrying `a8e0372` must be
-re-derived rather than re-read.
+two shas. **The scoped diff is also empty from `74e126f` to `35698f9`** — `git diff --name-only
+74e126f 35698f9 -- h-mad handoff` prints nothing — so every **corpus-derived and scoped-diff**
+figure below dated `a8e0372` or `74e126f` is byte-identically derivable at `35698f9` as well, and
+those stamps need no churn sweep. The qualifier is load-bearing and no count of the stamps is
+given here: a figure measured on *this document's own bytes* is **not** covered by an empty tree
+diff, because this document did change. Every document-self figure below therefore carries a
+`35698f9` re-run beside its `74e126f` stamp rather than relying on this sentence — the
+seam-ordinal check's before/after pair and the line-pin blind-form sweep are the ones that
+needed it. **The unscoped form is not the trip-wire and must never be used as one**:
+it names a
+*pair of integers that moves with every revision of `docs/`*, so a pair written here is stale
+before the next commit — **what is stable, and what the argument actually rests on, is the
+invariant**
+
+```bash
+git diff --name-only a8e0372 <sha> | grep '\.md$' | grep -vc '^docs/'   # expect 0
+```
+
+which returns `0` at `335f535`, at `74e126f` and at `35698f9` alike: every `.md` the unscoped diff
+names is under `docs/` — this feature's own spec, plan, design and impl-plan, which lie outside
+both roots and enter no corpus measured here. **Do not publish the pair.** An unscoped trip-wire
+on the pair would fire on every revision of this document and train a reader to ignore it; and a
+reader who re-ran a published pair would get a third number again. (Concretely, at `35698f9` the
+unscoped diff from `a8e0372` names 25 files and 23 `.md`, where at `74e126f` it named 18 and 16
+and at `335f535` 13 and 11 — three shas, three pairs, one invariant.) Re-run **the scoped form**
+before trusting any figure below; if *it* ever names an `.md`, every count carrying `a8e0372` must
+be re-derived rather than re-read.
 
 **The same closes the `335f535` figures as a class rather than one at a time**: scoped to the two
 roots, `git diff --name-only 335f535 74e126f -- h-mad handoff` is **empty**, so every figure this
@@ -324,7 +344,8 @@ for label, OLD in (("finder  ^#+", FINDER), ("bounder ^#{1,6}", BOUNDER)):
 PY
 ```
 
-At `74e126f` the whole fence prints exactly this — the two `git ls-files`/`find` counts, then
+At `74e126f`, and again when extracted from the shipped file and re-run at `35698f9`, the whole
+fence prints exactly this — the two `git ls-files`/`find` counts, then
 one labelled differential line per old guard, each followed by its `new_only` identities:
 
 ```
@@ -557,9 +578,12 @@ def census(paths):
             m = FENCE.match(ln)
             if fence is None:
                 if m:
-                    fence = m.group(1)[0]; prev = ''; continue
+                    fence = m.group(1); prev = ''; continue   # keep the RUN, not just the char
             else:
-                if m and m.group(1)[0] == fence: fence = None
+                # CommonMark §4.5: a closer must be at least as long as its opener,
+                # so a ``` line inside a ```` fence does NOT close it.
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                    fence = None
                 prev = ''; continue
             if UND.match(ln) and prev.strip() and not SKIP.match(prev): n += 1
             prev = ln
@@ -571,18 +595,38 @@ print('glob    files', len(glob), 'setext_headings', census(glob))
 PY
 ```
 
-At `74e126f` that fence prints exactly:
+At `74e126f` and again at `35698f9` that fence prints exactly:
 
 ```
 tracked files 30 setext_headings 0
 glob    files 35 setext_headings 0
 ```
 
-**Both controls were run before the count was published**: over a fixture holding one `===`
-heading and one `---` heading, the same `census()` returns `2`; over a fixture holding a thematic
-break, an underline inside a fence, an underline under a list item and a table delimiter row, it
-returns `0`. The null above is therefore discriminating rather than a scan that finds nothing.
-It was `0` at `1861157` too, over the 25 files tracked then.
+**Both controls were run before the count was published**, and both against the `census()` above
+rather than a paraphrase of it: over a fixture holding one `===` heading and one `---` heading it
+returns `2` (positive); over a fixture holding a thematic break, an underline inside a fence, an
+underline under a list item and a table delimiter row it returns `0` (true negative — non-members
+the screen declines, not members it fails to print). The null above is therefore discriminating
+rather than a scan that finds nothing. It was `0` at `1861157` too, over the 25 files tracked then.
+
+**A third control, added at v1.97 because the second one was a sound true negative but did not
+cover the shape AC-1.6 exists for**: a four-backtick fence containing a three-backtick line,
+followed by a paragraph line and
+an `===` underline. The earlier tracker closed the fence on the *marker character* alone and so
+scanned the rest of the file as prose — that fixture returned `1` where CommonMark says `0`. The
+run-length condition in the fence branch above is the fix, and with it the fixture returns `0`
+while the positive control still returns `2` and both corpus lines are unchanged. The direction
+of the old bug was safe (it could invent a Setext heading, never hide one), so no figure moved;
+what is recorded here is that the census now has a control for the shape AC-1.6 exists for.
+**Residual on `census()` itself, two arms, both stated**: (1) it does not model an *info string*,
+so a line opening a new fence with an info string while a fence of the same character and no
+greater run is already open is read as that fence's closer, where CommonMark reads it as content.
+The direction is the same safe one as the bug just fixed — it can end a fence early and scan code
+as prose, never hide a heading — and the corpus exercises it zero times. (2) It matches a fence
+only at 0–3 columns of indent, so a fence *opened inside a list item* is not recognised as a fence
+at all and its contents are scanned as prose. The corpus has none of either — the whole point of
+publishing the number as `0` with a positive control is that a wrong `0` is detectable — but a
+document that indents fences will need arm (2) built.
 
 **The rule over the axis**: every measurement this document states must either publish its command
 inline or name a script `git ls-files` can find — a figure whose derivation lives in an untracked
@@ -916,11 +960,11 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    ordinal-base rule stated just below is *not* exempt there**, because it governs every
    reference in this document. **The seam-naming rule (§Test Strategy) prohibits *addressing* a
    seam by ordinal, and that prohibition is scoped outside §Version History too** — for the
-   reason given where the rule is stated: five entries there quote an ordinal as part of a dated
-   record, and one of them is a strike annotation that has to quote the ordinal it struck in
-   order to record the strike. Verify the
-   line-pin class rather than trusting this sentence, with the corpus split at the §Version
-   History heading:
+   reason given where the rule is stated, which also gives the command that derives how many
+   entries there carry one. **No count of those entries is written at this site**: it grows with
+   every revision that records a strike, and a figure here would be a second place for it to go
+   stale. Verify the line-pin class rather than trusting this sentence, with the corpus split at
+   the §Version History heading:
 
    ```bash
    awk '/^## Version History$/{v=1} !v' docs/02-design/features/doc-block-exec.design.md \
@@ -932,13 +976,31 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    two forms and no others: a filename-shaped token bearing an extension, followed by a colon and
    digits, and a backticked colon-plus-digits. It is blind to a pin written as the word *line* or
    *lines* plus a number, as an `L`-prefixed number, or as a colon-plus-number not preceded by a
-   filename-shaped token. Those three blind forms were swept separately at `74e126f` over the
-   same head-of-document corpus, with the alternation
+   filename-shaped token. Those three blind forms were swept separately at `74e126f`, and again
+   at `35698f9`, over the same head-of-document corpus, with the alternation
    `line [0-9]{2,}|lines [0-9]{2,}|\bL[0-9]{3,}\b|[^A-Za-z0-9_./-]:[0-9]{2,}`, and the only hits
    are the two `lines …` fields of the block-census *output* quoted above — a printed count, not
    a locator. So the class **is** closed today and the `0` is honest; what the fence above does
    not by itself establish is that a *future* pin written in one of the three blind forms would
    be caught, and the sweep just named is what catches it.
+
+   **A fourth blind form, and why this detector is exempt from the fold §Test Strategy imposes on
+   the ordinal check**: `grep` is line-scoped and this file hard-wraps, so a detector can miss an
+   instance the wrapper split. That is a live hazard for a multi-*word* target and not for this
+   one — a `path:NNN` pin contains no whitespace, so no hard-wrapper can break it; only a
+   hand-inserted newline inside the token could, which is why the fence above stays line-scoped
+   and readable. It was checked rather than assumed, at `35698f9`, with a space-tolerant colon so
+   that a folded pin *would* be caught:
+
+   ```bash
+   awk '/^## Version History$/{v=1} !v' docs/02-design/features/doc-block-exec.design.md \
+     | tr '\n' ' ' \
+     | grep -oE '[A-Za-z0-9_./-]+\.(py|md|json|sh): +[0-9]+' | wc -l | tr -d ' '   # expect 0
+   ```
+
+   It returns `0`. Its own residual: a space-tolerant colon over folded prose would also match an
+   ordinary sentence of the shape "`docsections.py`: 30 files", so this form is a *screen* to be
+   read, not a gate — it is the strict fence above that carries the rule.
 
    **Residual on the enclosing-symbol locator, exactly**: it does not distinguish two `def`s of
    the same name in one file (Python keeps the last, so a reader must too), and it goes stale
@@ -1500,40 +1562,101 @@ mentioned below *and* every seam mentioned in §Error Handling Strategy above.
 **The rule over the axis, stated so a reader can apply it without asking**: no member of the
 eight-seam set is *addressed* by ordinal anywhere in this document outside §Version History —
 the seam is named instead. Verify that rather than trusting it, with the same corpus split the
-line-pin check uses:
+line-pin check uses.
+
+**Two properties of this file decide how such a check has to be built, and both were learnt by a
+published check missing a real member** (design audit v87). (i) `grep` is line-scoped and this
+document hard-wraps at ~95 columns, so **any** check whose target is a multi-*word* phrase is
+blind to an instance the wrapper split — a real instance existed at `74e126f`, where a bolded
+ordinal-plus-noun straddled a newline and the then-published line-scoped form scored it `0`.
+**Fold paragraphs before matching.** (ii) Once folded, the check would match its own pattern
+literal inside the fences below, so **exclude fenced code before folding** — and the excluder must
+compare fence *run lengths*, because the pattern literal here lives in a fence that itself quotes
+a shorter fence. The rule generalises past this one check: *a published detector in this document
+whose target can contain a space folds first and strips fences first; a detector whose target is a
+single whitespace-free token need not, because a hard-wrapper cannot split one.*
 
 ```bash
-awk '/^## Version History$/{v=1} !v' docs/02-design/features/doc-block-exec.design.md \
-  | grep -cE '\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\b[^.]{0,60}\b(seam|injection|primitive)\b'   # expect 0
+D=docs/02-design/features/doc-block-exec.design.md
+O='(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|final|penultimate)'
+N='(seam|injection|primitive)'
+G='([^.]|\.[^ ]){0,60}'   # a dot INSIDE a token is inside the reach; a sentence break ends it
+STRIP='match($0, /^ {0,3}(`{3,}|~{3,})/) {
+         m = substr($0, RSTART, RLENGTH); sub(/^ +/, "", m)
+         if (f == "") { f = m }
+         else if (substr(m,1,1) == substr(f,1,1) && length(m) >= length(f)) { f = "" }
+         next }
+       f == "" { print }'
+FOLD='BEGIN { RS = "" } { gsub(/\n/, " "); print }'
+awk '/^## Version History$/{v=1} !v' "$D" | awk "$STRIP" | awk "$FOLD" \
+  | grep -oE "\b$O\b$G\b$N\b|\b$N\b$G\b$O\b" | wc -l | tr -d ' '   # expect 0
 ```
 
-It returned `3` on v1.95 of this document and returns `0` on v1.96, so it discriminates — that
-before/after pair is the check's positive and negative control, run on this file rather than on a
-fixture. **Residual, exactly two items, both stated so the next author neither strikes a
-legitimate line nor leaves a real one:**
+`grep -o … | wc -l` and not `grep -c`, because after the fold a paragraph is one line and two
+addresses in one paragraph would count as one. `tr -d ' '` because BSD `wc` right-pads.
+
+**Three controls, run before the `0` was published, because a `0` from a screen that has never
+printed anything is not evidence.** *Positive*: the same pipeline over the v1.95 blob
+(`git show 74e126f:$D > /tmp/v195.md`, then the pipeline with `D=/tmp/v195.md`) prints `4` — the
+four ordinal-plus-noun instances that revision carried (two of them addresses, two of them
+cardinality phrasings; v1.96 removed all four), including the one the wrapper had split — where
+the line-scoped predecessor printed `3` on the same bytes. That gap **is** property (i), measured
+on this file rather than argued. *Positive, for
+the dotted form*: over a two-line fixture in which an ordinal is separated from its noun by a
+backticked dotted module path *and* a newline, the pipeline prints `1`; the predecessor's
+`[^.]{0,60}` gap printed `0`, and seven of the eight seams are dotted module paths, so that was
+the natural phrasing for this very set. *True negative* — a **non-member the screen declines**,
+not a member it fails to print: a fixture carrying both admissible cardinality phrasings and two
+block ordinals with their base, in the shapes this document actually uses, prints `0`. A fourth
+run pins property (ii): dropping `$STRIP` from the pipeline turns the `0` on this file into `1`,
+and that one hit is the alternation assigned to `O` above — the check matching its own source,
+not an address. (It was `2` before this revision, when the alternation was written out twice;
+hoisting it into a shell variable is why one copy remains. A reader who runs an unstripped fold
+and reads the hit as a live ordinal would strike a correct detector.)
+
+**Residual, exactly three items, all stated so the next author neither strikes a legitimate line
+nor leaves a real one:**
 
 1. **§Version History is exempt for ordinals as well as for line pins.** An ordinal there is a
    dated record of what *that revision claimed*, never a live address; v1.49's entry is the proof
    that the exemption cannot be avoided by striking, since it has to quote the ordinal it struck
    in order to record the strike at all — and so does every later entry that reports one. **How
    many entries carry one is therefore a derived number and is never written here as a list**,
-   because it grows by one each time a revision records a strike; count it with the same pattern
-   run over the *tail* instead of the head (one entry per line, so `grep -c` counts entries):
+   because it grows by one each time a revision records a strike. Count it with the same pattern
+   over the *tail*, and **without the fold** — a Version History entry is one unwrapped line, so
+   line-scope and entry-scope coincide there and folding would merge entries into one paragraph:
 
    ```bash
-   awk '/^## Version History$/{v=1} v' docs/02-design/features/doc-block-exec.design.md \
-     | grep -cE '\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\b[^.]{0,60}\b(seam|injection|primitive)\b'
+   # D, O, G and N as assigned in the fence above; this stage reuses them unchanged
+   awk '/^## Version History$/{v=1} v' "$D" | grep -cE "\b$O\b$G\b$N\b|\b$N\b$G\b$O\b"
    ```
 
-   It returns `7` at v1.96. (This narrows v1.95's blanket "the seam-naming rule is not exempt
-   there", which was a rule that revision stated and did not apply — it struck one Version
-   History ordinal and left the rest, and its own entry then quoted the ordinal it struck.) The
-   ordinal-*base* rule is a different axis and is **not** exempt there.
+   Evaluated against the blob this revision edits — `git show 35698f9:$D` piped through the same
+   two stages — it prints **8**, and that output is a *screen result, not a cardinality*. Seven
+   of the eight are entries recording an ordinal over the fault-injection set. The remaining one,
+   v1.76's, is an ordinal over the two *arms* of a cleanup path, which merely lands inside the
+   gap of one of the three nouns. Named here so the next reader does not chase it, and kept as
+   the demonstration of why this number is derived and never transcribed as a list. It is still
+   `8` on the working file after the v1.97 entry, which records this change without quoting an
+   ordinal address — checked, not assumed. It rises by one on the next entry that has to quote
+   the ordinal it struck.
+   (This narrows v1.95's blanket "the seam-naming rule is not exempt there", which was a rule that
+   revision stated and did not apply — it struck one Version History ordinal and left the rest,
+   and its own entry then quoted the ordinal it struck.) The ordinal-*base* rule is a different
+   axis and is **not** exempt there.
 2. **A cardinality statement is not an address** — "without an additional seam", "add no new
    seam" — because it refers to a hypothetical further member rather than picking one out of the
-   set. Such a statement is permitted in principle, but this document phrases every one of them
-   without an ordinal, so the check's expected output is a bare `0` and **any** hit is a finding,
-   with no judgement call left to the reader.
+   set. Such a statement is permitted in principle, and this document phrases every one of them
+   without an ordinal, which is why the expected output on the head is a bare `0`.
+3. **The screen is proximity-based, so a hit is a candidate to read, not automatically a
+   defect** — and it is blind in three named ways. It over-matches when an ordinal over some
+   *other* set (blocks, rows, arms, tuple members) lands within the gap of one of the three
+   nouns without an intervening sentence break; the v1.76 tail hit is a live instance of exactly
+   that, and it is why item 2's "any hit is a finding" would be too strong a rule to carry. It
+   *under*-matches an ordinal written as a digit-plus-suffix rather than a word, a noun outside
+   `{seam, injection, primitive}`, and a gap longer than 60 characters. The head returns `0`
+   today, so none of the three is exercised on this file — which is the honest statement of what
+   the `0` is worth, and it is weaker than "the class is closed".
 
 **Eight named fault injections — seven module-level seams (`os.killpg`, `shutil.rmtree`,
 `tempfile.mkdtemp`, `os.chmod`, `os.unlink`, `_final_write`, `_close_stream`) plus one
@@ -1873,20 +1996,70 @@ mean the probe never created one.
 - **Single-source contract** — complies on the invariant's FIRST branch for the rule this feature
   owns: section bounding has exactly one authoritative implementation (`fence_aware_end` on
   `_fence_events`) and `h-mad/tests/docsections.py` calls it (AC-1.8), replacing both its duplicate
-  `_fence_aware_end` and `titled_section`'s local heading regex. **The claim is scoped to that rule,
-  and the scope is stated because the tree holds three further hand-rolled `##`-slicers that the
-  consumer census behind it — a grep for `from docsections import` — cannot see by construction**:
-  `def _titled_section` in `h-mad/tests/test_h_mad_context_budget_docs.py` (eight call sites),
-  `def section_text` in `h-mad/tests/test_h_mad_batch_doc_rules.py` and `def _section`
-  in `h-mad/tests/test_h_mad_collect_report_docs.py` (reached through `_second_surface()`) —
-  each addressed by its own `def`, per the enclosing-symbol rule stated in Task 5, so
-  `grep -n 'def _titled_section' …` locates it and a `grep` that returns nothing is the signal
-  that it was renamed. None is
-  a surface applying *this* rule: each is a test-local assertion helper slicing one document for its
-  own pins, all three are fence-blind, and the invariant scopes to "a rule applied by more than one
-  surface", not to every function that finds a `##`. They are also not drop-ins — measured at
-  `1861157`: `_titled_section` anchors on a substring, so `docsections.titled_section(SKILL_MD,
-  "Run-context ceiling")` raises `AssertionError: missing section` where the real heading is
+  `_fence_aware_end` and `titled_section`'s local heading regex. **The claim is scoped to that
+  rule, and the scope is stated because the tree holds hand-rolled `##`-slicers that the consumer
+  census behind it — a grep for `from docsections import` — cannot see by construction.** That
+  census names three files at `35698f9` (`test_docsections.py`, `test_h_mad_review_evidence.py`,
+  `test_h_mad_wire_registry.py`), so every other slicer in the two roots is invisible to it by
+  construction rather than by accident.
+
+  **The residual is given as a SCOPE RULE plus a runnable sweep, never as a cardinality**, because
+  no mechanical sweep over this class is both sound and complete — measured in both directions at
+  `35698f9`, and the reason a count is refused is that two differently-wrong predicates can agree
+  on one. **Scope rule**: the invariant binds *a rule applied by more than one surface*; a
+  test-local helper that slices one document for its own pins applies no shared rule and is
+  outside it, whatever its internals. The sweep, which prints candidate bodies and is *not* a
+  membership oracle:
+
+  ````bash
+  python3.11 -c "
+  import ast, pathlib, re
+  op = re.compile(r'\.(find|index|split|startswith|rfind|partition)\(')
+  for root in ('h-mad/tests', 'h-mad/scripts', 'handoff'):
+      for f in sorted(pathlib.Path(root).rglob('*.py')):
+          src = f.read_text(encoding='utf-8', errors='replace')
+          for n in ast.walk(ast.parse(src)):
+              if isinstance(n, ast.FunctionDef) and not n.name.startswith('test'):
+                  seg = ast.get_source_segment(src, n) or ''
+                  if '## ' in seg and op.search(seg): print(f'{f} {n.name}')
+  "
+  ````
+
+  It prints 22 lines at `35698f9`, and that is *its* output, not a count of slicers.
+  **Over-count, each body read at `35698f9` rather than taken on report**: `traced_bindir` and
+  `run_with_bindir` in `h-mad/tests/test_hmad_dispatch_audit_cycle.py` hold their `## ` inside a
+  *stub audit-report string* (`"# Audit\n\n## Must-fix\nNone…"`) fed to a subprocess; `main` in
+  `h-mad/scripts/h_mad_audit_gate.py` holds it in a comment naming the sections an input must
+  have; `main` in `h-mad/scripts/h_mad_wire_pin_gate.py` holds it in an error message describing a
+  header shape. None of the four slices a section — the sweep selects them because a `## ` literal
+  and a `.split(`/`.find(` call co-occur in one body, which is a *shape*, not a role.
+  **Under-count, one verified instance**: `def _section` in
+  `h-mad/tests/test_h_mad_collect_report_docs.py` does not appear, because its `##` anchors arrive
+  as *parameters* and so occur nowhere in its body — the same reason a value sweep cannot close a
+  class.
+
+  **Three examples, named because the compliance argument was actually walked over them**, each
+  addressed by its own `def` per the enclosing-symbol rule stated in Task 5, so
+  `grep -n 'def _titled_section' …` locates one and a `grep` that returns nothing is the signal
+  that it was renamed: `def _titled_section` in `h-mad/tests/test_h_mad_context_budget_docs.py`
+  (8 call sites, derived as `grep -c '_titled_section(' <that file>` minus the `def` line),
+  `def section_text` in `h-mad/tests/test_h_mad_batch_doc_rules.py`, and `def _section` in
+  `h-mad/tests/test_h_mad_collect_report_docs.py` (reached through `_second_surface()`). None is a
+  surface applying *this* rule: each is a test-local assertion helper slicing one document for its
+  own pins, and **all three are fence-blind — a property of these three, not of the class**. The
+  class demonstrably contains fence-*aware* members: `def _section` in
+  `h-mad/tests/test_h_mad_pane_visible_dispatch_docs.py` and `def _section` in
+  `h-mad/tests/test_h_mad_context_budget_docs.py` both track fences deliberately, each with a
+  comment saying why. **Residual, stated exactly rather than as "and similar"**: the compliance
+  conclusion above has been argued over the three named and over no other member; the members the
+  sweep prints and this bullet does not walk are *unexamined against it*, not *found compliant by
+  it*. What makes that acceptable is the scope rule, which turns on whether a helper applies a
+  shared rule and not on how it is written — and what would falsify it is a slicer that two
+  surfaces call, which is the shape §Scanning's guards are aimed at.
+
+  They are also not drop-ins — measured at `1861157`: `_titled_section` anchors on a substring, so
+  `docsections.titled_section(SKILL_MD, "Run-context ceiling")` raises
+  `AssertionError: missing section` where the real heading is
   `## Run-context ceiling — halt the run at 80%`. **Migrating them is deliberately out of this
   feature's scope**; what is in scope is that after Task 5 `_section`/`_second_surface()` no longer
   sits on the executing path — `_gate_block()` calls `dbe.extract(SKILL_MD, "## Second surface — the
@@ -2001,4 +2174,5 @@ mean the probe never created one.
 - v1.93: Design audit v83, gating round, two surfaces (teammate must 2 should 4; agy must 1). MUST 1 (teammate): Task 5's split rationale was measured false and contradicted the paired plan one revision after plan v1.84 corrected it — tagging the gate fence leaves :270's re.findall matching 3 of the section's 4 blocks, not zero; re-measured independently at 1861157 (before 4 blocks/1 gating, after 3/0), and the loud failure is _gate_bash_block's assert gating, since what empties is the h_mad_audit_gate.py filter. MUST 2 (teammate): every heading measurement cited a 30-file *.md corpus that is 25 tracked files plus 5 untracked, gitignored .pytest_cache/README.md artifacts, each carrying '# pytest cache directory #' — five instances of the closing-hash softening the document claims has none, so the Guard-narrowing accounting was false and files=30/old_only=76/setext_headings=0 were reproducible only after pytest had run. The corpus is now defined as git ls-files -- h-mad handoff filtered to *.md with archive/ excluded (25 files); re-measured at 1861157: new_only=0, old_only=76, setext_headings=0, both softening shapes 0 over the 25 and 5 closing-hash over the 30. AC-6.1's sweep states a dot-directory exclusion (a test must still count a newly written untracked doc, which git ls-files would miss) and its residual now names generated .md inside the roots. MUST 3 (agy): run_block and main in the API block lacked trailing colons — two invalid-Python signatures; both now carry a colon and a docstring sourced from this document's own contract, and all 3 python fences ast.parse (2 of 3 at 1861157). SHOULD: the Single-source contract is added to Invariant Compliance, naming the three test-local ##-slicers the consumer census cannot see, which branch covers them and why (measured: _titled_section is not a drop-in — titled_section cannot find 'Run-context ceiling'), and stating that after Task 5 _second_surface() leaves the executing path; the convention deliverable's AC-6.1 exposure gets its sentence at the residual. NIT: run_recipe -> _run_recipe on the post-migration executing path. MUST 4 (team lead, from plan-author): the prose contradicted the mutation matrix on the 81-row split, and this document was the origin the plan and impl-plan copied. Re-derived by counting the matrix's mechanism column at 1861157 rather than reading it: two mutation tables, the wire table at 8 rows (0 naming SKILL.md) and doc_block_exec.json at 81 rows of which exactly 1 names SKILL.md as the file the harness edits (registry-row-removed). The split is 80 + 1, not 79 + 2. Its AC-4.5 partner detail-line-undocumented mutates the HELPER (missing_key: -> absent_key:), so the pair is one by AC and not by file; a \"file\": \"h-mad/SKILL.md\" anchor on it would be an anchor the harness refuses. Fixed at the two sites named (the deliverables cell and the summary paragraph under the matrix) and at a THIRD the sweep found and the brief did not: Task 4's Implementation Order called them \"the two SKILL.md mutation rows\". Each site now states how the split is derived so the next reader re-counts. Owed elsewhere and routed, not edited here: the plan's Measurements still says files=30, the spec's AC-6.1 reaches its scope by reference to that census, the impl-plan pins the 2748 floor at b7d0d77 where three documents pin e8eaf6f, and the impl-plan's AC-6.1 sweep is spelled as a bare filesystem glob.
 - v1.94: Design audit v84, gating round (teammate must 2 should 3 nit 2; agy clean at 13 tool calls and MISSED both musts, so not treated as corroboration). MUST 1: the Guard-narrowing corpus was stated as the figure 25 and its softening set was not closed as a class. Re-measured at a8e0372 over the tracked corpus (git ls-files -- h-mad handoff, *.md, archive/ excluded): files=30, glob=35, old_only=82, new_only=1 -- so the 30 that once marked the CONTAMINATED glob is now the TRACKED count and a bare figure now agrees for the wrong reason. Control at 1861157 returns files=25 old_only=76 new_only=0, reproducing this document's own earlier numbers, so only the tree moved. The corpus is now stated as a runnable command, never a figure. The softening set is closed by DERIVING it from the old guard's own pattern (h-mad/tests/docsections.py titled_section: re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$")) token by token rather than from a model of ATX -- enumerating the tokens enumerates the class, since a divergence has nowhere else to live. That gives FIVE softenings, not four: leading 1-3 space indent (0), tab delimiter (0), EMPTY TITLE (1), two-or-more spaces before the title (0, missed by the earlier grammar-shaped enumeration because re.escape(heading) sat flush against one space), and the closing hash run (0 tracked / 5 on the 35-file glob) -- plus one TIGHTENING (a 7+ hash run, which #+ accepted and #{1,6} refuses; 0 instances) and one NON-divergence (trailing whitespace, which \s*$ already tolerated), both rowed so the reader does not hunt for them. The mechanism column separates recognition softenings (the only ones that can appear in new_only) from the two title-comparison softenings (which cannot). Both differentials were re-run with the bounder's narrower ^#{1,6} shape and give the same old_only=82/new_only=1, so the figures do not depend on which of the two old guards is meant. The one live instance is the bare # line in h-mad/SKILL.md sitting alone outside any fence above the '## Reading a dispatch verdict' heading, introduced by bea1b60 and confirmed a real <h1></h1> by markdown-it-py 2.2.0 CommonMark. Residual: a further member needs either the old pattern to change (it is deleted by this feature) or CommonMark's ATX rule to change under the pinned oracles -- an oracle version bump, not a document drift. MUST 2: Task 5's block census was a behavioural premise with no command and had gone stale (6db8e50 inserted '## Teammate audit leg' between _section's two string anchors, growing the span 50->159 lines). The number is replaced by a one-physical-line command (heredoc-free on purpose: the fence is indented inside a list item) whose output at a8e0372 is 'lines 159 blocks 7 gating 1', tagging leaves 6/0, and at 1861157 gave 50/4/1 -> 3/0. POSITIONS ARE DROPPED ENTIRELY in favour of the CONTENT PREDICATE each block is actually addressed by (_gate_bash_block filters on "h_mad_audit_gate.py" in b and asserts exactly one; the untouched scan filters on "exec codex" in b and takes the first) -- a positional claim would describe something the code does not do, which is how this sentence went stale. The ambiguity was live, not theoretical: two independent re-derivations of this census named the SAME two blocks under different base conventions (0-based 1 and 3 = 1-based 2nd and 4th), so a bare "index N" is off by one depending on the reader. Both censuses are re-derived here from the git blobs at both shas rather than carried. The v1.93 conclusion is unchanged -- _gate_bash_block's assert gating is still the loud failure, not an empty findall. SHOULD: Task 5 now states the MAGNITUDE of the address narrowing (executor span 50 lines/4 blocks vs the named-anchor 159/7), that exactly one of _second_surface()'s eight call sites migrates (the one inside _gate_bash_block; the other seven are named test functions). Those sites are located by ENCLOSING SYMBOL, not by line: the eight line pins the finding used are replaced by an ast one-liner that prints the enclosing symbol set, since a line pin goes stale on any insertion above it and gives no signal that it has. It also states that the gate fence falls inside both spans today, and the exact residual (an h_mad_audit_gate.py-bearing fence added under a later ## section would be visible to the seven survivors and invisible to the executor). The closing-hash-run delimiter is corrected from space-only to spaces-or-tabs at both sites, closing the same axis request-predicate-space-only closes on the opening delimiter (oracle: markdown-it-py 2.2.0 renders '## Text\t##' as <h2>Text</h2>); test_closing_hash_run_does_not_change_heading_identity's fixture gains the tab form, with the measured residual of 0 tracked instances. Invariant Compliance's pointer to the plan now names the CORPUS and the owed action rather than a figure. NIT: the eight fault injections are named, never numbered, since an ordinal drifts whenever the set is reordered; the count-rule sentence renders index/value/seconds quoted to match the verdict table. SHARED CORRECTION, verified independently and by probe: AC-6.4's '+ 7' is short by two and is now + 9. h-mad/tests/test_h_mad_portable_timeout.py builds _SCANNED at module level from sorted((SKILL/'scripts').glob('*.py')) and parametrises TWO tests over it with ids=lambda p: p.name, so Task 1's h-mad/scripts/h_mad_doc_block_exec.py collects test_no_document_or_script_emits_a_bare_timeout_command[h_mad_doc_block_exec.py] and test_no_document_or_script_rests_on_an_unconditional_absence_claim[h_mad_doc_block_exec.py]. Measured with a one-line stub at that path: pytest --collect-only -q gains exactly 2 node IDs and no others; every other glob under h-mad/tests and handoff/tests that could see the feature's new files iterates inside a test body rather than feeding a parametrize -- checked rather than assumed for the mutation-spec directory, where this feature lands two .json: test_h_mad_mutation_harness.py has ZERO parametrize decorators and calls both of its spec-globbing helpers from inside test bodies, so the new specs collect nothing. The rule over the axis is now stated: the addend is every node the change COLLECTS, not every node it WRITES. Owed elsewhere and routed, not edited here, each checked against the tree at the time of writing: the plan's Measurements pins its differential at 1861157 (files=25 both=263 old_only=76 new_only=0 -- which reproduces this document's control exactly, so its method is sound and only its sha is behind) and owes the corpus DEFINITION plus a re-measure at HEAD, where its 25/30 pair becomes 30/35 and the bare 30 would otherwise agree with a fresh git ls-files for the wrong reason; the plan (3 sites) and the impl-plan (5 sites) still carry the seven/+7 count and owe the correction to nine. The spec carries NEITHER -- its FR-6 already states seven bash blocks and it holds no +7 -- so no census or count fix is owed there. **[Superseded by v1.95, and left otherwise intact as the dated record it is.** The `+ 9` this entry landed and the "owe the correction to nine" it routed to the plan and impl-plan are both withdrawn: the assertion is `+ len(tuple)` in every document, a total is permitted only as a dated evaluation carrying its sha, and no document owes a literal to any other. The three sites this entry names in the plan and impl-plan are not a debt. Also withdrawn from this entry: "a positional claim would describe something the code does not do" was too strong — the ordinals are true and re-derivable, only the *selection* is by content predicate. See v1.95.**]
 - v1.95: Design audit v85, gating round, two surfaces (teammate must 3 should 3 nit 2; agy must 2, independently corroborating the floor-tuple count contradiction). Every premise below re-derived at 335f535, and a single sentence now states WHY the a8e0372 figures still hold: git diff --name-only a8e0372 335f535 names two files, both .py, so the *.md corpus (h-mad/SKILL.md included) is byte-identical between the shas. MUST 1 (both surfaces): AC-6.4 carried a hand-written total. The assertion is now full_collected >= baseline + new_module + len(tuple); len(tuple) occurred 0 times in this document and now carries the arithmetic. Membership is spec AC-6.4's rule, attributed by locator and not re-worded; what this document owns is the EMPIRICAL EVALUATION, stated as a dated one -- evaluated at 335f535 the rule yields a nine-member tuple, seven authored and two collected. The Components row's 'seven floor-tuple node IDs' and Task 5's 'nine-node tuple' are both replaced by 'the floor tuple'. The stub probe is not re-run (other authors hold the tree); instead the standing cheap check is published and run: grep -c 'parametrize("path", _SCANNED' test_h_mad_portable_timeout.py -> 2, grep -c parametrize -> 0 on test_h_mad_mutation_harness.py and handoff/tests/test_mutation_specs_clean.py, and the diff since a8e0372 names exactly one test file (test_h_mad_assemble_audit.py) whose single parametrize is over a two-element LITERAL list, so no glob-driven parametrize has entered. v1.94's '+ 9' and its 'owe the correction to nine' routing to the plan and impl-plan are withdrawn by a bracketed supersession on that entry. MUST 2: the absolute 'a positional claim about them would describe something the code does not do' is softened to what the mechanism actually supports -- neither block is SELECTED by position; the content predicate is what the code uses and what the tag replaces. An ordinal is informational and TRUE, and the rule over the axis is that it must name BOTH halves of its base: the index convention AND the span. Re-derived at 335f535 with enumerate(b, 1) over the 7 blocks of the named-anchor span, gate=4 and exec-codex=2; over the 4 blocks of the executor's AC-1.5 span the same two ordinals come out 4 and 2, so the spans coincide on this tree by coincidence, which is why the span half has to be stated. MUST 3: the closing-hash-run widening to spaces-or-tabs is kept (oracle re-run at 335f535: markdown-it-py 2.2.0 renders '## Text\t##' as <h2>Text</h2>) and its residual is now exact -- ATX has exactly two #-run delimiters and both are spaces-or-tabs, so the axis has no third member; the fence info-string production is a different grammar. The impl-plan's two prose delimiter statements and its test_closing_hash_run_does_not_change_heading_identity fixture row are named as the routing target WITHOUT asserting what that document currently holds. SHOULD 1: the differential fence now carries BOTH old guards two characters apart (FINDER ^#+ , BOUNDER ^#{1,6} ) and prints one self-labelled line each, so the equality the prose asserts is a run; extracted from the edited document and executed verbatim at 335f535 it prints 30 / 35 / 'finder ^#+ files 30 both 292 old_only 82 new_only 1' / 'bounder ^#{1,6} files 30 both 292 old_only 82 new_only 1', each followed by the same single new_only identity (h-mad/SKILL.md, titleless). The mislabelled comment ('the fence-blind guard being replaced' on the BOUNDER) is gone. SHOULD 2: the locate-by-enclosing-symbol rule is closed as a class instead of applied at one site. Every line pin outside Version History is converted -- :412 at three sites (Task 5 prose, the AC-6.4 cell, the exec-scan-executes mutation row) to test_exec_codex_dispatch_carries_out_log_and_timeout, :270 to _gate_bash_block, and the three Invariant-Compliance pins to their defs. Verified by a published awk check that splits the corpus at the Version History heading and greps the head: 0. Version History is exempt for LINE PINS ONLY, because its entries are dated records; the seam-naming and ordinal-base rules are NOT exempt there. Residual on the symbol locator stated: it cannot distinguish two defs of one name, and it goes stale silently on a rename -- a changed name SET, not a changed line, is the signal. SHOULD 3: the '14 of 14' grammar-oracle premise is declared not re-derivable in those words -- grammar_corpus.py is untracked (git ls-files | grep -c grammar_corpus -> 0) and 4.2.0 is on no local interpreter (only python3.11 carries markdown-it-py, at 2.2.0). A cheap proxy is published in its place and run verbatim from the edited document: eleven ATX shapes rendered on the local oracle, all agreeing with the grammar this document states. Its residual is exact -- the proxy covers the ATX heading production only; the fence grammar and the Setext census carry mutation rows instead, and no oracle-render evidence for them survives here. NIT 1: 'Each seam is named, never numbered' moves to the HEAD of Test Strategy, ahead of both enumerations, and its rationale is now demonstrated rather than asserted -- the two enumerations in that section list the same eight seams in different orders. The one live ordinal ('the sixth named injection' for _close_stream) is struck; it was drifting AND wrong, that seam being seventh in the Test Strategy list. v1.49's ordinal is struck the same way. NIT 2: the <h1> claim is narrowed to 'exactly one EMPTY <h1></h1>' -- the file renders two <h1> elements, the other being the document title. OWED ELSEWHERE, routed and not edited here: the impl-plan's three closing-hash-delimiter sites (two prose, one fixture row). NOT owed: no document owes a floor-tuple literal to any other, which reverses v1.94's routing. **[Two factual claims in this entry are corrected by v1.96, and the entry is otherwise left intact as the dated record it is. (1) "git diff --name-only a8e0372 335f535 names two files, both .py" is FALSE as written: unscoped, that diff names 13 files, 11 of them .md. The conclusion holds only under the SCOPED form `-- h-mad handoff`, which names exactly the two .py; all 11 .md are under docs/, outside both corpus roots. Version History is exempt for line pins, never for factual claims, which is why this correction sits here rather than only at the body site. (2) "the seam-naming and ordinal-base rules are NOT exempt there" was a rule this entry stated and did not apply — it struck one Version History ordinal (v1.49's) and left four standing (v1.12, v1.23, v1.48, v1.69). v1.96 scopes the seam-ordinal ADDRESS prohibition to outside Version History and states why the exemption cannot be avoided by striking; the ordinal-base rule remains non-exempt.]**
-- v1.96: Design audit v86, gating round (teammate must 2 should 2 nit 2). Every figure re-derived at 74e126f. MUST 1: the published sha-equality command's stated output was FALSE and the document's own trip-wire fired on its own tree -- unscoped, git diff --name-only a8e0372 74e126f names 13 files, 11 of them .md. The command is now SCOPED to the two roots the corpus is drawn from (-- h-mad handoff), which names exactly the two .py, and the reason the conclusion survived unscoped is now stated rather than left implicit: all 11 .md are under docs/, outside both roots. The unscoped form is explicitly demoted -- it fires on every revision of this document and would train a reader to ignore the trip-wire. The identical false claim in the v1.95 Version History entry is corrected by a bracketed note there, since Version History is exempt for line pins only, never for factual claims. The 335f535 figures are closed as a CLASS in the same paragraph: git diff --name-only 335f535 74e126f -- h-mad handoff is EMPTY, so the five remaining 335f535 dates below are records of when each was run, not stale pins; three of the five were re-run anyway at 74e126f (eleven-shape ATX proxy, closing-hash-run oracle, _second_surface ast one-liner) and reproduce exactly. MUST 2: the seam-ordinal rule was closed as a class instead of one member at a time. Both surviving ordinals in Error Handling Strategy are struck -- os.unlink 'the eighth named seam' becomes 'the os.unlink fault injection', _final_write 'the fifth named injection' (the stale v1.23 ordinal) becomes 'the _final_write fault injection' -- and the two cardinality phrasings beside them ('a ninth seam', 'add no sixth') are reworded to 'an additional seam' and 'add no new seam' so that the published check has NO expected exceptions. The check is published at the head of Test Strategy and run: awk-split at the Version History heading, grep -cE over the ordinal-x-seam pattern -> 3 on v1.95 and 0 on v1.96, which is its own positive and negative control on this file. Residual stated exactly and in two numbered items: (1) Version History is exempt for ordinals as well as line pins, and v1.49's strike annotation is the proof the exemption cannot be avoided by striking, since it must quote the ordinal it struck -- as must every later entry that reports one, this one included. How many entries carry one is therefore DERIVED, never listed: the same pattern run over the tail (one entry per line) returns 7 at v1.96, and it grows by one each time a revision records a strike. This narrows v1.95's blanket 'not exempt there', a rule that revision stated and did not apply. The ordinal-BASE rule remains non-exempt. (2) A cardinality statement is not an address and is permitted in principle, but this document now carries none, so the expected output is a bare 0 and any hit is a finding. SHOULD 1: the Setext census gets the same honesty treatment '14 of 14' got. Its cited script heading_differential.py is untracked (git ls-files | grep -cE 'heading_differential|grammar_corpus' -> 0) and the plan's transcript is pinned at a different sha (1861157, files=25/30), so neither the cited run nor a re-run of it was re-derivable. A runnable fence replaces the citation and was executed verbatim from the shipped file: 'tracked files 30 setext_headings 0' / 'glob    files 35 setext_headings 0'. Both controls were run before the count was published (decision E): a positive fixture with one === and one --- heading returns 2, a negative fixture with a thematic break, a fenced underline, a list-item underline and a table delimiter row returns 0. Rule over the axis: every measurement must publish its command inline or name a script git ls-files can find. Residual: this census and the ATX proxy close the axis for the only two untracked scripts ever cited here. SHOULD 2: the awk line-pin detector now states its OWN residual -- it matches a filename-shaped token with an extension followed by colon-digits, and a backticked colon-digits, and is blind to the word line/lines plus a number, an L-prefixed number, and colon-digits not preceded by a filename-shaped token. Those three blind forms were swept separately at 74e126f over the same head-of-document corpus and the only hits are the two 'lines ...' fields of the block-census OUTPUT, a printed count and not a locator. NIT 1: the two wc -l lines in the differential fence gain | tr -d ' ' with the reason inline (BSD wc right-pads to six columns, GNU does not), so the verbatim block below is byte-exact on both platforms; the whole fence was extracted from the shipped file and re-run at 74e126f and prints that block byte-for-byte. NIT 2: the ~1,100-word AC-6.1-6.6 Test Plan cell is split -- the floor-tuple empirical evaluation moves out to a wrapped prose block beneath the table titled 'The floor tuple, evaluated', with the cell pointing to it; the cell is now 837 words. The evaluation is re-derived at 74e126f rather than carried: the three standing parametrize counts are still 2/0/0 and the diff since a8e0372 still names exactly one test file. OWED ELSEWHERE, reported and not edited here (decision F): v1.95 added a second occurrence of the four-word phrase the impl-plan uses as its needle into this document (the ordinal-base rule in Task 5's prose), taking that needle from 1 matching line at 335f535 to 2 at 74e126f and breaking a locator that was unique when it was written. Counts confirmed here, edited nowhere else; the impl-plan author is re-needling to a longer form. The needle itself is DELIBERATELY not quoted in this entry -- quoting it would add a third matching line and break the re-needling too, which is the same defect one level down.
+- v1.96: Design audit v86, gating round (teammate must 2 should 2 nit 2). Every figure re-derived at 74e126f. MUST 1: the published sha-equality command's stated output was FALSE and the document's own trip-wire fired on its own tree -- unscoped, git diff --name-only a8e0372 74e126f names 13 files, 11 of them .md. The command is now SCOPED to the two roots the corpus is drawn from (-- h-mad handoff), which names exactly the two .py, and the reason the conclusion survived unscoped is now stated rather than left implicit: all 11 .md are under docs/, outside both roots. The unscoped form is explicitly demoted -- it fires on every revision of this document and would train a reader to ignore the trip-wire. The identical false claim in the v1.95 Version History entry is corrected by a bracketed note there, since Version History is exempt for line pins only, never for factual claims. The 335f535 figures are closed as a CLASS in the same paragraph: git diff --name-only 335f535 74e126f -- h-mad handoff is EMPTY, so the five remaining 335f535 dates below are records of when each was run, not stale pins; three of the five were re-run anyway at 74e126f (eleven-shape ATX proxy, closing-hash-run oracle, _second_surface ast one-liner) and reproduce exactly. MUST 2: the seam-ordinal rule was closed as a class instead of one member at a time. Both surviving ordinals in Error Handling Strategy are struck -- os.unlink 'the eighth named seam' becomes 'the os.unlink fault injection', _final_write 'the fifth named injection' (the stale v1.23 ordinal) becomes 'the _final_write fault injection' -- and the two cardinality phrasings beside them ('a ninth seam', 'add no sixth') are reworded to 'an additional seam' and 'add no new seam' so that the published check has NO expected exceptions. The check is published at the head of Test Strategy and run: awk-split at the Version History heading, grep -cE over the ordinal-x-seam pattern -> 3 on v1.95 and 0 on v1.96, which is its own positive and negative control on this file. Residual stated exactly and in two numbered items: (1) Version History is exempt for ordinals as well as line pins, and v1.49's strike annotation is the proof the exemption cannot be avoided by striking, since it must quote the ordinal it struck -- as must every later entry that reports one, this one included. How many entries carry one is therefore DERIVED, never listed: the same pattern run over the tail (one entry per line) returns 7 at v1.96, and it grows by one each time a revision records a strike. This narrows v1.95's blanket 'not exempt there', a rule that revision stated and did not apply. The ordinal-BASE rule remains non-exempt. (2) A cardinality statement is not an address and is permitted in principle, but this document now carries none, so the expected output is a bare 0 and any hit is a finding. SHOULD 1: the Setext census gets the same honesty treatment '14 of 14' got. Its cited script heading_differential.py is untracked (git ls-files | grep -cE 'heading_differential|grammar_corpus' -> 0) and the plan's transcript is pinned at a different sha (1861157, files=25/30), so neither the cited run nor a re-run of it was re-derivable. A runnable fence replaces the citation and was executed verbatim from the shipped file: 'tracked files 30 setext_headings 0' / 'glob    files 35 setext_headings 0'. Both controls were run before the count was published (decision E): a positive fixture with one === and one --- heading returns 2, a negative fixture with a thematic break, a fenced underline, a list-item underline and a table delimiter row returns 0. Rule over the axis: every measurement must publish its command inline or name a script git ls-files can find. Residual: this census and the ATX proxy close the axis for the only two untracked scripts ever cited here. SHOULD 2: the awk line-pin detector now states its OWN residual -- it matches a filename-shaped token with an extension followed by colon-digits, and a backticked colon-digits, and is blind to the word line/lines plus a number, an L-prefixed number, and colon-digits not preceded by a filename-shaped token. Those three blind forms were swept separately at 74e126f over the same head-of-document corpus and the only hits are the two 'lines ...' fields of the block-census OUTPUT, a printed count and not a locator. NIT 1: the two wc -l lines in the differential fence gain | tr -d ' ' with the reason inline (BSD wc right-pads to six columns, GNU does not), so the verbatim block below is byte-exact on both platforms; the whole fence was extracted from the shipped file and re-run at 74e126f and prints that block byte-for-byte. NIT 2: the ~1,100-word AC-6.1-6.6 Test Plan cell is split -- the floor-tuple empirical evaluation moves out to a wrapped prose block beneath the table titled 'The floor tuple, evaluated', with the cell pointing to it; the cell is now 837 words. The evaluation is re-derived at 74e126f rather than carried: the three standing parametrize counts are still 2/0/0 and the diff since a8e0372 still names exactly one test file. OWED ELSEWHERE, reported and not edited here (decision F): v1.95 added a second occurrence of the four-word phrase the impl-plan uses as its needle into this document (the ordinal-base rule in Task 5's prose), taking that needle from 1 matching line at 335f535 to 2 at 74e126f and breaking a locator that was unique when it was written. Counts confirmed here, edited nowhere else; the impl-plan author is re-needling to a longer form. The needle itself is DELIBERATELY not quoted in this entry -- quoting it would add a third matching line and break the re-needling too, which is the same defect one level down. **[Two claims in this entry are corrected by v1.97; the entry is otherwise left intact as the dated record it is. (1) "unscoped, git diff --name-only a8e0372 74e126f names 13 files, 11 of them .md" is FALSE. Re-derived at 35698f9, that command names 18 files, 16 of them .md; 13/11 is the a8e0372..335f535 measurement, which v1.95's bracketed note above quotes CORRECTLY and which must not be "fixed". The pair moves with every revision of docs/, so v1.97 stops publishing a pair at the body site and publishes the invariant the argument rests on instead. (2) "3 on v1.95 and 0 on v1.96, which is its own positive and negative control" mislabels the control. A 0 on the current file is not a true negative — it is the state under test. The 3 was also a demonstrated FALSE NEGATIVE: v1.95's head carried four ordinal-plus-noun instances and the line-scoped pattern saw three, missing one the hard-wrap had split across a newline. v1.97 replaces the check with a fold-and-strip pipeline, publishes a real true-negative fixture, and states the residual.]**
+- v1.97: Design audit v87, gating round, but only ONE surface produced evidence: the agy leg scored UNVERIFIED (reason=low_evidence, 1 tool call) and its "Must-fix None" is not corroboration, so nothing here rests on it. Every figure re-derived at 35698f9; none carried from the report or from the round-six decision sheet. Stated once instead of re-stamping every dated figure: git diff --name-only 74e126f 35698f9 -- h-mad handoff is EMPTY, so every CORPUS-DERIVED and SCOPED-DIFF figure dated a8e0372 or 74e126f is byte-identically derivable at the audited sha, and that sentence now sits in the same paragraph as the a8e0372 closure. The qualifier is deliberate and no count of the stamps is published: an empty TREE diff says nothing about a figure measured on THIS DOCUMENT's bytes, and this document changed, so the document-self figures (the seam-ordinal before/after pair, the line-pin blind-form sweep) each carry a 35698f9 re-run beside their 74e126f stamp instead of relying on the closure. The heading-differential fence was likewise extracted and re-run at 35698f9 and its stamp now names both shas. MUST 1: the unscoped-diff figure was the a8e0372..335f535 measurement carried into a sentence about a8e0372..74e126f. Re-derived: that command names 18 files, 16 of them .md, and at 35698f9 it names 25 and 23 -- so the published pair was never right at its own sha, and a reader who re-ran it got a third number. The pair is no longer published as the trip-wire anywhere in the body. What is published is the invariant the argument actually rests on -- git diff --name-only a8e0372 <sha> | grep '\.md$' | grep -vc '^docs/' -> 0 -- that exact three-stage command run and confirmed 0 at 335f535, at 74e126f and at 35698f9, with the three pairs named once in a single parenthesis to show why a pair is the wrong thing to pin. The v1.95 bracketed note that quotes 13/11 for a8e0372..335f535 is CORRECT at its own sha and was deliberately NOT touched; the identical false claim in the v1.96 entry is corrected by a bracketed note there, Version History being exempt for line pins only and never for factual claims. MUST 2: the seam-ordinal detector was published as proof the class is closed while carrying two unstated blind forms, one of them demonstrated on this document's own bytes. (a) grep is line-scoped and this file hard-wraps at ~95 columns, so an ordinal the wrapper separated from its noun scored 0: v1.95's head held four ordinal-plus-noun instances and the published line-scoped pattern printed 3, a FALSE NEGATIVE, which the v1.96 entry cited as its "negative control" -- inverting the meaning of the control. (b) the gap was [^.]{0,60} and seven of the eight seams are dotted module paths, so the natural phrasing for this very set scored 0 (fixture run: 0 under the old pattern, 1 under the new). The check is rebuilt as a three-stage pipeline -- split at the Version History heading, strip fenced code with a RUN-LENGTH-aware fence tracker, fold paragraphs, then match with a gap that admits a dot inside a token and stops at a sentence break -- and shipped as shell variables so the alternation is written once. grep -o | wc -l | tr -d ' ', not grep -c, because after the fold a paragraph is one line. The head returns 0, and beside it THREE controls, all executed from the shipped file: v1.95 blob 4 (positive, and the gap against the old form's 3 IS the wrap blindness); the dotted+wrapped fixture 1; a true-negative fixture carrying both admissible cardinality phrasings and two block ordinals with their base 0 -- a non-member the screen DECLINES, which is what the earlier "negative control" was not. A fourth run pins the fence-strip: dropping it turns the head's 0 into 1, that hit being the alternation's own source. The residual grows from two items to three: the third states that the screen is proximity-based and therefore a hit is a CANDIDATE, not automatically a defect, and names both directions -- it over-matches an ordinal over some other set landing inside the gap, and under-matches a digit-suffixed ordinal, a noun outside {seam, injection, primitive}, and a gap over 60 characters. Item 2's absolute "any hit is a finding" is withdrawn on that evidence. The class rule is stated over the axis rather than at the instance: a detector whose target can contain a space folds and strips first; one whose target is a single whitespace-free token need not, because no hard-wrapper can split one. The line-pin detector is the second member of that class and is settled by measurement rather than by assertion -- a space-tolerant, folded variant is published and returns 0 at 35698f9, and its own residual (it would also match prose of the shape "<name>.py: 30 files") is stated, so the strict line-scoped fence remains the rule-carrying one. Its three previously-swept blind forms were re-swept at 35698f9: same two hits, both the block-census OUTPUT's "lines ..." fields. MUST 3: two sites contradicted each other on how many Version History entries quote an ordinal, and the wrong one was spelled as an English word, invisible to a digits-only sweep. The Invariant Compliance prose said five; the derived command returns 8 against the 35698f9 blob under the new pattern and returned 6 against the 74e126f blob under the old one, so "five" was never right. The prose figure is DELETED and points at the command; no count of those entries is written at that site. The number is republished where the command lives as a screen result rather than a cardinality: seven of the eight are entries recording an ordinal over the fault-injection set and one (v1.76) is an ordinal over the two arms of a cleanup path that merely lands inside the gap -- named so the next reader does not chase it, and kept as the demonstration of why the number is derived. The tail command is deliberately NOT folded, because a Version History entry is one unwrapped line and folding would merge entries. MUST 4: the Single-source compliance claim was scoped by a closed enumeration of "three further hand-rolled ##-slicers", and the class is open. It is now a SCOPE RULE plus a runnable AST sweep and NO cardinality -- the same treatment the impl-plan reached for its own residual, and adopted here because two differently-wrong predicates agreed on one number, which is exactly the failure a cardinality hides. The sweep prints 22 lines at 35698f9 and that is labelled as ITS output, with over-count members verified by reading each body at 35698f9 rather than by carrying the report's word for it (traced_bindir and run_with_bindir in test_hmad_dispatch_audit_cycle.py hold their ## inside a stub audit-report STRING; main in h_mad_audit_gate.py in a COMMENT; main in h_mad_wire_pin_gate.py in an ERROR MESSAGE -- none slices) and one verified under-count member (def _section in test_h_mad_collect_report_docs.py, whose ## anchors arrive as parameters). The consumer census's blindness is stated by construction: only three files in the two roots import docsections at all. The three walked members are relabelled "three examples", the 8 call sites of _titled_section are given with the command that derives them, and "all three are fence-blind" is scoped to those three and immediately falsified for the class by two verified fence-AWARE members (def _section in test_h_mad_pane_visible_dispatch_docs.py and def _section in test_h_mad_context_budget_docs.py, each with a comment saying why). The residual is stated exactly, not as "and similar": the unwalked members are UNEXAMINED against the compliance conclusion, not found compliant by it, and what would falsify the scope rule is a slicer two surfaces call. SHOULD: the Setext census's fence tracker closed a fence on the marker CHARACTER alone, so a three-backtick line inside a four-backtick fence ended it and the rest of the file was scanned as prose -- the exact shape AC-1.6 exists for, and the shape the published negative control did not cover. Fixed by keeping the opener's RUN and requiring a closer at least as long (CommonMark 4.5). Direction of the old bug was safe, so no figure moved and none was re-stated on trust: the edited fence was extracted from the shipped file and re-run at 35698f9, printing "tracked files 30 setext_headings 0" / "glob files 35 setext_headings 0" byte-for-byte, and all three controls were re-run against the SHIPPED census() rather than a paraphrase -- positive 2, true negative 0, nested-fence fixture 0 where the old tracker returned 1. The earlier negative control is NOT relabelled: it was a sound true negative, it simply did not cover the shape AC-1.6 exists for. A two-arm residual on census() is added (no info-string model, so an info-string opener of the same character and no greater run reads as a closer -- same safe direction, corpus 0; and a fence indented past column 3, e.g. inside a list item, is not recognised at all). NOT edited, and deliberately: the report's third should-fix is marked "Not a defect -- recorded" and needed no change; its constraint on the MUST 2 fix is discharged by the fence-strip stage above. OWED ELSEWHERE, reported and not edited here: nothing new. The differential fence was also re-run verbatim at 35698f9 while the file was open and still prints finder/bounder 30 / 292 / 82 / 1 with the same single new_only identity.
