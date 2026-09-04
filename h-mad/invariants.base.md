@@ -216,6 +216,24 @@
   step they blamed. Re-run the MEASUREMENT as well as the claim — a brief's conclusion can be right
   while its method is wrong.
 
+## Behavioural premises carry their command
+- A premise about **behaviour** — "X currently does Y", "this guard fires when Z", "the suite
+  collects N", "the parser rejects W" — MUST carry the exact command that produced it, inline and
+  runnable, beside the observed output. An output recorded without its command is not
+  re-derivable, and a premise that cannot be cheaply re-run gets re-READ instead, cycle after
+  cycle, by every reviewer in turn. Measured: one false behavioural premise survived **10** audit
+  cycles that way.
+- Narrower than §"Assumption verification" and it fails at a different moment: there the evidence
+  was never gathered; here it was gathered once, written down as a conclusion, and thereby made
+  uncheckable. Both readers are then reasoning about prose.
+- **The command belongs in the document even when the answer is one number**, because the number
+  alone does not say what was counted. Measured: two readers measuring "the same" census got **3**
+  and **23**, having run different commands, and neither could tell which was wrong until the
+  command was written down beside it. `git grep -l '```' -- '*.py'` is the census; "21 files" is
+  a claim about one.
+- A premise whose command has become expensive to re-run is not exempt. Say so, and say what the
+  cheap proxy is — an unrunnable premise is a premise no later cycle can falsify.
+
 ## Counts a dispatch reports
 - **Re-derive every COUNT a dispatched agent reports; never carry it into a document, a commit
   message or a verdict on the agent's word.** A report that is right about its actions can still be
