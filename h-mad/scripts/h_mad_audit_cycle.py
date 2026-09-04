@@ -535,6 +535,51 @@ def combine(results: list[PassResult]) -> tuple[str, str | None]:
             )
             return "UNVERIFIED", f"{token}:p{result.index}"
 
+    # A pass that cannot have read anything cannot certify anything (#13).
+    #
+    # This REVERSES the rule that stood here until 2026-09-04 ("the effort block
+    # reports; it must never decide"), by operator decision and on measured
+    # evidence rather than taste. What changed is not the scoring but what the
+    # scoring was found to predict:
+    #
+    #   - Over HemaSuite `#18` c45-75 the agy leg produced 6 fabricated must-fixes
+    #     of 11 while codex produced 0 of 25 -- so its verdicts are not
+    #     interchangeable with the other surface's.
+    #   - Its low-evidence passes never found anything, in either direction. In one
+    #     round its design pass ran 58 tool calls and found a real defect BOTH
+    #     teammate passes missed, while its plan pass ran 2 -- this floor exactly --
+    #     and returned a clean worth nothing. Same surface, same round, opposite
+    #     value, and the tool count sorted them.
+    #   - On one feature the second surface was hollow in 21 of 22 passes, so the
+    #     union that the two-surface gate is built on was carried by one leg while
+    #     reporting as two.
+    #
+    # The old rule's defence was that a 2-call pass "honoured the delivery contract
+    # exactly as asked". True, and beside the point: honouring the delivery contract
+    # is not evidence of having read the tree, and a gate cannot tell "there is
+    # nothing to find" from "this pass looked at nothing". That is the same
+    # cannot-judge this file already refuses to score anywhere else.
+    #
+    # It is deliberately NOT a FAIL: nothing was found to be wrong. It is also
+    # checked AFTER the FAIL loop, so findings a hollow pass did manage to write
+    # still count -- the direction that never falsely gates. And `UNVERIFIED`
+    # rather than a new word, for the reason the rc guard above already gives.
+    for result in results:
+        if result.effort is None:
+            # No log was named for this pass, so nothing was measured. That is the
+            # ordinary shape of a codex leg and of every `Agent()` teammate pass,
+            # and scoring absence-of-measurement as hollowness would flip almost
+            # every honest pass to UNVERIFIED. Absence of evidence about evidence
+            # is not evidence of absence.
+            continue
+        if not result.effort.get("readable"):
+            # A log was named and could not be read: a cannot-judge, and it fails
+            # closed. Its own reason token, because the remedy differs -- find the
+            # log, versus re-dispatch the pass.
+            return "UNVERIFIED", f"low_evidence_unmeasurable:p{result.index}"
+        if result.effort.get("ok", 0) <= DELIVERY_FLOOR:
+            return "UNVERIFIED", f"low_evidence:p{result.index}"
+
     return "PASS", None
 
 
@@ -578,7 +623,19 @@ def render(
             delivered = ",".join(result.delivered for result in results)
             fields.append(f"delivered={delivered}")
         fields.append(f"size_status={size_status}")
-        lines = [" ".join(fields), f"[H-MAD] {feature} audit-cycle {verdict}"]
+        lines = [" ".join(fields)]
+        # The Effort block renders HERE too, and that is load-bearing rather than
+        # cosmetic. Since #13 a low-evidence pass can itself produce the UNVERIFIED
+        # verdict, so the counts are the evidence FOR the verdict — this branch used
+        # to return before reaching them, which would have printed
+        # `reason=low_evidence:p1` with nothing to justify it and sent the reader
+        # back to the raw NDJSON, the exact hand-opening the Effort block exists to
+        # replace.
+        effort = _effort_items(results)
+        if effort:
+            lines.append("Effort:")
+            lines.extend(f"- {item}" for item in effort)
+        lines.append(f"[H-MAD] {feature} audit-cycle {verdict}")
         return "\n".join(lines) + "\n"
 
     fields = [f"AUDITCYCLE: {verdict}"]
@@ -594,10 +651,12 @@ def render(
         fields.append(f"size_status={size_status}")
 
     lines = [" ".join(fields)]
-    # Beside the verdict, never inside it. The AUDITCYCLE line is a machine
-    # contract parsed positionally by consumers; effort is a scoring caveat for a
-    # human, and a caveat that can move a verdict is a gate wearing a caveat's
-    # name. `combine()` never sees it.
+    # Beside the verdict, never INSIDE it. The AUDITCYCLE line is a machine contract
+    # parsed positionally by consumers, so the counts stay out of the token itself.
+    # Since #13 `combine()` does read the same numbers, in one direction only: a pass
+    # at or below the delivery floor cannot certify a clean. It still cannot
+    # manufacture a FAIL, and `tools=`/`low-evidence` still never appear in the
+    # token — only the `reason=low_evidence:pN` field does.
     effort = _effort_items(results)
     if effort:
         lines.append("Effort:")

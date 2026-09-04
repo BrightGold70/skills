@@ -1687,8 +1687,15 @@ def test_premise_items_match_gate_count_real_artifacts(
 # AUDITCYCLE line that is indistinguishable from a real clean pass, and the counts
 # were only visible by opening the NDJSON by hand.
 #
-# The effort block reports. It must never decide: `combine()` does not see it, and a
-# pass that made 2 tool calls honoured the delivery contract exactly as asked.
+# The effort block reports in the HUMAN block, and since 2026-09-04 it also decides
+# the machine verdict in ONE direction: a pass at or below the delivery floor can no
+# longer certify a clean (#13). It still never manufactures a FAIL, and it still
+# never appears inside the AUDITCYCLE token itself.
+#
+# The rule here used to be "it must never decide", defended on the grounds that a
+# 2-call pass honoured the delivery contract exactly as asked. That is true and
+# beside the point: honouring the delivery contract is not evidence of having read
+# the tree. See `combine()` for the measured evidence that reversed it.
 
 
 def _agy_log(path: Path, *, tools_ok: int, tools_err: int = 0, thinking: int = 0) -> Path:
@@ -1838,9 +1845,23 @@ class TestEffortIsSurfaced:
 
         assert "Effort:" not in capsys.readouterr().out
 
-    def test_effort_never_changes_the_verdict(self, tmp_path, capsys) -> None:
-        """J49 is a scoring caveat, not a defect. The same clean report must produce
-        the same AUDITCYCLE line whether the pass was hollow or exhaustive."""
+    def test_a_hollow_pass_and_an_exhaustive_one_no_longer_score_the_same(
+        self, tmp_path, capsys
+    ) -> None:
+        """REVERSED 2026-09-04 (#13), by operator decision on measured evidence.
+
+        This test previously asserted the opposite -- that the same clean report
+        must produce the same AUDITCYCLE line however hollow the pass. It is kept
+        here inverted rather than deleted, because the old invariant was deliberate
+        and its reversal should be visible to whoever reads this file next.
+
+        What changed: over one feature the second surface was hollow in 21 of 22
+        passes, and on another it produced 6 fabricated must-fixes of 11 against
+        codex's 0 of 25. Its low-evidence passes never found anything in either
+        direction. A clean from a pass that read nothing is not a clean; it is an
+        absence of observation, and this file refuses to score a cannot-judge
+        everywhere else.
+        """
         ac = audit_cycle()
         body = "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n"
         verdicts = []
@@ -1853,7 +1874,11 @@ class TestEffortIsSurfaced:
                      "--pass", f"1:{report}:{report.with_suffix('.out')}:0:{log}"])
             verdicts.append(auditcycle_lines(capsys.readouterr().out)[0])
 
-        assert verdicts[0] == verdicts[1], "effort leaked into the machine verdict"
+        assert verdicts[0] != verdicts[1], (
+            "a pass that read nothing must not score the same as one that read the tree"
+        )
+        assert "UNVERIFIED" in verdicts[0] and "low_evidence:p1" in verdicts[0]
+        assert verdicts[1].startswith("AUDITCYCLE: PASS")
 
     def test_the_contract_line_is_unchanged_by_effort(self, tmp_path, capsys) -> None:
         """The AUDITCYCLE line is a machine contract. Effort belongs in the human
@@ -1942,3 +1967,84 @@ def test_render_surfaces_the_rc_reason():
     line = auditcycle_lines(text)[0]
     assert "AUDITCYCLE: UNVERIFIED" in line
     assert "reason=dispatch_timeout:p2" in line
+
+
+# --- #13: a pass that cannot have read anything cannot certify anything -------
+# Three inputs, three different correct answers, and the whole point is that they
+# are NOT spelled the same way. "No log was named" and "the log says zero reads"
+# lead to opposite actions, and collapsing them is the defect this closes.
+
+
+def test_low_evidence_pass_cannot_certify_a_clean():
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, effort={"readable": True, "tools": 2, "ok": 2,
+                                     "failed": 0, "thinking": 0}),
+    ])
+    assert verdict == "UNVERIFIED"
+    assert reason == "low_evidence:p1"
+
+
+def test_a_pass_above_the_delivery_floor_still_certifies():
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, effort={"readable": True, "tools": 34, "ok": 34,
+                                     "failed": 0, "thinking": 900}),
+    ])
+    assert (verdict, reason) == ("PASS", None)
+
+
+def test_a_named_but_unreadable_log_fails_closed_with_its_own_reason():
+    """A cannot-judge, and distinct from hollowness: the remedy is to find the log,
+    not to re-dispatch the pass."""
+    ac = audit_cycle()
+    verdict, reason = ac.combine([pass_result(index=2, effort={"readable": False})])
+    assert verdict == "UNVERIFIED"
+    assert reason == "low_evidence_unmeasurable:p2"
+
+
+def test_no_log_named_is_NOT_scored_as_hollow():
+    """The ordinary shape of a codex leg and of every Agent() teammate pass.
+
+    Absence of measurement is not measurement of absence — scoring it as hollow
+    would flip almost every honest pass in the tree to UNVERIFIED.
+    """
+    ac = audit_cycle()
+    assert ac.combine([pass_result(index=1, effort=None)]) == ("PASS", None)
+
+
+def test_findings_from_a_hollow_pass_still_outrank_its_hollowness():
+    """FAIL is the direction that never falsely gates, so it is checked first."""
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, verdict="FAIL", must=1,
+                    effort={"readable": True, "tools": 2, "ok": 2,
+                            "failed": 0, "thinking": 0}),
+    ])
+    assert (verdict, reason) == ("FAIL", "findings:p1")
+
+
+def test_a_timeout_outranks_low_evidence_because_it_explains_it():
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, rc=124,
+                    effort={"readable": True, "tools": 0, "ok": 0,
+                            "failed": 0, "thinking": 0}),
+    ])
+    assert reason == "dispatch_timeout:p1"
+
+
+def test_one_hollow_leg_unverifies_the_whole_cycle_even_beside_a_deep_one():
+    """The union is only as honest as its weakest leg.
+
+    Measured: the second surface was hollow in 21 of 22 passes on one feature, so
+    a two-surface gate reported as two while being carried by one.
+    """
+    ac = audit_cycle()
+    verdict, reason = ac.combine([
+        pass_result(index=1, effort={"readable": True, "tools": 40, "ok": 40,
+                                     "failed": 0, "thinking": 5000}),
+        pass_result(index=2, effort={"readable": True, "tools": 2, "ok": 2,
+                                     "failed": 0, "thinking": 0}),
+    ])
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence:p2")

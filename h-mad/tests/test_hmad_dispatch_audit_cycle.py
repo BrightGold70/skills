@@ -1592,6 +1592,12 @@ def test_verb_writes_only_reports(tmp_path):
         f"01-plan/features/{feature}.plan.audit.v7.p1.md",
         f"01-plan/features/{feature}.plan.audit.v7.p2.md",
     }, "audit-cycle must add only the per-pass collected reports under docs/"
+    # UNVERIFIED, not PASS, since #13: the stub dispatch writes a log carrying a
+    # single `result` event and no tool calls, so `ok=0` — below the delivery floor.
+    # That is the correct verdict for what this fixture models. The stub is a fake
+    # dispatch that reads nothing, and a pass that read nothing can no longer
+    # certify a clean. What this test asserts is unchanged and is above: the verb
+    # writes ONLY the two per-pass collected reports under `docs/`.
     assert auditcycle_lines(r.stdout) == [
-        "AUDITCYCLE: PASS must=0 should=0 passes=2 p1=0/0 p2=0/0 delivered=out,out size_status=verified"
+        "AUDITCYCLE: UNVERIFIED reason=low_evidence:p1 passes=2 delivered=out,out size_status=verified"
     ]

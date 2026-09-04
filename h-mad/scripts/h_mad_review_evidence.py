@@ -47,9 +47,15 @@ def scan(log_text: str) -> dict:
     returned "CLEAN PASS" on a document another pass proved defective (J49). At the
     verdict line a hollow pass and a real clean pass look identical.
 
-    It must not become a threshold. A pass that made 2 tool calls honoured the
-    report-file delivery contract exactly as asked, and one such pass in this repo
-    (5,356 thinking / 2 tools) still returned a real finding.
+    Since #13 it IS a threshold in `h_mad_audit_cycle.combine()`, but in one
+    direction only, and the counter-example this paragraph was built on is what
+    fixes the direction. A pass that made 2 tool calls honoured the report-file
+    delivery contract exactly as asked, and one such pass in this repo
+    (5,356 thinking / 2 tools) still returned a REAL FINDING. So the floor is
+    checked strictly AFTER the findings loop: a low-evidence pass that found
+    something is scored on what it found, exactly as before, and only a
+    low-evidence pass claiming a CLEAN is refused. Findings are evidence of
+    reading; a clean is not.
     """
     tools = ok = failed = thinking = 0
     status: str | None = None
