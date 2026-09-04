@@ -651,32 +651,66 @@ ordinal or absence claim about the working tree carries **both** its generating 
 the sha it was measured at, on the same surface as the number. A command with no sha is
 unfalsifiable, because the tree moved; a sha with no command is uncheckable, because two readers
 measuring "the same" thing run different commands; and `measured`, "this session" and
-"today" are neither a command nor a sha. Those three words are the marker set screen one below
-filters on, and the rule and the screen are written from one list so they cannot drift apart.
+"today" are neither a command nor a sha. Those are **three markers across four words** — one is a
+two-word phrase, which is not pedantry: it is the branch whose boundaries took three revisions to
+get right, and calling it a word is what made a two-word branch read as a one-word one.
+**The rule sentence and the screen's program are maintained together by convention, and nothing
+checks that they agree.** Through v1.93 this sentence claimed they "are written from one list so
+they cannot drift apart"; they are two independent pieces of prose, and v1.93 itself demonstrated
+the drift — the marker *set* matched while the *treatment* did not, three markers named as bounded
+and two of them actually bounded. The residual is stated rather than closed: the only mechanical
+bind available is to derive this sentence's marker list from the program the way screen two derives
+its rule from the spec's fenced block, which would make the prose an awk alternation and cost more
+readability than the drift it prevents. What stands in for the missing checker is the **per-branch**
+control below — each branch is run against its own fixture, so a dead or unbounded branch can no
+longer be covered by a healthy sibling in the alternation.
 
 **One closure, stated once instead of re-stamping every pin in this document.** Every commit
-between `74e126f` and the audited commit `6f0ee85` touches only paths under `docs/`:
-`git diff --name-only 74e126f 6f0ee85 -- h-mad handoff` prints nothing, and
-`git diff --name-only 74e126f 6f0ee85 | sed 's|/.*||' | sort -u` prints `docs` alone. So every
-figure below that was measured over `h-mad/` or `handoff/` and is stamped `74e126f` **or**
-`35698f9` is provably identical at `6f0ee85`, and those stamps are deliberately left as written
+between `74e126f` and the audited commit `cf3a862` touches only paths under `docs/`:
+`git diff --name-only 74e126f cf3a862 -- h-mad handoff` prints nothing, and
+`git diff --name-only 74e126f cf3a862 | sed 's|/.*||' | sort -u` prints `docs` alone. So every
+figure below that was measured over `h-mad/` or `handoff/` and is stamped `74e126f`, `35698f9`
+**or** `6f0ee85` is provably identical at `cf3a862`, and those stamps are deliberately left as written
 rather than re-typed at every surface that carries one. A mass re-stamp is itself a defect surface,
 and this closure is checkable in two commands where that many edits are not. **The interval is
 re-checked, not extended by assumption**: each revision re-runs the two commands with the *new*
 audited commit as the right-hand side, and the closure holds only as far as that run reaches.
 **No count of the surfaces this covers is offered**, and the offer was withdrawn in v1.93 rather
-than corrected: `grep -c '74e126f'` over the body returns **27** at `6f0ee85`, but `grep` is
+than corrected: `grep -c '74e126f'` over the body returns **27** at `6f0ee85` and **26** at
+`cf3a862`, but `grep` is
 line-scoped and this document hard-wraps, so a sha and the `h-mad`/`handoff` path it belongs to
 routinely sit on different lines — the count cannot be narrowed to the closure's stated subject by
 co-occurrence (the narrowed form
 `awk '/^## Version History/{exit}{print}' <doc> | grep '74e126f' | grep -cE 'h-mad|handoff'`
-returns **10**, and neither integer is the number of covered figures). It also counts this
+returns **10** at `6f0ee85` and **11** at `cf3a862`, and no integer in this sentence is the number
+of covered figures). It also counts this
 paragraph's own prose and the very lines the next sentence puts *outside* the closure. The
-argument does not need a number; the two `git diff` commands are the whole evidence. The closure
+argument does not need a number; the two `git diff` commands are the whole evidence.
+**Both readings are of a body that existed before this revision's edit, and that is the only reason
+they can be published at all**: this paragraph is inside the corpus it counts, so a reading taken
+after the edit would be a number the act of writing it had already moved. The rule the two shas
+encode: a figure whose corpus is this document is stated at a **landed** commit, never at "now",
+and it is re-taken at each freeze rather than carried. The closure
 does **not** reach figures derived from **this** document or from its three siblings under
-`docs/`: those files did change, so every such figure is re-derived at `6f0ee85` on the surface
+`docs/`: those files did change, so every such figure is re-derived at `cf3a862` on the surface
 that states it. Nor does it reach a figure stamped at a commit *older* than `74e126f`; those are
 re-run where this revision touches them and left at their own sha otherwise.
+
+**What this revision did NOT re-run, named rather than passed over in silence.** A figure no round
+challenged is not a verified figure, and an auditor's silence about it is not evidence either way;
+the register is kept here so the next reader can tell "reproduced at the freeze" from "nobody
+looked". Inherited-unverified at `cf3a862`: the `doc-auditor.md` fence-toggle `8`/`4` readings; the
+Setext differential and its `files=25`/`files=30` printouts, which the bullet stating them already
+marks as not re-run; the markdown-it-py 14-case grammar corpus, which needs a throwaway venv; the
+three OS probes (`rmtree` on a `0o000` directory, the reader-less FIFO, the emptied-group
+`killpg`); and the four screen-two legs named below. Also carried rather than re-run by this
+revision: the **membership** of the five triage categories below, which the v80 audit re-derived at
+`8909ec4` — this revision re-ran only their *total*, by showing the repaired program and the v1.93
+program print byte-identical output over the same body. **The register is itself a completeness
+claim and is therefore not offered as complete**: it lists what this revision knows it did not run,
+and the honest residual is that a figure nobody has thought to name is invisible to it. What the
+register does close is the softer failure — a figure that *was* named by an audit as unverified and
+then quietly acquired the freeze sha anyway.
 
 **A checker this document publishes is executed against a positive and a negative control before
 any count derived from it is published.** A screen that has never been shown to fire, and never
@@ -704,12 +738,12 @@ live in the document body where the next author reads them.
 **Screen one — the provenance markers the rule names. This document owns it.**
 
 ```
-$ awk '/^## Version History/{exit} /(^|[^[:alnum:]_])[Mm]easured([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)|[Tt]his session/ && !/[0-9a-f]{7}/{print NR": "$0}' \
+$ awk '/^## Version History/{exit} /(^|[^[:alnum:]_])[Mm]easured([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]his [Ss]ession([^[:alnum:]_]|$)/ && !/[0-9a-f]{7}/{print NR": "$0}' \
       docs/01-plan/features/doc-block-exec.plan.md
 ```
 
 **Every marker is bounded on both sides and case-folded, and each of those is a repair with a
-member behind it.** The alternation has exactly three branches, one per marker word the rule
+member behind it.** The alternation has exactly three branches, one per marker the rule
 names, and none of them is anchored on neighbouring punctuation or on a following word. Through
 v1.92 there were five branches: `\(measured\)`, `measured[,)]` and `measured with` for one marker
 plus a lowercase-only `today` and a lowercase-only `this session`. See below for what each repair
@@ -726,10 +760,17 @@ macOS default — over a two-line fixture written by
 `printf 'measured today\nremeasured todayish\n'`: the `\b` form prints **nothing**; a bare `/today/`
 prints **both** lines, which is the positive control showing the fixture is reachable at all;
 `printf 'a\bb\n' | awk '/\b/'` **matches**, which is the second positive control and is what proves
-`\b` is a literal backspace rather than a construct that never matches anything; and the POSIX form
-above prints the **first line only**, which is the discrimination the rule wanted and the negative
-control the `\b` form could not produce. This is an interpreter-behaviour probe, so it is stamped
-with its interpreter under the carve-out below rather than with a repository sha.
+`\b` is a literal backspace rather than a construct that never matches anything; and
+`awk '/(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)/'` — **the `today` branch alone, not the
+alternation**, which is what makes this a single-branch control under the rule above — prints the
+**first line only**, which is the discrimination the rule wanted and the negative control the `\b`
+form could not produce. The case half of the branch is controlled on its own line, since the
+two-line fixture is lowercase throughout and would have passed a lowercase-only branch:
+`printf 'Today it was measured\n' | awk '/(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)/'` prints its
+line. This is an interpreter-behaviour probe, so it is stamped
+with its interpreter under the carve-out below rather than with a repository sha — and for exactly
+that reason it is the **`awk` boundary probe** row of the carve-out sweep's table, named rather than
+numbered because that table is swept and reordered.
 
 **The `measured` branch was repaired on one side only, and v1.93 repairs the other.** Through
 v1.90 that branch required a comma immediately *before* the marker — `, measured[,)]` — so
@@ -745,17 +786,83 @@ while the class does not. So the three `measured` branches collapse into one bot
 form, and the same both-sides treatment is applied to *every* sibling branch in the expression in
 the same edit rather than to the branch an audit happened to name.
 
+**v1.93 wrote that sentence and applied it to two branches of three, which is the third
+half-application on this one expression in three revisions — and v1.94 repairs the mechanism, not
+just the branch.** The three are: v1.91 replaced `\b` on `today` only; v1.92 added a leading anchor
+and left the trailing one; v1.93 gave `[Mm]easured` and `[Tt]oday` both-sides POSIX boundaries and
+left `[Tt]his session` with **none**, while the paragraph above it asserted in bold that every
+marker was bounded on both sides and case-folded. Measured on the published v1.93 program, quoted
+out of the committed body rather than retyped:
+
+```
+$ printf 'in this sessionless mode\nThis Session capitalised\nxthis session glued\nthis session\n' \
+    | awk '/(^|[^[:alnum:]_])[Mm]easured([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)|[Tt]his session/'
+in this sessionless mode
+xthis session glued
+this session
+```
+
+Two substring false positives on both sides, and `This Session capitalised` declined — so the
+branch was unbounded *and* not case-folded past its first letter, the exact two properties the
+sentence claimed for it. The repaired branch on the same fixture returns the two members and
+neither substring:
+
+```
+$ printf 'in this sessionless mode\nThis Session capitalised\nxthis session glued\nthis session\n' \
+    | awk '/(^|[^[:alnum:]_])[Tt]his [Ss]ession([^[:alnum:]_]|$)/'
+This Session capitalised
+this session
+```
+
+**Why three revisions in a row could half-apply one rule and still pass their own control: the
+control was run on the alternation, where a healthy sibling covers a sick one.** Every published
+fixture line until now carried `measured` or `today` as well, so the `this session` branch was
+never the reason any line printed and its state was unobservable through the whole screen. The
+rule over that axis, which is what this revision actually ships: **each branch of a published
+alternation is controlled against its own fixture, run with that branch alone, positive and
+negative** — the alternation-level control is kept, but it is no longer evidence about any single
+branch. All three branches now have one, and they are named here so the correspondence is checkable
+without counting fences: `[Tt]his [Ss]ession` in the fenced pair immediately above; `[Tt]oday` in
+the `\b`-versus-POSIX probe two paragraphs *earlier*, whose
+`printf 'measured today\nremeasured todayish\n'` fixture is read against the
+`today` branch alone and whose case half has its own one-line control; and `[Mm]easured` in the
+six-line fixture *below*. Residual, stated
+because it is not closed: nothing enforces that a *newly added* branch arrives with its own
+fixture, and no screen can check it — the obligation lives in this sentence, and the reader's check
+is to read the alternation and find each branch named in this list.
+
+**The repair changes no published reading, and that was measured rather than assumed.** Over the
+v1.92 body as `6f0ee85` shipped it, the v1.94 program returns the same **32** lines as the v1.93
+program and the two outputs are byte-identical —
+`diff <(git show 6f0ee85:<doc> | awk '<v1.93 program>') <(git show 6f0ee85:<doc> | awk '<v1.94 program>')`
+prints nothing, on `awk version 20200816`. So the 9/32 widening, the 23, and the five triage
+categories below are untouched by this edit and are not re-derived from scratch. Live impact on the
+*current* body is likewise zero, and it is stated as zero rather than inflated: over the body at
+`cf3a862`, `awk '/^## Version History/{exit} /[Tt]his session/ && !/[0-9a-f]{7}/{print NR": "$0}'`
+prints **2** lines and **both** are also matched by the `[Mm]easured` or `[Tt]oday` branches
+(the same command with
+`&& !/(^|[^[:alnum:]_])[Mm]easured([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)/`
+appended prints **nothing**), so no hit in the triage below ever depended on this branch. Both
+readings are of the body at `cf3a862`, which predates this revision's edit — this paragraph writes
+`this session` into the document several more times, so a reading taken after the edit would be a
+number this paragraph had itself moved.
+
 **The widening is measured, and both halves of the control are run.** Over the v1.92 body as
 `6f0ee85` shipped it, the v1.92 screen returns **9** lines and the v1.93 screen returns **32** —
-so **23** lines were invisible to the published form and had never been triaged. Both readings are
-by `awk version 20200816`, both are of a committed body, and either is reproducible with
+so **23** lines were invisible to the published form and had never been triaged. The v1.94 screen
+above returns the **same 32 lines, byte-identical**, over that same body, which is the measurement
+recorded with the boundary repair; the readings below are therefore of a program the repair did not
+move. All three readings are
+by `awk version 20200816`, all three are of a committed body, and each is reproducible with
 `git show 6f0ee85:docs/01-plan/features/doc-block-exec.plan.md | awk '<the program>'`. The unit is
 **body lines printed**, not occurrences or distinct claims: one wrapped sentence can print twice
 and one line can carry two markers. Case-folding alone accounts for four of the twenty-three
 (`[Mm]easured` three, `[Tt]oday` one), and it is not cosmetic — the single line `[Tt]oday` adds is
 a real member, an unstamped count derived from a sibling document under `docs/`.
 
-Positive and negative controls, run at `6f0ee85` over one fixture rather than reasoned about:
+The `[Mm]easured` branch's single-branch control — positive and negative, run at `6f0ee85` over one
+fixture rather than reasoned about, and with the branch alone rather than the alternation, for the
+reason given above:
 
 ```
 $ printf 'anything unmeasured\nremeasured today\nmeasured, x\n(measured)\nmeasured with care\nMeasured at dawn\n' \
@@ -792,7 +899,8 @@ this plan runs the spec's enumeration **verbatim**, substituting only this docum
 spec's. **The address is the line-anchored one that document designates, not a prose phrase** — a
 prose needle sits mid-line, so a §Version History entry quoting it takes the count to 2, while the
 anchored form cannot be inflated that way:
-`grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → **1** at `6f0ee85`.
+`grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → **1** at `6f0ee85` and **1**
+at `cf3a862`.
 Re-checked in the revision that ships it rather than trusted from the commit it was authored at,
 because a locator that was unique when written can be broken by a concurrent sibling edit landing
 in the **same** commit — which in this feature's rounds is not hypothetical. **Two residuals here,
@@ -804,27 +912,42 @@ line with two spaces and `$ awk ` makes it 2. **The slot census is published at 
 it moved between them and one number under one stamp would read as a standing property.** One
 command —
 `grep -oE '^  \$ [a-zA-Z0-9._-]+' docs/01-plan/features/doc-block-exec.spec.md | sort | uniq -c` —
-run over `git show 35698f9:` and over `git show 6f0ee85:`. At `35698f9`: **9 openers** over
+run over `git show 35698f9:`, `git show 6f0ee85:` and `git show cf3a862:`. At `35698f9`:
+**9 openers** over
 **5 distinct tokens** — `awk` ×1, `curl` ×1, `git` ×5, `printf` ×1, `python3.11` ×1. At `6f0ee85`,
-the commit this revision is audited at: **20 openers** over **11 distinct tokens** — `awk` ×1,
+the commit **v1.93** was audited at: **20 openers** over **11 distinct tokens** — `awk` ×1,
 `curl` ×1, `git` ×7, `pairs` ×1, `printf` ×2, `python3.11` ×1, `RULE` ×1, `S` ×1, `sed` ×1,
-`split_only` ×3, `while` ×1. The units are *occurrences of a line-opening command token* and
+`split_only` ×3, `while` ×1. At `cf3a862`, the freeze v1.94 was authored against:
+**21 openers** over **11 distinct tokens** — the same distribution with `sed` ×**2**, the spec's
+v1.60 having added one. **Every label here is a past-tense sha and none of them describes the
+commit the reader is standing in**: a sibling-derived census can
+only ever be stamped at a *landed* commit, and when all four documents move together the commit a
+revision lands in is by construction not the commit its sibling figures were read at, so any
+present-tense self-description goes false the moment the revision lands — v1.93 carried one and it
+did. The sha is the label; there is nothing for prose to add. The units are
+*occurrences of a line-opening command token* and
 *distinct such tokens*, both from that one command; neither is a count of fenced blocks.
-**`awk` ×1 at both**, so the conclusion the needle rests on survived the move: a new `awk` fence
+**`awk` ×1 at all three**, so the conclusion the needle rests on survived both moves: a new `awk` fence
 there is still the one edit that breaks it, and the census moving while the conclusion did not is
 why the two are stated separately. This is the hazard named two sentences above — a sibling
 revised in the same commit that audits this one — realised rather than hypothetical, so the census
 is re-derived at every audited commit and never carried. This plan is also the only document of the
 four that attributes to that enumeration: `grep -cE '^  \$ awk '` over
 `docs/02-design/features/doc-block-exec.design.md` and
-`docs/01-plan/features/doc-block-exec.impl-plan.md` returns **0** on each at `6f0ee85`, where the
-same grep on the spec returns **1**.
+`docs/01-plan/features/doc-block-exec.impl-plan.md` returns **0** on each at `6f0ee85` and again at
+`cf3a862`, where the same grep on the spec returns **1** at both.
 
 Its hit count is deliberately **not** stated here: it is a procedure rather than a measurement, and
 any edit to this document changes it, so a number would falsify itself every cycle. Controls are
 published instead, since a filter whose output is not published must be shown to discriminate some
-other way. Every leg below was re-run at `6f0ee85`, since every one of them depends either on
-this document or on the spec, and the closure above reaches neither.
+other way. Every leg below was re-run at `6f0ee85` **by v1.93**, since every one of them depends
+either on this document or on the spec, and the closure above reaches neither. **v1.94 did not
+re-run them and says so rather than letting the older sha read as a fresh pass**: the two spec
+locators in this section are re-derived at `cf3a862` on the surfaces that state them, and the four
+screen-two legs below — the `335f535` positive, the true-negative leg (two declined sentences, one
+leg), the blind form and the over-reach — are carried at `6f0ee85` and are **unverified at the
+freeze**. They are named here
+because the alternative is silence, and silence reads as verification.
 
 **Positive — a real member of this document, and the screen prints it.** The scripts-directory
 count as `335f535` wrote it, a bare `37` with the adverb the provenance rule forbids and no sha, is
@@ -875,7 +998,7 @@ restated here** — a sibling can be revised in the same commit that audits this
 saying what it currently lists is false the moment that happens, and this paragraph made exactly
 that mistake through v1.91. The address is
 `grep -c 'Residual on the enumeration itself' docs/01-plan/features/doc-block-exec.spec.md` → **1**
-at `6f0ee85`. What is recorded here is only what running the checker against **this** body measured,
+at `6f0ee85` and **1** at `cf3a862`. What is recorded here is only what running the checker against **this** body measured,
 which is this document's own fact:
 
 - **The multi-word gap no longer misses a member of this document, and that changed under this
@@ -963,30 +1086,81 @@ behaviour the probe measures **one day after** the calendar date it was stamped 
 `3f50b95` and `bea1b60`, "the wrapper tore its own read"). The rule over the axis:
 
 > **A probe carries a sha whenever the thing whose behaviour it measures is a tracked repository
-> artifact. The carve-out is only for behaviour the OS, the kernel or the language runtime alone
-> determines.** Naming the determining thing is part of the claim; if it is not named, the
-> exemption is not established.
+> artifact. The carve-out is for behaviour determined entirely outside this repository — the OS,
+> the kernel, the language runtime, or a third-party package this repository does not vendor.**
+> Naming the determining thing is part of the claim; if it is not named, the exemption is not
+> established.
+
+**The list in that rule is a gloss on the test, not a second condition, and v1.94 says so because
+the narrower v1.93 wording ("the OS, the kernel or the language runtime") had no room for a probe
+whose subject is a third-party renderer.** `git ls-files <the artifact the probe names>` is the
+whole test. What exempts the markdown-it-py grammar corpus is the same property that exempts
+`argparse` — nothing in this tree determines the behaviour, so no sha of this tree can date it, and
+a version stamp is what stands in for the sha. Enumerating *kinds* of outside-thing invites the
+next kind to be argued about; the test does not care what kind it is.
 
 **The test is one command and its residual is that no screen can run it for you**:
 `git ls-files <the artifact the probe names>` — non-empty means the probe needs a sha. A shape
 filter cannot apply it, because deciding *what* a probe's subject is requires reading the probe.
 So the carve-out population is swept by hand, and the sweep is published rather than asserted.
-**Five members at `6f0ee85`, all five checked with that command**:
 
-| Probe | Subject | `git ls-files` on it | Verdict |
+**v1.93 published this table as a complete population — "five members, all five checked" — and it
+was two members short, because the sweep was driven by recall.** The rule over the population, which
+is what v1.94 actually adds: **every probe in this document that is stamped with a version or a
+platform instead of a sha is a row in this table**, and the sweep is driven by **the stamp**, not by
+which probes an author remembers or an audit names. Under that rule two members fall out
+immediately — the `awk` boundary probe of §Measurements above, whose stamp is `awk version
+20200816`, and the markdown-it-py grammar corpus under §Measurements, stamped `2.2.0` and `4.2.0`.
+Both are genuinely exempt, so the v1.93 *verdict* was right and its *sweep* was not; a completeness
+claim is a measurement under the provenance rule, and this one had not been measured.
+
+The stamp-driven driver, run over the body at `cf3a862` — before this revision's edit, since the
+rows it produces are written into the corpus it scans:
+
+```
+$ git show cf3a862:docs/01-plan/features/doc-block-exec.plan.md \
+    | awk '/^## Version History/{exit}{print}' \
+    | grep -cE '(python3?[.:]? ?[0-9]+\.[0-9]+\.[0-9]+|awk version [0-9]|markdown-it-py [0-9])'
+13
+```
+
+Those 13 lines resolve to **seven** distinct probes — the five v1.93 listed, plus the two above —
+because a probe's stamp appears both on its table row and in its recorded output. The mapping is a
+hand read, which is the point: the grep finds candidate stamps, and deciding which probe a stamp
+belongs to still requires reading the probe.
+
+**Seven members at `cf3a862`, each checked with its own command, and the argument is in the row so
+the row is runnable without scrolling up**:
+
+| Probe | `git ls-files` argument | Result | Verdict |
 |---|---|---|---|
-| argparse's `exit_on_error` routing (§Scope) | CPython `argparse` | empty | exempt; stamped `python 3.11.8` |
-| Group kill and escape (AC-5.2) | `os.killpg`, `os.setsid` | empty | exempt; **was missing its platform line and ran under `python3` — repaired below** |
-| `shutil.rmtree` on a `0o000` directory (AC-3.14) | `shutil` | empty | exempt; stamped `python: 3.11.8 \| darwin` |
-| Reader-less FIFO `O_NONBLOCK` (AC-3.10) | `os.open` on a FIFO | empty | exempt; stamped `python 3.11.8 darwin` |
-| Naturally emptied group (AC-5.5) | `killpg` on a zombie group | empty | exempt; stamped `python 3.11.8 darwin` |
-| The `run --timeout` wrapper's `124` (the 5f bound under §Success Criteria) | `h-mad/bin/hmad-dispatch` | **two paths** | **not exempt — carries a sha, below** |
+| argparse's `exit_on_error` routing (§Scope) | `git ls-files argparse` | empty | exempt; stamped `python 3.11.8` |
+| The `awk` boundary probe (§Measurements, screen one) | `git ls-files awk` | empty | exempt; stamped `awk version 20200816` |
+| Group kill and escape (AC-5.2) | `git ls-files os.py signal.py` | empty | exempt; **was missing its platform line and ran under `python3` — repaired below** |
+| `shutil.rmtree` on a `0o000` directory (AC-3.14) | `git ls-files shutil.py` | empty | exempt; stamped `python: 3.11.8 \| darwin` |
+| Reader-less FIFO `O_NONBLOCK` (AC-3.10) | `git ls-files os.py` | empty | exempt; stamped `python 3.11.8 darwin` |
+| Naturally emptied group (AC-5.5) | `git ls-files os.py signal.py` | empty | exempt; stamped `python 3.11.8 darwin` |
+| Scanner grammar corpus (§Measurements) | `git ls-files markdown_it markdown-it-py` | empty | exempt; stamped `markdown-it-py 2.2.0` and `4.2.0` |
+| The `run --timeout` wrapper's `124` (the 5f bound under §Success Criteria) | `git ls-files h-mad/bin/hmad-dispatch h-mad/scripts/hmad-dispatch.sh` | **two paths** | **not exempt — carries a sha, below** |
 
-The table is six rows because the wrapper is listed with the five it does not belong among; that is
-the point of publishing it. The residual on the sweep itself: it is a snapshot of the probes this
-document carries at `6f0ee85`, and a probe added later is only caught by a reader running
-`git ls-files` on its subject, so the obligation is written into the rule above rather than into a
-count here.
+The table is eight rows because the wrapper is listed with the seven it does not belong among; that
+is the point of publishing it. **The argument column is not cosmetic**: through v1.93 the middle
+column held the probe's *subject* rather than the command's *argument*, and the wrapper row read
+`h-mad/bin/hmad-dispatch` beside the result "two paths" — an audit at `cf3a862` ran the single-path
+form the cell named, got one path, and filed the row as false. The verdict was right and the cell
+was unrunnable; a result cell whose command is stated three paragraphs away is a result nobody can
+reproduce.
+
+Two residuals, and neither is closed:
+- **A probe stamped with a calendar date is invisible to the driver above**, which greps for
+  version and platform strings. The wrapper row is the proof — the stamp it carried was
+  `measured 2026-09-03`, a calendar date, still readable at
+  `git show 6f0ee85:docs/01-plan/features/doc-block-exec.plan.md | grep -n '2026-09-0'` → one hit,
+  and no version grep would find it. That member was caught by reading, not by the
+  driver, and the driver is an aid to the hand sweep rather than a replacement for it.
+- The sweep is a snapshot of the probes this document carries at `cf3a862`. A probe added later is
+  caught only by a reader running the driver and then `git ls-files` on each subject, so the
+  obligation lives in the rule above rather than in the integer seven.
 
 **The fence census — 73 at `a8e0372`, and the number is inseparable from the commit.** Every
 surface of this document that states it (§Scope, §Out-of-Scope, the Risks row above) carries the
@@ -1013,17 +1187,24 @@ bash fences: 73 across 10 files
 
 Control, to show the counter is not under-matching — the same sweep counting opening fences of
 *every* language must return a strictly larger number, and does: **88** at `a8e0372`, re-run and
-still **73 across 10 files** / **88** at `335f535` and again at the audited commit **`35698f9`**
+still **73 across 10 files** / **88** at `335f535`, at `35698f9`, and again at the audited commit
+**`cf3a862`**
 (**83** at `a469493`/`1861157`) — the same script with the counting line replaced by
 `if l.startswith('```') and len(l) > 3 and l[3].isalpha()` (an opener with any language word). The
 freeze-sha re-run is recorded because both figures are stamped at commits *older* than `74e126f`,
-which the closure in the preamble does not reach.
+which the closure in the preamble does not reach **and cannot be made to reach by extending its
+right-hand side** — extending the interval moves its end, not its start, so the only thing that
+re-verifies an older-stamped figure is running it again, which is what this sentence records.
 
 **This census is corpus-invariant, and that was measured rather than assumed — re-measured at
 `a8e0372`, not carried.** The script above walks a filesystem glob, which returns more `*.md`
-files than the tracked corpus §Scanning defines (35 against 30 at `a8e0372`; 30 against 25 at
+files than the tracked corpus §Scanning defines (35 against 30 at `cf3a862` and at `a8e0372`;
+30 against 25 at
 `1861157` — the pair moved because `6db8e50` added five `h-mad/agents/*.md`, verified with
-`git show --stat 6db8e50`). Run at `a8e0372` over **both** corpora: `73 across 10 files`, control
+`git diff-tree --no-commit-id --name-only -r --diff-filter=A 6db8e50 -- h-mad/agents` → 5, which is
+the addition-scoped form; the tracked-versus-glob bullet later in this section owns the reason the
+plainer `--stat` form does not answer this claim, and this sentence points at it rather than
+restating it). Run at `a8e0372` over **both** corpora: `73 across 10 files`, control
 `88`, **identical on each**, and identical again at `1861157` at `68`/`83`. The reason holds
 independently of either number: the `.pytest_cache/README.md` artifacts under the two roots carry
 no fence at all (`find h-mad handoff -name README.md -path '*pytest_cache*'` → **5** files at `74e126f`,
@@ -1039,7 +1220,8 @@ run is part of the re-measurement, not a one-off.
 **AC-6.1's tree sweep is deliberately NOT this filter, and must not be harmonised with it.** The
 spec **spells AC-6.1's sweep out in full rather than reaching it by reference** — spec v1.55,
 AC-6.1: `*.md` files under `h-mad/` and `handoff/`, excluding any `archive/` path and any
-dot-directory. Both greps re-run in this revision at `6f0ee85`, because the closure above does not
+dot-directory. Both greps re-run in this revision at `cf3a862` — one hit and none, unchanged from
+`6f0ee85` — because the closure above does not
 reach a sibling under `docs/`:
 `grep -n 'stated here rather than by reference' docs/01-plan/features/doc-block-exec.spec.md`
 returns one hit and `grep -n 'same sweep as the plan' docs/01-plan/features/doc-block-exec.spec.md`
@@ -1063,11 +1245,23 @@ different number.** At `a469493` from the root it was `68 across 10 files`, cont
 `SKILL.md` files survive the filter. The script is correct from the root, which is where its
 `Path('.')` assumes it runs; a reviewer re-running it must do so from the root.
 
-**The extractor census — 2, re-run at `35698f9`.** The consumers that would break when a fence is
-tagged — the narrow census returns the same **2** hits at `35698f9` as at `a8e0372` and at
+**The extractor census — 2, re-run at `cf3a862`.** The consumers that would break when a fence is
+tagged — the narrow census returns the same **2** hits at `cf3a862` as at `35698f9`, `a8e0372` and
 `1861157`, and the two line numbers below are its command's own **output**, reproduced verbatim
 rather than transcribed, which is why they are not pins and are exempt from the shape grep under
-§Implementation Strategy:
+§Implementation Strategy. **Its corpus is `.` — the whole repository, not the two roots — so the
+§Measurements closure does not reach it and its stamp rests on nothing but this re-run**, which is
+the same defect v1.93 repaired for the three `h-mad`/`handoff` censuses and left standing on this
+one, one paragraph above the sentence that states the caveat for its sibling grep. **The sweep for
+that class is driven off the command's corpus argument** — `.` with `--include` versus
+`h-mad handoff` — and never off which numbers an audit happened to name; a value sweep only ever
+finds the members that already drifted, which is how this one survived. Run at `cf3a862`, the
+driver is `grep -oE "grep -r[a-z]* '[^']*' --include='\*\.py' \."` over the body at `cf3a862` and it
+returns **3** — this one, the broader bare-literal grep below, and the per-file split below
+that — all three now stamped at the freeze. The same driver with `h-mad handoff` in place of `\.`
+returns **2** at `cf3a862`, the two `docsections` import censuses, which the closure does reach.
+Both readings are of the body at `cf3a862`, before this paragraph wrote either pattern into the
+corpus they scan.
 
 ```
 $ grep -rn 'findall.*```bash\|split.*```bash\|re\.compile.*```bash' --include='*.py' .
@@ -1076,14 +1270,21 @@ $ grep -rn 'findall.*```bash\|split.*```bash\|re\.compile.*```bash' --include='*
 ```
 
 A broader grep for the bare literal — `grep -rn '```bash' --include='*.py' .` —
-returns **6** at `6f0ee85` (it returned five at `1861157`). **This corpus is the whole repository,
-not the two roots**, so the §Measurements closure does not reach it — `git ls-files '*.py' | grep
--vcE '^(h-mad|handoff)/'` → **411** at `6f0ee85` — and it is re-derived on this surface at every
-audited commit instead. Digits, and on one physical line with
+returns **6** at `cf3a862` and **6** at `6f0ee85` (it returned five at `1861157`). **This corpus is
+the whole repository, not the two roots**, so the §Measurements closure does not reach it —
+`git ls-files '*.py' | grep -vcE '^(h-mad|handoff)/'` → **411** at `6f0ee85` and **411** at
+`cf3a862` — and it is re-derived on this surface at every
+audited commit instead. **`grep -r .` also walks untracked and generated files, which the tracked
+form cannot**, so both censuses are cross-checked against a sha-addressable command that excludes
+them: `git grep -nE 'findall.*```bash|split.*```bash|re\.compile.*```bash' cf3a862 -- '*.py'` → the
+same **2**, and `git grep -E '```bash' cf3a862 -- '*.py'` → the same **6**. The two forms agreeing
+is what licenses reading the `grep -r` output as a statement about the repository rather than about
+one working tree; if they ever disagree, the `git grep` form is the one with a sha on it. Digits,
+and on one physical line with
 its sha: the English-word form split its number from its sha across the wrap, where `grep` is
 line-scoped and cannot see either half of the pair, and a digits-only staleness sweep cannot see a
 count spelled as a word at all. The per-file split, by
-`grep -rc '```bash' --include='*.py' . | grep -v ':0$'` at the same sha:
+`grep -rc '```bash' --include='*.py' . | grep -v ':0$'` at `cf3a862`:
 `h-mad/scripts/h_mad_precheck_doc.py` 1, `h-mad/tests/test_docsections.py` 1,
 `h-mad/tests/test_h_mad_assemble_tdd.py` 2, `h-mad/tests/test_h_mad_collect_report_docs.py` 2 —
 the last pair being the two extractors above. The four that are not extractors are the one inline
@@ -1287,12 +1488,16 @@ the duplicate bounder is.
   file count is a measurement and never the definition**, because the two drift apart and a reader
   who matches a re-run number against the wrong figure inverts the whole bullet. At `a8e0372` the
   pair is **30 tracked / 35 glob**; at `1861157`, the sha the heading and Setext figures below were
-  measured at, it was **25 / 30**; re-run at `335f535` and again at the audited commit `35698f9` it is **30 / 35** still — re-run at the freeze sha for the same reason as the census above, since `a8e0372` and `335f535` both predate the closure's window. The pair moved because `6db8e50` added five `h-mad/agents/*.md`
-  (`git show --stat 6db8e50` lists exactly those five new files), and it will move again with any
+  measured at, it was **25 / 30**; re-run at `335f535`, at `35698f9` and again at the audited commit `cf3a862` it is **30 / 35** still — re-run at the freeze sha for the same reason as the census above, since `a8e0372` and `335f535` both predate the closure's window. The pair moved because `6db8e50` added five `h-mad/agents/*.md`
+  (`git diff-tree --no-commit-id --name-only -r --diff-filter=A 6db8e50 -- h-mad/agents` lists
+  exactly those five paths and nothing else; the plainer `git show --stat 6db8e50` was cited here
+  through v1.93 and lists **six** rows, because that commit also modified `h-mad/SKILL.md` — the
+  claim was "five new files" and the command was "everything the commit touched", which is a
+  command that does not answer the claim rather than a wrong number), and it will move again with any
   `.md` added under the two roots.
 
   ```
-  $ git ls-files -- h-mad handoff | grep '\.md$' | grep -v '/archive/' | wc -l    # 30 at a8e0372, 25 at 1861157
+  $ git ls-files -- h-mad handoff | grep '\.md$' | grep -v '/archive/' | wc -l    # 30 at cf3a862 and at a8e0372, 25 at 1861157
   30
   ```
 
@@ -1772,3 +1977,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.91: Plan audit v77, gating round, doc-auditor teammate surface (must 4 should 3 nit 3). The auditor RAN the v1.90 screen at both commits and its published before/after numbers reproduced exactly - and the finding was the thing the screen could not see. MUST 1, THE SCREEN WAS PARTLY DEAD CODE: in awk \b is a BACKSPACE ESCAPE, not a word boundary, so the \btoday\b alternative could only ever match a line carrying a literal 0x08 and one of the three markers the rule names was unenforceable. Re-probed by me at 74e126f on awk version 20200816 (the macOS default, awk --version) over printf 'measured today\nremeasured todayish\n': the \b form prints NOTHING, a bare /today/ prints BOTH lines, printf 'a\bb\n' | awk '/\b/' MATCHES (the control proving \b is a literal backspace rather than a never-matching construct), and the POSIX form (^|[^[:alnum:]_])today([^[:alnum:]_]|$) prints the first line only. Replaced with the POSIX form. A SECOND narrowing was then found by running the repaired screen and READING its output: the marker alternative was anchored on a preceding comma (, measured[,)]) so the em-dashed '- measured, it selects a different, untagged block' form this document's Risks table actually writes was invisible; widened to measured[,)] with no leading punctuation, which surfaced exactly one member (the Risks row asserting the exec-codex scan is unaffected - an absence claim with the marker, no command, no sha) and two non-members. Axis stated: a marker alternative must not be anchored on neighbouring punctuation, which is a per-sentence house-style choice while the class is not. ALL v1.90 COUNTS DISCARDED, NOT CARRIED, because they were produced by a blind filter; the repaired screen's readings are published as a TRIPLE so the middle term is legible - 21 lines at 335f535, 18 over the v1.90 body at 74e126f, 9 over the v1.91 body in the working tree at 74e126f, the 9 triaged by CATEGORY (5 permanent self-matches, 2 OS/interpreter-probe references under the stated carve-out, 2 sentences using a marker word while stating no tree count at all) with ZERO members. MUST 2, a FIFTH surviving member of the class v1.90 declared closed at four: the .returncode absence restated in the migration paragraph with the marker, no command and no sha, while the same claim in the paragraph above had been repaired in the same revision. Both surfaces now carry grep -c returncode h-mad/tests/test_h_mad_collect_report_docs.py -> 0 at 74e126f, and the rule is stated over the axis (before declaring a member fixed, grep the claim's SUBJECT across the whole body and provenance every surface) with its residual (a claim restated in words other than its subject - 'nothing maps to .rc' - is unreachable by a subject grep and must be caught by the shape screen). MUST 3, plan:234's sys.path premise was FALSE against the tree: both h-mad/tests/test_h_mad_review_evidence.py and h-mad/tests/test_h_mad_wire_registry.py DO insert h-mad/scripts into sys.path. Verified by me at 74e126f with grep -n 'from docsections import|sys.path.insert' over all three importers: the conclusion survives on IMPORT ORDER, not absence - the from docsections import line precedes every insert in those two files and the third has no insert at all. Premise rewritten as order, with the per-file residual (an import-block reorder silently removes it in one file without touching the others) and the pin that catches it named - the isolated python3 -c 'import docsections' with an unrelated cwd, which is also what docsections-syspath-setup-removed is scored against. MUST 4 / DECISION E, ONE RULE ONE CHECKER: the plan's counted-noun screen was a second, strictly weaker wording of a rule the spec already implements. Deleted and replaced by an ATTRIBUTION to spec section 'How the members are found - an enumeration, because a value sweep cannot find them all', run verbatim with this document's path substituted; grep -c on that locator -> 1 at 74e126f, with DECISION F recorded as the reason to re-check it at every audited commit rather than trusting the commit it was authored at. Its hit count is deliberately NOT published, for the spec's own stated reason (it is a procedure, not a measurement); a positive/negative control pair is published instead, run at 74e126f - the scripts-directory count as 335f535 wrote it IS returned, the same claim as this body now writes it (ls h-mad/scripts/*.py | wc -l -> 37 at 335f535) is filtered. DECISION E's general rule is stated at the head of the section: a checker this document publishes is EXECUTED against a positive and a negative control before any count derived from it is published. THE AUDITOR'S ONE UNREPRODUCED CLAIM, reported not adopted: the report says spec:695's enumeration 'is what surfaces plan:554'. I ran it against this document at 74e126f and 553-554 are NOT in its output - the enumeration allows exactly one word between cardinal and noun, its cardinal list has no 'zero', and the claim wraps across a line break, so it misses on all three counts. The finding stands and is fixed; only the mechanism was wrong, and the three misses are now recorded as the enumeration's residual on THIS document and reported to the spec author. SHOULD 1: plan:264's command did not reproduce its own number - grep -n 'titled_section|section_from' returns 8 lines, not six call sites; narrowed to grep -c 'titled_section(|section_from(' -> 6 at 74e126f with the two non-call lines named, and grep -c '^def test_' -> 6 re-stamped at 74e126f. SHOULD 2: the paragraph explaining why the class survived was itself an unprovenanced member; all three of its counts now carry their commands and 74e126f inline, with the reason stated (the rule admits no carve-out for explanatory prose). SHOULD 3 / DECISION D extended: the floor tuple's members are addressed by SOURCE, never by ordinal - 'A seventh' and 'The eighth and ninth' are gone, and the self-granted 'numbered within this enumeration of nine and nowhere else' licence with them. NITS: the screen-two self-match sentence dissolved with screen two; 'inline fixture strings' -> one string (grep -c '```bash' h-mad/tests/test_docsections.py -> 1 at 74e126f); the pytest_cache half of the corpus-invariance claim gains its command, SCOPED to h-mad and handoff (find h-mad handoff -name README.md -path '*pytest_cache*' -> 5 at 74e126f) because a repository-root run also returns ./.pytest_cache/README.md, which is outside the corpus and would contradict the tracked/glob arithmetic on the same page. ALSO SWEPT, not in the report but the same class the document declares closed one line earlier: prose line pins into h-mad/tests/test_h_mad_collect_report_docs.py, EIGHTEEN occurrences across FIFTEEN body lines (7 x :270, 1 x :309, 10 x :412; counted at 74e126f by piping the body through awk '/^## Version History/{exit}{print}' and grepping the three backticked tokens), while the sentence beside several of them says call sites are named by their enclosing function because a line pin in that file has gone stale once already. Zero remain in the v1.91 body by the same count. Replaced by two structural nicknames defined once - the GATE-BLOCK EXTRACTOR (the re.findall inside the module-level _gate_bash_block() helper) and the EXEC-CODEX SCAN (the re.findall inside test_exec_codex_dispatch_carries_out_log_and_timeout) - both re-read at 74e126f. Recorded command outputs that print line numbers are untouched, since those are outputs and not pins. RE-DERIVED AT 74e126f AND UNCHANGED, so re-stamped where I ran them: 3 importers, the def plus 3 _gate_bash_block() call sites, 0 returncode, ls/git ls-files h-mad/scripts/*.py 37/37, parametrize 2, docsections.json's four file keys all tests/docsections.py, its key sets (no test and no target_command key exists yet), grep -n 'P<marks>' h-mad/tests/docsections.py -> 1. OWED ELSEWHERE, reported not edited: the spec should add 'zero' to its cardinal alternation and 'call sites|importers|node IDs' to its noun alternation, and should consider allowing more than one word between cardinal and noun.
 - v1.92: Plan audit v78, gating round, doc-auditor teammate surface (must 5 should 3 nit 3), at freeze sha 35698f9. Every one of the five must-fixes was a PROVENANCE or CITATION defect on a claim that is factually true; the auditor re-derived all of them at the freeze sha and they reproduce, so the conclusions are untouched and only the provenance is repaired. CLOSURE STATED ONCE INSTEAD OF FORTY RE-STAMPS: both commits between 74e126f and 35698f9 touch only docs/ (git diff --name-only 74e126f 35698f9 -- h-mad handoff prints nothing; the same diff piped through sed 's|/.*||' | sort -u prints docs alone), so every h-mad/handoff-scoped figure stamped 74e126f is provably identical at 35698f9 and is left as written - a mass re-stamp is itself a defect surface. The Measurements preamble now says so, and says what the closure does NOT reach: figures derived from this document or from its three siblings under docs/, which did change, and figures stamped older than 74e126f. MUST 1, and the fix for it is a POINTER rather than a second copy: the Risks row's provenance pointed at a section this document does not have (grep -n '^#{1,4} ' returns no Second surface heading; the only '## Second surface - the codex leg' is in h-mad/SKILL.md, the probe's SUBJECT) and stamped 74e126f while the two surfaces that record the probe both stamped 335f535. The block census now has ONE authoritative record, in Implementation Strategy, carrying a runnable one-liner and re-derived by me at 35698f9 - python3 -c importing the consumer's own _second_surface() and running the gate-block extractor's pattern over it prints 'blocks 7 | gate [4] | exec codex [2]', the two SINGLETON lists being the load-bearing uniqueness claim and the ordinals inside them informational. The 'only the gate-block extractor is affected' paragraph and the Risks cell are now pointers that restate neither the total nor an ordinal (SHOULD 2, same edit). Generalisation recorded: the repair for a claim stated without provenance is a pointer to the single surface that owns it, never a second copy, because two copies drift and a pointer cannot. MUST 2 / DECISION E: the residual on screen two was FALSE at the freeze sha because the spec was widened in the SAME commit - at 74e126f the gap between cardinal and noun was ([a-z]+ )? and at 35698f9 it is ([^ ]+ ){0,3}, landed by the spec author in 0aac0b7. Rather than restate what a sibling currently says, this document now records only what running the checker against ITS OWN body measured: fed as 74e126f held it, 'three importing test files' is NOT returned; fed as 35698f9 holds it, it IS - so the miss was real when written and is closed, and 'reported to the spec author rather than patched here' is gone because the spec author patched it. The half that stands is stated the same way: printf 'zero files' returns nothing at 35698f9 while printf 'one file' matches, so the cardinal alternation still declines zero. The line-break miss stands as the first residual. The spec's own residual enumeration is addressed, not restated - grep -c 'Residual on the enumeration itself' on the spec -> 1 at 35698f9. MUST 3 / DECISION A: the published negative control attributed the filtering to a stage the checker does not have. Run verbatim the enumeration has NO sha stage anywhere in it, and I proved provenance plays no part by feeding the same claim with the counted noun restored AND the sha left in place - it MATCHES. What filters the live form is the counted-noun shape ('**37** at' puts no noun of the closing alternation within the allowed gap). So it is a FALSE NEGATIVE, named as such, and calling it 'the negative' inverted the control. A real true negative is published in its place, deliberately one carrying a noun from the alternation so the decline costs something: 'Shell mode belongs on the fence, not in the caller.' verbatim from Architecture Considerations, declined; 'The tag is the security boundary.' likewise. One over-reach is published too: 'Refusal is the default response to anything unmeasured.' IS returned, because -i matches 'measured' as a substring of 'unmeasured'. Provenance on this document is screen ONE's job, via marker plus the !/[0-9a-f]{7}/ reading. MUST 4 / DECISION C: a bare path:line pin into h-mad/tests/test_h_mad_collect_report_docs.py survived in prose because the v1.91 sweep enumerated VALUES (:270/:309/:412) and this one had not drifted. Replaced by the structural form, and the class is now declared closed by a SHAPE grep written into the body - awk '/^## Version History/{exit}{print NR": "$0}' <doc> | grep -E '\.py:[0-9]+' - which returned 3 on the v1.91 body at 35698f9 (two recorded outputs, exempt, plus the one prose pin) and returns exactly the two recorded outputs on this body. Both residuals stated and MEASURED: the companion grep -nE '\.(md|json|sh|toml):[0-9]+' returns 0 at 35698f9, and the shape grep cannot tell a pin from an output so its hits are read, never counted. A PREMISE THE TREE REFUTED, found by me while fixing that sentence and not in any report: the same sentence claimed the arrangement is the one EVERY test in h-mad/tests/ already uses for SCRIPT_DIR. It is 13 of 88 - grep -l 'sys.path.insert(0, str(SCRIPT_DIR))' h-mad/tests/test_*.py | wc -l -> 13, ls h-mad/tests/test_*.py | wc -l -> 88, 48 carrying some sys.path.insert, all at 35698f9. Rewritten as a convention to follow, not a property of the directory. MUST 5 / DECISION D: a tree-derived count carried a DESCRIPTION of its command ('a fence-toggling one-liner'), which invariants.base.md makes a Must and forbids downgrading. The actual awk one-liner is now pasted with its output, re-derived at 35698f9 - four in-fence # lines in h-mad/agents/doc-auditor.md, printed by the command itself rather than counted in prose, and none in the other four. Per DECISION A it ships with a TRUE NEGATIVE, not a bare zero: implplan-author.md and spec-author.md each hold a balanced fence AND carry 4 #-prefixed lines each, every one declined, so the screen discriminates on fence state and not on the absence of #; design-author.md and plan-author.md hold no fence and are declined trivially. Two residuals: the toggle ignores run length, marker character and info string (it cannot fire here - the same run tallies 8 markers at 35698f9, all bare three-backtick runs, even per file - but that is a property of this corpus, not a theorem), and /^ *#/ is broader than the old #+ selector. SHOULD 1: screen two's address is now the LINE-ANCHORED needle the spec designates rather than a prose phrase - grep -cE '^  \$ awk ' on the spec -> 1 at 35698f9 - with both of its residuals stated and the ^  $ opener distribution re-derived (awk x1, curl x1, git x5, printf x1, python3.11 x1), and with the fact that this plan is the sole attributing document measured rather than asserted (the same anchored grep returns 0 on the design and 0 on the impl-plan at 35698f9). SHOULD 3: screen one's third leg was stamped 'the v1.91 body in the working tree at 74e126f', wrong on both halves - the v1.91 body is committed, and at 35698f9. All three legs now read COMMITTED bodies and were re-derived by me at 35698f9: 21 over git show 335f535:, 18 over the v1.90 body at 74e126f, 9 over the v1.91 body at 35698f9, and the 9-line triage is exact by category (5 permanent self-matches, 2 OS/interpreter-probe references, 2 sentences using a marker word while stating no count) with zero members. NO reading of the v1.92 body is published, because that body is readable at no commit until it lands. NITS: the Risks row's bolded clause regains its capital ('The exec-codex scan is NOT affected'); the six-hits sentence no longer splits its number from its sha across the wrap and is re-derived in DIGITS at 35698f9 - grep -rn '```bash' --include='*.py' . -> 6, split 1 h_mad_precheck_doc.py / 1 test_docsections.py / 2 test_h_mad_assemble_tdd.py / 2 test_h_mad_collect_report_docs.py by grep -rc; the pytest_cache re-stamp the report asked for is subsumed by the closure above rather than done as a separate edit. ALSO RE-DERIVED AT 35698f9 BECAUSE THE CLOSURE DOES NOT REACH A SIBLING UNDER docs/: the AC count, 49, now anchored at spec v1.58 rather than v1.55; the design's seven-plus-two-plus locator, grep -c -> 1; and both AC-6.1 premise greps on the spec, 'stated here rather than by reference' -> 1 and 'same sweep as the plan' -> 0. TWO FURTHER DECISION-E INSTANCES FOUND BY ME, not in the report: the 5f bound's parenthetical said the impl-plan 'carries the stale 397 s too' - it does not at 35698f9, that document fixed it, so the assertion outlived the defect it reported and the sibling claim is dropped rather than re-worded; and the Next Steps standing debt carried 'four revisions of this text', a figure that grows by one every round, now replaced by the derivation that produces it (ls of the codex audit reports piped through sed/sort/tail -> 72 at 35698f9, to be compared against the teammate series by the same derivation). ALSO RE-RUN AT 35698f9 AND UNCHANGED, so re-stamped where I ran them: the extractor census, 2 hits, with its recorded output now reproduced verbatim including the ./ prefix and labelled an OUTPUT so the shape grep's exemption is stated rather than assumed; its control, git grep -l '```' -- '*.py' | wc -l -> 24 with the narrow bash reading 4. OWED ELSEWHERE, reported not edited: nothing new beyond what the round-six decision sheet already routes.
 - v1.93: Plan audit v79 at freeze sha 6f0ee85, two surfaces (doc-auditor teammate: must 2 should 4 nit 3, 26 files / 110 commands; agy: must 1, REJECTED on evidence below). Both must-fixes were provenance defects on claims that are factually true, which is now five rounds running. THE agy MUST-FIX WAS WRONG AND MY FIGURE STANDS: it called the spec-opener distribution "demonstrably false" after measuring at 6f0ee85, while the sentence stamps 35698f9. Re-derived by me at both: git show 35698f9:<spec> | grep -oE '^  \$ [a-zA-Z0-9._-]+' | sort | uniq -c gives 9 openers over 5 tokens (awk 1, curl 1, git 5, printf 1, python3.11 1) - exactly what the sentence says - and the same command at 6f0ee85 gives 20 openers over 11 tokens. A wrong-commit measurement is not a falsification. MUST 1 / DECISION J, A CARVE-OUT WHOSE PREMISE THE TREE REFUTES: the 5f wrapper probe was stamped 'measured 2026-09-03' under a carve-out reading 'which no repository sha determines'. hmad-dispatch is tracked repository code - git ls-files h-mad/bin/hmad-dispatch h-mad/scripts/hmad-dispatch.sh returns BOTH paths at 6f0ee85 - and 3f50b95, dated 2026-09-04 and titled 'make rc=124 legible', landed on that exact behaviour ONE DAY AFTER the stamp (bea1b60 is a second). Probe re-run live by me at 6f0ee85 invoking the tracked script BY PATH: h-mad/bin/hmad-dispatch run --timeout 5 -- sh -c 'exit 3' -> rc=3; run --timeout 1 -- sleep 3 -> 'hmad-dispatch: run_timeout after 1s - sleep 3', rc=124. Conclusion unchanged, provenance replaced: sha, not date, with the recorded output pasted. THE CLASS IS CLOSED OVER THE AXIS, NOT THE INSTANCE: the rule is now 'a probe carries a sha whenever the thing whose behaviour it measures is a tracked repository artifact; the carve-out is only for behaviour the OS, kernel or language runtime alone determines, and naming the determining thing is part of the claim'. Its test is one command, git ls-files <the probe's subject>, and its residual is stated - no shape filter can apply it, because deciding what a probe's subject IS requires reading the probe. The whole carve-out population was then swept BY HAND and the sweep is PUBLISHED as a six-row table, five exempt plus the one that is not: argparse exit_on_error (CPython argparse, empty, stamped python 3.11.8), AC-5.2 group kill/escape (os.killpg/os.setsid, empty), AC-3.14 rmtree on 0o000 (shutil, empty), AC-3.10 reader-less FIFO (os.open, empty), AC-5.5 emptied group (killpg, empty), and the 5f wrapper (h-mad/bin/hmad-dispatch, TWO PATHS, not exempt). A SECOND MEMBER FOUND BY THAT SWEEP: the AC-5.2 probe was correctly OS-scoped but claimed the exemption without paying for it - it ran under python3 -u, not the supported python3.11 -u, and printed no interpreter or platform line at all. Re-run by me under python3.11 with print('python:', sys.version.split()[0], '|', sys.platform) added; its recorded output now opens 'python: 3.11.8 | darwin' and the new pids are output, not pins. MUST 2 / DECISION I, A HALF-FIXED BOUNDARY PASSES THE TEST WRITTEN FOR THE HALF THAT WAS FIXED: v1.91 removed the LEADING comma from the measured branch and left the TRAILING [,)], so 'measured on the supported interpreter' and 'measured 2026-09-03,' fell straight through the screen this document calls its own provenance filter - which is exactly why the 5f defect above was invisible to it. The repair is over the axis and reaches EVERY sibling branch in the same expression, not the branch the audit named: five branches collapse to three, each a both-sides POSIX word boundary, each case-folded - (^|[^[:alnum:]_])[Mm]easured([^[:alnum:]_]|$)|(^|[^[:alnum:]_])[Tt]oday([^[:alnum:]_]|$)|[Tt]his session. Measured by me over the COMMITTED v1.92 body at 6f0ee85 (git show 6f0ee85:<doc> | awk '<program>'): the v1.92 screen returns 9 body lines, the v1.93 screen returns 32, so 23 lines had never been triaged. Unit stated: body lines printed, not occurrences and not distinct claims. Case-folding alone accounts for 4 of the 23 and is not cosmetic - the one line [Tt]oday adds is a real member. BOTH CONTROL HALVES RUN AND PUBLISHED, over one printf fixture: four positives (measured, x / (measured) / measured with care / Measured at dawn) and two true negatives ('anything unmeasured' and 'remeasured today' are DECLINED, because the leading boundary refuses an alnum), with the v1.92 form on the same fixture returning only the first three - the missing 'Measured at dawn' being the case-fold member itself. THE 23 WERE TRIAGED AND THEY CONTAINED FIVE REAL MEMBERS, ALL FIVE INVISIBLE TO THE OLD SCREEN (the intersection of the five with the nine the v1.92 screen printed is EMPTY, which is what makes the boundary repair load-bearing rather than tidy), all five repaired in this revision: (a) the 5f wrapper stamp above; (b) the collected count taken from h-mad/ as cwd, published as a bare 2486 with NO command and NO sha - it does not reproduce and, carrying no sha, could never be shown to have been right; replaced by a same-sha pair re-derived by me at 6f0ee85 with python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1, 2809 tests collected from the repository root and 2547 from h-mad/, plus the accounting for the 2808 -> 2809 move (the only commit touching h-mad or handoff since a8e0372 is 335f535, and git show 335f535 -- 'h-mad/tests/*' | grep -c '^+def test_' -> 1); (c) the mutation-spec 80/1 split introduced by the word 'Today' - a count derived from a SIBLING under docs/, which the Measurements closure explicitly does not reach - now derived by grep -c 'the mutation targets `SKILL.md`' on the design -> 1 at 6f0ee85, unit stated as matching lines; (d) the fence-grammar table cell's 'measured on both renderers' with no renderer version anywhere on it, repaired by POINTER to the one surface that records the markdown-it-py versions and the 14-case corpus rather than by a second copy; (e) the fixture-preamble paragraph, which points at the spec's AC-3.11 and then restates the result anyway - now a pointer only, with the note that its subject (the h-mad/SKILL.md gate block and the collector) is TRACKED, so the owning surface owes it a sha. The full 32 are published as five categories that PARTITION them and sum to 32 (9 permanent self-matches, 8 marker-word-with-no-count, 5 carve-out probe references, 5 claims whose provenance sits on the owning surface via pointer or a line-wrap, 5 members), by category and never by line number. THE 21/18/9 TRIPLE IS NOT CARRIED FORWARD AS A SERIES: it is left as written and explicitly labelled a reading by the SUPERSEDED v1.91-v1.92 screen, because a reading is a reading of a screen and this screen has now been superseded twice in three revisions. SHOULD 1: the closure paragraph offered grep -c '74e126f' as the derivation of its own scope; I reproduce 27 at 6f0ee85, but that command counts this paragraph's own prose AND the very lines the next sentence puts outside the closure, and it cannot be narrowed by co-occurrence because grep is line-scoped and this document hard-wraps (the narrowed form returns 10, and neither integer is the number of covered figures). The offer is WITHDRAWN rather than corrected - the two git diff commands are the whole evidence. THE CLOSURE ITSELF IS EXTENDED AND RE-RUN, not assumed: git diff --name-only 74e126f 6f0ee85 -- h-mad handoff prints nothing and the piped form prints docs alone, so every h-mad/handoff figure stamped 74e126f OR 35698f9 is provably identical at 6f0ee85, and the paragraph now says the interval is re-checked against the NEW audited commit each revision rather than extended by assumption. SHOULD 2 / DECISION A IN MIRROR FORM: the companion sweep grep -nE '\.(md|json|sh|toml):[0-9]+' published a bare 0 and had never been shown to fire on anything - a POSITIVE half never run, in the revision that established a bare zero is not a control. A constructed positive is now published beside it and was run by me; the 0 is re-derived at both 35698f9 and 6f0ee85 and its reason is stated as INCIDENTAL, not load-bearing. The control changes the reading and that is said out loud: the same grep over THIS body returns 2, both hits the control's own recorded output. The fixture path is deliberately synthetic rather than a real sibling pin, so the shared precheck does not read a control as a pin. SHOULD 3 / DECISION F: the opener census is now published at BOTH shas with its units (occurrences of a line-opening command token, and distinct such tokens - one grep yields both), 9/5 at 35698f9 and 20/11 at 6f0ee85, with awk x1 at BOTH so the load-bearing conclusion survived a move the census did not; the anchored needle is re-stamped 1 at 6f0ee85 and the sole-attributor claim re-run there (0 on the design, 0 on the impl-plan, 1 on the spec). The fourth should-fix is a cross-document ruling routed to the spec and is not a plan defect; it produced no edit here. NITS: the two residuals on the needle are now stated as the spec's three MERGED, so a reader comparing counts does not read a contradiction that is not there; every 'spec v1.NN' label is defined once as the revision at which the premise beside it was last re-derived, and all three premises were re-run at 6f0ee85 (AC-6.1's spelled-out sweep at v1.55, AC-6.4's two-source tuple rule and len(tuple) floor at v1.56, and the AC count now re-derived at spec v1.59 / 6f0ee85 - 49 body-line anchors, with the uniqueness check printing nothing); the triage gloss that called a line 'prescribing how a report must read' is gone with the rewritten triage - it prescribes what a CANNOT-JUDGE VERDICT LINE may carry; and the screen-two -i over-reach on 'unmeasured' is now labelled screen two's and stays screen two's, with the note that screen one declines it by construction. ALSO SWEPT PER RULE 7, because collapsing five branches to three shifts every ordinal: the body no longer addresses any branch by ordinal ('the third alternative', 'the second alternative') - each is named by its marker word, which cannot drift when the alternation changes. RE-RUN AT 6f0ee85 AND UNCHANGED: the .py:N shape grep returns exactly the two recorded outputs on this body; the 49 AC anchors; both AC-6.1 premise greps (1 and 0); AC-6.4's len(tuple) at 2 hits. Shared precheck run on this revision: PRECHECK: PASS issues=0. THE CLOSURE'S OWN PROMISE WAS THEN SWEPT RATHER THAN ASSERTED, because the paragraph now says every figure derived from this document or a sibling under docs/ is re-derived at 6f0ee85: I ran awk '/^## Version History/{exit}{print NR": "$0}' <doc> | grep '35698f9' and triaged all of them. Seven were sibling- or spec-derived and are re-run by me at 6f0ee85 and RE-STAMPED, every one unchanged in value: the design's seven-plus-two-plus locator (grep -c -> 1); the address grep -c 'Residual on the enumeration itself' on the spec -> 1; both AC-6.1 premise greps (1 and 0); the whole screen-two control set, whose RULE is extracted from the spec's own fenced block (positive 'the 37 files today line at 335f535' returned; true negatives 'Shell mode belongs on the fence, not in the caller.' and 'The tag is the security boundary.' declined; the live '**37** at' form declined as the named FALSE negative; 'Refusal is ... unmeasured.' returned as the named over-reach; printf 'zero files' declined while printf 'one file' matches); the multi-word-gap comparison, where 'three importing test files' is DECLINED by the spec's rule as 74e126f held it and MATCHES as 6f0ee85 holds it; and the codex-leg ledger (ls | sed | sort -n | tail -1 -> 72). A GAP THE SWEEP FOUND THAT NO REPORT NAMED: three .py censuses (6 bash-fence lines, 24 files with any fence literal, 4 with the bash literal) are REPO-WIDE, not scoped to the two roots, so the closure never reached them and their 35698f9 stamps rested on nothing - git ls-files '*.py' | grep -vcE '^(h-mad|handoff)/' -> 411 at 6f0ee85. All three re-run by me at 6f0ee85, all three unchanged, all three re-stamped, and the corpus difference is now stated on the surface that states them. TWO SECTION POINTERS IN THE NEW CARVE-OUT TABLE WERE CHECKED BEFORE SHIPPING, because v1.92's MUST 1 was a pointer to a heading this document does not have: grep -nE '^#{1,4} ' returns no Approach and no 5f heading, so the table reads Scope and 'the 5f bound under Success Criteria', both of which resolve. OWED ELSEWHERE, reported not edited: the spec owes AC-3.11's with/without pair a command and a sha, since its subject is tracked; the spec's own opener mis-stamp is routed there by the decision sheet.
+- v1.94: Plan audit v80 at freeze sha cf3a862, two surfaces (doc-auditor teammate: must 3 should 3 nit 3, 8 files / 64 greps; agy: must 9, split five ways below - 3 scope/stamp rejected, 3 unquotable rejected, 3 acted on). All three teammate must-fixes are ONE shape: a new rule reaching further than the sweep run for it. MUST 1, THE THIRD HALF-APPLIED BOUNDARY REPAIR ON ONE EXPRESSION IN THREE REVISIONS: screen one's [Tt]his session branch carried NO boundary on either side and no case-fold, while the paragraph above it asserted in bold that every marker is bounded on both sides and case-folded. Measured on the published v1.93 program over a four-line fixture: it returns 'in this sessionless mode' and 'xthis session glued' (substring hits on both sides) and DECLINES 'This Session capitalised'. Branch repaired to (^|[^[:alnum:]_])[Tt]his [Ss]ession([^[:alnum:]_]|$); the same fixture now returns the two real members and neither substring. The MECHANISM is what v1.94 actually fixes: all three half-applications passed their own control because the control was run on the ALTERNATION, where a healthy sibling covers a sick one - every published fixture line carried 'measured' or 'today' as well, so this branch's state was unobservable through the whole screen. New rule over that axis: EACH BRANCH OF A PUBLISHED ALTERNATION IS CONTROLLED AGAINST ITS OWN FIXTURE, RUN WITH THAT BRANCH ALONE, positive and negative. All three branches now have one and they are named in a list so the correspondence is checkable without counting fences; the today branch's probe is re-stated as a single-branch run and gains a case control (printf 'Today it was measured' -> returned), since its two-line fixture was lowercase throughout and would have passed a lowercase-only branch. Residual stated: nothing enforces that a NEWLY ADDED branch arrives with its own fixture. NO PUBLISHED READING MOVED, and that was measured rather than assumed: over the v1.92 body as 6f0ee85 shipped it the v1.94 program returns the same 32 lines as the v1.93 program, BYTE-IDENTICAL under diff, so the 9/32 widening, the 23 and the five triage categories are untouched. Live impact zero and stated as zero: over the body at cf3a862 the branch alone prints 2 lines and BOTH are also matched by the measured/today branches, so no triage hit ever depended on it. MUST 2, THE CARVE-OUT SWEEP WAS DRIVEN BY RECALL AND WAS TWO MEMBERS SHORT: 'Five members at 6f0ee85, all five checked' omitted the awk boundary probe (which this document explicitly places under that carve-out three paragraphs earlier) and the markdown-it-py grammar corpus. git ls-files awk -> 0 and git ls-files markdown_it markdown-it-py -> 0, so both are genuinely exempt and the VERDICT was right while the SWEEP was not - and a completeness claim is a measurement under decision G. Class closed rather than the two instances filed: EVERY PROBE STAMPED WITH A VERSION OR PLATFORM INSTEAD OF A SHA IS A ROW IN THIS TABLE, and the sweep is driven by THE STAMP. Driver published and run over the body at cf3a862 (before this revision's rows were written into the corpus it scans): grep -cE '(python3?[.:]? ?[0-9]+\.[0-9]+\.[0-9]+|awk version [0-9]|markdown-it-py [0-9])' -> 13 lines resolving to seven distinct probes. Table now eight rows (seven exempt plus the non-exempt wrapper). The carve-out's prose list is demoted to a GLOSS on git ls-files rather than a second condition, because the v1.93 narrowing ('the OS, the kernel or the language runtime') had no room for a third-party renderer; enumerating kinds of outside-thing invites the next kind to be argued about. Residual: A PROBE STAMPED WITH A CALENDAR DATE IS INVISIBLE TO THE DRIVER - the wrapper is the proof, its stamp was 'measured 2026-09-03' and git show 6f0ee85:<plan> | grep -n '2026-09-0' -> one hit. NIT applied in the same edit and it is load-bearing: the middle column now carries the git ls-files ARGUMENT, not the probe's subject. Through v1.93 the wrapper row read 'h-mad/bin/hmad-dispatch' beside 'two paths'; the audit ran the single-path form the cell named, got one path, and filed the row as false. The verdict was right and the cell was unrunnable. MUST 3, A FOURTH REPO-WIDE .py CENSUS: the extractor census's corpus is '.' with --include, the whole repository and not the two roots, so the Measurements closure never reached it and its 35698f9 stamp rested on nothing - the same defect this feature repaired for the three h-mad/handoff censuses one paragraph above the sentence that states the caveat for its own sibling grep. Re-run at cf3a862: same 2 hits, output verbatim. Sweep driven off THE COMMAND'S CORPUS ARGUMENT rather than off which numbers an audit named; the driver grep -oE "grep -r[a-z]* '[^']*' --include='\*\.py' \." over the body at cf3a862 returns 3 (this one, the bare-literal grep -> 6, and the per-file split), all three now stamped at the freeze, and the h-mad handoff form returns 2. Both censuses gain a TRACKED-CORPUS CROSS-CHECK that excludes untracked and generated files and carries a sha: git grep -nE '...' cf3a862 -- '*.py' -> the same 2, git grep -E '```bash' cf3a862 -- '*.py' -> the same 6; if the two forms ever disagree, the git grep form is the one with a sha on it. 411 re-derived at both shas. SHOULD 1: the opener census label 'the commit this revision is audited at' went false the moment v1.93 landed. Census now published at three shas - 9/5 at 35698f9, 20/11 at 6f0ee85 (the commit v1.93 was audited at), 21/11 at cf3a862 with sed x1 -> x2 - and the rule is stated: a sibling-derived census can only be stamped at a LANDED commit, so the label is past tense by construction. awk x1 at all three, so the needle the conclusion rests on survived both moves. SHOULD 2: 'the rule and the screen are written from one list so they cannot drift apart' asserted a guarantee nothing enforces, in the paragraph whose sibling defect is exactly that drift; restated as a convention with the residual, and the reason the mechanical bind is declined (deriving prose from an awk alternation costs more readability than the drift it prevents). SHOULD 3: the closure's right-hand side re-checked and extended to cf3a862 with both commands re-run (git diff --name-only 74e126f cf3a862 -- h-mad handoff prints nothing; the piped form prints 'docs' alone), and 6f0ee85-stamped two-root figures are now inside it. The fence census and the tracked/glob pair are stamped OLDER than 74e126f, which extending the interval cannot help - moving its end does not move its start - so both were RE-RUN instead: 73 across 10 files / control 88 at cf3a862, and 30 tracked / 35 glob at cf3a862, with the embedded shell comment carrying the new sha alongside the old ones. NIT: 'those three words' -> three markers across four words, with why the miscount mattered (it is the two-word branch whose boundaries took three revisions). THE agy LEG'S NINE, EACH ADJUDICATED RATHER THAN DISMISSED IN A BLOCK, and the accounting is written as a five-way split because the round-nine sheet's blanket 'reject the count findings' would have buried three real ones. (a) THREE are the SCOPE/STAMP error a third and fourth time - the '27 at 6f0ee85' body count, the narrowed '10', and the '20 openers at 6f0ee85' distribution, each evaluated against the unscoped current tree; the quoted text exists, the figures reproduce at their stated sha, REJECTED on evidence. (b) THREE quote text that IS NOT IN THIS DOCUMENT AT ANY SHA, checked at cf3a862, 6f0ee85, 35698f9, 74e126f, 0aac0b7, a8e0372 and 335f535 with grep -c returning 0 at every one: 'Every 35698f9 in the body mentions both', 'and every 6f0ee85 in the body mentions both', and 'the only caller is h-mad/tests/test_docsections.py' - REJECTED as unquotable, and the stale-source check was run before saying so, because a fabrication verdict on a quote that merely moved would itself be a defect. The document in fact publishes THREE importing test files, re-derived: grep -rln 'from docsections import|import docsections' --include='*.py' h-mad handoff -> test_docsections.py, test_h_mad_review_evidence.py, test_h_mad_wire_registry.py. (c) THREE WERE ACTED ON: the 6db8e50 --stat claim above (UPHELD outright, and agy alone found it); the carve-out 'two paths' row, where agy's own number was wrong but the reason it got a wrong number was a real defect - the cell named a subject and not the command's argument - so the CELL is fixed rather than the figure; and the [Tt]his session branch, corroborated by the teammate leg and by the sheet, which is must 1 above. NOTHING OWED ELSEWHERE ON 6db8e50: grep -c '6db8e50' returns 3 on the spec, 2 on the design and 0 on the impl-plan, and grep -c 'git show --stat 6db8e50' returns 0 on all three, so no sibling repeats the claim. Within this document the --stat form now survives once, in the sentence that explains why it does not answer the claim, and the addition-scoped form appears at both surfaces that state the five (grep -c 'diff-filter=A 6db8e50' -> 2). NEW: an INHERITED-UNVERIFIED REGISTER in Measurements naming what this revision did NOT re-run (doc-auditor fence-toggle 8/4, the Setext differential, the markdown-it-py 14-case corpus, the three OS probes, the four screen-two legs, and the MEMBERSHIP of the five triage categories - only their total was re-run), because an auditor's silence about a figure is not evidence either way; the register is itself a completeness claim and is not offered as complete. DECISION N APPLIED THROUGHOUT: every reading of this document's own body is taken at a LANDED commit that predates this revision's edit and says so, because a control that publishes its own needle destroys the number it reports.
