@@ -80,6 +80,70 @@ def _payload(line: str) -> str:
     return remainder if remainder is not None else stripped
 
 
+_ACK_KEY_RE = re.compile(r"^\[([A-Za-z0-9][A-Za-z0-9 ._:/-]{0,60})\]\s*")
+_ACK_STRIP = re.compile(r"[`*_~]")
+_ACK_WS = re.compile(r"\s+")
+
+
+def _ack_normalize(payload: str) -> str:
+    """Canonical form of a finding/ack bullet for comparison.
+
+    A CANONICALISATION, never a similarity: it removes formatting the reviewer did
+    not mean to change — markdown emphasis, backticks, line-wrap whitespace, case,
+    trailing punctuation — and nothing else. Two texts that differ in a word still
+    differ here, which is the property that makes it safe (#15).
+    """
+    s = _ACK_STRIP.sub("", payload)
+    s = _ACK_WS.sub(" ", s).strip()
+    s = s.strip(" .;,:—-")
+    return s.lower()
+
+
+def _ack_key(payload: str) -> str | None:
+    """A leading `[key]` tag, lowercased, or None.
+
+    The rewording-immune half. An operator who writes
+    `- [ac-1.4 teardown-leak] <text>` in the sidecar acknowledges THAT finding
+    however the next cycle's reviewer rephrases it, and two findings that share a
+    topic but not a key are never conflated — which is exactly the case fuzzy
+    matching gets wrong below.
+    """
+    m = _ACK_KEY_RE.match(payload.strip())
+    return m.group(1).strip().lower() if m else None
+
+
+def _is_acknowledged(payload: str, acknowledged: set[str]) -> bool:
+    """Is this finding covered by the `## Acknowledged-not-fixed` sidecar?
+
+    Three ways, in order of strength, and NO fuzzy text similarity. That omission
+    is measured, not squeamish. On the real 7-bullet sidecar of HemaSuite's
+    `gateway-consolidation.plan.audit.v18` — which accreted 7 bullets over ~3
+    underlying findings, with items 1/4 and 2/5 as re-worded duplicates and items
+    6/7 as two genuinely DIFFERENT AC-1.4 process-group leaks — token-overlap
+    scores the negative control ABOVE both true pairs:
+
+        positive 1~4  jaccard 0.089
+        positive 2~5  jaccard 0.158
+        NEGATIVE 6~7  jaccard 0.180   <-- higher than either pair
+
+    So the ordering is inverted: every threshold that pairs the re-worded
+    duplicates collapses the two distinct leaks FIRST, and a collapsed ack
+    silently clears a real finding. Same shape as the refused evidence check
+    (#27): the rule that would help does not discriminate, and the one that
+    discriminates is vacuous. Softening therefore stops at canonicalisation plus
+    an explicit operator key.
+    """
+    if payload in acknowledged:
+        return True
+    norm = _ack_normalize(payload)
+    if any(norm == _ack_normalize(a) for a in acknowledged):
+        return True
+    key = _ack_key(payload)
+    if key is not None and any(_ack_key(a) == key for a in acknowledged):
+        return True
+    return False
+
+
 def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     """Findings in one blocking section's non-blank content lines.
 
@@ -107,7 +171,7 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
         if _bullet_remainder(line.strip()) is not None
         and p and not _is_none_sentinel(p)
     ]
-    bullets = [p for p in marked if p not in acknowledged]
+    bullets = [p for p in marked if not _is_acknowledged(p, acknowledged)]
     if bullets:
         return len(bullets)
     if marked:
@@ -115,7 +179,7 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
         return 0
     # Non-None content with no countable bullet → at least one off-template finding.
     joined = " ".join(p for p in payloads if p)
-    return 0 if joined in acknowledged else 1
+    return 0 if _is_acknowledged(joined, acknowledged) else 1
 
 
 def has_gate_sections(text: str) -> bool:

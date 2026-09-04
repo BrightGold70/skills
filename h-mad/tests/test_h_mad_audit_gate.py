@@ -822,3 +822,70 @@ def test_the_skill_documents_the_stamp() -> None:
     skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
     assert "--verify-stamp" in skill, "a readback nobody is told to run is never run"
     assert "GATESTAMP:" in skill, "the token is undocumented"
+
+
+# --- #15: softening the ack sidecar, mutation-tested in BOTH directions -------
+# Over-matching here does not merely annoy; it SILENTLY CLEARS A REAL FINDING.
+# So every positive case below is paired with a negative one, and the negative
+# cases are drawn from a real accreted sidecar rather than invented.
+
+import h_mad_audit_gate as _g  # noqa: E402
+
+
+def test_ack_exact_match_still_works():
+    """Back-compat: byte-identical acks matched before this change and still do."""
+    assert _g._is_acknowledged("a finding", {"a finding"})
+
+
+def test_ack_survives_reformatting_which_is_what_cost_a_cycle_per_rewording():
+    for variant in ("**A Finding**", "`a finding`", "a  finding.", "A FINDING —"):
+        assert _g._is_acknowledged(variant, {"a finding"}), variant
+
+
+def test_ack_does_NOT_match_a_genuine_rewording():
+    """Canonicalisation, not similarity. One changed word is a different finding."""
+    assert not _g._is_acknowledged("a finding about X", {"a finding about Y"})
+
+
+def test_ack_explicit_key_is_rewording_immune():
+    assert _g._is_acknowledged(
+        "[ac-1.4 teardown-leak] completely different prose this cycle",
+        {"[AC-1.4 teardown-leak] the original wording"},
+    )
+
+
+def test_ack_different_keys_never_collapse():
+    assert not _g._is_acknowledged(
+        "[ac-1.4 creation-residual] x", {"[ac-1.4 teardown-leak] y"}
+    )
+
+
+def test_the_negative_control_two_distinct_AC_1_4_leaks_do_not_collapse():
+    """The measured reason there is no fuzzy matching here.
+
+    These two bullets are from the real accreted sidecar of HemaSuite's
+    `gateway-consolidation.plan.audit.v18`: two genuinely DIFFERENT AC-1.4
+    process-group leaks. Token-overlap scores this pair (0.180) ABOVE both
+    re-worded true pairs in the same file (0.089, 0.158), so every threshold that
+    would pair the duplicates collapses these two first — and collapsing them
+    clears a real finding.
+    """
+    six = ("AC-1.4 is explicitly narrowed by the creation-failure residual — the spec "
+           "requires that, if creation has not completed by the bound, the group is")
+    seven = ("AC-1.4 has an additional unacknowledged process-group leak at event-loop "
+             "teardown — the spec requires that when creation has not completed by the")
+    assert not _g._is_acknowledged(seven, {six})
+    assert not _g._is_acknowledged(six, {seven})
+
+
+def test_a_reworded_duplicate_from_the_same_corpus_is_also_NOT_matched():
+    """Stated so the limit is explicit rather than discovered later.
+
+    Items 1 and 4 of that sidecar ARE the same finding re-worded, and this matcher
+    does NOT pair them — canonicalisation cannot, and similarity must not. The
+    remedy is the explicit `[key]`, which is why that half exists.
+    """
+    one = "`scripts/bootstrap_mac.sh:189` / `:193` invoke `\"$NLM_BIN\" list` and `\"$NLM_BIN\" login`"
+    four = ("The documented Step-10 shell exception (`scripts/bootstrap_mac.sh:189` and `:193`) "
+            "still invokes `$NLM_BIN` directly")
+    assert not _g._is_acknowledged(four, {one})
