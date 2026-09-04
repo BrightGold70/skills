@@ -2843,7 +2843,8 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
 _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
-  local -a prompt report out log asm tok rc pids pass_args
+  local surfaces=""  # csv, one agent per pass; empty = every pass on agy (legacy)
+  local -a prompt report out log asm tok rc pids pass_args agent
   pass_args=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
@@ -2852,6 +2853,7 @@ _cmd_audit_cycle() {
     --phase) phase="$2"; shift 2 ;;
     --cycle) cycle="$2"; shift 2 ;;
     --passes) passes="$2"; shift 2 ;;
+    --surfaces) surfaces="$2"; shift 2 ;;
     --project-root) root="$2"; shift 2 ;;
     --ack-file) ack_file="$2"; shift 2 ;;
     --report-grace) report_grace="$2"; shift 2 ;;
@@ -2871,6 +2873,46 @@ _cmd_audit_cycle() {
   esac
   [ "$passes" -ge 1 ] || {
     echo "hmad-dispatch: audit-cycle: --passes must be >= 1" >&2; return 2; }
+
+  # --surfaces: which agent runs each pass (#6).
+  #
+  # Until now every pass ran `agy`, so the default `--passes 2` dispatched ONE
+  # surface twice -- which §"Never gate on one audit pass" explicitly says is not a
+  # second opinion: "Two passes of one surface mostly re-confirm that surface's
+  # blind spot." Measured on one feature: the second surface was hollow in 21 of 22
+  # passes, so a union that reported as two legs was carried by one.
+  #
+  # The default stays agy-for-every-pass, because changing what an existing caller
+  # dispatches without being asked is worse than the defect. What changes is that a
+  # same-surface union now SAYS so on stderr rather than looking like two opinions.
+  local -a _surf
+  if [ -n "$surfaces" ]; then
+    IFS=',' read -r -a _surf <<< "$surfaces"
+    [ "${#_surf[@]}" -eq "$passes" ] || {
+      echo "hmad-dispatch: audit-cycle: --surfaces lists ${#_surf[@]} agents for $passes passes" >&2
+      return 2; }
+    local _s
+    for _s in "${_surf[@]}"; do
+      case "$_s" in agy|codex) ;;
+        *) echo "hmad-dispatch: audit-cycle: --surfaces: unknown agent '$_s' (agy|codex)" >&2
+           return 2 ;;
+      esac
+    done
+  else
+    local _i2=1
+    while [ "$_i2" -le "$passes" ]; do _surf+=(agy); _i2=$((_i2 + 1)); done
+  fi
+  i=1
+  while [ "$i" -le "$passes" ]; do agent[$i]="${_surf[$((i - 1))]}"; i=$((i + 1)); done
+  if [ "$passes" -ge 2 ]; then
+    local _first="${agent[1]}" _same=1
+    i=2
+    while [ "$i" -le "$passes" ]; do
+      [ "${agent[$i]}" = "$_first" ] || _same=0
+      i=$((i + 1))
+    done
+    [ "$_same" -eq 1 ] && echo "hmad-dispatch: audit-cycle: WARNING: all $passes passes run '$_first' — this is one surface repeated, not a union; pass --surfaces agy,codex for a real second opinion" >&2
+  fi
 
   local stem i p arc size_status halt_pass div foreign
   stem="/tmp/audit_${feature}_${phase}_cycle${cycle}"
@@ -2969,7 +3011,7 @@ _cmd_audit_cycle() {
   i=1
   while [ "$i" -le "$passes" ]; do
     (
-      _cmd_exec agy "${prompt[$i]}" --cd "$root" \
+      _cmd_exec "${agent[$i]}" "${prompt[$i]}" --cd "$root" \
         --out "${out[$i]}" --log "${log[$i]}" --timeout "$timeout" >/dev/null
     ) &
     pids[$i]=$!

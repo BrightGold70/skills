@@ -1601,3 +1601,57 @@ def test_verb_writes_only_reports(tmp_path):
     assert auditcycle_lines(r.stdout) == [
         "AUDITCYCLE: UNVERIFIED reason=low_evidence:p1 passes=2 delivered=out,out size_status=verified"
     ]
+
+
+# --- #6: which SURFACE runs each pass -----------------------------------------
+# Until 2026-09-04 every pass ran agy, so the default `--passes 2` dispatched one
+# surface twice. SKILL.md §"Never gate on one audit pass" says that is not a second
+# opinion: two passes of one surface re-confirm that surface's blind spot, and the
+# measured case is a feature where the second leg was hollow in 21 of 22 passes.
+
+
+def _audit_cycle_rc(tmp_path, extra):
+    """Run the verb with bad flags and return (rc, stderr). Fails before dispatch."""
+    root = project_with_docs(tmp_path, feature="surf")
+    r = run_audit_cycle(
+        tmp_path,
+        dispatch_args(feature="surf", root=root) + extra,
+        env={"HMAD_STUB_AGY_RESP": _audit_response(feature="surf")},
+    )
+    return r.returncode, r.stderr
+
+
+def test_surfaces_must_name_one_agent_per_pass(tmp_path):
+    rc, err = _audit_cycle_rc(tmp_path, ["--passes", "2", "--surfaces", "agy"])
+    assert rc == 2, err
+    assert "lists 1 agents for 2 passes" in err
+
+
+def test_surfaces_refuses_an_unknown_agent(tmp_path):
+    rc, err = _audit_cycle_rc(tmp_path, ["--passes", "1", "--surfaces", "gemini"])
+    assert rc == 2, err
+    assert "unknown agent 'gemini'" in err
+
+
+def test_a_same_surface_union_says_so_on_stderr(tmp_path):
+    """The default is unchanged — changing what an existing caller dispatches
+    without being asked is worse than the defect — but it no longer LOOKS like two
+    opinions when it is one surface twice."""
+    root = project_with_docs(tmp_path, feature="surf2")
+    r = run_audit_cycle(
+        tmp_path,
+        dispatch_args(feature="surf2", root=root, passes="2"),
+        env={"HMAD_STUB_AGY_RESP": _audit_response(feature="surf2")},
+    )
+    assert "one surface repeated, not a union" in r.stderr
+
+
+def test_two_different_surfaces_do_not_warn(tmp_path):
+    root = project_with_docs(tmp_path, feature="surf3")
+    r = run_audit_cycle(
+        tmp_path,
+        dispatch_args(feature="surf3", root=root, passes="2")
+        + ["--surfaces", "agy,codex"],
+        env={"HMAD_STUB_AGY_RESP": _audit_response(feature="surf3")},
+    )
+    assert "one surface repeated" not in r.stderr

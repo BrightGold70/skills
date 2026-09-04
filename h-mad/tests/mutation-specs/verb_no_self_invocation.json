@@ -13,12 +13,12 @@
  "mutations": [
   {"name": "self-invocation-on-the-exec-argv",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
+   "find": "      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\",
    "replace": "      _cmd_exec agy audit-cycle \"${prompt[$i]}\" --cd \"$root\" \\"},
 
   {"name": "thin-the-trace-while-rc-stays-0-vacuous-all",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
-   "replace": "      [ \"$i\" -eq 1 ] && _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\"}
+   "find": "      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\",
+   "replace": "      [ \"$i\" -eq 1 ] && _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\"}
  ]
 }

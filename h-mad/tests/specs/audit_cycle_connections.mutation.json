@@ -26,15 +26,15 @@
   {
    "name": "verb-exec-drop-p2",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
-   "replace": "  i=1\n  while [ \"$i\" -lt \"$passes\" ]; do\n    (\n      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\",
+   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\",
+   "replace": "  i=1\n  while [ \"$i\" -lt \"$passes\" ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\",
    "failure_test": "test_verb_two_distinct_dispatches"
   },
   {
    "name": "verb-exec-force-2",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
-   "replace": "  i=1\n  while [ \"$i\" -le 2 ]; do\n    (\n      _cmd_exec agy \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le 2 ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
+   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
+   "replace": "  i=1\n  while [ \"$i\" -le 2 ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le 2 ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
    "failure_test": "test_verb_passes_one"
   },
   {
