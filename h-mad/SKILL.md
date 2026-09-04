@@ -1181,6 +1181,48 @@ in the orchestrator's own work were caught by fresh contexts and **none** by the
 re-reading its own document. Each agent file states the failure class each of its rules closes;
 they are contracts, not style guides.
 
+### Delta self-review — review the FIX before you re-dispatch the audit
+
+An author has just changed a document to answer findings. Review **what changed**, not the
+document again, before assembling the next audit prompt.
+
+The reason is a number this repository keeps re-measuring on itself. In the last gating round on
+`doc-block-exec`, **two of the three must-fixes were introduced by the previous cycle's own
+repairs** — that document's own version history records it, and says the delta was the first place
+looked *because* of it. Across a whole session roughly half of all must-fixes were fix-introduced,
+and one arc recorded four consecutive cycles where the fix produced the next defect. A cycle spent
+finding a defect the last cycle created is a cycle spent twice.
+
+Two passes, cheapest first:
+
+```bash
+# 1. Mechanical — the greppable half, already covered by the precheck.
+python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py \
+  <document> --phase <phase> --root <PROJECT_ROOT>
+
+# 2. What changed, and whether it answers what it claims to.
+git diff <the commit the last cycle was audited at>..HEAD -- <document>
+```
+
+Then dispatch the diff, not the document:
+
+```
+Agent(subagent_type: "doc-auditor", prompt:
+  "PROJECT_ROOT=<root>  REPORT=<path>  This pass is ADVISORY.
+   Subject: the diff below / `git show <sha> -- <document>`, and the findings it answers: <paths>.
+   For each hunk: does it close the finding it claims, or only the instance the reviewer named?
+   Did it break a claim elsewhere in this document or in a sibling — a count, a cross-reference,
+   a value stated in more than one place?")
+```
+
+`doc-auditor` rule 7 already carries the cross-document check, so **do not write a new agent for
+this**. What is new is only the scoping: a diff and the findings it answers, rather than a whole
+document.
+
+**It is ADVISORY and it is not a gate.** Its findings go back to the owning author as an ordinary
+revision. A delta review that blocked would just be another cycle, which is the cost it exists to
+avoid.
+
 ### The four rules that are the ORCHESTRATOR's, not the author's
 
 An author cannot enforce any of these, because each one is a property of the round rather than of
@@ -1211,7 +1253,8 @@ a document:
 ### Precheck before you dispatch — never spend a cycle on a greppable premise
 
 Before `h_mad_assemble_audit.py` for **any** phase audit (3, 4, 5b), run the document
-through the precheck. A dual-surface cycle costs two dispatches and roughly four minutes
+through the precheck — and on a revision cycle run §"Delta self-review" first, which
+covers this and the half a grep cannot reach. A dual-surface cycle costs two dispatches and roughly four minutes
 of wall clock to discover a claim a `grep` refutes in a second, and then a second cycle
 to fix it:
 
