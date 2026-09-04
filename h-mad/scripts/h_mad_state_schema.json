@@ -142,7 +142,7 @@
       "additionalProperties": false
     },
     "codex_status": {
-      "description": "Availability of Codex as the Phase-5 implementer. OPTIONAL and additive (not in `required`; absent means 'available'). The TDD-gate hook reads it: while a feature is in step5, a production write reaching the hook is Claude self-implementing, which is blocked when Codex is available. Set to 'exhausted' or 'unavailable' to record — auditably — that Codex cannot author, permitting Claude to write the fallback (still test-first).",
+      "description": "Availability of Codex, as the Phase-5 implementer AND as the audit gate's second surface. OPTIONAL and additive (not in `required`; absent means 'available'). Two consumers read it. (1) The TDD-gate hook: while a feature is in step5, a production write reaching the hook is Claude self-implementing, which is blocked when Codex is available. (2) The audit gate: 'unavailable'/'exhausted' routes the second surface to the doc-auditor teammate leg, which then GATES. Set to 'exhausted' or 'unavailable' to record — auditably — that Codex cannot author or audit, permitting Claude to write the fallback (still test-first) and a teammate to hold the second leg. One switch, both effects: 5b runs inside step5, so a declaration made to route a document audit is live for 5d/5e production authoring on the same feature. Flip it back to 'available' when Codex returns.",
       "enum": [
         "available",
         "unavailable",

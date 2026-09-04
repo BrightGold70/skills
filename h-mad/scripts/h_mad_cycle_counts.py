@@ -23,7 +23,7 @@ _PHASE_ALIASES: dict[str, str] = {
 
 # One optional discriminator token after the cycle number, taken from the corpus
 # rather than invented: over 1120 real audit files the token is one of `''`, `.p1`,
-# `.p2`, `.p3`, `.codex`, `.agy`, `.claude` -- always exactly one, and a pass index
+# `.p2`, `.p3`, `.codex`, `.agy`, `.teammate`, `.claude` -- always exactly one, and a pass index
 # never co-occurs with a surface name.
 #
 # `.p<i>` is the per-pass artifact `audit-cycle` writes; the surface names are
