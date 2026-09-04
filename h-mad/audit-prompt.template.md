@@ -129,6 +129,23 @@ Report Axis C as a table in your `## Summary`, then raise each `restated` or
 `absent` item as its own `## Must-fix` bullet.
 {{END-ONLY}}
 
+Effort contract (this pass is scored on it, not only on its verdict):
+
+- **Sweep the whole document. Do not stop at the first blocking finding.** Measured
+  over 83 design / 74 plan / 34 impl-plan cycles on one feature: the median pass
+  returned **one** must-fix against a prompt asking for all of them, which turns every
+  defect into its own round trip and is most of why those numbers are that large.
+- **Read the tree before asserting what is in it.** The documents are inlined above,
+  which is exactly why a pass can look thorough having opened nothing. Their claims are
+  *about* the tree — a `path:symbol`, a signature, a test name, a count against its own
+  list — and those are the claims that turn out to be wrong.
+- **A pass at or below two successful tool calls cannot certify a clean.** Writing the
+  report and its marker costs those two by itself, so at that floor nothing was read;
+  the cycle is scored `UNVERIFIED`, not clean. Findings count at any effort — this
+  bounds what a *clean* is worth, never what a finding is worth.
+- **State your evidence** on its own line in `## Summary`: `Evidence: <N> files opened,
+  <M> searches run.`
+
 Output framing (mandatory — the orchestrator extracts on these markers):
 
 Emit your report bracketed by these two lines, each alone on its line, with

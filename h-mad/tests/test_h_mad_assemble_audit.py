@@ -239,14 +239,31 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # candidate-batch added four rules to invariants.base.md (+4,724 B to EVERY
     # prompt: at 2850 the fixture measured 94,715 B, past the frontier). Measured
     # after: 2645 -> 90,000 B, mid-band; 2945 -> 96,900 B, past the frontier.
+    # Was 2440/2740 until the 2026-09-04 reviewer effort contract (#17) added 1,164 B
+    # to the template. Measured after: 2389 -> 89,999 B, mid-band; 2689 -> 96,899 B,
+    # past the frontier.
+    #
+    # TWO THINGS MEASURED HERE THAT THE PREVIOUS COMMENT GOT WRONG, both worth more
+    # than the re-anchor itself:
+    #
+    # 1. The template is NOT wholly head-duplicated. The `quote:` note above assumed
+    #    +1,365 B became +2,730 B per prompt; counted directly, the new section
+    #    occurs exactly ONCE in an assembled prompt, so a template edit costs 1x, not
+    #    2x. Only the output contract is duplicated. Measure the occurrence count
+    #    (`prompt.count(<your new heading>)`) rather than assuming a factor.
+    # 2. **This test PASSED after the +1,164 B edit, and that was not evidence of no
+    #    drift.** At 2440 the fixture measured 91,172 B — inside the band, 883 B under
+    #    the ceiling. The note below predicted exactly this, and it happened on the
+    #    very next edit. So: re-measure on ANY template or invariants change and
+    #    re-anchor to ~90,000 B, rather than waiting for red.
+    #
     # Was 2645/2945 until the 2026-09-03 `quote:` evidence-marker rule added 1,365 B
-    # to the template, which is head-duplicated, so +2,730 B to EVERY prompt.
-    # Measured after: 2440 -> 90,008 B, mid-band; 2740 -> 96,908 B, past the
-    # frontier. NOTE the fixture was already 62 B under the ceiling before that
-    # edit -- measured directly against the pre-change template, 2645 -> 91,993 B.
-    # A drift this close reads as a pass right up until it doesn't, so the anchor
-    # deserves re-measuring whenever the template or invariants move, not only when
-    # this test goes red. Was 3047/3347 after §"Guard narrowing"
+    # to the template. Measured after: 2440 -> 90,008 B, mid-band; 2740 -> 96,908 B,
+    # past the frontier. NOTE the fixture was already 62 B under the ceiling before
+    # that edit -- measured directly against the pre-change template,
+    # 2645 -> 91,993 B. A drift this close reads as a pass right up until it doesn't,
+    # so the anchor deserves re-measuring whenever the template or invariants move,
+    # not only when this test goes red. Was 3047/3347 after §"Guard narrowing"
     # added 2,037 B on 2026-08-09: at the previous 3136 the fixture measured
     # 93,005 B, past the frontier, so the filler drops ~89 lines at ~23 B/line.
     # Was 3136/3436 after §"Wrapper–runtime reconciliation" added 1,583 B on
@@ -254,11 +271,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # the frontier. Was 3200/3500 after the 2026-07-30 re-anchor to the 92,055 B
     # confirmed-answered frontier, and 2000/2200 before that against the old
     # 61,493 B ceiling.
-    approaching, mid = size_of(2440)
+    approaching, mid = size_of(2389)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2740)
+    past, big = size_of(2689)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
