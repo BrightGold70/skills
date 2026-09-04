@@ -2048,3 +2048,61 @@ def test_one_hollow_leg_unverifies_the_whole_cycle_even_beside_a_deep_one():
                                      "failed": 0, "thinking": 0}),
     ])
     assert (verdict, reason) == ("UNVERIFIED", "low_evidence:p2")
+
+
+# --- #13 follow-up: a log's SHAPE chooses the remedy, not just the verdict -----
+# "I could not measure this" and "I measured it and it is hollow" have opposite
+# remedies — find the right file, versus re-dispatch the pass. The first cut routed
+# two of the four shapes to the other one's remedy. Neither could produce a false
+# clean, but a wrong hint sends the reader somewhere there is nothing to find.
+
+
+def _combine_for_log(tmp_path, name, body):
+    ac = audit_cycle()
+    p = tmp_path / name
+    if body is not None:
+        p.write_text(body)
+    effort = ac.measure_effort(p)
+    return ac.combine([pass_result(index=1, effort=effort)]), effort
+
+
+def test_an_empty_log_is_hollow_not_unmeasurable(tmp_path):
+    """A zero-byte log is what a dispatch that died instantly leaves behind.
+    There is nothing to go and find; the remedy is to re-dispatch."""
+    (verdict, reason), effort = _combine_for_log(tmp_path, "empty.ndjson", "")
+    assert effort["shape"] == "empty"
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence:p1")
+
+
+def test_a_non_json_log_is_unmeasurable_not_hollow(tmp_path):
+    """Not this pass's transcript — a stray --log, a wrapper's stdout, the wrong
+    path. `tools=0` there means "not measured", not "measured as zero"."""
+    (verdict, reason), effort = _combine_for_log(
+        tmp_path, "junk.ndjson", "this is not json\nnor is this\n"
+    )
+    assert effort["shape"] == "unparseable"
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence_unmeasurable:p1")
+
+
+def test_a_missing_log_is_unmeasurable(tmp_path):
+    (verdict, reason), effort = _combine_for_log(tmp_path, "absent.ndjson", None)
+    assert effort["shape"] == "missing"
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence_unmeasurable:p1")
+
+
+def test_a_parsed_but_hollow_log_is_hollow(tmp_path):
+    (verdict, reason), effort = _combine_for_log(
+        tmp_path, "real.ndjson", '{"event":"result"}\n'
+    )
+    assert effort["shape"] == "parsed"
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence:p1")
+
+
+def test_the_render_still_calls_an_empty_log_unreadable(tmp_path, capsys):
+    """`shape` is additive: the VERDICT routes on it while the RENDER keeps saying
+    "unreadable" rather than printing a row of zeros. `tools=0` is exactly what a
+    genuinely hollow pass looks like, so the two must stay distinguishable there."""
+    ac = audit_cycle()
+    log = tmp_path / "empty.ndjson"
+    log.write_text("")
+    assert ac.measure_effort(log)["readable"] is False

@@ -1190,7 +1190,7 @@ The reason is a number this repository keeps re-measuring on itself. In the last
 `doc-block-exec`, **two of the three must-fixes were introduced by the previous cycle's own
 repairs** — that document's own version history records it, and says the delta was the first place
 looked *because* of it. Across a whole session roughly half of all must-fixes were fix-introduced,
-and one arc recorded four consecutive cycles where the fix produced the next defect. A cycle spent
+and the gateway-consolidation Phase-4 record (durable session memory, not this tree — so cite it as recalled rather than as citable here) has four consecutive cycles where the fix produced the next defect. A cycle spent
 finding a defect the last cycle created is a cycle spent twice.
 
 Two passes, cheapest first:
@@ -1208,7 +1208,8 @@ Then dispatch the diff, not the document:
 
 ```
 Agent(subagent_type: "doc-auditor", prompt:
-  "PROJECT_ROOT=<root>  REPORT=<path>  This pass is ADVISORY.
+  "PROMPT=<none — a delta review has no assembled prompt; your subject is below>
+   PROJECT_ROOT=<root>  REPORT=<path>  This pass is ADVISORY.
    Subject: the diff below / `git show <sha> -- <document>`, and the findings it answers: <paths>.
    For each hunk: does it close the finding it claims, or only the instance the reviewer named?
    Did it break a claim elsewhere in this document or in a sibling — a count, a cross-reference,

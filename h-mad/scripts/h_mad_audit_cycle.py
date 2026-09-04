@@ -352,16 +352,34 @@ def measure_effort(log_path: Path | None) -> dict | None:
     try:
         text = log_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return {"readable": False}
+        return {"readable": False, "shape": "missing"}
     if not text.strip():
-        return {"readable": False}
+        # `readable` stays False so the RENDER keeps saying "unreadable" rather
+        # than printing a row of zeros — see the note above, which is about
+        # rendering and is unchanged. `shape` is what the VERDICT routes on, and
+        # the two answers differ: an empty file is what a dispatch that died
+        # instantly leaves behind, so there is nothing to go and find and the
+        # remedy is to re-dispatch.
+        return {"readable": False, "shape": "empty"}
     counts = scan(text)
     counts["readable"] = True
+    # A file that was read, is not blank, and carries no NDJSON object at all is
+    # not this pass's transcript — a stray `--log`, a shell wrapper's stdout, the
+    # wrong path. `tools=0` there means "not measured", not "measured as zero",
+    # and the remedy is to find the right file rather than to re-dispatch.
+    counts["shape"] = "parsed" if any(
+        line.lstrip().startswith("{") for line in text.splitlines()
+    ) else "unparseable"
     return counts
 
 
 def _effort_items(results: list[PassResult]) -> list[str]:
-    """One human line per pass that carried a log. Never a verdict."""
+    """One human line per pass that carried a log.
+
+    This function renders; it never decides. Since #13 `combine()` reads the same
+    counts and does decide, in one direction — scope any "never a verdict" claim to
+    the rendering, which is all this was ever about.
+    """
     items: list[str] = []
     for result in results:
         effort = result.effort
@@ -572,11 +590,23 @@ def combine(results: list[PassResult]) -> tuple[str, str | None]:
             # every honest pass to UNVERIFIED. Absence of evidence about evidence
             # is not evidence of absence.
             continue
-        if not result.effort.get("readable"):
-            # A log was named and could not be read: a cannot-judge, and it fails
-            # closed. Its own reason token, because the remedy differs -- find the
-            # log, versus re-dispatch the pass.
+        # Route on the log's SHAPE, because "I could not measure this" and "I
+        # measured it and it is hollow" have opposite remedies -- find the right
+        # file, versus re-dispatch the pass -- and the first cut of this routed
+        # two of the four shapes to the other one's remedy. Neither could produce
+        # a false clean, but a wrong hint sends the reader somewhere there is
+        # nothing to find.
+        shape = result.effort.get("shape")
+        if shape is None:
+            # An effort dict built by hand, or by an older caller, carries no
+            # shape. Fall back to the pre-#13-followup reading rather than
+            # dropping through to the floor check, which would score an
+            # unreadable log as hollow.
+            shape = "parsed" if result.effort.get("readable") else "missing"
+        if shape in ("missing", "unparseable"):
             return "UNVERIFIED", f"low_evidence_unmeasurable:p{result.index}"
+        if shape == "empty":
+            return "UNVERIFIED", f"low_evidence:p{result.index}"
         if result.effort.get("ok", 0) <= DELIVERY_FLOOR:
             return "UNVERIFIED", f"low_evidence:p{result.index}"
 

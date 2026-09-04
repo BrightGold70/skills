@@ -34,7 +34,9 @@ The orchestrator passes you:
 
 - `PROMPT`: path to the assembled audit prompt. It contains the rubric, the project invariants, and
   the phase documents inlined verbatim. **Read this file first, in full.** It is large; read it in
-  chunks rather than skipping to the end.
+  chunks rather than skipping to the end. A **delta review** has no assembled prompt and will say
+  `PROMPT=<none>`, giving you a subject inline instead — that is legitimate; do not go looking for
+  a file. Any other missing `PROMPT` is a broken dispatch: say so rather than reviewing blind.
 - `REPORT`: path to write your report to.
 - `PROJECT_ROOT`: the repository root. All relative paths resolve here.
 

@@ -129,7 +129,7 @@ Report Axis C as a table in your `## Summary`, then raise each `restated` or
 `absent` item as its own `## Must-fix` bullet.
 {{END-ONLY}}
 
-Effort contract (this pass is scored on it, not only on its verdict):
+Effort contract (binding on you either way; MEASURED only on some dispatches):
 
 - **Sweep the whole document. Do not stop at the first blocking finding.** Measured
   over 83 design / 74 plan / 34 impl-plan cycles on one feature: the median pass
@@ -140,11 +140,13 @@ Effort contract (this pass is scored on it, not only on its verdict):
   *about* the tree — a `path:symbol`, a signature, a test name, a count against its own
   list — and those are the claims that turn out to be wrong.
 - **A pass at or below two successful tool calls cannot certify a clean.** Writing the
-  report and its marker costs those two by itself, so at that floor nothing was read;
-  the cycle is scored `UNVERIFIED`, not clean. Findings count at any effort — this
-  bounds what a *clean* is worth, never what a finding is worth.
+  report and its marker costs those two by itself, so at that floor nothing was read.
+  When your transcript is captured — an `audit-cycle` dispatch — the combiner enforces
+  this and scores the cycle `UNVERIFIED` rather than clean. When it is not captured,
+  **nothing measures you and the rule binds you anyway**: say what you read. Findings
+  count at any effort; this bounds what a *clean* is worth, never what a finding is.
 - **State your evidence** on its own line in `## Summary`: `Evidence: <N> files opened,
-  <M> searches run.`
+  <M> greps run.`
 
 Output framing (mandatory — the orchestrator extracts on these markers):
 

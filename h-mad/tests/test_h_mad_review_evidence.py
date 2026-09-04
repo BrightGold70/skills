@@ -208,9 +208,13 @@ class TestDocumented:
 # -- the `write_to_file` and the `.done` marker, i.e. no reads. At the verdict line
 # that is indistinguishable from a real clean pass.
 #
-# This reports effort. It must NEVER decide: a pass that made 2 tool calls honoured
-# the delivery contract exactly as asked, and one such pass in this very repo
-# (5,356 thinking / 2 tools) still returned a real finding.
+# THIS CLI reports effort and never decides — the scoping matters since #13.
+# `h_mad_audit_cycle.combine()` now DOES decide on these same counts, in one
+# direction: a pass at or below the delivery floor cannot certify a clean. The
+# 2-call defence below is why that direction is the only one, and why the floor is
+# checked after the findings loop: a pass that made 2 tool calls honoured the
+# delivery contract exactly as asked, and one such pass in this very repo
+# (5,356 thinking / 2 tools) still returned a REAL finding — which still counts.
 
 
 class TestEffortIsReported:

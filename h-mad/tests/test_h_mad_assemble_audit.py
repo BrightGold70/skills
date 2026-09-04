@@ -239,6 +239,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # candidate-batch added four rules to invariants.base.md (+4,724 B to EVERY
     # prompt: at 2850 the fixture measured 94,715 B, past the frontier). Measured
     # after: 2645 -> 90,000 B, mid-band; 2945 -> 96,900 B, past the frontier.
+    # Was 2329/2629 until the effort contract was CONDITIONED the same day (the P1
+    # review found it told every reviewer it was scored on effort, which is true
+    # only for a dispatch whose transcript is captured). Measured after:
+    # 2320 -> 89,997 B, mid-band; 2620 -> 96,897 B, past the frontier.
+    #
     # Was 2389/2689 until the 2026-09-04 behavioural-premise rule (#14) added 1,382 B
     # to invariants.base.md. Measured after: 2329 -> 90,001 B, mid-band;
     # 2629 -> 96,901 B, past the frontier. (Confirming #17's correction below: the
@@ -278,11 +283,11 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # the frontier. Was 3200/3500 after the 2026-07-30 re-anchor to the 92,055 B
     # confirmed-answered frontier, and 2000/2200 before that against the old
     # 61,493 B ceiling.
-    approaching, mid = size_of(2329)
+    approaching, mid = size_of(2320)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2629)
+    past, big = size_of(2620)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
