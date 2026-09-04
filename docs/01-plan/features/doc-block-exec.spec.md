@@ -71,12 +71,12 @@ not opted in.
     tagged block from the wrong section — the same silent-wrong-answer shape the tag exists to
     prevent, one level up, and the tag cannot repair an ambiguous *section* selector. Not
     hypothetical: `h-mad/invariants.example.md` already carries `### Unified-facade routing` and
-    `### Data-source priority` twice each — measured at `335f535`, 16 headings, 2 of them
+    `### Data-source priority` twice each — measured at `74e126f`, 16 headings, 2 of them
     duplicated:
     `git grep -hcE '^#{1,6} ' -- h-mad/invariants.example.md` → 16, and
     `git grep -hE '^#{1,6} ' -- h-mad/invariants.example.md | sort | uniq -d | wc -l` → 2, both at
-    `335f535`. That file holds no fences at all (`git grep -c '^```' -- h-mad/invariants.example.md`
-    → no match at `335f535`), so a raw line grep cannot mistake a `#` comment inside a fence for a
+    `74e126f`. That file holds no fences at all (`git grep -c '^```' -- h-mad/invariants.example.md`
+    → no match at `74e126f`), so a raw line grep cannot mistake a `#` comment inside a fence for a
     heading here. Residual: those two commands compare raw lines rather than closing-hash-stripped
     text, so the 2 is a floor on duplicates under this AC's own comparison, never a ceiling.
   - AC-1.8: **One authoritative bounder, which `docsections` delegates to.** A differential test
@@ -436,7 +436,7 @@ not opted in.
 - **Description**: `h-mad/tests/test_h_mad_collect_report_docs.py` hand-writes extraction at
   `:270` and `:412` with `re.findall(r"```bash\n(.*?)```", …)`, and runs the block inline in
   `run_recipe` at `:309`. **The two extractors select different blocks** — measured at `a8e0372`
-  and re-run unchanged at `335f535`, with the extractor's own regex over the section the test
+  and re-run unchanged at `335f535` and again at `74e126f`, with the extractor's own regex over the section the test
   itself bounds:
 
   ```
@@ -476,7 +476,7 @@ not opted in.
   2 headings, `a8e0372` → 7 blocks / 2 headings. So the drift is one commit's, `6db8e50`, which
   inserted a `##` heading between the two string anchors `_second_surface()` bounds on and widened
   the section; the gate block reads 4 and the exec-codex block 2 at **all three** shas (and at
-  `335f535`), because the arrivals land after block 4. That stability is why the ordinal looked
+  `335f535` and `74e126f`), because the arrivals land after block 4. That stability is why the ordinal looked
   safe enough to lean on, and is exactly why it is demoted here: an ordinal that has held is still
   an ordinal, and one insertion before block 4 would move it without moving the predicate.
   Only `:270`'s block is tagged, so only `:270` breaks when the tag lands, and only
@@ -521,13 +521,21 @@ not opted in.
     floor uses `len(tuple)`, so a number restated here would be a second authority that drifts
     against the plan's enumeration and buys nothing. What the spec fixes instead is the
     **membership rule**, because the tuple has two sources and only one of them is a test anyone
-    writes by hand:
+    writes by hand. **Documents that attribute this membership rule address it by AC label anchored
+    to the start of its own body line** — `grep -cE '^  - AC-6\.4:'` against this file → `1` at
+    `74e126f` — never by a bare `AC-6.4`, which §Version History cites many times over. Every AC
+    body anchor in this document is unique by the same form: at `74e126f`,
+    `grep -oE '^  - AC-[0-9]+\.[0-9]+:' | sort | uniq -c | awk '$1>1'` prints nothing over 49
+    anchors (`grep -cE '^  - AC-[0-9]+\.[0-9]+:'` → `49`). Residual: the anchor pins the AC, not
+    the sub-clause inside it, so an attributing document that means the two-item list specifically
+    must say so in words; and the anchor breaks if the AC list's two-space indentation changes,
+    which is a whole-document reformat and would be visible in review, not silent.
       1. Nodes added directly to a consumer file — the wire and exemption tests in
          `test_h_mad_collect_report_docs.py` and the delegation spy test in `test_docsections.py`.
       2. **One node per glob-parametrised test, per new file this feature adds under
          `h-mad/scripts/`.** `test_h_mad_portable_timeout.py` globs `(SKILL / "scripts").glob("*.py")`
          into `_SCANNED` and parametrises over it twice — verified at `a8e0372`, re-run unchanged
-         at `335f535`, with
+         at `335f535` and again at `74e126f`, with
          `grep -c 'parametrize("path", _SCANNED' h-mad/tests/test_h_mad_portable_timeout.py` -> `2`
          — so Task 1's `h-mad/scripts/h_mad_doc_block_exec.py` adds exactly two nodes:
          `test_no_document_or_script_emits_a_bare_timeout_command[h_mad_doc_block_exec.py]` and
@@ -539,7 +547,7 @@ not opted in.
       feature adds two more nodes by the same rule; a third glob-parametrised test over the same
       directory would add one per new script; and a glob that loops **inside** one test body rather
       than parametrising adds coverage but no node, so it is out of the tuple — verified at
-      `a8e0372` and re-run unchanged at `335f535` that the two other `*.py` globs in the suite are
+      `a8e0372` and re-run unchanged at `335f535` and `74e126f` that the two other `*.py` globs in the suite are
       of that second kind —
       `git grep -n 'glob("\*\.py")' -- 'h-mad/tests/*.py'` returns three hits, `_SCANNED` itself
       plus `test_h_mad_collect_report.py:287`, which loops but filters to two named writer modules
@@ -580,11 +588,11 @@ not opted in.
 
 - Any blanket or directory-wide sweep of bash fences. The corpus such a sweep would have to face —
   column-0 ` ```bash ` openers in tracked `*.md` under `h-mad/` and `handoff/` — is **73 openers**,
-  measured over the tracked tree at `335f535`:
+  measured over the tracked tree at `74e126f`:
 
   ```
-  $ git grep -c '^```bash' -- 'h-mad/*.md' 'handoff/*.md' ':!*/archive/*' | awk -F: '{s+=$NF} END {print s}'   # -> 73  (at 335f535)
-  $ git ls-files 'h-mad/*' 'handoff/*' | grep -c archive                                                       # -> 0   (at 335f535)
+  $ git grep -c '^```bash' -- 'h-mad/*.md' 'handoff/*.md' ':!*/archive/*' | awk -F: '{s+=$NF} END {print s}'   # -> 73  (at 74e126f; also 73 at 335f535)
+  $ git ls-files 'h-mad/*' 'handoff/*' | grep -c archive                                                       # -> 0   (at 74e126f; also 0 at 335f535)
   ```
 
   This feature executes only tagged fences and adds exactly one tag. The `archive/` exclusion
@@ -635,7 +643,7 @@ quoted
   exposure is reversible, so it is confirmed by eye at Phase 5 after the tag lands.
 - The two extractors named in FR-6 are the only in-repo consumers that anchor on a bare
   ` ```bash\n ` opener in a file this feature tags. **Measured over the tracked tree at `a8e0372`
-  and re-run unchanged at `335f535`** (`-E`, because git's default regex is not GNU BRE and `\|` is
+  and re-run unchanged at `335f535` and `74e126f`** (`-E`, because git's default regex is not GNU BRE and `\|` is
   not portable here):
 
   ```
@@ -646,10 +654,10 @@ quoted
 
   A broader sweep for the bare literal, over the **tracked** tree so no gitignored or
   not-yet-committed artifact contaminates it, returns six hits at `a8e0372` and still six at
-  `335f535`; the four that are not extractors are inline fixture strings and one prose comment:
+  `335f535` and at `74e126f`; the four that are not extractors are inline fixture strings and one prose comment:
 
   ```
-  $ git grep -n '```bash' -- '*.py' | wc -l          # -> 6   (at a8e0372, re-run -> 6 at 335f535)
+  $ git grep -n '```bash' -- '*.py' | wc -l          # -> 6   (at a8e0372, re-run -> 6 at 335f535 and 6 at 74e126f)
   ```
 
   — `test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551` are fixture strings, and
@@ -657,7 +665,7 @@ quoted
   example. Control that the narrow pattern is not under-matching:
 
   ```
-  $ git grep -l '```' -- '*.py' | wc -l              # -> 24  (at a8e0372, re-run -> 24 at 335f535)
+  $ git grep -l '```' -- '*.py' | wc -l              # -> 24  (at a8e0372, re-run -> 24 at 335f535 and 24 at 74e126f)
   ```
 
   Twenty-four tracked `.py` files contain a fence literal and exactly two of them extract on a
@@ -685,26 +693,78 @@ quoted
   v1.57 for a structural reason worth stating, and verified rather than assumed: `git log -S'There
   are 68' -- docs/01-plan/features/doc-block-exec.spec.md` returns exactly one commit, `e58ef3a`,
   so the number was written once and never edited; and §Out-of-Scope's command re-run at that same
-  sha gives 68, at `335f535` gives 73. Same command, same corpus, different tree — it drifted in
+  sha gives 68, and at `335f535` and `74e126f` gives 73. Same command, same corpus, different tree — it drifted in
   place while the tree moved under it. No sweep keyed on a *changed* value can reach a number that
   never changed, and it sat in a non-normative section a walk of the FR/AC bodies never visits. The
   rule therefore carries its own enumeration, run over the whole document body, keyed on shape
   rather than on what changed:
 
   ```
-  $ awk '/^## Version History/{exit} {print FILENAME":"NR": "$0}' docs/01-plan/features/doc-block-exec.spec.md | grep -Ei 'measured|census|(\*\*)?([0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|(thir|four|fif|six|seven|eigh|nine)teen|(twen|thir|for|fif|six|seven|eigh|nine)ty(-(one|two|three|four|five|six|seven|eight|nine))?)(\*\*)? ([a-z]+ )?(\*\*)?(blocks?|headings?|hits?|files?|fences?|openers?|nodes?|seams?|consumers?)'
+  $ awk '/^## Version History/{exit} {print FILENAME":"NR": "$0}' docs/01-plan/features/doc-block-exec.spec.md | grep -Ei 'measured|census|(\*\*)?([0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|(thir|four|fif|six|seven|eigh|nine)teen|(twen|thir|for|fif|six|seven|eigh|nine)ty(-(one|two|three|four|five|six|seven|eight|nine))?)(\*\*)? ([^ ]+ ){0,3}(\*\*)?(blocks?|headings?|hits?|files?|fences?|openers?|nodes?|seams?|consumers?)'
   ```
 
   It covers every section, normative or not, and stops at the Version History boundary because
-  residual (1) exempts that region. **The cardinal alternation is deliberate**: this document states
+  residual (1) exempts that region.
+
+  **This enumeration is the single checker for this class rule, and the other documents of this
+  feature attribute to it rather than re-word it — so it needs a stable address.** The address is
+  the fenced block immediately above, and the needle is **line-anchored**, not a prose phrase:
+  `grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → `1` at `74e126f`. The
+  anchoring is the whole point. A plain-substring needle on the awk program itself was tried first
+  and measured at `2` in this file at `74e126f`, because the sentence publishing the needle
+  reproduced it — the same duplication a later §Version History entry would cause. The anchored
+  form is immune: prose references sit mid-line, so quoting the needle cannot add a hit. Three
+  residuals, all concrete. (1) It is **file-scoped**; an attributing document must grep this path,
+  never the tree, and must not assume the same needle is unique in a sibling document. (2) A second
+  fenced block in this file opening a line with two spaces and `$ awk ` would make it `2`. That is
+  a specific and checkable risk, not a vague one: at `74e126f` the nine `^  $ ` command openers in
+  this document are `awk` ×1, `curl` ×1, `git` ×5, `printf` ×1 and `python3.11` ×1
+  (`grep -oE '^  \$ [a-zA-Z0-9._-]+' | sort | uniq -c`), so `awk` is the sole holder of its slot
+  and a new `awk` command in a fence is the one edit that breaks the needle. (3) The needle pins the block, not any clause inside it; a
+  document meaning the alternation specifically must say so in words.
+
+  **It has been executed against controls, because a screen that never fires reads exactly like a
+  clean document.** That is not hypothetical: a sibling screen for this same class shipped with
+  `\btoday\b` inside an `awk` program, where `\b` is a backspace escape and not a word boundary,
+  so that term matched nothing and its published before/after counts came from a screen blind to
+  one of its own forms. Run at `74e126f`, each string fed on stdin to the `grep -Ei` half:
+
+  ```
+  # positives — each is a real member of this document
+  There are **68** tagged openers                            -> MATCH       (old and new)
+  the Second-surface section holds **seven** bash blocks     -> MATCH       (old and new)
+  16 headings, 2 of them duplicated                          -> MATCH       (old and new)
+  six hits with four non-extractors                          -> MATCH       (old and new)
+  Twenty-four tracked `.py` files contain a fence literal    -> NO MATCH old, MATCH new
+  # negatives — none states a tree-derived count
+  A block's declared shell mode is a property of the recipe  -> NO MATCH    (old and new)
+  the tag cannot repair an ambiguous section selector        -> NO MATCH    (old and new)
+  exit 0 and print the verdict token                         -> NO MATCH    (old and new)
+  ```
+
+  The fourth positive is why the gap between the cardinal and the counted noun is now
+  `([^ ]+ ){0,3}` and was `([a-z]+ )?` through v1.57: one optional *lowercase* word cannot span
+  `tracked` **and** the backticked `` `.py` ``, so the enumeration was blind to a member sitting
+  in the very paragraph that defines it. Widening recovers three members, **named rather than
+  counted** because the totals of both forms move on every edit to this document: the
+  `Twenty-four tracked .py files` sentence here, and the two FR-6 sentences stating the gate
+  ordinal 4 and the insertion-before-block-4 hazard. It also admits two lines that state no
+  tree-derived count — AC-1.9's `one — a wrong block` and FR-3's `8 with errors="replace"` — and
+  those are the correct trade: this enumeration is read by a human, so an extra line costs a
+  glance and a miss costs a cycle.
+
+  **The cardinal alternation is deliberate**: this document states
   most of its counts as words — `**seven** bash blocks`, `Twenty-four tracked .py files`, `six
   hits` — so a digits-only enumeration would miss the majority of its own members, and a
-  `grep -E '[0-9]'` fallback would miss them too. Residual on the enumeration itself, two concrete
-  categories. (1) A counted noun outside the closing alternation — the axis is *countable things
-  this feature measures in the tree*, and the list is the finite set the document currently uses;
-  a new noun must be added when it arrives, which is the enumeration's own maintenance cost and is
-  accepted. (2) A cardinal of one hundred or more written as words, which the alternation stops
-  below. The hit count is deliberately not stated: it is a procedure, not a measurement, and any
+  `grep -E '[0-9]'` fallback would miss them too. Residual on the enumeration itself, three
+  concrete categories. (1) A counted noun outside the closing alternation — the axis is *countable
+  things this feature measures in the tree*, and the list is the finite set the document currently
+  uses; a new noun must be added when it arrives, which is the enumeration's own maintenance cost
+  and is accepted. (2) A cardinal of one hundred or more written as words, which the alternation
+  stops below. (3) A gap of more than three space-delimited tokens between the cardinal and its
+  noun, which `{0,3}` stops below; the widened gap admits false positives by design, so the
+  bound is a readability limit and not a correctness one. The hit count is deliberately not
+  stated: it is a procedure, not a measurement, and any
   edit to this document changes it, so a number here would falsify itself every cycle.
 
   Residual — three categories deliberately outside this rule, so their numbers are not swept.
@@ -712,7 +772,10 @@ quoted
   era's numbers. (2) Counts of things that do not exist yet — the new module's collected count,
   the seven module seams of FR-5's injection list — are design-derived, not tree-derived, and move
   only when the design moves. (3) `path:line` locators (`:270`, `:309`, `:412`, `docsections.py:37`)
-  are locators, not counts; all four were re-verified at `a8e0372` and again at `335f535`. They are still line numbers and
+  are locators, not counts; all four were re-verified at `a8e0372`, at `335f535` and again at
+  `74e126f`, where they resolve to the `re.findall(r"```bash\n(.*?)```", section, re.S)` assignment,
+  the `def run_recipe(...)` signature, the `next(…)` generator filtering on `exec codex`, and
+  `if stripped.startswith("```"):` respectively. They are still line numbers and
   will still drift, and rewriting them as structural locators is owed by this document, the design
   and the plan **together** — done in one document alone it would read downstream as a
   disagreement about which block is meant.
@@ -779,3 +842,4 @@ quoted
 - v1.55: Design v1.93 back-propagation. AC-6.1 states its own sweep instead of reaching it by reference to the plan's fence census: *.md under h-mad/ and handoff/, excluding archive/ and any dot-directory. The reference was the defect, not the scope — that census was a filesystem glob contaminated by gitignored .pytest_cache/README.md artifacts, and a reference inherits whatever its referent becomes. Both halves are now pinned here with their reasons: the *.md restriction, because the feature's own test module carries column-0 tagged fences in triple-quoted fixtures that an unrestricted sweep would count; and the dot-directory exclusion rather than git ls-files, deliberately different from the measurement corpus, because this guard must still catch a tagged fence in a document written but not yet committed. Residual stated.
 - v1.56: Round-three back-propagation of four findings raised against the plan (v75), design (v84) and impl-plan (v35), all of which land here. Findings 1+2 are one class, not two edits: every tree-derived count in this document now carries the exact runnable command that generates it AND the sha it was observed at, on the same surface as the number. The extractor census's control was 21 .py files with a fence literal and is 24 at a8e0372 (git grep -l '```' -- '*.py' | wc -l); it had already drifted through 23 unnoticed precisely because no generating command travelled with it, and the corpus is now git grep rather than a filesystem walk so gitignored and uncommitted artifacts cannot contaminate it. The broad literal sweep was five hits with three non-extractors and is six with four at a8e0372, the arrival being a prose comment in h_mad_precheck_doc.py. Neither total touches the census's conclusion, which is that exactly two consumers extract on a bare bash opener, so the conclusion is now stated apart from the control. Residual: Version History entries keep their era's numbers, design-derived counts of things that do not exist yet are out of class, and path:line locators are locators not counts. FR-6's Description carried the same stale block census the design carried: the Second-surface section holds seven bash blocks at a8e0372, not four, because 6db8e50 inserted a ## heading between the two string anchors _second_surface() bounds on. The ordinals are unchanged and are the load-bearing part -- the gate block is still 4 and the exec-codex block still 2, because the arrivals came after block 4. AC-6.4 no longer carries a total for its node tuple. The old 'seven enumerated in the plan' was nine, because Task 1's h-mad/scripts/h_mad_doc_block_exec.py adds one node to each of the two tests that parametrise over _SCANNED, and a floor short by two tolerates two invisible deletions. Rather than restate a number that drifts on any script add, the AC now fixes the membership rule over the axis -- consumer-file nodes, plus one node per glob-parametrised test per new h-mad/scripts file -- requires those nodes to pass and not merely be counted, and states the residual, including that a glob looping inside one test body adds coverage but no node.
 - v1.57: Round-four back-propagation of one plan finding (agy cycle 76) plus decision-sheet items B/C/D. Finding 1: Out-of-Scope's fence count was 68 and is 73 openers at 335f535, and it now carries both its generating command (git grep -c '^```bash' -- 'h-mad/*.md' 'handoff/*.md' ':!*/archive/*' | awk -F: '{s+=$NF} END {print s}') and the sha, plus the git ls-files ... | grep -c archive -> 0 that shows the archive exclusion selects nothing at this sha and is kept only against future widening. The interesting half is why the v1.56 sweep missed it: a value sweep fires on values that CHANGE, and 68 was never edited -- it drifted in place, in a non-normative section a walk of the FR/AC bodies never visits. The class rule therefore now carries its own ENUMERATION, independent of what changed, over the whole body up to the Version History boundary, keyed on SHAPE rather than on what changed, and its alternation covers spelled-out cardinals because this document states most of its counts as words (seven bash blocks, Twenty-four tracked .py files, six hits) so a digits-only enumeration would miss the majority of its own members. The drift story is verified, not asserted: git log -S'There are 68' returns exactly one commit, e58ef3a, so the number was written once and never edited, and the same command gives 68 at e58ef3a and 73 at 335f535 -- same command, same corpus, different tree. Two concrete residuals on the enumeration (a counted noun outside the closing alternation, and a cardinal of one hundred or more written as words) and a stated reason for carrying no hit count. AC-1.7's '16 headings, 2 duplicated' was the same class's second surviving member and now carries two commands and the sha, plus the evidence that invariants.example.md holds no fences so a raw line grep cannot miscount, and the residual that the commands compare raw lines so 2 is a floor. Decision B: FR-6 called the ordinals the load-bearing part; they are demoted to informational and the CONTENT PREDICATE is the contract, with the two predicates' differing cardinality stated separately (_gate_bash_block filters on h_mad_audit_gate.py and asserts exactly one; :412 filters on exec codex and takes the FIRST hit via next(..., '')), the ordinals' base named (1-based over the extractor's own re.findall on _second_surface()), and the era split stated: after FR-6 :270 addresses by heading plus tag and retires its predicate, :412 keeps its permanently. Decision C: the spec was SILENT on the closing-hash delimiter where the design has an oracle-backed rule, so AC-1.7 now states it, measured on markdown-it-py commonmark preset -- '## Text ##' -> 'Text', '## Text\t##' -> 'Text', '## Text##' -> 'Text##' -- the last being the case an unconditional right-strip of # gets wrong. Decision D: no seam ordinal exists in this document's body. Every count and path:line locator was re-derived at 335f535 and restamped: 6, 24, 7 [4] [2], the two-hit narrow extractor census, :270 :309 :412 docsections.py:37, the _SCANNED parametrise-twice 2, and the three *.py globs -- all unchanged.
+- v1.58: Round-five decision-sheet items E and F; no finding this round landed in this file. E (one rule, one checker): the count-enumeration in Assumptions is now the CANONICAL checker for the tree-derived-count class rule across all four documents, and it was EXECUTED against controls rather than published unrun -- because a sibling screen for this same class shipped with a backspace escape where a word boundary was meant and matched nothing. The controls found the same defect class here: the gap between a cardinal and its counted noun was one optional lowercase word, which cannot span 'tracked' and a backticked '.py', so the enumeration was blind to a member sitting in the paragraph that defines it. The gap is widened to three space-delimited tokens; the recovered members are NAMED, not counted, because both forms' totals move on every edit. Positive and negative control results are published beside the enumeration. F (locator uniqueness is commit-scoped): every locator this document publishes is now LINE-ANCHORED and re-verified at 74e126f -- the enumeration's needle is an anchored command opener at exactly 1 hit, and the AC-6.4 membership rule is addressed by its anchored AC label at exactly 1 hit, with all 49 AC body anchors verified collision-free. A plain-substring needle was tried first and MEASURED at 2, because the sentence publishing it reproduced it; that measurement is recorded as the reason the anchored form was chosen. Every tree count was re-derived at 74e126f and restamped, all unchanged: 73 openers and 0 archive paths, 24 tracked .py with a fence literal, 6 broad literal hits with the same 2-hit narrow extractor census, 16 headings with 2 duplicated and no fences in invariants.example.md, the _SCANNED parametrise 2 and the three *.py globs, and 7 [4] [2] from the second-surface extraction. The four path:line locators were re-verified at 74e126f and now record what each resolves to.
