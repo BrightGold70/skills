@@ -96,6 +96,16 @@ def resolve(text: str, audit_type: str) -> str:
 # --- step 7.2 ----------------------------------------------------------------
 
 
+# An inline code span: a run of backticks, content carrying neither a backtick nor a
+# newline, then the SAME run. `{{` inside one is content, exactly as it is inside a fence --
+# design v1.94 and impl-plan v1.38 both quote the old bounder as `rf"^#{{1,{level}}} "` in
+# running prose, and a bare `"{{" in ln` refused to emit both prompts (2026-09-04).
+# Residual, stated exactly: a span that uses a multi-backtick run *in order to contain* a
+# backtick is not matched, so a `{{` inside one still halts. That fails closed -- it refuses a
+# clean prompt rather than passing a leaked one -- and no document here has that shape.
+_INLINE_CODE = re.compile(r"(`+)[^`\n]*?\1")
+
+
 def _braces_outside_fences(text: str) -> list[str]:
     """Lines carrying `{{` that are NOT inside a fenced code block.
 
@@ -120,7 +130,7 @@ def _braces_outside_fences(text: str) -> list[str]:
         if m and (m.group(1)[0] == "~" or "`" not in ln[m.end():]):
             fence_char, fence_len = m.group(1)[0], len(m.group(1))
             continue
-        if "{{" in ln:
+        if "{{" in _INLINE_CODE.sub("", ln):
             leaked.append(ln)
     return leaked
 

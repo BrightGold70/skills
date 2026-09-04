@@ -484,3 +484,28 @@ def test_double_brace_inside_a_fence_is_content_not_a_conditional():
     assert not [p for p in preflight(inside4, {}) if p.startswith("unresolved_conditional")]
     outside = "prose\n{{ONLY:design}} leaked\n"
     assert [p for p in preflight(outside, {}) if p.startswith("unresolved_conditional")]
+
+
+def test_double_brace_inside_an_inline_code_span_is_content_not_a_conditional():
+    """The fenced-block case above has a sibling the guard did not cover: a `{{` inside an
+    INLINE code span. Measured 2026-09-04 — design v1.94 and impl-plan v1.38 each quote the old
+    bounder as (`re.match(rf"^#{{1,{level}}} ", line)`, space required) in running prose, and
+    `ASSEMBLE: HALT <phase>:preflight unresolved_conditional` refused to emit BOTH prompts,
+    blocking two of the three phases of a gating round on documents that were clean.
+
+    A gate that fails a clean document is not a gate. The three directions below are the
+    contract: an inline span is content; a real `{{ONLY:…}}` still halts; and a span that is
+    merely opened and never closed is NOT treated as a span, so a leak cannot hide behind a
+    stray backtick."""
+    real = ('(`re.match(rf"^#{{1,{level}}} ", line)`, space required) does not. This is **not**\n')
+    assert not [p for p in preflight(real, {}) if p.startswith("unresolved_conditional")]
+
+    assert not [p for p in preflight("a `{{ONLY:design}}` b\n", {})
+                if p.startswith("unresolved_conditional")]
+
+    assert [p for p in preflight("prose\n{{ONLY:design}} leaked\n", {})
+            if p.startswith("unresolved_conditional")]
+
+    # an unterminated backtick must not swallow the rest of the line
+    assert [p for p in preflight("prose ` {{ONLY:design}} leaked\n", {})
+            if p.startswith("unresolved_conditional")]
