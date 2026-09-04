@@ -50,7 +50,13 @@ every one of those is a number about a tree that keeps moving. That is where thi
    in this document appear in prose, tables, and inside comments embedded in shell commands — the
    embedded ones are where the misses live. Measured five times in one session.
 
-8. **No placeholders**; `grep -nE 'TBD|TODO|…|<[a-z][^>`]*>'` before finishing.
+8. **No placeholders** — **run the precheck rather than a hand-rolled grep.**
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py <your document> --phase <phase>
+   --root <PROJECT_ROOT>`. Read the `PRECHECK:` token, never `$?`. Resolve every hard finding;
+   read the advisories and, for each one you are keeping deliberately, either say why in your
+   report or pass it back as `--allow <substring>`. Four copies of one regex in four agent files
+   is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
+   not.
 
 9. **Bump the Version History** with `h_mad_version_history.py`, never a hand-rolled substitution.
    Read the `VERSION-HISTORY:` token, not `$?`.

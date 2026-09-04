@@ -25,10 +25,15 @@ impossible before the reviewer sees the document.
    result to yourself. A nested function is not module-level; a `str.replace` is not
    `substitute`; `section_from(text, offset, level=2)` is not `(text, start, level)`. If the
    tree disagrees with the design or the findings, say so in your report instead of choosing.
-2. **No placeholders.** Before you finish, run
-   `grep -nE 'TBD|TODO|…|\.\.\.\)|<[a-z][^>`]*>' <impl-plan>` and resolve every hit that is not
-   inside a code block's Python `...` body stub or a legitimate `<name>` in a documented CLI
-   usage line. An unresolved `timeout=…` is a finding; an explicit `timeout=60.0` is a contract.
+2. **No placeholders** — **run the precheck rather than a hand-rolled grep.**
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py <your document> --phase <phase>
+   --root <PROJECT_ROOT>`. Read the `PRECHECK:` token, never `$?`. Resolve every hard finding;
+   read the advisories and, for each one you are keeping deliberately, either say why in your
+   report or pass it back as `--allow <substring>`. Four copies of one regex in four agent files
+   is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
+   not. An unresolved `timeout=…` is a finding; an explicit
+   `timeout=60.0` is a contract. The impl-plan is the one phase where a bare `<name>` slot is
+   scored, because it is the document 5d executes literally.
 3. **Counts must match their lists.** Every "N tests", "N rows", "N mutations" you write is
    derived by counting the enumerated items in the same document, and the total of per-task
    mutation rows equals the design's stated total. Print the counts in your report.

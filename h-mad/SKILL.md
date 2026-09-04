@@ -166,7 +166,8 @@ Run from current project root (`pwd` at invocation):
 4. **Register the teammate agents** (idempotent; `ln -sfn` re-points an existing link rather than
    failing, so this is safe to re-run):
    ```bash
-   SK="$(cd "$(dirname "$(readlink ~/.claude/skills/h-mad)")" && pwd)/h-mad"   # the checkout, not the symlink
+   SK="$(readlink -f ~/.claude/skills/h-mad)"   # the checkout, not the symlink
+   [ -d "$SK/agents" ] || { echo "[h-mad] cannot resolve the checkout — skipping agent registration"; }
    mkdir -p ~/.claude/agents
    for n in spec-author plan-author design-author implplan-author doc-auditor; do
      ln -sfn "$SK/agents/$n.md" ~/.claude/agents/"$n".md
@@ -1183,6 +1184,36 @@ a document:
    "contradictions: none" in good faith, and be wrong. Re-state what moved, or re-dispatch, rather
    than believing a sibling-document claim made against a version you have since replaced.
 
+### Precheck before you dispatch — never spend a cycle on a greppable premise
+
+Before `h_mad_assemble_audit.py` for **any** phase audit (3, 4, 5b), run the document
+through the precheck. A dual-surface cycle costs two dispatches and roughly four minutes
+of wall clock to discover a claim a `grep` refutes in a second, and then a second cycle
+to fix it:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py \
+  <document> --phase plan|design|impl-plan|spec --root <PROJECT_ROOT>
+```
+
+Read the `PRECHECK:` token, never `$?` — it exits 0 on both verdicts, and 2 only when the
+document cannot be read. `PRECHECK: FAIL` → **re-dispatch the owning author with the detail
+lines and do not assemble the prompt.** `PRECHECK: UNREADABLE` is a cannot-judge, not a pass.
+
+**Read the advisories too, even on a PASS.** They are the larger half and they are advisory
+because no rule can decide them, not because they are unimportant: a `PATH:` or `SYMBOL:`
+line is either a file the feature creates or a citation that has gone stale, and only you
+know which. `--allow <substring>` records a deliberate hit; it is an INPUT and is never
+inferred.
+
+**What is hard is only what is provably wrong** — an unfilled slot, a pin past end-of-file,
+a pin into a file that changed since the document's own provenance commit, a provenance sha
+that names no commit here. That split was measured, not chosen: every detector filed as hard
+on first cut fired dozens of times on the design and plan that had just passed 83 and 74
+audit cycles — 104 `PATH:` hits, then 49 `LINEPIN:`, then 48 `PLACEHOLDER:` — and each time
+the hits were correct usage rather than defects. **A gate that fails a clean document is not
+a gate**, and finding that out costs one test run here against a full cycle in the loop.
+
 ## Never gate on one audit pass
 
 **Agreement between two passes is not a stopping signal; it is one observation repeated.** Dispatch
@@ -2159,6 +2190,7 @@ A leg dropped for being sometimes-hollow takes its sometimes-real findings with 
 - `h_mad_collect_report.py` — collect-report surface collector: copies a delivered report-file or `--out` fallback into the docs audit path, prints `COLLECT: OK|MISSING|CONFLICT` plus the collected path/delivery source, and performs readback before reporting success. `OK`/`MISSING`/`CONFLICT` exit 0 because they are measured outcomes; operational errors and readback failures exit 2. `--force` overwrites an existing collected report after a conflict.
 - `h_mad_offcontract_scan.py` — **where did the report actually go?** Locates an audit artifact written off-contract: `scan()` + CLI printing `OFFCONTRACT: NONE|FOUND|UNREADABLE`, exit 0 on `NONE` **and on `FOUND`** / 2 on `UNREADABLE reason=no_workspace`. `FOUND` exits 0 deliberately — this reports, it never decides. Reach for it when `h_mad_extract_report.py` exits 2: that exit is *correct* (silence must never score as a clean gate), but its remedy — `clear` and re-dispatch — is wrong when the audit already ran, and on a large prompt you pay a full cycle to reproduce a drop. **The defect it addresses is unfindability, not absence.** `exec agy` can honour neither the `--report-file` slot nor the sentinel pair while still doing the work and writing a real report at a path of its own choosing; two were observed eleven days apart — a workspace **dotfile** (`.design.audit.v14.md`, invisible to the `*audit.v14*` glob the orchestrator searches, which is exactly how one cycle concluded "no file was written" and re-dispatched over completed work) and `audit_report.md` in agy's own scratch directory while the run narrated "the current workspace". It therefore assumes **no** `audit.vN` stem — the whole failure is that the agent chose the name — and searches dotfiles too; `--cd <workspace>` plus agy's scratch dir by default, `--extra-dir` to widen, `--minutes`/`--since` to bound by mtime, `--expected` to exclude the path that was contracted for. **Its output does not feed the gate.** A report recovered this way has had NO schema enforcement applied, so it prints candidates with an explicit not-validated caution for a human to transcribe by hand, falsifying every premise against the source first; teaching `h_mad_extract_report.py` to glob these paths would score an unvalidated file as a clean gate, which is the opposite of the fix. `NONE` means nothing matched the search, **not** that the work was never done — it narrows a re-dispatch decision rather than making one. Closes J30. Stdlib-only.
 - `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report or no gateable sections. `--pass` takes an optional 5th field, `i:<report>:<out>:<rc>[:<log>]`; when a log is given the render carries an **`Effort:`** block — per pass `tools=/ok=/failed=/thinking=`, and `low-evidence` when `ok` is at or below the 2 successful calls the report-file contract itself costs, i.e. the pass cannot have read anything (J49). **It reports; it never decides.** `combine()` cannot see it, the `AUDITCYCLE:` line is unchanged, and a named-but-unreadable log renders as `unreadable` rather than as zeros — `tools=0` is exactly what a genuinely hollow pass looks like.
+- `h_mad_precheck_doc.py` — phase-document pre-dispatch precheck (§"Precheck before you dispatch"): `scan()` + CLI printing `PRECHECK: PASS|FAIL issues=N|UNREADABLE`, exit 0 on a verdict / 2 on operational error. Refutes before the prompt is assembled what a cycle would otherwise spend two dispatches discovering. **Hard** findings are only the provably-wrong ones — `PLACEHOLDER` (an unfilled `key=…` or bare `<slot>`, impl-plan only, plus `TBD`/`TODO`/`FIXME` anywhere), `LINEPIN` past end-of-file, `PINDRIFT` (a pin into a file that changed since the document's own newest provenance commit — the c33 defect exactly, six `SKILL.md` pins stale by 93 lines), and `UNKNOWNSHA` (a provenance sha naming no commit here). **Advisory, verdict-neutral**: `PATH` and `SYMBOL` (a planning document names files and symbols the feature will CREATE), `STALESHA` (behind-HEAD is the normal condition of every written measurement), ordinary `LINEPIN`, and `COUNT`. Every one of those started as a hard finding and was demoted by measurement, not by taste: they fired 104, 49 and 48 times on the design and plan that had just passed 83 and 74 audit cycles, and the hits were correct usage. `--allow` is an input, never inferred. The residual it cannot close: a document that NARRATES a stale pin quotes the stale number, and no detector distinguishes that from the defect. Stdlib-only.
 - `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
 - `h_mad_install_check.py` — verifies the install shape of this checkout's skills (the two symlinks §"First-run auto-bootstrap" depends on, plus every sibling skill the checkout ships): `check()` / `check_siblings()` + CLI printing `INSTALL: PASS|FAIL issues=N|UNREADABLE` followed by `SKILL_NOT_SYMLINK:`/`SKILL_NOT_INSTALLED:`/`SKILL_DANGLING:`/`SKILL_NOT_A_CHECKOUT:`/`HOOK_NOT_INSTALLED:`/`HOOK_DANGLING:`/`SPLIT_INSTALL:`/`SIBLING_NOT_SYMLINK:`/`SIBLING_DANGLING:`/`SIBLING_WRONG_CHECKOUT:` detail lines, exit 0 on a verdict / 2 only when no path was given. Read the token, never `$?`. Reads paths and repairs nothing — relinking `~/.claude` is an operator action.
 - `h_mad_resume_decision.py` — smart-resume decision

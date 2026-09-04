@@ -61,8 +61,13 @@ value it is thinking about rather than the value that exists. Your fresh context
    `.pytest_cache/`, `archive/` or untracked generated files is a contaminated measurement; prefer
    `git ls-files` or state the exclusion explicitly.
 
-9. **No placeholders.** Before you finish, `grep -nE 'TBD|TODO|…|<[a-z][^>`]*>'` and resolve every
-   hit that is not a documented grammar token in a CLI usage line.
+9. **No placeholders** — **run the precheck rather than a hand-rolled grep.**
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py <your document> --phase <phase>
+   --root <PROJECT_ROOT>`. Read the `PRECHECK:` token, never `$?`. Resolve every hard finding;
+   read the advisories and, for each one you are keeping deliberately, either say why in your
+   report or pass it back as `--allow <substring>`. Four copies of one regex in four agent files
+   is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
+   not.
 
 10. **Do not weaken a requirement to make a finding fit.** If a finding contradicts the design or
     the plan, report the contradiction; do not silently pick a side. The spec is the reference the

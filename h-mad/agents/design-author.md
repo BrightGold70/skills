@@ -49,8 +49,13 @@ point.
    `.pytest_cache/`, `archive/` or other untracked generated files is a contaminated measurement;
    prefer `git ls-files` or state the exclusion.
 
-7. **No placeholders.** Before you finish, `grep -nE 'TBD|TODO|…|<[a-z][^>`]*>'` and resolve every
-   hit that is not a documented grammar token.
+7. **No placeholders, and run the precheck rather than a hand-rolled grep.**
+   `python3 ~/.claude/skills/h-mad/scripts/h_mad_precheck_doc.py <your document> --phase <phase>
+   --root <PROJECT_ROOT>`. Read the `PRECHECK:` token, never `$?`. Resolve every hard finding;
+   read the advisories and, for each one you are keeping deliberately, either say why in your
+   report or pass it back as `--allow <substring>`. Four copies of one regex in four agent files
+   is drift waiting to happen, and the shared checker also knows the exemptions a bare grep does
+   not — a design grammar (`leftover: "<path>"`) is a declaration, not a hole.
 
 8. **Bump the Version History** with `h_mad_version_history.py` — never a hand-rolled substitution,
    which writes nothing and reports success when its anchor has drifted. Read the
