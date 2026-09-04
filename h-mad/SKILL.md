@@ -36,14 +36,20 @@ Before any feature-level operation, check:
    ```
 
    A **project-scoped** `.claude/agents/<name>.md` shadows the user-scope link, so a copy left
-   there is a fork that drifts silently — remove it rather than editing it. Verify with
-   `head -2 ~/.claude/agents/<name>.md` naming the agent, not by trusting the link's presence.
+   there is a fork that drifts silently. Report it rather than deleting it — it may be a deliberate
+   local override — per §"Bootstrap action" step 4, which owns this instruction. Verify with
+   `head -2 ~/.claude/agents/<name>.md` naming the agent, not by trusting the link's presence:
+   a dangling link and a correct one are both "present".
    Getting this wrong is not a halt: `Agent(subagent_type: "plan-author")` fails loudly with an
    unknown agent type, so it announces itself.
 4. Does `.h-mad/invariants.md` exist in the current working directory (project root)?
 5. Does `docs/.bkit-memory.json` exist?
 
-If 3, 4 or 5 is missing → run bootstrap automatically, then continue with the requested operation.
+If 3, 4 or 5 is missing → run bootstrap automatically, then continue with the requested operation
+— **except under `/h-mad status`, which is documented read-only and must stay so.** Item 3 writes
+under `~/.claude/agents/`, i.e. outside the project entirely, so firing it from a read-only verb
+widens that verb's blast radius into the user's home config. Under `status`, report item 3 as unmet
+and register nothing.
 Item 3 is in that trigger deliberately: the agents are the one thing on this list that a fresh
 clone silently lacks, and a check with no action behind it detects the condition it was written to
 repair and then leaves it in place.
@@ -166,13 +172,28 @@ Run from current project root (`pwd` at invocation):
 4. **Register the teammate agents** (idempotent; `ln -sfn` re-points an existing link rather than
    failing, so this is safe to re-run):
    ```bash
-   SK="$(readlink -f ~/.claude/skills/h-mad)"   # the checkout, not the symlink
-   [ -d "$SK/agents" ] || { echo "[h-mad] cannot resolve the checkout — skipping agent registration"; }
-   mkdir -p ~/.claude/agents
-   for n in spec-author plan-author design-author implplan-author doc-auditor; do
-     ln -sfn "$SK/agents/$n.md" ~/.claude/agents/"$n".md
-   done
+   SK="$(cd -P ~/.claude/skills/h-mad 2>/dev/null && pwd)"   # the skill dir; agents/ lives under it
+   if [ -z "$SK" ] || [ ! -d "$SK/agents" ]; then
+     echo "[h-mad] cannot resolve the skill checkout — agents NOT registered"
+   else
+     mkdir -p ~/.claude/agents
+     for n in spec-author plan-author design-author implplan-author doc-auditor; do
+       ln -sfn "$SK/agents/$n.md" ~/.claude/agents/"$n".md
+     done
+     for n in spec-author plan-author design-author implplan-author doc-auditor; do
+       [ -r ~/.claude/agents/"$n".md ] || echo "DANGLING: $n — registration FAILED"
+     done
+   fi
    ```
+
+   **The guard and the read-back loop are the point, not decoration.** `ln -sfn` exits 0 while
+   writing a link to a path that does not exist, so an unresolvable `$SK` produces five broken
+   agents silently — strictly worse than not registering at all, because item 3's verification then
+   reports a *missing* file rather than a wrong one. A first cut of this step derived `$SK` with
+   `dirname "$(readlink …)"`; measured on a constructed install whose skills symlink is **relative**,
+   that collapses to `SK=/h-mad` and writes five dangling links, and `h_mad_install_check.py` calls
+   the install `PASS` throughout because `Path.resolve()` resolves a relative link against the link's
+   own directory. `cd -P` canonicalises in both that case and the stale-copy case.
    Then check nothing shadows them: a project-scoped `.claude/agents/<name>.md` outranks the
    user-scope link, so report any hit from `ls .claude/agents/ 2>/dev/null` rather than deleting
    it — a project copy may be somebody's deliberate local override.
@@ -403,7 +424,7 @@ agent; `pin`/`pin-agents` when adopting an existing pane.
 - **5a** — arm hook, then **dispatch the `implplan-author` teammate** (§"Teammate authors"); the inline impl-plan protocol (`references/inline-protocols.md §Phase 5`) is its contract. Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
 - **5b** — auto-audit impl-plan (same audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"; §"Never gate on one audit pass" chooses the two surfaces). Write each surface's audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>[.<surface>].md`. Run awk gate on the union. If must-fix > 0 OR should-fix > 0, **re-dispatch `implplan-author` with both the must-fix AND should-fix bullets** (§"Teammate authors" — you relay findings, you do not regenerate the document yourself); cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared.
 
-  **Then run the wire-pin gate — 5b is the last gate that can require it.** `python3 ~/.claude/skills/h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md --feature <feature>`. Read the `WIREPIN:` token, never `$?` (`UNSHAPED` exits 2 because it is a cannot-judge, not a verdict). On `WIREPIN: PASS`, 5b automatically registers each passing `wiring` task in `.h-mad/wires.jsonl`; without `--feature`, registration is skipped. `UNREADABLE` → halt `step5b:impl_plan_unreadable`: the gate could not read the file at all, so nothing was parsed — this token carries **no `tasks=`/`wiring=` counts** precisely so it cannot be mistaken for a verdict or routed by a count that was never measured; the stderr `ERROR:` names the path, which is almost always wrong rather than the plan. `UNSHAPED` → **read the `tasks=` count before choosing a remedy**: `tasks=N` with N>0 → halt `step5b:impl_plan_unshaped`, the plan declares no `Task shape` at all, so a wiring task in it is indistinguishable from new behaviour — regenerate against the current template; `tasks=0` → halt `step5b:impl_plan_no_tasks`, the parser saw no task header, so nothing is missing a field — you are almost certainly pointed at a legacy `.plan.md` or the design doc rather than the `.impl-plan.md`. `FAIL` has two causes and two different remedies, so **read the detail lines, not just the verdict**: an `unpinned:` line → halt `step5b:wire_pin_missing:<task>` and return to 5a to name the `WIRE`/`WIRE-PIN`; a `mislabeled:` line → halt `step5b:wire_pin_shape_mislabel:<task>` — the fields are already filled in, so nothing is missing to add and the missing-pin remedy would read as already satisfied. After 5b nothing downstream can tell a wired build from an unwired one, which is why the obligation is mechanical here and advisory nowhere.
+  **Then run the wire-pin gate — 5b is the last gate that can require it.** `python3 ~/.claude/skills/h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md --feature <feature>`. Read the `WIREPIN:` token, never `$?` (`UNSHAPED` exits 2 because it is a cannot-judge, not a verdict). On `WIREPIN: PASS`, 5b automatically registers each passing `wiring` task in `.h-mad/wires.jsonl`; without `--feature`, registration is skipped. `UNREADABLE` → halt `step5b:impl_plan_unreadable`: the gate could not read the file at all, so nothing was parsed — this token carries **no `tasks=`/`wiring=` counts** precisely so it cannot be mistaken for a verdict or routed by a count that was never measured; the stderr `ERROR:` names the path, which is almost always wrong rather than the plan. `UNSHAPED` → **read the `tasks=` count before choosing a remedy**: `tasks=N` with N>0 → halt `step5b:impl_plan_unshaped`, the plan declares no `Task shape` at all, so a wiring task in it is indistinguishable from new behaviour — return to 5a and **re-dispatch `implplan-author`** against the current template (§"Teammate authors"; this is a revision like any other, and regenerating it in your own context is the loop that cost 34 cycles); `tasks=0` → halt `step5b:impl_plan_no_tasks`, the parser saw no task header, so nothing is missing a field — you are almost certainly pointed at a legacy `.plan.md` or the design doc rather than the `.impl-plan.md`. `FAIL` has two causes and two different remedies, so **read the detail lines, not just the verdict**: an `unpinned:` line → halt `step5b:wire_pin_missing:<task>` and return to 5a to name the `WIRE`/`WIRE-PIN`; a `mislabeled:` line → halt `step5b:wire_pin_shape_mislabel:<task>` — the fields are already filled in, so nothing is missing to add and the missing-pin remedy would read as already satisfied. After 5b nothing downstream can tell a wired build from an unwired one, which is why the obligation is mechanical here and advisory nowhere.
 
   A shape is a self-declaration, and closing only the *absent* case leaves the plan one edited word from a PASS: demote a pinned `wiring` task to `refactor` and `wiring` drops to 0 with `unpinned=0`. The gate therefore trusts the filled-in `WIRE`/`WIRE-PIN` over the shape word — a task carrying either under a non-`wiring` shape contradicts the template, which declares both fields `wiring` shape only. Unfilled template lines and placeholders still count as declaring nothing, or the guard would refuse every plan the template generates.
   This is the 5b auto-register step: every passing `wiring` task is written to `.h-mad/wires.jsonl`.
@@ -1138,8 +1159,11 @@ Agent(subagent_type: "plan-author", prompt: "<feature>; documents: <spec> <desig
 
 The same routing applies to a **revision**, not only a first draft. A cycle's must-fixes go to the
 author that owns the document they land in; you relay findings and decisions, you do not apply
-them yourself. The sites that revise are Phase 3's audit loop, Phase 4's (which inherits it) and
-5b's — all three re-dispatch, none of them regenerate in your context.
+them yourself. The sites that revise are Phase 3's audit loop, Phase 4's (which inherits it), 5b's, and the
+wire-pin gate's `UNSHAPED` remedy — all four re-dispatch, none of them regenerate in your context.
+Phase 6b edits production files and the analysis document, never a phase document, and the
+rejections ledger writes a sidecar and forbids editing the gated document, so those are not
+revision sites.
 
 **The spec has no audit phase of its own**, and that is not an oversight to correct here:
 `h_mad_assemble_audit.py` binds `--phase` to `plan|design|impl-plan` as argparse `choices`, so a
@@ -2147,7 +2171,7 @@ Read the `COLLECT:` token exactly as the codex leg does — anything but `COLLEC
   construction — the exact property the union of two surfaces exists to defeat. It is a *stand-in*
   for an independent surface, not an independent surface.
 - **It has never been scored against a labelled corpus.** The surfaces it sits beside have numbers:
-  over `c45–75` — 31 reports — agy produced 6 fabricated must-fixes out of 11 on one feature and
+  over `c45–75` agy produced 6 fabricated must-fixes out of 11 on one feature and
   codex 0 of 25 on the same corpus. The teammate leg was escalated to gating on **yield** — 6
   confirmed must-fixes in one round that **82 codex+agy design cycles** had missed, including a CLI
   parser that was structurally unable to emit the verdict its own named test asserts — not on

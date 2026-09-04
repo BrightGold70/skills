@@ -17,7 +17,7 @@ rules below. Measured on this repository:
 - The other surface (agy, `--print` mode) returned `ok ≤ 2` — a report-file floor, meaning it read
   essentially nothing — in **21 of 22** passes on one feature. It read the tree in **1** cycle out
   of 22. Its clean verdicts were consistency checks over the inlined text, never reality checks.
-- On a second feature it produced **6 fabricated must-fixes out of 11** over `c45–75` (31 reports): citations
+- On a second feature it produced **6 fabricated must-fixes out of 11** over `c45–75`: citations
   to `path:line` locations that do not exist, quoted "spec text" that appears nowhere, and one
   inverted claim (it said a file was untracked; the document says tracked, twice).
 - Every fabrication costs a full cycle to refute, and refuting it used to cost a second cycle.
