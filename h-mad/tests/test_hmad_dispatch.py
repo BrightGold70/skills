@@ -114,7 +114,7 @@ _ENV_CHECK_WAIT = (
     '],"count":2}}'
 )
 
-_MAIN_LINE = 'main "$@"'
+_MAIN_LINE = 'main "$@"; exit $?'
 
 
 def _isolated_env(*, substrate=None, env=None, capture=None, bindir=None):
@@ -2579,7 +2579,7 @@ def _wait_gated(tmp_path, frame, *gate_args, timeout="2"):
 def _frame_satisfies_rc(tmp_path, *, until_re="", not_while_re=""):
     """Call the private frame gate without triggering the wrapper's main."""
     text = WRAPPER.read_text(encoding="utf-8")
-    assert text.rstrip().endswith('main "$@"'), (
+    assert text.rstrip().endswith('main "$@"; exit $?'), (
         "the helper strip depends on the wrapper ending in its dispatch call"
     )
     lib = tmp_path / "hmad-dispatch-lib.sh"
@@ -2612,7 +2612,7 @@ def test_frame_satisfies_large_until_match_is_satisfied(tmp_path):
 def _recovered_has_verdict_rc(tmp_path, *, lead, filler_lines):
     """Call the private recovered-verdict predicate without triggering main."""
     text = WRAPPER.read_text(encoding="utf-8")
-    assert text.rstrip().endswith('main "$@"'), (
+    assert text.rstrip().endswith('main "$@"; exit $?'), (
         "the helper strip depends on the wrapper ending in its dispatch call"
     )
     lib = tmp_path / "hmad-dispatch-lib.sh"
@@ -5759,7 +5759,7 @@ class TestAtomicOutWrite:
         `test_verb_no_self_invocation` pins the `main "$@"` ending both rely on.
         """
         text = WRAPPER.read_text(encoding="utf-8")
-        assert text.rstrip().endswith('main "$@"'), (
+        assert text.rstrip().endswith('main "$@"; exit $?'), (
             "the strip below depends on the wrapper ending in its dispatch call"
         )
         lib = tmp_path / "wrapper-lib.sh"

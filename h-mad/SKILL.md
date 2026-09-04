@@ -951,6 +951,27 @@ as today. Surfacing is never a gate precondition; the cmux review flow is unchan
 HemaSuite may use `file-diff <manuscript.docx>` to surface a generated manuscript
 DOCX; this is documented usage only, with no HemaSuite code in this feature.
 
+## `exec` bounds itself even when you omit `--timeout`
+
+An omitted `--timeout` used to mean **no ceiling at all** — the deadline branch is skipped and the
+wrapper waits on the pid forever. It now defaults to 3600, chosen to sit clear of the longest
+timeout this skill documents (1800) so a legitimate dispatch can never reach it; an explicit
+`--timeout` of any value still wins.
+
+The symptom it bounds is real and intermittent: `exec agy` twice kept running for its full timeout
+**after** agy had finished its turn and written the report — the `--log` ends with the `result`
+event and the `.done` marker exists within about four minutes, but the wrapper waits on the PID
+rather than on the completion signal already sitting on disk. Two of 29 cycles; codex on the same
+runner exits normally every time, and it did not reproduce across roughly 70 later agy execs.
+`audit-cycle` always passes a `--timeout`, so its cost was capped; a hand-run `exec agy` — the
+reflex for Phases 1–4 — had no cap.
+
+**Still owed, deliberately not built:** reaping on the `<report>.done` marker would end the wait
+when the work actually finishes rather than at the ceiling. With a ceiling in place the remaining
+cost is bounded, so the smaller fix shipped and the better one is recorded.
+
+#
+
 ## Reading a dispatch verdict
 
 Every dispatch that gates a decision ends in a machine-parsed line, and each is
@@ -1701,6 +1722,26 @@ See `references/failure-recovery.md` for per-phase routes + recovery hints.
 - Never call `advisor()` above ~45% window used — it forwards the whole transcript, so the turn costs ~2x the current context and above 50% it cannot fit. Measure with `h_mad_context_budget.py` (read the `CTXBUDGET:` token, never `$?`); above the ceiling use the substitute ladder in §"Orchestrator context hygiene", not a smaller advisor call — there is no such thing. Surfaced by `hooks/h-mad-advisor-warn.sh` in any session where it is wired — an ADVISORY, not enforcement: `advisor` is a server-side tool no tool-scoped hook event fires for, so nothing can refuse the call (J44). Documentation everywhere else.
 - Never invoke Codex or agy directly — always via `hmad-dispatch` (see `references/agent-substrate.md`), which also picks inline vs file-indirection delivery by prompt size, per CLAUDE.md §F-12.
 - Never time-bound a command with `timeout` or `gtimeout` — **neither is a macOS system component**, so the form is unportable in both directions. Where coreutils is absent the call dies at 127 and the reflex is to re-run the same command *unbounded*, which does not fail at the deadline, it hangs the phase. Where someone has run `brew install coreutils` it silently *works*, which is worse: the 127 that used to expose the improvisation never fires. **What this box has is not an input to the rule** — h-mad already owns a time-bounder, reachable wherever `hmad-dispatch` is, so the form is forbidden unconditionally rather than because of any downstream failure; for anything committed or dispatched it is a new external CLI dependency besides. A local `command -v timeout` that succeeds is not licence — it proves only that this box has coreutils. Use `hmad-dispatch run --timeout <s> -- <cmd...>` (exit 124 at the deadline, GNU convention; the same process-group watchdog `exec` uses). If no time-bounder is reachable, **halt** — an unbounded retry is a silent downgrade, and in a log a hang and slow work look identical.
+
+### A dispatch that rewrites the wrapper tears its own read
+
+`hmad-dispatch.sh` ends `main "$@"; exit $?`, and the `exit` on that line is load-bearing.
+Bash reads a script incrementally by byte offset, so a Phase-5 task that rewrites the wrapper
+while dispatching through it leaves bash seeking to a stale offset in a longer file. Measured
+twice, both **after** the child had already succeeded:
+
+```
+codex exec rc=0
+line 3597: ame: command not found          <- the tail of a split identifier
+line 3619: unexpected EOF while looking for matching `'
+```
+
+turning a good dispatch into a wrapper rc of 127 and 2. Those line numbers point at a blank line
+and a comment in the version measured, which is the signature of a stale offset rather than a
+syntax error — and is why this survived as "two wrapper bugs" in a backlog for weeks. **It is one
+defect with two symptoms, and `RUN_RC` is not a work signal when the task edits the wrapper it
+dispatches through.** Reproduced and guarded in `tests/test_hmad_dispatch_torn_read.py`, control
+included.
 
 ## Editing this skill while a run is in flight
 

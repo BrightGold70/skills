@@ -2653,6 +2653,32 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     --effort) effort="$2"; shift 2 ;;      # agy: native --effort; codex: -c model_reasoning_effort
     *) _unknown_opt exec "$1"; return $? ;;
   esac; done
+
+  # The WAIT gets a ceiling even when the caller gives no `--timeout` (#22).
+  #
+  # `$timeout` itself stays empty on purpose: it flows into the AGENT's argv
+  # (`--print-timeout "${timeout}s"` for agy), and defaulting it there would change
+  # what every dispatch asks the agent for. This bounds only the wrapper's own
+  # wait, which is where the defect is.
+  #
+  # An empty value made `_exec_run` skip the deadline branch entirely and wait on
+  # the pid forever. Measured with the function extracted: `_exec_run 2 bash -c
+  # 'sleep 6'` returns 124 at 2s, while `_exec_run "" bash -c 'sleep 6'` returns 0
+  # at 6s -- no ceiling at all.
+  #
+  # The symptom: `exec agy` twice kept running for its whole timeout AFTER agy had
+  # finished and written the report -- the `--log` ends with the `result` event and
+  # `<report>.done` exists within ~4 min, but the wrapper waits on the PID, not on
+  # the completion signal already on disk. 2 of 29 cycles, and not reproduced in
+  # ~70 later execs. `audit-cycle` always passes a `--timeout` so its cost was
+  # capped; a hand-run `exec agy` -- the reflex for Phases 1-4 -- had no cap.
+  #
+  # 3600 sits clear of the longest timeout this skill documents (1800), so a
+  # legitimate dispatch cannot reach it. Marker-aware reaping would end the wait
+  # when the work finishes rather than at the ceiling; that is the better fix and
+  # is recorded as owed, since a ceiling already bounds the cost.
+  local wait_secs="${timeout:-3600}"
+
   command -v "$agent" >/dev/null 2>&1 || {
     echo "hmad-dispatch: exec requires the $agent CLI on PATH" >&2; return 2; }
   [ -n "$cd_dir" ] || cd_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -2704,7 +2730,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # run. rc comes from the codex process.
     _HMAD_EXEC_BEAT_LOG="$log"
     _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
-      "$timeout" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
+      "$wait_secs" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
     _HMAD_EXEC_BEAT_LOG=""
     if [ -s "$last" ]; then
       verdict="$(cat "$last")"
@@ -2755,7 +2781,7 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # Appending (>>) preserves any caller-supplied content already in the file.
     _HMAD_EXEC_BEAT_LOG="$log"
     ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
-      "$timeout" agy "${args[@]}" ) >> "$log" 2>/dev/null || rc=$?
+      "$wait_secs" agy "${args[@]}" ) >> "$log" 2>/dev/null || rc=$?
     _HMAD_EXEC_BEAT_LOG=""
     resp="$(_agy_ndjson_response "$log" "$pre_lines")"
     verdict="$resp"
@@ -3740,4 +3766,22 @@ main() {
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }
-main "$@"
+# `exit $?` on the SAME input line as the call is load-bearing, not tidiness (#3).
+#
+# Bash reads a script incrementally by byte offset. Phase-5 tasks routinely rewrite
+# THIS file while a dispatch through it is still running, so after `main` returns
+# bash seeks to its remembered offset in a file that has since grown and parses
+# whatever now lives there. Measured on two real dispatches, both AFTER the child
+# had already succeeded: `line 3597: ame: command not found` (the tail of a split
+# identifier) and `line 3619: unexpected EOF while looking for matching '` — turning
+# `codex exec rc=0` into a wrapper rc of 127 and 2. The work was fine both times;
+# only the wrapper's own exit status lied.
+#
+# Bash parses a whole input line before executing it, so reaching `exit` on this
+# line terminates the shell without another read. Reproduced both ways against a
+# script rewritten mid-run: bare `main "$@"` gives the unexpected-EOF pair, and
+# this form is clean.
+#
+# Nothing sources this file (checked across both repos), so `exit` cannot kill a
+# caller's shell.
+main "$@"; exit $?

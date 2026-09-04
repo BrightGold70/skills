@@ -548,7 +548,7 @@ def run_with_cmd_exec_stub(tmp_path, args, *, env=None):
     bindir = traced_bindir(tmp_path, trace)
     lib = tmp_path / "hmad-dispatch-lib.sh"
     text = WRAPPER.read_text(encoding="utf-8")
-    assert text.rstrip().endswith('main "$@"')
+    assert text.rstrip().endswith('main "$@"; exit $?')
     lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
     harness = tmp_path / "audit-cycle-function-harness.sh"
     harness.write_text(
@@ -684,7 +684,7 @@ def run_main_with_fallthrough_marker(tmp_path, args, *, env=None):
     marker = tmp_path / "fallthrough.marker"
     lib = tmp_path / "hmad-dispatch-lib.sh"
     text = WRAPPER.read_text(encoding="utf-8")
-    assert text.rstrip().endswith('main "$@"')
+    assert text.rstrip().endswith('main "$@"; exit $?')
     lib.write_text(text.rsplit('main "$@"', 1)[0], encoding="utf-8")
     harness = tmp_path / "audit-cycle-main-harness.sh"
     harness.write_text(
