@@ -1295,6 +1295,7 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   cycles where agy returned clean. — recurrence: 3 — candidate: yes (a `--surfaces agy,codex` flag
   on `audit-cycle` that dispatches both and reports the union; the pieces all exist, the verb just
   never composes them)
+  — **LANDED 2026-09-04** — `hmad-dispatch audit-cycle --surfaces agy,codex` names the agent per pass (`3b6be6d`); the default stays agy-for-every-pass, but a same-surface run now warns on stderr that it is one surface repeated, not a union.
 - **an AC count in a paired doc goes stale every time an AC is inserted**: the plan's Success
   Criteria asserted "All N ACs pass" and drifted **three times** in one feature (38→39→40→43), each
   time caught by an auditor rather than by a check, and twice the insertion also broke contiguous
@@ -1341,6 +1342,7 @@ individually re-verified this pass; that is stated rather than left implied.
   fix that ended it was writing the command inline. Same shape as the row above but distinct: that
   one is about *when* a number was true, this one is about *what was counted* — recurrence: 2 —
   candidate: yes
+  — **LANDED 2026-09-04** — `invariants.base.md` §"Behavioural premises carry their command" (`55672c5`) requires the command inline beside the output, and cites this row's own 3-vs-23 measurement as the reason.
 - **freeze the tree for the duration of a teammate audit round**: a teammate auditor reads the
   WORKING TREE, unlike codex which reads a frozen assembled prompt. Committing mid-round made all
   three auditors return line numbers correct for what they read and mislabelled by the base commit
@@ -1358,3 +1360,8 @@ individually re-verified this pass; that is stated rather than left implied.
   version control. Already biting: row `:1298` above stays open precisely because its rule lives
   only there. Options are tracking them under `h-mad/agents/` and symlinking, or accepting
   machine-local — recurrence: 1 — candidate: yes
+  — **LANDED 2026-09-04** — the five agents are tracked at `h-mad/agents/` and registered by user-scope symlink (`6db8e50`), with the registration step added to §"Bootstrap action" and hardened after a review found it wrote five dangling links on a relative skills symlink (`2eece9f`). A project-scoped copy silently outranks the link, so bootstrap reports one rather than deleting it.
+- **verify a backlog reference resolves as a commit before trusting it**: two P3 items cited `cfc79129` and `45db0187` as commits; both are **session UUIDs** and resolve in neither repo, which is why both sat unreproduced for weeks and reached the backlog as vague one-liners — recurrence: 2 (both in one session) — candidate: yes — one command settles it (`git cat-file -t <sha>`) and it belongs at the front of any inherited defect that names a sha. Likely a rule for the handoff/h-mad docs rather than a new skill, since the fix is a habit.
+- **calibrate a new detector against artifacts that already passed, before wiring it**: every `h_mad_precheck_doc.py` detector written as a hard finding fired 104 / 49 / 48 times on the design and plan that had just passed 83 and 74 audit cycles, and every hit was correct usage — recurrence: 5 detectors in one session — candidate: yes — the reusable shape is: pick a real corpus with labelled defects, assert a noise floor on known-good artifacts, and demote anything that fires on them. Currently recorded only in one script's docstring plus a memory.
+- **re-measure the audit-prompt size fixture on ANY template or invariants edit**: re-anchored three times in one session (2440 → 2389 → 2329 → 2320) and on two of those three the test PASSED without the re-anchor, sitting 883 B and then 1,381 B under the ceiling — recurrence: 3 — candidate: yes — the fixture's own comment predicted this ("a drift this close reads as a pass right up until it doesn't") and it came true on the very next edit. A check that prints the current margin would replace a judgement call with a number.
+- **sweep EVERY mutation-spec directory, not the one you thought of**: `--check-anchors` over `tests/specs/` returned `ANCHORS_OK` while two anchors in `tests/mutation-specs/` were drifted and failing the suite — recurrence: 1 — candidate: maybe — `find h-mad -name '*.json' -path '*spec*'` is the whole fix, but nothing makes the two-directory layout discoverable to someone who checks one and stops.
