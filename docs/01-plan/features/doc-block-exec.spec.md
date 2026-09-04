@@ -423,10 +423,26 @@ not opted in.
 
 - **Description**: `h-mad/tests/test_h_mad_collect_report_docs.py` hand-writes extraction at
   `:270` and `:412` with `re.findall(r"```bash\n(.*?)```", …)`, and runs the block inline in
-  `run_recipe` at `:309`. **The two extractors select different blocks** — measured: the
-  Second-surface section holds four bash blocks, `:270` takes the one containing
+  `run_recipe` at `:309`. **The two extractors select different blocks** — measured at `a8e0372`
+  with the extractor's own regex over the section the test itself bounds:
+
+  ```
+  # from the repository root. Deliberately ONE line and outer-single-quoted: a shell
+  # continuation inside single quotes is literal, and inside DOUBLE quotes the fence
+  # backticks would be command substitution. Copy it whole.
+  $ python3.11 -c 'import sys,re; sys.path.insert(0,"h-mad/tests"); import test_h_mad_collect_report_docs as t; b=re.findall(r"```bash\n(.*?)```", t._second_surface(), re.S); print(len(b), [i for i,x in enumerate(b,1) if "h_mad_audit_gate.py" in x], [i for i,x in enumerate(b,1) if "exec codex" in x])'
+  7 [4] [2]
+  ```
+
+  The Second-surface section holds **seven** bash blocks; `:270` takes the one containing
   `h_mad_audit_gate.py` (block 4, the gate recipe), `:412` takes the one containing `exec codex`
-  (block 2). Only `:270`'s block is tagged, so only `:270` breaks when the tag lands, and only
+  (block 2). The **ordinals are the load-bearing part and are unchanged.** The total was written as
+  four in an earlier draft; running the same extraction over `git show <sha>:h-mad/SKILL.md` at the
+  three points gives `6db8e50^` → 4 blocks / 1 `##` heading in the section, `6db8e50` → 7 blocks /
+  2 headings, `a8e0372` → 7 blocks / 2 headings. So the drift is one commit's, `6db8e50`, which
+  inserted a `##` heading between the two string anchors `_second_surface()` bounds on and widened
+  the section; the gate block reads 4 and the exec-codex block 2 at **all three** shas, because the
+  arrivals land after block 4. Only `:270`'s block is tagged, so only `:270` breaks when the tag lands, and only
   `:270` migrates. `:412` never executes anything — it asserts the exec recipe carries
   `--out`/`--log`/`--timeout` — and running that block would dispatch a real agent, so it stays a
   text inspection deliberately. The executing migration and the first tag land together.
@@ -463,11 +479,35 @@ not opted in.
     `2748` (collected and passing at `e8eaf6f`, cited in the plan with its commands and its re-measure-at-5c rule; it was `2747` at `6b4df35` and `b59e05e` moved it, which is why the commit travels with the number); the
     feature's additions are the collected count of the new module
     `h-mad/tests/test_h_mad_doc_block_exec.py` (derived by running the collector on that file
-    alone) plus a fixed tuple of the named new node IDs added to existing files — the **seven**
-    enumerated in the plan: six wire and exemption tests in `test_h_mad_collect_report_docs.py`
-    and the delegation spy test in `test_docsections.py`; every other new test, the collect-alone
-    pins included, lives in the new module — each
-    of which the test asserts exists. `test_suite_floor_holds` asserts `full_collected >= 2748 + new_module + len(tuple)`
+    alone) plus a fixed tuple of the named new node IDs added to **pre-existing** files, each of
+    which the test asserts exists. **This spec deliberately carries no total for that tuple**; the
+    floor uses `len(tuple)`, so a number restated here would be a second authority that drifts
+    against the plan's enumeration and buys nothing. What the spec fixes instead is the
+    **membership rule**, because the tuple has two sources and only one of them is a test anyone
+    writes by hand:
+      1. Nodes added directly to a consumer file — the wire and exemption tests in
+         `test_h_mad_collect_report_docs.py` and the delegation spy test in `test_docsections.py`.
+      2. **One node per glob-parametrised test, per new file this feature adds under
+         `h-mad/scripts/`.** `test_h_mad_portable_timeout.py` globs `(SKILL / "scripts").glob("*.py")`
+         into `_SCANNED` and parametrises over it twice — verified at `a8e0372` with
+         `grep -c 'parametrize("path", _SCANNED' h-mad/tests/test_h_mad_portable_timeout.py` -> `2`
+         — so Task 1's `h-mad/scripts/h_mad_doc_block_exec.py` adds exactly two nodes:
+         `test_no_document_or_script_emits_a_bare_timeout_command[h_mad_doc_block_exec.py]` and
+         `test_no_document_or_script_rests_on_an_unconditional_absence_claim[h_mad_doc_block_exec.py]`.
+         These must **pass**, not merely be counted: the new script carries no bare `timeout <n>`
+         form and no unconditional absence claim. Omitting them makes the floor tolerate two
+         silent deletions of pre-existing tests — the exact weakening this AC exists to prevent.
+      Residual, stated as categories rather than "and similar": a second new script from this
+      feature adds two more nodes by the same rule; a third glob-parametrised test over the same
+      directory would add one per new script; and a glob that loops **inside** one test body rather
+      than parametrising adds coverage but no node, so it is out of the tuple — verified at
+      `a8e0372` that the two other `*.py` globs in the suite are of that second kind —
+      `git grep -n 'glob("\*\.py")' -- 'h-mad/tests/*.py'` returns three hits, `_SCANNED` itself
+      plus `test_h_mad_collect_report.py:287`, which loops but filters to two named writer modules
+      so a new script is skipped, and `test_hmad_dispatch_audit_cycle.py:250`, which globs a
+      `tmp_path` fixture directory rather than the real one.
+    Every other new test, the collect-alone pins included, lives in the new module.
+    `test_suite_floor_holds` asserts `full_collected >= 2748 + new_module + len(tuple)`
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
@@ -539,23 +579,60 @@ quoted
   Claude Code viewer has no headless renderer to probe; it is a CommonMark viewer and the one-line
   exposure is reversible, so it is confirmed by eye at Phase 5 after the tag lands.
 - The two extractors named in FR-6 are the only in-repo consumers that anchor on a bare
-  ` ```bash\n ` opener in a file this feature tags. **Measured this session, tree-wide:**
+  ` ```bash\n ` opener in a file this feature tags. **Measured over the tracked tree at
+  `a8e0372`** (`-E`, because git's default regex is not GNU BRE and `\|` is not portable here):
 
   ```
-  $ grep -rn 'findall.*```bash\|split.*```bash\|re\.compile.*```bash' --include='*.py' .
+  $ git grep -n -E 'findall.*```bash|split.*```bash|re\.compile.*```bash' -- '*.py'
   h-mad/tests/test_h_mad_collect_report_docs.py:270:    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
   h-mad/tests/test_h_mad_collect_report_docs.py:412:        (b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b),
   ```
 
-  A broader grep for the bare literal returns five hits; the other three
-  (`test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551`) are inline fixture
-  strings, not extractors. Control: 21 `.py` files contain a fence literal, so the narrow pattern
-  is not under-matching. One further consumer reads `SKILL.md` and was checked directly —
-  `h-mad/tests/docsections.py:37` bounds fences with `stripped.startswith("```")`, a **prefix**
-  match, so an info-string tag does not disturb it.
+  A broader sweep for the bare literal, over the **tracked** tree so no gitignored or
+  not-yet-committed artifact contaminates it, returns six hits at `a8e0372`; the four that are
+  not extractors are inline fixture strings and one prose comment:
 
-  Re-verify at implementation time rather than trusting this block; the point of citing it is
-  that a reviewer can re-run it, not that it never goes stale.
+  ```
+  $ git grep -n '```bash' -- '*.py' | wc -l          # -> 6   (at a8e0372)
+  ```
+
+  — `test_docsections.py:27`, `test_h_mad_assemble_tdd.py:489` and `:551` are fixture strings, and
+  `h-mad/scripts/h_mad_precheck_doc.py:100` is a comment quoting the literal inside a worked
+  example. Control that the narrow pattern is not under-matching:
+
+  ```
+  $ git grep -l '```' -- '*.py' | wc -l              # -> 24  (at a8e0372)
+  ```
+
+  Twenty-four tracked `.py` files contain a fence literal and exactly two of them extract on a
+  bare ` ```bash ` opener, which is the census's conclusion and the part that matters; the total
+  itself has moved twice (21 → 23 → 24) without that conclusion changing, because the arrivals
+  were fixtures and comments, not extractors. One further consumer reads `SKILL.md` and was
+  checked directly — `h-mad/tests/docsections.py:37` bounds fences with
+  `stripped.startswith("```")`, a **prefix** match, so an info-string tag does not disturb it.
+
+  **Rule for every tree-derived count in this document, stated once here rather than beside each
+  number.** A count taken from the tree is written with (a) the exact runnable command that
+  generates it and (b) the sha it was observed at, in that order, on the same surface as the
+  number — including inside fenced blocks, table cells and comments embedded in commands, which is
+  where this document's v1.54 miss lived (the `21` here, by contrast, sat in plain prose, so the
+  surface is not the discriminator; the missing command is). A count without its command is the defect, not
+  merely stale: the reason `21` survived two drifts unnoticed is that no reader could re-run it.
+  Prefer `git grep`/`git ls-files` over a filesystem walk so the corpus is the tracked tree; if a
+  filesystem walk is genuinely wanted, say so in the same clause. Where a count is only a control
+  on a conclusion, state the conclusion separately so a drifted total cannot be read as a defect
+  in the conclusion. Re-verify at implementation time rather than trusting these blocks; the point
+  of citing them is that a reviewer can re-run them, not that they never go stale.
+
+  Residual — three categories deliberately outside this rule, so their numbers are not swept.
+  (1) Version History entries are a record of what was believed in their era and keep their
+  era's numbers. (2) Counts of things that do not exist yet — the new module's collected count,
+  the seven module seams of FR-5's injection list — are design-derived, not tree-derived, and move
+  only when the design moves. (3) `path:line` locators (`:270`, `:309`, `:412`, `docsections.py:37`)
+  are locators, not counts; all four were re-verified at `a8e0372`. They are still line numbers and
+  will still drift, and rewriting them as structural locators is owed by this document, the design
+  and the plan **together** — done in one document alone it would read downstream as a
+  disagreement about which block is meant.
 - A block's declared shell mode is a property of the recipe, not of the caller, so it belongs on
   the fence rather than in the test.
 
@@ -617,3 +694,4 @@ quoted
 - v1.53: Plan audit v73 / design audit v82 back-propagation (teammate surface, advisory). AC-6.4's floor baseline re-measured to 2748 at e8eaf6f (was 2747 at 6b4df35; b59e05e moved it), with the commit now travelling with the number. AC-5.6 states exit_on_error at argparse's default True — with False a missing option value raises argparse.ArgumentError past the overridden error() and escapes main as a non-DOCBLOCK exit.
 - v1.54: Plan audit v74 back-propagation. AC-6.4's embedded Phase-5f gate command still carried the pre-fix 2747/2485 pair in its comment while the AC body around it said 2748/2486 — so the same AC stated both. My v1.53 sweep updated the prose and missed the number inside the command comment, which is the sixth instance this session of a value swept in one surface and not another; the plan's rule 7 (sweep every surface that states a value, including inside embedded commands and table cells) is the general form.
 - v1.55: Design v1.93 back-propagation. AC-6.1 states its own sweep instead of reaching it by reference to the plan's fence census: *.md under h-mad/ and handoff/, excluding archive/ and any dot-directory. The reference was the defect, not the scope — that census was a filesystem glob contaminated by gitignored .pytest_cache/README.md artifacts, and a reference inherits whatever its referent becomes. Both halves are now pinned here with their reasons: the *.md restriction, because the feature's own test module carries column-0 tagged fences in triple-quoted fixtures that an unrestricted sweep would count; and the dot-directory exclusion rather than git ls-files, deliberately different from the measurement corpus, because this guard must still catch a tagged fence in a document written but not yet committed. Residual stated.
+- v1.56: Round-three back-propagation of four findings raised against the plan (v75), design (v84) and impl-plan (v35), all of which land here. Findings 1+2 are one class, not two edits: every tree-derived count in this document now carries the exact runnable command that generates it AND the sha it was observed at, on the same surface as the number. The extractor census's control was 21 .py files with a fence literal and is 24 at a8e0372 (git grep -l '```' -- '*.py' | wc -l); it had already drifted through 23 unnoticed precisely because no generating command travelled with it, and the corpus is now git grep rather than a filesystem walk so gitignored and uncommitted artifacts cannot contaminate it. The broad literal sweep was five hits with three non-extractors and is six with four at a8e0372, the arrival being a prose comment in h_mad_precheck_doc.py. Neither total touches the census's conclusion, which is that exactly two consumers extract on a bare bash opener, so the conclusion is now stated apart from the control. Residual: Version History entries keep their era's numbers, design-derived counts of things that do not exist yet are out of class, and path:line locators are locators not counts. FR-6's Description carried the same stale block census the design carried: the Second-surface section holds seven bash blocks at a8e0372, not four, because 6db8e50 inserted a ## heading between the two string anchors _second_surface() bounds on. The ordinals are unchanged and are the load-bearing part -- the gate block is still 4 and the exec-codex block still 2, because the arrivals came after block 4. AC-6.4 no longer carries a total for its node tuple. The old 'seven enumerated in the plan' was nine, because Task 1's h-mad/scripts/h_mad_doc_block_exec.py adds one node to each of the two tests that parametrise over _SCANNED, and a floor short by two tolerates two invisible deletions. Rather than restate a number that drifts on any script add, the AC now fixes the membership rule over the axis -- consumer-file nodes, plus one node per glob-parametrised test per new h-mad/scripts file -- requires those nodes to pass and not merely be counted, and states the residual, including that a glob looping inside one test body adds coverage but no node.
