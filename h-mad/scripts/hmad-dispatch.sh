@@ -2862,6 +2862,23 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   _exec_stamp exit "$agent" "$label" "$cd_dir" "$rc" "${verdict:-no-verdict}" || true
   _cmd_notify "$agent exec" "rc=$rc verdict=${verdict:-no-verdict}" || true
 
+  # A 124 says the WATCHDOG killed the child, not that the work is missing (#22).
+  #
+  # This is the whole operational cost of the lingering-agy fault: agy finishes,
+  # writes its report and its `.done` marker, then the process does not exit, and
+  # the wrapper reports `rc=124`. A coordinator reading that number re-dispatches
+  # work that is already complete and already gateable. Say which case it is on the
+  # same line, so the number does not have to be interpreted.
+  #
+  # `verdict` is set above from whatever the run actually produced, so this reads a
+  # value already in hand rather than re-parsing the stream.
+  if [ "$rc" -eq 124 ]; then
+    if [ -n "${verdict:-}" ]; then
+      echo "hmad-dispatch: $agent exec rc=124 (timeout) — but a verdict WAS recovered; the work is likely complete, check the report before re-dispatching" >&2
+    else
+      echo "hmad-dispatch: $agent exec rc=124 (timeout) — no verdict recovered; re-dispatch" >&2
+    fi
+  fi
   echo "hmad-dispatch: $agent exec rc=$rc" >&2
   return "$rc"
 }

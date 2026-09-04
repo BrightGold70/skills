@@ -144,3 +144,26 @@ def test_the_ceiling_is_above_every_timeout_the_skill_documents():
         f"the default ceiling 3600 is not clear of the longest documented timeout "
         f"{max(documented)}"
     )
+
+
+def test_exec_pane_inherits_the_ceiling_rather_than_needing_its_own():
+    """`exec-pane` forwards `--timeout` only when given, so it looked like a second
+    unbounded path. It is not: it builds `<self> exec <agent> …`, so the ceiling in
+    `_cmd_exec` applies transitively. Asserted so a future refactor that has the
+    pane call the agent directly cannot silently reopen the gap."""
+    src = WRAPPER.read_text()
+    assert 'local inner="$(_shq "$self") exec $agent' in src, (
+        "exec-pane no longer routes through the exec verb; it now needs its own "
+        "wait ceiling"
+    )
+
+
+def test_a_timeout_says_whether_a_verdict_survived_it():
+    """rc=124 is what makes a coordinator re-dispatch completed work.
+
+    The lingering-agy fault ends with the report and its `.done` marker already on
+    disk, so the number alone is misleading in the expensive direction.
+    """
+    src = WRAPPER.read_text()
+    assert 'a verdict WAS recovered' in src
+    assert 'no verdict recovered; re-dispatch' in src

@@ -966,9 +966,20 @@ runner exits normally every time, and it did not reproduce across roughly 70 lat
 `audit-cycle` always passes a `--timeout`, so its cost was capped; a hand-run `exec agy` — the
 reflex for Phases 1–4 — had no cap.
 
+**`rc=124` now says which case it is.** That number is the whole operational cost of this fault:
+the report and its `.done` marker are already on disk, so a coordinator reading a bare 124
+re-dispatches work that is complete and gateable. The exit line now distinguishes "a verdict WAS
+recovered — check the report before re-dispatching" from "no verdict recovered; re-dispatch".
+
+**`exec-pane` needs no ceiling of its own.** It forwards `--timeout` only when given, which looks
+like a second unbounded path, but it builds `<self> exec <agent> …` and so inherits this one. A
+test pins that, because a refactor calling the agent directly would silently reopen the gap.
+
 **Still owed, deliberately not built:** reaping on the `<report>.done` marker would end the wait
-when the work actually finishes rather than at the ceiling. With a ceiling in place the remaining
-cost is bounded, so the smaller fix shipped and the better one is recorded.
+when the work actually finishes rather than at the ceiling. It needs the wrapper to learn the
+report path, which it does not currently know — `--out` is the verdict file, and the report path
+lives inside the prompt. With a ceiling and a legible 124 in place the remaining cost is one
+timeout on an intermittent fault, so the smaller fix shipped and the better one is recorded.
 
 #
 
