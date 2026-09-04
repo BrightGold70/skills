@@ -46,9 +46,15 @@ remaining `Cc`/`Zl`/`Zp` character — DEL, the C1 range with U+0085, U+2028/U+2
 else verbatim), so a caller- or document-controlled value can neither start a
 second `DOCBLOCK:` line nor forge a field token inside it — `--heading 'x rc=0'` renders as
 `heading="x rc=0"`, one quoted value, never a bare `rc=` on a refusal line (AC-4.3); the bare
-list is exhaustive and exactly the design's — `rc=`, `blocks=`, `count=`, `keys=`, `shell=`, `stage=`,
+list is `rc=`, `blocks=`, `count=`, `keys=`, `shell=`, `stage=`,
 `reason=` — and every other field, the helper-produced numbers `seconds=` and `pgid:` included, is
-JSON-quoted (design v1.79 §Verdict lines; `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives
+JSON-quoted (the design states the same seven in the paragraph opening `Verdict lines, one per run.`,
+addressed by that literal because it is a paragraph lead and **not** a heading —
+`git show b3be433:<design> | grep -nE '^#{2,4} '` piped to `grep -i erdict` prints **nothing**,
+while `grep -c 'Verdict lines, one per run.'` over the same body returns **1**, so the
+`design v1.79 §Verdict lines` pointer this clause carried through v1.100 named neither a live
+version nor a real section and could not be followed;
+`test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` drives
 a newline-bearing `--heading`, `--subst` and a newline-named created `--stdout` artifact on the
 AC-3.10 rollback fixture, `test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'`;
 mutations `field-escape-removed`, `field-quoting-removed`) — that contract is not weakened. **That
@@ -75,6 +81,74 @@ so a recipe is never executed only for its output to be discarded.
 
 Left unstated, an implementation can satisfy "one verdict line" while dropping the streams, or
 print the streams inline and break every consumer that parses the verdict line.
+
+**"The bare list is exhaustive" is a claim about a set four documents state, and through v1.100
+this document asserted it from one of them.** The clause read "the bare list is exhaustive and
+exactly the design's" — a property of the design's `Verdict lines, one per run.` paragraph,
+generalised to the feature without a census. Censused body-scoped at `b3be433` over all four
+documents and **every occurrence classified**, which is the half a bare count cannot do:
+
+```
+$ for f in docs/01-plan/features/doc-block-exec.spec.md \
+           docs/01-plan/features/doc-block-exec.plan.md \
+           docs/02-design/features/doc-block-exec.design.md \
+           docs/01-plan/features/doc-block-exec.impl-plan.md; do
+    b=$(git show b3be433:$f | awk '/^## Version History/{exit}{print}')
+    printf '%s  pgid= %s  of which LaunchFailed( %s   pgid: %s\n' "$(basename $f)" \
+      "$(printf '%s\n' "$b" | grep -oF 'pgid=' | wc -l | tr -d ' ')" \
+      "$(printf '%s\n' "$b" | grep -oE 'LaunchFailed\([^)]*pgid=' | wc -l | tr -d ' ')" \
+      "$(printf '%s\n' "$b" | grep -oF 'pgid:' | wc -l | tr -d ' ')"
+  done
+doc-block-exec.spec.md       pgid= 1  of which LaunchFailed( 0   pgid: 0
+doc-block-exec.plan.md       pgid= 0  of which LaunchFailed( 0   pgid: 1
+doc-block-exec.design.md     pgid= 5  of which LaunchFailed( 4   pgid: 10
+doc-block-exec.impl-plan.md  pgid= 6  of which LaunchFailed( 6   pgid: 8
+```
+
+**The token `pgid=` carries two unrelated grammars and a census that does not separate them reads
+neither**: a Python keyword argument to `LaunchFailed(stage, err, pgid=…)`, which is a constructor
+call and never reaches a verdict line, and a bare `=` field on the emitted line. Ten of the eleven
+`pgid=` occurrences in the feature are the kwarg. **Emitted-field spellings, which is the
+population the exhaustiveness claim is about**: the **spec** spells it **bare**, `pgid=<n>` on the
+verdict line, at AC-4.6 and nowhere else — its one occurrence, with `LaunchFailed(` accounting for
+none of it. The **design** spells it **quoted** in its `_field` example and in its verdict table
+(`pgid: "4242"`, `(+ pgid: "<n>" when stage=reap or stage=collect)`) and names `pgid:` as a detail
+key in four further places — **and also spells it bare once**, in its own AC-4.6 row, whose
+non-kwarg occurrence is the single line
+`git show b3be433:<design> | awk '/^## Version History/{exit}{print}' | grep -oE '.{60}pgid=.{20}' | grep -v LaunchFailed`
+returns: `` `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid=` in the detail ``.
+The **impl-plan** spells it **quoted** only, as a `DETAIL_KEYS` member rendering `pgid: "4242"`;
+its six `pgid=` are six kwargs. **This document carries the emitted field in neither spelling**:
+its single `pgid:` is the clause above, naming it as a member of the JSON-quoted set.
+
+**The plan row is the one row of the four that this paragraph itself moves, and that is stated
+rather than left to trip a re-runner**: the census is stamped `b3be433`, where this document's row
+reads `pgid= 0 / LaunchFailed( 0 / pgid: 1`. Over any later working tree it reads much higher, and
+**no working-tree value is published here, because there is no fixed point to publish** — telling
+the two grammars apart requires writing both of them out, and every sentence stating the new
+reading raises it again, which was confirmed by running the command after each of two successive
+edits. **A census whose corpus includes the document publishing it is read at a landed commit and
+at no other**, which is this document's standing rule and the reason the sha sits inside the
+command rather than beside it. The other three rows are of siblings and are unaffected by anything
+written here, which is why they are the rows the conclusion rests on.
+
+**So the four documents do not agree, the design disagrees with itself, and there is no consensus
+spelling to harmonise on.** What this document claims is now exactly what it derives: the seven
+bare fields above are the seven the design's `Verdict lines, one per run.` paragraph states, and
+`pgid` is quoted **in this document's own contract**. Whether the *emitted* `pgid` is bare or
+quoted is **open across the feature** until the spec's AC-4.6 and the design's AC-4.6 row each
+settle their own text; both are reported to their authors and **neither is repaired here**, because
+a cross-document repair made from one document is how two surfaces come to state one rule twice.
+
+**The class, and it is not `pgid`.** The axis is *an exhaustiveness claim about a set more than one
+document states*. The rule over it: such a claim is derived by a census over **every** surface that
+states the set, with every occurrence **classified by grammar before any of them is counted**, or
+it is not made — an exhaustiveness claim sourced from one surface is a claim about that surface and
+says nothing about the other three. **Residual, stated as a category and not as this token**: the
+census needle is a **literal string**, so a surface that states a member in prose without writing
+the token — "the seconds field stays bare" — is invisible to it, as is a member nobody has thought
+to name. The census bounds the documents' *spellings*; it does not bound their *intent*, and it is
+not a screen a later revision can run unattended, because the grammar split is read by a human.
 
 **The CLI contract, in full.** `h_mad_doc_block_exec.py <doc> --heading <h> [--index N]
 [--subst K=V]... [--preamble-file PATH] [--shell-timeout SECONDS] [--stdout PATH]
@@ -853,20 +927,24 @@ occurrences of `4e4a00c` (`git show 68a70d6:<doc> | awk '/^## Version History/{e
 grep -c '4e4a00c'`), and `git diff --name-only 4e4a00c 68a70d6 -- h-mad handoff` prints nothing
 while `git diff --name-only 4e4a00c 68a70d6 | sed 's|/.*||' | sort -u` prints `docs` alone, so
 every one of those sixty that reads the tree is provably still true where it stands.
-**v1.98 re-ran both commands again with `1cbddb7` as the right-hand side and the interval holds
-there too**: `git diff --name-only 74e126f 1cbddb7 -- h-mad handoff` prints nothing and
-`git diff --name-only 74e126f 1cbddb7 | sed 's|/.*||' | sort -u` prints `docs` alone, as do the same
-two with `4e4a00c` on the left; the body carries **70** occurrences of `4e4a00c` at `1cbddb7`
-by the `awk`-prefixed form above, up from the **60** v1.97 read at `7d8e797` because v1.97's own
+**v1.101 re-ran both commands again with `b3be433` as the right-hand side and the interval holds
+there too**: `git diff --name-only 74e126f b3be433 -- h-mad handoff` prints nothing and
+`git diff --name-only 74e126f b3be433 | sed 's|/.*||' | sort -u` prints `docs` alone, as do the same
+two with `4e4a00c` on the left; the body carries **70** occurrences of `4e4a00c` at `b3be433`
+by the `awk`-prefixed form above — **unmoved at `1cbddb7`, `700c599` and `8c6539a`, where it was
+also 70**, up from the **60** v1.97 read at `7d8e797` because v1.97's own
 edit added ten — **which is the paragraph's own point restated as a measurement rather than as an
 argument**: the corpus of this figure is this document, so the figure moves with every revision and
-is re-taken at each freeze rather than carried. **The phrase
+is re-taken at each freeze rather than carried. **That it did not move across three revisions is
+not evidence it need not be re-taken**, and the two figures beside it in this section both did move
+across the same span — the `the freeze` triple to `37`/`21`/`16` and the codex-leg ledger's
+teammate half to `84`. **The phrase
 *the freeze* in this document means `4e4a00c` throughout and is deliberately not repointed** —
 every reading v1.96 takes on the current body names `68a70d6` explicitly and never says "the
 freeze", because a phrase with two referents in one body is the drift this section exists to
 refuse. **Residual, and it is carried here rather than closed here:** the three self-counts stamped
 `4e4a00c` in this paragraph are readings of the v1.94 body and are *not* claimed at any later
-commit, `1cbddb7` included; the interval closure covers `h-mad/` and `handoff/`, and this document
+commit, `b3be433` included; the interval closure covers `h-mad/` and `handoff/`, and this document
 is neither. **The register below is where that residual is discharged, and this sentence is its
 pointer rather than a second home for it** — v1.97 entered the three in the register and left this
 sentence unchanged, so the register's account of it read in the past tense while both surfaces were
@@ -900,24 +978,32 @@ naming `68a70d6` as the commit it was measured at, which detached every "re-deri
 sentence from the round's own measurement commit and let one `docs/`-scoped figure — the codex-leg
 ledger in §Next Steps — go stale inside the sentence that forbids carrying it: its teammate half
 read `81` at `4e4a00c` and had already moved to `82` at `68a70d6`, v1.96's own freeze, and to `83`
-at `7d8e797`.
+at `7d8e797`. **The same half went stale the same way again in v1.99 and v1.100, which is why this
+is a rule and not a repair**: it moved to `84` at `8c6539a`, the commit v1.100 was authored
+against, and neither entry re-measured it — the recurrence is written up at the ledger itself under
+§Next Steps.
 **The rule: a `docs/`-scoped figure is re-derived at the commit the revision is measured at, that
 commit is named once per revision, and every such re-derivation carries the sha inside the command
-rather than the phrase beside it. v1.98 is measured at `1cbddb7`.** *The freeze* keeps its meaning —
+rather than the phrase beside it. v1.101 is measured at `b3be433`.** *The freeze* keeps its meaning —
 `4e4a00c`, v1.95's freeze and the sha the phrase stayed pinned to through v1.96 even though v1.96's
-own round was frozen at `68a70d6` — and it stays a **past-tense label on readings already taken**. Body-scoped at `1cbddb7` the phrase sits on **32** lines, **21** of them carrying
+own round was frozen at `68a70d6` — and it stays a **past-tense label on readings already taken**. Body-scoped at `b3be433` the phrase sits on **37** lines, **21** of them carrying
 `4e4a00c` on the same line
-(`git show 1cbddb7:<doc> | awk '/^## Version History/{exit}{print}' | grep 'the freeze' | grep -c '4e4a00c'`);
-those twenty-one are readings with their sha beside them and are deliberately not re-typed, since a
+(`git show b3be433:<doc> | awk '/^## Version History/{exit}{print}' | grep 'the freeze' | grep -c '4e4a00c'`);
+**it read `32`/`21` at `1cbddb7` and at `700c599`, and v1.99's edit moved the total to `37` at
+`8c6539a` with the `4e4a00c` half unchanged — a figure this document publishes twice went stale
+between the revision that took it and the revision that shipped beside it**, the same shape as the
+ledger and the reason the standing obligation names the measurement commit rather than a phrase.
+Those twenty-one are readings with their sha beside them and are deliberately not re-typed, since a
 mass re-stamp is a larger defect surface than the standing sentences this rule repoints. Residual,
 stated because no screen closes it: a *future* standing obligation written with the bare phrase is
 caught only by reading, and the shape filter that narrows the reading — the same command with
-`grep -vc` — returns the other **11** at `1cbddb7` and is a *shape* filter and never a verdict,
-because this document hard-wraps and most of those eleven carry their sha on the adjacent line.
-**Both figures are readings of a landed body and both moved when v1.97 landed** — the pair read
-`32`/`20`/`12` at `7d8e797` and `32`/`21`/`11` at `1cbddb7`, one line having crossed the filter — so
-they are re-taken at each revision's own measurement commit and never carried, which is this rule
-applied to itself.
+`grep -vc` — returns the other **16** at `b3be433` and is a *shape* filter and never a verdict,
+because this document hard-wraps and most of those sixteen carry their sha on the adjacent line.
+**The triple is a reading of a landed body and it has moved on three of the last four landings** —
+`32`/`20`/`12` at `7d8e797`, `32`/`21`/`11` at `1cbddb7` and at `700c599`, `37`/`21`/`16` at
+`8c6539a` and again at `b3be433` — so it is re-taken at each revision's own measurement commit and
+never carried, which is this rule applied to itself, and v1.99 and v1.100 are the two revisions
+that did not apply it.
 
 **The `docs/`-scoped figures this revision re-derived, stated as one closure rather than as one
 re-stamp per member.** The members are **listed, never counted**, and that distinction is the point:
@@ -925,7 +1011,7 @@ v1.97 led this paragraph with a cardinal over the list in the sentence immediate
 sentence forbidding one, which is the defect and not merely an inconsistency: this
 population is prose, so a cardinal over it would be exactly the population-short-by-N claim the
 paragraph above writes a rule against. Every member below is stamped `4e4a00c`, was re-run at
-`1cbddb7` — the commit this revision is measured at, not the one the previous revision was — and
+`b3be433` — the commit this revision is measured at, not the one the previous revision was — and
 **returned exactly its published value**, so its `4e4a00c` stamp is left as written —
 the design's `seven-plus-two-plus` locator (**1**), the design mutation-target derivation (**1**),
 the **49** AC anchors with the duplicate check silent (**0** lines from the `uniq -c | awk '$1>1'`
@@ -934,15 +1020,16 @@ form), AC-6.1's two spec greps (**1** and **0**), the spec's `len(tuple)` (**2**
 enumeration itself" needle (**1**), the spec opener census (**21** openers over **11** distinct
 tokens, distribution unchanged), the impl-plan's `found = _dbe.find_heading(text, heading)` (**4**),
 and the spec-immobility premise the opener census rests on
-(`git diff --stat cf3a862 1cbddb7 -- <spec>` empty, as `cf3a862 7d8e797` and `cf3a862 4e4a00c`
-were). **The screen used to
+(`git diff --stat cf3a862 b3be433 -- <spec>` empty, as `cf3a862 1cbddb7`, `cf3a862 7d8e797` and
+`cf3a862 4e4a00c` were — the spec is still at v1.60 at `b3be433`, read from its own Version
+History). **The screen used to
 find them cannot establish that the list is complete, and is published as a starting point rather
 than as a verdict**: `git show <sha>:<doc> | awk '/^## Version History/{exit}{print}' | grep '4e4a00c' | grep -Ei 'spec|design|impl-plan'`
 is line-scoped while this document hard-wraps, so a member whose sha and whose sibling name land on
 different lines is invisible to it — AC-6.1's two spec greps are exactly that case and were found by
 reading, not by the screen. **The whole closure also drifts by construction and must be re-run every
 round**: the design, the spec and the impl-plan are revised in the same rounds this document is, so
-a walk that holds at `1cbddb7` says nothing about the next freeze — it is re-taken there, not
+a walk that holds at `b3be433` says nothing about the next freeze — it is re-taken there, not
 extended by assumption, exactly as the `h-mad`/`handoff` interval above is.
 Nor does the interval closure reach a figure stamped at a commit *older* than `74e126f`; those are
 re-run where this revision touches them and left at their own sha otherwise.
@@ -1065,20 +1152,47 @@ argument for the rule and not against it. **Every cardinal this document fixes o
 screen-two legs", "Seven members at `cf3a862`", "the **five** OS- or runtime-determined probes",
 "thirteen rows … twelve exempt probes" over the carve-out population as v1.99 extends it, "five
 members" of the stdlib-premise class closed under §Measurements,
-"admissible are …" — is a completeness measurement under DECISION G, and is derived by walking the
+"the three admissible categories" — is a completeness measurement under DECISION G, and is derived by walking the
 surface it counts and counting the stamped legs, never by recall or by carrying the previous
-revision's cardinal.** Residual, and it is why this is a rule and not a screen: no shape filter can
+revision's cardinal.** **Each member of that list is a quotation of a surface this document
+actually carries, and through v1.100 one of them was not**: `"admissible are …"` occurred **once**
+in the whole file — the list entry itself — so a reader told to go and check it had nowhere to go.
+It is replaced by `the three admissible categories`, and the class is closed by a check every
+member now passes rather than by repairing the one: **each needle must return ≥ 2 over the
+paragraph-joined body**, once as the list entry and at least once at the surface it quotes.
+Run at `b3be433` with
+`awk '/^## Version History/{exit}{print}' <doc> | tr '\n' ' ' | grep -oF <needle> | wc -l`,
+the joined form being required because this document hard-wraps and a needle can straddle a
+newline: `the six screen-two legs` **2**, ``Seven members at `cf3a862` `` **2**,
+`five** OS- or runtime-determined probes` **5**, `twelve exempt probes` **2**, `five members`
+**2**, `the three admissible categories` **2** (the replacement's reading at that sha, where the
+list still carried the broken member). **Over the body this revision produces every one of them
+reads exactly one higher — 3, 3, 6, 3, 3 and 4 — because the sentence you are reading quotes each
+needle once**, which is the self-match this document measures everywhere else and is stated here
+rather than left for a reader to discover as a discrepancy. **Residual, and it is why this is a rule and not a screen**: no shape filter can
 count a population whose members are prose paragraphs, so the obligation sits on the author and the
-reader's check is to walk the counted section and match its stamped legs against the cardinal.
-Inherited-unverified at `700c599`, the commit v1.99 is measured at — re-stamped from v1.98's
-`1cbddb7` rather than carried, because a register that names a commit older than the revision's own
-measurement commit is the same detachment the closure paragraph above repairs. **The v1.98→v1.99
-move is discharged by the same interval argument the paragraph below states, run rather than
-recalled**: `git rev-list --oneline 1cbddb7..700c599` returns exactly **one** commit, `700c599`
-itself (v1.98's own landing), and v1.98's Version History entry enumerates its re-runs — no register
-member is among them, so the stamp moves. Stated so the arithmetic is not mistaken for
+reader's check is to walk the counted section and match its stamped legs against the cardinal. A
+second residual on the ≥ 2 check itself: it establishes that the needle is *findable*, never that
+the surface it finds is the one the cardinal is about — a needle quoted a second time in an
+unrelated sentence passes it.
+Inherited-unverified at `b3be433`, the commit v1.101 is measured at — re-stamped from v1.99's
+`700c599` rather than carried, because a register that names a commit older than the revision's own
+measurement commit is the same detachment the closure paragraph above repairs, **and v1.100 left it
+at `700c599` while being measured at `8c6539a`, which is that detachment happening again in the
+paragraph that defines it**. **The v1.99→v1.101 move is discharged by the same interval argument
+the paragraph below states, run rather than
+recalled**: `git rev-list --oneline 700c599..b3be433` returns exactly **two** commits, `8c6539a`
+(v1.99's own landing) and `b3be433` (v1.100's), and both revisions' Version History entries
+enumerate their re-runs — no member carried into this register is among them, both entries instead
+naming the register's own contents under `NOT RE-RUN` — so the stamp moves. Stated so the arithmetic is not mistaken for
 byte-identity: the document did change across that interval,
-`git diff --shortstat 1cbddb7 700c599 -- <doc>` reports **157 insertions, 56 deletions**.
+`git diff --shortstat 700c599 b3be433 -- <doc>` reports **482 insertions, 13 deletions**.
+**The interval argument covers only the members that were already in the register when the stamp
+moved, and this revision both adds and removes members**, so the blanket is replaced by a
+per-member statement: **every member below now names the revision and the commit at which it was
+last executed**, and "inherited-unverified" means exactly that no member's last-execution revision
+is v1.101. A member entered by this revision is covered by its own stamp and not by the interval,
+because the interval says nothing about a figure that was outside the register while it ran.
 **The justification for moving the stamp is about the interval, and the interval must contain the
 stamp being replaced — v1.97's did not.** v1.97 replaced `68a70d6` and justified it with
 "byte-identical across `f91a74b..7d8e797`", a span that *excludes* `68a70d6`
@@ -1096,22 +1210,64 @@ across `7d8e797..1cbddb7` (`git diff --shortstat 7d8e797 1cbddb7 -- <doc>` repor
 moved by a sibling's edit without this document changing at all. Residual, stated because no screen
 reaches it: "no member was re-run in the interval" is knowable to the author of the revisions in it
 and to a reader of their Version History entries, and by nothing else; a member re-run by a
-*sibling* document's revision is invisible to both. The members: the
-`doc-auditor.md` fence-toggle
-`8`/`4` readings; the
-Setext differential and its `files=25`/`files=30` printouts, which the bullet stating them already
-marks as not re-run; the markdown-it-py **14-case** grammar corpus, which needs a throwaway venv —
-the fence-body de-indentation probe added in **v1.95** was run on both renderers and is *not*
-part of that fourteen, so the fourteen stay unverified here; the **five** OS- or runtime-determined
-probes of the carve-out table's `cf3a862` block that this revision did not re-run — the block
-scoping is load-bearing now that the table has a second block, because "five of the carve-out
-table" would read as a claim about **twelve** exempt probes and the other seven of the twelve are
-in a different register position: the five added at `700c599` were every one of them executed in
-this revision and are therefore **not** register members at all — argparse's `exit_on_error` routing
-(§Scope), `rmtree` on a `0o000` directory (AC-3.14), the reader-less FIFO (AC-3.10), the naturally
-emptied group (AC-5.5) and the AC-5.2 group-kill-and-escape probe; the **six** screen-two legs
-named below; and — new in v1.97 — **the three `74e126f` self-counts the closure paragraph above
-states, entered here by pointer and not by copy**. Their integers, their commands and their
+*sibling* document's revision is invisible to both.
+
+**Every member carries the revision or commit its last execution is stamped at, and no member's
+status is stated with a deixis.** Through v1.100 **three** status assignments in this register
+turned on the words *this revision* — the `cf3a862` probes' membership, the `700c599` probes'
+**non**-membership, and the triage categories' — and a deixis names a different revision every time
+the document is revised. The `700c599` one was therefore false the moment v1.100 shipped without
+re-running what v1.99 had run: that is the softer failure this register exists to close, committed
+by the register itself. **The axis is a status assignment whose subject is a revision, and the rule
+over it is that the revision is named by number and never by *this* one.** Residual, stated because
+the phrase is not banned: `this revision` reads **32** body-scoped at `b3be433`
+(`grep -ciF 'this revision'` over the `awk`-prefixed body) and most of those are legitimate —
+a revision describing its own act at the moment it acts. **A value sweep on the phrase is the wrong
+screen**; what is repaired is the narrower class of sentences that assign a *status a later reader
+will read*, and those are found by walking this register and nothing else. The members:
+
+- The `doc-auditor.md` fence-toggle `8`/`4` readings — stamped `35698f9` at their own site.
+- The Setext differential and its `files=25`/`files=30` printouts — stamped `1861157` at their own
+  site; the bullet stating them already marks them as not re-run.
+- The markdown-it-py **14-case** grammar corpus — stamped `markdown-it-py 2.2.0` and `4.2.0` and
+  by no sha, being a carve-out probe; it needs a throwaway venv. The fence-body de-indentation
+  probe added in **v1.95** was run on both renderers and is *not* part of that fourteen, so the
+  fourteen stay unverified here.
+- The **five** OS- or runtime-determined probes of the carve-out table's **`cf3a862` block** —
+  stamped `python 3.11.8 | darwin` and read at `cf3a862`. They are argparse's `exit_on_error` routing (§Scope), `rmtree`
+  on a `0o000` directory (AC-3.14), the reader-less FIFO (AC-3.10), the naturally emptied group
+  (AC-5.5) and the AC-5.2 group-kill-and-escape probe. **The block scoping is load-bearing now that
+  the table has a second block**: "five of the carve-out table" would read as a claim about
+  **twelve** exempt probes, and the other seven of the twelve sit in different register positions —
+  the five in the **bullet immediately below**, plus the `awk` boundary probe and the scanner
+  grammar corpus, each handled in its own bullet further down.
+- The **five stdlib probes of the carve-out table's `700c599` block** — last executed **v1.99**, at
+  `700c599`, and **not re-run in v1.100 or v1.101**. **They are members now and were not before, and
+  the reason is the deixis and not a new measurement**: through v1.100 they were held out of the
+  register on the words "executed in this revision", which was true of v1.99 and false of every
+  revision after it — v1.100's own Version History entry lists `the five 700c599 stdlib probes' own
+  outputs` under `NOT RE-RUN` while this paragraph still said they were not members. A carve-out
+  probe leaves the register **only for the revision that executes it** and re-enters at the next
+  revision that does not, which is why membership is now stated against a revision number.
+- The **three `74e126f` self-counts** the closure paragraph above states — entered in **v1.97**, by
+  pointer and not by copy; stamped `4e4a00c` on the surface that owns them.
+
+**Residual on the last-execution stamps, stated rather than papered over**: only two of the six
+entries above name an executing *revision* (`v1.99` for the stdlib block, `v1.97` for the
+self-counts), and the other four name the **commit or version their reading is stamped at**,
+because that is what this document records for them and reconstructing a revision number from a
+stamp is the recall the register exists to refuse. A stamp is enough for the register's purpose —
+it says the reading is not this revision's — and it is not enough to say *which* revision last took
+it. Closing that would mean walking the Version History for each, which is the one derivation this
+document has already found unreliable twice.
+
+**Left the register in v1.101**: the **six** screen-two legs named below, all six re-executed at
+`b3be433` against the spec's enumeration *as that document ships it at `b3be433`* and all six
+reproducing — outputs published at their own site. They re-enter at the next revision that does not
+re-run them, by the rule stated in the bullets above.
+
+**On the `74e126f` self-counts specifically, and the head noun is repeated rather than left to the
+nearest antecedent**: the three self-counts' integers, their commands and their
 `4e4a00c` stamp stay on the one surface that owns them, because this document's rule is that a
 pointer to the owning surface never drifts and a second copy does — **and v1.97's copy had already
 drifted in the one respect a copy can drift without changing a digit**: it labelled all three
@@ -1125,7 +1281,8 @@ now points here, so the two surfaces state one arrangement rather than two: it o
 this entry owns their status. **It is described here by its role and not by quoting its opening
 words** — a quotation of another surface's text is a copy that drifts silently the moment that
 surface is edited, and v1.97's quotation of it is exactly the copy that would have gone stale in
-this revision. **They are entered as unverified rather than
+**v1.98**, the revision that wrote this sentence and that said *this revision* where it meant a
+revision number. **They are entered as unverified rather than
 re-published, and that is deliberate**: the paragraph states in as many words that no integer in it
 is the number of covered figures and that the two `git diff` commands are the whole evidence, so a
 fourth stamped triple would add three maintained figures and no argument. **The carve-out table's
@@ -1144,11 +1301,18 @@ half-true for the other:**
   paragraph ordinal, for the same reason the carve-out table's rows are. Nothing about that row is
   claimed beyond the one case.
 
-Also carried rather than re-run by this
-revision: the **membership** of the five triage categories below, which the v80 audit re-derived at
-`8909ec4` — v1.94 re-ran only their *total*, and this revision re-ran neither. **The register is
+Also carried rather than re-run, and stated against a revision number for the same reason as the
+bullets above: the **membership** of the five triage categories below, which the v80 audit
+re-derived at `8909ec4` — v1.94 re-ran only their *total*, and **v1.101 re-ran neither**. Three of the six
+revisions in between say so at their own entries and three are silent, which is derivable rather
+than recalled: `awk '/^## Version History/{f=1} f && /^- v/{n=$2} f && /triage categor/{print n}'`
+over this document returns `v1.94 v1.95 v1.96 v1.99` plus this revision's own entry, so v1.97,
+v1.98 and v1.100 name it nowhere and their silence is not a claim in either direction — **which is
+the register's own argument applied to the register's own evidence**. The self-match is stated for
+the same reason it is one bullet up: the command matches the entry that publishes it. **The register is
 itself a completeness
-claim and is therefore not offered as complete**: it lists what this revision knows it did not run,
+claim and is therefore not offered as complete**: it lists what **the revision whose number is on
+the lead stamp** knows it did not run,
 and the honest residual is that a figure nobody has thought to name is invisible to it. What the
 register does close is the softer failure — a figure that *was* named by an audit as unverified and
 then quietly acquired the freeze sha anyway.
@@ -1494,19 +1658,28 @@ three.
 Its hit count is deliberately **not** stated here: it is a procedure rather than a measurement, and
 any edit to this document changes it, so a number would falsify itself every cycle. Controls are
 published instead, since a filter whose output is not published must be shown to discriminate some
-other way. Every leg below was re-run at `6f0ee85` **by v1.93**, since every one of them depends
-either on this document or on the spec, and the closure above reaches neither. **v1.94, v1.95,
-v1.96, v1.97 and v1.98 have none of them re-run these legs, and all five say so rather than letting
-the older sha read as a fresh pass**: the two spec
+other way. Every leg below was first run at `6f0ee85` **by v1.93**, since every one of them depends
+either on this document or on the spec, and the closure above reaches neither. **v1.94 through
+v1.100 have none of them re-run these legs; six of the seven say so at their own entries and
+v1.100 is silent, which is derivable and not recalled** —
+`awk '/^## Version History/{f=1} f && /^- v/{n=$2} f && /screen-two leg/{print n}'` over this
+document returns every entry from `v1.94` to `v1.99`, plus this revision's own, and **no
+`v1.100`** — so the one revision that did not name them is the one immediately before this. The
+`v1.101` hit is this revision's entry and is stated so the reader is not left to wonder whether the
+command has a self-match: it does, by construction, and the load-bearing reading is the absence. **Silence is the failure mode the naming
+exists to prevent**, and it is recorded here rather than smoothed over. The two spec
 locators in this section are re-derived on the surfaces that state them — at `4e4a00c` by v1.95 and
-v1.96, at `7d8e797` by v1.97 and at `1cbddb7` by v1.98, returning **1** at every one — and
+v1.96, at `7d8e797` by v1.97, at `1cbddb7` by v1.98 and at `b3be433` by v1.101, returning **1** at every one — and
 the **six**
 screen-two legs below — the `335f535` positive, the true-negative leg (two declined sentences, one
 leg), the blind form, the over-reach, the **multi-word-gap** leg (the "three importing test files"
 sentence declined by the spec's block as `74e126f` held it and returned by the form the same block
 holds at `6f0ee85`) and the **cardinal-alternation** leg (`printf 'zero files\n'` returning nothing
-while `printf 'one file\n'` matches) — are carried at `6f0ee85` and are **unverified** at
-`1cbddb7`. **The cardinal is six because the section below was walked and its stamped legs counted,
+while `printf 'one file\n'` matches) — were carried at `6f0ee85` through v1.100 and are
+**re-executed at `b3be433` by v1.101**, all six reproducing, which is what takes them out of the
+inherited-unverified register for this revision only. The re-run is against the spec's block **as
+it ships at `b3be433`** and not against the `6f0ee85` form, which is the point of doing it: the
+paragraph below records that this checker has already moved once. **The cardinal is six because the section below was walked and its stamped legs counted,
 not because the previous revision's four was carried**: through v1.95 this clause said four and
 left the last two — both stated below with a `6f0ee85` stamp and neither re-run — outside the
 closure and outside the register at once, which the register says cannot happen. This is the third
@@ -1642,6 +1815,51 @@ the v1.93 body this revision writes is published here, because that body is read
 until it lands and a working-tree count carries no sha the next reader can check. Every reading
 above moves on any edit to this document by construction, so each is a reading of a commit and
 never a standing property.
+
+**The obligation was un-discharged for two consecutive revisions and is discharged here, with the
+delta read rather than the count published as a result.** Neither v1.99's nor v1.100's Version
+History records running either screen. Run at `b3be433`, screen one's published program returns
+**92** body lines, against **84** at `1cbddb7` and at `700c599` and **92** at `8c6539a` — so the
+**+8** landed with v1.99 and v1.100 added none. **The 92 is not itself a finding and is not a
+count of defects**: this section states that screen one's hits are read and never counted, its
+`[Mm]easured` branch matches this document's own prose by design, and the discriminating stage is
+the `!/[0-9a-f]{7}/` co-occurrence filter. What the obligation exists to prevent is exactly what
+happened — **sixty lines accumulated across the v1.93→v1.99 span with no round reading them**, the
+last published triage being over the `6f0ee85` body where the program returned **32**. **The eight
+v1.99 added were read line by line rather than counted**, isolated with
+`diff <(<program> 700c599) <(<program> 8c6539a) | grep '^>'`, and all eight are **hard-wrapped
+continuation lines of sentences whose subject is measurement itself** — "set-equal to the measured
+survivors", "run at the freeze, per branch, with its controls and its measured blind", "measured
+after this revision's last edit", "committed inside a `measured:` citation", "Measured … differ
+between `awk` and any `splitlines()`-based reader", "measured at two commits into one table",
+"the freeze this revision is measured at", "measured on the surface screen and is stated rather
+than hidden". Not one is an un-stamped provenance claim; every one is either the screen matching
+this document's own prose about screens, or the first residual below — a sha sitting on the
+adjacent line of a hard-wrapped sentence. **That is a reading, not a clean bill**: the residual it
+rests on is the residual this section already publishes, and it is the reason the obligation is to
+read the delta and never to compare two totals. The ALL-CAPS control still holds and still returns its own text:
+`grep -cE '(^|[^[:alnum:]_])(MEASURED|TODAY|THIS SESSION)([^[:alnum:]_]|$)'` over the body at
+`b3be433` returns **3**, all three the control's own fixture written into this section, while the
+same grep fed `printf 'stamped TODAY with no sha\n'` returns **1**.
+
+**Screen two was re-run at `b3be433` too, and all six of its legs with it** — against the spec's
+enumeration *as the spec ships it at `b3be433`*, which matters because that enumeration has moved
+once before under this document's feet. The line-anchored address the spec designates,
+`grep -cE '^  \$ awk '`, returns **1** on the spec at `6f0ee85`, `1cbddb7`, `700c599`, `8c6539a`
+and `b3be433`, and **0** on the design and the impl-plan at `b3be433`, so the address still
+resolves to one block. Run over this document's body with only the path substituted, the
+enumeration returns **122** lines at `6f0ee85`, **225** at `1cbddb7`, **228** at `700c599`, **262**
+at `8c6539a` and **271** at `b3be433` — published as a delta and **not** as a measurement of
+anything, for the reason this section already gives: screen two's hit count is a procedure, any
+edit moves it, and a number stated as a property would falsify itself every cycle. The six legs
+each reproduced at `b3be433`, and the outputs are at their own sites: the `335f535` positive
+returns its line, the two true negatives return nothing, the blind form returns nothing while the
+same sentence with the counted noun restored returns one, the over-reach returns its one line,
+`three importing test files` is declined by the `74e126f` form of the block and returned by the
+`b3be433` form, and `printf 'zero files\n'` returns nothing while `printf 'one file\n'` matches.
+`grep -c 'Residual on the enumeration itself'` on the spec returns **1** at `b3be433`, as at the
+four earlier shas. **They therefore leave the inherited-unverified register for v1.101 and re-enter
+at the next revision that does not re-run them**, which is the rule that register now states.
 
 Deliberately out of class, by construction rather than by exception: Version History entries,
 which record their own era's numbers and are excluded by the `exit`; design-derived counts of
@@ -2655,7 +2873,7 @@ already publishes returns exactly the thirteen rows, headers excluded.** That pa
 over the eight-row population as "the one thing every one of them carries and no other line in the
 body does", and it still holds over the extended one —
 (``git show <sha>:<doc> | awk '/^## Version History/{exit}{print}' | grep -c '^| .*`git ls-files ' ``)
-returns **8** at `1cbddb7`, **8** at `700c599` and **13** at `8c6539a`: the eight rows before this
+returns **8** at `1cbddb7`, **8** at `700c599`, **13** at `8c6539a` and **13** at `b3be433`: the eight rows before this
 block, the thirteen after it. It separates rows from the two header rows with no special case,
 because the selector requires a space after the verb — every row goes on to give arguments, and both
 header cells close their code span immediately after `ls-files`. **Residual, stated as the category
@@ -2668,11 +2886,24 @@ cross-check, not as the reason.
 
 Two coarser readings are published as well, and the property the previous sentence claimed for both
 holds of only one of them. `grep -cE '\`git ls-files [^\`]'` is **unanchored** and does count this
-paragraph's own mentions: **25** body-scoped over the working tree *this revision produces*, up from
-24 because the paragraph above quotes the needle once more, and it will move again by construction
-whenever this paragraph is reworded — so it is stamped to a working tree and to nothing else, and a
-reader comparing it against a landed commit is comparing two different bodies.
-`grep -cE '^\| .*git ls-files'` returns **15**, at `8c6539a` and over this working tree alike, and
+paragraph's own mentions: it reads **24** at `8c6539a` and **25** at `b3be433`, and it will move
+by construction whenever this paragraph is reworded — it read **26** at one point during this
+revision's editing, when the repair below was first written with the command spelled out in full
+rather than described, and returned to **25** when that spelling was replaced by a description.
+**That excursion is recorded as process and not as a figure**, because a reading of an
+uncommitted intermediate tree is re-derivable by nobody; it is recorded at all because it is direct
+evidence for the sentence above. **v1.100 stamped it "to a working tree and to nothing else",
+which discouraged a check that is in fact available**: v1.100's working tree landed as `b3be433`
+and its **25** reproduces there, by the same command with `git show b3be433:<doc> |` in front of
+the `awk`. So the figure is stamped to **the working tree each revision produces, which lands as
+that revision's landing commit** — checkable at a sha the round *after* it is taken, and not
+before. A reader comparing it against any *other* landed commit is still comparing two different
+bodies, which was the true half of the v1.100 sentence.
+**The excursion above is this paragraph doing exactly what it says it does, and it was measured
+rather than predicted**: naming the command in full moved the figure this paragraph publishes, and
+the move was found by re-running after the edit and not by reasoning about it, which is the only
+reason it can be reported at all.
+`grep -cE '^\| .*git ls-files'` returns **15**, at `8c6539a`, at `b3be433` and over this working tree alike, and
 counts **no prose line at all** — the thirteen rows plus the two header rows, nothing else — because
 it is line-start anchored, the same property that makes the row selector above work. That 15 is a
 **superset** of the rows and is what the `74e126f` check is
@@ -2691,11 +2922,22 @@ python-version **15 → 26**, `awk version [0-9]` **11 → 12**, `markdown-it-py
 union **32 → 44**. **Those working-tree readings are of the body as it stood *before this paragraph
 was written*, and this paragraph then moved them, which is the same self-match this revision
 measured on the surface screen and is stated rather than hidden**: writing the resolution out quotes
-two further python-version stamps and one further awk-version stamp, so re-run after this
-revision's last edit the same commands read python-version **28**, awk-version **13**,
+two further python-version stamps and one further awk-version stamp, so re-run after v1.99's
+last edit the same commands read python-version **28**, awk-version **13**,
 markdown-it-py **8**, union **47**. The **44** is the number the assignment below partitions;
-the **47** is what a reader re-running the driver over this working tree will see, and the three-line
-difference is this paragraph. **The twelve added lines are assigned by hand, published rather than left as a
+the **47** is the reading of v1.99's working tree, and the three-line
+difference is this paragraph. **The 47 landed and reproduces at a sha** — `8c6539a` and `b3be433`
+both return `28`/`13`/`8`/`47`, so it is checkable rather than stamped to a vanished tree, and
+v1.100 moved none of the four. **v1.101's own working-tree reading is deliberately NOT published,
+and the reason is a measurement rather than a preference**: two register bullets rewritten this
+round each name a probe by its interpreter or renderer stamp, which the driver counts, and the
+sentence assigning those two would have to quote the same stamps a third and fourth time — each
+publication moves the figure it publishes, so there is no fixed point to state. Neither addition is
+a new probe or a new carve-out row, so the **44** partition is untouched; what moves is the count
+of *lines quoting a stamp*, which is what this driver measures and what it will keep doing every
+time the register names a probe by its stamp. **The landed reading is the one to run**, and this
+revision's is checkable at the commit that lands it, not before — the same rule this document
+applies to every figure whose corpus is itself. **The twelve added lines are assigned by hand, published rather than left as a
 reading**, exactly as the `cf3a862` resolution is and for the same reason — a partition nobody can
 re-derive is not checkable whatever its total. Each of the five probes contributes **two**: its
 table row and the `python 3.11.8` line inside its own recorded output (`| platform darwin` on the
@@ -2958,36 +3200,50 @@ the substitute leg. Its corpus is `docs/01-plan/features/`, which the §Measurem
 explicitly excludes, and — unlike every other figure in this document — **that corpus is one this
 very round writes into**, because the round's own audit report lands in it. So the figure is not
 merely re-derivable at a sha; it is **stale by construction the moment the next report is written**,
-and it must be re-measured on every revision, without exception. **Both halves, re-derived by v1.98
-at `1cbddb7`, with the sha inside the command so the reading is reproducible without a working
+and it must be re-measured on every revision, without exception. **Both halves, re-derived by v1.101
+at `b3be433`, with the sha inside the command so the reading is reproducible without a working
 tree:**
 
 ```
-git ls-tree -r --name-only 1cbddb7 -- docs/01-plan/features/ \
+git ls-tree -r --name-only b3be433 -- docs/01-plan/features/ \
   | grep -E 'doc-block-exec\.plan\.audit\.v[0-9]+\.codex\.md$' \
   | sed 's/.*audit\.v//;s/\.codex\.md//' | sort -n | tail -1      # -> 72
-git ls-tree -r --name-only 1cbddb7 -- docs/01-plan/features/ \
+git ls-tree -r --name-only b3be433 -- docs/01-plan/features/ \
   | grep -E 'doc-block-exec\.plan\.audit\.v[0-9]+\.teammate\.md$' \
-  | sed 's/.*audit\.v//;s/\.teammate\.md//' | sort -n | tail -1    # -> 83
+  | sed 's/.*audit\.v//;s/\.teammate\.md//' | sort -n | tail -1    # -> 84
 ```
 
-**codex `72` against teammate `83` at `1cbddb7`, unmoved from `7d8e797` because round thirteen's
-reports are not committed at `1cbddb7`** — which is not reassurance and is the reason the sentence
-above says *without exception*: the same pair read `72`/`82` at `6dcb70f` one commit earlier, and it
-moves again the moment this round's reports land. Through v1.96 this pair was carried at `4e4a00c`
-(`72`/`81`) inside the sentence saying it must not be carried — both halves reproduce at that sha,
-so nothing published was arithmetically wrong, but the teammate half had already moved to `82` at
-`68a70d6`, the commit v1.96 was measured at, and to `83` here. **Three residuals, each a way the
-figure has actually gone wrong or provably can.** (1) **The unit is the highest cycle number, not a
+**codex `72` against teammate `84` at `b3be433`. The published pair was `72`/`83` and the teammate
+half had been wrong since `8c6539a` — the commit v1.100 was authored against — which is what
+"without exception" was written to prevent and what two consecutive revisions then did.** The
+series, one run of the command above per sha, is the whole argument: `1cbddb7` **72/83** ·
+`700c599` **72/83** · `8c6539a` **72/84** · `b3be433` **72/84**. v1.99 landed at `8c6539a` and
+v1.100 was measured there; the v84 gating report is the file that moved the teammate half to `84`
+in that same commit, so the figure went stale *inside the round that carried it* and neither the
+v1.99 nor the v1.100 Version History entry mentions the ledger at all. Earlier motion is the same
+mechanism: `72`/`82` at `6dcb70f`, and through v1.96 the pair was carried at `4e4a00c` (`72`/`81`)
+inside the sentence saying it must not be carried. **The class, stated over the axis rather than
+over this figure**: a figure whose corpus is a directory the round itself writes into cannot be
+carried across a revision under any argument, because the commit that lands the revision is also
+the commit that lands the report — so the rule is that this pair is re-run at the commit each
+revision is measured at and the reading is published, **or the revision's own entry records that it
+was not run**, the register below being the only other place a non-run is admissible. **Residual,
+and it is exact**: even a reading taken at the round's own measurement commit is correct only until
+that round's reports are committed. This one is already outrun — the two v85 reports of this round
+exist and are uncommitted at `b3be433`, and the teammate half becomes `85` the moment they land.
+**Three further residuals, each a way the figure has actually gone wrong or provably can.** (1) **The unit is the highest cycle number, not a
 file count**, and the two forms disagree: the same pipeline with `grep -c` in place of the
 `sed | sort | tail` returns `72` for codex — the codex reports run `1..72` contiguously — but only
-**11** for teammate, so a reader who takes `83` for a file count is off by seventy-two. (2) **The
+**12** for teammate at `b3be433` (it was `11` at `1cbddb7`), so a reader who takes `84` for a file
+count is off by seventy-two. (2) **The
 `ls`-based form this paragraph carried through v1.96 reads the *working tree*, not a commit**, so it
-diverges from any sha whenever an uncommitted report sits in that directory; it agrees with the
-`git ls-tree` form today only because `git status --porcelain docs/01-plan/features/ | grep -c 'doc-block-exec.plan.audit'`
-returns **0** at the time of writing, which is a property of the moment and not of the derivation.
+diverges from any sha whenever an uncommitted report sits in that directory. **It is diverging right
+now, which is why this residual is no longer hypothetical**:
+`git status --porcelain docs/01-plan/features/ | grep -c 'doc-block-exec.plan.audit'`
+returned **0** when v1.98 wrote this sentence and returns **2** at `b3be433` — this round's two v85
+reports — so the working-tree form reads `85` where the sha'd form reads `84`.
 The `git ls-tree` form is the one with a sha on it and is the one to run. (3) The comparison says
-nothing about *quality*: a codex cycle numbered `72` and a teammate cycle numbered `83` are both
+nothing about *quality*: a codex cycle numbered `72` and a teammate cycle numbered `84` are both
 just filenames, and the gap is a statement about which surface ran, never about what either found. A
 `must=0 should=0` reached without codex is provisional until one real codex round runs on the
 landed document. Recorded here rather than in a Version History entry, because that is where the
@@ -3097,3 +3353,4 @@ which pins the exact mutation anchors and node IDs this plan and the design's ma
 - v1.98: Round-thirteen DELTA SELF-REVIEW of the v1.97 diff (doc-auditor teammate on the diff only: must 2 should 5 nit 2). NOT A GATING ROUND and it stamps nothing; the gating cycle runs after this batch lands. ONE SHA, NOT TWO: freeze and measurement commit are both 1cbddb7, so the two-referent hazard v1.97's own entry created does not arise here, and v1.97's entry is amended in place to say which of its two shas its figures belong to. MUST 1, A CELL PUBLISHING A READING TAKEN BEFORE THE EDIT THAT MOVED IT, inside the table built to close exactly that: row 3 column 2 published 'three importing test files' 2 at 7982c18. Under the command the table states for every cell, git show <commit>:<doc> | awk '/^## Version History/{exit}{print}' | grep -cF <needle>, the readings are 8909ec4 1, 7982c18 1, 06ef40f 1, f91a74b 2, 1cbddb7 4, whole-file at 7982c18 4 - no scope returns 2 at 7982c18, and 2 is the reading at f91a74b. The conclusion survives because presence is all the cell claims, and the cell now says so: any value >= 1 establishes the probe was in that body and the six-leg walk turns on nothing else. The other eight cells were re-run and all eight reproduce (Five members 1 at 8909ec4 and 0 at 6f0ee85; Seven members 1 at 7982c18; three OS probes 1 at 7982c18 and 0 at 8909ec4; five OS- or runtime-determined probes 1 at 06ef40f; four screen-two legs 1 at 7982c18, 1 at 06ef40f and 0 at 8909ec4; six screen-two legs 1 at f91a74b; printf 'zero files 1 at 7982c18). CLASS, NOT THE CELL: the table's own cells are property claims under DECISION Q, so the rule is now that every cell in this table is re-run whenever the table is edited and never carried from the revision that wrote it, with the residual stated that a cell whose command differs from the stated -F form is outside a check written against that form - which is why the two such cells are now named at their cells. THE D-3 SWEEP, RUN OVER THIS WHOLE DOCUMENT AND CLOSED BY A DIFFERENT MECHANISM THAN THE ONE PRESCRIBED: every needle in the members table appears literally in this body, so each cell is a member of the corpus its own screen counts. Paraphrasing the needles would break the cells, so the closure is the commit argument instead - every cell's commit predates the revision in which its needle was first quoted in the table, and that is now written as a rule over every screen this document publishes. Executed, not asserted: three importing test files is 1 body-scoped at 7982c18 and 4 at 1cbddb7, and one of the four is this table's own cell. Residual: the rule covers literal-string needles; a regex-class needle can be matched by prose containing no literal, and the stamp-driven -E driver of row 1 column 2 is exactly such a screen, pinned by the same commit argument. MUST 2, A CARDINAL OVER A LIST IN THE SENTENCE BEFORE THE SENTENCE FORBIDDING ONE: the docs/-scoped closure paragraph led with 'as ten re-stamps' and then said its members are listed and never counted because a cardinal there would be the population-short-by-N claim the paragraph above writes a rule against. The numeral is dropped rather than corrected - it is ten or eleven depending on whether AC-6.1's two spec greps count as one member or two, and a figure that must be maintained on every future edit to the list buys nothing. SHOULD 1: the blanket 'every grep cell above is one command' was false for two cells, and both are now named at the cell - row 1 column 2 runs the stamp-driven -E alternation and is pointed at its owning block rather than re-typed, row 2 column 2 is a hand reading of an eight-row table and involves no grep at all. Row 1 column 2's 13 lines are re-derived (whole-file 16) and THE ASSIGNMENT OF THE THIRTEEN IS NOW PUBLISHED rather than left as an unre-derivable reading, and MY FIRST WRITING OF IT WAS WRONG AND THE RE-RUN CAUGHT IT: I assigned by pattern-matching the stamp text and had to read each line's enclosing block instead, which moved four of the seven. The assignment is argparse exit_on_error 2, awk boundary 2, rmtree on 0o000 2, reader-less FIFO 2, naturally emptied group 2, AC-5.2 group-kill-and-escape 1, markdown-it-py corpus 1 - seven probes over twelve lines - plus one line of prose about the stamp form. Most contribute two because a probe stamps both its prose and its recorded output. It cannot drift, because 8909ec4 is landed. SHOULD 2: the register's population statement claimed a single driver, the carve-out table, and that was already false in the revision that wrote it - the member v1.97 added is not a carve-out row, 74e126f appears in 0 of the eight rows, and neither are the doc-auditor.md fence-toggle readings, the Setext differential or the six screen-two legs. The driver is restated as a walk over two sources - every carve-out row, and every figure the two closure paragraphs hold by ARGUMENT rather than by EXECUTION, since a closure establishes that a reading still holds and never that it was taken again. Residual: the walk is the author's and no screen bounds it. SHOULD 3 AND NIT 1 TOGETHER: the register's copy of the three 74e126f self-counts is replaced by a pointer to the paragraph that owns them, per this document's own rule that a pointer never drifts and a copy does - and the copy had already drifted in the one way a copy can drift without changing a digit, labelling all three body-scoped when one is by construction a whole-file count. SHOULD 4: v1.97's entry named a freeze sha and a measurement sha without saying which its figures belong to, and the ledger reads 82 at the freeze against 83 at the measurement commit; that entry now carries the clause. SHOULD 5: the register's stamp move was justified with an interval that EXCLUDED the stamp being replaced - 68a70d6 is an ancestor of f91a74b and the document changed 149 insertions / 30 deletions across that span. The axis is what the lead stamp asserts, and it asserts NON-EXECUTION and never a value, so the justification is over the half-open interval (old stamp, new stamp] which contains the old stamp by construction; byte-identity is explicitly refused as the premise, since this document did change across 7d8e797..1cbddb7 (158 insertions / 32 deletions) and a member's value can move by a sibling's edit with this document unchanged. Residual: 'no member was re-run in the interval' is knowable from the Version History entries of the revisions in it and by nothing else; a member re-run by a sibling is invisible. NIT 2: the inline residual and the register entry were both live with the register describing the inline one in the past tense; the inline sentence is retained deliberately and now points at the register, the register describes it by role instead of quoting its opening words, and the quotation it used to carry is exactly the copy that would have gone stale in this revision. THE MEASUREMENT COMMIT IS RE-STAMPED TO 1cbddb7 AND EVERY docs/-SCOPED FIGURE WAS RE-RUN THERE, because this document's own rule says a docs/-scoped figure is re-derived at the commit the revision is measured at: the interval closure holds from both 74e126f and 4e4a00c (h-mad handoff empty, the piped form prints docs alone); the body carries 70 occurrences of 4e4a00c at 1cbddb7, up from 60 at 7d8e797 because v1.97's edit added ten, which is the paragraph's point restated as a measurement; 'the freeze' sits on 32 lines, 21 with 4e4a00c on the same line and 11 without, moved from 32/20/12 at 7d8e797 by one line crossing the filter; every closure member returns its published value at 1cbddb7 (design seven-plus-two-plus 1, design mutation-target 1, 49 AC anchors with the duplicate check printing nothing, AC-6.1's two spec greps 1 and 0, spec len(tuple) 2, the spec awk-opener locator 1 with design and impl-plan 0 each, the Residual-on-the-enumeration needle 1, the spec opener census 21 openers over 11 distinct tokens, the impl-plan's find_heading call 4, and the spec-immobility premise with git diff --stat cf3a862 1cbddb7 on the spec empty); and the codex ledger re-derives as codex 72 against teammate 83 at 1cbddb7, unmoved from 7d8e797 only because this round's reports are not committed there - it read 72/82 one commit earlier at 6dcb70f and moves again when they land, which is why the site says without exception. WITHDRAWN, AND RECORDED SO IT IS NOT RE-LITIGATED: I reported to the orchestrator that the v83 teammate report was internally inconsistent on eleven versus ten sibling-derived figures. It is consistent - eleven is ten plus the ledger. No body sentence made that claim, so nothing was owed here, verified by grep for eleven, inconsisten, contradict and self-contradic over the whole document. THREE MORE FOUND WHILE RE-RUNNING, NONE REPORTED BY ANY SURFACE. (a) SCREEN ONE IS A DETECTOR AND THE D-3 RULE AS FIRST WRITTEN CONDEMNED IT: its [Mm]easured branch matches this document's prose by design and its discriminating power is the seven-hex-digit co-occurrence filter, not the absence of the needle - so the rule is scoped to COUNTING screens, whose published value is a count of members, and the detector exception is named with its own residual, that a line carrying the marker and an unrelated seven-hex token is declined for the wrong reason. Screen one was also re-run live rather than reasoned about: it prints 84 lines over the body at 1cbddb7 and 84 over the shipped body of this revision, the two differing only in one line's version number. It printed 85 over an intermediate draft of mine, a state that was never committed and whose reading is therefore not re-derivable and is recorded as process and not as a figure; the extra line was a rule sentence of mine using the bare marker word, reworded to measurement commit. (b) THE LANDING-COMMIT DERIVATION NO LONGER FOUND MY OWN ENTRY: -S'- v1.NN: Plan audit' returns 8909ec4, 7982c18, 06ef40f, f91a74b and 1cbddb7 for v1.93 through v1.97 but nothing for an entry that does not open Plan audit, and this one does not; the needle is generalised to the entry's leading token, verified to return the same five, with the residual that an unlanded revision and an unmatched needle both return silence. (c) the -F property claim quoted an error message without naming the implementation that produces it. An interactive shell here resolves grep to ugrep, which rejects the same pattern with a different message; the load-bearing half, that it FAILS rather than returning a wrong number, holds under both, and the message is now stamped BSD grep 2.6.0-FreeBSD. Every -cF cell and the -cE driver were re-run one by one under both implementations and return identical values, so no published integer depends on which grep the reader has. PRECHECK: PASS issues=0; every advisory kept deliberately - 12 PATH for artifacts Phase 5 has not written yet, 3 LINEPIN at the one sentence that names those values precisely to explain why a value sweep is the wrong screen, 11 STALESHA where the older sha is the point and the re-run sits beside it, and every COUNT advisory inside this Version History with zero falling in the body, which the body declares out of class by construction.
 - v1.99: Round-thirteen GATING audit v84 at freeze 700c599 (doc-auditor teammate: must 2 should 3 nit 1). NOT A GATING PASS, no two-surface clean, no exit gate: codex is exhausted until 2026-09-07 11:28 so every surface shares a model family with the authoring surface, and the agy leg returned PASS must=0 should=0 beside two musts one of which the orchestrator verified by execution - the third consecutive round a clean agy leg sat beside real defects, so it is not cited as evidence about this document. MUST 1, CROSS-DOCUMENT AND THE DESIGN OWNS THE ORIGIN: the _field escaper's rationale attached 'which json.dumps leaves literal AND splitlines() breaks on' to a whole set (DEL, the C1 range with U+0085, U+2028/U+2029) and the conjunction is false of most of it. Executed per code point on python 3.11.8 darwin and published under Measurements as 'json.dumps line-breaking, per code point': of 67 Cc/Zl/Zp code points json.dumps leaves 35 literal, and those 35 are SET-EQUAL to the set this document names (DEL + 32 C1 + LS + PS), which is the part that makes the arithmetic checkable; splitlines() breaks on 3 of the 35 (U+0085, U+2028, U+2029); DEL yields 1 line and 31 of the 32 C1 code points yield 1 line. Scope now states the two reasons apart - the three breakers are what the one-physical-line transport invariant AC-4.3 turns on, DEL and the rest of C1 are escaped because an unescaped control is unrenderable inside a verdict line. THE COMPOSITE FIXTURE THE DESIGN CITES IS RUN PER MEMBER, which is DECISION O applied to an inherited fixture: the NEL+LS+PS+DEL heading does split into 4 lines, and minus DEL it still returns 4 while minus NEL, minus LS and minus PS each return 3 - so four lines is what three breaking characters produce and the composite cannot see DEL's (nil) contribution. THE GUARD IS NOT WEAKENED: test_unicode_line_separators_cannot_split_a_verdict_line drives all four (grep -c 'U+0085, U+2028, U+2029 and U+007F' on the impl-plan -> 3 at 700c599, the AC-4.1 row plus two prose restatements, assigned by reading; grep -c 'U+2028, U+2029 and DEL' on the design -> 1), so c1-escape-removed is still killed through NEL. This is a documentation defect, not a behaviour defect, and the design's copy is REPORTED not edited. MUST 2, PROVENANCE ONLY, ONE EDIT: the titled_section end-of-match premise carried a LOCATOR (grep -n 'P<marks>' -> 1) where the paragraph turns on BEHAVIOUR. CLOSED AS A CLASS, not as two members: a sentence naming a stdlib or OS call and asserting what it does is a probe and takes a probe's treatment - a fenced command, its output and its version-or-sha stamp - or it says unexecuted in as many words. FIVE members found and ALL FIVE EXECUTED rather than labelled, so the class ships with no unexecuted member and nothing promoted to a finding on a reading: the json census above; re.search end-of-match, match.end() 4 on '## H\nBody\n' and 5 on '## H\n\nBody\n' with remainder '\nBody\n' both times; a buffered TextIOWrapper deferring the OS write (os.stat st_size 0 after write(100), 100 after flush()); the (st_dev, st_ino) alias key on the OPENED descriptors catching a hard link True and a symlink True with an unrelated file False as the negative control; and unpacking a None result raising TypeError 'cannot unpack non-iterable NoneType object' while bind-then-check reaches the loud failure. RESIDUAL, stated because no screen reaches it: the carve-out sweep is driven off STAMPS, so a premise carrying no stamp at all is invisible to it for the same structural reason the calendar-date member was; a stdlib-symbol driver branch is deliberately NOT built because it would screen the symbols this document happens to use rather than the class. CARVE-OUT POPULATION EXTENDED UNDER ITS OWN RULE: all five probes are stamped python 3.11.8 on darwin, so each is a row, added as a SEPARATELY HEADED BLOCK read at 700c599 rather than mixed into the eight cf3a862 rows, which are untouched and whose readings stand. Population is now thirteen rows, twelve exempt probes and one not; thirteen is a HAND COUNT of two tables and says so, because no row selector separates a row from a sentence quoting one (working-tree body-scoped, counting this sentence's own mentions: the backtick-space form 24, the row-shape form 15 = 13 rows + 2 headers). 74e126f appears in 0 of those 15 lines, a SUPERSET of the rows, which re-derives over the whole population the reading the closure paragraph states over the eight. The fence-body de-indentation case is still not a row - it shares a subject and stamp with the scanner-grammar-corpus row and none of these five shares a subject with an existing row. REGISTER STAMP MOVED 1cbddb7 -> 700c599 by the interval argument RUN rather than recalled: git rev-list --oneline 1cbddb7..700c599 returns exactly one commit, 700c599 itself, and v1.98's entry enumerates its re-runs with no register member among them; not argued from byte-identity, git diff --shortstat 1cbddb7 700c599 reports 157 insertions / 56 deletions. The register's 'five OS- or runtime-determined probes' is re-scoped to the carve-out table's cf3a862 BLOCK, because 'five of the carve-out table' would now read as a claim about twelve exempt probes; the five added at 700c599 were all executed this revision and are not register members. SHOULD 1: collector and gate are NOT locals of the nested run_recipe - they are computed in the enclosing test test_documented_gate_recipe_halts_instead_of_gating_an_empty_path and run_recipe CLOSES OVER them, which is exactly why hoisting to module level would leave them unbound, so the old wording understated its own argument; read by grep -n on the four def/assignment forms at 74e126f, with git diff --stat 74e126f 700c599 on h-mad/tests empty so it holds at the freeze. SHOULD 2: the quantified assertion-shape claim is now LABELLED a hand reading of six functions, bounded by a census rather than by recall (grep -c 'assert |pytest.raises' -> 9 at 74e126f, nine assertion sites across the six functions, every one read). SHOULD 3, AND THE AUDITOR'S OWN SCREEN DID NOT REPRODUCE: its line-scoped grep returns 5 lines that resolve to surface one, surface three and this paragraph's quotations of those two - surface TWO's own carve-out sentence wraps across a line break ('there is no / non-DOCBLOCK exit') and is unreachable by ANY line-scoped grep, which is the same mechanism that made a spec enumeration miss a wrapped claim in v1.91. The screen published instead is PARAGRAPH-scoped and run at the freeze: union 3 paragraphs = the three surfaces, per branch 'exactly one .*verdict' 9/11/19, 'prints exactly one' 9/11/19, 'one *physical* line' 9/11, 'verdict line for' 19, 'no non-DOCBLOCK exit' 11 - so exactly ONE branch reaches surface two's own claim and dropping it leaves a union that is right for the wrong reason. Controls both directions on awk version 20200816: the plain positive fires under both forms, the WRAPPED positive only under the paragraph-joined form, the negative declined by both. Residual: it is a phrase alternation, so a fourth surface worded differently is invisible and the sweep stays by claim; second residual MEASURED AFTER THE LAST EDIT and the estimate would have been wrong - the working-tree run returns 6 where the freeze run returns 3, three added paragraphs being this revision's own screen prose and its two fixtures. NIT: the titled_section regex is reproduced with its re.escape, since a source span this document reproduces verbatim must stay findable by a literal grep. NO LITERAL U+0085, U+2028, U+2029 OR U+007F BYTE IS WRITTEN INTO THIS DOCUMENT - every fixture builds its characters with chr(), because a literal one would make this file's line count differ between awk and any splitlines()-based reader including the precheck; measured after the last edit, python3 counting those four code points in the file -> 0. NOT RE-RUN and named rather than passed over: the markdown-it-py 14-case corpus, the five cf3a862 OS/runtime probes, the doc-auditor.md 8/4 fence-toggle readings, the Setext differential, the six screen-two legs, the three 74e126f self-counts, the pytest collect counts and the 2748 floor, the live hmad-dispatch run --timeout probe, and the membership of the five triage categories. PRECHECK: PASS issues=0; every advisory kept deliberately - 14 STALESHA where the older sha is the point and the freeze re-run sits beside it, 12 PATH for artifacts Phase 5 has not written yet, 3 LINEPIN on the paragraph that quotes replaced line pins as DATA, and every COUNT advisory inside this Version History, which the body declares out of class by construction - the COUNT total is deliberately NOT published, because this entry is itself inside the corpus the precheck scans and a figure that its own publication moves is the self-match defect this revision measured twice elsewhere. ALSO IN THIS REVISION, not in the report: the STAMP-DRIVEN DRIVER is re-run over the extended population, because the rule it implements is what put the five new rows there - per branch, body-scoped, freeze -> working tree, python-version 15 -> 26, awk-version 11 -> 12, markdown-it-py 8 -> 8, union 32 -> 44, with the twelve added lines ASSIGNED BY HAND (each probe contributes its table row plus the interpreter line inside its own recorded output = ten; the eleventh is the class paragraph's prose about the stamp form and the twelfth is the awk-version stamp on the surface screen's controls, which is deliberately NOT a new row because its subject is the awk build the existing awk boundary probe row already owns and the screen it stamps carries a sha). The working-tree readings are of the body BEFORE the resolution paragraph was written and that paragraph then moved them, so the post-last-edit readings are published beside them: 28 / 13 / 8, union 47, the three-line difference being the resolution paragraph itself. And the pointer to the re.search probe is reflowed onto one line - it wrapped, so a literal grep for the pointer name returned 2 where the name occurs 3 times, which is the same defect as the re.escape nit one paragraph away. OWED ELSEWHERE, reported not edited: the design must split the same set by reason and replace its measured: composite citation with the per-member run, in its own words.
 - v1.100: Round-fourteen DELTA self-review of the 8c6539a diff (delta reviewer: must 2 should 4 nit 2). ADVISORY AS A GATE, NOT ADVISORY AS FINDINGS - both musts are defects on main and both were introduced by the v1.99 fix, in the paragraph the round-thirteen must rewrote. NO GATING CLAIM, NO TWO-SURFACE CLEAN, NO EXIT GATE: codex is exhausted until 2026-09-07 11:28 and every surface that read this revision shares a model family with the surface that wrote it. Authored against the working tree at 8c6539a, byte-identical to origin/main for this path (git status --porcelain on it returns nothing). MUST 1, THE TWO CROSS-DOCUMENT VERIFICATION GREPS DID NOT READ THE SITES THEY WERE CITED FOR. The axis is cross-document census, not either member, and the rule now written over it is that a sibling census is SCOPED to the sibling's body and EVERY hit is CLASSIFIED before it is described. IMPL-PLAN, re-derived at BOTH shas because the reviewer read 700c599 and the orchestrator read 8c6539a and their line numbers disagree while their KINDS agree: whole-file 3, which is what v1.99 published, body-scoped 2; the three are the _field docstring, the AC-4.1 checklist row and a Version History entry (the v1.25 entry), at both shas. So v1.99's assignment 'the AC-4.1 checklist row plus two prose restatements' is wrong on both non-checklist members - one sits OUTSIDE the body, which is the exact hazard this document states against itself in the spec-enumeration paragraph and then walked into here, and one is a CODE PAYLOAD, the _field docstring reproduced inside Task 1's delta rather than a restatement of the criterion. Fencedness is not readable by a line-scoped grep, so it is published as a fence-aware walk with TWO negative controls, one of which LIVE-DISAGREES: the one-character-run walk calls 1 of the 2 body hits fenced, an any-indent loose-close variant also 1, and a mixed backtick/tilde character class calls 2 of 2, because a prose line carrying a run of both opens a phantom fence. Residual as a category: any cross-document census over this sibling that is not fence-aware in that specific way misreports code payloads as prose. DESIGN: the needle v1.99 published, 'U+2028, U+2029 and DEL', returns 1 body-scoped at 700c599 and 1 at 8c6539a, but that hit is the AC-4.1 PROSE SENTENCE and never touched the c1-escape-removed mutation row it was cited for. Re-pointed at a needle taken from the row itself, 'DEL, C1 controls (U+0085) and U+2028/U+2029 stay literal', which returns 1 body-scoped at both shas and is therefore stable across the design's own v1.104 rewrite of that row's second half; re-measure it if the row is reworded again. The conclusion is unchanged - c1-escape-removed is still killed through NEL whatever DEL does. MUST 2, THE 'UNSCREENABLE' REASON GIVEN FOR A HAND COUNT IS REFUTED BY A SELECTOR THIS DOCUMENT ALREADY PUBLISHES. v1.99 said thirteen is a hand count because no row selector this document could publish separates a row from a sentence quoting one; the register paragraph publishes exactly such a selector and describes it as the one thing every row carries and no other line in the body does. Body-scoped, the line-anchored row form with the backtick-space verb returns 8 at 1cbddb7, 8 at 700c599 and 13 at 8c6539a - the eight rows before the new block, the thirteen after it, headers excluded with no special case because a row goes on to give arguments while both header cells close their span immediately after ls-files. Published with its residual stated as a category: the selector is line-start anchored, so a row quoted verbatim at line start, in prose or inside a fence, would be counted as a row; none exists at this revision, which is why the 13 IS the thirteen rows rather than a bound on them, and that is the thing to re-check when a later revision quotes a row. The hand count of the two tables is kept beside it as an independent cross-check, not as the reason. The same sentence's second half was also false: 'both readings count this sentence's own mentions' holds ONLY of the unanchored backtick-space form; the row-shape form returns 15 = 13 rows + 2 headers and counts NO prose line at all, by the same line-start anchoring that makes the row selector work. MEASURED AFTER THE LAST EDIT, every figure this revision touches or could have moved. Row selector 13 body-scoped over the post-edit working tree, unchanged from 8c6539a because it is line-anchored and this revision adds no line beginning with a pipe; row-shape form 15 at 8c6539a and 15 post-edit, with 74e126f in 0 of those 15. The unanchored backtick-space form moved 24 to 25 BY CONSTRUCTION, because the new paragraph quotes the needle once more - published as 25 with that reason, stamped to a working tree and to nothing else, and flagged as moving again whenever the paragraph is reworded. NOT MOVED, re-run rather than assumed: the stamp-driven driver per branch and body-scoped reads python-version 15 / awk-version 11 / markdown-it-py 8 / union 32 at 700c599 and 28 / 13 / 8 / 47 at 8c6539a AND over this working tree, so v1.99's post-last-edit readings reproduce exactly and the twelve-added-lines partition is untouched; the paragraph-scoped surface screen reads 6 at 8c6539a and 6 post-edit with per-branch ordinals identical (9 11 13 14 15 24 / 9 11 13 14 15 24 / 9 11 / 13 14 15 24 / 11 13 14 15), line-scoped 16 and 16; and python3 counting U+0085, U+2028, U+2029 and U+007F in the file still returns 0. SELF-INTRODUCED DEFECT CAUGHT BEFORE SHIPPING, recorded because the measured failure mode of this loop is that the fix introduces the next finding: the first fence walk written for the impl-plan classification used a mixed backtick/tilde character class and reported 2 of 2 body hits fenced. It is wrong - a prose line in the impl-plan carrying a backtick followed by three tildes opens a phantom fence - and it was caught only by diffing it against a second walk written earlier in the same session, not by reading it. The wrong variant now SHIPS AS A CONTROL beside the correct one rather than being deleted, because a classification whose instrument two reasonable readers implement differently needs its disagreement published. CROSS-DOCUMENT STALENESS THE ROUND ITSELF INTRODUCED, taken from the reviewer's should: v1.99 routed the _field defect to the design's author as work not done here, but the design was repaired in the SAME commit as v1.99. The sentence now names design v1.104 at 8c6539a and publishes the diff grep that shows it (git show 8c6539a --format='' on the design path piped to grep -c on the added split sentence returns 1). HARMONISATION ASYMMETRY STATED RATHER THAN RESOLVED, on the decision sheet's instruction: the two repairs were written independently and agree on every figure and on the two-reason split, but their residuals differ in BOTH directions - this document publishes the set-equality check the design does not, and the design states a residual this document does not carry, a boundary-treated code point outside Cc/Zl/Zp; body-scoped grep -c 'Cf' on the design returns 1, whole-file 2 with the second a Version History entry, which is the same scoping trap again inside the very reading that establishes the point. Neither document adopts the other's residual, so a reader reconciling them needs both. A matching absence count over THIS document is deliberately NOT published, because the needle would have to be written into the sentence publishing it, which is the self-match this revision measures elsewhere. NOT TAKEN and named: the reviewer's three remaining shoulds and both nits. The design's two unexecuted decomposition figures are the design's to fix; the carve-out row covering two premises and the deictic 'this one' in the surface-screen paragraph are left for the gating cycle to weigh, because editing either would move a paragraph population the reviewer re-ran byte-for-byte this round and the decision sheet asks that it not be disturbed. NOT RE-RUN and named rather than passed over: the markdown-it-py 14-case corpus, the five cf3a862 OS/runtime probes, the five 700c599 stdlib probes' own outputs, the doc-auditor.md fence-toggle readings, the Setext differential, the three 74e126f self-counts, the pytest collect counts and the 2748 floor, and the live hmad-dispatch run --timeout probe. PRECHECK: PASS issues=0; advisories 15 STALESHA / 12 PATH / 3 LINEPIN, every one kept deliberately - the STALESHA count rose by one because this revision deliberately cites 1cbddb7 and 700c599 beside 8c6539a, which is the whole point of a reading taken at two shas, and every COUNT advisory sits inside this Version History, which the body declares out of class by construction. OWED ELSEWHERE, reported not edited: nothing new falls to the design or the impl-plan from this revision's two musts, since the design's copy of the _field rationale was already repaired at 8c6539a; the design still owes its two prose decomposition figures (4 lines with DEL removed, 1 with DEL alone) either as executed prints or as a citation of this plan's measurement.
+- v1.101: Round-fourteen GATING revision on audit v85 at freeze b3be433 (doc-auditor teammate: must 3 should 4 nit 2). NO GATING CLAIM, NO TWO-SURFACE CLEAN, NO EXIT GATE: codex is exhausted until 2026-09-07 11:28, and the agy leg returned PASS must=0 should=0 on this document while the gating teammate found three musts - the fourth consecutive round of that pattern, so that leg is not cited as evidence about this document in either direction. Measured at b3be433, which is v1.100's landing commit and is byte-identical to the working tree for this path (git status --porcelain on it prints nothing). EVERY PROPERTY CLAIM v1.100 SHIPPED WAS RE-EXECUTED BY THE AUDITOR AND ALL OF THEM REPRODUCED; none is disturbed here. All three musts were in OLDER text and all three are the same shape - a sentence whose referent moved. MUST 1, THE CODEX-LEG LEDGER WENT STALE INSIDE THE SENTENCE SAYING IT MUST NOT, FOR THE SECOND TIME. Re-derived with the document's own published command, one run per sha: 1cbddb7 72/83, 700c599 72/83, 8c6539a 72/84, b3be433 72/84. The teammate half moved to 84 at 8c6539a - the commit v1.100 was authored against - so the published 83 was already wrong there, and neither the v1.99 nor the v1.100 entry mentions the ledger at all. Re-stamped to 72/84 at b3be433 and the whole series published, because the series is the argument. THE CLASS, NOT THE FIGURE: a figure whose corpus is a directory the round itself writes into cannot be carried across a revision under any argument, since the commit that lands the revision also lands the report; the rule is now re-run at the revision's measurement commit and publish, or the entry records the non-run, the register being the only other admissible place. RESIDUAL AND IT IS ALREADY OUTRUN: this round's two v85 reports exist uncommitted at b3be433 and take the teammate half to 85 when they land. Residual (2) is no longer hypothetical either - git status --porcelain on docs/01-plan/features/ filtered to this feature's plan audits returned 0 when v1.98 wrote that sentence and returns 2 now, so the ls-based working-tree form reads 85 where the sha'd form reads 84, which is the divergence that residual predicted. Residual (1) re-run: the grep -c form returns 72 for codex and 12 for teammate at b3be433, up from 11 at 1cbddb7. The value was swept: the second surface stating the ledger, in the docs/-scoped rule paragraph, carried the series to 83 at 7d8e797 and now records the 84 recurrence; the quality residual's copy of 83 was 84-ed. MUST 2, THE REGISTER WAS STAMPED OLDER THAN ITS OWN MEASUREMENT COMMIT AND EXCLUDED FIVE FIGURES ON A DEIXIS. Re-derived rather than taken from the report: the lead read Inherited-unverified at 700c599, the commit v1.99 is measured at, while v1.100 was measured at 8c6539a - the same detachment the paragraph above it repairs, happening in the paragraph that defines it. Re-stamped to b3be433 with the interval argument RUN: git rev-list --oneline 700c599..b3be433 returns exactly two commits, 8c6539a and b3be433, and both entries enumerate their re-runs with no carried member among them, both instead naming the register's contents under NOT RE-RUN; not argued from byte-identity, git diff --shortstat 700c599 b3be433 reports 482 insertions / 13 deletions. THE INTERVAL ARGUMENT IS NOW EXPLICITLY SCOPED to members already in the register when the stamp moved, because this revision both adds and removes members and the interval says nothing about a figure that was outside the register while it ran. THE DEIXIS IS THE REAL DEFECT: three status assignments turned on the words this revision - the cf3a862 probes membership, the 700c599 probes NON-membership, and the triage categories - and the 700c599 one was false the moment v1.100 shipped, since v1.100's own entry lists the five 700c599 stdlib probes' own outputs under NOT RE-RUN while the register still said they were not members at all. THE FIVE 700c599 STDLIB PROBES ARE ENTERED AS MEMBERS, last executed v1.99 at 700c599, with the rule that a carve-out probe leaves the register only for the revision that executes it and re-enters at the next revision that does not. The members are now a bulleted list, one per line, each carrying the revision or the commit its last execution is stamped at. RESIDUAL PUBLISHED RATHER THAN PAPERED OVER: only two of the six entries name an executing REVISION and the other four name the commit or version their reading is stamped at, because that is what this document records for them and reconstructing a revision number from a stamp is the recall the register refuses. A value sweep on the phrase this revision is the WRONG screen and is said so - it reads 32 body-scoped at b3be433 and most are legitimate; the repaired class is the narrower one of status assignments a later reader will read. MUST 3, THE EXHAUSTIVENESS CLAIM WAS ASSERTED FROM ONE SURFACE AND IS NOW DERIVED FROM FOUR - AND THE AUDIT REPORT'S SHAPE FOR IT IS WRONG. It filed spec pgid=<n> against three siblings' quoted form. Censused body-scoped at b3be433 with EVERY OCCURRENCE CLASSIFIED, the token pgid= carries TWO UNRELATED GRAMMARS - a Python keyword argument to LaunchFailed(stage, err, pgid=...) and a bare field on the emitted verdict line - and ten of the eleven pgid= occurrences in the feature are the kwarg. Occurrence-level: spec pgid= 1 of which LaunchFailed( 0, pgid: 0; plan 0/0, pgid: 1; design 5 of which LaunchFailed( 4, pgid: 10; impl-plan 6 of which LaunchFailed( 6, pgid: 8. So the emitted-field picture is THREE-WAY and the design DISAGREES WITH ITSELF: the spec spells it bare at AC-4.6 only; the design spells it quoted in its _field example and its verdict table and names pgid: as a detail key four more times, AND spells it bare once in its own AC-4.6 row (the single non-kwarg hit, isolated by grep -oE on a 60/20 window piped to grep -v LaunchFailed); the impl-plan is quoted-only; and this document carries the emitted field in NEITHER spelling. There is no consensus spelling to harmonise on and nothing cross-document is repaired here. What this document now claims is what it derives: the seven bare fields are the seven the design's Verdict lines, one per run. paragraph states, and pgid is quoted in this document's own contract. THE POINTER WAS ALSO BROKEN AND NO AUDIT FILED IT: design v1.79 SECTION-Verdict lines named neither a live version nor a real section - the design has NO heading carrying the word verdict (a heading scan piped to grep -i erdict prints nothing) while grep -c on the paragraph's opening literal returns 1 - so it is re-addressed by that literal. CLASS: an exhaustiveness claim about a set more than one document states is derived by a census over every surface that states it with every occurrence classified by grammar before any is counted, or it is not made. Residual: the needle is a literal string, so a surface stating a member in prose without the token is invisible, and the census bounds spellings and never intent. SHOULD 3 AND ITS CLASS: the cardinal list's member "admissible are ..." occurred ONCE in the whole file, its own list entry, so a reader had nowhere to check; replaced by the three admissible categories, and the class closed by a check every member now passes - each needle returns at least 2 over the PARAGRAPH-JOINED body (tr newline to space, because this document hard-wraps): six screen-two legs 2, Seven members at cf3a862 2, five** OS- or runtime-determined probes 5, twelve exempt probes 2, five members 2, the three admissible categories 2. Second residual on that check: it establishes findability and never that the surface found is the one the cardinal is about. SHOULD 4, BOTH SCREENS RE-RUN AND THE DELTA READ, un-discharged for two revisions. Screen one returns 92 body lines at b3be433, 92 at 8c6539a, 84 at 1cbddb7 and at 700c599 - so the +8 landed with v1.99 and v1.100 added none - against the last published TRIAGE of 32 over the 6f0ee85 body. The eight were isolated with diff of the program at the two shas and READ LINE BY LINE: all eight are hard-wrapped continuation lines of sentences whose subject is measurement itself, not one an un-stamped provenance claim. ALL-CAPS control re-run: 3 body-scoped at b3be433, all three the control's own fixture, and the same grep on printf 'stamped TODAY with no sha' returns 1. Screen two re-run against the spec's enumeration AS THE SPEC SHIPS IT AT b3be433, which matters because that checker has moved once before under this document's feet: the anchored address returns 1 on the spec at all five shas and 0 on the design and impl-plan at b3be433; over this body the enumeration returns 122 at 6f0ee85, 225 at 1cbddb7, 228 at 700c599, 262 at 8c6539a, 271 at b3be433, published as a DELTA and never as a measurement. ALL SIX LEGS RE-EXECUTED AT b3be433 AND ALL SIX REPRODUCE - the 335f535 positive returns its line, both true negatives return nothing, the blind form returns nothing while the noun-restored form returns 1, the over-reach returns 1 while screen one declines the same sentence, three importing test files is declined by the 74e126f form and returned by the b3be433 form, and printf 'zero files' returns nothing while printf 'one file' matches; Residual on the enumeration itself returns 1 on the spec at b3be433. The six therefore LEAVE the register for v1.101 only. v1.100 named the six nowhere, which is derivable: an awk over the Version History for screen-two leg returns every entry v1.94 to v1.99 plus this one and NO v1.100. NIT 1 CLOSED STRUCTURALLY: the five-name enumeration now sits immediately after its head noun as a bullet, with the twelve-probes aside moved after it, so it can no longer attach to the nearer five. NIT 2: the 25 reading was stamped to a working tree and to nothing else, which discouraged a check that exists - that working tree landed as b3be433 and the 25 reproduces there. It reads 24 at 8c6539a and 25 at b3be433, and it EXCURSED TO 26 AND BACK DURING THIS REVISION'S EDITING: writing the repair with the command spelled out in full added a twenty-sixth match, replacing that spelling with a description returned it to 25, and both moves were found by re-running after each edit rather than by reasoning. The excursion is recorded as PROCESS and not as a figure, an uncommitted intermediate tree being re-derivable by nobody. ALSO MEASURED AFTER THE LAST EDIT AND DELIBERATELY NOT PUBLISHED AS A FIGURE: the stamp-driven driver's working-tree union, because two register bullets rewritten this round each name a probe by its interpreter or renderer stamp, which the driver counts, so the sentence assigning them would have to quote the same stamps again - each publication moves the figure it publishes and there is no fixed point. The 44 partition is untouched, neither addition being a probe or a row, and the landed 28/13/8/47 reproduces at 8c6539a AND at b3be433, so the driver is checkable at a sha whatever a working tree reads. THE SAME SELF-MATCH IS STATED AT THE CARDINAL-LIST CHECK: its six needles read 2/2/5/2/2/2 at b3be433 and one higher over the body this revision ships, because the sentence publishing the check quotes each needle once. FOUND BY ME, IN NEITHER THE REPORT NOR THE BRIEF, AND THE SAME CLASS AS MUST 1: the once-per-revision measurement-commit declaration still read v1.98 is measured at 1cbddb7, three revisions stale, and the freeze-phrase triple beside it read 32/21/11 when the tree gives 37/21/16 - it moved to 37 at 8c6539a with the 4e4a00c half unchanged, so a figure this document publishes twice went stale between the revision that took it and the revision that shipped beside it. Both repaired at b3be433. EVERY docs/-SCOPED FIGURE RE-RUN AT b3be433 AND EVERY ONE REPRODUCED: seven-plus-two-plus 1, mutation-target 1, 49 AC anchors with the duplicate check printing nothing, AC-6.1's two spec greps 1 and 0, spec len(tuple) 2, the spec awk-opener locator 1 with design and impl-plan 0 each, Residual on the enumeration itself 1, the spec opener census 21 openers over 11 distinct tokens with the distribution unchanged, the impl-plan find_heading call 4, and the spec-immobility premise (git diff --stat cf3a862 b3be433 on the spec empty, spec still v1.60). Interval closure re-run from both 74e126f and 4e4a00c with b3be433 as the right-hand side: h-mad handoff prints nothing, the piped form prints docs alone; the body carries 70 occurrences of 4e4a00c, UNMOVED across 1cbddb7, 700c599 and 8c6539a, which is not evidence it need not be re-taken since the two figures beside it both moved. Row selector 8/8/13 extended to 13 at b3be433; the row-shape 15 form holds at b3be433. NOT RE-RUN and named rather than passed over: the markdown-it-py 14-case corpus, the five cf3a862 OS/runtime probes, the five 700c599 stdlib probes' own outputs, the doc-auditor.md fence-toggle readings, the Setext differential, the three 74e126f self-counts, the membership of the five triage categories, the pytest collect counts and the 2748 floor, and the live hmad-dispatch run --timeout probe. OWED ELSEWHERE, REPORTED NOT EDITED: the spec owes its AC-4.6 pgid spelling and the 2486 in its AC-6.4 gate command and BAD_ARGS in AC-4.2's exit-0 enumeration; the design owes the bare pgid= in its own AC-4.6 row, which contradicts its own exhaustiveness paragraph.
