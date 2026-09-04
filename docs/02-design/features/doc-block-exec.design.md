@@ -25,15 +25,36 @@ tests.
 claimed self-containment while omitting any equivalence test — the violation the Single-source
 contract names. v1.2 added a differential test, which is **not achievable**: `_fence_aware_end`
 toggles on any ```-prefixed line, so on an unbalanced inner quote inside a four-backtick fence it
-stops early, while AC-1.6 requires the new scanner not to. Measured on the real helper:
+stops early, while AC-1.6 requires the new scanner not to. Measured on the real helper — `python3.11`
+(3.11.8), run from the repository root at `700c599`, both arms of the differential in one run so
+neither is read alone:
 
+```python
+import sys; sys.path.insert(0, "h-mad/tests")
+from docsections import titled_section
+F = "````bash\n```bash hmad:exec\n%s## Not a heading\n````\n"
+for label, inner in (("balanced  ", "```\n"), ("UNBALANCED", "")):
+    body = (F % inner).split("\n")
+    pre = [l for l in body[:body.index("## Not a heading")] if l.lstrip().startswith("```")]
+    print("%s 4-backtick : %d toggles before the '##' -> in_fence=%s"
+          % (label, len(pre), len(pre) % 2 == 1))
+    print("%s 4-backtick : bound = %r" % (label, titled_section("## S\n" + (F % inner), "S")))
 ```
-balanced   4-backtick : bound reaches the closing ````   (even toggle count masks the bug)
-UNBALANCED 4-backtick : bound = '\n````bash\n```bash hmad:exec\n'   <-- cut at an IN-FENCE '## Not a heading'
+```
+balanced   4-backtick : 3 toggles before the '##' -> in_fence=True
+balanced   4-backtick : bound = '\n````bash\n```bash hmad:exec\n```\n## Not a heading\n````\n'
+UNBALANCED 4-backtick : 2 toggles before the '##' -> in_fence=False
+UNBALANCED 4-backtick : bound = '\n````bash\n```bash hmad:exec\n'
 ```
 
-Byte-identical bounds and AC-1.6 cannot both hold, so a differential test would have failed on the
-very shape AC-1.6 exists for.
+**The toggle counts are printed rather than reasoned, because reasoning them is where this
+paragraph went wrong once already.** The balanced arm reaches the `##` line with *three* toggles
+behind it — the inner closing quote has flipped the tracker back to in-fence — so the heading is
+skipped and the bound runs past it; that arm is healthy only because the outer close brings the
+body's total to an even four. The unbalanced arm has no inner closing quote, reaches the `##` with
+*two*, and the tracker says out-of-fence, so the bound is cut inside the fence. Byte-identical
+bounds and AC-1.6 cannot both hold, so a differential test would have failed on the very shape
+AC-1.6 exists for.
 
 **Resolution: satisfy the invariant's FIRST branch — one authoritative implementation all surfaces
 call.** This module owns the bounder; `h-mad/tests/docsections.py` imports it and keeps its
@@ -63,7 +84,7 @@ caller (test, or operator on the CLI)
    extract()  ──────────►  [Block, …]          PURE SCAN, fence-aware
         │                    .text .shell .lineno .info
         ▼
-   select(blocks, index) ─── POLICY: index<1 ──► BAD_INDEX ; 0 ──► NOT_FOUND ; >1 no index ──► AMBIGUOUS
+   select(blocks, index) ─── POLICY: index<1 ──► BAD_INDEX ; 0 candidates ──► NOT_FOUND ; >1 candidates, no index ──► AMBIGUOUS
         ▼ exactly one
   substitute()  ─────────►  (Block', counts)   literal replace, count each key; a NEW Block plus
                                                the per-key counts (tuple[Block, dict[str, int]])
@@ -877,12 +898,57 @@ instead of leaving it to be read off one instance**: a composite is excluded onl
 arms are separately stated at the same sha over the same corpus**, so the same composite restated
 at another sha, or over another corpus, is a site of its own until its arms are measured there.
 That is exactly what the `1861157` sentence is — a different corpus, 25 files, whose arms nothing
-had measured — and it is why it counts rather than being covered. (A reader re-running the sweep
-at a later sha gets a larger number: **36** at `cf3a862`, **42** at `7982c18` and at `4e4a00c`,
-**50** at `06ef40f` and at the freeze sha `68a70d6` — the four shas later than the stamped one,
-all four re-derived with the bracketed needle above, as was the stamped `36` itself. The delta is the labels each revision writes into candidate lines, which is why the figure
-is stamped at a blob and deliberately not given for the working file: this revision writes more
-labels again, so a working-file value would be a number this paragraph moved by being written.) **Residual, stated as a
+had measured — and it is why it counts rather than being covered.
+
+A reader re-running the sweep at a later sha gets a larger number. **Every sha later than the stamp is enumerated
+rather than remembered** — `git rev-list --reverse cf3a862..700c599 -- "$D"`, which lists the
+commits that *change* this blob, so a commit leaving the file untouched cannot appear as a distinct
+reading: `7982c18`, `06ef40f`, `f91a74b`, `1cbddb7`, `700c599`. Each of those five, plus the stamp
+itself, re-derived with the bracketed needle above over `git show <sha>:"$D"`: **36** at `cf3a862`,
+**42** at `7982c18`, **50** at `06ef40f`, **53** at `f91a74b`, **61** at `1cbddb7`, **63** at
+`700c599`. The delta is the labels each revision writes into candidate lines, which is why the
+figure is stamped at a blob and deliberately not given for the working file: this revision writes
+more labels again, so a working-file value would be a number this paragraph moved by being written.
+
+**The axis behind this list's two previous errors, closed once rather than member by member.** A
+sha addressed by its *role in the current round*, and a *cardinality* over shas, are both facts
+about the round rather than about the bytes, so both go stale with no edit to the sentence: the
+earlier form of this list named one sha by a role that had belonged to an earlier round, and
+asserted a count that three existing shas falsified, while every published *number* stayed correct
+— which is the signature of the class, a true measurement carried inside a false description. The
+rule is that a sha is written as its hex; where a role is genuinely useful it is pinned to a round
+ordinal rather than to "the" current round; and a count over shas is never written but derived by
+`git rev-list`. The screen, run over the head:
+
+```bash
+D=docs/02-design/features/doc-block-exec.design.md
+HEAD() { awk '/^## Version History$/{exit} {print NR": "$0}' "$1"; }
+HEAD "$D" | grep -iE 'the (freeze|frozen|audited|stamped|current|latest|head) (sha|commit|blob)'
+HEAD "$D" | grep -iE 'the ([a-z]+|[0-9]+) (shas|commits|blobs)'
+```
+
+Neither regex can match its own fenced text: each requires a literal `the ` followed immediately by
+an alternative, and what follows it in the fence is `(`. Both print nothing on the working file
+this revision ships; over the `700c599` blob they were calibrated on, the first prints two lines
+and the second one. **Residual on the sha-description screen, exactly, in three named parts.**
+(i) The role vocabulary is a closed list of seven words bound to three heads, so a sha described
+outside it — "the commit this revision answers", "the blob under audit" — is not reached.
+(ii) The cardinality arm requires a definite article, so a count written without one is outside it;
+widening it to `\b(the|at|over|across|of) ([a-z]+|[0-9]+) (shas|commits|blobs)\b` was calibrated
+and **deliberately not shipped as a zero-expectation screen**, because on this file it returns
+three lines of which one names later shas as a set rather than counting them — a description, not
+a cardinality — and a screen whose expected output is a triage list is not a screen. The two real
+un-articled cardinalities it finds are disposed of here by name rather than hidden: "at ten shas"
+in §Test Strategy's unstripped-fold progression, and "at two blobs" in the needle-literal
+paragraph — both re-counted against their own lists in this revision and both correct.
+The cost of holding the second arm at *print nothing* is that it cannot tell a count from an
+adjective, so a legitimate description in the definite-article form must be rephrased rather than
+exempted; this revision paid that twice, in the two sentences immediately above and beside this
+one.
+(iii) The screen is blind to a role label correct in *form* and wrong in *value* — a sha labelled
+"round eleven's freeze" that is not — which only re-reading the round's own record catches.
+
+Back to the candidate sweep's own screens. **Residual, stated as a
 category rather than as "and similar"**: these screens are two-state differentials, so an arm
 whose "repair" is itself wrong would read as agreement with the shipped code; that is why each
 repair must first move its control. And `ANYIND` is the arm-(2) *screen*, not the arm-(2) *fix* —
@@ -967,9 +1033,28 @@ boundary, and an in-process caller must meet the same wall `main` does.
 ### Execution
 
 `tempfile.mkdtemp()` **followed by `os.chmod(cwd, 0o700)`** is the cwd. `mkdtemp` alone gives
-`0o700 & ~umask` — probed: under `umask 0777` it yields mode `0o0` — so "0700 by construction",
-which an earlier draft claimed, was only true under the default umask; the chmod makes AC-3.13
-true everywhere. **`cwd` is `None` until `mkdtemp` returns**, and cleanup and read-back run only
+`0o700 & ~umask`, so "0700 by construction", which an earlier draft claimed, was only true under
+the default umask; the chmod makes AC-3.13 true everywhere. Probed — `python3.11` (3.11.8), darwin,
+at `700c599`, with the default umask carried as the control arm so the hostile arm is not read
+alone:
+
+```python
+import os, shutil, stat, tempfile
+for m in (0o022, 0o777):
+    old = os.umask(m); d = tempfile.mkdtemp()
+    before = oct(stat.S_IMODE(os.stat(d).st_mode)); os.chmod(d, 0o700)
+    print("umask %04o -> mkdtemp mode %s ; after chmod 0o700 %s"
+          % (m, before, oct(stat.S_IMODE(os.stat(d).st_mode))))
+    shutil.rmtree(d); os.umask(old)
+```
+```
+umask 0022 -> mkdtemp mode 0o700 ; after chmod 0o700 0o700
+umask 0777 -> mkdtemp mode 0o0 ; after chmod 0o700 0o700
+```
+
+The control arm is what makes the hostile arm legible: `0o700` under the default umask and `0o0`
+under `0777` is a *differential*, where the `0o0` alone could equally have been a broken probe.
+**`cwd` is `None` until `mkdtemp` returns**, and cleanup and read-back run only
 when it is not `None`: a `mkdtemp` that raises records `LaunchFailed("mkdtemp", err)` with no
 directory to remove, so the `finally` and the read-back are skipped rather than tripping over an
 unbound name (a literal "always `rmtree(cwd)`" is an `UnboundLocalError` on that path, which is a
@@ -983,17 +1068,38 @@ child in its own process group, which is what makes the timeout path able to rea
 rather than orphaning them. That failure was observed in this repository this session and the
 count is cited rather than recalled — four orphaned `hmad-dispatch exec-pane agy` processes, PIDs
 `82161 85642 90677 91239`, PPID 1, elapsed 2d 13-15h, each a `sleep 1` poll loop surviving its
-dead `pytest-9187/9132/9124/9102` run (`pgrep -fl 'exec-pane'`, reaped the same session). On
+dead `pytest-9187/9132/9124/9102` run (`pgrep -fl 'exec-pane'`, reaped the same session).
+**That four-process count is a historical observation, not a re-derivable measurement, and is
+labelled so rather than left to sit silently inside the measured-claim class**: the processes were
+reaped when they were seen, so the `pgrep` records how the count was taken and does not offer a
+re-run. Run rather than supposed: `pgrep -fl 'exec-pane'` prints nothing at `700c599` (exit 1, no
+match), and a reader must not read that null as a refutation of the observation. On
 `TimeoutExpired`: **`os.killpg(proc.pid, signal.SIGKILL)`** — the pid directly, *not*
 `os.getpgid(proc.pid)`. `start_new_session=True` calls `setsid()`, so the child is a group leader
 and its pgid is numerically its pid; going through `getpgid` only adds a lookup that can fail.
-Measured this session, and the failure is the very bug this path exists to prevent:
+Measured, and the failure is the very bug this path exists to prevent — `python3.11` (3.11.8),
+darwin, at `700c599`; the PIDs below are this run's output, not pins:
 
+```python
+import os, signal, subprocess, time
+def alive(pid):
+    try: os.kill(pid, 0); return True
+    except ProcessLookupError: return False
+p = subprocess.Popen(["bash", "-c", "sleep 300 & echo $! >&2; exit 0"],
+                     stderr=subprocess.PIPE, start_new_session=True)
+gc = int(p.stderr.readline()); p.wait()      # p.wait() is load-bearing: a zombie still answers getpgid
+print("pgid == pid ?  %d == %d  -> %s" % (p.pid, p.pid, os.getpgid(gc) == p.pid))
+try: os.getpgid(p.pid); print("getpgid after child exit: returned")
+except ProcessLookupError:
+    print("getpgid after child exit: ProcessLookupError   <-- direct child gone, grandchild alive =", alive(gc))
+os.killpg(p.pid, signal.SIGKILL); print("killpg(pid) after child exit: reached the group")
+time.sleep(0.3); print("grandchild %d alive_after=%s" % (gc, alive(gc)))
 ```
-pgid == pid ?  38030 == 38030  -> True
-getpgid after child exit: ProcessLookupError   <-- direct child gone, grandchild still alive
+```
+pgid == pid ?  65167 == 65167  -> True
+getpgid after child exit: ProcessLookupError   <-- direct child gone, grandchild alive = True
 killpg(pid) after child exit: reached the group
-grandchild 38032 alive_after=False
+grandchild 65168 alive_after=False
 ```
 
 When the direct child has already exited but a grandchild holds the pipe open — exactly the
@@ -1262,7 +1368,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    *lines* plus a number, as an `L`-prefixed number, or as a colon-plus-number not preceded by a
    filename-shaped token. Those three blind forms were swept separately at `74e126f`, again
    at `35698f9` (the alternation below is in both blobs, so both runs are reproducible), and
-   again on the working file this revision ships, **after the v1.103 entry**, over the same
+   again on the working file this revision ships, **after the v1.104 entry**, over the same
    head-of-document corpus, with the alternation
    `line [0-9]{2,}|lines [0-9]{2,}|\bL[0-9]{3,}\b|[^A-Za-z0-9_./-]:[0-9]{2,}`, and the only hits
    are the two `lines …` fields of the block-census *output* quoted above — a printed count, not
@@ -1275,7 +1381,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    instance the wrapper split. That is a live hazard for a multi-*word* target and not for this
    one — a `path:NNN` pin contains no whitespace, so no hard-wrapper can break it; only a
    hand-inserted newline inside the token could, which is why the fence above stays line-scoped
-   and readable. It was checked rather than assumed — **on the working file this revision ships, after the v1.103 entry**, and the
+   and readable. It was checked rather than assumed — **on the working file this revision ships, after the v1.104 entry**, and the
    phrasing is deliberate: this fence does not exist in the `35698f9` blob
    (`git show 35698f9:$D | grep -cF "tr '\\n' ' '"` → `0`, against `1` at `6f0ee85`), so a bare
    sha here would send a reader to a document that does not contain the thing being validated.
@@ -1538,7 +1644,53 @@ draft specified `exit_on_error=False`, which is precisely what suppresses argpar
 `argparse.ArgumentError` inside `_parse_known_args` and never reached the override. `ArgumentError`
 is not a `DocBlockError`, so it escaped `main` as a traceback with a non-`DOCBLOCK` exit: the exact
 breach this paragraph forbids, on one of the two inputs `test_malformed_invocation_is_a_verdict`
-drives. Measured on python 3.11.8 with `allow_abbrev=False` and `error()` overridden:
+drives. Measured on `python3.11` (3.11.8) at `700c599`. The CLI module does not exist yet, so the
+probe builds a **standalone parser carrying the three argument kinds the five shapes exercise** — a
+positional, a required option taking a value, and a typed option — under this design's
+`allow_abbrev=False` with `error()` overridden to raise. It is not the whole CLI grammar (`--subst`,
+`--stdout`, `--stderr`, `--shell` are absent and none of the five shapes needs them); what makes the
+reading load-bearing is that it is a claim about *argparse*, re-runnable today, rather than a claim
+about code not yet written:
+
+```python
+import argparse, contextlib, io, sys
+class BadArgs(Exception): pass
+def parser(eoe):
+    class P(argparse.ArgumentParser):
+        def error(self, msg): raise BadArgs(msg)
+    p = P(prog="doc-block-exec", allow_abbrev=False, exit_on_error=eoe)
+    p.add_argument("path"); p.add_argument("--heading", required=True); p.add_argument("--index", type=int)
+    return p
+SHAPES = [("unknown option",          ["d.md", "--heading", "H", "--nope"]),
+          ("missing option value",    ["d.md", "--heading"]),
+          ("missing required option", ["d.md"]),
+          ("missing positional",      ["--heading", "H"]),
+          ("abbreviation",            ["d.md", "--head", "H"])]
+print("python:", sys.version.split()[0])
+for name, argv in SHAPES:
+    row = []
+    for eoe in (False, True):
+        try: parser(eoe).parse_args(argv); row.append("PARSED")
+        except BadArgs: row.append("BadArgs")
+        except argparse.ArgumentError: row.append("ArgumentError ESCAPES")
+        except SystemExit: row.append("SystemExit")
+    print("%-24s exit_on_error=False: %-21s default(True): %s" % (name, row[0], row[1]))
+try:
+    with contextlib.redirect_stdout(io.StringIO()) as h: parser(True).parse_args(["--help"])
+except SystemExit as e:
+    print("--help".ljust(24), "exits %s, help text %d chars" % (e.code, len(h.getvalue())))
+```
+```
+python: 3.11.8
+unknown option           exit_on_error=False: BadArgs               default(True): BadArgs
+missing option value     exit_on_error=False: ArgumentError ESCAPES default(True): BadArgs
+missing required option  exit_on_error=False: BadArgs               default(True): BadArgs
+missing positional       exit_on_error=False: BadArgs               default(True): BadArgs
+abbreviation             exit_on_error=False: BadArgs               default(True): BadArgs
+--help                   exits 0, help text 195 chars
+```
+
+The same reading, as a table:
 
 | grammar shape | `exit_on_error=False` | default (`True`) |
 |---|---|---|
@@ -1785,7 +1937,7 @@ Verdict lines, one per run. **Every dynamic field is rendered through one escape
 (design audit v67): `heading="<h>"`, `arg="<raw>"`, `missing_key: "<k>"`, `duplicate_key: "<k>"`,
 `overlap: …`, `os_error: "<text>"`, `path="<p>"`, `leftover: "<path>"`, `stream: "<name>"`, `value="<v>"`
 and every other caller- or document-controlled value pass through it, and it renders the value as
-a **double-quoted JSON string** — `json.dumps(str(value), ensure_ascii=False)`, the value stringified FIRST so an `int`/`float` is quoted too (`json.dumps(3)` alone would emit a bare `3` — design audit v72 agy), **followed by a second pass** that rewrites every remaining character of Unicode category `Cc`, `Zl` or `Zp` to its `\uXXXX` escape — `json.dumps` escapes only C0 controls, and leaves DEL, the C1 range (U+0085 NEL included) and U+2028/U+2029 literal, every one of which `str.splitlines()` treats as a line boundary (measured: a heading carrying NEL, LS, PS and DEL splits into four lines after `json.dumps` alone — design audit v73): `"` and `\` escaped,
+a **double-quoted JSON string** — `json.dumps(str(value), ensure_ascii=False)`, the value stringified FIRST so an `int`/`float` is quoted too (`json.dumps(3)` alone would emit a bare `3` — design audit v72 agy), **followed by a second pass** that rewrites every remaining character of Unicode category `Cc`, `Zl` or `Zp` to its `\uXXXX` escape (design audit v73; the reason for that set is split by member below): `"` and `\` escaped,
 `\r`, `\n` and every other control character escaped, everything else (spaces, `=`, non-ASCII)
 verbatim inside the quotes — so no argument, key, heading or path can start a second line **or
 forge a field token inside the line**: a `--heading` of `"x\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict"`
@@ -1801,6 +1953,58 @@ grammar parses it either way; impl-plan v1.22), so the line grammar is
 `DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")*` and a consumer that splits on the
 quoted-string grammar recovers every field. The rule is what keeps the one-line, one-token-per-field
 contract true for a machine consumer; `_field` is the only place a dynamic value is rendered.
+
+**The second pass covers one set for two different reasons, and stating them as one conjunction
+was a defect this revision repairs.** `json.dumps(…, ensure_ascii=False)` escapes only the C0
+controls and leaves **35** of the 67 code points in `Cc`/`Zl`/`Zp` literal — DEL, the 32 C1
+controls (U+0085 NEL among them), and U+2028/U+2029. Of those 35, exactly **three** — U+0085,
+U+2028, U+2029 — are what `str.splitlines()` treats as a line boundary; they are the members
+AC-4.3's one-physical-line transport invariant turns on. **The other 32, DEL and the rest of C1,
+break no line and are escaped for a separate reason**: they are unrenderable inside a verdict line
+a human or a terminal reads, and a field that carries them silently is a field whose value cannot
+be compared with the argument that produced it. Measured **per member, not as a composite** —
+`python3.11` (3.11.8) at `700c599`:
+
+```python
+import json, unicodedata
+cc  = [cp for cp in range(0x110000) if unicodedata.category(chr(cp)) in ("Cc", "Zl", "Zp")]
+lit = [cp for cp in cc  if chr(cp) in json.dumps("a" + chr(cp) + "b", ensure_ascii=False)]
+brk = [cp for cp in lit if len(json.dumps("a" + chr(cp) + "b", ensure_ascii=False).splitlines()) > 1]
+print("Cc/Zl/Zp:", len(cc), "| left literal by json.dumps:", len(lit),
+      "| of those, splitlines() breaks on:", len(brk), [hex(c) for c in brk])
+for cp in (0x85, 0x2028, 0x2029, 0x7f, 0x80, 0x9f):
+    s = json.dumps("a" + chr(cp) + "b", ensure_ascii=False)
+    print("U+%04X literal=%s lines=%d" % (cp, chr(cp) in s, len(s.splitlines())))
+```
+```
+Cc/Zl/Zp: 67 | left literal by json.dumps: 35 | of those, splitlines() breaks on: 3 ['0x85', '0x2028', '0x2029']
+U+0085 literal=True lines=2
+U+2028 literal=True lines=2
+U+2029 literal=True lines=2
+U+007F literal=True lines=1
+U+0080 literal=True lines=1
+U+009F literal=True lines=1
+```
+
+**What this replaces, and why the replacement is the point.** The earlier rationale cited one
+composite fixture — a heading carrying NEL, LS, PS *and* DEL splitting into four lines after
+`json.dumps` alone — as `measured:` evidence for the whole conjunction. That fixture is real and
+reproduces; it also returns **4** lines with DEL removed and **1** with DEL alone, so it could
+never have shown DEL's contribution, because DEL has none. A control run over a composite tests the
+composite and not its members, and a healthy member masks a sick one; published inside a
+`measured:` citation, that is the one place a reader stops checking. **Residual, exactly**: the
+per-member run above covers `Cc`/`Zl`/`Zp` and nothing else, so a code point outside those three
+categories that some future consumer treats as a boundary — a bidi control in `Cf`, say — is
+neither escaped by the second pass nor screened here; extending the pass is a behaviour change and
+would need its own AC and its own mutation, not a wider sentence.
+
+**The guard is unaffected and is deliberately not weakened by this repair.**
+`test_unicode_line_separators_cannot_split_a_verdict_line` drives U+0085, U+2028, U+2029 *and* DEL
+and asserts one physical line with all four visible as escapes, so `c1-escape-removed` is still
+killed by the line-splitting members regardless of DEL's null contribution; what changes here is
+the rationale, not the behaviour, and the test keeps DEL because the second reason above is a real
+reason to escape it.
+
 `test_dynamic_field_cannot_forge_a_token` drives `--heading 'x rc=0'` in-process and asserts the
 `NOT_FOUND` line parses under that grammar to exactly `heading` (`== "x rc=0"`) with no `rc`
 field; mutation `field-quoting-removed` (`_field` escapes control characters but emits the value
@@ -1830,7 +2034,7 @@ returns its input unchanged) is killed by it.
 | `DOCBLOCK: AMBIGUOUS_HEADING count=<n> heading="<h>"` | 0 | >1 heading matches text+level |
 | `DOCBLOCK: BAD_INDEX index="<n>"` | 0 | `--index` below 1, or not an integer |
 | `DOCBLOCK: BAD_TIMEOUT value="<v>"` | 0 | `--shell-timeout` non-numeric, non-finite, or not > 0 |
-| `DOCBLOCK: BAD_ARGS message="<m>"` | 0 | argparse grammar: an unknown option or a missing option value (the parser's `error()` is routed here; `--help` alone still prints help, exit 0) |
+| `DOCBLOCK: BAD_ARGS message="<m>"` | 0 | argparse grammar — all five shapes measured under §API / Interface Changes: unknown option, missing option value, missing required option, missing positional, abbreviation (the parser's `error()` is routed here; `--help` alone still prints help, exit 0) |
 | `DOCBLOCK: BAD_SUBST arg="<raw>"` (+ `duplicate_key: "<k>"`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: "<k>"` per key, map insertion order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
 | `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" "<b>"` per pair | 0 | one key is a substring of another |
@@ -1953,7 +2157,7 @@ both.** A fence opened at four or more columns (inside a list item) is invisible
 its body would survive the strip, be folded, and be matched as prose — the mirror of arm (2) on
 `census()`. Measured rather than argued, on this document's head and on the whole file:
 `grep -cE '^ {4,}(\`{3,}|~{3,})' "$D"` returns `0` at `6f0ee85` and `0` on the working file this
-revision ships, **the second run made after the v1.103 entry**, so the bound is **unexercised here** — *vacuous* in the absence rule's vocabulary,
+revision ships, **the second run made after the v1.104 entry**, so the bound is **unexercised here** — *vacuous* in the absence rule's vocabulary,
 and one of the nine sites that rule counts — and, unlike `census()`'s arm (2), which is
 exercised four times on the corpus it reads, this one is a `0` because the shape is absent, not
 because two other guards happen to decline it. It goes live the first time this document indents
@@ -1994,7 +2198,7 @@ what makes this a control on the tilde alternative rather than on the pipeline**
 the tilde alternative moves the tilde fixture and leaves the backtick fixture at `0`, so the
 movement belongs to `~{3,}` and cannot be its sibling's. No corpus can supply this —
 `grep -cE '^ {0,3}~{3,}' "$D"` returns **0** on the working file this revision ships, **run after
-the v1.103 entry below was written**, which is the second half of the stamping rule the
+the v1.104 entry below was written**, which is the second half of the stamping rule the
 fourth-blind-form fence states and which this site carried only half of until v1.102: a
 document-self figure names the working file *and* the entry it was run after, because the working
 file is a moving object and the entry is what pins which version of it was measured. It is an
@@ -2237,15 +2441,16 @@ from a *sibling document* is a decision-E matter and is not what this run measur
 not a member it fails to print: a fixture carrying both admissible cardinality phrasings and two
 block ordinals with their base, in the shapes this document actually uses, prints `0`. A fourth
 run pins property (ii): dropping `$STRIP` from the pipeline turns the `0` on this file into **`6`**
-— on the working file this revision ships, after the v1.103 entry. **The literal `1` stood in this
+— on the working file this revision ships, after the v1.104 entry. **The literal `1` stood in this
 sentence unchanged at every sha from `6f0ee85` to `7d8e797` and was true only at the first two of
 them, and it is the first thing the rule stated at the `NUM` residual caught**: the figure is a
 property of *this document's fence bodies*, so every
 revision that adds a fixture moves it, and the three revisions that added fixtures each restated
-the number instead of re-running it. Re-derived over the head at eight shas with the same
+the number instead of re-running it. Re-derived over the head at ten shas with the same
 unstripped fold — `2` at `35698f9`, `1` at `6f0ee85` and at `cf3a862`, `2` at `7982c18` and at
-`4e4a00c`, `3` at `06ef40f` and at `68a70d6`, `6` at `7d8e797` — so the drift is visible and dated
-rather than asserted. **All six are fence text, and the disposition is what the control turns on,
+`4e4a00c`, `3` at `06ef40f` and at `68a70d6`, `6` at `7d8e797`, at `1cbddb7` and at `700c599` — so
+the drift is visible and dated rather than asserted, and the series reaches the freeze this
+revision answers instead of stopping three shas short of it. **All six are fence text, and the disposition is what the control turns on,
 not the count**: two are the `O` and `N` alternations assigned in the fence above, the check
 matching its own source; two are the ordinal-plus-noun fixture bodies written into the `printf`s of
 the `$STRIP` tilde control below; and two are the same shape in the opening line of the `$P` and
@@ -2258,7 +2463,7 @@ note; hoisting the alternation into a shell variable is why **at that blob** one
 **That clause is dated and not present-tense, and the reason is the sharpest instance of a hazard
 this document otherwise avoids: this is its one screen whose needle is a literal string that lives
 inside the scope the screen counts, so every sentence written *about* the screen is a candidate
-member of what it counts.** On the working file this revision ships, **after the v1.103 entry**,
+member of what it counts.** On the working file this revision ships, **after the v1.104 entry**,
 that same `-F` grep — quoted exactly once above and deliberately not re-quoted here, since a
 fourth literal copy would move the figure inside the sentence stating it — returns **3**
 whole-file and **2** over the head: the `O` assignment, the probe quoting it, and — the third,
@@ -2299,7 +2504,7 @@ nor leaves a real one:**
    v1.76's, is an ordinal over the two *arms* of a cleanup path, which merely lands inside the
    gap of one of the three nouns. Named here so the next reader does not chase it, and kept as
    the demonstration of why this number is derived and never transcribed as a list. It is still
-   `8` on the working file **after the v1.103 entry**, which records its changes without quoting an
+   `8` on the working file **after the v1.104 entry**, which records its changes without quoting an
    ordinal address — and the tail command was re-run on the working file *after* the bump rather
    than before it, which is the only order in which that check means anything. Naming the entry is
    the rule this document settled on for a document-self figure ("this revision" stops resolving
@@ -2381,7 +2586,7 @@ nor leaves a real one:**
    TAIL "$D" | grep -oiE "$W" | sort | uniq -c     # the tail, the claim under test
    ```
 
-   Run on the working file this revision ships, **after the v1.103 entry** landed rather than
+   Run on the working file this revision ships, **after the v1.104 entry** landed rather than
    before it — the entry is named rather than described, because "the entry recording this
    revision" stops resolving from the bytes the moment a later entry exists, which is the same
    reason the tail-count site above names its version:
@@ -2457,7 +2662,7 @@ nor leaves a real one:**
    "primitives" throughout — and `$N` now carries `s?` on all three, which closes it. What remains
    uncovered is named, not waved at: a possessive (`seam's`), a hyphenated compound (`sub-seam`),
    and any noun this feature adopts later for the same set. The head returns `0` on the working
-   file **after the v1.103 entry**, and re-running the same pipeline on those same bytes with `N`
+   file **after the v1.104 entry**, and re-running the same pipeline on those same bytes with `N`
    cut back to its singular-only form also returns `0` — the comparison was first made on the
    v1.100 bytes and is re-taken here, because a differential between two alternations is a
    property of the file they are run over and a bump moves it,
@@ -2547,7 +2752,7 @@ scoping `os.killpg` to AC-4.6's reap and `os.unlink` to AC-3.10's read-back, the
 name its AC — pass it, correctly.
 
 The CLI is exercised by `subprocess.run([sys.executable, SCRIPT, …])` so the exit codes under test
-are the real process's, not a return value — the same shape `test_skill_candidates_census.py` uses —
+are the real process's, not a return value — the same shape `handoff/tests/test_skill_candidates_census.py` uses — named by path because a bare file name sends a reader to the wrong root, and this design cites **two** tests under `handoff/tests/`, this one and `test_mutation_specs_clean.py`, derived by `grep -oE '[A-Za-z0-9_/.-]*test_[A-Za-z0-9_]+\.py'` over the head rather than recalled —
 **for every verdict a real input or a real fault can produce**. A verdict that needs one of the eight
 fault injections (the seven module seams `_final_write`, `_close_stream`, `tempfile.mkdtemp`,
 `os.chmod`, `shutil.rmtree`, `os.killpg`, `os.unlink`, or the `Popen` instance wrapper for
@@ -2656,7 +2861,8 @@ h-mad/tests/test_h_mad_portable_timeout.py` → `2`, and `grep -c parametrize` �
 (***incidental***, the same label the site above carries, for the same reason: neither file
 parametrises at all today, so the zero is a property of those two files' current bytes) —
 and `git diff --name-only a8e0372 74e126f` still names exactly one test file, so the evaluation
-stands at the audited commit. **Re-run again at `cf3a862`**: `2`, `0`, `0`, and
+stands at `74e126f` — named by its hex rather than by its role in whichever round is reading this,
+per the sha-description rule under §Scanning. **Re-run again at `cf3a862`**: `2`, `0`, `0`, and
 `git diff --name-only a8e0372 cf3a862 | grep -c 'tests/'` → `1`, so it stands there too.
 
 **Helper mutation spec — `h-mad/tests/mutation-specs/doc_block_exec.json`, entry by entry.** Every
@@ -2749,7 +2955,7 @@ exactly what the base Mutation verification invariant forbids.
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
 | `field-escape-removed` | `_field` returns its input unchanged, so a newline inside a heading, key, path or OS-error text starts a second `DOCBLOCK:` line | `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (AC-4.1) |
-| `c1-escape-removed` | `_field`'s second pass is removed, so DEL, C1 controls (U+0085) and U+2028/U+2029 stay literal inside the quotes and `splitlines()` sees more than one line | `test_unicode_line_separators_cannot_split_a_verdict_line` (AC-4.1) |
+| `c1-escape-removed` | `_field`'s second pass is removed, so DEL, C1 controls (U+0085) and U+2028/U+2029 stay literal inside the quotes; the three that `splitlines()` breaks on (U+0085, U+2028, U+2029) then split the verdict line, while DEL only becomes unrenderable — the kill comes from the three, not from DEL | `test_unicode_line_separators_cannot_split_a_verdict_line` (AC-4.1) |
 | `field-quoting-removed` | `_field` escapes control characters but emits the value bare, without the JSON quotes, so `--heading 'x rc=0'` renders `heading=x rc=0` and a key/value consumer reads an `rc` field on a refusal | `test_dynamic_field_cannot_forge_a_token` (AC-4.1/4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
@@ -2816,12 +3022,27 @@ A test that only checked the direct child would pass against the orphaning bug t
 prevent.
 
 **The AC is scoped to the process GROUP, and that bound is real rather than cautious.** A
-descendant that calls `os.setsid()` leaves the group and survives any `killpg`. Measured:
+descendant that calls `os.setsid()` leaves the group and survives any `killpg`. **The probe and its
+output live on one surface — the plan's — and are pointed at rather than re-rendered here**, because
+a figure retyped in different words is exactly what this document's own carry screen cannot catch.
+The locator is a content predicate, not a line number: the fenced probe in
+`docs/01-plan/features/doc-block-exec.plan.md` under `## Measurements` whose program *and* recorded
+output both carry the token `os.setsid() descendant` — `grep -c 'os.setsid() descendant'` on that
+file returns `2` at `700c599` and `2` on the working plan, one occurrence in the program and one in
+its output, so the predicate resolves to exactly one fence. Its two load-bearing output lines,
+quoted verbatim rather than paraphrased — each re-checked with `grep -cF` against the plan at
+`700c599` and against the working plan, `1` and `1`, because a sibling's bytes are a present-tense
+claim and this document may not assert one:
 
 ```
-descendant in the group       -> survived killpg? False
-descendant that called setsid -> survived killpg? True
+in-group descendant 90513: survived killpg? False   (want False)
+os.setsid() descendant 90537: survived killpg? True   (want True: escapes the group)
 ```
+
+**Residual on this locator, exactly**: it is a single-token content predicate, so it goes ambiguous
+the moment the plan carries a second `os.setsid()` probe, and it goes dead if that probe is
+reworded. The `→ 2` count beside it is the thing that fails first, and re-running that one `grep -c`
+is the whole check — no line number is pinned and none goes stale.
 
 A first attempt used the `setsid` **binary** and showed no escape — that probe was vacuous, since
 macOS ships no such binary, and reading its null as a negative would have kept an over-claim in
@@ -2835,18 +3056,43 @@ in `finally` and AC-5.4 requires it to. The test therefore passes an absolute pa
 and not a sandbox: an absolute path escapes it, which the design states plainly under Architecture
 Considerations rather than relying on it silently.
 
-**The reaping claim is measured, not assumed.** Run this session, with a control that discriminates:
+**The reaping claim is measured, not assumed**, with a control that discriminates — `python3.11`
+(3.11.8), darwin, at `700c599`, driving the **shipped** `os.killpg(p.pid, …)` form rather than the
+`getpgid` form this design rejects, so the probe measures the code the design specifies:
 
+```python
+import os, signal, subprocess, tempfile, time
+def alive(pid):
+    try: os.kill(pid, 0); return True
+    except ProcessLookupError: return False
+def leg(killpg):
+    f = tempfile.mktemp()
+    p = subprocess.Popen(["bash", "-c", "sleep 300 & echo $! > %s; sleep 300" % f], start_new_session=True)
+    for _ in range(40):
+        if os.path.exists(f) and open(f).read().strip(): break
+        time.sleep(0.05)
+    else: raise SystemExit("PROBE VACUOUS: descendant never wrote its pid")
+    gc = int(open(f).read()); assert alive(gc), "control: descendant alive before the kill"
+    try: p.communicate(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL) if killpg else p.kill()
+    time.sleep(0.3); s = alive(gc)
+    if s: os.killpg(p.pid, signal.SIGKILL)
+    return gc, s
+a = leg(True);  print("killpg   : grandchild %d alive_after=%s   (want False)" % a)
+b = leg(False); print("p.kill() : grandchild %d alive_after=%s    (want True = control discriminates)" % b)
+print("VERDICT:", "CONFIRMED" if (a[1] is False and b[1] is True) else "REFUTED")
 ```
-killpg   : grandchild 304 alive_after=False   (want False)
-p.kill() : grandchild 516 alive_after=True    (want True = control discriminates)
+```
+killpg   : grandchild 68150 alive_after=False   (want False)
+p.kill() : grandchild 68173 alive_after=True    (want True = control discriminates)
 VERDICT: CONFIRMED
 ```
 
-A `bash -c 'sleep 300 & echo $! > f; sleep 300'` under `start_new_session=True`, timed out, then
-reaped two ways. `os.killpg(os.getpgid(p.pid), SIGKILL)` removed the grandchild; `p.kill()` alone
-left it running. The control is the load-bearing half — without it, "grandchild gone" could equally
-mean the probe never created one.
+`os.killpg(p.pid, SIGKILL)` removed the grandchild; `p.kill()` alone left it running. The control is
+the load-bearing half — without it, "grandchild gone" could equally mean the probe never created
+one, which is why the probe also aborts with `PROBE VACUOUS` rather than reporting a null if the
+descendant never writes its pid. The PIDs are this run's output, not pins.
 
 ## Invariant Compliance
 
@@ -2951,7 +3197,47 @@ mean the probe never created one.
   codex leg")` directly — so the one slicer that was reached by executed code is left serving text
   pins only.
 - **Assumption verification** — complies: the plan's `## Measurements` section carries both cited
-  commands with their observed output, and the design adds no uncited measured claim. The two
+  commands with their observed output. **That the design adds no uncited measured claim is itself a
+  measurement, not an assertion, and it takes two walks**, because a walk over fenced blocks is
+  blind to a measured claim written as prose — and that blindness is exactly what let four fenced
+  blocks and two prose claims ship uncited through v1.103:
+
+  ```bash
+  D=docs/02-design/features/doc-block-exec.design.md
+  HEAD() { awk '/^## Version History$/{exit} {print NR": "$0}' "$1"; }
+  HEAD "$D" | grep -cE ':[[:space:]]*`{3,}'                                     # fenced: opener/closer lines
+  HEAD "$D" | grep -ciE '(^|[^[:alnum:]_])(measured|probed)([^[:alnum:]_]|$)'   # prose: marker words
+  ```
+
+  `104` and `60` on the file this revision ships. Every fenced measurement output in the head now
+  carries **either** the runnable command that produced it in the adjacent block — §Scanning's
+  census, the heading differential, the four-backtick bounder differential, the five-kinds
+  `os.open` probe, the `getpgid`-versus-`killpg` probe, the `_field` per-member escape run, the
+  `umask`/`mkdtemp` pair, the `argparse` `exit_on_error` matrix, the reaping probe with its control,
+  and §Test Strategy's screens — **or** a content-predicate locator to the sibling section that
+  does, as the `ENXIO`, `rmtree(…, ignore_errors=True)`, naturally-emptied-group and
+  `os.setsid()`-escape probes do. **The second walk's `60` splits mechanically before anything is
+  judged**: `2` of the 60 lines sit *inside* a fence — the walk is line-scoped and does not strip
+  them, a property of it stated here rather than left to be discovered — leaving `58` prose lines,
+  every one of which was read in this revision. **Three were acted on**: the `umask`/`mkdtemp` mode
+  and the `exit_on_error` five-shape matrix carried no command and are now fenced with theirs, and
+  the four orphaned `exec-pane` processes cannot be re-derived at all and are labelled a historical
+  observation where they stand rather than left to pass as a re-runnable probe. **The remaining `55`
+  are a *reading*, not a partition** — the same word this document uses of §Scanning's nine-site
+  classification, and for the same reason: the `58` is mechanical and the disposition of each line
+  is not. Each of the 55 was read for a missing command and none was found, which is weaker than a
+  proof and is written as weaker.
+
+  **Residual, exactly, in three parts.** (i) The prose walk's vocabulary is two marker words, so a
+  measured claim written with neither ("it yields", "it gives", "in practice") is outside both walks
+  and is reached only by reading. (ii) The walk is line-scoped and this file hard-wraps, so a marker
+  word separated from its own claim by a newline is *counted* while its claim is reached only by
+  opening the paragraph — which the reading above did and which no count can do. (iii) Neither walk
+  judges whether a published command still produces its published output. Only re-execution does,
+  and this revision did it from the shipped bytes rather than from the clipboard: every `python`
+  fence in the head was extracted from this file and run, `6` of them carry an adjacent output block,
+  `4` reproduce byte-identically, and the `2` that differ differ only in the PIDs their own text
+  already calls output rather than pins. The two
   heading measurements are re-derived here over the **tracked** corpus (§Scanning) because the
   filesystem glob behind the plan's `files=` figure is not reproducible on a clean clone. The
   plan's §Measurements carries the same differential and is owed the same sweep — **and the debt
@@ -3067,3 +3353,4 @@ mean the probe never created one.
 - v1.101: Design audit v91 at freeze sha 68a70d6, gating round, SINGLE SURFACE -- the agy leg returned UNVERIFIED at tools=1 and certifies nothing, so this round cannot count toward the exit gate and the four must-fixes below are weighed on their evidence rather than on their gating status. All four are one shape, and it is decision Q recursing: a property claim that reads plausibly and was never run. MUST 1, and it is v1.100's own falsification of the carry screen, which is the sharpest place this could have landed: the demonstration RAN, but not on what its sentence said. "this revision's own added body lines" named v1.100 while the fence appended git diff 35698f9 6f0ee85, the MEASURED revision's added body lines. Both ranges are now run in a git clone --local --shared of this repository checked out at 68a70d6, and both are published BY RANGE in a table rather than by a phrase a reader has to resolve: 35698f9..6f0ee85 appends 229 body lines and moves the v1.99 open() form to BODY 1 runs / 1 figure-bearing and VERSION HISTORY 49 runs / 17 figure-bearing; 4e4a00c..06ef40f appends 161 and moves it to BODY 13 runs / 7 figure-bearing while VERSION HISTORY stays at 15 / 8; the shipped git show form prints 8/3 and 15/8 under both, and on a clean tree the two forms agree on all four numbers. The weaker mutation is published rather than dropped, with what makes it weaker stated in the text: it moves one partition and leaves the other standing, so on its own it is evidence about half the screen. The fence now takes MB and MH as named variables so the range cannot be left to prose, and it carries the scratch-clone recipe, because the append writes to a TRACKED file and a reviewer bound by the read-only audit contract cannot run it in the tree under audit. The rule stated over the axis: when a property is established by EXECUTING a mutation, the mutation is itself a claim -- name the exact range, blob or input the run consumed and show it is the one the sentence describes, because in the text a demonstration run on the wrong input is indistinguishable from one run on the right input. Its mechanical corollary: the revision being written can never be its own mutation range, since its lines are uncommitted while the sentence is being written, which is why "this revision" failed here. MUST 2: the absence-site denominator was under-derived INSIDE ITS OWN NEEDLE for the second round running. The census's 1861157 restatement is an absence claim about a corpus, it sits on a candidate line the sweep itself raises, and it carried a command and a sha but no label. It is labelled now and the label is MEASURED, not assumed: the differential harness was extracted from this file and run in a scratch clone at 1861157, printing tracked files 25 headings shipped 0 arm1 0 arm2 0 | reached: arm1 0 lines, arm2 8 marker lines / 4 fences / 2 files, whose 9 body lines are scanned as prose, 0 of them below 4 columns -- so arm (1) is vacuous and arm (2) incidental at that sha too, the same pair the 30-file corpus gets. The denominator at cf3a862 is EIGHT, not seven, and the composite carve-out now states its bound instead of resting on the one instance that motivated it: a composite is excluded only where its own arms are separately stated AT THE SAME SHA OVER THE SAME CORPUS, so the same composite restated at another sha, or over another corpus, is a site of its own until its arms are measured there. MUST 3: the tilde run reaches SHIPPED and ANYIND and stops -- they are the census harness's only two fence regexes -- while the sentence named STRIP as controlled as well. STRIP is a separate awk in the seam-ordinal pipeline, and this document holds 0 tilde-fence lines, so its tilde alternative was moved by no control and by no corpus, which is decision O one level up. A control now sits beside STRIP, where the code it moves is, and it discriminates MUTUALLY: two one-line fixtures, one tilde-fenced and one backtick-fenced, score shipped 0 / no-STRIP 1 / TILDELESS 1 and shipped 0 / no-STRIP 1 / TILDELESS 0 on awk version 20200816 -- deleting STRIP moves both fixtures, so the stage is live for either character, while deleting only the tilde alternative moves the tilde fixture and leaves its sibling at 0, so the movement belongs to that alternative and cannot be the backtick branch's. MUST 4: the span-ordinal screen is DIGIT-ONLY, so a span noun beside a WORD ordinal scores 0 on it, and this document writes that shape in both of its halves. A word-ordinal arm W is added over the same sixteen-noun set and a fifteen-member ordinal set; all fifteen ordinal branches fire against a one-line fixture, the emphasised-noun and one-word-gap positives fire, and the true negative -- which now also carries the digit form the other arm catches and a suffixed-numeral form neither catches -- prints 0. Stamped at cf3a862, W raises 6 on the head, and their disposition closes classes rather than cases: an ordinal counted from the end carries no zero-versus-one ambiguity and therefore needs no base, which disposes of the end-anchored pair by rule; two are cardinalities and not addresses at all; one addresses a field of a printed output the same paragraph quotes in full, and that one is a reading. ONE WAS A GENUINE UNBASED ADDRESS IN THE BODY, where no exemption reaches: the helper-mutation-spec paragraph addressed two prescribed docsections.json rows by position, and both are now named by key alone, the keys having stood in the same sentence all along, so the ordinals carried no information and one bound of ambiguity. W raises 6 on the tail as well, four of them ordinals over docsections.json's rows in the v1.52, v1.53, v1.58 and v1.62 entries; three of the four name the key in the same clause, so the address resolves through the key and the ordinal is redundant rather than ambiguous, and one names no key at all. NONE of the four resolves against the tree: that spec's mutations array holds 4 at 68a70d6, and eight is what this design PRESCRIBES, not what the file HAS. So "no Version History entry states a span ordinal without its base" is FALSE. It is WITHDRAWN rather than re-scoped; the entries are left as the dated records they are; and the residual now names the closed ordinal set, the one-word gap (measured rather than supposed -- a two-ordinal phrase joined by a conjunction yields one hit and not two, which is how the body site was found by half) and the suffixed numeral as uncovered. SHOULD 1: the v1.100 entry called 42 at 7982c18 the working-file value, and it is neither -- 7982c18 is the v1.99 blob, and the file v1.100 shipped raises 50. The series is re-derived with the same bracketed needle and published at blobs: 36 at cf3a862, 42 at 7982c18 and at 4e4a00c, 50 at 06ef40f and at 68a70d6, with the reason no working-file value is given, which is that this revision writes more labels again. Corrected by a bracket on the v1.100 entry, not by a rewrite. SHOULD 2: zero is added at the head of the NUM residual's named set and run through the shipped tokeniser (zero runs gives tokens zero and runs, scored not figure-bearing), because an absence claim IS a figure and this document writes more of those than of any other kind. NIT 1 is closed inside MUST 2 and MUST 3: the labelled absence claims v1.100 and this revision add on top of the eight stamped at cf3a862 are named where they are stated, and the working-file candidate count is explained rather than frozen. NIT 2 is closed inside MUST 1: the falsification fence names the scratch clone it must be run in. PROPERTY CLAIMS SHIPPED VERSUS EXECUTED, the standing metric this round introduces: TWENTY new or changed property claims, TWENTY executed and published, ZERO asserted. Enumerated so the count is derived and not carried -- (1) the carry screen on a clean tree in both forms; (2) it dirtied with 35698f9..6f0ee85 in both forms; (3) it dirtied with 4e4a00c..06ef40f in both forms; (4) the restore verified with git diff --quiet after each; (5) the census differential harness at 1861157; (6) the candidate sweep at cf3a862, 7982c18, 4e4a00c, 06ef40f and 68a70d6; (7) the tracked-corpus tilde reach at 68a70d6; (8) the tilde-fence count on this document; (9) the STRIP tilde control, two fixtures by three pipeline variants; (10) the fifteen W ordinal branch firings; (11) the two W gap positives; (12) the W true negative; (13) W on the head at cf3a862; (14) W on the tail, run after this entry landed; (15) P on the head at cf3a862 and P on the tail, likewise re-run after; (16) the docsections.json mutations length; (17) the one-word-gap residual; (18) the zero tokeniser case; (19) the indented-fence bound on the working file; (20) W with and without the word boundary that guards its noun group, which was added after the arm was first drafted because without it the word disposition matched the position alternative -- both forms were measured on the same bytes and both give 6 on the stamped head and 6 on the tail, so the hardening moves no published figure. That is TWENTY, not nineteen; the enumeration is the count. NOT EXECUTED AND NOT RE-DERIVED, named rather than passed over: everything v1.100 listed as INHERITED-UNVERIFIED is still inherited-unverified here -- the 5 dotted-seams derivation, the dotted-form fixture, the line-scoped predecessor's 3, the property-(ii) drop-STRIP differential, the named-anchor block census, the plan's 1861157 files=25/30 Measurements transcript, both line-pin blind-form sweeps, the seam-enumeration membership run, the 14/14 markdown-it oracle, the ENXIO timing, the finder-and-bounder 30/292/82/1 differential and the 2748 suite floor; the full census harness output on the CURRENT corpus was not re-run either, only its 1861157 counterpart and the two control arms; Error Handling Strategy and the Test Plan AC table were read for contradictions with the edits above but not re-derived against the tree; and no claim about tests that do not exist yet was checked, the feature being unimplemented. Their absence from this round's findings is not confirmation. OWED ELSEWHERE: nothing. No sibling repair is asserted and none was found. **[Corrected by v1.102: the DECISION Q metric in this entry -- "TWENTY new or changed property claims, TWENTY executed and published, ZERO asserted" -- is itself an unexecuted property claim in its last term, and the entry is otherwise left intact as the dated record it is. All twenty enumerated items were re-executed by the v92 gating audit and all twenty reproduced; what the enumeration missed is a TWENTY-FIRST new-or-changed claim, the NUM residual's "unexercised on the published input" figure, which v1.101's own edit moved by adding `zero` to the name set the grep runs over and which was restated rather than re-run. It is false on the shipped bytes: the count is `1`, not `0`. So the denominator is at least twenty-one and "ZERO asserted" is wrong. The mechanism is scoped rather than the instance patched: an enumeration assembled by listing the revision's NEW FENCES cannot see a claim changed inside a paragraph the revision was already editing, and v1.102 enumerates by new-or-changed claim instead.]**
 - v1.102: Design audit v92 at freeze sha 6dcb70f, gating round, and NOTHING here is settled. The gating teammate leg found must 2 should 2 nit 2; the agy leg (doc-block-exec.design.audit.v92.p1.md) returned must=0 should=0, which is NOT a gate -- one clean surface has never been the gate on this feature -- and codex_status is exhausted until 2026-09-07 11:28, so every surface this round shares a model family with the authoring surface. No two-surface clean and no exit-gate-relevant result is claimed. All four gated documents are byte-identical from 6dcb70f to 7d8e797, verified with git diff --stat over the four paths, so every figure below was re-derived against the working tree rather than carried from the report. MUST 1, and it is DECISION Q recursing one level out: the NUM residual published `git diff 35698f9 6f0ee85 -- $D | grep '^+' | grep -cEi <name set>` as `0`, while v1.101 had itself added `zero` to that name set in the same edit and did not re-run the grep. Executed both ways here: with the set as the paragraph now names it the count is 1, with `zero` removed it is 0, so the single hit is `zero`'s and nothing else's -- the added body line reading "as prose, never hide a heading -- and the corpus exercises it zero times. (2) It matches a fence". The 1 is published and the line is named. The CONCLUSION -- that no figure above moves -- survives, and the route is now published rather than left to be reconstructed: a name-set hit and a figure-bearing run are different objects, because a token has to fall inside a run of six or more SHARED consecutive tokens before NUM is ever consulted about it. The shipped carry screen was EXTRACTED from this file with awk rather than retyped, and re-run with `zero` prepended to its WORDS via a one-character sed; against R=doc-block-exec.design.audit.v87.teammate.md, RSHA=cf3a862, BASE=35698f9, HEAD=6f0ee85 both forms print "BODY: 8 runs, 3 of them figure-bearing" and "VERSION HISTORY: 15 runs, 8 of them figure-bearing". That differential is the WHOLE of the evidence claimed: it says the four counts are unchanged, and it does NOT say where the token sits, which is a mechanism claim this run does not measure and none is made. Both of the screen's inputs are committed blobs -- git diff reads two trees and git show reads the report -- so the run is invariant to the sha checked out, which is why it reproduces at 7d8e797 what the auditor got at 68a70d6. RULE over the axis: when a revision edits the INPUT to a claim -- a name set, a needle, a WORDS list, a corpus list -- the claim is re-run AFTER the edit lands, never restated from the run that preceded it; a property claim and its input are one object. RESIDUAL, exactly: this covers a claim whose input changed inside the SAME revision and does nothing for one whose input a LATER revision changes; the only screen for that is that every figure here carries its command inline. The figure also leaves the absence class by becoming 1, so it is not a site of the absence rule and is not counted in that denominator. MUST 2, the ninth absence site: the provenance probe `git show 35698f9:$D | grep -cF "tr '\n' ' '"` -> 0, against 1 at 6f0ee85 -- both re-run here -- carried a command and a sha and no label through three sweeps. Of the two admissible repairs, LABELLING IT was chosen over carving out provenance probes, because DECISION G makes an absence claim a measurement and nothing in the rule's stated scope exempts an absence used as provenance for a neighbouring figure's stamp; the carve-out would also have needed a third way to be missed, for a weaker reason. It is labelled VACUOUS at its site -- the fence does not exist in that blob -- its positive is the paired 1 at 6f0ee85, and the denominator moves eight to nine, swept at both other sites that state it. The residual needed a third way REGARDLESS of which repair was chosen: this site was raised by the needle, is plain prose, and is not harness output, so neither of the two stated ways can account for it, and "exactly two" was false as an account of the miss that had just happened. The three ways are now: OUTSIDE THE NEEDLE; INSIDE THE NEEDLE AND MISTAKEN FOR HARNESS OUTPUT; and INSIDE THE NEEDLE, NEEDING NO INTERPRETATION AT ALL, AND SIMPLY NOT ENUMERATED -- which is how both the 1861157 restatement and this probe were missed, and which is an enumerator failure and not a classification failure. RULE over that axis: the denominator is WALKED, never recalled. Every raised line is carried to a named disposition and the check is that no raised line is left over. Walked here over all 36 lines raised at cf3a862 (re-derived, 36): nine are the sites, and each of the rest is either a fence's or a fixture's own printed output on this document together with the prose disposing of it, or a `0` making no claim about a corpus at all -- an ordinal in the index contract, a value in an AC row, or the rule quoting its own vocabulary. The walk is published as a PARTITION whose parts sum to the raised count, not as an assertion that nothing was left over: 13 + 15 + 8 = 36, the 13 being the nine sites (four state their figure on two lines each), the 15 a fence's or fixture's own printed output with the prose disposing of it, and the 8 zeros making no corpus claim at all. The sum is the check: a walk that loses a line shows up as a sum that misses 36, which recalling a site list never could. ZERO raised lines sit outside the three parts. One assignment inside the partition is arguable and is named at the site rather than hidden -- the census arm-(2) raised line states the arm's CONTROL while the arm's own zero is written in a shape the needle does not raise, so reading it as the site gives 13 + 15 + 8 and reading it as harness output gives 12 + 16 + 8; the total and the conclusion are the same either way. THE WALK'S OWN RESIDUAL, as a concrete category and not "and similar": the disposition is still a reading, and the one boundary it turns on is a line that quotes a harness's `0` and then generalises it into a claim about the corpus -- both at once, nothing mechanical separates them, and the 1861157 restatement was exactly that line; where the reading is genuinely undecidable the line counts as a site. Denominator history corrected in place: v1.99 published four, v1.100 seven, v1.101 eight, and every dropped site sat on a line the needle had already raised, so the miss was INSIDE the needle three times running. Two carried "this revision" phrases that had silently re-pointed at v1.102 were re-anchored on the revision that actually made the change. FOUND BY MY OWN DECISION-K SWEEP AND NAMED BY NEITHER AUDITOR, a third instance of the same class as MUST 1: "dropping $STRIP from the pipeline turns the 0 on this file into 1, and that one hit is the alternation assigned to O above" is FALSE on the shipped bytes. The literal 1 stood in that sentence unchanged at every sha from 6f0ee85 to 7d8e797 and was true only at the first two of them. Re-derived over the head at eight shas with the same unstripped fold: 2 at 35698f9, 1 at 6f0ee85 and cf3a862, 2 at 7982c18 and 4e4a00c, 3 at 06ef40f and 68a70d6, 6 at 7d8e797. The figure is a property of THIS DOCUMENT'S FENCE BODIES, so every revision that adds a fixture moves it, and three revisions added fixtures and each restated the number. 6 is published with all six hits disposed of by category -- two are the O and N alternations of the fence itself, two are the tilde control's printf bodies, two are the opening line of the $P and $W true-negative fixtures -- none is a live ordinal address, and the larger number makes the control STRONGER, since $STRIP is now shown to suppress six lines rather than one. The prose naming those hits was deliberately written WITHOUT reproducing the ordinal-plus-noun shape, and the stripped detector was re-run afterwards and still returns 0 on the head. SHOULD 1: the v1.101 DECISION Q metric "TWENTY / TWENTY / ZERO" is corrected by a bracketed note appended to that entry rather than by rewriting it, per this feature's practice since round six; must 1 is a twenty-first new-or-changed claim, unexecuted and false on the shipped bytes, so the denominator is at least twenty-one and "ZERO asserted" is wrong. The mechanism is scoped rather than the instance patched: an enumeration built by listing a revision's NEW FENCES cannot see a claim changed inside a paragraph the revision was already editing. SHOULD 2, the cross-document term collision on "re-anchored": this design GIVES UP the word rather than redefine it. Verified against the tree and not reasoned -- h-mad/tests/mutation-specs/docsections.json holds 4 rows, all four carrying "file": "tests/docsections.py", and the impl-plan, READ AT v1.45 / 7d8e797 and recorded as a dated reading rather than as a present-tense claim about sibling bytes (decision E), named fence-tracking-removed and section-no-longer-owns-its-subsections as the two re-anchored into h-mad/scripts/h_mad_doc_block_exec.py. The impl-plan's adjective is on the ANCHOR-FILE axis, two of four; this design's sentence was on the test-key axis, all six rows it lists. One word, two axes, two cardinalities, and the design withdraws it. NIT 1: "all four re-derived" trailing five shas now reads "the four shas later than the stamped one", with the stamped 36 named as re-derived too; all five were re-run and all five reproduce -- 36 / 42 / 42 / 50 / 50 at cf3a862 / 7982c18 / 4e4a00c / 06ef40f / 68a70d6. NIT 2: the tilde absence claim named the working file but not the entry it was run after, which is half of this document's own stamping rule. Closed as a CLASS across every document-self figure rather than at the named instance: the three-blind-form re-sweep, the fourth-blind-form fence, the ^ {4,} bound, the ~{3,} claim and the no-STRIP figure all now name the v1.102 entry, and every one was re-run on the working file AFTER this entry landed. RESIDUAL: a document-self figure whose site names no entry at all is findable only by grepping the phrase "working file"; that grep is the screen, and it is stated here rather than automated. DECISION K sweep, run after this entry landed and in the shipped order: stripped seam-ordinal head 0, unstripped 6, tail 8; ^ {4,} fence bound 0; ^ {0,3}~{3,} 0; both blind-form pin sweeps at their published expectations; $P and $W over the tail 12 and 6 with the head stamped at cf3a862 unmoved at 14 and 6. PROPERTY CLAIMS SHIPPED VERSUS EXECUTED, enumerated by new-or-changed CLAIM and not by new fence, which is should-fix 1's lesson, and the count is DERIVED by counting this list rather than carried: TWENTY-ONE new or changed, TWENTY-ONE executed and published, ZERO asserted -- (1) the name-set grep with zero, 1; (2) its control arm with zero removed, 0; (3) the hit line's text; (4) the carry screen with shipped WORDS, 8/3 and 15/8; (5) the same with zero prepended, identical; (6) the provenance probe at 35698f9, 0; (7) at 6f0ee85, 1; (8) the candidate sweep at cf3a862, 36; (9) that the provenance line is among those 36; (10) the walk partition, 13 + 15 + 8 = 36, with its 2/1/5 sub-split; (11) the sweep at the four later shas, 42/42/50/50; (12) docsections.json holding four rows all anchored at tests/docsections.py at 7d8e797; (13) the impl-plan naming two rows re-anchored into the new module, read at v1.45 / 7d8e797; (14) the no-STRIP head at eight shas, 2/1/1/2/2/3/3/6; (15) the literal 1 standing unchanged in that sentence at all seven shas from 6f0ee85 to 7d8e797, grepped verbatim; (16) the identities of the six hits; (17) the stripped head still 0 after this revision's prose landed; (18) ^ {4,} and ^ {0,3}~{3,} both 0 on the working file after this entry; (19) the tail seam-ordinal count 8; (20) $P and $W over the tail, 12 and 6, with the cf3a862 head unmoved at 14 and 6; (21) both blind-form pin sweeps, 0 and 0, with the three-blind-form alternation raising only the two lines fields of the block census. OWED ELSEWHERE, reported and NOT edited here: nothing is owed to the impl-plan by the should-fix 2 repair, since this document withdrew the colliding word; if a shared definition is wanted instead of an avoidance, that is an impl-plan matter and this author does not write it. NOT RE-DERIVED and stated so their absence is not read as confirmation: the API and Error Handling sections, the AC table, and every claim about tests that do not exist yet, the feature being unimplemented. [Corrected by v1.103, appended rather than rewritten, per this feature's practice since round six. Claim (10) above -- the walk partition -- was NOT executed. It was recalled off the site list, and its first two parts are wrong by one: the derived partition is 12 + 16 + 8 = 36, and 11 + 17 + 8 under the arm-(2) output reading, now published as a runnable anchor assignment rather than as three addends. So the metric "TWENTY-ONE new or changed, TWENTY-ONE executed and published, ZERO asserted" is itself false in the same way should-fix 1 of that round was: the correct reading for this entry is TWENTY-ONE new or changed, TWENTY executed, ONE asserted. Also corrected: three sites state their figure on two raised lines, not four.]
 - v1.103: DELTA SELF-REVIEW response and NOT a gating round -- it answers doc-block-exec.design.delta-review.r13.md (must 0 / should 3 / nit 1), whose subject was the v1.101->v1.102 diff at 1cbddb7. No audit surface and no exit-gate-relevant result is claimed; the round-thirteen gating cycle runs after this batch lands. codex_status is exhausted until 2026-09-07 11:28, so every surface this round shares a model family with the authoring surface. The working tree was byte-identical to 1cbddb7 for all four gated documents before this revision. SHOULD 1, and it is the walk rule recursing onto its own repair: the 13 + 15 + 8 partition v1.102 published is WRONG BY ONE in its first two parts. It is re-walked here and published as a RUNNABLE ASSIGNMENT rather than as three addends -- an alternation of anchor strings, each a fragment of a raised line's own text, so no line number is written anywhere. It prints raised 36, sites 12, noclaim 8, both 0, neither 16; every anchor selects exactly one raised line except the parametrize anchor, which selects the pair that states that figure. The derived partition is therefore 12 + 16 + 8 = 36, and 11 + 17 + 8 under the arm-(2) output reading. v1.102's 13 came from RECALLING the site list -- its own parenthesis said four sites state their figure on two raised lines, and three do. The reviewer's independent walk reached 12 and 11 as well, so this figure changed BY DERIVATION and not on a reviewer's word; the decision sheet filed it unverified precisely because the assignment was unpublished, and publishing the assignment is what settles it. RULE over the axis: a completeness measurement is published as an assignment a reader can re-take, never as a total -- the total is the check, the assignment is the claim. RESIDUAL, a concrete category and not 'and similar': the screen proves the parts are disjoint, exhaustive and one-anchor-one-line, and it does NOT prove that an anchor sits in the right PART, which is still a reading; what changes is that a dispute is now about a named member a reader can point at rather than about a member nobody can find. The screen is also immune to its own needles being text, because its corpus is the frozen cf3a862 blob and nothing written into this document afterwards -- including that fence -- can enter the scope it counts. SHOULD 2, the document-self stamp class: v1.102 closed it at five sites and left one carrying v1.101 while the document shipped v1.102. The AXIS is the naming rule's own cost -- a stamp that names an entry goes stale on the very next bump -- so the rule is now that AN ENTRY BUMP IS ITSELF THE TRIGGER TO RE-RUN AND RE-STAMP EVERY DOCUMENT-SELF FIGURE, and all eight sites were re-run on the working file after this entry landed and re-stamped on v1.103. v1.102's residual screen grepped the phrase 'working file' and cannot reach a figure that names the working file correctly and an entry that has since been superseded, which is exactly what the missed one was; the screen is now the entry-naming form itself, FOLDED because the hard wrapper splits that phrase, with every hit read against the version the document ships. It is not self-matching -- the escaped form written in the fence is not the literal the pattern needs -- and that property is stated rather than assumed. RESIDUAL, concrete: it reaches a document-self figure in that exact phrasing and nothing else; a figure naming the working file with NO entry at all remains v1.102's grep, and a figure naming NEITHER is a decision-G matter caught by the candidate sweep. One further site was brought to the rule: it read 'the entry recording this revision', the self-describing form this document had already rejected for not resolving from the bytes. SHOULD 3, the re-anchored collision has a THIRD axis and it lives in the plan. Derived rather than reasoned -- git show 1cbddb7:<path> | grep -c 're-anchor' gives impl-plan 8, plan 2, spec 0, with the design's own count deliberately withheld because this paragraph moves it. The impl-plan's use is the anchor-FILE axis (fence-tracking-removed and section-no-longer-owns-its-subsections, into h_mad_doc_block_exec.py); the plan's is 're-anchored IN PLACE', the anchor-TEXT axis, naming the COMPLEMENTARY pair (offset-anchored-bound-runs-to-end-of-file and missing-heading-returns-empty-instead-of-failing). Both siblings say two re-anchored over DISJOINT pairs, which is the half that actually misleads a reader. This design's own use was a third axis, the test-key one, over all six rows it lists. The design still withdraws the word; the sibling-to-sibling collision is REPORTED and NOT edited, since one author writes one file. NIT: the clause saying hoisting the alternation into a shell variable is why one copy remains is now DATED to 6f0ee85, with the working-file figure published beside it -- 3 whole-file and 2 over the head, after this entry. This is THE ONE SCREEN in this document whose needle is a literal string living inside the scope it counts, and it is now named as such: the -F grep is quoted exactly once and described everywhere else, because a fourth literal copy would move the figure inside the sentence stating it. RULE over that axis: no screen's needle is written literally anywhere in the scope that screen counts, and where one already sits there the figure is derived at each corpus and never carried. RESIDUAL, concrete: this covers literal-string needles only; a regex-CLASS needle can still be matched by prose containing no literal -- the seam-ordinal screen is one of those, which is why the sentences naming its unstripped hits avoid reproducing the shape -- and nothing mechanical separates that prose from a real member, only the stripped run beside the unstripped one. v1.102's PROPERTY CLAIMS metric is corrected by a bracketed note appended to that entry rather than by rewriting it. DECISION K SWEEP, run on the working file AFTER this entry landed and re-run once more after this sentence was appended to it, in the shipped order: partition screen raised 36, sites 12, noclaim 8, both 0, neither 16, with ten SITE anchors at 1, the parametrize anchor at 2, and all eight NOCLAIM anchors at 1; candidate sweep head-scoped 36 / 42 / 42 / 50 / 50 at cf3a862 / 7982c18 / 4e4a00c / 06ef40f / 68a70d6; strict line-pin fence 0; three blind forms exactly the two block-census output fields and nothing else; fourth blind form folded 0; provenance probe 0 at 35698f9 against 1 at 6f0ee85; seam-ordinal stripped head 0, unstripped head 6, tail 8; unstripped head across nine shas 2 / 1 / 1 / 2 / 2 / 3 / 3 / 6 / 6 from 35698f9 through 1cbddb7; singular-only N on the current head 0; caret-four-space fence bound 0 and the tilde bound 0; the -F needle 3 whole-file and 2 head against 2 at 35698f9 and 1 at 6f0ee85; the new entry-naming stamp screen returning nine hits with every one naming v1.103 and no other version present; P over the tail 12 and W over the tail 6 with the cf3a862 head unmoved at 14 and 6, every P and W branch firing at 1 and both true negatives at 0; the tilde discrimination control printing shipped 0 / no-STRIP 1 / TILDELESS 1 for the tilde fixture and shipped 0 / no-STRIP 1 / TILDELESS 0 for the backtick one; the AC comm figure unmoved at 7 of 49; the seam-site fence naming all eight seams in each of the three documents; the docs-scoped .md invariant 0 at each of four shas; and the tree-derived standing counts unmoved. PRECHECK: PASS issues=0 under h_mad_precheck_doc.py --phase design; every advisory it prints is one of three deliberate classes and none lands in the head -- PATH for the files 5c through 5e create, STALESHA for shas this document stamps ON PURPOSE as historical measurements, and COUNT, all of whose hits are inside Version History where the checker pairs a figure with an unrelated neighbouring list. PROPERTY CLAIMS SHIPPED VERSUS EXECUTED, enumerated by new-or-changed CLAIM and not by new fence, with the count DERIVED by counting this list: EIGHTEEN new or changed, EIGHTEEN executed and published, ZERO asserted -- (1) raised 36; (2) sites 12; (3) noclaim 8; (4) both 0, the disjointness; (5) neither 16, the remainder that carries exhaustiveness; (6) the SITE branch loop; (7) the NOCLAIM branch loop; (8) the derived partition 12 + 16 + 8 = 36; (9) the alternative reading 11 + 17 + 8; (10) that three sites carry two raised lines and not four; (11) the entry-naming stamp screen's output on the working head; (12) that the stamp pattern does not match its own escaped definition; (13) the singular-only N re-run on the current head; (14) the -F needle whole-file; (15) the -F needle head-scoped; (16) the re-anchor counts across the three siblings at 1cbddb7; (17) the four docsections.json rows all carrying tests/docsections.py at 1cbddb7; (18) that the plan's re-anchored pair is the COMPLEMENT of the impl-plan's. OWED ELSEWHERE, reported and NOT edited here: the plan and the impl-plan each say two rows are re-anchored and name DISJOINT pairs, which is a sibling-to-sibling collision this document cannot repair by withdrawing its own use of the word, and routing it is the orchestrator's call. NOT RE-DERIVED and stated so their absence is not read as confirmation: the Setext census harness, the carry screen and the mutation-range demonstration were untouched by this revision and were not re-run; so were the API and Error Handling sections, the AC table, and every claim about tests that do not exist yet, the feature being unimplemented.
+- v1.104: Design gating audit v93 (teammate: must 2 should 3 nit 2) plus the cross-document _field must routed by the round-thirteen decision sheet; freeze 700c599. NOT A GATE AND NOT A TWO-SURFACE CLEAN: the agy leg for this cycle returned AUDITCYCLE: UNVERIFIED reason=low_evidence:p1, which is neither a pass nor a fail, and codex is exhausted until 2026-09-07, so every surface that read this revision shares a model family with the surface that wrote it. CROSS-DOCUMENT MUST, DECISION O INSIDE A measured: CITATION: the _field rationale attached 'which json.dumps leaves literal AND splitlines() breaks on' to one set and cited a COMPOSITE fixture for it - one heading carrying NEL, LS, PS and DEL splitting into four lines. The fixture is real and reproduces; it also returns 4 with DEL removed and 1 with DEL alone, so it could never have shown DEL's contribution, because DEL has none. The set is now SPLIT BY REASON: of the 35 code points json.dumps leaves literal, exactly 3 (U+0085, U+2028, U+2029) are what splitlines() breaks on and are what AC-4.3's one-physical-line invariant turns on; the other 32 (DEL and the rest of C1) are escaped because they are unrenderable in a verdict line, a separate reason now separately stated. The composite is replaced by a PER-MEMBER run published with its command and output (python3.11 3.11.8 at 700c599): Cc/Zl/Zp 67, left literal 35, breaks 3. THE GUARD IS NOT WEAKENED: test_unicode_line_separators_cannot_split_a_verdict_line drives U+0085/U+2028/U+2029 AND DEL, so c1-escape-removed is still killed by the three line-splitting members; the mutation row is swept to say so. Residual stated: the run covers Cc/Zl/Zp only, so a boundary-treated code point outside those categories (a Cf bidi control) is neither escaped nor screened, and widening the pass is a behaviour change needing its own AC and mutation. MUST 1, DEFINITE DESCRIPTIONS OF SHAS AND ROUNDS: the candidate-sweep list called 68a70d6 'the freeze sha' (it was round eleven's) and called four shas 'the four shas later than the stamped one' while three later shas existed. Every published NUMBER was correct - a true measurement inside a false description, which is the signature of the class. The list is now DERIVED, not remembered: git rev-list --reverse cf3a862..700c599 -- <doc> gives the five commits that CHANGE this blob (7982c18, 06ef40f, f91a74b, 1cbddb7, 700c599) and each is re-derived with the bracketed needle over git show <sha>:<doc>: 36 at cf3a862, 42 at 7982c18, 50 at 06ef40f, 53 at f91a74b, 61 at 1cbddb7, 63 at 700c599. Two shas the old list named (4e4a00c, 68a70d6) do not touch this file and were duplicate readings of their predecessor. THE CLASS IS CLOSED BY A SCREEN, CALIBRATED BEFORE SHIPPING: two greps over the head, one for a role noun bound to sha/commit/blob and one for a cardinality over shas/commits/blobs; over the 700c599 blob they return two lines and one line, and neither can match its own fenced text because each needs a literal 'the ' followed immediately by an alternative and what follows in the fence is '('. A SECOND LIVE MEMBER THE SCREEN FOUND that no report named: 'the evaluation stands at the audited commit', where the audited commit is now 700c599 and the figure is 74e126f's - repaired to the hex. Residual stated: the vocabulary is a closed list of seven role words and three plural heads, so a sha described outside it is not reached, and the screen is blind to a role label correct in form and wrong in value. MUST 2, FOUR FENCED MEASUREMENT OUTPUTS WITH NO COMMAND AND NO LOCATOR while Invariant Compliance asserted none such existed. All four repaired, each re-run by me at 700c599 on python3.11 3.11.8 and published with the command that produced it: (1) the four-backtick _fence_aware_end differential, which is the justification for the HEADLINE architectural decision that a differential test is not achievable and this module owns the bounder - the UNBALANCED bound reproduces byte for byte as '\n````bash\n```bash hmad:exec\n', and the balanced arm is now shown beside it as the healthy arm that masks the bug; (2) the getpgid-versus-killpg(proc.pid) probe, now runnable with p.wait() noted as load-bearing since a zombie still answers getpgid; (3) the setsid-escape block, which was a PARAPHRASE of the plan's output, replaced by a content-predicate locator to the plan's Measurements fence (grep -c 'os.setsid() descendant' on the plan returns 2, one in the program and one in its output, so the predicate resolves to exactly one fence) plus the plan's two output lines quoted VERBATIM; (4) the AC-5.2 reaping claim with its discriminating control, now driving the SHIPPED os.killpg(p.pid, ...) form rather than the getpgid form this design rejects - the prose beside it had said getpgid, contradicting the killpg(proc.pid) decision under Execution. THE RESIDUAL THE AUDITOR NAMED IS CLOSED OVER BOTH SHAPES, not just the fenced one: the umask/mkdtemp mode claim now carries its command AND a default-umask control arm so the hostile 0o0 is a differential rather than a bare reading, and the exit_on_error five-shape matrix now carries a standalone-parser probe mirroring the specified grammar, since the CLI module does not exist yet - both reproduce exactly. A THIRD PROSE MEMBER NEITHER REPORT NAMED: the four orphaned exec-pane PIDs cite pgrep but were reaped when observed, so the command cannot be re-run and its null today is not a refutation; it is now LABELLED a historical observation rather than left to pass as a probe. Invariant Compliance no longer asserts the absence - it publishes the two walks that measure it (fenced-opener walk and prose marker-word walk, 104 and 60 on this file) and then TRIAGES the second rather than counting it: 2 of the 60 lines sit inside a fence (the walk is line-scoped and does not strip them, now stated), leaving 58 prose lines, all 58 read this revision, 3 acted on and the remaining 55 published as a READING and not a partition, in this document's own vocabulary, because the 58 is mechanical and each line's disposition is not. SELF-INTRODUCED DEFECTS CAUGHT BEFORE SHIPPING, recorded because the measured failure mode of this loop is that the fix introduces the next finding: (a) the first draft of the bounder prose said the balanced arm's toggle count is EVEN at the '##' line, which is backwards - the probe now PRINTS the counts (balanced 3 toggles, in_fence=True, skipped; UNBALANCED 2, in_fence=False, cut) instead of reasoning them; (b) 'the only test this design cites outside h-mad/tests/' was carried from the report and is FALSE - grep -oE over the head returns two, test_skill_candidates_census.py and test_mutation_specs_clean.py, and the sentence now says two and names the derivation; (c) two present-tense sibling-byte claims on the plan (the grep -c 2 and the verbatim quote) were unstamped, contrary to decision E, and now carry 700c599 and a working-plan re-check; (d) the pgrep null was asserted as 'returns nothing today' without running it - run, prints nothing, exit 1. EVERY PYTHON FENCE IN THE HEAD WAS EXTRACTED FROM THE SHIPPED BYTES AND EXECUTED, not retyped: 6 carry an adjacent output block, 4 reproduce byte-identically, and the 2 that differ differ only in the PIDs their own text already calls output rather than pins. SHOULD/NIT TAKEN: test_skill_candidates_census.py named by path (handoff/tests/); the Architecture diagram's select line now says '0 candidates' and '>1 candidates' so a count is not typeset like an argument value; the BAD_ARGS table cell now names all five grammar shapes instead of two. FOR THE RECORD, not a claim about the floor: python3.11 -m pytest --collect-only -q -p no:cacheprovider from the repository root at 700c599 collects 2809, so the AC-6.4 floor of 2748 (stamped e8eaf6f) holds with 61 tests of slack today; the floor is still re-measured at 5c branch time. OWED ELSEWHERE, reported not edited: the plan carries its own copy of the _field rationale and owes the identical split; the spec's umask restatement carries no command; the plan's Measurements would be the natural home for the getpgid and reaping probes if a later revision wants to locator them rather than carry them here.
