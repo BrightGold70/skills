@@ -60,11 +60,33 @@ AC-1.6 exists for.
 call.** This module owns the bounder; `h-mad/tests/docsections.py` imports it and keeps its
 `titled_section`/`section_from` signatures. The dependency that was rejected was `scripts/` →
 `tests/`; `tests/` → `scripts/` is the correct direction and was available all along. **The
-mechanism is the one every test in `h-mad/tests/` already uses** for `SCRIPT_DIR`: `docsections.py`
+mechanism is an established convention in `h-mad/tests/`, and what the argument needs is that the
+module insert the path ITSELF — not that every module there does**: `docsections.py`
 does `sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))` itself, on the
 line before `import h_mad_doc_block_exec as _dbe`, so the import holds when `test_docsections.py`
 is collected alone and never depends on a sibling test module having inserted the path first
-(the plan names the two tests that pin this); the call is module-qualified,
+(the plan names the two tests that pin this). **An earlier form of that clause said *every* test
+in the directory already uses it, which is false; it is corrected with the census rather than
+softened.** Measured at `fbc2ea0`: `h-mad/tests/` holds 88 `test_*.py` modules, of which 13 carry
+the exact `sys.path.insert(0, str(SCRIPT_DIR))` spelling, 14 mention `SCRIPT_DIR` at all, and 48
+perform some `sys.path.insert`. Re-derive, do not read:
+
+```bash
+git ls-files -- h-mad/tests | /usr/bin/grep -cE '(^|/)test_[^/]*\.py$'
+for N in 'sys.path.insert(0, str(SCRIPT_DIR))' SCRIPT_DIR 'sys\.path\.insert'; do
+  git ls-files -- h-mad/tests | /usr/bin/grep -E '(^|/)test_[^/]*\.py$' \
+    | while read -r f; do /usr/bin/grep -q -- "$N" "$f" && echo "$f"; done | wc -l | tr -d ' '
+done
+```
+
+**The rule over the axis, because a universal quantifier is the shape that keeps failing here**: a
+convention claim is stated as a proportion over a named corpus with its command, never as *every*.
+The property the design actually rests on is self-containment of the one module, which
+`test_docsections_imports_from_an_unrelated_cwd` and the mutation
+`docsections-syspath-setup-removed` pin directly. **Residual, as a concrete category**: the census
+counts spellings, so a module reaching `scripts/` through a `conftest.py`, an installed package or
+a differently spelled insert is outside all four figures — which is why the mutation and not the
+census is what the argument stands on. The call is module-qualified,
 `_dbe.fence_aware_end(text, start, level)`, so the delegation *wire* can be discriminated by a spy
 under an isolated revert of the connection (`docsections.json`'s
 `docsections-delegation-reverted` — a private file-path instance of the same module replacing
@@ -139,9 +161,44 @@ control-flow design, not a hope:** `run_block` never raises from inside the time
 records a *pending* outcome — `pending = BlockTimeout(timeout)` after the reap, or the `RunResult`
 — runs cleanup in `finally` (which records an `OSError` and never raises), then, after the
 `try`/`finally` has completed, reads the cwd back and **selects** the final outcome: `CleanupFailed(cwd,
-cleanup_error)` raised `from pending` **if a cleanup `OSError` was recorded OR the directory
-persists** — either alone (`__cause__` is the pending `BlockTimeout`/`LaunchFailed` when there is
-one, else `cleanup_error`), else the pending outcome re-raised, else the result returned. The
+cleanup_error)` **if a cleanup `OSError` was recorded OR the directory
+persists** — either alone — else the pending outcome re-raised, else the result returned. **The
+chaining is an explicit two-branch selection and never a lone `from pending`**: the raise is
+`from pending` when `pending is not None`, and `from cleanup_error` otherwise. `raise err from
+None` sets `__cause__` to `None` **and** sets `__suppress_context__` to `True`, so on a run that
+succeeded and then failed to clean up, a single `from pending` would drop the cleanup error out of
+`__cause__` and suppress it from the printed context as well — the one outcome the read-back
+exists to report. Run on `python3.11` (3.11.8) at `fbc2ea0`, both branches of the selection
+against a `Cleanup` error caught in the enclosing `except`:
+
+```bash
+python3.11 - <<'PY'
+class Cleanup(Exception): pass
+class Pending(Exception): pass
+for pending in (Pending("pending"), None):          # the two branches of the selection
+    try:
+        try:
+            raise Cleanup("cleanup boom")           # the finally-recorded OSError, in behaviour
+        except Cleanup:
+            raise RuntimeError("final") from pending
+    except RuntimeError as e:
+        print("pending=%-18r cause=%-20r context=%r suppressed=%s"
+              % (pending, e.__cause__, e.__context__, e.__suppress_context__))
+PY
+```
+
+```
+pending=Pending('pending') cause=Pending('pending')   context=Cleanup('cleanup boom') suppressed=True
+pending=None               cause=None                 context=Cleanup('cleanup boom') suppressed=True
+```
+
+The `suppressed=True` on the second reading is the half that is easy to miss: the cleanup error is
+not merely absent from `__cause__`, it is suppressed from the printed context as well, so the one
+outcome the read-back exists to report would leave no trace in a traceback.
+`test_cleanup_failure_after_successful_run_is_chained` drives
+that branch — a run that succeeds, then the existing `shutil.rmtree` seam raises — and asserts the
+raised exception's `__cause__` **is** the cleanup error; mutation `cleanup-chain-selection-flipped`
+collapses the selection to an unconditional `from pending`, and that test kills it. The
 "OR" is the rule: an `rmtree` that removed everything and then raised is still a failure
 (`test_cleanup_error_after_successful_removal_is_still_a_failure` injects exactly that), because
 "the tree is gone" and "the removal reported success" are different facts and the helper does not
@@ -395,10 +452,14 @@ rendered through markdown-it-py — both the interpreter-local 2.2.0 and the 4.2
 tagged-fence probe used, CommonMark preset on each — before it was written down; 14 of 14 agreed
 on both versions, and the transcript is in the plan's §Measurements ("Scanner grammar corpus").
 That fourteen-case run is NOT re-derivable by a later reader, and this document says so plainly
-rather than leaving the citation to imply otherwise**: the corpus script `grammar_corpus.py` was
-a throwaway and is not in the tree (`git ls-files | grep -c grammar_corpus` → `0` at `cf3a862`;
-**vacuous** — the artifact does not exist, so the zero records only that the search ran, which is
-exactly why the citation is replaced below by a command a reader can execute), and 4.2.0 is
+rather than leaving the citation to imply otherwise**: the corpus script was untracked when that
+run was made and has since been committed, as
+`docs/03-analysis/probes/doc-block-exec/grammar_corpus.2026-09-03.cd979362.py`
+(`git ls-files | grep -c grammar_corpus` → `0` at `cf3a862` and `1` on the working tree; the
+`cf3a862` reading is **vacuous** — the artifact did not exist there, so it records only that the
+search ran — while the working-tree reading is what makes the citation re-derivable at all, and
+the command below remains the cheap proxy, since running the committed script still needs an
+interpreter carrying the version this document cannot supply), and 4.2.0 is
 not installed on any interpreter here (`for P in python3 python3.11 python3.12 python3.13; do $P
 -c 'import markdown_it; print(markdown_it.__version__)' 2>/dev/null; done` prints one line,
 `2.2.0`). **The cheap proxy is the command below, and it is what a later reader should run** — it
@@ -578,12 +639,21 @@ opening fences between those two offsets.
 
 **The Setext census is published here as a runnable command, not cited.** The plan's
 §Measurements pins its transcript at `1861157` (`files=25`/`30`), so that locator does not contain
-a run at this tree; and the script it names is not in the tree either —
-`git ls-files | grep -cE 'heading_differential|grammar_corpus'` returns `0` at `cf3a862`
-(**vacuous** — neither script was ever committed, so nothing was screened and the zero is worth
-only the statement that the search ran) — so neither the cited
-run nor a re-run of it is re-derivable by a reader. That is the same condition that made the
-"14 of 14" grammar-oracle premise not re-derivable, and it takes the same treatment. Fence-aware,
+a run at this tree. **The scripts it names WERE untracked and have since been committed, and both
+readings are given here rather than the stale one alone** —
+`git ls-tree -r --name-only <sha> | grep -cE 'heading_differential|grammar_corpus|setext_census'`
+returns `0` at `cf3a862` and **4** at `fbc2ea0`. **The needle carries `setext_census` on purpose**:
+the subject of this paragraph is the Setext census, and the two-name needle an earlier form of this
+sentence used answered about the other two scripts instead — a needle whose alternation does not
+name its own subject reports about something else and reads as though it reported about this. The
+`cf3a862` zero is **vacuous at that blob and nowhere else**: it records only that the search ran on
+a tree where the artifacts did not exist, and a label like that travels with its sha rather than
+with the sentence. At the freeze they do exist, under `docs/03-analysis/probes/doc-block-exec/`, so
+**the cited run IS re-derivable by a reader**; the committed Setext census re-runs to
+`[glob] files=35 setext_headings=0` and `[tracked] files=30 setext_headings=0`. What still blocks
+the "14 of 14" grammar-oracle re-run is an interpreter version this machine does not carry, not a
+missing artifact, and the two were one condition until `fbc2ea0` split them — which is why the
+proxy below remains the cheap route and is no longer the only one. Fence-aware,
 CommonMark §4.3 (a `===`/`---` underline immediately after a paragraph line), YAML front matter
 skipped, and list, table, blockquote and indented-code lines excluded as underline bases, over
 both the tracked corpus and the contaminated glob:
@@ -642,7 +712,7 @@ underline under a list item and a table delimiter row it returns `0` (true negat
 the screen declines, not members it fails to print). The null above is therefore discriminating
 rather than a scan that finds nothing. **It was `0` at `1861157` too, over the 25 files tracked
 then — and that sentence is itself an absence claim about a corpus, so it now carries a label,
-which it did not until this revision.** Its zero decomposes exactly as the current one does,
+which it did not until v1.101.** Its zero decomposes exactly as the current one does,
 measured rather than assumed: the differential harness below, extracted from this file and run in
 a scratch clone checked out at `1861157`, prints `tracked files 25 headings shipped 0 arm1 0 arm2
 0 | reached: arm1 0 lines, arm2 8 marker lines / 4 fences / 2 files, whose 9 body lines are
@@ -812,13 +882,17 @@ this document** — the reason the withholding was struck, and the rule that rep
 there. At `cf3a862` it raises **36** candidate lines, of which **nine** sites are absence
 claims, each labelled where it is stated: the `.md`-under-`docs/` invariant (*load-bearing*); the
 two untracked-script measurements (`grep -c grammar_corpus` and
-`grep -cE 'heading_differential|grammar_corpus'`, both *vacuous*); the `grep -c parametrize` pair
+`grep -cE 'heading_differential|grammar_corpus'`, both *vacuous* **at `cf3a862`, which is the sha
+this whole walk reads, and NEITHER vacuous at `fbc2ea0`**, where the same two needles return `1`
+and `3` because the commit that created the artifacts turned both absence claims into presence
+ones — a label is a property of a reading at a sha, never of a sentence, and one carried across
+the commit that created its subject is precisely the drift this walk exists to catch); the `grep -c parametrize` pair
 under the floor tuple (*incidental*, at both sites that state the figure); **the arm-(1) zero and
 the arm-(2) zero of the census above** (*vacuous* and *incidental* respectively); the `^ {4,}`
 fence bound stated at `$STRIP` below (*vacuous*); **the `1861157` restatement in the census's
 own paragraph** (*vacuous* and *incidental*, its two arms measured at that sha in v1.101); and
 **the `35698f9` provenance probe at the fourth-blind-form fence** (*vacuous*, labelled there by
-this revision).
+v1.102).
 **v1.99 published this denominator as four, v1.100 as seven and v1.101 as eight, and every site
 all three of them dropped sits on a candidate line this sweep itself raises** — the miss was
 *inside the needle* three times running, never at its margin, which is why that half of the
@@ -892,7 +966,7 @@ form could hide. It is also immune to the hazard that its own needles are text: 
 frozen `cf3a862` blob, so nothing written into this document afterwards — including this fence —
 can enter the scope it counts. The `$STRIP` bound carried its reason in prose and no
 label until v1.100; the `1861157` restatement carried a command and a sha and no label until
-v1.101; the provenance probe carried a command and a sha and no label until this revision.
+v1.101; the provenance probe carried a command and a sha and no label until v1.102.
 **The `headings shipped 0` column is still excluded, and the carve-out now states its bound
 instead of leaving it to be read off one instance**: a composite is excluded only where **its own
 arms are separately stated at the same sha over the same corpus**, so the same composite restated
@@ -919,7 +993,7 @@ and the head-scoped companion reading is therefore derived with that pipe rather
 here as a second series to keep in step.
 
 **The working-file value is published beside the blob series rather than withheld**, re-derived with the same
-bracketed needle after the v1.106 entry below was written: **63 whole-file**, the series' corpus, and
+bracketed needle after the v1.109 entry below was written: **63 whole-file**, the series' corpus, and
 **61 over the head**, the corpus the sweep's own definition names — the two named apart because the
 paragraph above measures a gap between them. `63` is what the `700c599`
 blob also gives whole-file, because **no revision since it added a raised line** — the pair is 63
@@ -954,8 +1028,17 @@ and that control is published in the v1.108 entry with its four needles, written
 so the scope those needles count does not contain them. The head does hold a shell function and a
 shell variable whose names collide with the ref, and neither is a member: both are a different
 GRAMMAR — the function is the head-scoping helper every screen in this document pipes through, and
-the variable is bound to a fixed sha in §Test Strategy's mutation-range demonstration — so a rule
-about refs does not reach either, and that exemption is stated rather than left to be re-argued.
+the variable is bound to a fixed sha in **§Test Strategy's six-gram carry screen**: its fence, whose
+opening comment names the diff endpoints and whose interpreter invocation passes them as arguments,
+plus that screen's two published invocations, which are where the binding is written. **The earlier
+form of this sentence and of the entry that published the split both named the mutation-range
+demonstration instead, and that fence carries no such token at all** — it is spelled against a
+different pair of variables entirely. So a rule about refs reaches neither the function nor the
+variable, and that exemption is stated rather than left to be re-argued. **The class, not the
+instance**: a locator that names a *neighbouring* fence is indistinguishable from a correct one to
+every screen this document ships, because a screen counts tokens and never asks which fence they
+sit in — so a locator over fences is verified by re-taking the split per fence, which is what the
+appended block below does and what the entry that first published the split did not.
 **Residual on the endpoint rule, as a concrete category**: a fixed pair can still be stamped at the
 WRONG pair, and a working-file endpoint identified by an entry stops identifying anything the
 moment a later entry lands, so a comparison re-read after a bump names a right-hand side that no
@@ -985,7 +1068,7 @@ above, so striking the copy here left the definition still declining to give a f
 paragraph publishes. **The rule over that axis: a publication decision is stated once, at the site
 that publishes, and no other site may say the figure is withheld.** The screen is that the refusal
 be greppable — ``grep -ciE 'not (restated|given|published) for the working file'`` over the head,
-which prints nothing on the working file this revision ships, **after the v1.106 entry below was
+which prints nothing on the working file this revision ships, **after the v1.109 entry below was
 written**; it does not match the line you are reading, because what follows the literal `not ` here
 is `(` and not one of the alternatives, the same publication rule the candidate needle above uses.
 This is a screen's expected output on this document and not a finding about a corpus, so the
@@ -1033,7 +1116,7 @@ HEAD "$D" | grep -iE 'the ([a-z]+|[0-9]+) (shas|commits|blobs)'
 
 Neither regex can match its own fenced text: each requires a literal `the ` followed immediately by
 an alternative, and what follows it in the fence is `(`. Both print nothing over the head of the
-working file this revision ships, **after the v1.106 entry below was written**; over the **head of
+working file this revision ships, **after the v1.109 entry below was written**; over the **head of
 the** `700c599` blob they were calibrated on, the first prints two lines and the second one. The
 scope word is not decoration at either reading: over the *whole* `700c599` blob the same two arms
 print three and three, because §Version History carries dated members of both shapes by
@@ -1057,7 +1140,7 @@ awk '/^## Version History$/{exit} {print}' "$D" \
   | grep -oiE '\b(the|that) (freeze|frozen|stamp|stamped|baseline|blob|commit|sha|tree) [a-z]{0,10} ?(this|the) (revision|round|entry|audit)'
 ```
 
-It prints nothing over the folded head of the working file this revision ships, **after the v1.106
+It prints nothing over the folded head of the working file this revision ships, **after the v1.109
 entry below was written**, and it is not vacuously satisfied: over the folded head of the `8c6539a`
 blob it prints three — the two §Test Strategy members v1.106 rewrote as hexes, plus the
 quoted example this paragraph has just stopped reproducing — and over the folded head of `700c599`
@@ -1079,7 +1162,7 @@ into this file, so stamping it would spend the signal the stamp exists to give: 
 the `700c599` blob it returns three, one of which is the
 count-over-shas defect in the candidate-sweep list that round thirteen repaired — so the widened
 arm discriminates, which is why it was calibrated at all; over the head of the working file,
-**after the v1.106 entry below was written**, it
+**after the v1.109 entry below was written**, it
 returns two, and **both are disposed of by position rather than by quotation** — the un-articled
 sha count in §Test Strategy's unstripped-fold progression, and the un-articled blob count in the
 needle-literal paragraph, each re-counted against its own list and each correct.
@@ -1140,10 +1223,20 @@ label costs a sentence and a dropped one has now cost three revisions.
 
 **The rule over the axis**: every measurement this document states must either publish its command
 inline or name a script `git ls-files` can find — a figure whose derivation lives in an untracked
-throwaway is not re-derivable, however correct the figure happens to be. **Residual, exactly**:
-this census and the eleven-shape ATX proxy close the axis for the two untracked scripts this
-document has ever cited, `heading_differential.py` and `grammar_corpus.py`; any script cited in
-future must pass that same `git ls-files` check before a figure derived from it is published here.
+scratch file is not re-derivable, however correct the figure happens to be. **Both scripts this
+document has ever cited are now tracked, and that is what discharges the axis** rather than the
+in-document proxies alone; each is cited by its committed path and never by a bare filename, since
+a bare filename names no blob a reader can fetch. They are
+`docs/03-analysis/probes/doc-block-exec/heading_differential.2026-09-04.b66afa9c.py`, the
+tracked-corpus form the plan publishes,
+`docs/03-analysis/probes/doc-block-exec/heading_differential.2026-09-03.cd979362.py`, its
+glob-corpus predecessor, and
+`docs/03-analysis/probes/doc-block-exec/grammar_corpus.2026-09-03.cd979362.py`;
+`git ls-files docs/03-analysis/probes/` lists those three and a Setext census beside them.
+**Residual, exactly**: a committed script still has to be run, and its output is not in this file,
+so this census and the eleven-shape ATX proxy remain the in-document derivation for both figures;
+and any script cited in future must pass that same `git ls-files` check before a figure derived
+from it is published here.
 
 Candidate *counting* is where `extract` stops. Choosing among them is `select`'s job (see API):
 `index` is 1-based and optional, and with no `index` zero candidates raise `BlockNotFound`, one
@@ -1172,17 +1265,94 @@ order-independent: with `A→B` and `B→C` on a block containing `A B`, the out
 whatever the map's iteration order, whereas the sequential count-then-replace an earlier draft
 prescribed yields `C C` when `A` is replaced first and `B C` when `B` is — an outcome that
 depends on dict order, exactly the surprise AC-2.7 refuses overlapping keys to avoid,
-re-created one step later. Overlap refusal (below) is what makes the alternation unambiguous, so
-no key can match inside another. Each reported count is the number of matches in the original
-text, which is the number replaced (AC-2.5).
+re-created one step later. The two refusals below are what make the alternation unambiguous: no
+key may sit inside another, **and no key's match may intersect another key's**. Each reported
+count is the number of matches in the original text, which is the number replaced (AC-2.5) — **an
+equality that holds only because BOTH refusals fire**, which is the correction v1.109 makes
+rather than a property of the alternation.
 
-**Overlapping keys refuse** (AC-2.7). If any key is a substring of another, the result depends on
-iteration order, and a silently order-dependent answer is the failure class this whole feature
-exists to catch. `SUBST_OVERLAP keys=<n>` with a detail line per offending pair, exit 0, nothing
-executed — rather than picking an order and documenting it, which only moves the surprise. `<n>`
-counts the **distinct keys implicated**, not the pairs (`a`, `ab`, `abc` → `keys=3`, three pairs);
-each unordered pair appears once as `overlap: "<shorter>" "<longer>"`, and the lines are sorted by
-`(shorter, longer)`, so the same map always produces the same diagnostic.
+**Keys whose matches are not independent refuse** (AC-2.7), and that class has **two** members,
+tested by **two different predicates**, both refusing under the one `SUBST_OVERLAP` token, exit 0,
+nothing executed — rather than picking an order and documenting it, which only moves the surprise.
+
+- **Substring**, a property of the map alone: one key is a substring of another
+  (`any(a != b and a in b)`), so the result would depend on iteration order. Detail line
+  `overlap: "<shorter>" "<longer>"`, one per unordered pair, sorted by `(shorter, longer)`.
+- **Intersecting spans**, a property of the map **and the text**: two keys' matches share a
+  character position in `block.text`, so the single left-to-right pass consumes one of them and
+  the other never fires, while `text.count` reports both keys' pre-substitution figures — the
+  counts stay equal and the substitution silently does not happen. Detail line
+  `intersect: "<a>" "<b>" "<offset>"`, one per unordered pair, and **there is no connective token
+  between the values**: the spec's FR-4 grammar carries none, and this line mirrors `overlap:`,
+  which carries none either. `<a>` is the lexicographically smaller key and `<b>` the larger,
+  mirroring `overlap:` putting the shorter first; `<offset>` is the **smallest character index the
+  two matched spans share**, 0-based into `block.text` — deliberately not the start of the earlier
+  span, which names a position the two do not both occupy. Lines are sorted by `(offset, a, b)`.
+  The canonical fixture is `abc` under `{ab→X, bc→Y}`: the two matched spans cover `[0, 2)` and
+  `[1, 3)`, they share exactly one position, and the emitted line is `intersect: "ab" "bc" "1"`. The scan runs on the **original** `block.text` before any replacement: all
+  match spans of all keys are collected, and two spans belonging to different keys that share an
+  index intersect.
+
+**Neither predicate contains the other, which is why both ship rather than one replacing the
+other.** `ab`/`abc` on a text holding no `abc` is substring-refused and not span-refused;
+`ab`/`bc` on `abc` is the reverse — span-refused, while the substring predicate is **False** for
+that pair. The second case is what this section got wrong until v1.109: it prescribed the
+substring check alone and then claimed the reported count equals the number replaced. Run rather
+than argued, on `python3.11` (3.11.8) at `fbc2ea0`, with the prescribed escaped alternation and a
+recording callback, so the fires are observed and not inferred, and with `ab bc ab bc` carried as
+the control arm in the same run so the failing arm is never read alone:
+
+```bash
+python3.11 - <<'PY'
+import re
+subs = {"ab": "X", "bc": "Y"}
+def scan(text):                       # every match span of every key, on the ORIGINAL text
+    sp = [(m.start(), m.end(), k) for k in subs for m in re.finditer(re.escape(k), text)]
+    first = {}
+    for a in sp:
+        for b in sp:
+            if a[2] < b[2] and a[0] < b[1] and b[0] < a[1]:
+                p, o = (a[2], b[2]), max(a[0], b[0])   # the smallest index they SHARE
+                first[p] = min(first.get(p, o), o)
+    return sorted((o, p[0], p[1]) for p, o in first.items())
+for text in ("abc abc", "abc", "ab bc ab bc"):
+    fired = {k: 0 for k in subs}
+    out = re.sub("|".join(map(re.escape, subs)),
+                 lambda m: (fired.__setitem__(m.group(0), fired[m.group(0)] + 1),
+                            subs[m.group(0)])[1], text)
+    print("%-13r -> %-11r count=%s fired=%s pairs=%s"
+          % (text, out, {k: text.count(k) for k in subs}, fired, scan(text)))
+print("substring predicate any(a != b and a in b):",
+      any(a != b and a in b for a in subs for b in subs))
+PY
+```
+
+```
+'abc abc'     -> 'Xc Xc'     count={'ab': 2, 'bc': 2} fired={'ab': 2, 'bc': 0} pairs=[(1, 'ab', 'bc')]
+'abc'         -> 'Xc'        count={'ab': 1, 'bc': 1} fired={'ab': 1, 'bc': 0} pairs=[(1, 'ab', 'bc')]
+'ab bc ab bc' -> 'X Y X Y'   count={'ab': 2, 'bc': 2} fired={'ab': 2, 'bc': 2} pairs=[]
+substring predicate any(a != b and a in b): False
+```
+
+The `fired` column is the load-bearing one: on the first two arms both keys' `count` reads its
+true figure while one key fired not once, which is the whole defect, and no comparison of the two
+count dictionaries could ever have shown it. The control arm moves every column at once.
+
+`<n>` counts the **distinct keys implicated across both kinds**, not the pairs (`a`, `ab`, `abc` →
+`keys=3`, three pairs), so a map refused for both reasons at once still counts each key once.
+`test_overlapping_keys_refuse` drives the substring kind;
+`test_substitute_refuses_intersecting_spans` drives the span kind on the fixture `abc` under
+`{ab→X, bc→Y}` with `ab bc ab bc` as its control, and mutation `intersect-check-removed` (the span
+scan deleted, the substring check left standing) is killed by it.
+
+**The class, with the residual stated exactly.** The class is *two keys whose matches are not
+independent*; the substring check was one member of it and the span check is the other, and the
+axis is closed at two because a pair of distinct keys either can or cannot occupy overlapping
+positions in the same text. A key intersecting **itself** (`aa` in `aaa`) is not an intersection
+between keys, and `str.count`'s non-overlapping count equals the alternation's non-overlapping
+match count for a single key, so the reported count still equals the number replaced there and no
+third predicate is owed. What would falsify that bound is a replacement engine that scans
+overlapping matches, which `re.sub` does not.
 
 Any key with a count of zero is collected; if the collection is non-empty nothing is executed and
 every missing key gets its own detail line, **in the map's insertion order** — an absent key has
@@ -1225,7 +1395,50 @@ by then `cwd` is set, the chmod runs inside the same `try` whose `finally` remov
 as the pending outcome and falls through to the ordinary cleanup, read-back and selection —
 `CleanupFailed` (with the `LaunchFailed` as `__cause__`) if the removal fails or the directory
 persists, else the `LaunchFailed`. `test_chmod_rollback_failure_is_cleanup_failed` injects both
-(`os.chmod` raising, `shutil.rmtree` raising) and asserts that chain. `start_new_session=True` puts the
+(`os.chmod` raising, `shutil.rmtree` raising) and asserts that chain.
+
+**A NUL byte in the composed shell text is a launch failure, not a traceback.** `Popen` rejects an
+argument vector containing `chr(0)` before the child exists, and it raises `ValueError` — which is
+not an `OSError`, and so fell outside the mapping this section otherwise closes. That input is
+reachable: a document block or a preamble file may hold the byte, pass the strict-UTF-8 read (it is
+valid UTF-8), and arrive at the spawn. The spawn call therefore catches `ValueError` beside
+`OSError` and raises `LaunchFailed("spawn", err)` — the existing exception, the existing token and
+**the existing stage**, `spawn` already being one of this exception's four stages, so the verdict
+partition gains no member; nothing executed, because the spawn never happened. Measured on
+`python3.11` (3.11.8) at `fbc2ea0`, the same call shape twice so the payload is the only thing that
+differs between the arms:
+
+```bash
+python3.11 - <<'PY'
+import subprocess
+for payload in ("true", "true" + chr(0)):
+    try:
+        p = subprocess.Popen(["bash", "-c", payload]); p.wait()
+        print("%-14r rc=%s" % (payload, p.returncode))
+    except Exception as e:
+        print("%-14r %s: %s" % (payload, type(e).__name__, e))
+PY
+```
+
+```
+'true'         rc=0
+'true\x00'     ValueError: embedded null byte
+```
+
+`test_nul_in_document_block_is_a_launch_failure` and `test_nul_in_preamble_is_a_launch_failure`
+drive the two routes — the byte inside the fence body, and the byte inside `--preamble-file` — and
+each asserts `LAUNCH_FAILED stage=spawn`, exit 2, an `os_error:` detail line, no traceback, and the
+cwd gone; mutation `spawn-valueerror-unmapped` (the `except ValueError` removed, so the failure
+escapes as a traceback carrying no `DOCBLOCK:` line) is killed by the first. **The class, with the
+residual stated exactly**: the class is *the runtime rejects the argument vector before the child
+exists*. On CPython 3.11 a `str` argv element is rejected for exactly one reason, an embedded NUL,
+which is this `ValueError`; the neighbouring member — a non-`str` element, which raises `TypeError`
+— is unreachable here because every element of the vector is composed as `str` by this design
+(`"bash"`, the flag literals, `"-c"`, and the composed text), so no third catch is owed unless that
+composition changes. What that bound does **not** cover: the byte reaching `bash` down a path this
+helper does not compose, and this helper composes every element of the one vector it spawns.
+
+`start_new_session=True` puts the
 child in its own process group, which is what makes the timeout path able to reap grandchildren
 rather than orphaning them. That failure was observed in this repository this session and the
 count is cited rather than recalled — four orphaned `hmad-dispatch exec-pane agy` processes, PIDs
@@ -1429,7 +1642,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
 |---|---|---|---|
 | `h_mad_doc_block_exec` | `h-mad/scripts/h_mad_doc_block_exec.py` | new | extract / substitute / run / CLI |
 | Helper suite | `h-mad/tests/test_h_mad_doc_block_exec.py` | new | FR-1..FR-5 ACs |
-| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 81 mutations (81 rows: 80 of the helper's source, 1 of `h-mad/SKILL.md` — `registry-row-removed`, the only row whose mechanism names `SKILL.md` as the file the harness edits; re-derive from the matrix's mechanism column, never from this cell), each bound to its RED test, enumerated under Test Plan |
+| Helper mutation spec | `h-mad/tests/mutation-specs/doc_block_exec.json` | new | guards for FR-1..FR-5 — 85 mutations (85 rows: 84 of the helper's source, 1 of `h-mad/SKILL.md` — `registry-row-removed`, the only row whose mechanism names `SKILL.md` as the file the harness edits; re-derive from the matrix's mechanism column, never from this cell), each bound to its RED test, enumerated under Test Plan |
 | Wire mutation spec | `h-mad/tests/mutation-specs/doc_block_exec_wire.json` | new | FR-6 connection, both directions — eight mutations: `wire-revert-extract`, `wire-revert-select`, `wire-revert-run`, `wire-revert-substitute`, `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened`, each bound to its `tests/test_h_mad_collect_report_docs.py::<name>` (table under Test Plan) |
 | Registry entry | `h-mad/SKILL.md` (Helper scripts) | modify | contract + remedy rows (AC-4.5) |
 | Tagged fence | `h-mad/SKILL.md` (Second surface) | modify | the one opt-in block (AC-6.1) |
@@ -1452,8 +1665,9 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    `h-mad/tests/mutation-specs/docsections.json` is re-pointed, converted to named-test form and
    run to `ALL_CAUGHT` (the author-together ordering the plan requires). Satisfies FR-1 (incl. AC-1.8/1.9) and AC-3.7. **`wiring` shape** — it carries the docsections wire and its WIRE-PIN, so the impl-plan's one-shape rule makes it `wiring` with the new-behaviour RED split stated in prose (impl-plan audit v30).
 2. **Task 2 — substitution.** `substitute` in `h-mad/scripts/h_mad_doc_block_exec.py`: simultaneous
-   replacement, counts on the original text, missing-key collection, overlap and empty-key
-   refusal, the empty-map no-op; its tests and mutation rows in the same two files as Task 1.
+   replacement, counts on the original text, missing-key collection, **both refusals of the
+   not-independent class — the substring predicate over the map and the span-intersection scan
+   over `block.text`** — and empty-key refusal, the empty-map no-op; its tests and mutation rows in the same two files as Task 1.
    Satisfies FR-2. Depends on Task 1 only for `Block`.
 3. **Task 3 — execution and bounding.** `run_block` and **`RunResult`** in
    `h-mad/scripts/h_mad_doc_block_exec.py`: temp cwd (`mkdtemp` + `chmod`, `cwd` `None` until
@@ -1469,7 +1683,10 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    Helper-scripts registry entry in `h-mad/SKILL.md` pinned bidirectionally (the two AC-4.5
    mutation rows land here — `registry-row-removed`, which mutates `SKILL.md`, and
    `detail-line-undocumented`, which mutates the **helper**; they are one pair by AC, not by file,
-   and calling them "the two `SKILL.md` rows" is the 79+2 miscount this document carried).
+   and calling them "the two `SKILL.md` rows" is the 79+2 miscount this document carried). **The
+   registry entry gains a row for the `intersect:` detail line here too**, with the rest of the
+   AC-4.5 registry work — the design owns the line's grammar and `h-mad/SKILL.md` owns its
+   registry row, and that row is not written before this task.
    Satisfies FR-4, AC-3.8/3.9. Depends on 1–3.
 5. **Task 5 — the wire.** Tag the Second-surface gate fence in `h-mad/SKILL.md` **and** migrate
    the executing call site in `h-mad/tests/test_h_mad_collect_report_docs.py` — a new
@@ -1530,7 +1747,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    *lines* plus a number, as an `L`-prefixed number, or as a colon-plus-number not preceded by a
    filename-shaped token. Those three blind forms were swept separately at `74e126f`, again
    at `35698f9` (the alternation below is in both blobs, so both runs are reproducible), and
-   again on the working file this revision ships, **after the v1.106 entry**, over the same
+   again on the working file this revision ships, **after the v1.109 entry**, over the same
    head-of-document corpus, with the alternation
    `line [0-9]{2,}|lines [0-9]{2,}|\bL[0-9]{3,}\b|[^A-Za-z0-9_./-]:[0-9]{2,}`, and the only hits
    are the two `lines …` fields of the block-census *output* quoted above — a printed count, not
@@ -1543,7 +1760,7 @@ clean up, so the refusal can neither leak a directory nor need the read-back —
    instance the wrapper split. That is a live hazard for a multi-*word* target and not for this
    one — a `path:NNN` pin contains no whitespace, so no hard-wrapper can break it; only a
    hand-inserted newline inside the token could, which is why the fence above stays line-scoped
-   and readable. It was checked rather than assumed — **on the working file this revision ships, after the v1.106 entry**, and the
+   and readable. It was checked rather than assumed — **on the working file this revision ships, after the v1.109 entry**, and the
    phrasing is deliberate: this fence does not exist in the `35698f9` blob
    (`git show 35698f9:$D | grep -cF "tr '\\n' ' '"` → `0`, against `1` at `6f0ee85`), so a bare
    sha here would send a reader to a document that does not contain the thing being validated.
@@ -1982,9 +2199,27 @@ between two syscalls of one call. The rollback still refuses to delete what it d
 before the unlink it compares `os.lstat(path)`'s `(st_dev, st_ino)` with the reserved
 descriptor's `fstat` identity recorded at creation and, on a mismatch, skips the unlink and
 reports the path as `leftover:` (someone else's file stands there now; the inode this call
-created is already gone or renamed away). That identity check is a policy constraint rather than
-a mutation-backed guard: its mismatch branch cannot be reached by a test without an additional
-seam between the two arms, and adding one for a stated non-goal is not warranted. `test_rollback_unlink_failure_reports_leftover` gives `--stdout`
+created is already gone or renamed away). **That identity check is a mutation-backed guard like
+every other, and the exemption an earlier draft granted it is withdrawn here.** The exemption
+said the mismatch branch could not be reached by a test without an additional injection point
+between the two arms and that adding one for a stated non-goal was not warranted. The base Test
+discrimination invariant, which this document inlines into every audit of itself, admits no such
+carve-out — an implemented deletion guard does not become untestable because the state it guards
+against is a non-goal, and the matrix carrying no mutant for it was the actual defect. The
+injection point is `os.lstat` in the helper's namespace, patched exactly as the other
+module-level names are and listed with them in §Test Strategy's canonical taxonomy.
+`test_rollback_skips_unlink_on_identity_mismatch` patches `os.lstat` to return an
+`(st_dev, st_ino)` pair differing from the `fstat` identity recorded at creation and patches
+`os.unlink` to record its calls, drives the failed-second-reservation path, and asserts
+`os.unlink` was **not** called and that the `stream_path_unwritable` verdict carries `leftover:`
+naming that path; mutation `rollback-identity-check-removed` (the comparison deleted, so the
+unlink runs unconditionally and another process's file is removed) is killed by it, since under
+the mutant `os.unlink` records a call and no `leftover:` line is emitted — both halves of the
+assertion move, which is what makes the kill the guard's and not the read-back's. **Residual,
+stated exactly**: the injection makes the mismatch *branch* reachable; it does not reproduce a
+real concurrent replacement between the two syscalls, which remains outside the threat model
+stated above. What the guard now has is a named RED, which is what the invariant asks and what
+the exemption withheld. `test_rollback_unlink_failure_reports_leftover` gives `--stdout`
 a fresh path and `--stderr` a path under a regular file (the real `ENOTDIR`), patches `os.unlink`
 in the helper's namespace to raise `PermissionError` (the `os.unlink` fault injection, §Test
 Strategy), and
@@ -2097,7 +2332,7 @@ and racy.)
 
 Verdict lines, one per run. **Every dynamic field is rendered through one escaper, `_field(value)`**
 (design audit v67): `heading="<h>"`, `arg="<raw>"`, `missing_key: "<k>"`, `duplicate_key: "<k>"`,
-`overlap: …`, `os_error: "<text>"`, `path="<p>"`, `leftover: "<path>"`, `stream: "<name>"`, `value="<v>"`
+`overlap: …`, `intersect: …`, `os_error: "<text>"`, `path="<p>"`, `leftover: "<path>"`, `stream: "<name>"`, `value="<v>"`
 and every other caller- or document-controlled value pass through it, and it renders the value as
 a **double-quoted JSON string** — `json.dumps(str(value), ensure_ascii=False)`, the value stringified FIRST so an `int`/`float` is quoted too (`json.dumps(3)` alone would emit a bare `3` — design audit v72 agy), **followed by a second pass** that rewrites every remaining character of Unicode category `Cc`, `Zl` or `Zp` to its `\uXXXX` escape (design audit v73; the reason for that set is split by member below): `"` and `\` escaped,
 `\r`, `\n` and every other control character escaped, everything else (spaces, `=`, non-ASCII)
@@ -2111,7 +2346,12 @@ Helper-constrained fields — `rc=<n>`, `blocks=<n>`, `count=<n>`, `keys=<n>`, `
 `stage=`, `reason=` — are ints or enums the helper produces and stay bare; **that list is
 exhaustive**: every other field is quoted, including the helper-produced numbers `seconds=` and
 `pgid:` (`seconds="1.0"`, `pgid: "4242"` — quoting a number never enables a forgery and the
-grammar parses it either way; impl-plan v1.22), so the line grammar is
+grammar parses it either way; impl-plan v1.22) **and the byte offset on the new `intersect:` line, which
+v1.109 quotes for exactly that reason rather than leaving bare as the round-seventeen decision
+sheet proposed — a bare integer there would be the first exception to a list this sentence calls
+exhaustive, and the exception is not worth the one saved character. The spelling that ships is the
+spec's own, three quoted values and no connective token; v1.109 proposed a connective and withdrew
+it, the spec's FR-4 grammar having no such token in any detail line**, so the line grammar is
 `DOCBLOCK: <VERDICT> (<key>=<bare>|<key>="<json-string>")*` and a consumer that splits on the
 quoted-string grammar recovers every field. The rule is what keeps the one-line, one-token-per-field
 contract true for a machine consumer; `_field` is the only place a dynamic value is rendered.
@@ -2123,8 +2363,15 @@ process-group id, the read-back stream and the leftover path — and each spelli
 different thing, so no regex separates a defect here from a legitimate use. **The arm's alternation
 is not typed by hand: it is the `DETAIL_KEYS` tuple the impl-plan declares for the helper, member
 for member.** That tuple is a module-level declaration in the impl-plan and not yet a symbol in the
-tree, its own trailing comment states its cardinality, and it holds **eleven** keys; the arm
-``grep -oE '(missing_key|overlap|duplicate_key|os_error|pgid|written|failed|skipped|verify|stream|leftover)='``
+tree, and its own trailing comment states its cardinality. **It held eleven keys at `fbc2ea0` and
+v1.109's `intersect:` line makes it twelve**, so the alternation below carries twelve rather
+than lagging by one — the derivation rule stated further down, applied forwards for once instead of
+after a drift. The blob reading is
+`git show fbc2ea0:"$IP" | grep -A2 'DETAIL_KEYS: tuple'` with
+`IP=docs/01-plan/features/doc-block-exec.impl-plan.md`, which prints the eleven-member tuple and
+its own trailing cardinality comment; **the twelfth member is owed by the impl-plan and is reported
+here, not edited**, one author writing one file. The arm
+``grep -oE '(missing_key|overlap|intersect|duplicate_key|os_error|pgid|written|failed|skipped|verify|stream|leftover)='``
 over the head raises **seven**, each identified by section and subject rather than quoted, since
 quoting one would move the reading it is describing: two `LaunchFailed` constructions carrying a
 value in §Execution; the same signature with its `None` default twice, once in §API / Interface
@@ -2136,17 +2383,56 @@ is derived by taking the arm, not by recalling the sites, and two earlier drafts
 were wrong in the same direction twice over: one said four because its needle saw only the two
 value-carrying hits, and its repair said six because the alternation it shipped was a hand-typed
 subset of ten keys which omitted the duplicate-substitution key and so could not see the hit on
-that row at all. **The rule over the class: this alternation is a copy of a set another document
+that row at all. **Widening the alternation to twelve moved the reading by nothing, and that is
+stated rather than left as a silent equality**: the head carries no `intersect` constructor
+spelling, because the span refusal's line is emitted and never built with a keyword of that name,
+so the seven are the same seven — re-derived after v1.109's own text landed rather than
+carried across it. A widening that changes no hit is exactly the case in which carrying the
+previous number would be invisible if it were wrong. **The rule over the class: this alternation is a copy of a set another document
 owns, so it is derived from that set and checked against it, never extended by hand one key at a
 time as new ones are met.** **Residual, as a concrete category**: `DETAIL_KEYS` can gain a member
 without this alternation gaining one, and nothing here fires when it does — **no test can reach it
 until tasks 5d and 5e build the module**, because until then this alternation lives in prose here
 and the tuple is a declaration in the impl-plan, with no symbol in the tree for either to be tested
 against (`grep -rn DETAIL_KEYS h-mad/` exits 1 with no output). **The bound in time is what makes
-this agree with the spec rather than contradict it**: the spec states the same residual against the
-same tuple and closes it at the far end of the bound, with AC-4.5's registry walk once the module
-exists, so the two documents hold the two halves of one closure and not two answers to it — until
-5d/5e the check is a reader comparing the two lists, and after 5e it is the walk. **Second residual, as a concrete category**: an *emitted detail line* mis-spelled in the
+this agree with the spec rather than contradict it — and this claim about the spec's bytes carries
+its readings instead of standing on assertion**, which is the rule stated further down applied to
+itself, and exactly what an earlier draft of this sentence did not do. **Two different sentences of
+the spec are involved and they say different things, so each is named rather than the paragraph
+being described as a whole.** With `S=docs/01-plan/features/doc-block-exec.spec.md`:
+
+- (a) the spec's own bound sentence — `git show fbc2ea0:"$S" | tr '\n' ' ' | grep -cF 'That
+  authority does not exist in the tree yet'` → **1**, and the same command returns **0** at
+  `b3be433` and at `00b961f`, so the reading discriminates rather than merely printing a number;
+- (b) the spec's residual sentence naming the walk — `git show fbc2ea0:"$S" | tr '\n' ' ' | grep
+  -cF 'a staleness the registry walk catches and this grammar does not'` → **1**, and **0** at
+  `b3be433`.
+
+So the spec's paragraph **as a whole** carries the bound, at (a), while its single residual
+sentence at (b) names the walk without restating it. That is the whole of the apparent
+contradiction between this paragraph and the debt §Version History records against the spec, and
+it resolves by naming the sentence — neither statement is wrong, they are about different ones.
+The two documents hold the two halves of one closure and not two answers to it: until 5d/5e the
+check is a reader comparing the two lists, and after 5e it is the walk.
+
+**Why no working-file arm is taken for either reading, stated rather than silently omitted.** This
+document's rule is a blob reading **and** a working-file re-check. The working-file half is
+unavailable this round, and that is measured rather than assumed: `git diff --numstat fbc2ea0 --
+"$S"` prints **289 added and 106 removed** on the tree this revision ships — the spec's author has
+finished in this same batch, so the file is written but uncommitted and its bytes are addressed by
+no sha at all, which is what makes a working-file reading unfetchable by a reviewer rather than
+merely unstable. **This figure was 243 and 101 when v1.109 first drafted this sentence, taken while that
+author was still writing**, and it is re-measured here rather than left standing: a sibling's
+numstat is a reading of a moving file, so it is re-taken after that author reports done and never
+carried from the moment the sentence was drafted. Both readings are therefore taken at `fbc2ea0`, with earlier
+blobs beside them in place of the missing arm. **The rule this adds to the pair rule, which
+addressed only the case where a working read is possible: during a multi-document batch the
+working-file half does not exist, so a claim about a sibling's bytes is stamped at the batch's
+parent with the divergence measured and named — never at a half-written working file, and never
+dropped.** **Residual, as a concrete category**: the pair rule exists to catch a sibling rewritten
+in the same commit, and this substitution does not catch that either; it names it. Only re-taking
+both readings at the merge commit closes it, which is work the merge owes and which no reading
+taken from inside the batch can do. **Second residual, as a concrete category**: an *emitted detail line* mis-spelled in the
 constructor form lands inside that same seven and is invisible to the arm — only reading each hit
 against the object it names catches it. That is precisely how the
 AC-4.6 row carried the process-group id in the constructor form, inside a table cell that spells
@@ -2157,17 +2443,20 @@ carried**: v1.106 filed the spec's FR-4 policy sentence as describing *the verdi
 then spelling the field in the constructor form. That was true of the `b3be433` blob, where the
 sentence stood under §FR-4, and it was already false the moment it was filed — the same commit that
 landed v1.106 rewrote the spec, whose FR-4 sentence now carries the quoted detail form and whose
-body holds no bare constructor spelling of the field at all; the bare needle over the spec's body
-returns one at `b3be433` and none on the working spec. **The rule this instance settles, stated
+body holds no bare constructor spelling of the field at all. **The reading is now a blob series
+rather than a blob-plus-working pair, for the reason given two paragraphs above** — the spec has a
+live author this round: the bare needle over the spec's body returns **1** at `b3be433` and **0**
+at `00b961f`, at `09e9307` and at `fbc2ea0`, so the discharge is dated at the commit that made it
+and confirmed to have held at `00b961f`, `09e9307` and `fbc2ea0` since. **The rule this instance settles, stated
 against the half v1.106 stated: a sibling rewritten in the *same commit* is the case a blob stamp
 alone cannot see, so a cross-document debt is either discharged with both of its readings or it is
-not written at all.** Both readings are the two just given, taken after this revision's entry
-landed. **Residual, as a concrete category**: a sibling rewritten *after* those two readings and
-before this document is committed is outside them, and only re-taking the working-file half at the
-merge commit closes that.
+not written at all.** **Residual, as a concrete category**: a sibling rewritten *after* those
+readings and before this document is committed is outside them, and only re-taking them at the
+merge commit closes that — which is what the batch v1.109 belongs to makes concrete rather
+than hypothetical.
 
 **The second pass covers one set for two different reasons, and stating them as one conjunction
-was a defect this revision repairs.** `json.dumps(…, ensure_ascii=False)` escapes only the C0
+was a defect v1.104 repairs.** `json.dumps(…, ensure_ascii=False)` escapes only the C0
 controls and leaves **35** of the 67 code points in `Cc`/`Zl`/`Zp` literal — DEL, the 32 C1
 controls (U+0085 NEL among them), and U+2028/U+2029. Of those 35, exactly **three** — U+0085,
 U+2028, U+2029 — are what `str.splitlines()` treats as a line boundary; they are the members
@@ -2258,8 +2547,106 @@ test does, so the `stream_path_unwritable` verdict carries `leftover:` with the 
 each on its own refusal path (`NOT_FOUND`, `SUBST_MISSING`/`BAD_SUBST`,
 `stream_path_unwritable` with `leftover:`), and asserts that
 `capsys` stdout holds exactly one line starting with `DOCBLOCK:`, that no line equals the forged
-`RAN` line, and that the escaped payload appears; mutation `field-escape-removed` (`_field`
-returns its input unchanged) is killed by it.
+`RAN` line, and that the escaped payload appears **inside `heading="…"`** — the quote clause is
+part of the assertion, not decoration, because AC-4.3 promises the escaped payload sits inside a
+quoted value rather than beside it, and it is what makes this test red under a mutant that strips
+the quotes. **The quote-bearing payload is a test of its
+own, added at v1.109**: `test_quote_in_dynamic_field_cannot_close_the_value` drives a `--heading`
+of `x" rc=0 y="` and asserts that the line parses under the quoted-string grammar to exactly
+`heading` and carries no `rc` field. That test, and not the newline test, is the killer of
+`field-escape-removed`, whose payload is redefined here; the impl-plan states the same pairing.
+
+**The three `_field` mutations were not isolated, and the repair is measured rather than
+reasoned.** `field-escape-removed` was specified as "`_field` returns its input unchanged", which
+drops the JSON **quoting**, the JSON **escaping** and the **second pass** all at once — so it turns
+all three of `test_dynamic_field_cannot_forge_a_token`,
+`test_unicode_line_separators_cannot_split_a_verdict_line` and the newline test red together, and
+the row discriminated nothing. Its payload is now `json.dumps(str(value), ensure_ascii=False)`
+replaced by `'"' + str(value) + '"'`: **the quotes are kept and the second pass is kept**, so the
+mutant removes exactly one guard. **Every cell below is the TEST'S OWN ASSERTION evaluated on the
+rendered line, and each assertion is transcribed from the test description this section states
+rather than written for the probe** — which is the whole of the correction here, and it took two
+passes. An earlier form scored whether the line SPLIT, and published three cells wrong. Its repair
+scored assertions but modelled the unicode test as a line count, and published one more cell wrong,
+because that test asserts the four escapes appear **inside `heading="…"`** and a probe that never
+looks inside the quotes cannot see a mutant whose whole payload is removing them. Both are one
+error: a cell is a claim about a TEST, so its predicate comes from that test's contract.
+
+```bash
+python3.11 - <<'PY'
+import json, re, unicodedata
+def c1(s):                                     # the shipped SECOND pass, in behaviour
+    return "".join("\\u%04x" % ord(ch) if unicodedata.category(ch) in ("Cc","Zl","Zp") else ch
+                   for ch in s)
+FORMS = {"shipped":         lambda v: c1(json.dumps(str(v), ensure_ascii=False)),
+         "quoting-removed": lambda v: c1(str(v)),
+         "escape-removed":  lambda v: c1('"' + str(v) + '"'),
+         "c1-removed":      lambda v: json.dumps(str(v), ensure_ascii=False)}
+NL = chr(10)
+V = {"N": "x" + NL + "DOCBLOCK: RAN rc=0 blocks=1 shell=strict",
+     "U": "a" + chr(0x85) + "b" + chr(0x2028) + "c" + chr(0x2029) + "d" + chr(0x7f),
+     "F": "x rc=0",
+     "Q": 'x" rc=0 y="'}
+FIELD = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
+def render(f, v): return "DOCBLOCK: NOT_FOUND heading=" + f(v)
+def fields(o):   return dict(FIELD.findall(o))
+def one(o):      return len(o.splitlines()) == 1
+def unforged(o): return not any(l.strip().startswith("DOCBLOCK: RAN") for l in o.splitlines())
+# EACH PREDICATE IS THE ASSERTION THE DESIGN STATES FOR THAT TEST, quote clause included
+def N(o): return one(o) and unforged(o) and "\\n" in fields(o).get("heading", "")
+def U(o): return one(o) and all(e in fields(o).get("heading", "")
+                                for e in ("\\u0085", "\\u2028", "\\u2029", "\\u007f"))
+def F(o): return one(o) and fields(o) == {"heading": "x rc=0"}
+def Q(o): return one(o) and set(fields(o)) == {"heading"}
+TESTS = [("N", N), ("U", U), ("F", F), ("Q!", Q)]
+print("%-17s%s" % ("row", "".join("%-8s" % t[0] for t in TESTS)))
+for name, f in FORMS.items():
+    print("%-17s%s" % (name, "".join(
+        "%-8s" % ("green" if p(render(f, V[t.rstrip('!')])) else "RED") for t, p in TESTS)))
+print()
+for form in ("shipped", "escape-removed", "quoting-removed"):
+    print("%-16s U -> %s" % (form, repr(render(FORMS[form], V["U"]))))
+PY
+```
+
+On `python3.11` (3.11.8) at `fbc2ea0` it prints:
+
+```
+row              N       U       F       Q!      
+shipped          green   green   green   green   
+quoting-removed  RED     RED     RED     RED     
+escape-removed   RED     green   green   RED     
+c1-removed       green   RED     green   green   
+
+shipped          U -> 'DOCBLOCK: NOT_FOUND heading="a\\u0085b\\u2028c\\u2029d\\u007f"'
+escape-removed   U -> 'DOCBLOCK: NOT_FOUND heading="a\\u0085b\\u2028c\\u2029d\\u007f"'
+quoting-removed  U -> 'DOCBLOCK: NOT_FOUND heading=a\\u0085b\\u2028c\\u2029d\\u007f'
+```
+
+**These are the impl-plan's three rows cell for cell**, which states the same matrix once rather
+than as pairwise sentences; the two documents now agree, and the disagreement that surfaced this
+correction was in the unicode cell of `field-quoting-removed`. `c1-escape-removed` **is isolated**:
+it reds its own key alone, because `json.dumps` still escapes the newline and still supplies the
+quotes, and the four line separators are the only characters it frees. `field-escape-removed` **is
+isolated to its key, and only once that key is the QUOTE test** — under it `U` is byte-identical to
+the real renderer and `F` still parses to one `heading` field, while `N` reds on the escape
+SPELLING, `\u000a` where the shipped renderer writes `\n`, and so stays a regression pin rather
+than a discriminator. `field-quoting-removed` **is NOT isolated, and that is recorded rather than
+smoothed**: `N`, `U` and `Q!` each assert their payload appears inside the field's double quotes,
+so stripping the quotes reds three tests beyond its key. **It is not repaired by weakening the
+assertions** — dropping the quote clause from those three would leave nothing pinning that the
+escaped payload sits inside a quoted value rather than beside it, which is the AC-4.3 promise, so
+the exposure is priced and kept. **The claim that each mutant has exactly one RED column is
+withdrawn**: it was true of the rendering and false of the tests.
+
+**The rule over the axis, which is what closes it**: a discrimination matrix's cell is the verdict
+of a NAMED TEST, so its predicate is transcribed from that test's stated assertions — every clause
+of them, the quote clause included — and never from what the mutant appears to change. A probe
+written from the mutant's mechanism scores the mechanism, and a cell that scores the mechanism
+agrees with the matrix only by luck. **Residual, stated exactly**: `\`, the other character
+`json.dumps` escapes and the second pass does not, is freed by `field-escape-removed` and by
+nothing else here, and no fixture drives it — a value ending in a lone backslash would escape the
+closing quote under that mutant, and that is the one uncovered member, named rather than screened.
 
 | line | exit | when |
 |---|---|---|
@@ -2272,7 +2659,7 @@ returns its input unchanged) is killed by it.
 | `DOCBLOCK: BAD_ARGS message="<m>"` | 0 | argparse grammar — all five shapes measured under §API / Interface Changes: unknown option, missing option value, missing required option, missing positional, abbreviation (the parser's `error()` is routed here; `--help` alone still prints help, exit 0) |
 | `DOCBLOCK: BAD_SUBST arg="<raw>"` (+ `duplicate_key: "<k>"`) | 0 | a `--subst` value with no `=` or an empty key, or a key given twice |
 | `DOCBLOCK: SUBST_MISSING keys=<n>` + `missing_key: "<k>"` per key, map insertion order | 0 | one or more keys are absent from the block (`n` counts them, so the line never has to pick one) |
-| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" "<b>"` per pair | 0 | one key is a substring of another |
+| `DOCBLOCK: SUBST_OVERLAP keys=<n>` + `overlap: "<a>" "<b>"` per substring pair and/or `intersect: "<a>" "<b>" "<offset>"` per span-intersecting pair | 0 | one key is a substring of another, **or** two keys' matches intersect in `block.text` (either predicate alone refuses; `keys=` counts the distinct keys implicated across both) |
 | `DOCBLOCK: UNREADABLE reason=stream_paths_alias` | 2 | `--stdout` and `--stderr` name one inode (`fstat` on the reserved handles) |
 | `DOCBLOCK: UNREADABLE reason=preamble_unreadable` | 2 | `--preamble-file` cannot be read |
 | `DOCBLOCK: BAD_INFO key="<k>"` | 0 | unrecognised info-string token |
@@ -2319,7 +2706,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `BadArgs(message)` | `main`, from the parser's overridden `error()` (argparse's default `exit_on_error=True`) | `BAD_ARGS message="<m>"` |
 | `BadSubstArg(raw, duplicate_key=None)` | `main`, building the map — split once on the first `=`; no `=`, an **empty key**, or a repeat refused there, `raw` being the argument exactly as given, so `--subst =V` prints `arg="=V"` under the quoted-field grammar (design audit v75: never a bare `arg="=V"`) — **and `substitute`, for an empty key reached by an API caller** (`BadSubstArg("")`, which `main` never reaches because it refused the raw argument first; design audit v69 agy: delegating the CLI's empty key to `substitute` would lose `raw` and print `arg=`). The same predicate in both places, each pinned by its own row: `empty-key-accepted-by-api` and `cli-empty-key-delegated` | `BAD_SUBST arg="<raw>"` + `duplicate_key: "<k>"` when it is a repeat |
 | `MissingSubstitution(keys)` | `substitute` | `SUBST_MISSING keys=<n>` + a `missing_key:` detail line per key |
-| `OverlappingSubstitution(pairs)` | `substitute` | `SUBST_OVERLAP keys=<n>` + a detail line per pair |
+| `OverlappingSubstitution(pairs)` | `substitute` — the substring predicate over the map, **and** the span-intersection scan over `block.text`; `pairs` carries both kinds, each tagged with the kind that raised it | `SUBST_OVERLAP keys=<n>` + an `overlap:` line per substring pair and an `intersect: …` line per span pair |
 | `StreamPathUnwritable(leftover=None)` | `main`'s stream reservation — the two-arm `os.open` create-or-open loop itself (raised `from` the `OSError`, which is its `__cause__`; also its bounded-retry exhaustion, with no cause); `leftover` set when the rollback read-back finds the created file still present; constructible with no arguments — the reservation region raises it bare, `from` the `OSError` (AC-4.5's subclass walk checks table membership by class and instantiates nothing; other subclasses keep their required arguments — design audit v72 agy) | `UNREADABLE reason=stream_path_unwritable` (+ `leftover: "<path>"` when set) |
 | `StreamPathsAlias` | `main`, after reserving both handles — `os.fstat` `(st_dev, st_ino)` equal | `UNREADABLE reason=stream_paths_alias` |
 | `PreambleUnreadable` | `main`'s pre-spawn read of `--preamble-file` (wraps `OSError` **and `UnicodeDecodeError`** — strict UTF-8, because text that will be executed is never silently repaired) | `UNREADABLE reason=preamble_unreadable` |
@@ -2327,7 +2714,7 @@ or an unwritable stream path escape as a traceback rather than a token:
 | `StreamCloseFailed(stream, close_error)` | `main`, selected after its reservation `try`/`finally` when the backstop `_close_stream` raised and no exit-2 error was pending (a pending `BlockTimeout` becomes `__cause__`) | `UNREADABLE reason=stream_close_failed` + `stream: "<name>"` + `os_error: "<text>"` |
 | `BlockTimeout(seconds)` | `run_block` (both AC-5.5 races end here) | `TIMEOUT seconds="<n>"` |
 | `CleanupFailed(path, cleanup_error)` | `run_block`, after the `finally` read-back | `CLEANUP_FAILED path="<p>"` + `os_error: "<text>"` when `cleanup_error` is set |
-| `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen`, a non-`ESRCH` `killpg` error, or an `OSError` from `communicate`/the drain/pipe close/`wait` (`collect`), wrapped; `pgid` set on the `reap` and `collect` stages | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap\|collect>` + `os_error: "<text>"` (+ `pgid: "<n>"` on `reap` and `collect`) |
+| `LaunchFailed(stage, err, pgid=None)` | `run_block` — `mkdtemp`, `Popen` (an `OSError` **or** the `ValueError` a NUL byte in the composed shell text raises, both mapped to the `spawn` stage), a non-`ESRCH` `killpg` error, or an `OSError` from `communicate`/the drain/pipe close/`wait` (`collect`), wrapped; `pgid` set on the `reap` and `collect` stages | `LAUNCH_FAILED stage=<mkdtemp\|spawn\|reap\|collect>` + `os_error: "<text>"` (+ `pgid: "<n>"` on `reap` and `collect`) |
 
 `main` catches `DocBlockError` and dispatches on type, so adding an exception without a verdict
 line is a `KeyError` in the mapping table rather than a silent traceback — and a test asserts every
@@ -2343,15 +2730,20 @@ test (strict vs plain, `-u`, `pipefail`, process-group reaping) are precisely wh
 stub out.
 
 **Each seam is named, never numbered — here, and everywhere else in this document that refers to
-one.** The eight are a *set*: the ordinal of any member changes whenever the set is reordered,
+one.** They are a *set*: the ordinal of any member changes whenever the set is reordered,
 and the two enumerations in this section alone (this paragraph's and the `main(argv)` sentence
-that closes it) list the same eight in different orders, so no ordinal over them is stable. That
+that closes it) list the same members in different orders, so no ordinal over them is stable. That
 is not hypothetical — every ordinal this rule has removed named the wrong seam as well as a
-drifting one. The rule is stated ahead of both enumerations because it governs every seam
+drifting one. **The set's own cardinal is deliberately absent from this paragraph and from the
+rule below, and that is a repair rather than an omission**: the set grew by one at v1.109 when
+the rollback identity guard acquired its injection point, and a cardinal written into the rule that
+governs the set is one more surface to re-sweep on every such growth. The cardinal is stated once,
+at the enumeration that lists the members, where it is derivable by counting them. The rule is
+stated ahead of both enumerations because it governs every seam
 mentioned below *and* every seam mentioned in §Error Handling Strategy above.
 
 **The rule over the axis, stated so a reader can apply it without asking**: no member of the
-eight-seam set is *addressed* by ordinal anywhere in this document outside §Version History —
+fault-injection set is *addressed* by ordinal anywhere in this document outside §Version History —
 the seam is named instead. Verify that rather than trusting it, with the same corpus split the
 line-pin check uses.
 
@@ -2392,7 +2784,7 @@ both.** A fence opened at four or more columns (inside a list item) is invisible
 its body would survive the strip, be folded, and be matched as prose — the mirror of arm (2) on
 `census()`. Measured rather than argued, on this document's head and on the whole file:
 `grep -cE '^ {4,}(\`{3,}|~{3,})' "$D"` returns `0` at `6f0ee85` and `0` on the working file this
-revision ships, **the second run made after the v1.106 entry**, so the bound is **unexercised here** — *vacuous* in the absence rule's vocabulary,
+revision ships, **the second run made after the v1.109 entry**, so the bound is **unexercised here** — *vacuous* in the absence rule's vocabulary,
 and one of the nine sites that rule counts — and, unlike `census()`'s arm (2), which is
 exercised four times on the corpus it reads, this one is a `0` because the shape is absent, not
 because two other guards happen to decline it. It goes live the first time this document indents
@@ -2433,7 +2825,7 @@ what makes this a control on the tilde alternative rather than on the pipeline**
 the tilde alternative moves the tilde fixture and leaves the backtick fixture at `0`, so the
 movement belongs to `~{3,}` and cannot be its sibling's. No corpus can supply this —
 `grep -cE '^ {0,3}~{3,}' "$D"` returns **0** on the working file this revision ships, **run after
-the v1.106 entry below was written**, which is the second half of the stamping rule the
+the v1.109 entry below was written**, which is the second half of the stamping rule the
 fourth-blind-form fence states and which this site carried only half of until v1.102: a
 document-self figure names the working file *and* the entry it was run after, because the working
 file is a moving object and the entry is what pins which version of it was measured. It is an
@@ -2455,21 +2847,26 @@ for each branch (`the third <noun>`), all six score `1`, so every branch is live
 zeros record the corpus rather than a dead pattern. *Positive, for
 the dotted form*: over a two-line fixture in which an ordinal is separated from its noun by a
 backticked dotted module path *and* a newline, the pipeline prints `1`; the predecessor's
-`[^.]{0,60}` gap printed `0`, and **five** of the eight seams are dotted module paths, so that was
-the natural phrasing for this very set. That five is **derived here, not quoted** — fold the
+`[^.]{0,60}` gap printed `0`, and most of the fault-injection set is spelled as a dotted module
+path, so that was
+the natural phrasing for this very set. That proportion is **derived at each corpus, not quoted** —
+fold the
 document, pull the parenthesised enumeration §Test Strategy calls the canonical taxonomy, and
-count the members carrying a dot:
+count the members carrying a dot. **The needle admits both spellings of the enumeration's own
+cardinal**, because the set grew at v1.109 and a needle pinned to the old word would have
+returned nothing on the shipped file while reading correctly at the blob:
 
 ```bash
 awk 'BEGIN { RS = "" } { gsub(/\n/, " "); print }' "$D" \
-  | grep -oE 'seven module-level seams \(`[^)]*`\)' | grep -oE '`[^`]+`' | tr -d '`' \
+  | grep -oE '(seven|eight) module-level seams \(`[^)]*`\)' | grep -oE '`[^`]+`' | tr -d '`' \
   | tee /dev/stderr | grep -c '\.'
 ```
 
-At `6f0ee85` it lists the seven module-level seams and then prints `5`: `os.killpg`,
-`shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod` and `os.unlink` are dotted, `_final_write` and
-`_close_stream` are not, and the remaining member of the eight — the instance-level `Popen`
-wrapper — is not a module path at all. Most of the set is still dotted, so the blindness this
+At `6f0ee85` it lists seven module-level seams and prints `5`: `os.killpg`,
+`shutil.rmtree`, `tempfile.mkdtemp`, `os.chmod` and `os.unlink` are dotted while `_final_write` and
+`_close_stream` are not, and the one remaining member there — the instance-level `Popen`
+wrapper — is not a module path at all. On the working file this revision ships, after the v1.109
+entry below was written, it lists eight and prints `6`, `os.lstat` being the member added at v1.109 and dotted like its neighbours. Most of the set is still dotted, so the blindness this
 control demonstrates is unchanged; only the figure moves.
 
 **v1.97 published `seven` at this site, taken verbatim from the audit report that raised the
@@ -2595,7 +2992,7 @@ changes what it measures.** And the stronger rule this instance forces, which is
 been missing: **a stated property of a screen — what it is immune to, which side it reads, which
 of its branches ever fire, what its zero means — is a claim about the screen's shipped text. Read
 it out of the fence and execute it. Never reason it from what the screen is for.** **And the
-corollary this revision had to add, because v1.100 obeyed that rule and still shipped a false
+corollary v1.101 had to add, because v1.100 obeyed that rule and still shipped a false
 sentence: when a property is established by executing a mutation, the mutation is a claim as
 well. Name the exact range, blob or input the run consumed, and show it is the one the sentence
 describes — in the text, a demonstration run on the wrong input is indistinguishable from one run
@@ -2676,7 +3073,7 @@ from a *sibling document* is a decision-E matter and is not what this run measur
 not a member it fails to print: a fixture carrying both admissible cardinality phrasings and two
 block ordinals with their base, in the shapes this document actually uses, prints `0`. A fourth
 run pins property (ii): dropping `$STRIP` from the pipeline turns the `0` on this file into **`6`**
-— on the working file this revision ships, after the v1.106 entry. **The literal `1` stood in this
+— on the working file this revision ships, after the v1.109 entry. **The literal `1` stood in this
 sentence unchanged at every sha from `6f0ee85` to `7d8e797` and was true only at the first two of
 them, and it is the first thing the rule stated at the `NUM` residual caught**: the figure is a
 property of *this document's fence bodies*, so every
@@ -2688,9 +3085,9 @@ the drift is visible and dated rather than asserted. **The ladder ends at `700c5
 written as a hex, never as whichever freeze the current round happens to answer**: that description
 was carried here at v1.104, was true when written, and went false on the next bump with no edit to
 the sentence, which is this section's own signature and the reason the sha-description residual in
-§Scanning now carries a folded third arm. The gap between the ladder's end and this revision is
+§Scanning now carries a folded third arm. The gap between the ladder's end and v1.106 is
 closed by measurement rather than by a claim: the same unstripped fold returns `6` at `8c6539a` and
-`6` at `b3be433`, and `6` on the working file after the v1.106 entry, so no drift hides there.
+`6` at `b3be433`, and `6` on the working file after the v1.109 entry, so no drift hides there.
 **All six are fence text, and the disposition is what the control turns on,
 not the count**: two are the `O` and `N` alternations assigned in the fence above, the check
 matching its own source; two are the ordinal-plus-noun fixture bodies written into the `printf`s of
@@ -2704,7 +3101,7 @@ note; hoisting the alternation into a shell variable is why **at that blob** one
 **That clause is dated and not present-tense, and the reason is the sharpest instance of a hazard
 this document otherwise avoids: this is its one screen whose needle is a literal string that lives
 inside the scope the screen counts, so every sentence written *about* the screen is a candidate
-member of what it counts.** On the working file this revision ships, **after the v1.106 entry**,
+member of what it counts.** On the working file this revision ships, **after the v1.109 entry**,
 that same `-F` grep — quoted exactly once above and deliberately not re-quoted here, since a
 fourth literal copy would move the figure inside the sentence stating it — returns **3**
 whole-file and **2** over the head: the `O` assignment, the probe quoting it, and — the third,
@@ -2749,7 +3146,7 @@ nor leaves a real one:**
    v1.76's, is an ordinal over the two *arms* of a cleanup path, which merely lands inside the
    gap of one of the three nouns. Named here so the next reader does not chase it, and kept as
    the demonstration of why this number is derived and never transcribed as a list. It is still
-   `8` on the working file **after the v1.106 entry**, which records its changes without quoting an
+   `8` on the working file **after the v1.109 entry**, which records its changes without quoting an
    ordinal address — and the tail command was re-run on the working file *after* the bump rather
    than before it, which is the only order in which that check means anything. Naming the entry is
    the rule this document settled on for a document-self figure ("this revision" stops resolving
@@ -2772,16 +3169,68 @@ nor leaves a real one:**
    and the statement of what the phrase still certifies and what it no longer does. The whole set
    then moves in ONE pass — stamps, the round-deictics around them, and the differentials that
    quote the lines they sit on — because moving any one alone is what makes the others wrong.
-   The v1.107 and v1.108 entries both take this exemption over the same eighteen sites and both
-   discharge those four, which is why the rule is amended at the site that states it rather than
-   published here and declined in an entry.
-   **The round-deictic register is a separate class from the stamp and moves in the same pass**:
+   **v1.107 and v1.108 both took this exemption over eighteen sites; v1.109 takes it over NONE,
+   because it did the one pass instead, and the reason that was the right call is a measurement
+   rather than a preference.** Walked at `09e9307` against the two cases the condition names, with
+   paragraphs cut on blank lines, with every fragment matched WHITESPACE-TOLERANTLY because this
+   file hard-wraps and a literal space in the walk's own pattern is what made the first run of it
+   report the wrong partition: of the eighteen sites the condition reached **five**, in **three**
+   paragraphs — the fold-ladder paragraph in §Test Strategy carries three of them, the
+   span-ordinal head-figures paragraph one, and §Test Plan's helper-mutation-spec paragraph one —
+   and **thirteen** it did not, each sitting
+   in a paragraph whose only round-deictic was the *self-resolving* form, which by the register's
+   own definition resolves at every revision and therefore never resolves to an earlier one.
+   **That walk is described here and deliberately not shipped as a fence, which is a property of
+   its subject and not a shortcut**: its fragments are the ten attributional members the v1.108
+   entry enumerates, and the phrase it cuts on is the round-deictic census's own literal, so a
+   fence carrying it would raise the very count that census reports — the one place in this
+   document where writing a screen down moves the reading the screen exists to take. What a reader
+   re-takes instead is that census and the stamp census under the needle this section publishes,
+   both of whose figures are given with the appendix readings in the entry below; the
+   five-and-thirteen partition follows from those two together with the v1.108 enumeration, and no
+   part of it rests on the walk alone. **The
+   gating auditor walked sixteen and reported eleven uncovered; the true figure is thirteen of
+   eighteen**, because a line-scoped walk cannot see the two wrap-split sites and neither of those
+   two carries an attributional deictic either. For the thirteen, re-stamping falsified nothing
+   anywhere, so the clause that was the only bridge from the condition to the claim did not hold of
+   them — the rule was being applied roughly three times as wide as it licensed, one level down
+   from the defect it was written to answer. **The repair is the one pass, not a third case in the
+   condition**, because inventing a case to cover sites that need no cover is how a rule stops
+   meaning anything: every stamp now reads v1.109, every attributional deictic is written as the
+   version that performed the act, and the exempt set this round is empty.
+   **The acceptance rule the entry-naming screen states must therefore admit an approved exemption,
+   and it did not.** "Every hit must name the current entry; any other version is a stale stamp by
+   construction" is true only when the exemption is untaken — as it is at v1.109 — and it
+   contradicted the exemption sitting three sentences above it whenever the exemption was taken.
+   It now reads: **every hit must name either the current entry or a version the exemption above
+   covers, and an exempt version is admissible only if the entry taking the exemption enumerates
+   the sites; any other version is a stale stamp by construction.** The screen's expected output is
+   therefore a single version on a clean pass and a named partition otherwise, never a bare
+   equality.
+   **The round-deictic register is a separate class from the stamp and moved in the same pass**:
    an *attribution* deictic says which revision performed an act and stops resolving from the bytes
    the moment a later entry exists, while the *self-resolving* form names the file a reading was
    taken over and resolves at every revision. The two are not separable by any screen — the folded
-   census reaches the literal phrase and nothing distinguishes the two uses mechanically — so the
-   register is enumerated in the v1.108 entry, member by member, each with the first-present sha
-   behind it and with a bound stated where only a bound is derivable.
+   census reaches the literal phrase and nothing distinguishes the two uses mechanically — so
+   v1.108 enumerated the register member by member, each with the first-present sha behind it, and
+   **v1.109 resolved every attributional member to its version, so the class is now empty rather
+   than enumerated**: the folded head census reads 18, of which 14 are the self-resolving form and
+   4 are quotations of the phrase as a described defect. **One register member was stamped at the
+   wrong sha, and the correction generalises rather than being a re-stamp.** First-present of a
+   *fragment* bounds when that WORDING entered, not when the SUBJECT it now attributes entered —
+   and the two come apart when a later revision re-points the fragment at a new subject.
+   Re-derived over the blob series with the folded idiom: the no-label-until clause **about the
+   provenance probe** is first present at `1cbddb7` (v1.102), not at `06ef40f` (v1.100) as the
+   register said; the same fragment does stand at `06ef40f`, where its subject was the `$STRIP`
+   bound (the no-label-until fragment with the `$STRIP` bound as its subject reads 1 at `06ef40f` and 0 at `1cbddb7` and after; the needle is described and not reproduced, because the round-deictic census counts this document's head and a literal copy would enter its own denominator), and the same sentence already labels that act v1.100. Stamping the probe
+   clause v1.100 would have produced two clauses in one sentence attributing different acts to the
+   same revision, contradicting the vacuity-label site four hundred lines earlier, which the same
+   register correctly stamps `1cbddb7`. **The rule over the axis: where a fragment has outlived its
+   subject, a register member carries the FRAGMENT sha and the SUBJECT sha as a pair, and it is the
+   subject sha that the resolution writes.** **Residual, as a concrete category**: first-present of
+   a fragment still cannot see a rewording that preserved the fragment, so a member whose subject
+   changed twice is bounded, not pinned — only reading the sentence at each blob separates them,
+   which is what caught this one.
    The v1.102 repair closed the class it could see and
    named a screen for the rest that grepped the phrase *working file*; that screen cannot reach a
    figure which names the working file correctly and an entry that has since been superseded,
@@ -2795,7 +3244,12 @@ nor leaves a real one:**
      | grep -oE 'after the v1\.[0-9]+ entry' | sort | uniq -c
    ```
 
-   Every hit must name the current entry; any other version is a stale stamp by construction.
+   Every hit must name either the current entry or a version the stamp exemption stated in
+   §Test Strategy covers, and an exempt version is admissible only where the entry taking that
+   exemption enumerates the sites it covers; any other version is a stale stamp by
+   construction. **At v1.109 the exemption is untaken, so the expected output is a single
+   version and nothing else** — the strict form the earlier sentence stated unconditionally,
+   which is why it contradicted the exemption whenever the exemption was live.
    The pattern is not self-matching — the escaped `v1\.` in the fence is not the literal
    `v1.` the pattern needs — so the screen does not count its own definition, and its scope is
    the head while its definition sits inside a fence the fold leaves in place, which is why that
@@ -2853,7 +3307,7 @@ nor leaves a real one:**
    TAIL "$D" | grep -oiE "$W" | sort | uniq -c     # the tail, the claim under test
    ```
 
-   Run on the working file this revision ships, **after the v1.106 entry** landed rather than
+   Run on the working file this revision ships, **after the v1.109 entry** landed rather than
    before it — the entry is named rather than described, because "the entry recording this
    revision" stops resolving from the bytes the moment a later entry exists, which is the same
    reason the tail-count site above names its version:
@@ -2870,9 +3324,9 @@ nor leaves a real one:**
 
    **The head is stamped at `cf3a862`: `$P` raises 14 there and `$W` raises 6; and the working-file
    head is published beside that stamp rather than withheld — `$P` **29** and `$W` **8**, both
-   re-derived after the v1.106 entry below was written.** The earlier form withheld them on the
+   re-derived after the v1.109 entry below was written.** The earlier form withheld them on the
    ground that this paragraph's own controls move the number, which is the same publication refusal
-   §Scanning's candidate sweep struck in this revision — and it was worded here in a way that
+   §Scanning's candidate sweep struck in v1.106 — and it was worded here in a way that
    sweep's greppable arm cannot reach, so it was found by reading, which is that arm's stated
    residual made concrete rather than hypothetical. The head figure does drift as controls are
    written, and it is therefore *derived at each corpus and stamped*, never carried: `$P` reads 14
@@ -2906,7 +3360,7 @@ nor leaves a real one:**
    remaining two are the cardinality and printed-output-field shapes the head also carries. So
    *"no §Version History entry states a span ordinal without its base"* is **false**. It is
    withdrawn rather than re-scoped, and the entries are not rewritten: they are dated records, and
-   what this revision changes is the sentence that claimed there were none, plus the body site,
+   what v1.101 changes is the sentence that claimed there were none, plus the body site,
    which was exempt from nothing.
 
    **Residual, exactly**: the noun set is closed by enumeration, so a span noun this feature
@@ -2936,7 +3390,7 @@ nor leaves a real one:**
    "primitives" throughout — and `$N` now carries `s?` on all three, which closes it. What remains
    uncovered is named, not waved at: a possessive (`seam's`), a hyphenated compound (`sub-seam`),
    and any noun this feature adopts later for the same set. The head returns `0` on the working
-   file **after the v1.106 entry**, and re-running the same pipeline on those same bytes with `N`
+   file **after the v1.109 entry**, and re-running the same pipeline on those same bytes with `N`
    cut back to its singular-only form also returns `0` — the comparison was first made on the
    v1.100 bytes and is re-taken here, because a differential between two alternations is a
    property of the file they are run over and a bump moves it,
@@ -2946,8 +3400,8 @@ nor leaves a real one:**
    what the screen exists to assert, so it carries no load-bearing/incidental label, and the
    controls above rather than the `0` itself are what show the screen can print something else.
 
-**Eight named fault injections — seven module-level seams (`os.killpg`, `shutil.rmtree`,
-`tempfile.mkdtemp`, `os.chmod`, `os.unlink`, `_final_write`, `_close_stream`) plus one
+**Nine named fault injections — eight module-level seams (`os.killpg`, `shutil.rmtree`,
+`tempfile.mkdtemp`, `os.chmod`, `os.unlink`, `os.lstat`, `_final_write`, `_close_stream`) plus one
 instance-level wrapper (the recorded `Popen` instance's `communicate`, `wait` and `poll`) — each
 on a call whose *failure* is under test, all via pytest's `monkeypatch` (restored on exit), all
 leaving `subprocess` real; this list is the canonical taxonomy, and what the spec and the impl-plan owe it is the
@@ -2980,7 +3434,12 @@ observes the real constructor and stubs nothing, so `subprocess.Popen` itself st
 The `os.unlink` seam is patched in the helper's namespace to raise
 `PermissionError` for the reservation rollback's read-back (`test_rollback_unlink_failure_reports_leftover`),
 because a directory writable at create time cannot be made unwritable between the two arms of one
-call. The drain race needs no mock, because a real
+call. The `os.lstat` seam is patched in the same namespace to return an `(st_dev, st_ino)` pair
+differing from the recorded `fstat` identity, which is what makes the rollback's identity-mismatch
+branch reachable (`test_rollback_skips_unlink_on_identity_mismatch`, mutation
+`rollback-identity-check-removed`), because nothing can replace the file between two syscalls of
+one call — **and that is the whole reason the guard was exempted from discrimination until v1.109; the exemption is withdrawn at the guard, and the set gains this member rather than the
+guard keeping its carve-out.** The drain race needs no mock, because a real
 `os.setsid()` descendant holds the pipes open; the real permission fixture still runs wherever
 `euid != 0`. Fixtures are markdown strings written to `tmp_path`, deliberately **hostile** rather than
 tidy: headings at mixed levels, fences quoting fences, a path containing a space, a body with
@@ -2993,8 +3452,8 @@ selects, in each of the three documents, the paragraph stating the canonical tax
 the set of names that paragraph carries:
 
 ```bash
-SHA=cf3a862   # the two siblings are read at a sha; this document is read as the working file
-SEAM='`(os\.(killpg|chmod|unlink)|shutil\.rmtree|tempfile\.mkdtemp|_final_write|_close_stream|Popen)`'
+SHA=fbc2ea0   # the two siblings are read at a sha; this document is read as the working file
+SEAM='`(os\.(killpg|chmod|unlink|lstat)|shutil\.rmtree|tempfile\.mkdtemp|_final_write|_close_stream|Popen)`'
 SEL='BEGIN { RS = "" }
      /instance[-]level/ && /fault[ ]injection/ && $0 !~ /^- v1\./ { gsub(/\n/, " "); print }'
 for f in docs/02-design/features/doc-block-exec.design.md \
@@ -3007,12 +3466,28 @@ for f in docs/02-design/features/doc-block-exec.design.md \
 done
 ```
 
-Run after the edits this revision ships, with the siblings read at `cf3a862` because both were
-being edited in the working tree at the time, it prints the identical eight-member set three
-times — `_close_stream _final_write os.chmod os.killpg os.unlink Popen shutil.rmtree
-tempfile.mkdtemp` — at `(sites=1)`, `(sites=1)` and `(sites=2)`. **The contract holds; nothing is
-owed to either sibling, and that is a measurement rather than a reading.** Two properties are
-deliberate. The selector is written so that **this fence cannot match itself**: `instance[-]level`
+Run on the working file this revision ships, after the v1.109 entry below was written, with the
+siblings read at `fbc2ea0` because all three documents are being rewritten in parallel in this
+round's batch, it prints
+
+```
+doc-block-exec.design.md     _close_stream _final_write os.chmod os.killpg os.lstat os.unlink Popen shutil.rmtree tempfile.mkdtemp (sites=1)
+doc-block-exec.spec.md       _close_stream _final_write os.chmod os.killpg os.unlink Popen shutil.rmtree tempfile.mkdtemp (sites=1)
+doc-block-exec.impl-plan.md  _close_stream _final_write os.chmod os.killpg os.unlink Popen shutil.rmtree tempfile.mkdtemp (sites=2)
+```
+
+— **so the three sets are NOT identical at this pair of corpora, and that is published rather than
+smoothed over.** The design carries `os.lstat` and the two siblings at `fbc2ea0` do not, because
+`os.lstat` enters the set at v1.109 and the batch that adds it lands in three files at once;
+the siblings acquire it in the same batch, from their own authors. **The rule this instance forces,
+and it is the one a set-equality check cannot state for itself: a cross-document set check run
+DURING a multi-document batch reads the siblings at the batch's parent and therefore measures the
+batch's own incompleteness, not a defect.** The reading that settles the contract is this same
+command re-taken after the batch lands, with `SHA` moved to the commit that lands it — which is
+work the merge owes and which no reading taken from inside the batch can do. Until then what is
+owed is named rather than asserted clean: the spec and the impl-plan each owe `os.lstat` in their
+canonical-taxonomy paragraph, and this document reports that debt and does not edit them. Two
+properties of the command are deliberate. The selector is written so that **this fence cannot match itself**: `instance[-]level`
 matches the prose spelling but not the bracketed one it is written in, which is the same
 publication rule as the screen above, one level down. And `$SHA` stamps the siblings, so a
 sibling being rewritten mid-round cannot silently change this output. **Residual, exactly two
@@ -3027,9 +3502,9 @@ name its AC — pass it, correctly.
 
 The CLI is exercised by `subprocess.run([sys.executable, SCRIPT, …])` so the exit codes under test
 are the real process's, not a return value — the same shape `handoff/tests/test_skill_candidates_census.py` uses — named by path because a bare file name sends a reader to the wrong root, and this design cites **two** tests under `handoff/tests/`, this one and `test_mutation_specs_clean.py`, derived by `grep -oE '[A-Za-z0-9_/.-]*test_[A-Za-z0-9_]+\.py'` over the head rather than recalled —
-**for every verdict a real input or a real fault can produce**. A verdict that needs one of the eight
-fault injections (the seven module seams `_final_write`, `_close_stream`, `tempfile.mkdtemp`,
-`os.chmod`, `shutil.rmtree`, `os.killpg`, `os.unlink`, or the `Popen` instance wrapper for
+**for every verdict a real input or a real fault can produce**. A verdict that needs one of the nine
+fault injections (the eight module seams `_final_write`, `_close_stream`, `tempfile.mkdtemp`,
+`os.chmod`, `shutil.rmtree`, `os.killpg`, `os.unlink`, `os.lstat`, or the `Popen` instance wrapper for
 `communicate`/`wait`/`poll`) is driven in-process through `main(argv)` instead — its return value is the exit code
 and `capsys` holds the lines — because a `monkeypatch` cannot cross an exec boundary; two
 subprocess tests (`NOT_FOUND` → 0, an unreadable document → 2) pin that `sys.exit(main(...))` turns
@@ -3068,21 +3543,38 @@ by naming what it found.
 | ACs | Tests |
 |---|---|
 | AC-1.1–1.7 | tagged-vs-untagged selection; a document containing an invalid UTF-8 byte → `UNREADABLE reason=doc_unreadable`, never a traceback; zero → `NOT_FOUND`; two → `AMBIGUOUS blocks=2 heading="<h>"`; `--index` 2 and 3; same/shallower-level bound; a fence quoting the tag, a `~~~` fence quoting the tag, and a four-space-indented literal tag (an indented code block, never an opener); **a document with two identical headings → `AMBIGUOUS_HEADING count=2`, nothing executed** (fixture mirrors `invariants.example.md`'s duplicated `###`) |
-| AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing `test_docsections.py` still passes unchanged, and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong, **and its own contract is pinned directly** — `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence` call `fence_aware_end` on hostile text and assert the section does not end at a heading quoted inside a `~~~` block or at a four-space-indented literal fence, since `docsections` consumes it as a section bounder, not through the extractor. **The import arrangement is pinned twice**: `test_docsections_imports_when_collected_alone` runs `pytest h-mad/tests/test_docsections.py -q` as a subprocess from the repo root, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
+| AC-1.8 | `docsections` delegates: no second bounder implementation remains (asserted on the source), its existing tests still **collect and pass in the full suite** — not "pass unchanged", since this feature adds a test to that file — and the shared bounder handles the unbalanced four-backtick case that the old toggle got wrong, **and its own contract is pinned directly** — `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence` call `fence_aware_end` on hostile text and assert the section does not end at a heading quoted inside a `~~~` block or at a four-space-indented literal fence, since `docsections` consumes it as a section bounder, not through the extractor. **The import arrangement is pinned twice, and the first of the two is COLLECTION-ONLY by design**: `test_docsections_imports_when_collected_alone` runs `[sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "h-mad/tests/test_docsections.py"]` as a subprocess from the repo root and requires exit 0, and `test_docsections_imports_from_an_unrelated_cwd` runs `python3 -c "import docsections"` with only the tests dir on `sys.path` and `cwd=tmp_path` — both would fail if `docsections.py` relied on another module's `sys.path` insert |
 | AC-1.9 | `--index 0` and `--index -1` → `BAD_INDEX index="<n>"`, exit 0, and the block a naive `blocks[-1]` would have chosen leaves no side effect; `select(blocks, 0)` raises `BadIndex` |
-| AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key is neither re-substituted nor mis-counted, in both map orders; overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order |
-| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: "stdout"` / `failed: "stderr"` detail lines; `os.unlink` fault-injected on a failed second reservation → `stream_path_unwritable` with a `leftover: "<path>"` line, the created file present and empty, no traceback |
+| AC-2.1–2.7 | path substitution; absent key refuses; two absent keys → two detail lines; metacharacter key; multi-occurrence count equals replacements; a value containing another key is neither re-substituted nor mis-counted, in both map orders; substring-overlapping keys refuse with `SUBST_OVERLAP`, `keys=` counts distinct keys (`a`/`ab`/`abc` → 3) and the `overlap:` lines are one per pair in `(shorter, longer)` order; **span-intersecting keys refuse under the same token** — `test_substitute_refuses_intersecting_spans` on the fixture `abc` under `{ab→X, bc→Y}`, whose substring predicate is False, asserting one `intersect: "ab" "bc" at "0"` line and nothing executed, with the control `ab bc ab bc` substituting to `X Y X Y` and both counts reading 2 |
+| AC-3.1–3.10 | `pwd` outside the repo and gone after; `git status --porcelain` byte-identical across a writing block; `-u` strict-vs-plain; bare `exit 3` → rc 3 with the harness alive; `pipefail` strict-vs-plain; streams unmerged, and `str` — a block printing `é` round-trips it, a block running `printf '\xff'` yields U+FFFD (AC-3.6); `shell=fish` → `BAD_INFO`; optional stream paths; aliased `--stdout`/`--stderr` (a symlink, `./x` vs `x`, **and an `os.link` hard link**) refuse after reservation and before running, with both handles closed and a created file unlinked; unwritable stream path refuses **and the block leaves no side effect**; a pre-existing stream file is truncated, not appended; **a failed `--stderr` reservation leaves a pre-existing `--stdout` file byte-identical, and removes a `--stdout` file the call itself created**; **a timeout leaves pre-existing artifacts byte-identical** (nothing is written on that path); `_final_write` fault-injected → `UNREADABLE reason=stream_write_failed`; failing only the stderr write leaves the stdout artifact current with `written: "stdout"` / `failed: "stderr"` detail lines; `os.unlink` fault-injected on a failed second reservation → `stream_path_unwritable` with a `leftover: "<path>"` line, the created file present and empty, no traceback; **`os.lstat` fault-injected to report a different `(st_dev, st_ino)` than the reserved descriptor's on that same failed-second-reservation path → the unlink is NOT attempted** (`os.unlink` patched to record, and it records nothing) **and the verdict still carries `leftover:` naming that path** (`test_rollback_skips_unlink_on_identity_mismatch`) |
 | AC-3.11–3.12 | a block reading `$FIXTURE_VAR` runs with `preamble="FIXTURE_VAR=…"` and its text is unchanged (the `Block.text` the API returns is byte-identical to the fence body); preamble **and** `subs` together — the executed text carries the substituted value, proving the preamble is composed with `text′`; the same with a preamble that has **no trailing newline**, proving the composition inserts the boundary; a preamble that fails (`false`) under strict mode is visible as the combined `rc` and stderr; `--preamble-file` on the CLI; an unreadable preamble path **and a preamble file containing an invalid UTF-8 byte** → `UNREADABLE reason=preamble_unreadable`, and the block leaves no side effect |
 | AC-2.8 | `--subst K`, `--subst =V` → `BAD_SUBST arg="<raw>"`; `--subst K=a --subst K=b` → `BAD_SUBST` with `duplicate_key: K`; `--subst K=a=b` substitutes the value `a=b`; each refusal executes nothing and reserves nothing |
 | AC-3.13 | the block itself runs `stat -f %Lp .` (macOS) / `stat -c %a .` (GNU) and the test asserts `700` **from the block's stdout**, so the mode is observed from inside the running block, not inferred from the API — **with `os.umask(0o777)` set around the call and restored in `finally`**, which is what proves the chmod rather than the umask produced it; the source contains no `mktemp` invocation — argv token or shell command word, the same predicate as AC-5.3 |
 | AC-3.14 | a block running `mkdir keep && chmod 000 keep` → `run_block` raises `CleanupFailed(path, cleanup_error)` with `cleanup_error` the `PermissionError` and the CLI prints `CLEANUP_FAILED path="<p>"`, exit 2, no `rc=` (skipped when `euid == 0`); the test then `chmod 700`s and removes the tree in its own `finally`; `test_cleanup_failure_carries_the_os_error` and `test_cleanup_readback_catches_silent_retention` fault-inject `rmtree` (raising / no-op) and run everywhere; a normal run reads back absent (also AC-3.1) |
-| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid:` in the detail — the fake records the pgid; because `dbe.os` is the process-global `os` module, the test binds `real_killpg = os.killpg` **before** `monkeypatch.setattr(dbe.os, "killpg", fake)` and its `finally` uses that bound original to send `SIGKILL` to the recorded pgid and to assert the group is gone (`real_killpg(pgid, 0)` raising `ProcessLookupError`), so neither the teardown nor the assertion goes through the fake; `communicate` fault-injected on the recorded `Popen` instance (first call raises `OSError(EIO)`, later calls pass through) under a block that would otherwise `RAN` → `LAUNCH_FAILED stage=collect`, exit 2, `pgid:` in the detail, cwd gone, group gone (`real_killpg(pgid, 0)` → `ProcessLookupError`); `proc.wait` fault-injected under a timed-out, signalled block → `stage=collect` with the `BlockTimeout` as `__context__`, within the drain bound; `proc.poll` fault-injected under a timed-out block → `stage=collect` with the `BlockTimeout` as `__context__`, the group still killed and gone; each carries an `os_error:` detail line and no `rc=` |
+| AC-4.6 | `mkdtemp` fault-injected → `LAUNCH_FAILED stage=mkdtemp`, exit 2; `os.chmod` fault-injected → `LAUNCH_FAILED stage=mkdtemp` and the directory `mkdtemp` created is gone; `PATH=<empty dir>` → `LAUNCH_FAILED stage=spawn` and the cwd is gone; `os.killpg` raising `PermissionError` under a timed-out block → `LAUNCH_FAILED stage=reap` within the drain bound, cwd gone, `pgid:` in the detail — the fake records the pgid; because `dbe.os` is the process-global `os` module, the test binds `real_killpg = os.killpg` **before** `monkeypatch.setattr(dbe.os, "killpg", fake)` and its `finally` uses that bound original to send `SIGKILL` to the recorded pgid and to assert the group is gone (`real_killpg(pgid, 0)` raising `ProcessLookupError`), so neither the teardown nor the assertion goes through the fake; `communicate` fault-injected on the recorded `Popen` instance (first call raises `OSError(EIO)`, later calls pass through) under a block that would otherwise `RAN` → `LAUNCH_FAILED stage=collect`, exit 2, `pgid:` in the detail, cwd gone, group gone (`real_killpg(pgid, 0)` → `ProcessLookupError`); `proc.wait` fault-injected under a timed-out, signalled block → `stage=collect` with the `BlockTimeout` as `__context__`, within the drain bound; `proc.poll` fault-injected under a timed-out block → `stage=collect` with the `BlockTimeout` as `__context__`, the group still killed and gone; **a fence body containing a NUL byte and, separately, a `--preamble-file` containing one → `LAUNCH_FAILED stage=spawn`, exit 2, the cwd gone and nothing executed** (`test_nul_in_document_block_is_a_launch_failure`, `test_nul_in_preamble_is_a_launch_failure`); each carries an `os_error:` detail line and no `rc=` |
 | AC-4.1–4.5 | `RAN` exits 0 with a non-zero block rc; **every** row of the verdict table exits with the code the table states — 0 for `RAN`, every refusal and `TIMEOUT`, 2 for `UNREADABLE`, `CLEANUP_FAILED` and `LAUNCH_FAILED` (the test enumerates the table rather than hardcoding a count, so adding or re-classing a verdict cannot leave the test stale); no cannot-judge carries `rc=`; only `AMBIGUOUS` carries `blocks=`; registry ↔ detail-line bidirectional pin; the parser rejects `--all`/`--dir` and abbreviated long options (`allow_abbrev=False`) |
 | AC-5.1–5.4 | sleeping block → `TIMEOUT`; no surviving descendant after reap; **no `timeout`/`gtimeout` INVOCATION** — an argv token or shell command word, never a substring, since the source legitimately contains `timeout=`, `TimeoutExpired`, `BlockTimeout` and `--shell-timeout`; temp cwd removed after timeout |
 | AC-5.6 | `--shell-timeout` `0`, `-1`, `nan`, `inf` and `abc` each → `BAD_TIMEOUT value="<v>"`, exit 0, and a block with a side effect leaves none; `run_block(block, timeout=0)` raises `BadTimeout` with no child spawned (asserted by wrapping `subprocess.Popen` in a recording pass-through that must not have been called — an observation of the real call, not a fault injection, so the named-fault-injection list in Test Strategy stands) |
 | AC-5.5 | `test_timeout_survives_a_group_that_already_emptied`, **no mock**: the block is `python3 ESC_PATH & exit 0` where `ESC_PATH` is replaced through the substitution map with the absolute path of an `esc.py` the test writes under its own `tmp_path` (the AC-5.2 idiom — the child's cwd is a fresh private directory, so nothing can be placed in it beforehand; the substituted absolute path is what makes the fixture executable) and `esc.py` calls `os.setsid()`, writes its pid to an absolute path outside the cwd, and sleeps holding stdout — `communicate` times out, `poll()` reaps the zombie leader, `killpg` raises `ProcessLookupError`, the drain times out, pipes close, `wait()` returns at once → `TIMEOUT`, cwd absent, no traceback; the test kills the escapee in `finally`; `test_timeout_drain_is_bounded_against_an_escapee`: the block starts an `os.setsid()` python child that writes its pid to an absolute path (outside the cwd, via the substitution map — the AC-5.2 idiom) and sleeps holding stdout, then the leader sleeps; `run_block(timeout=1)` raises `BlockTimeout` within `1 + 2 * DRAIN_SECONDS + 2` s wall time, the cwd is absent, and the test kills the escapee from the pid file in its `finally`; `test_wait_after_kill_is_bounded`: the recorded instance's `wait` records its `timeout` keyword (`== DRAIN_SECONDS`) and raises `TimeoutExpired` → `LAUNCH_FAILED stage=reap`, `pgid:` in the detail, `BlockTimeout` as `__context__`, cwd gone, within `timeout + 2 * DRAIN_SECONDS + 2` s |
 | AC-6.1–6.6 | tag present on the Second-surface fence **and exactly one tagged opener across the `*.md` files of `h-mad/` and `handoff/`, excluding `archive/`** (`test_exactly_one_tagged_fence_in_the_tree`, the plan's census sweep asserting cardinality 1). **The `*.md` restriction is load-bearing and was missing until design v1.92**: `_fence_events` is a markdown scanner, and by Task 5 the feature's own `h-mad/tests/test_h_mad_doc_block_exec.py` has landed under `h-mad/` carrying a column-0 tagged bash opener inside triple-quoted fixtures (AC-1.1, AC-1.5, AC-1.7, AC-3.7), which an unrestricted sweep counts as openers -- so the AC could not pass at Task 5 GREEN, and its RED reason ("zero tagged fences") was false for the same reason. A `.py` triple-quoted fixture is a false positive by construction, and one fixture is a deliberately unbalanced four-backtick fence, so a whole-file `.py` scan is not even additive. **The sweep excludes build output by excluding any path with a dot-directory component** (`.pytest_cache/README.md` is the live instance — five of them exist on any tree where pytest has run, and at `a8e0372` a filesystem glob without this filter returns 35 `*.md` where `git ls-files` returns 30 — both figures move with the tree and neither is a pin, which is why §Scanning states the corpus as a command; §Scanning states the same exclusion for the heading and Setext measurements, which realise it as `git ls-files` because a one-off human measurement has no reason not to). The two realisations differ on purpose: a test must still count a **newly written, not-yet-tracked** `.md` under the two roots, which is exactly the doc a `git ls-files` sweep would miss and this guard exists to catch. Residual, stated in full: a tagged fence added to a non-`.md` file is out of scope of this count by design; a `.md` file added outside `h-mad/`/`handoff/` is likewise uncounted; and a generated `.md` written under the two roots *outside* a dot-directory does enter the count — correctly, since it is then part of the executed documentation surface, but noisily if a tool starts emitting one. **Documenting the tag convention is subject to the same count**: the plan carries "`hmad:exec` fence info-string tag convention" as a deliverable and this design is its only home, so if it is ever written into an `.md` under `h-mad/` or `handoff/`, the example opener must use the four-space-indented literal (never an opener by this document's own grammar, §Scanning) or it becomes a second tagged fence and fails AC-6.1. No `re.findall(r"```bash` left on the **executing** path (`_gate_bash_block` and `_run_recipe`), and **exactly one** remaining in the file — the text scan inside `test_exec_codex_dispatch_carries_out_log_and_timeout`, which `test_exec_block_scan_performs_no_execution` pins as non-executing and `test_only_the_exec_scan_hand_rolls_extraction` pins as the only occurrence, so the exemption cannot silently widen; the four migrated behaviours still pass; **the full suite passes AND its collected count is >= the pre-change baseline plus this feature's added tests** (both halves — a passing suite that silently lost tests satisfies neither): `test_suite_floor_holds` runs `pytest --collect-only -q` in a subprocess (collection executes nothing, so the suite cannot recurse; `DOCBLOCK_FLOOR_INNER=1` makes an inner instance skip regardless) and asserts collected >= `2748` (the baseline **re-measured at `e8eaf6f`**, from the repository root with `cwd=REPO_ROOT` -- the same command run from `h-mad/` collects 2486, a different tree, not the baseline; design audit v68 agy). It was `2747`/`2485` at `6b4df35` and `b59e05e` then added a test, which left the floor asserting `>= 2747` against a real 2748 and so permitted exactly one silent deletion; **the number therefore travels with the commit it was measured at and is re-measured at 5c branch time** (plan v1.84, spec v1.53) + the collected count of `test_h_mad_doc_block_exec.py` alone + **`len(tuple)`**, where `tuple` is the floor tuple of node IDs added to *existing* files, each asserted present. **`len(tuple)` is the assertion; no total is the contract.** A literal here has gone stale twice — `+ 7` was the instance, and a `+ 9` written in its place would be the next one — so what this document carries is the expression, and any number below is a dated evaluation of it that names its sha. **Membership is spec AC-6.4's rule and is not re-worded here**; that rule's *empirical evaluation* is this document's job, and it is written as prose immediately beneath this table under **The floor tuple, evaluated** rather than in this cell — it is the densest reasoning in the document, and a single table cell renders it as one unbroken block, which is the least reviewable shape available for it.  A short `+ 7` here would have tolerated two silent deletions — exactly the weakening the floor exists to prevent; the pass half is the Phase-5f gate command run alone outside the suite — `pytest … > log; RC=$?; tail -1 log; echo "SUITE: rc=$RC"`, gated on both the `passed` line and `rc=0`, never a bare `| tail -1` whose status is `tail`'s; and the two wire directions — the AC-6.5 spies are installed with `monkeypatch.setattr(dbe, …)` on the consumer's module alias, which is why the consumer must call `dbe.extract`/`dbe.run_block` and a test pins that it has no `from h_mad_doc_block_exec import` |
 
+
+**Why AC-1.8's collection pin runs `--collect-only`, and the residual that costs.** The
+connection-only wire mutation `docsections-delegation-reverted` is killed by
+`test_docsections_delegates_to_the_authoritative_bounder`, which lives in
+`h-mad/tests/test_docsections.py` — the same file AC-1.8's collection pin points at. A pin that
+*ran* that whole file as a subprocess and required exit 0 would therefore go red under that very
+mutant, which is what makes the mutant's "**every** other test green" claim — the property that
+makes it the isolated-wire proof rather than a behaviour revert — false as written. Collection
+executes nothing: `--collect-only` proves the module imports and every test in the file is
+collectable when the file is collected alone, which is the property AC-1.8 is actually about, and a
+red wire pin cannot move it. **The class, not the instance**: any pin that *executes* a file this
+feature also *adds a mutation-killing test to* couples that pin to the mutant, so a pin whose
+subject is importability is written as collection and never as execution. **Residual, stated
+exactly**: the pre-existing `test_docsections.py` tests are no longer RUN in isolation by AC-1.8.
+They run in the full suite, which AC-6.4's floor gates, and in the Phase-5e module-scoped mutation
+run. What is given up is the signal that they pass with no other test module imported — a property
+nothing in this design rested on, and the reason it is named here rather than left implicit.
 
 **The floor tuple, evaluated.** This is the empirical evaluation the AC-6.1–6.6 row above points
 to; it lives here rather than in that cell so that it can be read and diffed as prose.
@@ -3149,7 +3641,7 @@ bare `test_*` name is a nonexistent path to pytest, so the names in the table be
 `<name>` half and the spec carries them qualified. The same rule binds the other two specs:
 `tests/test_h_mad_collect_report_docs.py::<name>` in `doc_block_exec_wire.json` (whose `command`
 is `["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`) and
-`tests/test_docsections.py::<name>` in `docsections.json` for the **six** rows killed there — **the four originals** (the adjective "re-anchored" is deliberately dropped here, and the reason is stated as a dated reading of the siblings rather than as a present-tense claim about their bytes, which decision E forbids. **Read at `1cbddb7` with `git show 1cbddb7:<path> | grep -c 're-anchor'` over the three siblings, head and tail together: impl-plan `8`, plan `2`, spec `0`** — and **the design's own count is published beside them rather than withheld**, since a publication decision justified by what the current revision is about to write is the shape §Scanning struck this revision: whole-file it is `2` at `1cbddb7` and `3` at `700c599`, `8c6539a`, `b3be433` and on the working file, `1` of the three sitting in the head, all re-derived after the v1.106 entry below was written. The figure moves when this paragraph is reworded, which is why it is derived at each corpus and never carried; this was the third site of that class, and like the second it was reached by reading and not by the greppable arm §Scanning ships. The enumeration below is over *axes*, which is a claim about sibling bytes and so is derived rather than recalled. **Three axes, across two siblings.** The impl-plan uses the word on the *anchor-file* axis, where only two of the four rows move — `fence-tracking-removed` and `section-no-longer-owns-its-subsections` into `h-mad/scripts/h_mad_doc_block_exec.py`. The **plan** uses it on the *anchor-text* axis, "re-anchored **in place**", naming the complementary pair — `offset-anchored-bound-runs-to-end-of-file` and `missing-heading-returns-empty-instead-of-failing` — whose `file` key does *not* move and whose `find` string is rewritten. That is the collision that actually misleads: both siblings say "two re-anchored" and the two pairs are **disjoint**, so a reader reconciling them by cardinality alone gets the wrong rows. This sentence's own use was a third axis, the *`test`-key* one, over all six rows. The tree-derived half is separable and is stamped on the tree, not on a sibling: all four rows in `h-mad/tests/mutation-specs/docsections.json` carry `"file": "tests/docsections.py"` at `1cbddb7`. One word on three axes with two disjoint pairs is a collision the design cannot fix from here; it gives up the word rather than redefine it, and the sibling-to-sibling half is **reported, not edited** — this author writes one file), `docsections-delegation-reverted` and
+`tests/test_docsections.py::<name>` in `docsections.json` for the **six** rows killed there — **the four originals** (the adjective "re-anchored" is deliberately dropped here, and the reason is stated as a dated reading of the siblings rather than as a present-tense claim about their bytes, which decision E forbids. **Read at `1cbddb7` with `git show 1cbddb7:<path> | grep -c 're-anchor'` over the three siblings, head and tail together: impl-plan `8`, plan `2`, spec `0`** — and **the design's own count is published beside them rather than withheld**, since a publication decision justified by what the current revision is about to write is the shape §Scanning struck v1.106: whole-file it is `2` at `1cbddb7` and `3` at `700c599`, `8c6539a`, `b3be433` and on the working file, `1` of the three sitting in the head, all re-derived after the v1.109 entry below was written. The figure moves when this paragraph is reworded, which is why it is derived at each corpus and never carried; this was the third site of that class, and like the second it was reached by reading and not by the greppable arm §Scanning ships. The enumeration below is over *axes*, which is a claim about sibling bytes and so is derived rather than recalled. **Three axes, across two siblings.** The impl-plan uses the word on the *anchor-file* axis, where only two of the four rows move — `fence-tracking-removed` and `section-no-longer-owns-its-subsections` into `h-mad/scripts/h_mad_doc_block_exec.py`. The **plan** uses it on the *anchor-text* axis, "re-anchored **in place**", naming the complementary pair — `offset-anchored-bound-runs-to-end-of-file` and `missing-heading-returns-empty-instead-of-failing` — whose `file` key does *not* move and whose `find` string is rewritten. That is the collision that actually misleads: both siblings say "two re-anchored" and the two pairs are **disjoint**, so a reader reconciling them by cardinality alone gets the wrong rows. This sentence's own use was a third axis, the *`test`-key* one, over all six rows. The tree-derived half is separable and is stamped on the tree, not on a sibling: all four rows in `h-mad/tests/mutation-specs/docsections.json` carry `"file": "tests/docsections.py"` at `1cbddb7`. One word on three axes with two disjoint pairs is a collision the design cannot fix from here; it gives up the word rather than redefine it, and the sibling-to-sibling half is **reported, not edited** — this author writes one file), `docsections-delegation-reverted` and
 `docsections-heading-lookup-reverted` (the local `re.search` heading regex restored in `titled_section`, `find_heading` untouched), the last two both bound to the delegation spy — while the two rows keyed
 `docsections-syspath-setup-removed`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd`, and
 `docsections-local-bounder-restored`, bound to `tests/test_h_mad_doc_block_exec.py::test_docsections_has_no_second_bounder`, bind into the new module's file (design audit v75 agy: 6 + 2 = 8) —
@@ -3194,6 +3686,7 @@ exactly what the base Mutation verification invariant forbids.
 | `index-below-one-accepted` | `index < 1` reaches `blocks[index - 1]` | `test_index_zero_refuses` (AC-1.9) |
 | `missing-key-silently-skipped` | a zero-count key is not collected | `test_absent_key_refuses` (AC-2.2) |
 | `overlap-resolved-by-order` | substring keys proceed in iteration order | `test_overlapping_keys_refuse` (AC-2.7) |
+| `intersect-check-removed` | the span-intersection scan over `block.text` is deleted and the substring check is left standing, so `{ab→X, bc→Y}` on a text holding `abc` substitutes one key, never fires the other, and reports both counts as if both had | `test_substitute_refuses_intersecting_spans` (AC-2.7 — the fixture `abc` must refuse with an `intersect:` line while the control `ab bc ab bc` still substitutes to `X Y X Y` with counts 2 and 2, so the mutant is discriminated in both directions) |
 | `replacement-sequential` | replacement becomes a per-key `str.replace` loop in map order, so a value containing another key is re-scanned | `test_value_containing_another_key_is_not_rescanned` (AC-2.6 — `A→B`, `B→C` on `A B` must yield `B C` for **both** map orders; the sequential mutant yields `C C` in the `A`-first order, and both keys occur so a missing-key precheck cannot mask it) |
 | `subst-split-on-every-equals` | `--subst` split on every `=` | `test_subst_value_may_contain_equals` (AC-2.8) |
 | `subst-duplicate-key-last-wins` | a repeated `--subst` key overwrites instead of refusing | `test_duplicate_substitution_key_refuses` (AC-2.8) |
@@ -3228,10 +3721,12 @@ exactly what the base Mutation verification invariant forbids.
 | `stream-write-oserror-unwrapped` | the `except OSError` mapping around `_final_write` and its read-back is removed, so a write failure escapes as a traceback | `test_stream_write_failure_after_the_run_is_a_refusal` (AC-3.8 — the injected failure must print `stream_write_failed`, exit 2, no traceback) |
 | `exit-partition-flipped` | refusals exit 2 | `test_verdict_table_exit_codes` (AC-4.2) |
 | `rc-leaked-into-refusal` | a refusal line carries `rc=` | `test_no_refusal_carries_rc` (AC-4.3) |
-| `field-escape-removed` | `_field` returns its input unchanged, so a newline inside a heading, key, path or OS-error text starts a second `DOCBLOCK:` line | `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` (AC-4.1) |
+| `field-escape-removed` | `_field`'s `json.dumps(str(value), ensure_ascii=False)` becomes `'"' + str(value) + '"'` — the quotes kept and the second pass kept, so **only** the JSON escaping is removed and a `"` inside a heading, key, path or OS-error text ends the field early and puts a bare token on the line | `test_quote_in_dynamic_field_cannot_close_the_value` (AC-4.1 — a `"` inside a dynamic field must not close the quoted value early; this is the ISOLATING killer. `test_newline_in_dynamic_fields_cannot_forge_a_verdict_line` also goes RED here, but on its escaped-spelling assertion (`\u000a` for `\n`) and not on line-splitting, so it is a regression pin under this mutant and not its discriminator — see the assertion-level matrix under §Error Handling) |
 | `c1-escape-removed` | `_field`'s second pass is removed, so DEL, C1 controls (U+0085) and U+2028/U+2029 stay literal inside the quotes; the three that `splitlines()` breaks on (U+0085, U+2028, U+2029) then split the verdict line, while DEL only becomes unrenderable — the kill comes from the three, not from DEL | `test_unicode_line_separators_cannot_split_a_verdict_line` (AC-4.1) |
 | `field-quoting-removed` | `_field` escapes control characters but emits the value bare, without the JSON quotes, so `--heading 'x rc=0'` renders `heading=x rc=0` and a key/value consumer reads an `rc` field on a refusal | `test_dynamic_field_cannot_forge_a_token` (AC-4.1/4.3) |
 | `launch-oserror-unwrapped` | `mkdtemp`/`Popen` `OSError` propagates as a traceback | `test_mkdtemp_failure_is_a_verdict` (AC-4.6) |
+| `spawn-valueerror-unmapped` | the `except ValueError` at the `Popen` call is removed, so a NUL byte anywhere in the composed shell text escapes as `ValueError: embedded null byte` — a traceback with no `DOCBLOCK:` line and a non-zero exit that is not 2 | `test_nul_in_document_block_is_a_launch_failure` (AC-4.6 — the verdict must be `LAUNCH_FAILED stage=spawn`, exit 2, no traceback; `test_nul_in_preamble_is_a_launch_failure` goes red under the same mutant and stays as a regression test on the second route, the spec's one `test` key naming the former) |
+| `rollback-identity-check-removed` | the reservation rollback's `os.lstat` versus recorded-`fstat` `(st_dev, st_ino)` comparison is deleted, so the unlink runs unconditionally and a file another process put at that path is removed | `test_rollback_skips_unlink_on_identity_mismatch` (AC-3.10 — under the mutant the recording `os.unlink` records a call and the verdict loses its `leftover:` line, so both halves of the assertion move) |
 | `collect-oserror-unmapped` | the `except OSError` around the first `communicate(timeout)` is removed, so a pipe-read failure escapes as a traceback with the child unreaped | `test_communicate_oserror_is_launch_failed_collect` (AC-4.6) |
 | `drain-oserror-unmapped` | the guard around the post-kill drain, the pipe closes and the `wait()` is removed, so a failure there escapes past the pending `BlockTimeout` | `test_drain_wait_oserror_is_launch_failed_collect` (AC-4.6) |
 | `poll-oserror-unmapped` | the guard around the pre-kill `poll()` is removed, so a `waitpid` failure escapes as a traceback with the group unkilled | `test_poll_oserror_is_launch_failed_collect` (AC-4.6) |
@@ -3251,6 +3746,7 @@ exactly what the base Mutation verification invariant forbids.
 | `backtick-in-info-accepted` | `_fence_events` treats a backtick-fence line whose info string contains a backtick as an opener | `test_backtick_in_info_string_is_not_an_opener` (AC-1.6 — the line must be inert: not a candidate, not `BAD_INFO`, and the following ``` line opens a fence) |
 | `tilde-fence-not-tracked` | `~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate | `test_bounder_ignores_a_heading_inside_a_tilde_fence` (AC-1.8 — the bounder's own contract; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener` pins the extractor side under AC-1.6) |
 | `cleanup-error-ignored-when-tree-gone` | `CleanupFailed` only when `lexists`, a recorded error alone is dropped | `test_cleanup_error_after_successful_removal_is_still_a_failure` (AC-3.14) |
+| `cleanup-chain-selection-flipped` | the two-branch chaining collapses to an unconditional `raise CleanupFailed(...) from pending`, so with no pending outcome `__cause__` becomes `None` and `__suppress_context__` hides the cleanup error as well | `test_cleanup_failure_after_successful_run_is_chained` (AC-3.14 — a run that succeeds and whose `rmtree` then raises must carry the cleanup error as `__cause__`) |
 | `empty-key-accepted-by-api` | `substitute` accepts `""` and calls `str.replace("", v)` | `test_empty_key_is_refused_by_the_api` (AC-2.8) |
 | `indented-closer-accepted` | the scanner closes a fence on a marker run preceded by four or more spaces | `test_indented_closer_does_not_close` (AC-1.6 — the four-space ```` ```` ```` line stays body text and the fence ends at the next 0–3-space closer) |
 | `rollback-leftover-unreported` | the rollback's `lexists` read-back is removed, so a first-reservation file that the failed unlink left behind is never reported on the `stream_path_unwritable` verdict | `test_rollback_unlink_failure_reports_leftover` (AC-3.10) |
@@ -3261,8 +3757,15 @@ exactly what the base Mutation verification invariant forbids.
 | `detail-line-undocumented` | the helper renames one emitted detail line (`missing_key:` → `absent_key:`) so an emittable line has no row | `test_registry_rows_cover_only_emittable_lines` (AC-4.5) |
 | `timeout-invocation-planted` | the real argv construction `["bash", *flags, "-c", script]` becomes `["timeout", "5", "bash", *flags, "-c", script]` — valid Python, valid argv, and exactly the forbidden invocation | `test_no_timeout_invocation_in_source` (AC-5.3) — the source scan is green on the real helper and goes RED on this mutant |
 
-Eighty-one rows, eighty-one mutations — **eighty of the helper's source and exactly one of
-`h-mad/SKILL.md`**. **The split is derived from the mechanism column above, never carried**: count
+Eighty-five rows, eighty-five mutations — **eighty-four of the helper's source and exactly one of
+`h-mad/SKILL.md`**. This revision added four: `intersect-check-removed`,
+`spawn-valueerror-unmapped`, `rollback-identity-check-removed` and
+`cleanup-chain-selection-flipped`, all four of the helper's
+source, so the `SKILL.md` half of the split is unchanged and only the first addend moves.
+**The count is derived by counting this table's rows, never by adding to the previous figure**:
+`awk '/^\| mutation \| guard it removes \(mechanism\) \| killed by/{f=1;next} f&&/^\|---/{next}
+f&&/^\|/{n++} f&&!/^\|/{f=0} END{print n}'` over the shipped file returns 85 after the v1.109
+entry below was written. **The split is derived from the mechanism column above, never carried**: count
 the rows whose mechanism names `SKILL.md` as the file the harness edits. Exactly one does
 (`registry-row-removed` — "one remedy row deleted from the `SKILL.md` Helper-scripts entry"); its
 AC-4.5 partner `detail-line-undocumented` mutates the **helper**, renaming an emitted detail line
@@ -3327,8 +3830,19 @@ containment nothing here implements.
 destroys the evidence on exactly the path under test, because `run_block` removes that directory
 in `finally` and AC-5.4 requires it to. The test therefore passes an absolute path under pytest's
 `tmp_path` into the block via the substitution map. This works *because* the temp cwd is isolation
-and not a sandbox: an absolute path escapes it, which the design states plainly under Architecture
-Considerations rather than relying on it silently.
+and not a sandbox: an absolute path escapes it. **That property is stated plainly in the PLAN, not
+here, and the earlier form of this sentence attributed it to a section of this document that does
+not exist** — `## Architecture Considerations` is a heading of
+`docs/01-plan/features/doc-block-exec.plan.md` and of nothing else in this feature's document set,
+which is the whole of the defect. The locator is a content predicate rather than a heading name, so
+it survives a retitle: the plan bullet beginning `The temp cwd is isolation, not a sandbox`, whose
+`grep -cF` over the plan returns `1` at `b3be433`, at `09e9307` and at `fbc2ea0`. The `fbc2ea0` blob is
+  the corpus rather than the working plan for the reason given at the `DETAIL_KEYS` bound above — a
+sibling author holds that file this round, `git diff --numstat fbc2ea0` over it printing **689
+added and 146 removed**, re-taken after that author reported done. **The rule over the axis**: a cross-document reference names the DOCUMENT
+as well as the section, and is checked by a needle over that document rather than by a heading
+name, because a heading a reader cannot find in the document they are holding reads as this
+document's own missing section.
 
 **The reaping claim is measured, not assumed**, with a control that discriminates — `python3.11`
 (3.11.8), darwin, at `700c599`, driving the **shipped** `os.killpg(p.pid, …)` form rather than the
@@ -3483,35 +3997,47 @@ descendant never writes its pid. The PIDs are this run's output, not pins.
   HEAD "$D" | grep -ciE '(^|[^[:alnum:]_])(measured|probed)([^[:alnum:]_]|$)'   # prose: marker words
   ```
 
-  `106` and `62` on the file this revision ships, **re-run after the v1.106 entry below was
-  written** — they read `104` and `60` at `b3be433` and both moved *by construction* in v1.106,
-  which is the screens behaving as designed and not a drift: the fenced walk counts an
-  opener and a closer, and the folded sha-description arm v1.106 added to §Scanning is one fence,
-  so it rises by
-  two; the prose walk rises by two because that arm's residual and the withholding arm's residual
-  each state their finding with a marker word. Every fenced measurement output in the head now
+  `126` and `70` on the file this revision ships, **re-run after the v1.109 entry below was
+  written** — they read `106` and `62` at `fbc2ea0` and `104` and `60` at `b3be433`, and every
+  step of that progression is *by construction* rather than a drift, which is the screens behaving
+  as designed. v1.106 added one fence and two marker-word residuals. v1.109 adds **ten** fences —
+  the import-convention census, the intersecting-span probe and its output block, the NUL-payload
+  probe and its output block, the `_field` mutant matrix probe and its output block, the
+  cleanup-chaining probe and its output block, and the seam-set enumeration's
+  output block — and the fenced walk counts an opener and a closer each, which is the whole of the
+  `+20`; and it adds **eight** marker-word lines, which is the whole of the `+8`. Every fenced measurement output in the head still
   carries **either** the runnable command that produced it in the adjacent block — §Scanning's
-  census, the heading differential, the four-backtick bounder differential, the five-kinds
+  census, the heading differential, the four-backtick bounder differential, the import-convention
+  census, the intersecting-span probe, the NUL-payload probe, the cleanup-chaining probe, the five-kinds
   `os.open` probe, the `getpgid`-versus-`killpg` probe, the `_field` per-member escape run, the
+  `_field` mutant-matrix probe, the
   `umask`/`mkdtemp` pair, the `argparse` `exit_on_error` matrix, the reaping probe with its control,
-  and §Test Strategy's screens — **or** a content-predicate locator to the sibling section that
+  the seam-set enumeration, and §Test Strategy's screens — **or** a content-predicate locator to the sibling section that
   does, as the `ENXIO`, `rmtree(…, ignore_errors=True)`, naturally-emptied-group and
-  `os.setsid()`-escape probes do. **The second walk's `62` splits mechanically before anything is
-  judged**: `2` of the 62 lines sit *inside* a fence — the walk is line-scoped and does not strip
+  `os.setsid()`-escape probes do. **The second walk's `69` splits mechanically before anything is
+  judged**: `2` of them sit *inside* a fence — the walk is line-scoped and does not strip
   them, a property of it stated here rather than left to be discovered, and that `2` was re-derived
-  fence-aware rather than carried, in v1.106 and in every revision since — leaving `60` prose lines,
-  every one of which was read in v1.106. **Five are disposed of by name**: the `umask`/`mkdtemp` mode
+  fence-aware rather than carried, in v1.106 and in every revision since, this one included —
+  leaving `67` prose lines. **Seven are disposed of by name**, the five v1.106 disposed of plus two
+  v1.109 adds: the `umask`/`mkdtemp` mode
   and the `exit_on_error` five-shape matrix carried no command and are now fenced with theirs;
   the four orphaned `exec-pane` processes cannot be re-derived at all and are labelled a historical
-  observation where they stand rather than left to pass as a re-runnable probe; and the fourth and
+  observation where they stand rather than left to pass as a re-runnable probe; the fourth and
   fifth are v1.106's own, in §Scanning — one in the sha-description screen's fourth residual
   part, where the marker word introduces the folded-versus-line-scoped reading, and one in the
   withholding arm's residual, where it introduces the three-site count — each with the command or
-  the walk that produced it in the same paragraph.
-  **The remaining `55`
-  are a *reading*, not a partition** — the same word this document uses of §Scanning's nine-site
+  the walk that produced it in the same paragraph; and the sixth and seventh are v1.109's, and both
+  are **statements of a rule rather than claims about a corpus** — the pair rule's clause on
+  naming a divergence, and the sibling-debt rule on re-deriving a debt before restating it. A rule
+  that happens to use the marker word owes no command, and naming those two is what keeps the
+  walk's over-match from reading as two uncited figures. **This disposal is itself written
+  without the marker words**, deliberately: the first draft of it used them twice and took the
+  prose walk from 69 to 71 in the sentence that publishes 69 — the document's own signature
+  failure, on the paragraph that counts.
+  **The remainder
+  is a *reading*, not a partition** — the same word this document uses of §Scanning's nine-site
   classification, and for the same reason: the count the split above hands it is mechanical and the
-  disposition of each line is not. Each of the 55 was read for a missing command and none was
+  disposition of each line is not. Each was read for a missing command and none was
   found, which is weaker than a proof and is written as weaker. **The figure is deliberately not
   restated in this sentence**, because a second copy of it is what went stale: the value this
   clause carried was the pre-v1.106 count of a number the same revision moved, and it sat two
@@ -3521,7 +4047,7 @@ descendant never writes its pid. The PIDs are this run's output, not pins.
   sentences that reason about it, never re-typed there.** **Residual, as a concrete category**: a
   reference costs the reader a re-read of the split above, and nothing screens for a figure
   re-typed by a later reviser — only the arithmetic does, and it is stated here for that purpose,
-  the disposal subtracting five from the prose-line remainder to give the 55.
+  the disposal subtracting the seven named above from the prose-line remainder.
 
   **Residual, exactly, in three parts.** (i) The prose walk's vocabulary is two marker words, so a
   measured claim written with neither ("it yields", "it gives", "in practice") is outside both walks
@@ -3544,12 +4070,28 @@ descendant never writes its pid. The PIDs are this run's output, not pins.
   only thing that would, and it has to be re-taken by hand. The two
   heading measurements are re-derived here over the **tracked** corpus (§Scanning) because the
   filesystem glob behind the plan's `files=` figure is not reproducible on a clean clone. The
-  plan's §Measurements carries the same differential and is owed the same sweep — **and the debt
-  is named by corpus, never by figure**, because the tracked count at `a8e0372` is itself 30: a
-  reader who chases a bare "30" will find the plan's number agreeing with a fresh `git ls-files`
-  for the wrong reason and close the item. What the plan owes is the *definition* (`git ls-files
-  -- h-mad handoff`, `*.md`, `archive/` excluded) and a re-measure at the commit it cites, not a
-  different number.
+  plan's §Measurements carries the same differential — **and the debt this bullet used to record
+  against it is DISCHARGED, which is stated as a dated account rather than left standing as an
+  outstanding claim.** The definition half was the debt: that the plan define the corpus as
+  `git ls-files -- h-mad handoff` filtered to `*.md` with `archive/` excluded, rather than by a
+  filesystem glob. Measured over the blob series with the newline-collapsing idiom, since the
+  sentence wraps —
+  `for s in 1861157 335f535 09e9307 fbc2ea0; do git show $s:"$P" | tr '\n' ' ' | grep -c 'is the
+  tracked one'; done` returns **0, 1, 1, 1**: absent at `1861157`, present from `335f535` onward
+  and still present at the freeze, where the plan additionally carries the `git ls-files` command
+  itself three times and publishes the tracked and glob counts beside it. The blob series is the
+  corpus rather than the working plan for the reason given at the `DETAIL_KEYS` bound above — the
+  plan has a live author this round, `git diff --numstat fbc2ea0` over it printing 689 added and
+  146 removed, re-taken after that author reported done. **What is still open is the other half, and it is named as open rather than as
+  owed-and-ignored**: the plan's `files=` figures are stamped at `1861157`, a corpus of 25 files,
+  and a re-measure at a current sha is landing in this same batch from that document's own author.
+  This design reports that and does not assert its state. **The debt was named by corpus and never
+  by figure**, for the reason that still holds: the tracked count at `a8e0372` is itself 30, so a
+  reader who chases a bare "30" finds the plan's number agreeing with a fresh `git ls-files` for
+  the wrong reason and closes the item. **The rule this discharge adds**: a debt recorded against a
+  sibling is re-measured before it is restated, because the sibling's authors read these bullets
+  and act on them — this one was satisfied at `335f535` and was still being published as
+  outstanding many revisions later.
 
 ## Version History
 
@@ -3662,3 +4204,4 @@ descendant never writes its pid. The PIDs are this run's output, not pins.
 - v1.106: Design gating revisions r14 (teammate gating audit v94: must 3 should 2 nit 2), freeze b3be433, authored against the working tree at b3be433. NOT A GATE, NOT A TWO-SURFACE CLEAN, NO EXIT GATE CLAIMED: codex is exhausted until 2026-09-07 11:28 and all three agy legs returned PASS must=0 should=0 in the same round in which all three gating teammates found three musts each, the fourth consecutive round of that pattern, so no clean second surface is cited here. THE HEADLINE OF THIS ROUND IS THAT NO PUBLISHED FIGURE WAS WRONG: the auditor re-derived 150+ of them and every one reproduced, and all three musts are prose whose referent moved. MUST 1, A PUBLICATION DECISION STATED AT TWO SITES AND STRUCK AT ONE: v1.105 struck the candidate sweep's withholding claim in the series paragraph and left it standing in the sweep's own definition paragraph, which went on refusing to give the working-file value that the series paragraph publishes. The surviving premise was also FALSE of v1.105 by that paragraph's own differential, which I re-ran. The definition now carries only the needle, its head scope and the cf3a862 stamp and points down at the published value; the rule is stated over the class - a publication decision is stated once, at the site that publishes, and no other site may say the figure is withheld - with a greppable arm over the two phrasings this document has used, and the residual stated exactly: a third phrasing is outside any closed vocabulary, so the closure that holds is that the figure is PUBLISHED and withholding it again requires deleting a visible value. MUST 2, TWO ROUND-RELATIVE SHA DESCRIPTIONS IN THE CLASS THE SCREEN'S OWN RESIDUAL (i) DECLARES UNREACHABLE, one introduced at v1.97 and one at v1.104 by the repair that added the screen. Both are now hexes: the unstripped-fold ladder says it ends at 700c599 rather than at whichever freeze the round answers, and the tail screen's corpus is named as the 35698f9 blob. THE CLASS IS CLOSED RATHER THAN THE INSTANCES: residual (i) is widened from three named parts to four and now ships a THIRD ARM that folds first, over a nine-noun role vocabulary and a four-word deictic, matching a head noun FOLLOWED by a round-deictic, which is the shape neither shipped arm can reach in either direction. It is calibrated and discriminating, not vacuous - nothing over the folded working head, three over the folded 8c6539a head, one over folded 700c599 - and the fold is shown load-bearing because unfolded it reaches only two of the three. The two examples residual (i) used to quote are now described instead, per this document's own rule that no match a screen produced may be written literally in the scope that screen counts; removing them is what let the arm ship at print-nothing. A FOURTH RESIDUAL PART NO REPORT NAMED, found while calibrating: both shipped arms are LINE-SCOPED while this document is hard-wrapped, against the rule the seam-ordinal screen states, and folding the head raises arm (2) from nothing to one hit in the scoped-diff paragraph of Scanning - a hit that is correct - so folding is deliberately not applied to the shipped pair and the residual is stated instead. MUST 3, A CROSS-DOCUMENT CLAIM ABOUT A SIBLING THAT CHANGED IN THE SAME COMMIT: the _field coverage paragraph said the plan states no Cf residual. True at 8c6539a and false at b3be433, where the plan's Measurements carries a mirror paragraph naming this document's Cf residual and declining to adopt it. Every reading in that paragraph is now taken out of a NAMED COMMIT and re-checked against the working plan, both arms published (set-equality needle 1 at 8c6539a, 1 at b3be433, 1 on the working plan; the plan's mirror sentence 0 at 8c6539a, 1 at b3be433, 1 on the working plan), and the characterisation is corrected to coverage differing in both directions. Rule over the class: every stamped claim about a sibling's bytes carries a blob reading AND a working-file re-check, run last; residual, a sibling rewritten in the SAME commit is the case a blob stamp alone cannot see. SHOULDS TAKEN: every reading of a scoped screen now carries its scope word - the sha-description arms read over the HEAD of the 700c599 blob (over the whole blob the same two arms print three and three, published so the scope is not inferable-only), the widened cardinality arm over the HEAD of 700c599, and the candidate sweep's working-file value is published as 63 WHOLE-FILE beside 61 over the head; and the 63's null is attributed to all three revisions the differential spans rather than to v1.104 alone, checked hop by hop (700c599 to 8c6539a one changed-line hunk, 8c6539a to b3be433 nothing, b3be433 to working nothing). NITS TAKEN: the vacuous entry stamp is removed from the widened arm's frozen-blob reading and kept only on the working-file one, with the reason stated; residual (i)'s two quoted examples are described. THE pgid SPELLING MATTER ROUTED BY THE DECISION SHEET IS NOT SHAPED AS FILED. Body-scoped at b3be433 the literal needles give design bare 2 quoted 3, spec bare 1 quoted 0, impl-plan bare 0 quoted 1, plan neither - but the design's two bare hits are LaunchFailed constructor KEYWORD ARGUMENTS and not the emitted field, so they are correct and the document is not internally inconsistent on that axis. The one real internal inconsistency is elsewhere and was named by no surface: the AC-4.6 row spelled the emitted DETAIL line in the constructor form inside a cell that spells the same emitted field the other way twice more, contradicting this document's own exhaustive bare-field list, which excludes pgid. Repaired, with the axis stated - the two spellings differ by OBJECT, not by field - and with a walked triage arm raising six hits, all six constructor keywords, published as a reading to re-walk rather than a screen to satisfy, its residual being that a mis-spelled emitted line lands inside that same six and only reading each hit against the object it names catches it. THE FOUR-VERSUS-SIX IS RECORDED RATHER THAN SILENTLY CORRECTED: the first draft of that sentence said four because it was written from a needle that saw only the two value-carrying hits and not the four None-default ones, and it was caught by re-running the published arm after the entry landed, which is the only step that could have caught it. OWED ELSEWHERE, reported and not edited: the spec's FR-4 policy sentence describes the verdict's detail and then spells the field in the constructor form, which is the same defect at a site this author may not touch. DECISION K SWEEP, every document-self figure re-run on the working file AFTER this entry landed, THE WITHHOLDING CLASS HAD THREE SITES, NOT ONE, AND TWO OF THEM WERE FOUND BY READING AND NOT BY THE ARM I SHIPPED FOR IT - which is that arm's residual made concrete in the same revision that stated it. Besides the candidate sweep's definition paragraph, Test Strategy withheld the working-file head values of the two span-ordinal screens and Test Plan withheld this document's own count of the cross-sibling adjective, both on the ground that the paragraph writing them moves them. Both are now PUBLISHED with their corpora and stamped: span-ordinal head P 14 at cf3a862, 23 at 1cbddb7 and 700c599, 29 at 8c6539a, b3be433 and the working file, W 6 at cf3a862 and 8 at each of the other four and the working file, tails 12 and 6; the adjective count 2 at 1cbddb7 and 3 at 700c599, 8c6539a, b3be433 and the working file, 1 of the three in the head. The residual is now stated as an EXACT category rather than as a guess: a refusal phrased as a property of the PARAGRAPH rather than of the working file shares no substring with the arm's vocabulary, and both surviving members were of that shape. A SELF-INTRODUCED DEFECT CAUGHT BY RE-RUNNING: the first draft of that residual sentence wrote the Test Plan needle LITERALLY, which moved the adjective count from 3 to 4 inside the revision that published 3; the needle is now named at its own site and described at the other. THE EIGHTEEN entry stamps are re-stamped on v1.106 because an entry bump is itself the trigger - eighteen and not the twelve v1.105 carried, the six new ones being the folded arm, the withholding arm, the compliance walks, the fold ladder, the span-ordinal head and the adjective count, which is the entry-naming screen behaving as a predicate and never as a carried count. The two COMPLIANCE WALKS moved BY CONSTRUCTION and are republished as 106 and 62 (from 104 and 60 at b3be433): the new folded arm is one fence, so the fenced walk rises by two, and two residuals state their findings with a marker word, so the prose walk rises by two; the fence-aware split of the 62 was RE-DERIVED rather than carried and is still 2 inside a fence, leaving 60 prose lines, five now disposed of by name and the same 55 published as a reading. NOT MOVED and re-run rather than assumed after the last edit: candidate sweep 63 whole-file and 61 head and 36 at cf3a862, with the raised-set differential empty on both hops after 8c6539a; both shipped sha-description arms nothing; widened cardinality arm two over the working head and three over the 700c599 head; the -F needle three whole-file and two over the head; seam-ordinal stripped head nothing, unstripped head six, tail eight, singular-only mutation nothing; fence-indent and tilde bounds nothing whole-file; and the unstripped-fold ladder 2/1/1/2/2/3/3/6/6/6 unchanged with 6 at 8c6539a, 6 at b3be433 and 6 on the working file. [Appended by v1.107, which re-took every reading named below rather than reading this entry. FOUR CORRECTIONS to this entry, three of them repeated verbatim from body sentences this entry summarised, which is why an entry correction and a body edit are both owed. (1) THE HOP CLAIM IS WRONG AT ITS LAST HOP: this entry says the raised-set differential is "empty on both hops after 8c6539a". Re-run with RAISE taken from the candidate-sweep fence, one hop per invocation: 700c599 to 8c6539a prints a single hunk of one changed line, 8c6539a to b3be433 prints nothing, and b3be433 to working prints 61c61, a single hunk of one changed line -- the Test Plan sentence publishing the cross-sibling adjective count, which THIS revision reworded after this entry landed and after the differential three sections away had been run. The 700c599-to-working differential is a fourth claim in the next body sentence and is also wrong: 60,61c60,61, one hunk of TWO changed lines. The totals this entry publishes are NOT affected and reproduce -- 63 whole-file and 61 over the head at 700c599, 8c6539a, b3be433 and the working file -- so no raised line was added; only the attribution of which revision reworded which was wrong. (2) TWICE MORE IS ONE TOO MANY: this entry says the AC-4.6 cell "spells the same emitted field the other way twice more". git show b3be433:<design> | grep '^| AC-4.6' | grep -oE 'pgid[=:]' | sort | uniq -c returns 1 pgid: and 1 pgid=, so the other spelling appeared ONCE more; on the working row the same command returns 2 pgid: and no bare form. (3) THE OWED-ELSEWHERE IS FALSE AND WAS FALSE WHEN COMMITTED: this entry files the spec's FR-4 policy sentence as still carrying the constructor spelling. 00b961f rewrote the spec in the SAME commit that landed this entry. Readings: the bare needle over the spec body returns 1 at b3be433 (the sentence stood under FR-4) and 0 on the working spec, whose FR-4 sentence now carries the quoted detail form. Discharged in the body, per the precedent v1.105 set for the plan's _field debt. (4) THE SIX IS A SCOPE STATEMENT, NOT A COUNT OF THE CLASS: the triage arm this entry describes as "raising six hits" was a hand-typed alternation of TEN keys, and the impl-plan's DETAIL_KEYS declares ELEVEN. Over the same head the eleven-key alternation raises SEVEN -- the omitted key is duplicate_key, and the hit it could not see is the bad-substitution row's None default in the exception table under Error Handling, a legitimate constructor keyword. So the arm was blind to one member of the very class its residual claims to bound. NO gating claim and NO second surface is added by this appendix; codex remains exhausted until 2026-09-07 11:28.]
 - v1.107: Design delta self-review r15 response, ADVISORY AND NOT A GATE: it answers doc-block-exec.design.delta-review.r15.md (must 4 / should 3 / nit 1) plus ONE finding routed to this document by the round-fifteen decision sheet from the spec's leg. Freeze sha dfae038 -- the last commit before this batch was authored and the parent of the commit that lands it, which is the definition the spec publishes and the same rule round fourteen applied one round earlier when it stamped b3be433. SUBJECT of the delta review 00b961f, a different thing from the freeze and named separately for that reason. The two are byte-identical over the four documents, checked as a FIXED PAIR rather than against a moving referent: git diff 00b961f..dfae038 over the two feature directories is empty. THE FIRST DRAFT OF THIS SENTENCE WROTE THAT COMPARISON AS 00b961f..HEAD, which was true when it was written and went false the moment this batch landed -- the identical moving-referent defect this same revision repairs in the hop paragraph, committed by the author who had just written the rule against it, which is worth recording rather than quietly fixing. THE RULE OVER THE CLASS: every sha comparison published in this document names TWO fixed endpoints; HEAD, the working tree and the current branch are not endpoints, they are whatever the reader's tree happens to be. RESIDUAL, a concrete category: a fixed pair can still be stamped at the wrong pair, which no screen catches -- only re-running the comparison at the named shas does. NOT A GATE, NOT A TWO-SURFACE CLEAN, NO EXIT GATE CLAIMED: codex is exhausted until 2026-09-07 11:28. THE DEFECT POPULATION OF THIS ROUND IS FIX-INTRODUCED PROSE, and every must sits in a paragraph v1.106 itself wrote. EVERY PREMISE HANDED TO THIS REVISION WAS RE-RUN BEFORE IT WAS ACTED ON, and one of them did not hold as framed -- see the DISAGREEMENT paragraph below. MUST 1, THE HOP DIFFERENTIAL. Re-run one hop per invocation with RAISE taken from the candidate-sweep fence: 700c599 to 8c6539a a single hunk of one changed line, 8c6539a to b3be433 nothing, b3be433 to working 61c61. So the document's THIRD hop was the false one, not its second, and the separate 700c599-to-working sentence in the next clause was independently wrong at 60,61c60,61 -- one hunk of TWO changed lines, not one. Attribution corrected to v1.104 reworded one, v1.105 none, v1.106 one, that one being the Test Plan sentence which publishes the cross-sibling adjective count, named by subject and not quoted because quoting it would move the reading it publishes. The totals are NOT in dispute and reproduce at all four corpora, 63 whole-file and 61 over the head, so no revision added a raised line and only the per-hop attribution was wrong. THE CLASS, NOT THE INSTANCE: a hop differential whose right-hand side is the working file is re-taken AFTER this document's own entry is written, because that entry is part of the file the hop compares against -- which is the mechanism that produced this defect, the entry landing and then a raised line three sections away being reworded by the same revision. RESIDUAL, a concrete category: a raised line reworded after the paragraph's last re-take is invisible from the paragraph, the hunk shapes being a reading and not a screen. MUST 2, A SUPERSEDED FIGURE IN A LIVE BODY SENTENCE. The Invariant Compliance triage justified its 55 with a prose-line count of 58 while the sentences around it publish 62 raised, 2 in-fence and 60 remaining. THE IN-FENCE SPLIT WAS RE-RUN RATHER THAN TAKEN FROM THE SHEET, with a fence-state walk over the head: 62 total, 2 inside a fence, 60 outside, and 60 minus the five named dispositions is the 55 the sentence goes on to publish, where 58 minus 5 is not. THE CLASS: the figure is no longer restated in that clause at all, because a second copy is what went stale; the clause now refers to the split above it, and the arithmetic is given so the reference is checkable. MUST 3, A WRONG CARDINAL. git show b3be433:<design> | grep '^| AC-4.6' | grep -oE 'pgid[=:]' | sort | uniq -c returns 1 pgid: and 1 pgid=, so the AC-4.6 cell spelled the emitted field the other way ONCE more, not twice; on the working row the same command returns 2 pgid: and no bare form. Corrected in the body and by bracketed appendix on the v1.106 entry. MUST 4, A CROSS-DOCUMENT DEBT THE SAME COMMIT DISCHARGED. v1.106 filed the spec's FR-4 policy sentence as still carrying the constructor spelling; 00b961f rewrote the spec in that same commit. Readings, both taken and both published: the bare needle over the spec body returns 1 at b3be433, where the sentence stood under FR-4, and 0 on the working spec, whose FR-4 sentence now carries the quoted detail form. Recorded as a DISCHARGE with its two readings rather than left as a debt, which is the precedent v1.105 set for the plan's _field debt. THE RULE, stated against the half v1.106 stated: a sibling rewritten in the SAME COMMIT is the case a blob stamp alone cannot see, so a cross-document debt is either discharged with both of its readings or it is not written at all. RESIDUAL, a concrete category: a sibling rewritten after those two readings and before this document is committed is outside them. ROUTED FINDING, raised by the spec's leg and missed by this document's own: the triage arm's alternation was a HAND-TYPED subset of ten detail keys while the impl-plan's DETAIL_KEYS tuple declares eleven and says so in its own trailing comment. Over the same head the eleven-key alternation raises SEVEN, not six -- the omitted key is duplicate_key and the hit it could not see is the bad-substitution row's None default in the exception table under Error Handling, a legitimate constructor keyword and therefore not a defect, but a member of the class the arm exists to bound. THE CLASS, NOT THE INSTANCE: the alternation is a copy of a set another document owns, so it is DERIVED from DETAIL_KEYS member for member and checked against it, never extended by hand one key at a time; the arm is republished with the eleven-key alternation and the seventh site named by section and subject. RESIDUAL, a concrete category: DETAIL_KEYS can gain a member without this alternation gaining one and NO TEST CAN REACH IT, because the alternation lives in prose in this document and not in the code -- DETAIL_KEYS is a declaration in the impl-plan and grep -rn DETAIL_KEYS h-mad/ returns nothing, so there is no symbol to test against; the spec states the same residual against the same tuple. SHOULDS TAKEN: the two present-tense residuals this document wrote about states it had itself closed are past-tensed and named at the corpus they were true over -- the withholding refusal HAD three sites at b3be433, where the arm returns one, against nothing over the working head; and the two live members of the unreached sha-description shape stood at 8c6539a, where the folded third arm returns three, and were rewritten as hexes by v1.106. The python-fence deictic in Invariant Compliance residual (iii) is attributed to the revision that actually ran it: git show <sha>:<design> per sha shows the sentence entering at 8c6539a, so it is v1.104's, no later revision re-ran it and NO Version History entry records the run, which is now said in the sentence. Its readings are carried on a stated ground rather than assumed: the head holds ten python fences at 8c6539a, at b3be433 and on the working file, and a body-by-body comparison shows the ten identical across all three. NIT TAKEN: residual (iv)'s 'both shipped arms' is a cardinal the same paragraph contradicts now that a third arm ships, so it names arms (1) and (2) directly. DISAGREEMENT WITH THE BRIEF, reported because a run outranks a sheet: the brief framed the hop differential as false at TWO of its three hops. It is false at ONE. Hops one and two reproduce exactly as the document states them; the second wrong figure is the 700c599-to-working differential in the FOLLOWING sentence, which is a fourth claim and not a hop. Both figures the sheet gives are right; the count of wrong hops is not. Separately, the delta report grounds its third should on v1.105's entry claiming a sweep over 'the shell screens as well as the python fences' -- that phrase is in NO entry of this document (a Version History grep for 'python fence' and for 'shell screens' returns one unrelated hit), so that half of the finding did not reproduce and the deictic was repaired on the stronger ground above instead. [Appended after this entry landed, with every reading below re-taken on the file that includes it, one command per invocation. POST-ENTRY RE-RUN. Candidate sweep 63 whole-file, 61 over the head, 36 at cf3a862. Hops, each its own diff: 700c599 to working 60,61c60,61; 8c6539a to working 61c61; b3be433 to working 61c61 -- exactly the shapes the body now publishes -- with 700c599 to 8c6539a printing 60c60 and 8c6539a to b3be433 printing nothing. Withholding arm nothing over the working head and one over the b3be433 head. Both shipped sha-description arms nothing over the head; the folded third arm nothing over the folded head; the widened cardinality arm two, line-scoped, over the head. Both line-pin screens nothing. Compliance walks 106 fenced and 62 prose, unchanged from v1.106 because this revision adds no fence and no marker word, and the fence-aware split re-derived rather than carried is still two inside a fence leaving 60, of which five are disposed of by name and 55 remain. Adjective count three whole-file and one in the head. The eleven-key triage arm seven over the head. CROSS-DOCUMENT READINGS, re-taken after this entry: the spec's body-scoped bare needle one at b3be433 and none on the working spec; the AC-4.6 table cell one pgid: and one pgid= at b3be433 against two pgid: and no bare form on the working file; DETAIL_KEYS eleven members with its own trailing comment saying eleven; a recursive grep for DETAIL_KEYS over h-mad/ returns nothing, so the tuple is a declaration in the impl-plan and not yet a symbol in the tree. Ten python fences in the head at 8c6539a, at b3be433 and on the working file, the ten bodies byte-identical across all three. HOW THE ADDED TEXT WAS PROVED NOT TO MOVE A SCREEN, since a value sweep taken after the fact is the step this loop keeps skipping: the 95 added and 35 removed lines of this revision's own diff were run against every needle this document ships -- the bracketed candidate needle, the marker-word walk, the fence-opener walk, both line-pin screens, all three sha-description arms, the widened cardinality arm, both span-ordinal arms, the fixed-string -F needle, the backticked-callable needle and the adjective needle -- and every one returns zero in BOTH directions, which is why the figures above reproduce rather than needing republication. THE -F NEEDLE WAS MISIDENTIFIED ONCE BEFORE IT WAS RUN, and the correction is recorded rather than quietly absorbed, because naming a check one did not perform is the failure this appendix exists to prevent: the candidate tried initially was the extraction of the seven-module-level phrase with its parenthesised backtick list, which returns one whole-file at 00b961f AND one on the working file, so its control proved it was not the needle the v1.106 entry publishes at three whole-file and two over the head. The needle is the fixed-string count of the newline-collapsing awk idiom, and it returns three whole-file and two over the head at 00b961f and the same pair on the working file. ONE STAMP CLASS IS DELIBERATELY NOT SWEPT AND ITS RESIDUAL IS STATED EXACTLY: the folded census of the phrase naming the entry a working-file reading was run after still returns 18 hits over the head, all of them reading v1.106, and 17 are flat while ONE is split by the hard wrap -- which is why that census is taken folded and why a flat grep for it under-reports by one. Every one of those 18 figures is re-taken above and every one reproduces, so none is stale in substance, and the phrase remains literally true because each reading was indeed run after the v1.106 entry was written. What it no longer certifies is that it was run after the most recent entry. Re-stamping all 18 was NOT done here because it would make several neighbouring attribution deictics false in the same stroke. The Invariant Compliance paragraph's four were reachable, because this revision edited that paragraph anyway, and all four are repaired in the body: the two walks moved by construction in v1.106, every prose line was read in v1.106, the folded arm was added to Scanning by v1.106, and the two dispositions Scanning calls its own are v1.106's. The ones left standing are in paragraphs this revision did NOT open -- Test Strategy's 'struck in this revision' and 'what this revision changes' -- and they are named here so their absence is not read as their non-existence. THE SHARPEST REASON NOT TO SWEEP THE STAMPS PIECEMEAL, which this round earned the hard way: the Test Plan stamp sits ON a raised line, so re-stamping it REWORDS the very line whose v1.106 attribution the hop paragraph above has just published, and the hop shapes would have to be re-taken and republished in the same edit. OWED, to the next revision that touches them: re-stamp the 18, re-attribute the remaining deictics, and re-take the three hops, all in ONE pass, never separately, since doing any one alone is what makes the others wrong. The three hops and the whole-file and head totals above were re-taken ONCE MORE as the last action of this revision, after this appendix itself landed, and print the same shapes; the shared checker reports PRECHECK: PASS issues=0, its remaining output being advisories this document keeps deliberately -- the PATH notes name files this design specifies and the tree does not hold yet, the STALESHA notes name blob stamps that are behind HEAD BY CONSTRUCTION, since a stamped blob reading is worthless if it moves, and the COUNT notes fire on dated Version History prose, which is a record and not a list.] [Appended by v1.108, which re-took every reading named below rather than reading this entry, and which corrects FIVE things in it -- four of them figures or descriptions inside the appendix this entry wrote to prevent exactly this, which is why the correction is recorded here rather than absorbed. (1) THE SWEEP's CORPUS EXISTS AT NO PAIR: this entry gives its own diff as 95 added and 35 removed. git diff --numstat over this file returns 102 and 41 at 00b961f to 3f70eb3, the same at 00b961f to af19d53 and at dfae038 to 3f70eb3, 96 and 36 at 00b961f to 59cc2ad where this appendix first landed, and 7 and 6 at 59cc2ad to 3f70eb3. The corrected corpus, named as a fixed pair, is 00b961f to 3f70eb3 at 102 added and 41 removed. The sweep's CONCLUSION survives and both v95 legs re-derived it. (2) THE -F NEEDLE IS THE TR IDIOM, NOT THE AWK ONE: the published pair of three whole-file and two over the head is reachable only with the newline-collapsing tr idiom that Implementation Order defines; the awk idiom returns five and five at 00b961f and on the shipped file under each of its three plausible fixed strings. A correct reading inside a false description, which is this document's own named signature class. (3) THE STAMP CENSUS UNDER-REPORTS BY TWO, NOT ONE: under the entry-naming needle Test Strategy actually ships, the head gives 18 folded and 16 flat, so TWO hits are wrap-split, not one. The 17 this entry publishes is reachable only under a looser needle this document does not define. (4) THE ENDPOINT RULE OVER-REACHED: this entry's rule over the class says the working tree is never an endpoint, which strikes the three hop differentials this same appendix publishes, Scanning's live hop command and six further working-file readings. The rule is corrected and restated in the body at Scanning's hop paragraph -- an endpoint is a fixed sha or blob, or the shipped file identified by the entry it was taken after, and only a MOVING git ref is excluded. (5) THE DEICTIC CHARACTERISATION IS FALSE AS WRITTEN: this entry says the attribution deictics left standing are in paragraphs it did NOT open. Invariant Compliance's after-the-edits clause on the fence-aware split was one, it sits in a paragraph this entry did open, and eight further live members stood unnamed. The full register is enumerated in the v1.108 entry with a first-present sha behind every member. NO gating claim and NO second surface is added by this appendix; codex remains exhausted until 2026-09-07 11:28.]
 - v1.108: Design gating revisions r16, answering design audit v95 at freeze sha 3f70eb3 across TWO independent teammate legs (leg A must 4 should 5 nit 2; leg B must 3, of which one converges with leg A's fourth and two are new). Freeze sha af19d53 -- the last commit before this batch was authored and the parent of the commit that lands it. NOT A GATE, NOT A TWO-SURFACE CLEAN, NO EXIT GATE CLAIMED: both legs share a model family with each other and with the author of v1.107, and codex is exhausted until 2026-09-07 11:28. THE FREEZE-SHA RULE HAS THREE CLAUSES AND v1.107 STATED TWO: an entry's own freeze field names the last commit before the batch was authored, here af19d53; a reading of a committed blob stays stamped at that blob and does not move when the freeze moves; and a reading taken over this batch's own post-edit body is stamped to the file the batch ships, identified by the entry it was taken after, and NEVER to af19d53, which does not contain these edits. That third clause is why every working-file reading of this round sits in the bracketed block appended after this entry landed and why not one of them carries af19d53. TWO BLOB IDENTITIES, stated so nobody re-derives them as distinct corpora: the design blob is 8fe66ba at BOTH 00b961f and dfae038, and eaa7fca at BOTH 3f70eb3 and af19d53, so the two document-touching commits since round fourteen are 00b961f and 3f70eb3 and the other two are no-ops on this file. MUST 1, RAISED BY BOTH LEGS INDEPENDENTLY, A CORPUS THAT EXISTS AT NO PAIR. v1.107's appendix published the corpus of its value sweep as 95 added and 35 removed, and no scoping reproduces that pair: git diff --numstat over this file gives 102 added and 41 removed at 00b961f to 3f70eb3, the same 102 and 41 at 00b961f to af19d53 and at dfae038 to 3f70eb3 by the blob identities above, 96 and 36 at 00b961f to 59cc2ad where the appendix first landed, and 7 and 6 at 59cc2ad to 3f70eb3. The corrected corpus is stated as a FIXED PAIR and named: 00b961f to 3f70eb3, 102 added and 41 removed, which is the whole of the v1.107 revision including the two author refinements that landed after 59cc2ad. The conclusion the appendix drew survives and both legs re-derived it: the shipped needles over those 102 and 41 lines return nothing outside the two added Version History entry lines, which every one of those screens excludes by head scope. THE CLASS, NOT THE INSTANCE: the defect is not the arithmetic, it is that a sweep certifying a revision was scoped against a corpus the revision did not have, and the rule over it is the endpoint rule below -- a sweep publishes the two endpoints its corpus is taken between, never the phrase this revision's own diff, because that phrase names a different corpus at every point during the revision. RESIDUAL, a concrete category: a corpus named by two fixed endpoints can still be the WRONG two, and the diff of a batch grows while the batch is being authored, so a sweep re-taken before the last edit lands is short by exactly that edit; only re-taking the numstat after the final edit, as the appended block below does, sees it. MUST 2, THE ATTRIBUTION-DEICTIC REGISTER, ENUMERATED RATHER THAN EXEMPLIFIED. v1.107 named two members of this class and characterised the rest as absent; leg A found at least eight more live, and one of them sat in a paragraph v1.107 had itself opened, which falsifies the characterisation as well as the count. THE AXIS: an ATTRIBUTION deictic says which revision performed an act and stops resolving from the bytes the moment a later entry exists; the SELF-RESOLVING form names the file a reading was taken over and resolves at every revision; the two share a literal and no screen separates them. THE MEASURED MEMBERSHIP, folded over the head with the newline-collapsing idiom this document ships, at the tree this batch ships: 27 occurrences of the round-deictic literal, partitioned 12 self-resolving, 4 quotations of the phrase as a described defect, 1 correct use inside the paragraph that wrote it, and 10 attributional. All 10 are named here by section and subject, each with the sha at which its wording is FIRST PRESENT in the blob series and the version that sha shipped -- Scanning's zero-decomposition clause at f91a74b (v1.101); Scanning's vacuity label on the provenance-probe fence at 1cbddb7 (v1.102); Scanning's no-label-until sentence on the same probe at 06ef40f (v1.100); the ensure_ascii repair sentence in API / Interface Changes at 8c6539a (v1.104); Test Strategy's mutation-corollary clause at f91a74b (v1.101); Test Strategy's fold-ladder-gap clause at 00b961f (v1.106); Test Strategy's struck-in clause, one of the two v1.107 named, at 00b961f (v1.106); Test Strategy's what-changes clause, the other one v1.107 named, at f91a74b (v1.101); Test Plan's run-after-the-edits stamp at 7982c18 (v1.99); and Test Plan's shape-struck clause at 00b961f (v1.106). The eleventh member, Invariant Compliance's after-the-edits clause on the fence-aware split, was the one in a paragraph v1.107 DID open, and it is REPAIRED here rather than registered: the sentence now states the standing property it meant, that the split is re-derived rather than carried in v1.106 and in every revision since, which removes the deictic instead of stamping it and is why the census reads 27 and not 28. THE CLASS IS CLOSED BY ENUMERATION AND NOT BY REPAIR, deliberately, and the reason is stated at the amended rule in Test Strategy: two of the ten sit ON lines whose rewording would move a differential another paragraph publishes, so the ten move in ONE pass with the eighteen stamps or not at all. RESIDUAL, a concrete category and not and-similar: first-present of a FRAGMENT bounds when that wording entered and cannot see a rewording that preserved the fragment, so each version above is the version the phrase was WRITTEN at and not a proof that the act it attributes happened then; and the register covers that one literal only -- a round-deictic written in another wording is outside the folded census entirely, and the head holds three such wordings at four occurrences, none of them attributional: a round-relative phrasing and an under-the-pen phrasing, both inside one parenthesis describing a defect this document already repaired, and two uses of a current-revision phrasing that state a RULE rather than attribute an act. MUST 3, A RULE PUBLISHED AND THEN DECLINED WITH NO RECONCILIATION AT THE SITE THAT STATES IT. Test Strategy states that an entry bump is itself the trigger to re-run and re-stamp every document-self figure and calls the version the corpus identifier; v1.107 then declined to re-stamp eighteen and booked it as a residual, leaving a reader at the rule with no way to know an exemption had been taken. The rule is AMENDED AT ITS SITE rather than the eighteen re-stamped, and its exemption carries an exact condition rather than a judgement about neighbours: a stamp may lag when re-stamping it in isolation would falsify a claim published elsewhere in the document, which is the case for a stamp sitting ON a line another paragraph's differential attributes to a named revision and for a stamp inside a paragraph whose round-deictics resolve to an earlier revision than the stamp would name. The entry taking the exemption owes four things and not a note, all four discharged in the appended block: the folded census under the needle Test Strategy publishes, the flat and split counts beside it, the statement that every figure so stamped was re-run and reproduces, and the statement of what the phrase still certifies and what it no longer does. RESIDUAL, a concrete category: the exemption is stated over a condition a reader evaluates, not a screen -- nothing mechanical decides whether re-stamping one site would falsify a claim at another, and the only check is the one-pass discipline the amended rule names. MUST 4, LEG A, CONVERGING WITH LEG B's THIRD: THE ENDPOINT RULE OVER-REACHED AND OUTLAWED THE DOCUMENT's OWN DOMINANT COMPARISON SHAPE. v1.107 wrote that HEAD, the working tree and the current branch are never endpoints; the same entry then published three hop differentials whose right-hand side IS the working file, Scanning publishes a fourth as a live command, and five further readings and Execution's cross-document discharge are stamped on the working file. The rule is RESTATED IN THE BODY, at Scanning's hop paragraph where the comparisons live rather than only in an entry: an endpoint is either a fixed sha or blob, or the shipped file identified by the Version History entry it was taken after; a MOVING git ref -- the checked-out tip, a branch name, or any range spelled against either -- is never an endpoint. The rule's real target is already absent rather than merely forbidden, and the control is published below with its four needles, written in this entry and not in the body so the head-scoped screens they describe do not contain them. The GRAMMAR exemption is stated at the same site: the head holds a head-scoping shell FUNCTION and a shell VARIABLE bound to a fixed sha in Test Strategy's mutation-range demonstration whose names collide with the ref, and a rule about refs reaches neither. RESIDUAL, a concrete category: a fixed pair can still be stamped at the WRONG pair, and a working-file endpoint identified by an entry stops identifying anything the moment a later entry lands, so a comparison re-read after a bump names a right-hand side that no longer exists; neither is reachable by a screen. LEG B MUST 1, VERIFIED AND TAKEN: THE STAMP CENSUS CARRIED THE WRONG CARDINAL UNDER THE DOCUMENT's OWN NEEDLE. v1.107 published the census as 18 folded with 17 flat and ONE wrap-split. Under the needle Test Strategy actually ships -- the entry-naming pattern in its own fence -- the head gives 18 folded and 16 flat, so TWO are wrap-split and a flat grep under-reports by two, not one: the splits are the folded-arm paragraph in Scanning, where the wrap falls between the version and the noun, and the tilde-bound sentence in Test Strategy, where it falls before the preposition. The 17 that v1.107 published is reachable only under a looser needle this document does not ship. THE CLASS this shares with leg B's second must: a correct measurement published under a needle other than the one the document defines. LEG B MUST 2, VERIFIED AND TAKEN: THE FIXED-STRING NEEDLE WAS NAMED AS THE WRONG IDIOM. v1.107 described the -F needle as the newline-collapsing AWK idiom. It is the newline-collapsing TR idiom, which is the one Implementation Order defines at its fourth-blind-form paragraph and the only one that returns the published pair of three whole-file and two over the head at 00b961f and on the shipped file; the awk idiom returns five and five at both corpora under each of its three plausible fixed strings. The needle is named and NOT quoted here, because this document's own rule forbids writing a screen's literal needle inside the scope that screen counts and the whole-file arm counts this entry. SHOULDS TAKEN. The hop series is re-defined so that no hop spans two revisions and the attribution is derivable from what is published, and it now runs 700c599 to 8c6539a, 8c6539a to b3be433, b3be433 to 00b961f, 00b961f to af19d53 and af19d53 to the shipped file, with every shape in the appended block. The value sweep's corpus is stated where it was left to be inferred: the sweep returns nothing over the added and removed lines OUTSIDE Version History, and the in-entry hits it excludes by head scope are published beside it rather than left for a reader to rediscover as an apparent contradiction. The DETAIL_KEYS residual is bounded in TIME as well as in the tree, which is what makes it agree with the spec rather than contradict it: no test can reach the alternation UNTIL tasks 5d and 5e build the module, after which the spec's registry walk is the check, and the design's until-then reading is a reader comparing two lists. DISAGREEMENTS WITH THE REPORTS, recorded because a run outranks a report. Leg A gives the folded census of the round-deictic literal as 29 and its quotation subset as five including a site in Test Strategy's entry-naming paragraph; at 3f70eb3 the document's own fold idiom returns 28 and that site is not a member, because the wrap there lands before an indented continuation and the fold inserts one space without squeezing the indent, so the joined text carries four spaces and not one. Under a whitespace-SQUEEZING fold it is a member and the total is 29. Both readings are right under their own grammar and the document ships the non-squeezing one; the partition above is published under the shipped grammar and the divergence is named here so it is not re-derived as an error. The membership leg A actually claims -- at least eight further live attributional deictics plus one in a paragraph v1.107 opened -- reproduces exactly and is what this entry acts on. Leg A's remaining shoulds and both nits are NOT taken this round and are named so their absence is not read as a clean: the fence-parity ground under Invariant Compliance residual (iii), the LaunchFailed duplicate-signature remark on the eleven-key arm, and the observation that the two compliance walks are head-scoped and so cannot be moved by any entry at all. OWED ELSEWHERE, reported and not edited, one author writing one file: the spec's DETAIL_KEYS paragraph and this document now agree once the until-5d/5e bound above is read, and no spec edit is required by it, but the spec is the document that should say which check closes the staleness AFTER 5e, and it currently says the registry walk without the bound. [Appended after this entry landed, with every reading below re-taken on the file that includes it, one command per invocation, and every comparison named at endpoints the corrected rule admits -- two fixed shas, or af19d53 and the file this batch ships, identified by the v1.108 entry above. POST-ENTRY RE-RUN. Candidate sweep 63 whole-file and 61 over the head, the same pair at 700c599, 8c6539a, b3be433, 00b961f, af19d53 and on the shipped file, so no revision in that span added a raised line. HOPS, NONE SPANNING TWO REVISIONS, each its own diff with RAISE taken from the candidate-sweep fence: 700c599 to 8c6539a one hunk of one changed line, 8c6539a to b3be433 nothing, b3be433 to 00b961f one hunk of one changed line, 00b961f to af19d53 nothing, af19d53 to the shipped file nothing -- so v1.104 reworded one, v1.105 none, v1.106 one, v1.107 none and v1.108 none, and the 700c599-to-shipped-file differential is one hunk of TWO changed lines, those two rewordings which the wrapper places adjacent. NUMSTAT OF THIS REVISION at the pair af19d53 to the shipped file: 63 added and 11 removed. VALUE SWEEP over exactly those 63 added and 11 removed lines, with the corpus stated rather than left to be inferred: every needle this document ships returns nothing in BOTH directions OUTSIDE Version History -- the bracketed candidate needle, the marker-word walk, the fence-opener walk, both line-pin screens, all three sha-description arms, the widened cardinality arm, both span-ordinal arms, the fixed-string needle, the backticked-callable needle and the adjective needle. INSIDE Version History the same sweep is NOT nothing, and the figures are published so a reader re-running it as written can tell a scope difference from a defect: three of the diff's lines are Version History entry lines (two added, one removed, the removed one being the v1.107 entry as it stood before its bracketed correction), and over those the marker-word walk raises one added while the widened cardinality arm raises one added and one removed. Every screen in that list excludes Version History by head scope, which is the whole of why they are excluded here. COMPLIANCE WALKS 106 fenced and 62 prose, unchanged from v1.106 and v1.107 because this revision adds no fence and no marker word to the head; the fence-aware split re-derived rather than carried is still two inside a fence, leaving 60 prose lines of which five are disposed of by name and 55 remain. STAMP CENSUS under the needle Test Strategy publishes: 18 folded and 16 flat, so TWO are wrap-split and a flat grep under-reports by two; all 18 read v1.106 and no other version is present. The two splits are the folded-arm paragraph in Scanning, where the wrap falls between the version and the noun, and the tilde-bound sentence in Test Strategy, where it falls before the preposition. Every one of the 18 figures is re-taken in this block or in the body and every one reproduces, so none is stale in substance; the phrase stays literally true, because each reading was indeed run after the v1.106 entry was written; what it no longer certifies is that it was run after the most recent entry, and the lag is now two entries rather than one. ROUND-DEICTIC CENSUS, folded with the non-squeezing idiom this document ships: 27 over the head, 26 line-scoped, partitioned 12 self-resolving, 4 quotations of the phrase as a described defect, 1 correct use inside the paragraph that wrote it, and 10 attributional -- the ten named in the entry above, each with its first-present sha. MOVING-REF CONTROL for the endpoint rule, over the folded head, its four needles written here and not in the body so the scope they count does not contain them: `..HEAD`, `HEAD~`, `origin/` and `@{` each return nothing, so the rule's real target is already absent rather than merely forbidden. Thirteen HEAD tokens do stand in the head and every one is exempt by GRAMMAR, and the split is walked rather than recalled: NINE are the head-scoping shell function -- three definitions, in Scanning, in Test Strategy's span-ordinal fence and in Invariant Compliance's walk fence, and six call sites -- and FOUR are a shell VARIABLE in Test Strategy's mutation-range demonstration, two of them assignments binding it to 6f0ee85 and two of them uses. One of those two uses spells a `..` range against the variable, which is the shape the first needle looks for and does NOT reach, because the token there is the variable and not the ref; that is the exemption made concrete rather than asserted, and it is the reason the needle's null is a grammar fact and not an absence of ranges. SCREENS UNMOVED, re-run rather than assumed, each against a corpus where it is non-zero so no null here is an unrun command: both shipped sha-description arms nothing over the head against two and one over the 700c599 head; the folded third arm nothing over the folded head against three over the folded 8c6539a head; the widened cardinality arm two over the head against three over the 700c599 head, its two being the same pair v1.106 disposed of by position; the withholding arm nothing over the working head against one over the b3be433 head; both line-pin screens nothing; the span-ordinal arms 29 and 8 over the head; the adjective needle three whole-file and one in the head; the fixed-string needle three whole-file and two over the head, against nothing at 35698f9 and one at 6f0ee85; the eleven-key triage arm seven over the head. THE SPAN-ORDINAL TAIL FIGURES v1.106 published as 12 and 6 are re-taken over the tail this batch ships and are still 12 and 6 -- a tail figure is the one class a Version History entry CAN move, so it is checked rather than assumed, and neither this entry nor the bracketed correction on v1.107 adds a member of either arm. CROSS-DOCUMENT: `grep -rn DETAIL_KEYS h-mad/` exits 1 with no output, so the tuple is still a declaration in the impl-plan and not a symbol in the tree, which is what the until-5d/5e bound rests on. The hops, the two totals, the two censuses and the two compliance walks above were re-taken ONCE MORE as the last action of this revision, after this block itself landed, and print the same values. The shared checker reports PRECHECK: PASS issues=0 under h_mad_precheck_doc.py --phase design, its remaining output being advisories this document keeps deliberately -- the PATH notes name files this design specifies and the tree does not hold yet, the STALESHA notes name blob stamps that are behind HEAD BY CONSTRUCTION, since a stamped blob reading is worthless if it moves, and the COUNT notes fire on dated Version History prose, which is a record and not a list.]
+- v1.109: Design gating revisions r17, answering design audit v96 at freeze sha 09e9307 across a codex leg and a teammate leg together for the first time on this document -- NOT the first round on this document read by two model families, which was v1.1's union of codex 7 and agy 1; the earlier draft of this entry claimed the stronger thing and it is withdrawn here, caught by re-reading the entry against its own Version History rather than by any screen (teammate leg must 2 should 3 nit 1; codex leg must 3 should 3 nit 1). Freeze sha fbc2ea0 -- the last commit before this batch was authored and the parent of the commit that lands it. NOT A GATE, NOT A TWO-SURFACE CLEAN, NO EXIT GATE CLAIMED: this round is FAIL then revision, the gate is c97, and nothing here is offered as a clean. THE TWO LEGS FOUND DIFFERENT POPULATIONS and are answered differently. The teammate leg filed the standing prose class -- a rule applied wider than its condition, a register member stamped at the wrong sha, a universal quantifier over a list that does not satisfy it -- and re-ran rather than read every figure it challenged, finding no wrong number anywhere in the document. The codex leg filed ENGINEERING DEFECTS IN WHAT THIS DOCUMENT SPECIFIES, and each is taken as a DESIGN CHANGE and not a prose repair. CODEX MUST 1, INTERSECTING SUBSTITUTION SPANS, VERIFIED AND TAKEN. With ab->X and bc->Y the prescribed escaped alternation turns 'abc abc' into 'Xc Xc' while text.count reports ab=2 bc=2, and a recording callback shows bc fired zero times; the map-static substring predicate any(a != b and a in b) is False for that pair, so AC-2.7 as written never reached it. Reproduced on python3.11 3.11.8 at fbc2ea0 with the control arm 'ab bc ab bc' in the same run, which moves every column. Substitution now refuses on TWO predicates under the one SUBST_OVERLAP token: the substring one over the map alone, and a span-intersection scan over the ORIGINAL block.text before any replacement, which collects all match spans of all keys and refuses any two spans from different keys that share an index. Detail line per unordered pair, sorted by (offset, a, b), keys= counting the distinct keys implicated across both kinds. NEITHER PREDICATE CONTAINS THE OTHER and both ship: ab/abc on a text holding no abc is substring-refused and not span-refused, ab/bc on abc is the reverse. Test test_substitute_refuses_intersecting_spans with its control, mutation intersect-check-removed, matrix row added. THE CLASS is 'two keys whose matches are not independent', closed at two members because a pair of distinct keys either can or cannot occupy overlapping positions; RESIDUAL stated exactly: a key intersecting ITSELF (aa in aaa) is not an intersection between keys and str.count's non-overlapping count equals the alternation's non-overlapping match count for a single key, so no third predicate is owed, and what would falsify that bound is a replacement engine that scans overlapping matches, which re.sub is not. DIVERGENCE FROM THE ROUND-SEVENTEEN DECISION SHEET, REPORTED TO THE ORCHESTRATOR BEFORE IT WAS WRITTEN: the sheet prescribed the offset BARE (at <offset>); this document's own grammar paragraph names an EXHAUSTIVE list of seven bare fields and says every other field is quoted, including the helper-produced numbers seconds= and pgid:, so a bare integer there would be the first exception to a list called exhaustive. It ships QUOTED, and the exhaustive-list sentence names it. THE SPELLING IS THE SPEC'S, NOT THIS DOCUMENT'S: the line is intersect: "<a>" "<b>" "<offset>" -- three quoted values and NO connective token. This document first wrote at "<offset>", which quotes correctly but adds a token FR-4's grammar does not carry, overlap: carrying none either; the spec author had already written the connective-free form, the spec is the reference the other three documents are audited against, and the at is withdrawn at every site here (the Substitution bullet, the exhaustive-list sentence, the verdict-line table and the exception table). TWO DETERMINISM RULES arrived from the same spec run and are written into the token table and the Substitution prose identically: <a> is the LEXICOGRAPHICALLY SMALLER key and <b> the larger, mirroring overlap: putting the shorter first; and <offset> is the SMALLEST CHARACTER INDEX THE TWO MATCHED SPANS SHARE, 0-based into block.text, and NOT the start of the earlier span, which would name a position the two do not both occupy. Canonical fixture abc under ab->X, bc->Y: the matched spans cover [0,2) and [1,3), they share exactly one position, and the line reads intersect: "ab" "bc" "1". THE PROBE FENCE MOVED WITH THE RULE rather than being left to agree by accident -- min(a.start,b.start) became max(a.start,b.start) -- and it was extracted from the shipped file and re-run, its pairs column now reading 1 where it read 0. CODEX MUST 2, NUL IN A SHELL PAYLOAD, VERIFIED AND TAKEN. Popen(["bash","-c","true"]) returns rc 0 and the same call with a trailing chr(0) raises ValueError: embedded null byte -- valid UTF-8, so it passes the strict decode and reaches the spawn, and ValueError is not an OSError, so the documented mapping did not cover it and the CLI would exit through a traceback carrying no DOCBLOCK: line. The spawn call now catches ValueError beside OSError and raises LaunchFailed("spawn", err). SECOND DIVERGENCE FROM THE SHEET, ALSO REPORTED FIRST: the sheet called spawn a NEW stage label; it is not. The exception table already spells stage=<mkdtemp|spawn|reap|collect>, the Architecture Overview already says the mkdtemp and spawn stages are pre-spawn by definition, and Test Strategy already says the spawn stage needs no mock. This is a widening of an existing catch, the verdict partition gains no member, and the spec and impl-plan authors were told not to add a label. Tests test_nul_in_document_block_is_a_launch_failure and test_nul_in_preamble_is_a_launch_failure, mutation spawn-valueerror-unmapped. CLASS: the runtime rejects the argument vector before the child exists; on CPython 3.11 a str argv element is rejected for exactly one reason and TypeError on a non-str element is unreachable because every element is composed as str by this design. CODEX MUST 3, THE ROLLBACK IDENTITY GUARD's DISCRIMINATION EXEMPTION, VERIFIED AND WITHDRAWN. The exemption said the mismatch branch could not be reached without an additional injection point and that adding one for a stated non-goal was not warranted; the base Test discrimination invariant this document inlines into every audit of itself admits no such carve-out, and the matrix carrying no mutant for an implemented deletion guard was the defect. os.lstat is added to the fault-injection set -- verified NOT already a member before it was added, the set having been os.killpg, shutil.rmtree, tempfile.mkdtemp, os.chmod, os.unlink, _final_write, _close_stream plus the Popen instance wrapper. Test test_rollback_skips_unlink_on_identity_mismatch patches os.lstat to a differing (st_dev, st_ino) and os.unlink to record, asserting the unlink is NOT called and leftover: is still reported; mutation rollback-identity-check-removed moves both halves. The SET's OWN CARDINAL IS NOW ABSENT from the rule paragraph that governs it and stated once at the enumeration that lists the members, because a cardinal written into a rule is one more surface to re-sweep every time the set grows; the seam-naming prohibition is restated over 'the fault-injection set' rather than over a numbered set. Every seam surface swept: both enumerations (which list the same members in DIFFERENT orders, deliberately), the SEAM alternation of the cross-document check, the dotted derivation whose needle now admits both spellings of the cardinal, and the one-of-N sentence in the subprocess paragraph. RESIDUAL: the injection makes the mismatch BRANCH reachable and does not reproduce a real concurrent replacement, which stays outside the threat model. THE SHARED CROSS-DOCUMENT DECISIONS THIS DOCUMENT OWNS. AC-1.8's collection pin becomes COLLECTION-ONLY -- [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "h-mad/tests/test_docsections.py"] exiting 0 -- and the wording moves from 'still passes unchanged' to 'still collect and pass in the full suite', because this feature ADDS a test to that file. The reason is design-internal and is now written down: the wire mutant docsections-delegation-reverted is killed by a test living in that same file, so a pin that RAN the file would go red under the very mutant whose 'every other test green' property makes it the isolated-wire proof. CLASS: a pin whose subject is importability is written as collection, never as execution, wherever the file it points at also carries a mutation-killing test. RESIDUAL: those tests are no longer RUN in isolation by AC-1.8; they run in the full suite AC-6.4 gates and in the 5e module-scoped run. field-escape-removed IS REDEFINED, AND THE SHEET's PREDICTED MATRIX IS FALSIFIED -- THIRD DIVERGENCE, and this one was found by executing rather than by reading. The old payload ('_field returns its input unchanged') drops the quoting, the escaping and the c1 second pass together, so three tests go red under it and the row isolates nothing, which is what codex and the impl-plan leg both filed. The sheet's replacement payload -- json.dumps(...) becomes '"' + str(value) + '"' with the c1 pass KEPT -- is adopted, and what the sheet predicted about the newline test is half right in a way that took TWO passes of this revision to get straight, both of them published here because the second corrected the first. The sheet said the newline test goes RED because the line SPLITS. It does not split: a raw newline is category Cc, so the KEPT second pass escapes it and the line stays single. This revision first concluded from that that the newline test stays GREEN and that each mutant has exactly one RED column -- AND THAT IS ALSO WRONG, caught by r17b's read and re-derived here. The matrix had been scored on the RENDERING, not on the ASSERTIONS the tests make, and the newline test asserts TWO things: one line, and the escaped spelling backslash-n appears. Under the mutant the second pass renders the newline as backslash-u000a, so the test goes RED on the SPELLING while the line stays single. The probe was rewritten to evaluate each test's own predicate rather than to print a line count -- AND THAT SECOND PASS WAS ALSO WRONG BY ONE CELL, caught by a CROSS-DOCUMENT check against the impl-plan's finished working file and re-derived here, so this entry records three passes over one matrix and not two. The second pass modelled the unicode test as a line count, and this document's OWN description of that test says it asserts the four escapes appear INSIDE heading="...". A probe that never looks inside the quotes cannot see a mutant whose entire payload is removing them, so it scored unicode GREEN under field-quoting-removed where the truth is RED. The impl-plan had it right and this document was the one in error. Third pass, every predicate transcribed from the test description this section states, re-run at fbc2ea0 on python3.11 3.11.8 and published with its grid and three repr lines: shipped all green; field-quoting-removed RED ON ALL FOUR; field-escape-removed RED on newline and quote, green on unicode and forge; c1-escape-removed RED on unicode alone. The two documents now agree cell for cell. SO "EACH MUTANT HAS EXACTLY ONE RED COLUMN" IS WITHDRAWN, and so is the second pass's replacement claim that the three RED SETS give an isolating observation one per mutant. What holds is what the impl-plan already said: c1-escape-removed IS isolated, reddening its own key alone; field-escape-removed IS isolated to its key once that key is the QUOTE test, with the newline test a regression pin on the escape spelling; and field-quoting-removed IS NOT ISOLATED and that is recorded rather than smoothed, because the newline, unicode and quote tests each assert their payload appears inside the field's double quotes, so stripping the quotes reds three tests beyond its key. IT IS NOT REPAIRED BY WEAKENING THE ASSERTIONS: dropping the quote clause from those three would leave nothing pinning that the escaped payload sits inside a quoted value rather than beside it, which is the AC-4.3 promise, so the exposure is priced and kept. THE NEWLINE TEST's DESCRIPTION IS ALSO CORRECTED HERE, since it is what the probe transcribes: it now states the quote clause explicitly, which was implicit before and is exactly the clause the second pass failed to model. THE RULE OVER THE AXIS, restated at the strength the third pass earned: a discrimination matrix's cell is the verdict of a NAMED TEST, so its predicate is transcribed from that test's stated assertions -- every clause of them, the quote clause included -- and never from what the mutant appears to change. A probe written from the mutant's mechanism scores the mechanism, and a cell that scores the mechanism agrees with the matrix only by luck. THE PROCESS READING, which is why this is in the record: the error survived two passes of a single author and died at the first cross-document comparison, so a matrix duplicated in two documents is checked BY DIFFING THE TWO, never by re-running one of them more carefully. So the quote-bearing payload becomes A TEST OF ITS OWN, test_quote_in_dynamic_field_cannot_close_the_value: a --heading of x" rc=0 y=", asserting that the line parses under the quoted-string grammar to exactly heading and carries no rc field. THAT test, and not the newline test, is field-escape-removed's killer; the row's test key names it and the impl-plan states the same pairing. The four-way discrimination is stated identically in both documents: under field-escape-removed the quote test is RED and the newline, forge and unicode tests are all GREEN. STATED PLAINLY because it is the interesting half: a raw newline is escaped TWICE on the shipped code, so no single-guard mutant can turn the newline assertion red -- it is defence in depth and a regression pin, never a discriminator, and the earlier row was named after an input that never carried its kill. RESIDUAL: the quote arm discriminates through " alone; a lone trailing backslash is covered by the same mutant and by no fixture, and is named as uncovered rather than screened. THE MUTATION MATRIX GOES 81 TO 85, eighty-four of the helper's source and 1 of h-mad/SKILL.md. The four additions are intersect-check-removed, spawn-valueerror-unmapped, rollback-identity-check-removed and cleanup-chain-selection-flipped, all four of the helper's source, so only the first addend moves. THE FOURTH CAME FROM THE IMPL-PLAN AUTHOR'S RUN AND IS A DESIGN CHANGE HERE, not a bookkeeping row. 3g's cleanup chaining was written as a lone raise ... from pending with a parenthetical promising that __cause__ would fall back to cleanup_error, and that fallback does not exist: raise err from None sets __cause__ to None AND sets __suppress_context__, so on a run that succeeded and then failed to clean up, the cleanup error is dropped from __cause__ and suppressed from the printed traceback as well -- the one outcome the read-back exists to report, leaving no trace. Run on python3.11 3.11.8 at fbc2ea0 over BOTH branches, published as a fence with its output: with a pending value the cause is that value; with pending None the cause is None, suppressed is True, and the cleanup error sits unreachable in __context__. The selection is now explicitly two-branch -- from pending when pending is not None, from cleanup_error otherwise -- test_cleanup_failure_after_successful_run_is_chained drives the branch with no pending outcome, and cleanup-chain-selection-flipped collapses the selection to an unconditional from pending and is killed by it. The count is DERIVED by counting the table's rows with the awk published beside it and the split by counting the rows whose mechanism names SKILL.md as the file the harness edits -- exactly one does -- never by adding to the previous figure. Both sites that state it are swept. TEAMMATE MUST 1, THE ENTRY-BUMP EXEMPTION APPLIED THREE TIMES WIDER THAN ITS CONDITION. VERIFIED, AND THE AUDITOR's PARTITION IS CORRECTED UPWARD RATHER THAN ACCEPTED. The auditor walked the SIXTEEN line-scoped stamp sites and reported 5 covered / 11 uncovered; the folded census the document's own needle produces raises EIGHTEEN, and neither of the two wrap-split sites -- the folded-arm paragraph in Scanning and the tilde-bound sentence in Test Strategy -- carries an attributional round-deictic in its paragraph either, so the true figure is 5 covered and THIRTEEN uncovered of eighteen; the walk that establishes that partition is DESCRIBED at the amended rule and deliberately not published as a fence, for a reason now written there rather than left to look like a shortcut: its fragments are the ten attributional members the v1.108 entry enumerates and the phrase it cuts on is the round-deictic census's own literal, so a fence carrying it would raise the very count that census reports -- the one place in this document where writing a screen down moves the reading the screen exists to take; what a reader re-takes instead is that census and the stamp census, and the partition follows from those two together with the v1.108 enumeration, and the first run of it reported the wrong split because one of its own fragments carried a LITERAL SPACE where this file wraps -- the same blindness the fold rule exists for, met on the instrument rather than on the document. The repair is the ONE PASS the rule itself prescribes and NOT a third case in the condition, because inventing a case to cover sites that need no cover is how a rule stops meaning anything: every stamp is re-stamped, every attributional deictic is resolved to the version that performed the act, and the exempt set at v1.109 is EMPTY. THE ROUND-DEICTIC REGISTER IS THEREFORE RETIRED RATHER THAN RE-ENUMERATED: v1.108 listed ten attributional members with first-present shas, and all ten are now written as versions, so the folded head census reads 18 of which 14 are the self-resolving form and 4 are quotations of the phrase as a described defect, and the attributional class is empty. TEAMMATE SHOULD 1 IS TAKEN INSIDE THAT PASS AND ITS CLASS IS CLOSED: the register stamped Scanning's no-label-until sentence about the PROVENANCE PROBE at 06ef40f (v1.100); re-derived over the blob series it is first present at 1cbddb7 (v1.102), and what stands at 06ef40f is the same FRAGMENT with the $STRIP bound as its subject -- an act the same sentence already labels v1.100 -- so stamping the probe clause v1.100 would have put two different acts on one revision and contradicted the vacuity-label site four hundred lines earlier, which the register stamps 1cbddb7 correctly. THE RULE OVER THE AXIS: first-present of a FRAGMENT bounds when the WORDING entered, not when the SUBJECT it now attributes entered, so where a fragment has outlived its subject the member carries the fragment sha and the subject sha as a PAIR and the resolution writes the subject sha. RESIDUAL: a member whose subject changed twice is bounded, not pinned; only reading the sentence at each blob separates them, which is what caught this one. CODEX SHOULD 1 INTERLOCKS WITH THAT MUST AND IS TAKEN AT THE SAME SITE: the entry-naming screen's acceptance rule read 'every hit must name the current entry; any other version is a stale stamp by construction', which contradicted the exemption three sentences above it whenever the exemption was live. It now admits a version the exemption covers, and only where the entry taking the exemption enumerates the sites -- with the note that at v1.109 the exemption is untaken, so the expected output is a single version and nothing else. TEAMMATE MUST 2, THE DETAIL_KEYS BOUND SENTENCE CARRIED NEITHER READING. VERIFIED -- the claim was TRUE and unrecorded, which is precisely what the two-reading rule exists to prevent. It now carries both, and the two sentences of the spec involved are NAMED SEPARATELY, which also discharges TEAMMATE SHOULD 3: the spec's bound sentence ('That authority does not exist in the tree yet') reads 1 at fbc2ea0 and 0 at b3be433 and 00b961f, while the spec's residual sentence naming the walk ('a staleness the registry walk catches and this grammar does not') reads 1 at fbc2ea0 and 0 at b3be433. So the spec's PARAGRAPH carries the bound and its RESIDUAL SENTENCE names the walk without restating it -- neither this document's body nor the v1.108 OWED-ELSEWHERE was wrong, they were about different sentences. WHY NO WORKING-FILE ARM IS TAKEN, MEASURED RATHER THAN OMITTED: git diff --numstat fbc2ea0 over the spec prints 243 added and 101 removed, because a sibling author is rewriting it in this same batch, so a working-file reading would be of a half-written file. THE RULE THIS ADDS TO THE PAIR RULE: during a multi-document batch the working-file half does not exist, so a claim about a sibling's bytes is stamped at the batch's parent with the divergence named -- never at a half-written working file, and never dropped. The same substitution is applied to the v1.106 spec debt (bare constructor spelling: 1 at b3be433, 0 at 00b961f, 09e9307 and fbc2ea0) and to the plan readings below. TEAMMATE SHOULD 2, THE VALUE SWEEP's UNIVERSAL QUANTIFIER. VERIFIED and taken as a SCOPE repair plus an honest re-measurement. The v1.108 appendix said 'every needle this document ships returns nothing in BOTH directions' and then listed thirteen, omitting the seam-ordinal screen, which is paragraph-scoped through $STRIP and $FOLD and cannot coherently be run over a line diff at all. The claim is now scoped to LINE-SCOPED needles, the paragraph-scoped screens are named as re-run separately over the head, and -- because THIS revision adds seven fences and seven marker-word lines where v1.107 added none -- the sweep is published as a table of DELTAS rather than as a null. A sweep that returns nothing is a property of a revision that adds no fence, not a property of the sweep, and stating it as the latter is what made a correct reading read as a rule. NITS, BOTH TAKEN. Codex's: the PID-file paragraph attributed 'Architecture Considerations' to this document; that heading belongs to the PLAN and to nothing else in this feature's set, and the design's own line-scoped grep returns 0 for the phrase because the wrapper splits it -- which is why it survived. It is replaced by a content predicate over the named document (the plan bullet beginning 'The temp cwd is isolation, not a sandbox', grep -cF 1 at b3be433, 09e9307 and fbc2ea0), with the rule that a cross-document reference names the DOCUMENT as well as the section. The teammate's: Scanning's GRAMMAR exemption located the colliding shell variable in Test Strategy's mutation-range demonstration, which carries no such token; the four variable tokens are the six-gram carry screen's fence and that screen's two invocations, and the v1.108 entry published the same wrong attribution alongside a correct 9/4 split. Both are repaired, with the class stated: a locator naming a NEIGHBOURING fence is indistinguishable from a correct one to every screen here, because a screen counts tokens and never asks which fence they sit in. CODEX SHOULD 2 AND SHOULD 3, BOTH VERIFIED AGAINST THE TREE AND BOTH TAKEN. Should 2: the compliance bullet still recorded an outstanding corpus-definition debt against the plan that the plan discharged at 335f535 -- 'is the tracked one' reads 0 at 1861157 and 1 at 335f535, 09e9307 and fbc2ea0, with the git ls-files definition present three times at the freeze. Replaced by a dated account naming what IS still open (the files= figures stamped at 1861157 over a 25-file corpus, whose re-measure is landing from the plan's own author this round) and reported rather than asserted. THE RULE: a debt recorded against a sibling is re-derived before it is restated, because sibling authors read these bullets and act on them. Should 3: the universal import-convention claim ('the mechanism every test in h-mad/tests/ already uses') is FALSE and is corrected with the census rather than softened -- 88 test_*.py modules there, 13 carrying the exact sys.path.insert(0, str(SCRIPT_DIR)) spelling, 14 mentioning SCRIPT_DIR at all, 48 performing some sys.path.insert, all four re-derivable from a published command. THE RULE: a convention claim is a proportion over a named corpus with its command, never 'every'; the property the argument rests on is self-containment of the ONE module, which test_docsections_imports_from_an_unrelated_cwd and mutation docsections-syspath-setup-removed pin directly. PROBE NAMING DEBT, RAISED BY THE PLAN AUTHOR AND TAKEN. This document named the two scripts it has ever cited as a throwaway or by bare filename; both have been committed since fbc2ea0 under docs/03-analysis/probes/doc-block-exec/ and every head site now cites the committed path -- grammar_corpus.2026-09-03.cd979362.py, heading_differential.2026-09-04.b66afa9c.py which is the tracked-corpus form the plan publishes, and heading_differential.2026-09-03.cd979362.py which is its glob-corpus predecessor; git ls-files | grep -c grammar_corpus reads 0 at cf3a862 and 1 on the working tree, and the cf3a862 zero is KEPT and re-labelled vacuous rather than deleted, an absence claim at a blob staying true at that blob. The word throwaway is gone from the head; the two occurrences inside Version History entries are LEFT AS WRITTEN, an entry being a dated record of what a revision claimed and not a surface to sweep, and that boundary is stated here so a later reader does not read the survivors as a missed sweep. RESIDUAL: a committed script still has to be RUN, and neither script's output is in this file, so the in-document census and the eleven-shape ATX proxy remain the derivation a reader can execute. SHEET CORRECTION C10, ANSWERED WITH A NULL AND THEN THE NULL WAS HALF WRONG -- BOTH HALVES ARE RECORDED because the first answer was sent to the orchestrator and acted on. The '*.py' half stands: this document publishes no census scoped to '*.py', and its rglob('*.py') sweep is scoped to h-mad/tests, h-mad/scripts and handoff and is blob-pinned at 35698f9, so af19d53 moving that corpus by two assembler files touches no published figure. THE REPO-WIDE HALF WAS FALSE, found by r17b and re-derived here: this document DOES publish an unscoped census, git ls-files piped to grep over the two probe-script names, and it reads 0 at cf3a862 and 3 at fbc2ea0 -- so the commit that created the probes moved it, and FOUR sentences resting on it were false at the freeze. They said the script was not in the tree, that neither script was ever committed, that neither the cited run nor a re-run of it is re-derivable by a reader, and that both untracked-script measurements are vacuous. All four are rewritten to publish the fbc2ea0 reading beside the cf3a862 one, and the vacuity label is scoped to the sha it was taken at, since a label carried across the commit that created its subject is the drift the walk exists to catch. THE NEEDLE IS ALSO WIDENED TO NAME ITS OWN SUBJECT: it alternated heading_differential and grammar_corpus while the paragraph's subject is the SETEXT census, so it answered about the wrong artifacts; with setext_census added it reads 0 at cf3a862 and 4 at fbc2ea0, and the committed Setext census re-runs to glob files=35 setext_headings=0 and tracked files=30 setext_headings=0. WHY THE EARLIER PROBE-NAMING SWEEP MISSED ALL OF THIS, stated as the class: that sweep's needle carried the .py extension, and these sites spell the script names WITHOUT it, inside grep alternations quoted in prose -- an extension-less needle raises 9 body sites where the .py form raises 0. THE RULE: sweep for an artifact by the SHORTEST form its name takes anywhere in the document, never by the form the citation happens to use. Its import-convention census is scoped to h-mad/tests and the heading differential's corpus is git ls-files -- h-mad handoff filtered to .md with archive excluded, so none of the figures fbc2ea0's own probe commit moved appears here. C10's correction is carried too: the collection change of +5 belongs to af19d53's assembler-audit tests and not to the probe commit. C12 NEEDS NO EDIT EITHER, and it was checked rather than assumed: this document never quotes the differential line the 09-03 probe prints for a new-only member, which is the line that carries a file name and a line number together; it enumerates the new_only member through the 09-04 probe's own identities print instead, and the path-and-line spelling a shipped guard test turns red on is absent by construction -- a fixed-string grep for it returns nothing over the head and nothing over the whole file. OWED ELSEWHERE, REPORTED AND NOT EDITED, one author writing one file. (1) The spec and the impl-plan each owe os.lstat in their canonical-taxonomy paragraph: the cross-document set check re-run at fbc2ea0 prints NINE members for this document and EIGHT for each sibling, and that divergence is PUBLISHED in the body rather than smoothed over, with the rule that a set check run DURING a multi-document batch measures the batch's own incompleteness and not a defect. (2) The impl-plan owes a twelfth DETAIL_KEYS member, intersect:, and the three figures derived from the tuple -- its 26 rendering slots become 27 and its 19 values through _field become 20, the 7 bare ones unchanged; the tuple reads eleven at fbc2ea0 with its own trailing cardinality comment. (3) h-mad/SKILL.md owes an AC-4.5 registry row for intersect:, which lands in Task 4 with the other registry work. (4) The reading that settles the seam-set contract is the same command re-taken after the batch lands with SHA moved to the landing commit; no reading taken from inside the batch can do it, and the merge owes it. (5) The impl-plan owes the exception SIGNATURE this document now specifies and which goes beyond the decision sheet, which is why it is reported here rather than assumed to be shared: OverlappingSubstitution(pairs) carries BOTH refusal kinds in the one argument, each pair tagged with the kind that raised it, so a consumer renders an overlap: line or an intersect: line from a single exception and the two predicates never need two exception classes. (6) The impl-plan owes the cleanup-chain row and its test in its own matrix -- cleanup-chain-selection-flipped killed by test_cleanup_failure_after_successful_run_is_chained -- and its prose at the from pending site owes the two-branch selection. (7) The spec and the impl-plan alike owe the connective-free intersect: spelling together with the two determinism rules, since a document carrying at "<offset>" and a document carrying "<offset>" cannot both match FR-4; the spec has it already and this document has been brought to it. [Appended after this entry landed, with every reading below re-taken on the file that includes it, one command per invocation, and every comparison named at endpoints the endpoint rule admits -- two fixed shas, or fbc2ea0 and the file this batch ships, identified by the v1.109 entry above. NUMSTAT at the pair fbc2ea0 to the shipped file: 697 added and 154 removed, exactly 1 of the added lines being this Version History entry and 0 of the removed being one, so the body figures are 696 and 154. CANDIDATE SWEEP 63 whole-file and 61 over the head, the same pair at 700c599, 8c6539a, b3be433, 00b961f, af19d53, 09e9307, fbc2ea0 and on the shipped file -- so this revision adds no raised line, which is worth stating because it adds 696 body lines. HOPS, none spanning two revisions, each its own diff on the bracketed needle: 700c599 to 8c6539a one hunk of one changed line, 8c6539a to b3be433 nothing, b3be433 to 00b961f one hunk of one changed line, 00b961f to af19d53 nothing, af19d53 to 09e9307 nothing, 09e9307 to fbc2ea0 nothing, and fbc2ea0 to the shipped file FOUR hunks of one changed line each -- the grammar-corpus citation, the unscoped probe-script census in the Setext paragraph, the dotted-seam clause and the docsections adjective-needle clause, all four rewordings of raised lines rather than additions, which is why the total holds at 63. VALUE SWEEP over the 696 added and 154 removed body lines, SCOPED TO THE LINE-SCOPED NEEDLES and published as deltas rather than as a null, because this revision adds fences and marker words where v1.107 added none: candidate 4 added / 4 removed (the four rewordings above, net zero); marker-word 8 / 0; fence-opener 20 / 0 (ten fences, an opener and a closer each); line-pin strict 0 / 0; line-pin blind 0 / 0; sha-description arm one 0 / 0; arm two 0 / 0; widened cardinality 0 / 0; span-ordinal digit arm 2 / 1; span-ordinal word arm 0 / 0; fixed-string needle 0 / 0; adjective needle 1 / 1 (one reworded line, net zero). THE PARAGRAPH-SCOPED SCREENS ARE NAMED AND RE-RUN SEPARATELY OVER THE HEAD, which is the scope repair teammate should 2 asked for: the seam-ordinal screen reads 0 stripped and 0 with its noun alternation cut back to the singular, against 6 unstripped, all six fence text and none a live ordinal address, and 6 unstripped at 8c6539a and at b3be433 too; the folded sha-description third arm reads nothing, against 3 over the folded 8c6539a head and 1 over the folded 700c599 head; the stamp census and the round-deictic census are below. SCREENS UNMOVED, each against a corpus where it is non-zero so no null here is an unrun command: both shipped sha-description arms nothing over the head against 2 and 1 over the 700c599 head; the withholding arm nothing over the working head against 1 over the b3be433 head; the widened cardinality arm 2 over the head against 3 over the 700c599 head, its two being the same pair v1.106 disposed of by position; both line-pin screens nothing, the blind-form arm's only hits still the two 'lines ...' fields of the block-census output; the four-column and tilde fence bounds both 0; the fixed-string needle 3 whole-file and 2 over the head, against 2 at 35698f9 and 1 at 6f0ee85; the adjective needle 3 whole-file and 1 in the head, against 2 at 1cbddb7 and 3 at 700c599, 8c6539a, b3be433 and fbc2ea0; the twelve-key triage arm 7 over the head -- the SAME seven as under the eleven-key form, because the head carries no intersect constructor spelling, which is stated rather than left as a silent equality. SCREENS THIS REVISION MOVED, each with its member named: the span-ordinal digit arm 29 to 30 over the head, the ONE added member being a span noun carrying a digit inside a QUOTED VERDICT STRING in the _field mutant-matrix probe's newline fixture, never an address -- and this figure moved twice inside this revision, reading 32 while the probe published two repr lines of that fixture and settling at 30 once the third pass published the unicode payload instead, which is stated because a figure that moves with a fence is a figure to re-take after the LAST edit and not after the first -- leaving the word arm at 8, whose hit list is byte-identical to fbc2ea0's; the compliance walks 106 fenced and 62 prose at fbc2ea0 to 126 and 70 on the shipped file, by construction and per fence and per marker-word line as the bullet itself now decomposes. STAMP CENSUS under the needle Test Strategy publishes: 21 folded and 17 flat, so FOUR are wrap-split and a flat grep under-reports by four; ALL 21 READ v1.109 and no other version is present, so the exemption is untaken and the acceptance rule's strict form holds as written. The four splits are the folded-arm paragraph in Scanning, the tilde-bound sentence in Test Strategy, the dotted-seam derivation and the mutation-count paragraph, both of them sites v1.109 created. The census rose from 18 to 21 because three of this revision's own figures are document-self and carry the stamp; that is the rule working, not a drift. ONE OF THE THREE was found by re-reading and not by a screen: the seam-set enumeration's run was introduced stamped only as after the edits this revision ships, which names no version and resolves nowhere, and a register member that resolves nowhere is exactly what the one pass above was meant to leave none of. ROUND-DEICTIC CENSUS, folded with the non-squeezing idiom this document ships: 19 over the head, 18 line-scoped, partitioned 15 self-resolving and 4 quotations of the phrase as a described defect, and ZERO attributional -- the class v1.108 enumerated is empty. THE ONE-PASS RE-STAMP IS COMPLETE, AND THE PROOF IS A NEEDLE DISTINCT FROM THE VERSION TOKEN, which matters because the two are easy to confuse and one of them reports a defect that is not there: the stamp needle raises 21 folded over the head and every one reads v1.109, so no stamp lags. The 18 folded occurrences of the BARE TOKEN v1.106 in the head are not stamp sites and must not be counted as one -- they are historical attributions of what that revision did, of the form 'v1.106 rewrote both as hexes', 'v1.106 added one fence and two marker-word residuals' and 'the five v1.106 disposed of' -- so a screen that counted the bare version token in place of the stamp phrase would report eighteen stale stamps where there are none. THE RULE: a stamp is a PHRASE and not a version token, and the screen for it carries the phrase; a version token in prose is an attribution and is governed by the deictic register instead. MOVING-REF CONTROL, its four needles written here and not in the body: ..HEAD, HEAD~, origin/ and @{ each return nothing over the folded head. Thirteen HEAD tokens stand in the head and the split is WALKED rather than recalled and is corrected this round: NINE are the head-scoping shell function (three definitions, in Scanning, in Test Strategy's span-ordinal fence and in Invariant Compliance's walk fence, plus six call sites) and FOUR are a shell VARIABLE in Test Strategy's SIX-GRAM CARRY SCREEN -- its fence's opening comment and its interpreter invocation, plus that screen's two published invocations binding it to 6f0ee85 -- NOT in the mutation-range demonstration, which v1.108 named and which carries no such token. MUTATION MATRIX 85 rows counted off the table, exactly 1 naming SKILL.md as the file the harness edits. WIRE MATRIX unchanged at 8 rows. SEAM SET across the three documents at fbc2ea0: this document 9, spec 8, impl-plan 8, at (sites=1), (sites=1) and (sites=2) -- the divergence is the batch, not a defect, and it is published in the body. DOTTED DERIVATION 5 at 6f0ee85 over the seven module-level seams listed there and 6 on the shipped file over the eight, os.lstat being the added dotted member. TEN python FENCES in the head at 8c6539a, at b3be433, at fbc2ea0 and on the shipped file, the bodies byte-identical across all four, so the carried four-of-six reproduction reading is untouched -- this revision adds FIVE bash fences, 19 to 24 counted with a column-0 opener grep over the head, and five unlabelled output blocks, and no python fence. THE EARLIER 17-TO-21 IN THIS ENTRY WAS AN INSTRUMENT ERROR AND IS CORRECTED RATHER THAN QUIETLY OVERWRITTEN: it came from a python regex requiring a well-formed closing fence, which under-counts every fence whose body carries a backtick run, so both endpoints and the delta were wrong together -- the same species as the fold blindness above, a screen defeated by the document's own markup. The ten fences the compliance bullet counts are these five plus the five output blocks, which is the whole of its +20. THE FOUR PROBES THIS REVISION PUBLISHES WERE EACH EXTRACTED FROM THE SHIPPED FILE AND RE-RUN, never retyped, and each reproduced its published output byte-identically: the intersecting-span probe, the NUL-payload probe, the _field mutant matrix and the cleanup-chaining probe. CROSS-DOCUMENT: grep -rn DETAIL_KEYS h-mad/ exits 1 with no output, so the tuple is still a declaration in the impl-plan and not a symbol in the tree, which is what the until-5d/5e bound rests on. The spec is 289 added / 106 removed against fbc2ea0 and the plan 689 / 146, BOTH RE-TAKEN AFTER THOSE AUTHORS REPORTED DONE and both corrected from the 243/101 and 601/140 this entry first carried, which were read while the files were still being written; a sibling numstat is a reading of a moving file and is worthless at the moment the sentence citing it is drafted. Every sibling reading in this revision is stamped at the freeze blob and none at a working file, and the reason is now stated at its full strength: a finished-but-uncommitted sibling is addressed by NO sha, so a working-file citation names bytes a reviewer cannot fetch. The shared checker reports PRECHECK: PASS issues=0 under h_mad_precheck_doc.py --phase design --root /Users/kimhawk/orca/skills, with no --allow needed; its remaining output is advisories this document keeps deliberately -- the PATH notes name files this design SPECIFIES and the tree does not hold until Phase 5d/5e, the STALESHA notes name blob stamps that are behind HEAD BY CONSTRUCTION, since a stamped blob reading is worthless if it moves, and every COUNT note fires inside this Version History, which is a dated record and not a list.]
