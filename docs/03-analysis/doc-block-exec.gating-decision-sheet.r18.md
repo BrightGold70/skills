@@ -251,3 +251,60 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   session cab14393`) is NOT taken over by this session; `pending-handovers` reports it, and the next
   resume's Step 3.5 owns that decision. Rule for r19+: the commit list in FACT 1 is pasted from
   `git log --oneline <prior-freeze>..<freeze>`, never typed.
+
+- **C2 — appended 2026-09-05 by the dispatching session `adb05ac8`, before the r18 authors were
+  spawned (a shared-facts gate: four authors fill an undecided fact four ways).**
+  (i) **The h-mad suite is RED on the committed tree from `b39d9dc` through `7a56cb7`**: `pytest
+  h-mad/tests -q` → `1 failed, 2573 passed` (2574 collected). FACT 1's first row (`2574`) is the
+  COLLECTION count, not a green run; the prior session measured the suite before committing
+  `b39d9dc`, and PINDRIFT is computed against the committed tree. The failure is
+  `test_h_mad_precheck_doc.py::test_noise_floor_on_documents_that_survived_eighty_cycles[impl-plan]`:
+  the precheck on the impl-plan reads 15 hard findings (> 12) — 11 `PLACEHOLDER` (the design grammar's
+  `overlap:`/`intersect:`/`os_error:`/`pgid:` slots, unchanged and legitimate) plus **4 `PINDRIFT`** at
+  impl-plan L217/L349/L885/L3917 pinning `h-mad/scripts/h_mad_assemble_audit.py:247`
+  (`_trim_version_history`) and `:109` (`_braces_outside_fences`) against provenance `fbc2ea0`;
+  `b39d9dc` edited the assembler (`DISPATCH_OVERHEAD_CHARS`, `prompt_oversize` inserted above
+  `_trim_version_history`, which is at **:264** at `cac6edc`; `_braces_outside_fences` is still
+  **:109**). Task #102. **Routing: impl-plan** re-pins `:247` → `:264` at every site (a stale pin that
+  the moved provenance no longer flags is the #29 class — re-pin, do not merely re-stamp), re-verifies
+  `:109`, and ships with `PRECHECK` hard findings ≤ 12 (the 11 grammar slots stay; `PINDRIFT` must be
+  0). No other document is affected: no document publishes a present-tense "N passed" for the
+  current suite (the `2747`/`2748 passed` sites are historical). Present-tense figures at `cac6edc`
+  remain: **2574** collected from `h-mad/`, **2836** from the repository root, **1527** `def test_`
+  lines, **89** test files. Nobody writes "2574 passed": the orchestrator re-runs the suite on the
+  batch tree after collection and stamps that reading (FACT 2 clause 3). Authors do NOT run the
+  full h-mad suite (four concurrent runs on one pin file); `--collect-only -q` and `git grep -h
+  '^def test_'` are fine.
+  (ii) **FACT 2 clause 1's parenthetical ("the parent of the commit that will land this batch") is
+  stale.** The freeze field stays **`cac6edc`**; HEAD at dispatch is the commit that carries this C2
+  (`git rev-parse HEAD` — the authors are told it verbatim in their prompt). `git diff --name-only
+  cac6edc..HEAD` is docs-only: this sheet, `docs/handoffs/2026-09-05-main__doc-block-exec-r18-sheet.md`,
+  `docs/handoffs/2026-09-05-main__hmad-audit-loop-evidence-from-gateway-consolidation.md`
+  (`**Taken-Over-By:**` stamped), `docs/learnings.md`. No scoped census moved, and no document
+  publishes the unscoped `git ls-files | wc -l` (value grep for 3666/3668/3670/3671: 0 in all four).
+  Do not "correct" the freeze to HEAD.
+  (iii) **Shared strings, decided once — paste, do not paraphrase.**
+  - Tagged pair: `(kind, a, b, offset|None)`; `kind ∈ {"overlap", "intersect"}`; detail lines
+    `overlap: "<a>" "<b>"` and `intersect: "<a>" "<b>" "<offset>"` are the grammar (slots stay);
+    the r18 fixture instance is `intersect: "aa" "ab" "2"` for text `aaab` under keys `{aa, ab}`,
+    found by the lookahead scan `re.finditer(r"(?=" + re.escape(k) + r")", text)` with span
+    `(m.start(), m.start() + len(k))`.
+  - AC-3.14 asserts `__cause__ is cleanup_error`; every `__suppress_context__` sentence goes
+    (8 sites: design 4, impl-plan 4).
+  - `LaunchFailed.__init__` err annotation: `OSError | subprocess.TimeoutExpired | ValueError`.
+  - The empty-ATX-heading case (FACT 3) is exercised by a `tmp_path` fixture (the feature's tests use
+    `tmp_path`, never a committed `tests/fixtures/` file — value grep: `tests/fixtures/` 0 in design
+    and impl-plan, `tmp_path` 7/8): test `test_titleless_heading_is_a_new_only_member` in
+    `h-mad/tests/test_h_mad_doc_block_exec.py`, writing `titleless.md` with body `before\n#\nafter\n`
+    and asserting `titleless=1 new_only=1` on that file alone. Design names it; impl-plan carries it as
+    a test row; spec does not mention it.
+  - The FACT 3 residual, in these words: "At `cac6edc` the `new_only` set is empty, so 'each
+    `new_only` member is a heading under CommonMark' is vacuously true there; it was verified
+    non-vacuously at `fbc2ea0` (N=1, the `h-mad/SKILL.md` specimen removed by `b39d9dc`) and is
+    exercised by `test_titleless_heading_is_a_new_only_member`."
+  - The 85 mutation rows are the impl-plan's value at `cac6edc`; the plan writes **85**. If the
+    impl-plan's revision moves it, the impl-plan's tail says "plan owes N" and the orchestrator
+    reconciles at collection.
+  (iv) **Every `:N` in this sheet is a READ locator for the author, never text to copy.** Design
+  writes no line numbers (its rule 2). Impl-plan cites `h-mad/references/codex-implementer-prompt.md`
+  by needle ("by construction"), never `:52`. Task #29 is a suite failure from a copied pin.
