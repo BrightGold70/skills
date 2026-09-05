@@ -353,3 +353,107 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   **c89** / impl-plan **c49**, `--vh-tail 3` (`--vh-tail 1` if the assembler HALTs `oversize`), codex via
   `hmad-dispatch exec … --sandbox read-only --timeout 1800 --log` plus one `doc-auditor` GATING leg per
   phase told freeze + HEAD; no agy leg (#77).
+
+- **C4 — appended 2026-09-06 by session `51a2b6f7` at dispatch of the r18 gating round (before any
+  leg reported).** (i) **Freeze `bc4688e`, HEAD `093c3ee`**; `git diff --name-only ccd8ebd..bc4688e`
+  is this sheet alone, `bc4688e..093c3ee` is the handoff doc + `docs/learnings.md`; no phase document
+  moved since `ccd8ebd`. Precheck at HEAD: spec / design / plan `PASS issues=0`; impl-plan `FAIL
+  issues=11`, all `PLACEHOLDER` on the FR-4 grammar slots (`overlap:` ×2, `intersect:` ×2, `os_error:`
+  ×3, `pgid:`, `stream:`, `<key>=<bare>`, `<key>="<json-string>"`), `PINDRIFT` 0 — **dispatched over the
+  skill's `PRECHECK: FAIL → re-dispatch the author` rule by decision**, C3 i's reading unchanged and
+  the noise-floor test's ≤ 12 floor passing; the slots are grammar declarations, not unfilled
+  placeholders. (ii) **The brief is IN the prompt, both surfaces alike:** a derived template (stock
+  `h-mad/audit-prompt.template.md` + one 12-line "Orchestrator cycle brief" block after the
+  Target/Paired lines, nothing else; `diff` verified) carries C3 v's facts, each RE-DERIVED at HEAD
+  before it was written — three of them hold only body-scoped (the plan's "the freeze `cac6edc`", the
+  old killer-test name, and the spec's `__suppress_context__` count each have one extra hit INSIDE a
+  Version History entry: plan:4548, plan:4548, spec:1484) — and the block says in so many words that
+  the facts are to weigh, not to withhold a finding; a leg that files against one tags it
+  `orchestrator-stated`. (iii) **Sizes (READ before dispatch):** design `--vh-tail 3` HALTs `oversize`
+  at 1,104,925 chars (r17's 1,027,802 + the batch's +384 design lines + the brief); **both design legs
+  re-assembled at `--vh-tail 1`** → 980,076 chars (985,605 B); plan c89 at 3 → 629,855 chars; impl-plan
+  c49 at 3 → 1,002,731 chars (1,007,799 B, 46 KB under the 1,048,576 ceiling). Same tail per phase on
+  both surfaces so the union gates one prompt content. Residual preflight over all six: 0 `<INLINE_`,
+  0 `{{ONLY`, brief present once, report path present. (iv) **Dispatch:** codex ×3 via
+  `hmad-dispatch exec codex <prompt> --cd <root> --sandbox read-only --out … --log … --timeout 1800`
+  backgrounded, stdout captured to `…_codex.stdout.txt`; `doc-auditor` GATING ×3 by prompt path
+  (report-file transport). Six report paths, none shared. No agy leg (#77). Codex pin `term_f483657a`
+  read `state=done` at `env`; quota state unknown at dispatch (memory: window reopens 2026-09-07
+  11:28) — the codex logs are read for `usage limit` before any codex leg is called failed.
+  (v) Orchestrator error caught before it cost anything: the zsh `set -- $spec` loop (C3's own
+  warning) produced six `invalid choice: 'design 98'` usages on the first assembly pass; re-run with
+  explicit arguments. (vi) Tree frozen for the round: this append is the only repository write until
+  all six legs are collected and scored.
+
+- **C5 — appended 2026-09-06 by session `51a2b6f7` after all six r18 gating legs were collected and every
+  must re-derived by the orchestrator.** (i) **Verdicts at freeze `bc4688e` (HEAD `093c3ee`), six reports
+  collected, none shared:** plan c89 codex `FAIL must=1 should=3` (via `--out`) / teammate `FAIL must=2
+  should=4` (report-file, 12 files / 71 greps); design c98 codex `FAIL must=3 should=2` (`--out`) / teammate
+  `FAIL must=4 should=2` (report-file, 13 / 46); impl-plan c49 codex `FAIL must=4 should=3` (`--out`) /
+  teammate `FAIL must=2 should=2` (report-file, 26 / 61). All three codex legs delivered via `--out` and
+  wrote no report file (read-only sandbox, as r16/r17); 0 `usage limit` hits — the 09-03 quota window
+  did not bind. **ROUND FAILS on all three phases.** (ii) **Every must verified (16/16), each by an
+  executed probe or a read of the shipped bytes, none by reasoning alone:** plan codex M1 — the
+  `h-mad/SKILL.md` bare-`#` specimen is 0 at `1861157` (09-04 08:02) and 1 from `bea1b60` (09-04 12:14),
+  so the `1861157` zero was a TRUE zero and plan:3462 mis-explains it; plan teammate M1 — the ledger
+  pipelines read 87/87 at `fbc2ea0` and **88/88** at `cac6edc`, `ccd8ebd`, `bc4688e`, `093c3ee` (overlaps
+  codex should 3); plan teammate M2 — plan:4340 says eight shas, the fenced series at :4359-4362 lists ten.
+  Design codex M1 — the 13,104-case search publishes no command (the four `fbc2ea0` probes are other
+  things; the r18 delta review reproduced 13,104/194 but a reviewer's reproduction is not the document's
+  command); design codex M2 — `communicate(timeout=-1)` raises **`TimeoutExpired`** on 3.11.8 AND 3.14.7,
+  design:1854's `ValueError` claim is FALSE; design codex M3 == impl-plan codex M2 — a fake `rmtree` that
+  raises unconditionally raises under `ignore_errors=True` too (probed), so `cleanup-errors-ignored` is
+  NOT killed by `test_cleanup_failure_carries_the_os_error` as design:1825 / design:4056 claim — **found
+  independently by the codex leg in BOTH documents, the r16 pattern again**; design teammate M1 — the
+  design's own trip-wire `git diff --name-only a8e0372 <sha> | grep '\.md$' | grep -vc '^docs/'` (`# expect
+  0`, design:284) reads **8** at `cac6edc`/`ccd8ebd`/`bc4688e`/`093c3ee` (`h-mad/SKILL.md`, five
+  `h-mad/agents/*.md`, two `h-mad/references/*.md`, all `b39d9dc`) and no reading records it; design
+  teammate M2 — `git diff --name-only b39d9dc^ b39d9dc -- h-mad handoff` = 13 files incl `h-mad/SKILL.md`,
+  `-- '*.py'` = 4, so "b39d9dc passed every scoped census predicate" (design:386) is FALSE; design teammate
+  M3 — `shared by *any* intersecting span pair` design 1 / spec 1 / impl-plan **0**, `the two spans SHARE`
+  impl-plan 3 at HEAD (:2094, :2463 body, :4146 VH) vs 2 at `cac6edc` — the batch ADDED a retired-wording
+  site (same axis as impl-plan codex S3 and impl-plan teammate S1: three legs, one defect); design
+  teammate M4 — `intersections` 5 whole-file (2 body :1436/:2955 + 3 in the v1.110 entry), design says 4.
+  Impl-plan codex M1 — impl-plan:3178 prescribes a subprocess CLI call with a `--preamble` argument
+  containing `\x00`; `subprocess.run(['/bin/echo','a\x00b'])` raises `ValueError: embedded null byte` in
+  the PARENT, the test cannot reach the CLI; impl-plan codex M3 — Task 1's
+  `test_invalid_utf8_document_is_unreadable` (:2334) gains its CLI half in Task 4 (:3163) while Task 4's
+  RED gate (:3413) says "Tasks 1–3 stay green" and `--expect-pass` = Task 3's GREEN figure (:3388) — off by
+  one in both clauses; impl-plan codex M4 — impl-plan defers a kind-selection rendering mutation row to the
+  design (quote present); impl-plan teammate M1 — the committed probe
+  `heading_differential.2026-09-04.b66afa9c.py` prints `TRACKED files=30 both=292 old_only=82 new_only=0`
+  at HEAD while impl-plan:1701/:1703 publish 25/263/76/268 in present tense with "no round having re-run
+  them" — the plan retired that figure at `cac6edc` in the SAME batch (#42 class); impl-plan teammate M2 —
+  `ast.parse` over the impl-plan's fenced python blocks: 8 parse, the Task 4 code-structure block (:3120)
+  raises `SyntaxError` at :3153 (three bodiless `def`s :3152-:3154). (iii) **Union:** plan 3 distinct /
+  design 7 / impl-plan 6, less the rmtree pair counted once = **15 distinct musts**; the two families found
+  DISJOINT must sets on the design and the impl-plan for the third round running (r16, r17, r18), and
+  agreed on the plan only through a codex should. (iv) **The brief:** no report carries an
+  `orchestrator-stated` tag and no leg filed against a C3 v fact; the design teammate re-ran every
+  executable self-measurement the design publishes and every one reproduced — every design must is in
+  the stamping/routing layer, and every codex must is a design-logic or test-discrimination claim.
+  (v) **Orchestrator error #49w:** C2 ii, C3 vi and C4 i each certified "no scoped census moved" over
+  `b39d9dc`, and the DESIGN's own published trip-wire (design:284) had fired to 8 at that commit; three
+  sheet entries asserted a predicate the documents publish a command for, and none of them ran it. Same
+  root as #49t (#81) — a tooling commit under `h-mad/` moves every scoped census — now at the sheet layer
+  rather than the freeze layer. Two near-misses caught before cost: zsh `$s:h-mad/…` parsed `:h` as the
+  dirname modifier and every per-sha specimen count read 0 (re-run as `${s}:`); and the C3-warned
+  `set -- $spec` loop reappeared in the first assembly pass. (vi) **Routing for the r19 batch (one
+  decision each, stated once):** DESIGN — (a) commit the 13,104/194 enumeration as a fifth probe under
+  `docs/03-analysis/probes/doc-block-exec/` and cite it; (b) correct :1854 to `TimeoutExpired` and publish
+  the paired probe; (c) **DESIGN CHANGE:** the `rmtree` fault-injection contract for `cleanup-errors-ignored`
+  must honour `ignore_errors` (raise only when `ignore_errors` is falsy) or name a different discriminating
+  fixture — impl-plan follows; (d) stamp the trip-wire at 8 with the eight paths and `b39d9dc`, state which
+  `a8e0372`-stamped figures were re-derived; (e) :386 ground sentence — `b39d9dc` did NOT pass the scoped
+  predicates, the fixture decision stands; (f) owed-elsewhere entry for the `<offset>` wording naming
+  impl-plan :2094/:2463; (g) `intersections` 4 → 5 in the v1.110 self-count; (h) decide the kind-selection
+  rendering row (impl-plan codex M4) — add it or state why the matrix does not carry it. PLAN — (a) :3462
+  the `1861157` zero was a true zero (specimen absent until `bea1b60`), separate it from the `closing_hash`
+  mis-corpus story; (b) ledger row `cac6edc` **88/88**, restamp, deixis "v1.104's measurement commit";
+  (c) eight → ten (or "the shas listed below"). IMPL-PLAN — (a) the NUL `--preamble` arm goes through
+  `--preamble-file`; (b) follow design (c); (c) split the CLI half of `test_invalid_utf8_document_is_unreadable`
+  into its own Task 4 test, or carry the moved test in both RED counts; (d) follow design (h);
+  (e) 25/263/76/268 → 30/292/82/0 stamped `cac6edc`, withdraw "no round having re-run them"; (f) ` ...` on
+  :3152-:3154 and add the `ast.parse` screen beside the GNU sweep; (g) reword :2094/:2463 to the any-pair
+  offset. SPEC — no findings; the any-pair offset wording already lives in it. Shoulds travel with their
+  document. Freeze for the r19 batch = the commit carrying this C5.
