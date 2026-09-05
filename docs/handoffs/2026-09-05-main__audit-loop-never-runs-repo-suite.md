@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session `9d8394fb-13d7-46e3-b161-9aafa8fb047e`
+**Taken-Over-By:** skills · main · session `ee549bb1-5aa4-4e86-a689-a9b631d41e2c` · 2026-09-05 (folded into feature `hmad-audit-evidence-gate` per this brief's Next Step 3)
 **Supersedes:** none — first on this topic
 
 ## Session Summary
