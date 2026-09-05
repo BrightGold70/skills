@@ -283,11 +283,17 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # the frontier. Was 3200/3500 after the 2026-07-30 re-anchor to the 92,055 B
     # confirmed-answered frontier, and 2000/2200 before that against the old
     # 61,493 B ceiling.
-    approaching, mid = size_of(2320)
+    # Was 2320/2620 until the 2026-09-06 finding-class rule (`class: build |
+    # measurement`) added its paragraph to the template's output-framing section,
+    # which IS head-duplicated by prepend_output_contract, so it cost 2x. Measured
+    # after, on the merged main: 2320 -> 92,155 B (100 B PAST the frontier — this
+    # test went red on the merge, and the worktree run had passed on the previous
+    # commit's template); re-anchored 2226 -> mid-band; 2526 -> past the frontier.
+    approaching, mid = size_of(2226)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2620)
+    past, big = size_of(2526)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
