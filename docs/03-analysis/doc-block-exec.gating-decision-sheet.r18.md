@@ -457,3 +457,22 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   :3152-:3154 and add the `ast.parse` screen beside the GNU sweep; (g) reword :2094/:2463 to the any-pair
   offset. SPEC — no findings; the any-pair offset wording already lives in it. Shoulds travel with their
   document. Freeze for the r19 batch = the commit carrying this C5.
+
+- **C6 — appended 2026-09-06 by session `51a2b6f7` after `d27d2ce` landed the six reports (correction to
+  C5 vi, and the two audit inputs made durable).** (i) **The r19 freeze moves the plan's ledger figure
+  again, by the orchestrator's own commit:** the plan's two `git ls-tree` pipelines read **88/88** at
+  `bc4688e` and **89/89** at `d27d2ce` (the r18 gating reports land under `docs/01-plan/features/`; the
+  plan calls this figure "stale by construction the moment the next report is written"). C5 vi PLAN (b)
+  is therefore: series gains `cac6edc` **88/88** AND `d27d2ce` **89/89**, headline restamped at the r19
+  freeze. The design's trip-wire still reads 8 at `d27d2ce`. Body sweep for `v48`/`v88`/`v97` outside
+  Version History: spec 0, plan 1, impl-plan 10, design 0 — the impl-plan's are attributions ("impl-plan
+  audit v48 codex must 1"), to be re-read by its author for any present-tense "latest report" site, not
+  bulk-replaced. (ii) **Instrument note (#62 class):** C5 ii says the impl-plan's fenced python blocks are
+  "8 parse, one fails"; the teammate report says "nine of ten". Two fence grammars (the orchestrator's
+  accepts only a bare ```` ```python ```` opener at 0–3 spaces; the auditor's counted one more block), one
+  defect. The r19 impl-plan author's `ast.parse` screen must state its fence grammar and publish its own
+  count. (iii) **Audit inputs now in the repo:** the 12-line orchestrator brief spliced into both
+  surfaces' prompts is `docs/03-analysis/doc-block-exec.r18-gating.orchestrator-brief.md`; the
+  per-must verification ledger is `docs/03-analysis/doc-block-exec.r18-gating.verification-ledger.md`.
+  (iv) **Not pushed:** `d27d2ce` and this commit are local; `origin/main` is at `093c3ee` until the
+  session closeout pushes.
