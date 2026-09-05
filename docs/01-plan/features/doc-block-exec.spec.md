@@ -331,18 +331,31 @@ not opted in.
   (`seconds="<n>"`): quoting a number never enables a forgery and the grammar parses it either
   way, so membership of the seven, not the value's provenance, decides the spelling.
   **Detail lines are the other half of the grammar and carry no exemption at all**: every detail
-  line the helper emits is `<key>: "<value>"`, quoted without exception. The keys as of this
-  revision are `os_error:`, `missing_key:`, `duplicate_key:`, `overlap:`, `leftover:`, `verify:`,
-  `written:`, `failed:`, `skipped:`, `stream:` and `pgid:` (AC-4.6) — the same set the helper
-  exposes as `DETAIL_KEYS` for AC-4.5's registry walk, which is the authority a reader checks the
-  list against rather than this sentence. A field's spelling is thus fixed by **which line it
+  line the helper emits is `<key>: "<value>"`, quoted without exception. The keys as this list was
+  written, in v1.61, are `os_error:`, `missing_key:`, `duplicate_key:`, `overlap:`, `leftover:`,
+  `verify:`, `written:`, `failed:`, `skipped:`, `stream:` and `pgid:` (AC-4.6) — the same set the
+  helper **will expose** as `DETAIL_KEYS` for AC-4.5's registry walk, which is the authority a
+  reader checks the list against rather than this sentence. **That authority does not exist in the
+  tree yet, and this sentence says so rather than pointing at a symbol as if it did**: `DETAIL_KEYS`
+  is specified in the impl-plan, inside the `Code structure` block of the task that builds
+  `h-mad/scripts/h_mad_doc_block_exec.py`, where the tuple carries its own member-count comment;
+  it becomes a *runnable* authority only when Phases 5d/5e build that module, and until then
+  AC-4.5's walk is a specified test, not a passing one. **Locate it by the assignment, never by the
+  name**: the definition is the one place `DETAIL_KEYS` is assigned a tuple of key spellings, and
+  the bare name is referenced in this document and in the plan besides, so a name grep does not
+  discriminate the definition from a reference. The residual is the self-quoting one this document
+  has already paid for twice: a needle spelling the assignment form cannot be published *here*
+  without this sentence becoming a second hit for it, which is why the locator is given in words.
+  Once 5d/5e land, the assignment moves into the module and the module becomes the authority. A
+  field's spelling is thus fixed by **which line it
   sits on**, not by what it is, and a value that moves from the verdict line to a detail line
   changes spelling with it. **Residual, a concrete category**: this rule fixes the spelling of
   every field and detail key this document names, and it does not fix one a later cycle *adds* —
   a new verdict-line field is bare only by being added to the seven named here, and a new detail
   key is quoted by construction with no decision to make; the membership of `DETAIL_KEYS` can grow
   without this list growing, which is a staleness the registry walk catches and this grammar does
-  not. It is
+  not. **The escaping rule this paragraph opened with** — not the exemption list and not the
+  detail-key list — is
   tested with newline-bearing and token-bearing `--heading`, `--subst` and `--stdout` values — and
   the exit code follows the base
   **Audit-gate signal discipline** invariant exactly: **every verdict exits 0** — `RAN`, and every
@@ -364,11 +377,27 @@ not opted in.
   - AC-4.1: A successful run prints `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict|plain>` and exits
     **0**, including when the block's own `rc` is non-zero — the block's rc is data, not the tool's
     verdict.
-  - AC-4.2: **The exit-code partition is pinned.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`,
-    `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
-    exit **0**; `UNREADABLE` (every `reason=`), `CLEANUP_FAILED` and `LAUNCH_FAILED` each exit **2**. A test
+  - AC-4.2: **The exit-code partition is pinned, and the two AC bodies together are exhaustive over
+    the verdict table.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`,
+    `BAD_ARGS`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO` and `TIMEOUT` each
+    exit **0**; `UNREADABLE` (every `reason=`), `CLEANUP_FAILED` and `LAUNCH_FAILED` (every
+    `stage=`) each exit **2**. A test
     enumerates the verdict table and asserts the code of every row, so a row cannot move between
-    the two classes unnoticed.
+    the two classes unnoticed. **Exhaustiveness is the requirement, not the list**: these eleven
+    heads plus AC-4.1's `RAN` are every exit-0 head, and the three collapsed heads here — with
+    `UNREADABLE` and `LAUNCH_FAILED` each standing for their whole family of `reason=`/`stage=`
+    spellings — are every exit-2 head, so nothing the helper can print is outside one of the two
+    classes. `BAD_ARGS` is on the list because an argparse grammar error is a *verdict*, not an
+    operational error — FR-4's own description already lists it at exit 0 and AC-5.6 spells the
+    rendered line — and it was omitted from this AC through v1.61 while three other surfaces
+    carried it, which is what an illustrative list does once a reader takes it for an exhaustive
+    one. The authority for the head set is the same shape as `DETAIL_KEYS`: the **assignment** of
+    `VERDICT_TABLE` to a head→exit-code dict in the impl-plan's `Code structure` block for the CLI
+    task, which does not exist in the tree until 5d/5e. **Locate it by the assignment, never by the
+    name**: the name alone occurs in this document and in the plan as well, so a name grep does not
+    discriminate the definition from a reference — the residual being that this sentence is itself
+    one of those references. A head added to that dict without being added here is caught by this
+    AC's own enumerating test, not by this sentence.
   - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
     non-measurement as a measured zero.
   - AC-4.4: `AMBIGUOUS` carries `blocks=<n>`; no other cannot-judge carries `blocks=`.
@@ -580,10 +609,24 @@ not opted in.
     from a `--collect-only` subprocess (collection never executes tests, so the suite does not
     recurse into itself; an env guard `DOCBLOCK_FLOOR_INNER=1` makes any inner instance skip, as a
     belt beside those braces). The *pass* half cannot live inside the suite it measures: it is the
-    Phase-5f gate command, `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?   # from the REPOSITORY ROOT: the 2748 baseline is the root count; from h-mad/ the same command collects 2486; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
+    Phase-5f gate command, `( cd "$(git rev-parse --show-toplevel)" && hmad-dispatch run --timeout 1200 -- python3.11 -m pytest -q -p no:cacheprovider ) > /tmp/doc_block_exec_suite.log; RC=$?   # from the REPOSITORY ROOT: the 2748 baseline is a ROOT count and a run from h-mad/ collects strictly fewer, so a floor read there is not comparable; tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"   # bounded through the reachable dispatcher (base Portable time bounds); rc=124 is the wrapper's expiry, not a suite result`, run alone by the orchestrator and recorded in the report:
     the last line must read `N passed` with no failures **and** `SUITE: rc=0` — the exit status is
     captured before `tail`, because a bare pipe reports `tail`'s status and lets a red suite print
     as success.
+    **Why that comment names no second number, stated as a rule rather than as this one repair.**
+    Through v1.61 it carried `from h-mad/ the same command collects 2486`. That figure was
+    superseded — at `dfae038` the two collections are **2809** from the repository root and
+    **2547** from `h-mad/`, each measured in its **own** shell invocation of
+    `python3.11 -m pytest --collect-only -q -p no:cacheprovider` (a `cd h-mad` chained into the
+    same invocation persists and makes both "controls" read the same tree, which is how the pair
+    was mis-measured once already). Both are `+61` on the retired `2748`/`2486` pair, which the
+    impl-plan publishes and the plan retires. The rule that closes the class: **a comment embedded
+    in a command may name a constant that is stamped elsewhere in this document — `2748` is, at the
+    AC body above, with its sha `e8eaf6f` and its re-measure-at-5c rule — and may never carry a
+    fresh measurement of its own**, because a comment inside a command string is the one surface a
+    value sweep of this document has already missed twice. `2809`/`2547` are stated here, in prose,
+    with the command and the sha; they are a *scale* for the root-versus-`h-mad/` gap, not a floor,
+    and the floor remains `2748` until 5c re-measures it.
     A deleted pre-existing test lowers the collected count below the floor and cannot hide behind
     the additions.
   - AC-6.5: **Connection discrimination.** Reverting the connection alone — the import of
@@ -676,8 +719,9 @@ quoted
 
   A broader sweep for the bare literal, over the **tracked** tree so no gitignored or
   not-yet-committed artifact contaminates it, returns six hits at `a8e0372` and still six at
-  `335f535` and at `74e126f`, with the freeze-sha closure below carrying it to `6f0ee85` on the
-  same terms as the other two `*.py` censuses. It is printed with `-n` and **without** `| wc -l`, so
+  `335f535` and at `74e126f`, with the freeze-sha closure below carrying it to `dfae038` on the
+  same terms as the other two `*.py` censuses — and re-executed there rather than inferred, where
+  it returns the same six lines. It is printed with `-n` and **without** `| wc -l`, so
   every location below is output the command as written gives back, not a pin retyped into prose —
   which is the form the round-seven predicate ruling asks for, and the reason this block replaced
   the counting form: a reader re-running a `| wc -l` census gets `6` and no locations, so the pins
@@ -732,32 +776,52 @@ quoted
   of citing them is that a reviewer can re-run them, not that they never go stale.
 
   **Freeze-sha closure for this revision, stated once rather than re-stamping every pin.** Every
-  *tree*-derived figure in this document stamped `74e126f` is provably identical at `6f0ee85`, this
+  *tree*-derived figure in this document stamped `74e126f` is provably identical at `dfae038`, this
   revision's freeze sha, because every intervening commit touches only `docs/`:
 
   ```
-  $ git diff --name-only 74e126f 6f0ee85 | grep -vc '^docs/'    # -> 0    (at 6f0ee85)
-  $ git diff --name-only 74e126f 6f0ee85 -- '*.py'              # -> (no output, at 6f0ee85)
+  $ git diff --name-only 74e126f dfae038 | grep -vc '^docs/'    # -> 0    (at dfae038)
+  $ git diff --name-only 74e126f dfae038 -- '*.py'              # -> (no output, at dfae038)
   ```
+
+  `dfae038` is HEAD, and this document is byte-identical at `00b961f` (the commit that shipped
+  v1.61) and at `dfae038` — `git diff --stat 00b961f dfae038 -- "$S"` is empty, because the two
+  commits between them touch only `docs/handoffs/`, `docs/learnings.md` and
+  `docs/skill-candidates.md` (`git diff --name-only 00b961f dfae038`). Either sha names the same
+  bytes; the *later* one is stamped, because the freeze sha is defined below as **the last commit**,
+  which is not the same thing as the last commit that touched this file. That distinction is why
+  v1.61's Version History entry named `b3be433` — a commit that never touched this file — while
+  this paragraph still named `6f0ee85`, two revisions behind it: one revision, two freeze shas,
+  neither of them HEAD. The rule that closes it: this paragraph and the entry both take the sha
+  `git rev-parse --short HEAD` returns while the revision is being drafted, and the entry quotes
+  this paragraph's sha rather than deriving its own.
 
   That closure covers the `*.py` censuses and the `h-mad/`+`handoff/` corpus counts; it does **not**
   cover figures measured over *this file*, which is one of the `docs/` paths that moved —
-  `git log --oneline 74e126f..6f0ee85 -- "$S"` lists `0aac0b7` and `6f0ee85`, so this file changed
-  in both. The `6`, `24`, `73` and `0` above were nevertheless re-executed at `6f0ee85` rather than
-  inferred, and each returned the value printed beside it.
+  `git log --oneline 74e126f..dfae038 -- "$S"` lists `0aac0b7`, `6f0ee85`, `8909ec4` and `00b961f`,
+  so this file changed in four of them. The `6`, `24`, `73` and `0` above were nevertheless
+  re-executed at `dfae038` rather than inferred, and each returned the value printed beside it;
+  the `16` and the `2` of AC-1.7's duplicate-heading pair were re-executed there too and are
+  unchanged.
 
   **Two shas, and a doc-scoped figure must carry the right one — the failure v1.59 shipped.**
-  `6f0ee85` is the freeze sha: the last commit, and the tree every *tree*-derived figure here is
+  `dfae038` is the freeze sha: the last commit, and the tree every *tree*-derived figure here is
   taken over. A figure measured over *this file* is **not** taken over that tree. It is taken over
   the **draft in hand**, which lands in the commit *after* the freeze sha, so the two can disagree
   and did: v1.59's opener census published the distribution its own draft had while carrying the
   stamp of the revision before it, and the audited value and the published value differed by more
   than a factor of two. The rule that closes the class, not the instance: **a doc-scoped figure is
-  published as a pair** — `git show 6f0ee85:"$S" | <command>` for the committed value and
-  `<command> "$S"` for the v1.61 draft — collapsed to one number only where the two agree and
-  written as both where they do not. Every doc-scoped figure below is stated that way. The residual
+  published as a pair** — `git show dfae038:"$S" | <command>` for the committed value and
+  `<command> "$S"` for the v1.62 draft — collapsed to one number only where the two agree and
+  written as both where they do not. Every doc-scoped figure below is stated that way. **The
+  committed half moves with the freeze sha**, which is the maintenance this rule costs and the
+  half v1.61 did not pay: v1.61 restamped every *draft* half from "the v1.60 draft" to "the v1.61
+  draft" and left every *committed* half at `6f0ee85`, so the pairs it published straddled two
+  freezes. Each committed half below is re-measured at `dfae038`, and a `6f0ee85` value is kept
+  only where it is labelled as history — the census progression and the `no`-token scale — never
+  as this revision's committed half. The residual
   is that the draft half cannot be re-run by a reader after this revision lands, because "the
-  draft" becomes a commit; a reader re-runs it as `git show <the commit shipping v1.61>:"$S"`, and
+  draft" becomes a commit; a reader re-runs it as `git show <the commit shipping v1.62>:"$S"`, and
   a figure that has drifted since then is a real drift, not a mis-stamp.
 
   `$S` throughout this section is the shell variable bound in the control block below to this
@@ -787,7 +851,7 @@ quoted
   feature attribute to it rather than re-word it — so it needs a stable address.** The address is
   the fenced block immediately above, and the needle is **line-anchored**, not a prose phrase:
   `grep -cE '^  \$ awk ' docs/01-plan/features/doc-block-exec.spec.md` → `1` at `74e126f`, `1` at
-  `6f0ee85` and `1` over the v1.61 draft, which is where uniqueness has to be checked because a
+  `dfae038` and `1` over the v1.62 draft, which is where uniqueness has to be checked because a
   sibling edit in the same commit can break it. The
   anchoring is the whole point. A plain-substring needle on the awk program itself was tried first
   and measured at `2` in this file at `74e126f`, because the sentence publishing the needle
@@ -796,20 +860,24 @@ quoted
   residuals, all concrete. (1) It is **file-scoped**; an attributing document must grep this path,
   never the tree, and must not assume the same needle is unique in a sibling document. (2) A second
   fenced block in this file opening a line with two spaces and `$ awk ` would make it `2`. That is
-  a specific and checkable risk, not a vague one, and it **materialised while this revision was
-  being drafted**: the `path:line` shape grep added below was first written as an `awk` one-liner,
+  a specific and checkable risk, not a vague one, and it **materialised while v1.59 was being
+  drafted**: the `path:line` shape grep added below was first written as an `awk` one-liner,
   which took the needle to `2` and, because the control block further down extracts its pattern
   through that same needle, silently broke the control as well. It was rewritten to open with `sed`
   for that reason alone. The slot census is published as a pair under the two-sha
   rule above, because it moved between the two trees and v1.59 published only the later value under
   the earlier stamp. Both halves from
   `grep -oE '^  \$ [a-zA-Z0-9._-]+' | sort | uniq -c`, run over `git show 35698f9:"$S"`,
-  `git show 6f0ee85:"$S"` and the draft respectively. At `35698f9`: **9 openers** over 5 distinct
-  tokens — `awk` ×1, `curl` ×1, `git` ×5, `printf` ×1, `python3.11` ×1. At `6f0ee85`, the commit
-  that shipped v1.59: **20 openers** over 11 distinct tokens — `awk` ×1, `curl` ×1, `git` ×7,
-  `pairs` ×1, `printf` ×2, `python3.11` ×1, `RULE` ×1, `S` ×1, `sed` ×1, `split_only` ×3,
-  `while` ×1. Over the v1.61 draft: **21 openers** over 11 distinct tokens, the one change being
-  `sed` ×2, because this revision adds a second `sed` command to the `path:line` shape-grep block
+  `git show 6f0ee85:"$S"`, `git show dfae038:"$S"` and the draft respectively. **Two of those four
+  are history and two are this revision's pair**, and they are labelled so that a later reviser
+  cannot mistake a historical anchor for a committed half. History: at `35698f9`, **9 openers**
+  over 5 distinct tokens — `awk` ×1, `curl` ×1, `git` ×5, `printf` ×1, `python3.11` ×1; at
+  `6f0ee85`, the commit that shipped v1.59, **20 openers** over 11 distinct tokens — `awk` ×1,
+  `curl` ×1, `git` ×7, `pairs` ×1, `printf` ×2, `python3.11` ×1, `RULE` ×1, `S` ×1, `sed` ×1,
+  `split_only` ×3, `while` ×1. The pair, collapsed because the two halves agree: **21 openers**
+  over 11 distinct tokens at `dfae038` and the same over the v1.62 draft. The one change from
+  `6f0ee85` to `dfae038` is `sed` ×2, which v1.60 introduced by adding a second `sed` command to
+  the `path:line` shape-grep block
   below. The same command answers differently over each of those trees, and the pair rule is why
   that is visible here instead of arriving as a silent restamp. The unit is *occurrences of a
   line-opening command token*, and the distinct-token figure beside each is the second unit the
@@ -824,10 +892,11 @@ quoted
   clean document.** That is not hypothetical: a sibling screen for this same class shipped with
   `\btoday\b` inside an `awk` program, where `\b` is a backspace escape and not a word boundary,
   so that term matched nothing and its published before/after counts came from a screen blind to
-  one of its own forms. **A positive control and a true negative control, both run at `6f0ee85`
-  and re-run over the v1.61 draft, against the form this revision ships.** The eight strings present
-  at both shas return identical verdicts at both; the sixth positive is new text and has no
-  `6f0ee85` half, which is stated where it is introduced below rather than folded into "identical". A true negative is a *non-member the screen declines*; a
+  one of its own forms. **A positive control and a true negative control, both run at `dfae038`
+  and re-run over the v1.62 draft, against the form this revision ships.** All nine strings are
+  present at `dfae038` and return identical verdicts at both halves of the pair — the
+  "no `6f0ee85` half" caveat v1.60 and v1.61 carried for the sixth positive is discharged by
+  moving the committed half to `dfae038`, where that string exists. A true negative is a *non-member the screen declines*; a
   member it fails to print is a false negative and is reported separately below, never as "the
   negative". The pattern is **not retyped** — it is extracted from the published block above by its
   own anchored needle, so a control cannot silently drift from the checker it tests, and an empty
@@ -861,21 +930,21 @@ quoted
   ```
 
   Six positives, each a verbatim member of this document, all printed. The sixth is new in v1.60
-  and is the control on this revision's widening of the closing noun alternation: under the v1.59
+  and is the control on **v1.60's** widening of the closing noun alternation: under the v1.59
   form it was `NO MATCH`, because `lines` was not a counted noun the screen knew. Three true
   negatives, each
   a verbatim sentence fragment of this document that states no count the rule governs, all
   declined — and the third is the sharp one, because it carries a digit (`0`) and is declined on
   the *noun*, which is the only boundary the screen enforces on its right-hand side. Verbatimness
   is itself checked rather than asserted: deleting this fenced block from a copy and running
-  `grep -cF` for each string returns exactly `1` for all nine over the v1.61 draft — the sixth
-  positive is new text, so it has no `6f0ee85` half; the other eight return `1` at both —
+  `grep -cF` for each string returns exactly `1` for all nine at `dfae038` and `1` for all nine
+  over the v1.62 draft —
   `sed '/^## Version History/,$d' "$S" | sed '/^  \$ S=docs/,/^  [^A-Za-z ]\{3\}$/d' > /tmp/nobody.md`,
   then `grep -cF "$s" /tmp/nobody.md`. **The Version History is cut first, and that is a v1.60
   repair, not decoration.** The claim under test is that each string is a verbatim substring of
   this document's *body*; a later §Version History entry quoting a control string makes the count
   `2` and turns a passing check red for a reason that is not a defect. That is not hypothetical —
-  it happened while this revision was drafted, when the v1.60 entry quoted the sixth positive and
+  it happened while **v1.60** was drafted, when the v1.60 entry quoted the sixth positive and
   took its count to `2`. Cutting the region residual (1) already exempts from the enumeration makes
   the check agree with its own subject and closes the class for every future entry, rather than
   forbidding entries from quoting strings. The closing address is written as three non-letter
@@ -894,7 +963,7 @@ quoted
   command and sha, and the screen declines it, because the quantifier `no` is not a cardinal in the
   alternation. Its locator is **line-anchored for the same reason the `awk` needle is**, and its
   pattern carries no backtick so that quoting it here cannot break the code span:
-  `grep -cE '^ +.74e126f.\. That file holds' "$S"` → `1` at `6f0ee85` and `1` over the draft. The
+  `grep -cE '^ +.74e126f.\. That file holds' "$S"` → `1` at `dfae038` and `1` over the draft. The
   unanchored needle `holds no fences at all` returns `3` here, because this paragraph reproduces it
   twice more — once describing the sentence, once publishing the needle. An author who publishes a
   prose needle manufactures its own duplicates; anchoring is the only defence, because a prose copy
@@ -903,7 +972,7 @@ quoted
   `blocks` is design-derived and therefore outside this rule by the second exclusion below, but it
   exhibits both blind shapes at once — `zero` absent from the alternation, and the counted noun on
   the following line (anchored locator `grep -cE '^  - AC-1\.2:.*yields zero$' "$S"` → `1` at
-  `6f0ee85` and `1` over the draft). Both are recorded as residuals (2) and (3) below rather than
+  `dfae038` and `1` over the draft). Both are recorded as residuals (2) and (3) below rather than
   patched, and the reason is stated there.
 
   **The line-split class was probed systematically, not by the one instance that happened to be
@@ -922,8 +991,8 @@ quoted
   $ split_only "$S"
   ```
 
-  The probe fires on the synthetic split and returns **nothing** on this document, at `6f0ee85` and
-  again over the v1.61 draft after every edit this revision makes: no
+  The probe fires on the synthetic split and returns **nothing** on this document, at `dfae038` and
+  again over the v1.62 draft after every edit this revision makes: no
   member of this rule is currently split across a wrap. That null is admissible only because the
   positive control immediately above it is non-empty — an unproven probe's zero would be
   indistinguishable from a dead one. The probe inherits every residual of `$RULE` itself, so AC-1.2's
@@ -939,7 +1008,7 @@ quoted
   ordinal 4 and the insertion-before-block-4 hazard. It also admits two lines that state no
   tree-derived count — AC-1.9's `one — a wrong block` and FR-3's `8 with errors="replace"` — and
   those are the correct trade: this enumeration is read by a human, so an extra line costs a
-  glance and a miss costs a cycle. Re-verified at `6f0ee85` and over the draft, and one correction to
+  glance and a miss costs a cycle. Re-verified at `dfae038` and over the draft, and one correction to
   how it is read: a reader who diffs the two forms mechanically sees **more lines than members**,
   because the excess is this document quoting itself — the control block above reproduces the
   `Twenty-four tracked .py files` string twice, once as input and once as output, and this
@@ -954,7 +1023,7 @@ quoted
   things this feature measures*, in the tree or in this document, and the list is the finite set the
   document currently uses; a new noun must be added when it arrives, which is the enumeration's own
   maintenance cost and is accepted. **Two arrived in v1.60 and were added rather than recorded as a
-  gap**: `lines?` and `pins?`, because this revision's `path:line` figures are stated in exactly
+  gap**: `lines?` and `pins?`, because **v1.60's** `path:line` figures are stated in exactly
   those units and the v1.59 alternation was blind to all of them. The trade is **reproducible rather
   than published as a number**, for the same reason the enumeration's own hit count is not stated:
   this paragraph is itself a member of both forms, so any figure written here inflates itself by
@@ -966,28 +1035,40 @@ quoted
   by tally: ordinary prose uses of `one … line`, `two things this pins` and `raw lines` — one
   bounded, readable class, and the accepted false-positive cost of a screen a human reads. Still
   outside and still accepted: nouns this feature does not yet count, of which `commits`, `tokens`
-  and `values` are the concrete ones this document uses in passing without measuring. (2) A quantity written in a word form the opening alternation does not list. The
+  and `values` are the concrete ones this document uses in passing without measuring.
+  **A second, distinct sub-class arrived in v1.61 and v1.62 and is named rather than left implicit**:
+  `fields` and `heads` — "a closed list of seven" in FR-4 and "the seven bare verdict-line fields"
+  in AC-4.6, "these eleven heads" in AC-4.2 — *are* counted, so they do not belong on the
+  un-measured list above; they sit
+  outside the alternation under **exclusion (2)** instead, because both are counts of a helper that
+  does not exist until 5d/5e and both move only when the design moves. The rule over the axis, so
+  the next one does not need a ruling: a counted noun is added to the alternation when its count
+  becomes **tree-derived**, and is named here under exclusion (2) while it is still design-derived.
+  (2) A quantity written in a word form the opening alternation does not list. The
   axis is *word forms that stand where a cardinal stands*, and exactly three concrete categories sit
   outside it: `zero`; the bare quantifiers `no` and `none`; and cardinals of one hundred or more,
   which the alternation stops below. This is measured, not assumed — the `no` category has a live
   member in this document, blind form (i) above. It is left open deliberately, and the trade is
   measured rather than asserted: `no` is overwhelmingly an ordinary negation here (`no file` in
   AC-3.2, `no API` in §Non-Functional Requirements, `no node` in FR-6), and
-  `awk '/^## Version History/{exit}{print}' "$S" | grep -oEi '\bno\b' | wc -l` → `75` at `6f0ee85`
-  and `85` over the v1.61 draft — the unit is *occurrences of the token*, not lines and not distinct
-  sentences, and the draft figure is higher because this revision's prose uses the word more —
-  FR-4's new bare-field exemption is stated in negatives, which is how an exhaustive list says it
-  is exhaustive, and the reason is given here in that form deliberately rather than by quoting the
-  clauses, since quoting them would move the figure inside the sentence stating it — so
-  admitting `no`/`none` would put up to 85 candidate occurrences in front of a reader to recover
-  the one known member. That figure moves on every edit to this document and is a scale, not a
+  `awk '/^## Version History/{exit}{print}' "$S" | grep -oEi '\bno\b' | wc -l` → `85` at
+  `dfae038` and `89` over the v1.62 draft — the unit is *occurrences of the token*, not lines
+  and not distinct sentences. The figure has risen every revision because each one adds prose that
+  states exclusions in negatives: it was `75` at `6f0ee85` (history, not this revision's committed
+  half), `85` once v1.61's bare-field exemption landed, and it moves again here because v1.62's
+  exclusion (2) sub-class and AC-4.2's exhaustiveness clause are stated the same way. The reason is
+  given in that form deliberately rather than by quoting the clauses, since quoting them would move
+  the figure inside the sentence stating it — so
+  admitting `no`/`none` would put up to `89` candidate occurrences in front of a reader to
+  recover the one known member. **That derived bound is a function of the figure above it, not a
+  second statement of it**, so it moves whenever the scale is re-measured; both are a scale, not a
   contract. `zero` is the cheap half and is admitted to the alternation the
   first time a tree-derived zero is written that way; none is today. (3) A
   gap of more than three space-delimited tokens between the cardinal and its noun, which `{0,3}`
   stops below — **including a newline**, since `grep` is line-scoped and this document hard-wraps at
   ~95 columns, so a wrap between the two is an infinite gap and not a three-token one. Both halves
   are probed rather than asserted: the token bound is what the fifth positive above exercises, and
-  the wrap half is what `split_only` above returns nothing for at `6f0ee85` and over the draft. The widened gap admits
+  the wrap half is what `split_only` above returns nothing for at `dfae038` and over the draft. The widened gap admits
   false positives by design, so the bound is a readability limit and not a correctness one. The hit
   count is deliberately not stated: it is a procedure, not a measurement, and any
   edit to this document changes it, so a number here would falsify itself every cycle.
@@ -1012,11 +1093,22 @@ quoted
   pins**; the two differ because a pin can repeat across surfaces and a line can carry more than
   one. The third unit is the one an auditor reads for the self-repair obligation — **bare pins
   standing in prose**, that is, pins not reproduced by a printed command — and it is
-  **3**, down from 7 at `6f0ee85`, because this revision rewrote §Assumptions' broad fence-literal
-  census to print `-n` output instead of a `| wc -l` total, which turned four of the seven into
-  command output. That block is located structurally, not by a line number: it is the only fenced
+  **3**, down from **6** at `6f0ee85`, because **v1.60** rewrote §Assumptions' broad fence-literal
+  census to print `-n` output instead of a `| wc -l` total, which turned three of the six into
+  command output. **`6` and `three`, not the `7` and `four` v1.60 and v1.61 published**: this
+  paragraph's own command counts *fully-qualified* pins, and a **continuation pin** — a bare `:N`
+  on a line whose path was given by the preceding pin, of which `6f0ee85` carried one — has no
+  `.py:` on it and so is not matched by `[A-Za-z0-9_./-]*\.py:[0-9]+`. Seven is what an eye counts
+  and six is what the command counts; the published figure follows the command, because the whole
+  point of the three-unit split below is that the stated unit and the command agree. The class,
+  not the instance: **a continuation pin is invisible to both shape greps**, and the axis is any
+  pin whose path is carried by an earlier line rather than repeated on its own — recorded here as
+  residual (d) below rather than patched, because widening the shape to match a bare `:N` would
+  match every ordinary colon-and-digit in prose. Verified at `dfae038`: the bare-pin command
+  returns `3` and the line command `11`, and the one continuation pin is gone from the body with
+  the census lines that carried it. That block is located structurally, not by a line number: it is the only fenced
   block in this document opening with a quoted `git grep -n` command, and the anchored needle
-  `grep -cE "^  [\$] git grep -n '" "$S"` returns `1` over the v1.61 draft. **The `[\$]` is
+  `grep -cE "^  [\$] git grep -n '" "$S"` returns `1` at `dfae038` and `1` over the v1.62 draft. **The `[\$]` is
   load-bearing and was measured, not styled.** Every other needle in this document is
   single-quoted, where `\$` reaches the regex engine as an escaped literal; this one must be
   double-quoted so it can contain the `'`, and inside double quotes the shell collapses `\$` to a
@@ -1039,7 +1131,7 @@ quoted
   is what makes a drifted pin cheap: **every pin either is reproduced command output, or carries a
   content predicate or an enclosing symbol on the same line**, so a drifted pin self-repairs under
   a re-run or under one `grep` of the predicate rather than under a reader hunting a moved line.
-  The reproduced-output arm is the stronger of the two and was widened this revision precisely
+  The reproduced-output arm is the stronger of the two and was widened in **v1.60** precisely
   because the predicate arm has a failure mode the round-seven ruling names: *a predicate alone is
   not a needle*. The split of the 11 lines is 8 + 3 — 8 are output of the two
   `git grep` census commands above and re-quote nothing, and 3 are prose. Of the prose
@@ -1050,7 +1142,7 @@ quoted
   printed output rather than prose. The fourth, the `run_recipe` signature FR-6 rests on, is
   written there as a bare ordinal beside the symbol name and is therefore **outside** both greps —
   residual (a) below. All four load-bearing pins were re-verified at `a8e0372`, at `335f535` and
-  again at `74e126f`, and the freeze-sha closure above carries them unchanged to `6f0ee85`. Three
+  again at `74e126f`, and the freeze-sha closure above carries them unchanged to `dfae038`. Four
   residuals on the shape greps, all concrete. (a) Both require a `.py` suffix on the same line, so
   a bare-ordinal reference such as the one FR-6 prose uses for the `run_recipe` signature, and any
   pin into a non-`.py` file, is invisible to them; a bare ordinal is admissible only where the full
@@ -1059,11 +1151,29 @@ quoted
   command discriminates output from prose by *indentation and path shape*, not by parsing fences,
   so a prose line that began with two spaces and `h-mad/` would be miscounted as output. That
   absence is measured, not assumed: `sed '/^## Version History/,$d' "$S" | grep -c '^  h-mad/'`
-  → `8` over the v1.61 draft, equal to the reproduced-output line count above, so every line the
+  → `8` at `dfae038` and `8` over the v1.62 draft, equal to the reproduced-output line count above,
+  so every line the
   discriminator treats as output *is* output and none is prose. The zero is incidental, not
   load-bearing — nothing stops a future paragraph from opening that way — so the check is the
   equality of those two figures, re-run, and not the claim; a fence-parsing form is not worth its
-  own bug here. Every pin is still a line
+  own bug here. **(d) Neither reaches a *continuation pin*** — a bare `:N` on a line whose path was
+  supplied by an earlier pin — because both require `.py:` on the matched text. That is the residual
+  the `6`-versus-`7` correction above rests on, and it is left open deliberately: a shape admitting
+  a bare `:N` would match ordinary colon-and-digit prose, so the cost of closing it exceeds the cost
+  of the one member it would recover. It is screened rather than asserted, by its **distribution**
+  and never by a total, because the total would read as sixteen defects. The screen is written
+  inline, as the bare-pin command above is, so that publishing a residual's screen does not itself
+  move the opener census:
+  `sed '/^## Version History/,$d' "$S" | grep -oE '(^|[^0-9A-Za-z_/.]):[0-9]+' | grep -oE ':[0-9]+' | sort | uniq -c`.
+  It returns 15 hits at `6f0ee85` and 16 at `dfae038` and over this draft, and the *distribution*
+  is the answer, not the total. Fourteen of them at every one of the three are FR-6's deliberate
+  bare ordinals for the two extractors and the inline runner, which residual (a) already admits
+  because the fully-qualified pin appears on the same surface. The two that arrive at `dfae038` sit
+  inside **reproduced command output**, not prose. The one that leaves is the single continuation
+  pin the `6f0ee85` body carried, in the §Assumptions prose the census rewrite replaced. So the
+  member count is **1 → 0**, and the screen's own residual is that it cannot tell an FR-6 ordinal
+  from a continuation pin — the reader does that, off the printed values. No `path:line` is
+  re-quoted in this paragraph, for the reason the paragraph above gives. Every pin is still a line
   number and will still drift, and rewriting them as structural locators is owed by this document,
   the design and the plan **together** — done in one document alone it would read downstream as a
   disagreement about which block is meant.
@@ -1132,5 +1242,6 @@ quoted
 - v1.57: Round-four back-propagation of one plan finding (agy cycle 76) plus decision-sheet items B/C/D. Finding 1: Out-of-Scope's fence count was 68 and is 73 openers at 335f535, and it now carries both its generating command (git grep -c '^```bash' -- 'h-mad/*.md' 'handoff/*.md' ':!*/archive/*' | awk -F: '{s+=$NF} END {print s}') and the sha, plus the git ls-files ... | grep -c archive -> 0 that shows the archive exclusion selects nothing at this sha and is kept only against future widening. The interesting half is why the v1.56 sweep missed it: a value sweep fires on values that CHANGE, and 68 was never edited -- it drifted in place, in a non-normative section a walk of the FR/AC bodies never visits. The class rule therefore now carries its own ENUMERATION, independent of what changed, over the whole body up to the Version History boundary, keyed on SHAPE rather than on what changed, and its alternation covers spelled-out cardinals because this document states most of its counts as words (seven bash blocks, Twenty-four tracked .py files, six hits) so a digits-only enumeration would miss the majority of its own members. The drift story is verified, not asserted: git log -S'There are 68' returns exactly one commit, e58ef3a, so the number was written once and never edited, and the same command gives 68 at e58ef3a and 73 at 335f535 -- same command, same corpus, different tree. Two concrete residuals on the enumeration (a counted noun outside the closing alternation, and a cardinal of one hundred or more written as words) and a stated reason for carrying no hit count. AC-1.7's '16 headings, 2 duplicated' was the same class's second surviving member and now carries two commands and the sha, plus the evidence that invariants.example.md holds no fences so a raw line grep cannot miscount, and the residual that the commands compare raw lines so 2 is a floor. Decision B: FR-6 called the ordinals the load-bearing part; they are demoted to informational and the CONTENT PREDICATE is the contract, with the two predicates' differing cardinality stated separately (_gate_bash_block filters on h_mad_audit_gate.py and asserts exactly one; :412 filters on exec codex and takes the FIRST hit via next(..., '')), the ordinals' base named (1-based over the extractor's own re.findall on _second_surface()), and the era split stated: after FR-6 :270 addresses by heading plus tag and retires its predicate, :412 keeps its permanently. Decision C: the spec was SILENT on the closing-hash delimiter where the design has an oracle-backed rule, so AC-1.7 now states it, measured on markdown-it-py commonmark preset -- '## Text ##' -> 'Text', '## Text\t##' -> 'Text', '## Text##' -> 'Text##' -- the last being the case an unconditional right-strip of # gets wrong. Decision D: no seam ordinal exists in this document's body. Every count and path:line locator was re-derived at 335f535 and restamped: 6, 24, 7 [4] [2], the two-hit narrow extractor census, :270 :309 :412 docsections.py:37, the _SCANNED parametrise-twice 2, and the three *.py globs -- all unchanged.
 - v1.58: Round-five decision-sheet items E and F; no finding this round landed in this file. E (one rule, one checker): the count-enumeration in Assumptions is now the CANONICAL checker for the tree-derived-count class rule across all four documents, and it was EXECUTED against controls rather than published unrun -- because a sibling screen for this same class shipped with a backspace escape where a word boundary was meant and matched nothing. The controls found the same defect class here: the gap between a cardinal and its counted noun was one optional lowercase word, which cannot span 'tracked' and a backticked '.py', so the enumeration was blind to a member sitting in the paragraph that defines it. The gap is widened to three space-delimited tokens; the recovered members are NAMED, not counted, because both forms' totals move on every edit. Positive and negative control results are published beside the enumeration. F (locator uniqueness is commit-scoped): every locator this document publishes is now LINE-ANCHORED and re-verified at 74e126f -- the enumeration's needle is an anchored command opener at exactly 1 hit, and the AC-6.4 membership rule is addressed by its anchored AC label at exactly 1 hit, with all 49 AC body anchors verified collision-free. A plain-substring needle was tried first and MEASURED at 2, because the sentence publishing it reproduced it; that measurement is recorded as the reason the anchored form was chosen. Every tree count was re-derived at 74e126f and restamped, all unchanged: 73 openers and 0 archive paths, 24 tracked .py with a fence literal, 6 broad literal hits with the same 2-hit narrow extractor census, 16 headings with 2 duplicated and no fences in invariants.example.md, the _SCANNED parametrise 2 and the three *.py globs, and 7 [4] [2] from the second-surface extraction. The four path:line locators were re-verified at 74e126f and now record what each resolves to.
 - v1.59: Round six, decision A applied to this document's own enumeration at freeze sha 35698f9: the class-closure screen is now published with a positive control (5 members, all printed) and a true-negative control (3 non-members, all declined), both runnable, with the pattern extracted from the published block by its own anchored needle rather than retyped. Two blind forms named rather than a bare zero — the tree-derived zero written as 'no fences' (a genuine false negative) and AC-1.2's 'zero'/'blocks' wrap (design-derived, shape demonstration only) — and the line-split class probed systematically by split_only, which fires on a synthetic split and returns nothing here. Residuals restated over their axes and still three: (2) becomes word forms outside the alternation (zero, no/none, one hundred and above) with the trade measured at 75; (3) absorbs the newline as an infinite gap. Decision C closed as a class: path:line pins are now derived by a shape grep (7 lines) with the class obligation and two residuals stated, re-quoting none of them. Freeze-sha closure stated once (git diff --name-only 74e126f 35698f9 | grep -vc '^docs/' -> 0), and 6/24/73/0 nevertheless re-executed. Doc-scoped figures re-derived in this revision: awk needle 1, opener census 20, py-pin lines 7, no-tokens 75; [v1.60 correction, entry otherwise left as written: this whole list is stamped `35698f9` and every figure in it is the value over v1.59's own DRAFT, which landed as `6f0ee85`. At `35698f9` the same commands return awk needle 1, opener census 9 openers over 5 distinct tokens, py-pin lines 8, no-tokens 59 (`git show 35698f9:"$S"` piped into each). The audit found the census instance; re-deriving at both shas found that three of the four were mis-stamped the same way and only the awk needle, being 1 at both, was indistinguishable. v1.60 replaces the single-stamp habit with a pair rule -- a doc-scoped figure publishes the committed value and the draft value, collapsed only where they agree.] the awk-slot residual materialised during drafting (the shape grep was first written as an awk one-liner, took the needle to 2 and broke the control's pattern extraction) and is recorded rather than hidden. The 'widening recovers three members' claim is re-verified and now says how to read it: a mechanical diff of the two forms returns more lines than members because this document quotes its own members, so count members by reading them. Late self-review caught three of my own defects before shipping and all three are fixed in this entry's revision: (a) all eight control strings were paraphrases and are now verbatim substrings, checked by deleting the control block from a copy and running grep -cF, which returns 1 for each; (b) the closure paragraph claimed this file changed in both intervening commits when git log 74e126f..35698f9 on this path returns exactly one, 0aac0b7; (c) the commands here depend on $S, whose unbound form prints 0 on stdout, so the binding is now stated where the section starts.
-- v1.60: Round seven back-propagation at freeze sha 6f0ee85; no audit cycle of this document's own, three items routed from the plan and design legs. (1) MIS-STAMP, and it was wider than the finding. v1.59 published the slot census as 20 openers over 11 distinct tokens under the stamp 35698f9, where the true value is 9 openers over 5 distinct tokens; 20 is the value at 6f0ee85, the commit that shipped v1.59, so the plan's figure was the correct one. Both verified here with git show 35698f9: and git show 6f0ee85: piped into grep -oE '^  $ [a-zA-Z0-9._-]+' | sort | uniq -c. Re-deriving v1.59's other three doc-scoped figures at both shas showed the same mis-stamp in all of them -- py-pin lines are 8 at 35698f9 and 7 at 6f0ee85, no-tokens are 59 at 35698f9 and 75 at 6f0ee85, and only the awk needle (1 at both) was indistinguishable. The class, not the instance: a figure measured over THIS file is taken over the draft in hand, which lands in the commit AFTER the freeze sha, so it is now published as a PAIR -- git show 6f0ee85:$S | <command> for the committed value and <command> $S for the draft -- collapsed to one number only where the two agree. The pair rule immediately earned itself: the census is 21 openers over 11 distinct tokens over this draft, because this revision adds a second sed command to the path:line block, and that third value would otherwise have shipped as a fourth silent restamp. awk holds its slot alone at all three shas, so the needle's conclusion never moved. (2) The predicate ruling, applied to the one pin that failed it. The broad fence-literal census in Assumptions was written 'git grep -n ...bash -- *.py | wc -l', so a reader re-running it as printed got 6 and no locations, and the three pins in the prose beneath it rested on the non-greppable predicate 'are fixture strings'. It now prints -n output spliced from the command rather than retyped, and the prose re-quotes no path:line from it. CONTRADICTION REPORTED, not silently resolved: the ruling's first option -- name the enclosing test function for the test_docsections.py hit -- is unavailable, because that hit sits inside a module-level FIXTURE string constant (grep -c '^FIXTURE = ' -> 1) and the file's first def is BELOW it, so the reproduced-output option was the only one open. The four pins the ruling passed are untouched. (3) Three units for the path:line class, because one grep over it yields three different true numbers and decision H says a bare integer is not a measurement: 11 body lines carrying a pin, 9 distinct fully-qualified path.py:N pins, and 3 bare pins standing in prose -- down from 7 at 6f0ee85 because four became command output -- each with its own command, and the bare-pin command counting pins rather than lines so the stated unit and the command agree. Freeze-sha closure extended: git diff --name-only 74e126f 6f0ee85 | grep -vc '^docs/' -> 0 and the same range with -- '*.py' prints nothing, so every tree-derived figure stamped 74e126f is unchanged at 6f0ee85; 6, 24, 73 and 0 were nevertheless re-executed there rather than inferred. Decision A re-run rather than carried, per the sheet: the positive control prints all five members and the true-negative control declines all three over this draft, the pattern still extracted from the published block by its own anchored needle, and all eight strings verified verbatim at grep -cF 1 with the control block deleted from a copy. split_only fires on its synthetic fixture and returns nothing on this draft. The v1.59 Version History entry is left as written with a bracketed correction, per the standing practice. (4) Decision A applied to the enumeration against THIS revision's own text, not only re-run against last revision's: the path:line figures above are stated in units -- lines and pins -- that the v1.59 closing noun alternation did not carry, so v1.60 would have shipped prose its own class-closure screen was blind to. lines? and pins? are added to the alternation, which is residual (1)'s stated maintenance path taken rather than deferred, and a SIXTH positive control is added covering exactly that widening: 'The split of the 11 lines is 8 + 3', verbatim from the body, NO MATCH under the v1.59 form and MATCH under this one, which is the before/after a widening needs and which v1.57's gap fix did not have. The controls are now nine strings -- six positives all printed, three true negatives all declined -- and all nine verify verbatim at grep -cF 1 with the control block deleted; the sixth is new text, so only the other eight have a 6f0ee85 half. The widening's cost is stated by SHAPE and deliberately NOT as a number: this paragraph and the residual that describes it are themselves members of both forms, so a published delta would inflate itself by the act of publishing it, which is the same self-quoting hazard that already cost this document one needle and the reason the enumeration has never published its own hit count. (5) The verbatimness check is now cut at the Version History boundary before the control block is cut. Its stated subject is 'a verbatim substring of this document's BODY', but it ran over the whole file, so a Version History entry quoting a control string took that string's count to 2 and turned a passing check red for something that is not a defect. That is measured, not foreseen: it happened while this entry was being written, because this entry quotes the sixth positive. Cutting the region residual (1) already exempts closes the class for every future entry instead of forbidding entries from quoting strings, and all nine return 1 again. Doc-scoped figures over this draft, each with its command in place: awk needle 1, git-grep-n needle 1, opener census 21 over 11 distinct tokens, py-pin lines 11, distinct pins 9, bare prose pins 3, no-tokens 81, split_only empty with its synthetic positive firing, nine control strings verbatim at 1. (6) One more locator defect, found by running the published string verbatim rather than the shell-escaped form I had tested with: the new git-grep-n needle is double-quoted so it can hold a single quote, and inside double quotes the shell collapses \$ to a bare $, which ERE reads as a mid-pattern end-of-line anchor -- so the needle as first written returned 0, an anchored locator reading as absence. It is now written [$], measured at 1 with the trailing quote and 2 without, and the reason is stated beside it. Every other needle in this document is single-quoted and was never exposed to this. Residual (c) on the bare-pin command also carried a bare 'there is none today'; it now carries sed '/^## Version History/,$d' | grep -c '^  h-mad/' -> 8, equal to the reproduced-output line count, and says the zero is incidental rather than load-bearing.
-- v1.61: Round fourteen, ONE routed finding and no audit cycle of this document's own; freeze sha b3be433, working tree byte-identical to it before this revision. The finding, from the plan's gating leg (plan.audit.v85.teammate, must 3), was filed as "the spec's bare pgid=<n> against three siblings that agree on pgid: \"<n>\"". THE CHARACTERISATION IS WRONG AND THE CONCLUSION IS RIGHT, and the two are separated here rather than merged. Body-scoped counts at b3be433 (git show b3be433:<path> piped through a body cut and grepped for each form): spec bare 1 quoted 0; plan bare 0 quoted 0; design bare 2 quoted 3; impl-plan bare 0 quoted 1 -- there is no consensus to conform to, so the spelling is DERIVED FROM THE CONTRACT and not from a vote. Three sources, none of them a sibling's majority. (a) This document's own FR-4 grammar: bare is an EXEMPTION and pgid is not on it. (b) The emission site: AC-4.6 puts pgid on a DETAIL line, and every detail line in this document is <key>: "<value>" -- os_error, missing_key, duplicate_key, overlap, leftover, verify, written, failed, skipped, stream. (c) The design at b3be433 states the exemption is exhaustive and names this exact case in words -- 'including the helper-produced numbers seconds= and pgid: (seconds="1.0", pgid: "4242")' -- and design v1.79's own entry records closing it that way; the impl-plan's DETAIL_KEYS tuple carries "pgid:" as a member (counted in the tuple, 11 keys). So AC-4.6 now reads pgid: "<n>" and carries the derivation beside it. THE CLASS, NOT THE INSTANCE, because a single instance is how this survived four documents: the AXIS is every field name this document spells inside a verdict or a detail line, and the defect that let one member drift was FR-4's OPEN list -- it read 'helper-constrained fields SUCH AS rc=, blocks=, shell=, stage= stay bare', which fixes the spelling of no field at all. FR-4 now closes it: exactly seven bare fields (rc=, blocks=, count=, keys=, shell=, stage=, reason=), exhaustive IN BOTH DIRECTIONS, governing the VERDICT LINE ONLY; detail lines carry no exemption and are always quoted; a field's spelling follows WHICH LINE IT SITS ON, not what it is. A helper-produced number off the list is quoted (seconds="<n>"), so provenance does not decide the spelling and membership does. RESIDUAL, a concrete category: this fixes every field and detail key this document names and does not fix one a LATER cycle adds -- a new verdict-line field is bare only by joining the seven named here, and a new detail key is quoted by construction. THE SWEEP, run after the last edit landed and reported with its command: python3 classification of every backtick span in the body that holds a DOCBLOCK line or a field token, splitting key= from key: " -- the only bare-spelled field outside the seven was the AC-4.6 pgid, and every quoted field (heading, arg, index, key, message, path, seconds, value) is off the list, so the class had exactly one member and it is closed. DECISION-K SWEEP, every doc-scoped figure re-run over THIS draft after the last edit and re-stamped from the v1.60 draft to the v1.61 draft (nine sites, plus the reader-instruction naming the commit that ships this revision): awk needle 1; git-grep-n needle 1 with the trailing quote and 2 without; opener census 21 openers over 11 distinct tokens, unchanged because this revision adds no fenced command; py-pin lines 11, distinct pins 9, bare prose pins 3; nine control strings all verbatim at grep -cF 1 with the Version History and the control block cut, six positives MATCH and three true negatives NO MATCH under the pattern extracted from the published block by its own anchored needle; split_only empty on this draft with its synthetic positive firing; AC-1.2 anchor 1; reproduced-output lines 8, equal to the bare-pin discriminator. EXACTLY ONE FIGURE MOVED, and it is the one this revision's own prose moves: the no-token scale was 81 over the v1.60 draft and is 85 over this one, because the new exemption paragraph is stated in negatives; the figure DERIVED from it in the next clause ('up to N candidate occurrences') is moved with it rather than left at the old value, and the reason is given without reproducing the clauses, since quoting them would move the figure inside the sentence stating it. The class-closure enumeration is at 110 over this draft and 110 at b3be433 -- its hit count is not published, by the standing rule, and it is stated here only because the first draft of the FR-4 paragraph took it to 111 on the phrase 'between the two lines', a non-member; the phrase was rewritten to 'from the verdict line to a detail line', which is also the more precise sentence. OWED ELSEWHERE, reported and NOT edited: the design's AC-table row for AC-4.6 says 'pgid= in the detail' in its killpg-injection clause while the same row says 'pgid: in the detail' for the collect clause and the design's own grammar paragraph quotes it -- that is the design's internal inconsistency, and it is the ONLY bare form in that document that is a diagnostic spelling; its other bare pgid= occurrences are Python constructor syntax (LaunchFailed(stage, err, pgid=None)), correctly bare and NOT members of this class, which is the distinction the auditor's count did not draw. The plan's body carries NEITHER form, so its claim about an exhaustive bare list has no local member to check. NO gating claim, no second surface, no exit-gate claim is made by this entry; codex_status exhausted until 2026-09-07 11:28. [Appended after the entry landed, and the whole-file screens re-run after it: the detail-key enumeration in FR-4 is stated as THE KEYS AS OF THIS REVISION and attributed to DETAIL_KEYS as the authority a reader checks it against, because an enumeration written flat would read as exhaustive over a set this document does not own; the residual therefore names the specific staleness -- DETAIL_KEYS can gain a member without this list gaining one, which AC-4.5's bidirectional registry walk catches and this grammar does not. Post-edit re-run: awk needle 1, git-grep-n needle 1 with the quote and 2 without, opener census 21 over 11 distinct tokens, no-tokens 85, py-pin lines 11 / distinct 9 / bare prose 3, reproduced-output lines 8, AC-1.2 anchor 1, nine control strings verbatim at 1, six positives MATCH and three true negatives NO MATCH, split_only empty with its positive firing, class-closure enumeration 110, bare pgid= in the body 0, PRECHECK: PASS issues=0.]
+- v1.60: Round seven back-propagation at freeze sha 6f0ee85; no audit cycle of this document's own, three items routed from the plan and design legs. (1) MIS-STAMP, and it was wider than the finding. v1.59 published the slot census as 20 openers over 11 distinct tokens under the stamp 35698f9, where the true value is 9 openers over 5 distinct tokens; 20 is the value at 6f0ee85, the commit that shipped v1.59, so the plan's figure was the correct one. Both verified here with git show 35698f9: and git show 6f0ee85: piped into grep -oE '^  $ [a-zA-Z0-9._-]+' | sort | uniq -c. Re-deriving v1.59's other three doc-scoped figures at both shas showed the same mis-stamp in all of them -- py-pin lines are 8 at 35698f9 and 7 at 6f0ee85, no-tokens are 59 at 35698f9 and 75 at 6f0ee85, and only the awk needle (1 at both) was indistinguishable. The class, not the instance: a figure measured over THIS file is taken over the draft in hand, which lands in the commit AFTER the freeze sha, so it is now published as a PAIR -- git show 6f0ee85:$S | <command> for the committed value and <command> $S for the draft -- collapsed to one number only where the two agree. The pair rule immediately earned itself: the census is 21 openers over 11 distinct tokens over this draft, because this revision adds a second sed command to the path:line block, and that third value would otherwise have shipped as a fourth silent restamp. awk holds its slot alone at all three shas, so the needle's conclusion never moved. (2) The predicate ruling, applied to the one pin that failed it. The broad fence-literal census in Assumptions was written 'git grep -n ...bash -- *.py | wc -l', so a reader re-running it as printed got 6 and no locations, and the three pins in the prose beneath it rested on the non-greppable predicate 'are fixture strings'. It now prints -n output spliced from the command rather than retyped, and the prose re-quotes no path:line from it. CONTRADICTION REPORTED, not silently resolved: the ruling's first option -- name the enclosing test function for the test_docsections.py hit -- is unavailable, because that hit sits inside a module-level FIXTURE string constant (grep -c '^FIXTURE = ' -> 1) and the file's first def is BELOW it, so the reproduced-output option was the only one open. The four pins the ruling passed are untouched. (3) Three units for the path:line class, because one grep over it yields three different true numbers and decision H says a bare integer is not a measurement: 11 body lines carrying a pin, 9 distinct fully-qualified path.py:N pins, and 3 bare pins standing in prose -- down from 7 at 6f0ee85 because four became command output -- each with its own command, and the bare-pin command counting pins rather than lines so the stated unit and the command agree. Freeze-sha closure extended: git diff --name-only 74e126f 6f0ee85 | grep -vc '^docs/' -> 0 and the same range with -- '*.py' prints nothing, so every tree-derived figure stamped 74e126f is unchanged at 6f0ee85; 6, 24, 73 and 0 were nevertheless re-executed there rather than inferred. Decision A re-run rather than carried, per the sheet: the positive control prints all five members and the true-negative control declines all three over this draft, the pattern still extracted from the published block by its own anchored needle, and all eight strings verified verbatim at grep -cF 1 with the control block deleted from a copy. split_only fires on its synthetic fixture and returns nothing on this draft. The v1.59 Version History entry is left as written with a bracketed correction, per the standing practice. (4) Decision A applied to the enumeration against THIS revision's own text, not only re-run against last revision's: the path:line figures above are stated in units -- lines and pins -- that the v1.59 closing noun alternation did not carry, so v1.60 would have shipped prose its own class-closure screen was blind to. lines? and pins? are added to the alternation, which is residual (1)'s stated maintenance path taken rather than deferred, and a SIXTH positive control is added covering exactly that widening: 'The split of the 11 lines is 8 + 3', verbatim from the body, NO MATCH under the v1.59 form and MATCH under this one, which is the before/after a widening needs and which v1.57's gap fix did not have. The controls are now nine strings -- six positives all printed, three true negatives all declined -- and all nine verify verbatim at grep -cF 1 with the control block deleted; the sixth is new text, so only the other eight have a 6f0ee85 half. The widening's cost is stated by SHAPE and deliberately NOT as a number: this paragraph and the residual that describes it are themselves members of both forms, so a published delta would inflate itself by the act of publishing it, which is the same self-quoting hazard that already cost this document one needle and the reason the enumeration has never published its own hit count. (5) The verbatimness check is now cut at the Version History boundary before the control block is cut. Its stated subject is 'a verbatim substring of this document's BODY', but it ran over the whole file, so a Version History entry quoting a control string took that string's count to 2 and turned a passing check red for something that is not a defect. That is measured, not foreseen: it happened while this entry was being written, because this entry quotes the sixth positive. Cutting the region residual (1) already exempts closes the class for every future entry instead of forbidding entries from quoting strings, and all nine return 1 again. Doc-scoped figures over this draft, each with its command in place: awk needle 1, git-grep-n needle 1, opener census 21 over 11 distinct tokens, py-pin lines 11, distinct pins 9, bare prose pins 3, no-tokens 81, split_only empty with its synthetic positive firing, nine control strings verbatim at 1. (6) One more locator defect, found by running the published string verbatim rather than the shell-escaped form I had tested with: the new git-grep-n needle is double-quoted so it can hold a single quote, and inside double quotes the shell collapses \$ to a bare $, which ERE reads as a mid-pattern end-of-line anchor -- so the needle as first written returned 0, an anchored locator reading as absence. It is now written [$], measured at 1 with the trailing quote and 2 without, and the reason is stated beside it. Every other needle in this document is single-quoted and was never exposed to this. Residual (c) on the bare-pin command also carried a bare 'there is none today'; it now carries sed '/^## Version History/,$d' | grep -c '^  h-mad/' -> 8, equal to the reproduced-output line count, and says the zero is incidental rather than load-bearing. [v1.62 correction, entry otherwise left as written: '3 bare pins standing in prose -- down from 7 at 6f0ee85 because four became command output' publishes two figures the entry's own command does not return. Re-run at 6f0ee85, `git show 6f0ee85:"$S" | sed '/^## Version History/,$d' | grep -v '^  h-mad/' | grep -oE '[A-Za-z0-9_./-]*\.py:[0-9]+' | wc -l` -> 6, and the drop is therefore three, not four. The 7 is the LINE count at that sha (`grep -cE '\.py:[0-9]+'` -> 7), so the sentence crossed the two units this same paragraph exists to keep apart. The one hit the pin command does not see is a CONTINUATION pin -- a bare :N whose path came from the preceding pin -- which is now residual (d) on the shape greps in the body.]
+- v1.61: Round fourteen, ONE routed finding and no audit cycle of this document's own; freeze sha b3be433, working tree byte-identical to it before this revision. The finding, from the plan's gating leg (plan.audit.v85.teammate, must 3), was filed as "the spec's bare pgid=<n> against three siblings that agree on pgid: \"<n>\"". THE CHARACTERISATION IS WRONG AND THE CONCLUSION IS RIGHT, and the two are separated here rather than merged. Body-scoped counts at b3be433 (git show b3be433:<path> piped through a body cut and grepped for each form): spec bare 1 quoted 0; plan bare 0 quoted 0; design bare 2 quoted 3; impl-plan bare 0 quoted 1 -- there is no consensus to conform to, so the spelling is DERIVED FROM THE CONTRACT and not from a vote. Three sources, none of them a sibling's majority. (a) This document's own FR-4 grammar: bare is an EXEMPTION and pgid is not on it. (b) The emission site: AC-4.6 puts pgid on a DETAIL line, and every detail line in this document is <key>: "<value>" -- os_error, missing_key, duplicate_key, overlap, leftover, verify, written, failed, skipped, stream. (c) The design at b3be433 states the exemption is exhaustive and names this exact case in words -- 'including the helper-produced numbers seconds= and pgid: (seconds="1.0", pgid: "4242")' -- and design v1.79's own entry records closing it that way; the impl-plan's DETAIL_KEYS tuple carries "pgid:" as a member (counted in the tuple, 11 keys). So AC-4.6 now reads pgid: "<n>" and carries the derivation beside it. THE CLASS, NOT THE INSTANCE, because a single instance is how this survived four documents: the AXIS is every field name this document spells inside a verdict or a detail line, and the defect that let one member drift was FR-4's OPEN list -- it read 'helper-constrained fields SUCH AS rc=, blocks=, shell=, stage= stay bare', which fixes the spelling of no field at all. FR-4 now closes it: exactly seven bare fields (rc=, blocks=, count=, keys=, shell=, stage=, reason=), exhaustive IN BOTH DIRECTIONS, governing the VERDICT LINE ONLY; detail lines carry no exemption and are always quoted; a field's spelling follows WHICH LINE IT SITS ON, not what it is. A helper-produced number off the list is quoted (seconds="<n>"), so provenance does not decide the spelling and membership does. RESIDUAL, a concrete category: this fixes every field and detail key this document names and does not fix one a LATER cycle adds -- a new verdict-line field is bare only by joining the seven named here, and a new detail key is quoted by construction. THE SWEEP, run after the last edit landed and reported with its command: python3 classification of every backtick span in the body that holds a DOCBLOCK line or a field token, splitting key= from key: " -- the only bare-spelled field outside the seven was the AC-4.6 pgid, and every quoted field (heading, arg, index, key, message, path, seconds, value) is off the list, so the class had exactly one member and it is closed. DECISION-K SWEEP, every doc-scoped figure re-run over THIS draft after the last edit and re-stamped from the v1.60 draft to the v1.61 draft (nine sites, plus the reader-instruction naming the commit that ships this revision): awk needle 1; git-grep-n needle 1 with the trailing quote and 2 without; opener census 21 openers over 11 distinct tokens, unchanged because this revision adds no fenced command; py-pin lines 11, distinct pins 9, bare prose pins 3; nine control strings all verbatim at grep -cF 1 with the Version History and the control block cut, six positives MATCH and three true negatives NO MATCH under the pattern extracted from the published block by its own anchored needle; split_only empty on this draft with its synthetic positive firing; AC-1.2 anchor 1; reproduced-output lines 8, equal to the bare-pin discriminator. EXACTLY ONE FIGURE MOVED, and it is the one this revision's own prose moves: the no-token scale was 81 over the v1.60 draft and is 85 over this one, because the new exemption paragraph is stated in negatives; the figure DERIVED from it in the next clause ('up to N candidate occurrences') is moved with it rather than left at the old value, and the reason is given without reproducing the clauses, since quoting them would move the figure inside the sentence stating it. The class-closure enumeration is at 110 over this draft and 110 at b3be433 -- its hit count is not published, by the standing rule, and it is stated here only because the first draft of the FR-4 paragraph took it to 111 on the phrase 'between the two lines', a non-member; the phrase was rewritten to 'from the verdict line to a detail line', which is also the more precise sentence. OWED ELSEWHERE, reported and NOT edited: the design's AC-table row for AC-4.6 says 'pgid= in the detail' in its killpg-injection clause while the same row says 'pgid: in the detail' for the collect clause and the design's own grammar paragraph quotes it -- that is the design's internal inconsistency, and it is the ONLY bare form in that document that is a diagnostic spelling; its other bare pgid= occurrences are Python constructor syntax (LaunchFailed(stage, err, pgid=None)), correctly bare and NOT members of this class, which is the distinction the auditor's count did not draw. The plan's body carries NEITHER form, so its claim about an exhaustive bare list has no local member to check. NO gating claim, no second surface, no exit-gate claim is made by this entry; codex_status exhausted until 2026-09-07 11:28. [Appended after the entry landed, and the whole-file screens re-run after it: the detail-key enumeration in FR-4 is stated as THE KEYS AS OF THIS REVISION and attributed to DETAIL_KEYS as the authority a reader checks it against, because an enumeration written flat would read as exhaustive over a set this document does not own; the residual therefore names the specific staleness -- DETAIL_KEYS can gain a member without this list gaining one, which AC-4.5's bidirectional registry walk catches and this grammar does not. Post-edit re-run: awk needle 1, git-grep-n needle 1 with the quote and 2 without, opener census 21 over 11 distinct tokens, no-tokens 85, py-pin lines 11 / distinct 9 / bare prose 3, reproduced-output lines 8, AC-1.2 anchor 1, nine control strings verbatim at 1, six positives MATCH and three true negatives NO MATCH, split_only empty with its positive firing, class-closure enumeration 110, bare pgid= in the body 0, PRECHECK: PASS issues=0.] [v1.62 corrections, four of them, entry otherwise left as written. (1) The OWED ELSEWHERE item was FALSE WHEN IT WAS COMMITTED: 00b961f -- the commit carrying this entry -- repaired the design's AC-4.6 row in the same commit, so nothing was owed by the time a reader could read the sentence. Re-measured at HEAD: `grep 'AC-4.6' <design> | grep -o 'pgid[=:]' | sort | uniq -c` -> 2 pgid: and 0 bare at dfae038, against 1 pgid: + 1 pgid= at b3be433; the design's four surviving body pgid= are all LaunchFailed(...) constructor kwargs, which this entry already excluded by name. The class IS closed across the feature at dfae038. The structural lesson is not the instance: THREE of the four documents wrote an OWED-ELSEWHERE debt in this same commit and all three were discharged by it, because each author read siblings that were being revised concurrently -- so an OWED ELSEWHERE written during a parallel revision batch is a claim about a MOVING tree and must be re-measured after the batch lands, not before. (2) Derivation clause (b) lists ten detail keys as 'every detail line in this document' and includes `stream`, which was NOT in the document when the clause was written: `git show b3be433:"$S" | awk '/^## Version History$/{exit}{print}' | grep -c 'stream:'` -> 0, and the same at 8909ec4; it is 1 at dfae038, inside the FR-4 enumeration THIS revision added. The derivation stands on the other nine; the evidence sentence overstated its scope by one member and the member it overstated was one the same edit introduced. (3) 'ONE routed finding' is wrong: plan.audit.v85.teammate routed THREE items at this document -- the pgid must (answered), the 2486 figure in AC-6.4's gate command, and BAD_ARGS missing from AC-4.2's exit-0 enumeration. `grep -n -i 'spec' docs/01-plan/features/doc-block-exec.plan.audit.v85.teammate.md` shows all three. (4) The two unanswered items were not recorded as deferred either, which is why they survived a whole round; both are fixed in v1.62 and 2486 was the round's only wrong published figure in this document.]
+- v1.62: Round fifteen delta-review revisions; freeze sha dfae038 (HEAD), which is byte-identical to 00b961f over this file (`git diff --stat 00b961f dfae038 -- "$S"` empty; the two intervening commits touch only docs/handoffs/, docs/learnings.md and docs/skill-candidates.md). ADVISORY, NOT A GATE: the delta pass answered here is one advisory reviewer, no second surface, no exit-gate claim; codex_status exhausted until 2026-09-07 11:28. THE FREEZE SHA IS RE-DERIVED, NOT INHERITED, AND THIS DISAGREES WITH BOTH THINGS I WAS HANDED. The delta report prescribed restamping to b3be433 and the round's decision sheet named 00b961f; this document's own definition -- 'the freeze sha: the last commit, and the tree every tree-derived figure here is taken over' -- makes it dfae038, and stamping either older sha would have re-shipped the same defect one revision later. b3be433 never touched this file at all (`git log --oneline 74e126f..dfae038 -- "$S"` lists 0aac0b7, 6f0ee85, 8909ec4, 00b961f and no b3be433), which is exactly how v1.61 came to carry TWO freeze shas at once -- b3be433 in its entry and 6f0ee85 in the body paragraph two revisions behind it. The rule that closes it is now in the body: both surfaces take `git rev-parse --short HEAD` at drafting time, and the entry quotes the body's sha rather than deriving its own. (1) MUST, THE `this revision` CLASS, SWEPT PER SITE AND NOT BLANKET. The report named twelve body-scoped occurrences from a line-scoped grep; the true body figure is FOURTEEN, because two are split across a hard wrap and no single-line grep can see them -- `awk '/^## Version History$/{exit}{print}' "$S" | tr '\n' ' ' | grep -o 'this  *revision' | wc -l` -> 14 against `grep -c` -> 12 at dfae038. One of the two wrapped members was named by no surface: FR-4's detail-key list read 'The keys as of this / revision are', so the eleven-key enumeration was stamped to whichever revision happened to be reading it. THE DISPOSITION IS STATED AS ARITHMETIC OVER THE MEASURED 14, NOT AS A BARE COUNT OF WHAT I TOUCHED: 14 = 8 restamped + 1 rewritten away + 5 kept, and 3 new ones are added by this revision's own prose, so the body figure after the sweep is 5 + 3 = 8 and `grep -o 'this  *revision'` over the collapsed body returns 8. The 8 restamped are read out of the Version History entry that records each event rather than assumed: the awk-slot residual that materialised during drafting is v1.59's (its entry says so); SIX are v1.60's -- the second `sed` command, the sixth positive control on the alternation widening, the Version-History-cut repair to the verbatimness check, the `lines?`/`pins?` addition, the §Assumptions census rewrite and the widening of the reproduced-output arm; FR-4's detail-key list is v1.61's. The 1 rewritten away is the clause explaining why the no-token scale rose, which is now stated as a per-revision history instead. The 5 kept are GENERIC statements of a standing rule that remain true for v1.62 ('for this revision', 'this revision's freeze sha', 'after this revision lands', 'the form this revision ships', 'after every edit this revision makes'). The 3 new all name this revision's half of a published pair, which is what the phrase is for. PER SITE, NEVER BLANKET, and the same discrimination governs the sha: `6f0ee85` occurs on 24 lines / 36 occurrences at dfae038, and only the sites asserting a CURRENT state moved -- the freeze-sha closure and its two fenced commands, the `git log` range, the pair rule's committed half, the two closure-carries in §Assumptions and §Out-of-Scope, and every published pair's committed half. Every remaining `6f0ee85` is now explicitly labelled history ('the commit that shipped v1.59'), and the census progression 9 -> 20 -> 21 and the no-token history 75 -> 85 are kept as anchors, never as this revision's committed half. (2) THE COMMITTED HALF MOVES WITH THE FREEZE, WHICH IS THE HALF v1.61 DID NOT PAY. v1.61 restamped nine DRAFT halves from 'the v1.60 draft' to 'the v1.61 draft' and left every COMMITTED half at 6f0ee85, so its published pairs straddled two freezes. Each committed half is re-measured at dfae038 here, `git show dfae038:"$S" | <command>`, and the pair is collapsed where the halves agree: awk needle 1/1; git-grep-n needle 1 with the trailing quote and 2 without, at both; opener census 21 openers over 11 distinct tokens at both; py-pin lines 11, distinct pins 9, bare prose pins 3, reproduced-output lines 8, all at both; AC-1.2 anchor 1/1; blind-form needle 1/1; nine control strings verbatim at grep -cF 1 at BOTH halves -- which discharges the 'the sixth positive has no 6f0ee85 half' caveat v1.60 and v1.61 both carried, since that string exists at dfae038; six positives MATCH and three true negatives NO MATCH under the pattern extracted from the published block by its own anchored needle; split_only empty over the draft with its synthetic positive firing. EXACTLY ONE FIGURE MOVED and it is the one this revision's own prose moves: the no-token scale is 85 at dfae038 and 89 over this draft, because v1.62's exclusion-(2) sub-class and AC-4.2's exhaustiveness clause are both stated in negatives. THE DERIVED FIGURE MOVED WITH IT: 'up to N candidate occurrences' is a FUNCTION of that scale, not a second statement of it, and it is now written as 89 and labelled as derived so a later re-measure cannot leave it silently behind. The class-closure enumeration is 110 at dfae038 and 123 over this draft; its hit count is not published in the body by the standing rule and is stated here only because the eighteen new members were read individually to confirm every one carries its command. (3) MUST, 2486 -- THE ROUND'S ONLY WRONG PUBLISHED FIGURE IN THIS DOCUMENT, AND THE LAST DOCUMENT STILL ASSERTING IT. AC-6.4's Phase-5f gate command carried the comment 'from h-mad/ the same command collects 2486'. Measured at dfae038, each in its OWN shell invocation of `python3.11 -m pytest --collect-only -q -p no:cacheprovider`: 2809 from the repository root and 2547 from h-mad/, both +61 on the retired 2748/2486 pair the impl-plan already publishes and the plan already retires. THE CLASS, NOT THE INSTANCE: the number is not replaced with a fresher number, because a comment embedded in a command string is the one surface a value sweep of this document has already missed twice (v1.54's miss lived there). The rule now stated in the body is that such a comment may name a CONSTANT stamped elsewhere in this document -- 2748 is, at the AC body above, with its sha e8eaf6f and its re-measure-at-5c rule, which is why it stays -- and may never carry a fresh measurement of its own; 2809/2547 are stated in prose with their command and sha, as a scale for the root-versus-h-mad gap and not as a floor. (4) MUST, THE OWED-ELSEWHERE DISCHARGE, taken as a bracketed correction on the v1.61 entry per the standing practice, together with three further corrections to that entry that the delta pass surfaced: the `stream` key was not in this document when v1.61's derivation cited it, 'ONE routed finding' was three, and the two it did not answer were not recorded as deferred. The v1.60 entry takes a bracketed correction too, for a defect no report raised and my own re-run found: it published the bare-pin drop as '7 -> 3, four became command output' where its own command returns 6 -> 3 and three, because 7 is the LINE count and the pin command counts PINS. The gap is one CONTINUATION pin -- a bare :N whose path came from the preceding pin -- and that is now residual (d) on the shape greps, screened by distribution rather than by a total (14 of the 15/16 hits at every sha are FR-6's deliberate bare ordinals, which residual (a) already admits; the member count is 1 at 6f0ee85 and 0 at dfae038 and over this draft). (5) SHOULD-FIXES, all six addressed, none deferred. AC-4.2 gains BAD_ARGS and states EXHAUSTIVENESS rather than a list: its eleven exit-0 heads plus AC-4.1's RAN, and its three collapsed exit-2 heads with UNREADABLE and LAUNCH_FAILED standing for their reason=/stage= families, partition every head of the impl-plan's VERDICT_TABLE, so nothing the helper can print falls outside the two classes. FR-4's dangling 'It is tested with' now names its subject. FR-4 and AC-4.2 both say IN WORDS that DETAIL_KEYS and VERDICT_TABLE do not exist in the tree until 5d/5e and must be located by their ASSIGNMENT and never by their name -- and the needle for either is deliberately NOT published here, because publishing it would make this document a second hit for it, the same self-quoting hazard that has already cost this document one needle. `fields` and `heads` are named as a NEW sub-class of the enumeration's residual (1): they are counted, so they do not belong on the un-measured list beside `commits`/`tokens`/`values`; they sit outside the alternation under exclusion (2) as design-derived counts, and the rule over the axis is now stated -- a counted noun joins the alternation when its count becomes tree-derived. (6) OWED BY ANOTHER DOCUMENT, REPORTED AND NOT EDITED: the design's triage alternation for the constructor-form screen lists ten keys and omits duplicate_key, while DETAIL_KEYS has eleven, so that screen cannot raise the one key it is blind to. This document's own FR-4 list matches DETAIL_KEYS member-for-member, so the spec is not the document that drifted. Tree-derived figures re-executed at dfae038 rather than inferred, per the closure's own practice: 6, 24, 73, 0, and AC-1.7's 16/2 heading pair, each returning the value printed beside it.
