@@ -544,3 +544,7 @@ AC-3.14's `__suppress_context__ False`; `LaunchFailed` annotation; Task 2 assert
 `_gating[0]`; Task 2 `AttributeError` REDs vs implementer prompt :52 — a TOOLING-side tension), the
 plan's two routing gaps, the design's `at "0"` site and 22→23 and stale self-measurements, the
 impl-plan's 19/20 docstring and wire-row enumeration. No two-surface clean; no exit gate.
+- **C40 — plan c88 `-b` leg (C38 re-dispatch) delivered 17:0x: `GATE: FAIL must=1 should=1` (13 files /
+  190 greps).** Its one must is the 81-vs-85 total both other plan legs filed; no new must. Three legs on
+  one document at one freeze, three model runs, one shared must set — the plan's prose class is closed
+  and only the orchestrator's routing gap remains. Collected as `plan.audit.v88.teammate-b.md`.
