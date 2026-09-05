@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-05 · gotcha · [0.7] · `h-mad,codex,exec,prompt-size,assembler,session:2026-09-05` — codex exec counts the wrapper's 30-char dispatch boundary against its 1,048,576-char limit (1,111,059-char file refused as actual_chars 1,111,089). A size gate must reserve the transport's own overhead, not compare to the raw limit.
+- 2026-09-05 · gotcha · [0.5] · `pytest,verification,session:2026-09-05` — pytest -q -q (double quiet) drops the 'N passed' summary line; exit 0 alone is then the only signal, which is exactly what 'score on the SUMMARY, never $?' forbids. One -q, and read the count.
 - 2026-09-05 · gotcha · [0.9] · `python,exceptions,handoff:2026-09-05-doc-block-exec-round-seventeen` — raise err from X always sets __suppress_context__=True; a test asserting False while prescribing explicit chaining rejects the prescribed implementation
 - 2026-09-05 · gotcha · [0.9] · `python,regex,doc-block-exec,handoff:2026-09-05-doc-block-exec-round-seventeen` — re.finditer enumerates NON-overlapping occurrences per key; a span-intersection scan built on it misses 'aa' at [1,3) in 'aaab' — use lookahead (?=k) with (m.start(), m.start()+len(k))
 - 2026-09-05 · gotcha · [0.5] · `h-mad,subagents,handoff:2026-09-05-doc-block-exec-round-seventeen` — A subagent 'failed: Prompt is too long' notification is recoverable (it resumed and kept writing); rule ownership explicitly BEFORE spawning a successor, or two authors share one file
