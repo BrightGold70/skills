@@ -446,3 +446,101 @@ of it goes stale mid-round (orchestrator rule 4). Report "sibling owes X" in you
 - **C31 — design DONE v1.109 (697/154).** The disputed unicode cell was the DESIGN's error: the unicode
   test asserts the four escapes inside `heading="…"`, and the design's probe modelled it as a line count.
   Rescored grid is cell-for-cell the impl-plan's: quoting-removed reds N/U/F/Q; escape-removed reds N (regression) + Q (key); c1-removed reds U alone. `field-quoting-removed` is NOT isolated — recorded, not smoothed. Three passes over one matrix; the error survived two passes of one author and died at the first cross-document diff. **All four documents DONE**: spec v1.63 (289/106), plan v1.104 (689/146), impl-plan v1.53 (575/147), design v1.109 (697/154). Batch committed with this sheet; the freeze-sha field of every entry is `fbc2ea0`, the parent of that commit.
+
+## Gating dispatch (appended after the batch commit)
+
+- **Batch `cb4fe99`** (parent `fbc2ea0`), brief stamp `34ed5ef`, both pushed; gating freeze = `cb4fe99`.
+- Assembled with `--vh-tail 3`, report-file transport, one transport file per leg: design c97
+  1,032,916 B (1,027,802 chars — 20 KB under codex's 1 Mi ceiling; `--vh-tail 1` would give 945 KB and
+  is the fallback if codex refuses), plan c88 590,894 B, impl-plan c48 935,512 B. Residual-slot
+  preflight: 0 slots, 0 `ONLY:` markers; the `{{` hits are the documents' own f-string regexes.
+- Dispatched 15:11: `hmad-dispatch exec codex … --sandbox read-only --timeout 1800` ×3 (backgrounded,
+  `--log` on each) and `doc-auditor` GATING ×3 by prompt path. Six report paths, none shared.
+- **C32 — plan c88 CODEX leg: `GATE: FAIL must=2 should=2`** (delivered via `--out`, no report file;
+  collected to `plan.audit.v88.codex.md`). BOTH musts are FACT 8 routing omissions by the orchestrator:
+  the plan row for 3d (AC-1.8 collect-only) and for the mutation-matrix count read "—", so the plan
+  still says `pytest h-mad/tests/test_docsections.py -q` and `81 mutations`. Shoulds: evidence-register
+  statuses contradict the measurements section (Setext re-run recorded but listed un-re-run; de-indent
+  claimed "this revision" but "no revision since v1.95"); the `.py` closure and the `h-mad handoff`
+  closure both broke at `af19d53` — the plan says one broke first. Orchestrator error #49u: a FACT 8 table
+  with a "—" cell for a document that restates the value is a silent routing gap; sweep every shared
+  value across ALL FOUR documents before writing the table, not only the ones the finding named.
+- **C33 — impl-plan c48 CODEX leg: `GATE: FAIL must=6 should=2`** (via `--out`; collected to
+  `impl-plan.audit.v48.codex.md`). ALL SIX PREMISES VERIFIED by the orchestrator: (1) `raise err from
+  cleanup_error` sets `__suppress_context__ = True` (Python semantics, probed) while AC-3.14 asserts
+  False — the test rejects the prescribed implementation; (2) `LaunchFailed.__init__(…, err: OSError |
+  subprocess.TimeoutExpired, …)` at :1973 excludes the `ValueError` Task 3 now passes; (3)
+  `OverlappingSubstitution` has THREE representations — `pairs: list[tuple[str,str]]` (:1964), `pairs,
+  intersections=()` (:2323), and the design's "pairs carries both kinds, each tagged" (:2709); (4) Task
+  2's `test_substitute_refuses_intersecting_spans` asserts the EMITTED detail line (:2358) but the
+  renderer lands in Task 4; (5) Task 5's scaffold reads `_gating[0]` (:3407, :3493, :3641) and so
+  accepts duplicate gating fences the shipped consumer refuses; (6) Task 2's ten `AttributeError` REDs
+  contradict `codex-implementer-prompt.md:52` ("an `AttributeError` standing in for a behavioural
+  assertion is not a RED") — a tension in h-mad's OWN prompt, scoped for wire tests but written
+  unconditionally; resolving it touches `h-mad/references` (tooling batch, #87) AND the impl-plan must say
+  why a new-symbol task's RED is necessarily `AttributeError`. Shoulds: subprocess coverage for both NUL
+  paths; Task 2 says nine and ten.
+- **C34 — design c97 CODEX leg: `GATE: FAIL must=3 should=1`** (via `--out`; collected to
+  `design.audit.v97.codex.md`). ALL THREE VERIFIED: (1) the AC-2.1–2.7 matrix row at :3548 still asserts
+  `intersect: "ab" "bc" at "0"` — the one `at`-form site r17's sweep and MY readback missed, because both
+  grepped for the `<offset>` PLACEHOLDER and this site carries a concrete `"0"` (a value sweep must try the
+  instantiated form too); (2) the prescribed scan `re.finditer(re.escape(k), text)` enumerates
+  NON-OVERLAPPING occurrences per key, so on `aaab` with keys `aa`,`ab` it yields `[0,2)`,`[2,4)` and
+  misses `aa` at `[1,3)`, which intersects `ab` at index 2 — probed: finditer intersections `[]`,
+  lookahead `(?=…)` enumeration finds the intersection; this ALSO falsifies the sheet's 3a residual ("a
+  key intersecting itself … counts stay equal") — the overlapping self-occurrence can hide a cross-key
+  intersection; decision for r18: enumerate with `re.finditer('(?=' + re.escape(k) + ')', text)` spans
+  `(m.start(), m.start()+len(k))`, add the `aaab` fixture; (3) published `$P` **29** (:3326) vs re-run
+  30, walk `70` vs partition `69` (:4017), "`af19d53`→working prints nothing" (:1007) vs four replaced
+  lines — the author's own screens table reported 30/8 while the body says 29. Should: plan still says 81.
+- **C35 — codex round summary at `cb4fe99`: plan 2/2, impl-plan 6/2, design 3/1 → 11 musts, 5 shoulds,
+  every premise verified.** All three codex legs delivered via `--out` and wrote no report file (as in
+  r16). Teammate legs pending.
+- **C36 — teammate legs at `cb4fe99` (report-file transport, both delivered):** design c97 `FAIL must=2
+  should=4` (Evidence 11 files / 84 greps): (1) §Invariant Compliance still publishes the `rglob('*.py')`
+  slicer sweep as **22** @`35698f9` while it reads **23** at `af19d53`, `fbc2ea0` and `cb4fe99`
+  (member `_trim_version_history`) — the same 22→23 the impl-plan fixed in v1.53 and the design's
+  v1.109 entry wrongly called a null; (2) `OverlappingSubstitution` — design says ONE tagged `pairs`,
+  impl-plan says `pairs` + `intersections` and its AC-2.7 test asserts `pairs == []` on the intersection
+  case → an implementer following the design fails the impl-plan's named test (codex filed the same from
+  the impl-plan side, C33 item 3: **cross-family convergence on a cross-document defect**). Shoulds: the
+  OWED-ELSEWHERE list is present-tense against `fbc2ea0` and 4 of 7 items are already discharged; plan
+  81 vs 85 unnamed; five spec ACs (2.3, 3.4, 3.5, 4.4, 6.3) never named in the design (42 of 49); the
+  line-pin exemption arm is extension-blind. impl-plan c48 `FAIL must=2 should=2` (19 files / 150
+  greps): (1) `_field`'s docstring in Task 4's code block says **19** dynamic values while the prose
+  derives **20** (27 slots) — the code block is what 5d writes verbatim; (2) the "five rows whose mutant
+  reds a second test" carve-out omits `wire-unconditional`. Shoulds: "third row" ordinal has no stated
+  base; the 9-site stamp sweep could not be reproduced by the auditor (unverified).
+- **C37 — gating freeze statement corrected (auditor-design-c97).** The dispatch said "cb4fe99 (HEAD)";
+  HEAD was `34ed5ef` (the brief-stamp commit, `docs/handoffs/` only). The four documents are
+  byte-identical between the two, so no reading moves; the gating freeze is `cb4fe99` for the documents
+  and `34ed5ef` for the tree. Orchestrator error: a HEAD claim written from memory one commit stale.
+  The design auditor's load-bearing note: the design's scoped-diff trip-wire trips only on `.md`, so no
+  screen it ships can see a `.py` arrival in its own declared roots — the class behind the 22→23 miss.
+- **C38 — plan c88 teammate leg silent for 54 minutes** (no report, no reply to a 15:54 status ping;
+  siblings delivered at 15:23–15:24). Per #49o: NOT declared dead, NOT re-dispatched to the same path.
+  A second leg `auditor-plan-c88-b` dispatched 16:06 to `…plan_cycle88_teammate-b.report.md`; the
+  original path is left untouched so a late arrival is a second reading, not a clobber.
+- **C39 — plan c88 TEAMMATE leg delivered at 16:08 (after 57 min; a slow leg, not a dead one — #49o
+  vindicated): `GATE: FAIL must=2 should=3` (12 files / 78 greps).** Its two musts are codex's two
+  (C32) one-for-one — §Deliverables/§Measurements `81 mutations` vs the design's 85; §Implementation
+  Strategy's AC-1.8 pin runs the file where spec v1.63 makes it collect-only — **cross-family convergence
+  for the second round running on the plan**, and both are the orchestrator's FACT 8 routing gaps
+  (#49u). One should is impl-plan debt: `LaunchFailed`'s `err` annotation (also codex impl-plan must 2).
+  The `-b` re-dispatch (C38) stays running as a second reading.
+
+## Round seventeen gating result at `cb4fe99` — FAIL on every phase, both surfaces
+
+| phase | teammate | codex | union must |
+|---|---|---|---|
+| design c97 | 2 / 4 | 3 / 1 | 5 |
+| plan c88 | 2 / 3 | 2 / 2 | 2 (identical sets) |
+| impl-plan c48 | 2 / 2 | 6 / 2 | 8 |
+
+Union must **15** (teammate 6 / codex 11, plan's two shared). Every codex premise verified by the
+orchestrator. r18 owes: the codex class again (three `OverlappingSubstitution` representations — found
+from both sides; `finditer` overlapping-occurrence miss + `aaab` fixture; `from cleanup_error` vs
+AC-3.14's `__suppress_context__ False`; `LaunchFailed` annotation; Task 2 asserting a Task 4 renderer;
+`_gating[0]`; Task 2 `AttributeError` REDs vs implementer prompt :52 — a TOOLING-side tension), the
+plan's two routing gaps, the design's `at "0"` site and 22→23 and stale self-measurements, the
+impl-plan's 19/20 docstring and wire-row enumeration. No two-surface clean; no exit gate.
