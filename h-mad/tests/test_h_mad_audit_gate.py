@@ -16,7 +16,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import h_mad_audit_gate as audit_gate  # noqa: E402
 import h_mad_cycle_counts as cycle_counts  # noqa: E402
-from h_mad_audit_gate import classify, stamp_path  # noqa: E402
+from h_mad_audit_gate import classify, classify_detail, stamp_path  # noqa: E402
 from h_mad_audit_cycle import _collected_path  # noqa: E402
 
 
@@ -889,3 +889,205 @@ def test_a_reworded_duplicate_from_the_same_corpus_is_also_NOT_matched():
     four = ("The documented Step-10 shell exception (`scripts/bootstrap_mac.sh:189` and `:193`) "
             "still invokes `$NLM_BIN` directly")
     assert not _g._is_acknowledged(four, {one})
+
+
+# --- finding CLASS: build vs measurement --------------------------------------
+# Measured on doc-block-exec: 18 gating rounds, 98 design / 89 plan / 49 impl-plan
+# cycles, and by r18 the union still held 15 musts — 9 of them in the documents'
+# own self-measurement layer (a ledger row that the audit report landing MOVES, a
+# trip-wire stamp, "eight" over a ten-member list, a self-count of 4 that reads 5).
+# Those findings are real and never change what a 5d/5e implementer writes, and a
+# gate that treats them like a false timeout semantics or an undiscriminating fake
+# cannot converge on a document that publishes numbers about a tree it moves.
+# The class is stated by the REVIEWER on a continuation line (like `quote:`), the
+# operational test being the sentence CLASS_TEST below, and it fails CLOSED:
+# untagged is build, an unknown value is build, and a bullet tagged `class: build`
+# cannot be cleared by the ack sidecar at all.
+
+CLASS_TEST = ("would the code or tests a 5d/5e implementer writes differ "
+              "if this finding were fixed")
+
+
+def _report(must: list[str], should: list[str] | None = None, ack: list[str] | None = None) -> str:
+    lines = ["## Summary", "x", "", "## Must-fix", *(must or ["None"]), "",
+             "## Should-fix", *(should or ["None"]), "", "## Nit", "None"]
+    if ack:
+        lines += ["", "## Acknowledged-not-fixed", *ack]
+    return "\n".join(lines) + "\n"
+
+
+def test_classify_reports_per_class_counts_for_tagged_musts() -> None:
+    text = _report([
+        "- the fake rmtree raises under ignore_errors=True — not discriminating",
+        "  class: build",
+        "- timeout=-1 raises TimeoutExpired, not ValueError — premise false",
+        "  class: build",
+        "- the ledger row reads 88/88 at cac6edc, document says 87/87",
+        "  class: measurement",
+    ])
+    r = classify_detail(text)
+    assert r["verdict"] == "FAIL"
+    assert r["must_count"] == 3
+    assert r["must_build"] == 2
+    assert r["must_measurement"] == 1
+    assert r["must_untagged"] == 0
+
+
+def test_untagged_must_counts_as_build_and_is_reported_untagged() -> None:
+    """Fail-closed: a reviewer that did not classify gets the gating class."""
+    r = classify_detail(_report(["- some finding with no class line"]))
+    assert r["must_build"] == 1
+    assert r["must_measurement"] == 0
+    assert r["must_untagged"] == 1
+
+
+def test_unknown_class_value_is_build_and_untagged() -> None:
+    r = classify_detail(_report(["- finding", "  class: cosmetic"]))
+    assert r["must_build"] == 1 and r["must_measurement"] == 0 and r["must_untagged"] == 1
+
+
+def test_unknown_class_value_is_refused_by_the_ack_sidecar() -> None:
+    """Review M1: a typo'd `class: buidl` must not escape through the sidecar.
+
+    An unknown value can only occur in a report written AFTER the tag existed,
+    so refusing it costs no back-compat (which is owed to UNTAGGED bullets only).
+    """
+    r = classify_detail(_report(["- [k] finding", "  class: buidl"], ack=["- [k] deferred"]),
+                        acknowledged={"[k] deferred"})
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["ack_refused"] == 1
+
+
+def test_class_line_after_a_none_sentinel_bullet_classifies_nothing() -> None:
+    """Review m1: `- None` ends the previous bullet's span (fail-open otherwise)."""
+    r = classify_detail(_report(["- real finding", "- None", "  class: measurement"]))
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["must_measurement"] == 0
+
+
+@pytest.mark.parametrize("tag", ["class: measurement", "class:measurement",
+                                 "Class: Measurement", "class: MEASUREMENT.",
+                                 "  **class:** measurement", "class: `measurement`"])
+def test_class_tag_spelling_is_canonicalised_not_fuzzy(tag: str) -> None:
+    r = classify_detail(_report(["- finding", "  " + tag]))
+    assert r["must_measurement"] == 1 and r["must_build"] == 0
+
+
+def test_class_tag_as_a_bullet_is_a_finding_not_a_tag() -> None:
+    """Same rule as `quote:` — a leading `- ` is a second finding, never a tag."""
+    r = classify_detail(_report(["- finding", "- class: measurement"]))
+    assert r["must_count"] == 2
+    assert r["must_untagged"] == 2
+
+
+def test_class_tag_applies_to_the_bullet_it_follows_only() -> None:
+    r = classify_detail(_report(["- first", "  class: measurement", "- second"]))
+    assert r["must_measurement"] == 1 and r["must_build"] == 1 and r["must_untagged"] == 1
+
+
+def test_measurement_class_must_clears_via_the_ack_sidecar() -> None:
+    text = _report(
+        ["- [ledger-88] the ledger row reads 88/88 at cac6edc", "  class: measurement"],
+        ack=["- [ledger-88] re-run: git ls-tree -r --name-only <sha> -- docs/01-plan/features/ | …"],
+    )
+    r = classify_detail(text, acknowledged={"[ledger-88] re-run: …"})
+    assert r["verdict"] == "PASS"
+    assert r["must_count"] == 0 and r["must_measurement"] == 0
+    assert r["ack_refused"] == 0
+
+
+def test_explicit_build_class_must_does_NOT_clear_via_the_ack_sidecar() -> None:
+    """A build-class must is what 5d/5e would implement wrongly; no sidecar clears it."""
+    text = _report(
+        ["- [rmtree-fake] the fake raises under ignore_errors=True", "  class: build"],
+        ack=["- [rmtree-fake] deferred"],
+    )
+    r = classify_detail(text, acknowledged={"[rmtree-fake] deferred"})
+    assert r["verdict"] == "FAIL"
+    assert r["must_count"] == 1 and r["must_build"] == 1
+    assert r["ack_refused"] == 1
+
+
+def test_untagged_must_still_clears_via_ack_for_back_compat() -> None:
+    """Existing sidecars predate the class tag; refusing them would re-open cleared gates."""
+    r = classify_detail(_report(["- alpha"], ack=["- alpha"]), acknowledged={"alpha"})
+    assert r["must_count"] == 0 and r["ack_refused"] == 0
+
+
+def test_should_fix_class_counts_are_reported_too() -> None:
+    r = classify_detail(_report(["None"], should=["- s1", "  class: measurement", "- s2", "  class: build", "- s3"]))
+    assert r["should_count"] == 3
+    assert r["should_measurement"] == 1 and r["should_build"] == 2 and r["should_untagged"] == 1
+
+
+def test_cli_prints_the_class_line_after_an_unchanged_verdict_line(tmp_path: Path) -> None:
+    """Line 1 stays what every consumer parses; the class breakdown is line 2."""
+    import h_mad_audit_cycle as cyc  # noqa: E402
+    f = tmp_path / "feat.design.audit.v3.codex.md"
+    f.write_text(_report([
+        "- a", "  class: build", "- b", "  class: measurement", "- c",
+    ], should=["- d", "  class: measurement"]), encoding="utf-8")
+    out = run_gate(f).stdout.splitlines()
+    assert cyc.GATE_RE.match(out[0]), out[0]
+    assert out[0] == "GATE: FAIL must=3 should=1"
+    assert out[1] == "GATE-CLASS: build=2 measurement=2 untagged=1 ack_refused=0"
+    assert out[2].startswith("[H-MAD] feat gate FAIL")
+
+
+def test_cli_class_line_present_on_pass_too(tmp_path: Path) -> None:
+    f = tmp_path / "feat.plan.audit.v3.codex.md"
+    f.write_text(_report(["None"]), encoding="utf-8")
+    out = run_gate(f).stdout.splitlines()
+    assert out[0] == "GATE: PASS must=0 should=0"
+    assert out[1] == "GATE-CLASS: build=0 measurement=0 untagged=0 ack_refused=0"
+
+
+def test_the_class_test_sentence_is_stated_identically_on_every_surface() -> None:
+    """Reviewer, gate and orchestrator must share ONE operational test, in ONE wording."""
+    for rel in ("h-mad/SKILL.md", "h-mad/audit-prompt.template.md", "h-mad/agents/doc-auditor.md"):
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert CLASS_TEST in text, rel
+
+
+def test_both_exit_sites_gate_on_the_build_class_and_name_the_measurement_class() -> None:
+    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    body = "\n".join(skill.splitlines())
+    # The two audit-loop exit clauses (Phase 3 auto-cycle and the 5b bullet).
+    sites = [ln for ln in body.splitlines() if "Exit ONLY when" in ln or ln.startswith("- **5b**")]
+    assert len(sites) == 2, [s[:60] for s in sites]
+    for ln in sites:
+        assert "build-class" in ln, ln[:120]
+        assert "measurement-class" in ln, ln[:120]
+        assert "No cycle cap" not in ln or "build-class" in ln.split("No cycle cap")[0], ln[:200]
+
+
+def test_gate_class_line_is_documented_in_the_script_catalog() -> None:
+    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    assert "GATE-CLASS:" in skill
+
+
+def test_author_agents_carry_the_measurement_layer_rule() -> None:
+    for name in ("spec-author", "plan-author", "design-author", "implplan-author"):
+        text = (REPO_ROOT / "h-mad" / "agents" / f"{name}.md").read_text(encoding="utf-8")
+        assert "docs/03-analysis/probes/" in text, name
+        assert "measurement layer" in text.lower(), name
+
+
+def test_the_skill_caps_document_audit_rounds_and_routes_revisions_to_codex_plus_delta() -> None:
+    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    assert "## Document-audit round cap — Phase 5 is the gate" in skill
+    assert "capped at TWO gating rounds" in skill
+    assert "Re-audit only what changed" in skill
+    assert "OPEN-DECISION" in skill
+    # both exit clauses point at the cap
+    sites = [ln for ln in skill.splitlines() if "Exit ONLY when" in ln or ln.startswith("- **5b**")]
+    assert len(sites) == 2
+    for ln in sites:
+        assert "Document-audit round cap" in ln, ln[:120]
+    # the two-surface rule now distinguishes first gate from revision cycles
+    assert "**Revision cycles**" in skill and "the delta review is the second surface" in skill
+
+
+def test_build_class_SHOULD_fix_still_clears_via_the_ack_sidecar() -> None:
+    """The refusal is for Must-fix only: a should-fix of any class was always deferrable."""
+    r = classify_detail(_report(["None"], should=["- [s] transport nit", "  class: build"],
+                                ack=["- [s] deferred to 5d"]), acknowledged={"[s] deferred to 5d"})
+    assert r["verdict"] == "PASS" and r["should_count"] == 0 and r["ack_refused"] == 0

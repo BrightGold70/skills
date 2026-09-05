@@ -179,6 +179,18 @@ Output schema (exact, no other top-level sections):
 - <style/clarity issue>
   *(empty section: write the single word `None` on its own line — NOT a `- None` bullet; a leading `- ` would be counted as a blocking item)*
 
+Class rule (Must-fix and Should-fix): **every bullet carries a `class:` continuation line**, `build` or
+`measurement`, under the bullet and never as a `- ` bullet of its own (a leading `- ` is a second
+finding). The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `class: build` (an interface, a contract, a
+predicate, a fixture, a test's assertion or RED/GREEN count, a false premise about the platform). No →
+`class: measurement` (a published number, stamp, ledger row, sha series, pointer or self-count that is
+stale or mis-derived; the tree is unchanged by fixing it). An untagged bullet is scored as `build`, so
+omitting the line never softens a finding — it only costs the orchestrator the triage. Put the `class:` line directly under its bullet (before or after `quote:`); do not indent a sub-bullet between a finding and its `class:` line, which leaves the finding untagged.
+
+    - <issue> — <why>
+      class: build
+      quote: <path/to/file.md> › `<span copied verbatim from that file>`
+
 Quoting rule (Must-fix and Should-fix): **if a finding asserts what a document says, prove it.**
 Add an indented `quote:` line under that bullet naming the file and carrying the span copied
 verbatim out of it:

@@ -87,6 +87,16 @@ The orchestrator passes you:
    disagreeing on an exception type) lived 5–15 cycles undetected here. Counts are the cheap
    version: when a document says "seven sites", count the list.
 
+7b. **Classify every finding, on a continuation line.** Under each Must-fix and Should-fix bullet
+   write `class: build` or `class: measurement` — a continuation line like `quote:`, never a `- `
+   bullet. The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `build` (interface, contract, predicate,
+   fixture, a test's assertion or RED/GREEN count, a false platform premise an implementer would
+   code against). No → `measurement` (a published number, stamp, ledger row, sha series, pointer or
+   self-count that is stale or mis-derived — the tree is unchanged by fixing it). Measured on
+   `doc-block-exec` r18: 9 of the union's 15 musts were measurement-class and the round could not
+   converge on them. The gate scores an untagged bullet as `build`, so leaving the line off never
+   softens your finding; it only hides which class it was in.
+
 8. **You never fix anything.** No `Edit`. No `Write` except the report path. If the right answer is
    obvious, put it in the finding as a prescription; the orchestrator applies it.
 
@@ -108,10 +118,12 @@ Write to `REPORT`, this exact schema and no other top-level sections:
 
 ## Must-fix
 - <issue> — <why it breaks an invariant or creates a hard gap>
+  class: build | measurement
   quote: <file> › `<verbatim span>`
 
 ## Should-fix
 - <issue> — <why it matters but is not a hard gate>
+  class: build | measurement
 
 ## Nit
 - <style/clarity issue>

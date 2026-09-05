@@ -283,7 +283,7 @@ See `references/phase-table.md` for the full gate table. Detailed inline protoco
 
 1. **Brainstorm** — run inline brainstorm protocol (`references/inline-protocols.md §Phase 1`). Output: `docs/01-plan/features/<feature>-brainstorm.md`. Wait for user approval.
 2. **Specify** — **dispatch the `spec-author` teammate** (§"Teammate authors"); the inline spec protocol (`references/inline-protocols.md §Phase 2`) is its contract, not yours to execute. Output: `docs/01-plan/features/<feature>.spec.md`. Wait for user approval.
-3. **Plan + Audit-Plan** — **dispatch the `plan-author` teammate** (§"Teammate authors"); the inline plan protocol (`references/inline-protocols.md §Phase 3`) is its contract. Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan on **two surfaces** (§"Never gate on one audit pass" chooses which) → awk gate on the union → if must-fix > 0 OR should-fix > 0, surface bullets, then **re-dispatch `plan-author` with the findings** (§"Teammate authors" — a revision routes to the owning author, never to you) → re-audit. **Exit ONLY when both must-fix = 0 AND should-fix = 0.** No cycle cap — the rationale is that if errors are already known (whether breakage-level or improvement-level), shipping them is worse than burning more cycles. Operator escape at any cycle: author `.audit.v<N+1>.md` with `## Acknowledged-not-fixed` section listing the should-fix items the operator chooses to defer, commit `[audit-override]`, and the gate treats those items as cleared.
+3. **Plan + Audit-Plan** — **dispatch the `plan-author` teammate** (§"Teammate authors"); the inline plan protocol (`references/inline-protocols.md §Phase 3`) is its contract. Output: `docs/01-plan/features/<feature>.plan.md`. Wait for user-approved v1.0, then auto-cycle: audit-plan on **two surfaces** (§"Never gate on one audit pass" chooses which) → awk gate on the union → if must-fix > 0 OR should-fix > 0, surface bullets, then **re-dispatch `plan-author` with the findings** (§"Teammate authors" — a revision routes to the owning author, never to you) → re-audit. **Exit ONLY when build-class must-fix = 0 on BOTH surfaces at one commit AND every remaining finding — build-class should-fixes, measurement-class musts and shoulds — is either fixed or acknowledged.** The class is the reviewer's `class:` line under each bullet (§"Finding class — build vs measurement"): build-class findings drive the loop up to the cap of TWO gating rounds per revision line (§"Document-audit round cap — Phase 5 is the gate"), after which an open build-class must becomes an `OPEN-DECISION` on its impl-plan Task and is settled in 5d — and measurement-class findings never hold a phase past the round in which build-class reached 0: they go to the sidecar with their re-run command as the ack text. Operator escape at any cycle: author `.audit.v<N+1>.md` with `## Acknowledged-not-fixed` section listing the should-fix and measurement-class items the operator chooses to defer, commit `[audit-override]`, and the gate treats those items as cleared (a bullet the reviewer tagged `class: build` is refused by the sidecar and reported `ack_refused=N` on the `GATE-CLASS:` line).
 4. **Design + Audit-Design** — **dispatch the `design-author` teammate** (§"Teammate authors"); the inline design protocol (`references/inline-protocols.md §Phase 4`) is its contract. Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3, with revisions re-dispatched to `design-author`. Back-propagation: if design revision invalidates a plan decision, return to Phase 3 to re-clean, then re-enter Phase 4 audit from cycle 1.
 5. **Implementation (autonomous)** — see Phase 5 sub-section below.
 6. **Verification (autonomous)** — run inline gap analysis (`references/inline-protocols.md §Phase 6`). If match rate < 90%, run inline iterate (`references/inline-protocols.md §Phase 6b`) — 5-cycle cap. Loop until ≥90% AND 100% test pass. Phase 6a-prime is an agy architectural review before gap analysis.
@@ -422,7 +422,7 @@ no title/preview dependence, no manual pin (H5). Use `launch` when h-mad owns th
 agent; `pin`/`pin-agents` when adopting an existing pane.
 
 - **5a** — arm hook, then **dispatch the `implplan-author` teammate** (§"Teammate authors"); the inline impl-plan protocol (`references/inline-protocols.md §Phase 5`) is its contract. Write `orchestrator_state.<feature>.phase = "step5"` + `autonomous_entry_ts = <now>`. Output: `docs/01-plan/features/<feature>.impl-plan.md`.
-- **5b** — auto-audit impl-plan (same audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"; §"Never gate on one audit pass" chooses the two surfaces). Write each surface's audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>[.<surface>].md`. Run awk gate on the union. If must-fix > 0 OR should-fix > 0, **re-dispatch `implplan-author` with both the must-fix AND should-fix bullets** (§"Teammate authors" — you relay findings, you do not regenerate the document yourself); cycle until **both must-fix = 0 AND should-fix = 0**. No cycle cap — same rationale as Phase 3 (known errors at any severity worth fixing > shipping). Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix items, commit `[audit-override]`, gate treats those as cleared. **Tag each ack bullet with a `[key]`** — `- [ac-1.4 teardown-leak] <text>` — and it keeps matching however the next cycle's reviewer re-words the finding; without one, the match survives re-formatting (emphasis, backticks, wrapping, case) but not a genuine re-wording, and you pay a cycle re-acknowledging it. **There is deliberately no fuzzy matching** (§"Why the ack match is not fuzzy").
+- **5b** — auto-audit impl-plan (same audit-prompt mechanism as Phases 3/4 — see §"Audit prompt assembly"; §"Never gate on one audit pass" chooses the two surfaces). Write each surface's audit to `docs/01-plan/features/<feature>.impl-plan.audit.v<N>[.<surface>].md`. Run awk gate on the union. If must-fix > 0 OR should-fix > 0, **re-dispatch `implplan-author` with both the must-fix AND should-fix bullets** (§"Teammate authors" — you relay findings, you do not regenerate the document yourself); cycle until **build-class must-fix = 0 on BOTH surfaces at one commit and every remaining finding is fixed or acknowledged** (§"Finding class — build vs measurement"). Build-class findings drive the loop up to the cap of TWO gating rounds (§"Document-audit round cap — Phase 5 is the gate"), after which an open build-class must is carried as an `OPEN-DECISION` on its Task and settled in 5d; measurement-class findings never hold the phase past the round in which build-class reached 0. Operator escape at any cycle: author `.impl-plan.audit.v<N+1>.md` with `## Acknowledged-not-fixed` listing deferred should-fix and measurement-class items, each with its re-run command, commit `[audit-override]`, gate treats those as cleared; a `class: build` bullet is refused (`ack_refused=N`). **Tag each ack bullet with a `[key]`** — `- [ac-1.4 teardown-leak] <text>` — and it keeps matching however the next cycle's reviewer re-words the finding; without one, the match survives re-formatting (emphasis, backticks, wrapping, case) but not a genuine re-wording, and you pay a cycle re-acknowledging it. **There is deliberately no fuzzy matching** (§"Why the ack match is not fuzzy").
 
   **Then run the wire-pin gate — 5b is the last gate that can require it.** `python3 ~/.claude/skills/h-mad/scripts/h_mad_wire_pin_gate.py docs/01-plan/features/<feature>.impl-plan.md --feature <feature>`. Read the `WIREPIN:` token, never `$?` (`UNSHAPED` exits 2 because it is a cannot-judge, not a verdict). On `WIREPIN: PASS`, 5b automatically registers each passing `wiring` task in `.h-mad/wires.jsonl`; without `--feature`, registration is skipped. `UNREADABLE` → halt `step5b:impl_plan_unreadable`: the gate could not read the file at all, so nothing was parsed — this token carries **no `tasks=`/`wiring=` counts** precisely so it cannot be mistaken for a verdict or routed by a count that was never measured; the stderr `ERROR:` names the path, which is almost always wrong rather than the plan. `UNSHAPED` → **read the `tasks=` count before choosing a remedy**: `tasks=N` with N>0 → halt `step5b:impl_plan_unshaped`, the plan declares no `Task shape` at all, so a wiring task in it is indistinguishable from new behaviour — return to 5a and **re-dispatch `implplan-author`** against the current template (§"Teammate authors"; this is a revision like any other, and regenerating it in your own context is the loop that cost 34 cycles); `tasks=0` → halt `step5b:impl_plan_no_tasks`, the parser saw no task header, so nothing is missing a field — you are almost certainly pointed at a legacy `.plan.md` or the design doc rather than the `.impl-plan.md`. `FAIL` has two causes and two different remedies, so **read the detail lines, not just the verdict**: an `unpinned:` line → halt `step5b:wire_pin_missing:<task>` and return to 5a to name the `WIRE`/`WIRE-PIN`; a `mislabeled:` line → halt `step5b:wire_pin_shape_mislabel:<task>` — the fields are already filled in, so nothing is missing to add and the missing-pin remedy would read as already satisfied. After 5b nothing downstream can tell a wired build from an unwired one, which is why the obligation is mechanical here and advisory nowhere.
 
@@ -1316,6 +1316,25 @@ a document:
    "contradictions: none" in good faith, and be wrong. Re-state what moved, or re-dispatch, rather
    than believing a sibling-document claim made against a version you have since replaced.
 
+### The measurement layer lives in probes, not in the phase document
+
+A phase document states a **claim** and the path of the **committed probe** that derives it
+(`docs/03-analysis/probes/<feature>/<name>.<date>.<session>.py`), plus **one** reading stamped at one
+sha. It does not publish sha-series of its own readings, ledgers of its own audit reports, trip-wires
+over `h-mad/`, counts of its own sections, or any figure that a commit *of this feature's own
+artifacts* moves. Measured on `doc-block-exec`: the design at `--vh-tail 1` assembled to 980,076 of
+the 1,048,576-character `exec` ceiling, the plan carried a ten-sha ledger that the gating reports
+landing advanced by one every round, and 9 of the 15 r18 musts were in that layer. A number that
+lives in a probe is re-derived by running it; a number that lives in the document is re-stamped by
+an author, and the re-stamp is the next round's must.
+
+Two consequences. **Do not restructure a document mid-flight** — extracting the layer is itself a
+revision batch that spawns two more rounds; apply the rule to the next feature, and to a document
+whose audit prompt no longer fits (`ASSEMBLE: HALT <phase>:oversize` at `--vh-tail 1` is the trigger
+that makes it mandatory, because the audit itself has become impossible). **A measurement-class
+finding on an existing document is acknowledged with its re-run command**, never re-stamped by hand
+(§"Finding class — build vs measurement").
+
 ### Precheck before you dispatch — never spend a cycle on a greppable premise
 
 Before `h_mad_assemble_audit.py` for **any** phase audit (3, 4, 5b), run the document
@@ -1368,6 +1387,88 @@ worse than the re-acknowledging cost it was meant to save. Same shape as the ref
 (#27): the rule that would help does not discriminate, and the rule that discriminates is vacuous.
 **The `[key]` tag is the escape**, because it is stated by the operator rather than inferred.
 
+## Finding class — build vs measurement
+
+Every Must-fix and Should-fix bullet a reviewer files carries a **class**, stated on a continuation
+line under the bullet — the same shape as `quote:`, and like `quote:` never a `- ` bullet of its own:
+
+```
+- <issue> — <why>
+  class: build | measurement
+```
+
+The operational test is one question, worded identically here, in `audit-prompt.template.md` and in
+`agents/doc-auditor.md`: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `build` (an interface, a contract, a predicate, a
+fixture, a test's assertion or its RED/GREEN count, a false premise about the platform an implementer
+would code against). No → `measurement` (a published number, stamp, ledger row, sha series, pointer or
+self-count about the tree that is stale or mis-derived — the tree is unchanged by fixing it).
+
+**Why the class exists — measured, not chosen.** `doc-block-exec` ran eighteen gating rounds (design
+c98 / plan c89 / impl-plan c49) under "exit only at must = should = 0, no cycle cap", and at r18 the
+union still held 15 distinct musts, and applying the class test to the r18 verification ledger partitions them **9 measurement / 6 build** (the partition is written out in the r18 sheet's C8): a ledger row
+that the gating report LANDING moves (88/88 → 89/89 by the orchestrator's own commit), an unstamped
+trip-wire, "eight shas" over a ten-member list, a self-count of 4 that reads 5. Every one was a real
+finding and not one of them changes a line an implementer writes; the round-over-round delta reviews
+put 12 of 12 fix-introduced musts in the same layer. A document that publishes numbers about a tree it
+moves is stale by construction, so a gate that scores that layer like a false timeout semantics cannot
+converge — it measures itself. The build class is where the two model families kept finding DISJOINT
+sets (r16, r17, r18), which is the class the loop exists for.
+
+**Exit rule, both audit loops (Phase 3 auto-cycle and the 5b bullet):** build-class must = 0 on BOTH
+surfaces at one commit; every remaining finding fixed or acknowledged. Measurement-class findings never
+hold a phase past the round in which build-class reached 0 — they go to `## Acknowledged-not-fixed`
+with their **re-run command** as the ack text, so the next reader can re-derive the figure instead of
+trusting it. **The decision is made blind:** the orchestrator writes the classification rule into the
+round's decision sheet BEFORE reading the round's verdicts, and may re-classify a reviewer's
+`measurement` to `build` but never `build` to `measurement`.
+
+**It fails closed** in every direction the reviewer can get wrong. `h_mad_audit_gate.py` counts an
+untagged bullet as build, an unknown class value as build, and REFUSES the sidecar for a MUST-FIX bullet tagged
+`class: build` or carrying an unknown value (a should-fix of any class stays deferrable, as it always was) (`ack_refused=N` on the `GATE-CLASS:` line — a build-class must is what 5d/5e would
+implement wrongly, and no operator note clears that). Untagged bullets keep the pre-class ack
+behaviour because every sidecar written before the tag existed is untagged. The verdict line
+`GATE: PASS|FAIL must=N should=N` is unchanged; the breakdown is a second line,
+`GATE-CLASS: build=N measurement=M untagged=K ack_refused=R`, over both blocking sections.
+
+## Document-audit round cap — Phase 5 is the gate
+
+**Every document audit loop (Phase 3 auto-cycle, Phase 4, 5b) is capped at TWO gating rounds per
+document per revision line.** After the second round the phase EXITS whatever the verdict, on these
+terms: every measurement-class finding goes to `## Acknowledged-not-fixed` with its re-run command;
+every build-class must that is still open is written into the impl-plan as an explicit **open
+decision on the Task it lands in** (`OPEN-DECISION: <finding> — resolve in 5d`), where a wrong choice is
+a RED failure that costs minutes; the phase's exit is stamped at the commit carrying the sidecars and
+5c/5d begin on that tree. **Phase 5 is the gate that matters**: RED/GREEN counts, the mutation
+harness and 6a-prime run pytest against the tree, and a design-logic defect that survived the
+documents shows up there as a failing test, not as a twentieth round.
+
+**Why — measured, 2026-09-06.** `doc-block-exec` ran eighteen document rounds (design c98 / plan
+c89 / impl-plan c49) with two surfaces per phase and no code written; r18 alone was six gating legs,
+~90 minutes of agents, sixteen verified musts, nine of them measurement-class; r19 was three authors,
+two reopens, three delta reviews and six legs again. The two model families found DISJOINT must sets
+three rounds running, so the union never approached zero — each round found *new* defects in
+documents of ~4,600 lines, not fewer. The operator called the cap on r19 and moved the feature to
+Phase 5. A document loop with no cap is not rigour; it is the loop measuring itself.
+
+Three rules that make the cap safe rather than a shortcut:
+
+1. **Re-audit only what changed.** A document with no diff since the commit its last gate was
+   scored at is not re-assembled — `git diff --quiet <last-gate-sha>..HEAD -- <document>` decides,
+   and the gate stamp (`--gated`) is the record of which commit that was. A revision batch that
+   touched the design and the impl-plan re-audits two documents, not three.
+2. **The independent family gates; the same family reviews the diff.** On a revision cycle the codex
+   leg is the gating pass and the `doc-auditor` runs §"Delta self-review" on the diff (ADVISORY) —
+   not a second full pass. The delta layer is where the fix-introduced musts live (12 of 12 at r18)
+   and a full same-family pass mostly re-reads what the author just wrote. Two full passes remain the
+   rule for the FIRST gating cycle of a document (§"Never gate on one audit pass"), and for every
+   cycle while codex is unavailable the teammate leg gates as before.
+3. **The cap counts rounds, not cycles.** A round is one assembled prompt per changed document at
+   one freeze; reopens inside a round and the delta review do not count. Two rounds means: batch →
+   gate → batch → gate → exit.
+
+The cap does not license skipping the class rule, the precheck, the delta review or the freeze; it
+bounds how many times they run on one revision line.
+
 ## Never gate on one audit pass
 
 **Agreement between two passes is not a stopping signal; it is one observation repeated.** Dispatch
@@ -1382,11 +1483,15 @@ defect — but a same-surface run now **says so on stderr** instead of looking l
 surface's blind spot, and on one feature the second leg was hollow in 21 of 22 passes while the
 union reported as two.
 
-**Which two surfaces — routed by whether codex can run.** Codex available: `codex` + `agy`. Codex
-unavailable (§"Teammate audit leg"): `doc-auditor` teammate + `agy`, with the teammate holding
-codex's leg and **gating**. Never two passes of one surface, and never the teammate leg *plus*
-codex on the same phase at the same cycle — that is three reports, of which two share a model
-family, and the union stops meaning what the rule below says it means.
+**Which two surfaces — routed by whether codex can run, and by whether this is the document's
+first gate.** First gating cycle of a document, codex available: `codex` + `agy` (or `codex` +
+`doc-auditor` full pass where agy is not dispatched — #77). Codex unavailable (§"Teammate audit
+leg"): `doc-auditor` teammate + `agy`, with the teammate holding codex's leg and **gating**.
+**Revision cycles** (§"Document-audit round cap"): `codex` gates and the `doc-auditor` reviews the
+DIFF (§"Delta self-review", advisory) — the delta review is the second surface, not a second full
+pass. Never two full passes of one surface, and never the teammate full pass *plus* codex on the
+same phase at the same cycle — that is three reports, of which two share a model family, and the
+union stops meaning what the rule below says it means.
 
 Prefer two **different** surfaces. Measured across 15 cycles on one feature: a clean verdict was
 falsified **four** times, and seven consecutive `agy`+`agy` cycles produced a false gate that a single
@@ -2158,6 +2263,7 @@ assembling by hand because the script is unavailable:
     The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
     - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+   Then read the second line, `GATE-CLASS: build=N measurement=M untagged=K ack_refused=R`: a FAIL whose musts are all measurement-class is routed to the `## Acknowledged-not-fixed` sidecar with their re-run commands rather than to another cycle, per §"Finding class — build vs measurement"; `ack_refused>0` means a build-class (or unknown-class) bullet was acknowledged and the gate refused it — fix it, do not re-ack it.
       "Revise" is where §"Close the class, never the instance" applies: before writing the fix,
       decide whether each bullet is a singleton or one member of an open-ended set, and for a set
       write the rule **and** the exactly-stated residual. Fixing the member the reviewer named is
@@ -2376,7 +2482,7 @@ findings with it; a leg whose hollow passes cannot certify keeps them.
 - `h_mad_offcontract_scan.py` — **where did the report actually go?** Locates an audit artifact written off-contract: `scan()` + CLI printing `OFFCONTRACT: NONE|FOUND|UNREADABLE`, exit 0 on `NONE` **and on `FOUND`** / 2 on `UNREADABLE reason=no_workspace`. `FOUND` exits 0 deliberately — this reports, it never decides. Reach for it when `h_mad_extract_report.py` exits 2: that exit is *correct* (silence must never score as a clean gate), but its remedy — `clear` and re-dispatch — is wrong when the audit already ran, and on a large prompt you pay a full cycle to reproduce a drop. **The defect it addresses is unfindability, not absence.** `exec agy` can honour neither the `--report-file` slot nor the sentinel pair while still doing the work and writing a real report at a path of its own choosing; two were observed eleven days apart — a workspace **dotfile** (`.design.audit.v14.md`, invisible to the `*audit.v14*` glob the orchestrator searches, which is exactly how one cycle concluded "no file was written" and re-dispatched over completed work) and `audit_report.md` in agy's own scratch directory while the run narrated "the current workspace". It therefore assumes **no** `audit.vN` stem — the whole failure is that the agent chose the name — and searches dotfiles too; `--cd <workspace>` plus agy's scratch dir by default, `--extra-dir` to widen, `--minutes`/`--since` to bound by mtime, `--expected` to exclude the path that was contracted for. **Its output does not feed the gate.** A report recovered this way has had NO schema enforcement applied, so it prints candidates with an explicit not-validated caution for a human to transcribe by hand, falsifying every premise against the source first; teaching `h_mad_extract_report.py` to glob these paths would score an unvalidated file as a clean gate, which is the opposite of the fix. `NONE` means nothing matched the search, **not** that the work was never done — it narrows a re-dispatch decision rather than making one. Closes J30. Stdlib-only.
 - `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report, no gateable sections, a non-zero dispatch rc, or — since #13 — too little evidence to certify anything. `--pass` takes an optional 5th field, `i:<report>:<out>:<rc>[:<log>]`; when a log is given the render carries an **`Effort:`** block — per pass `tools=/ok=/failed=/thinking=`, and `low-evidence` when `ok` is at or below the 2 successful calls the report-file contract itself costs, i.e. the pass cannot have read anything (J49). **Since #13 it decides, in ONE direction only**: a pass at or below the floor can no longer certify a clean (`UNVERIFIED reason=low_evidence:pN`), and a named-but-unreadable log fails closed as `low_evidence_unmeasurable:pN` — a distinct token because the remedy differs, find the log versus re-dispatch the pass. It still cannot manufacture a `FAIL`; it is checked AFTER the findings loop, so findings a hollow pass did write still count, and after the rc loop, so a timeout explains itself rather than being reported as hollowness. A pass with **no log named** is NOT scored as hollow — that is the ordinary shape of a codex leg and of every `Agent()` teammate pass, and absence of measurement is not measurement of absence. The counts still never appear inside the `AUDITCYCLE:` token, only as the `reason=` field, and the `Effort:` block now renders on `UNVERIFIED` too, because those counts are the evidence FOR the verdict. **This reverses the rule that stood until 2026-09-04** ("it reports; it never decides"), by operator decision on measured evidence: the second surface was hollow in 21 of 22 passes on one feature, and on another produced 6 fabricated must-fixes of 11 against codex's 0 of 25, while its low-evidence passes never found anything in either direction. Honouring the delivery contract is not evidence of having read the tree. A named-but-unreadable log still renders as `unreadable` rather than as zeros — `tools=0` is exactly what a genuinely hollow pass looks like.
 - `h_mad_precheck_doc.py` — phase-document pre-dispatch precheck (§"Precheck before you dispatch"): `scan()` + CLI printing `PRECHECK: PASS|FAIL issues=N|UNREADABLE`, exit 0 on a verdict / 2 on operational error. Refutes before the prompt is assembled what a cycle would otherwise spend two dispatches discovering. **Hard** findings are only the provably-wrong ones — `PLACEHOLDER` (an unfilled `key=…` or bare `<slot>`, impl-plan only, plus `TBD`/`TODO`/`FIXME` anywhere), `LINEPIN` past end-of-file, `PINDRIFT` (a pin into a file that changed since the document's own newest provenance commit — the c33 defect exactly, six `SKILL.md` pins stale by 93 lines), and `UNKNOWNSHA` (a provenance sha naming no commit here). **Advisory, verdict-neutral**: `PATH` and `SYMBOL` (a planning document names files and symbols the feature will CREATE), `STALESHA` (behind-HEAD is the normal condition of every written measurement), ordinary `LINEPIN`, and `COUNT`. Every one of those started as a hard finding and was demoted by measurement, not by taste: they fired 104, 49 and 48 times on the design and plan that had just passed 83 and 74 audit cycles, and the hits were correct usage. `--allow` is an input, never inferred. The residual it cannot close: a document that NARRATES a stale pin quotes the stale number, and no detector distinguishes that from the defect. Stdlib-only.
-- `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py` Since #15 an `## Acknowledged-not-fixed` bullet matches a finding through canonicalisation (emphasis, backticks, wrapping, case, trailing punctuation) or an explicit leading `[key]`; **never through text similarity** — see §"Why the ack match is not fuzzy" for the measurement that refused it.
+- `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` (three keys, every caller) / `classify_detail()` (plus the per-class breakdown) + CLI printing `GATE: PASS|FAIL must=N should=N`, then `GATE-CLASS: build=N measurement=M untagged=K ack_refused=R` (§"Finding class — build vs measurement": untagged and unknown count as build; a `class: build` bullet is refused by the sidecar), then the `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py` Since #15 an `## Acknowledged-not-fixed` bullet matches a finding through canonicalisation (emphasis, backticks, wrapping, case, trailing punctuation) or an explicit leading `[key]`; **never through text similarity** — see §"Why the ack match is not fuzzy" for the measurement that refused it.
 - `h_mad_install_check.py` — verifies the install shape of this checkout's skills (the two symlinks §"First-run auto-bootstrap" depends on, plus every sibling skill the checkout ships): `check()` / `check_siblings()` + CLI printing `INSTALL: PASS|FAIL issues=N|UNREADABLE` followed by `SKILL_NOT_SYMLINK:`/`SKILL_NOT_INSTALLED:`/`SKILL_DANGLING:`/`SKILL_NOT_A_CHECKOUT:`/`HOOK_NOT_INSTALLED:`/`HOOK_DANGLING:`/`SPLIT_INSTALL:`/`SIBLING_NOT_SYMLINK:`/`SIBLING_DANGLING:`/`SIBLING_WRONG_CHECKOUT:` detail lines, exit 0 on a verdict / 2 only when no path was given. Read the token, never `$?`. Reads paths and repairs nothing — relinking `~/.claude` is an operator action.
 - `h_mad_resume_decision.py` — smart-resume decision
 - `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify` **and `has_gate_sections`**): `check()` + CLI printing `PRECONDITION: PASS|FAIL issues=N|UNREADABLE` followed by `MISSING:`/`INVALID:`/`DIRTY:` detail lines, exit 0 on a verdict / 2 only when `--repo-root` cannot be read. Read the token, never `$?`. **`INVALID:` is not `DIRTY:`** — it means the report carried no `## Must-fix`/`## Should-fix` sections at all, so it was refused rather than scored; there are no findings to go and fix, the report needs re-obtaining. This caller used to reach past `has_gate_sections` straight into `classify()`, so a heading-less report scored `must_count=0` and **cleared** the Phase-5 gate while the audit-gate CLI returned `GATE: INVALID` on the same file (#39). Route the check through the shared guard — re-deriving it is how the two drifted apart.
