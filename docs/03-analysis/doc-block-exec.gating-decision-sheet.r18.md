@@ -15,7 +15,11 @@ are r17 sheet C32–C36 (codex) and C40 (`-b`); this sheet cites them by number 
 
 ## FACT 1 — three commits since the r17 gating freeze, and exactly what each moved
 
-r17 gated at `fa64031`. Since then: `fbc8655` (plan c88 `-b` report + r17 sheet C40), `b39d9dc` (the #87
+r17 gated at `fa64031`. Since then, SIX commits (`git log --oneline fa64031..cac6edc`; see C1 — the
+first draft of this paragraph named three): `4f40e8d` (the r17 handoff doc, +1 file under
+`docs/handoffs/`), `fbc8655` (plan c88 `-b` report + r17 sheet C40), `f81f75e` + `55b2371` (an
+INBOUND handover brief from HemaSuite session `cab14393`, `docs/handoffs/…hmad-audit-loop-evidence-from-gateway-consolidation.md`,
++1 file — committed by another session on this branch while this one was working), `b39d9dc` (the #87
 tooling batch — `h-mad/SKILL.md`, `scripts/hmad-dispatch.sh`, `scripts/h_mad_assemble_audit.py`, five
 `agents/*.md`, two `references/*.md`, three `tests/*.py` incl. one NEW file), `cac6edc`
 (`docs/learnings.md` +2 rows). Per #49t every census command the four documents publish was re-run at
@@ -30,7 +34,7 @@ per commit:
 | `git grep -h '^def test_' <sha> -- '*test_*.py' \| wc -l` | 1512 | 1512 | **1527** | 1527 | `b39d9dc` (+15 `def` lines; parametrize makes 22 collected) |
 | `ls h-mad/tests/test_*.py \| wc -l` | 88 | 88 | **89** | 89 | `b39d9dc` (`test_h_mad_agent_definitions.py`) |
 | `git ls-files -- h-mad handoff \| wc -l` | 236 | 236 | **237** | 237 | `b39d9dc` |
-| `git ls-files \| wc -l` (unscoped) | 3666 | **3668** | **3670** | 3670 | `fbc8655` (+2), `b39d9dc` (+2) |
+| `git ls-files \| wc -l` (unscoped) | 3666 | **3668** | **3670** | 3670 | `4f40e8d` (+1, handoff doc), `fbc8655` (+1), `f81f75e` (+1, inbound brief), `b39d9dc` (+1, new test file); the sheet's own commit makes it 3671 — see C1 |
 | `git diff --name-only fbc2ea0 <sha> -- '*.py' \| wc -l` | 0 | 0 | **4** | 4 | `b39d9dc` (assembler + 3 test files) |
 | `grep -c '^#$' h-mad/SKILL.md` | 1 | 1 | **0** | 0 | `b39d9dc` — see FACT 3 |
 | 09-04 probe, GLOB: `new_only` / `titleless` / `both` | 1 / 1 / 297 | 1 / 1 / 297 | **0 / 0 / 297** | 0 / 0 / 297 | `b39d9dc` — see FACT 3 |
@@ -235,4 +239,15 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
 
 ## Corrections (appended during the round; lines above are left as written)
 
-_(none yet)_
+- **C1 — FACT 1's first draft named THREE commits since `fa64031`; `git log --oneline fa64031..cac6edc`
+  names SIX (orchestrator error, #49-class: an attribution written from memory of one's own commits,
+  not from `git log`).** Hidden: `4f40e8d` (the r17 handoff doc — it sits between `fa64031` and
+  `fbc8655`, so the table's first column already absorbed its +1 file), and `f81f75e`/`55b2371` — an
+  inbound handover brief from another session, landed on this branch between this session's resume
+  and its first commit. Neither touches `h-mad/`, `handoff/`, `*.py`, or the four documents, so no
+  scoped census moved; the unscoped `git ls-files` row is re-attributed above. Two consequences.
+  (i) The sheet's freeze `cac6edc` is still correct — it is HEAD at writing — but "what moved" was
+  under-attributed for one column. (ii) The inbound brief (`**Handover-From:** HemaSuite · main ·
+  session cab14393`) is NOT taken over by this session; `pending-handovers` reports it, and the next
+  resume's Step 3.5 owns that decision. Rule for r19+: the commit list in FACT 1 is pasted from
+  `git log --oneline <prior-freeze>..<freeze>`, never typed.
