@@ -237,9 +237,51 @@ def _read(path: Path, *, required: bool) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Every known delivery surface refuses a prompt past this many characters:
+# codex `exec` answers `input_too_large max_chars=1048576` (measured 2026-09-05
+# on two real gating prompts), and agy's `--print` arg is bounded at the same
+# figure. The assembler used to print PASS past it and say exec had no limit.
+MAX_PROMPT_CHARS = 1_048_576
+
+
+def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
+    """Keep the body verbatim and only the LAST `keep` `## Version History`
+    entries; replace the omitted ones with a single line that states the count
+    and the way back to the record.
+
+    Why: Version History measured ~36% of every doc-block-exec document
+    (design 172,720 of 483,815 chars; impl-plan 193,134 of 536,527) and was
+    embedded verbatim into every audit prompt -- the target's AND each paired
+    sibling's -- which is what carried two of three gating prompts past
+    MAX_PROMPT_CHARS. The omitted entries are dated records, not the audit's
+    subject; auditors that need them run `git show <sha>:<doc>`, which is how
+    every auditor this round actually read them. `keep=None` (the default) is a
+    strict no-op so existing callers and prompt hashes are unaffected.
+    """
+    if keep is None:
+        return text
+    marker = "\n## Version History"
+    i = text.find(marker)
+    if i < 0:
+        return text
+    body, vh = text[:i], text[i:]
+    lines = vh.split("\n")
+    entry_idx = [k for k, ln in enumerate(lines) if ln.startswith("- v")]
+    if len(entry_idx) <= keep:
+        return text
+    omitted = len(entry_idx) - keep
+    head = lines[:entry_idx[0]]            # "" + heading + any preamble
+    kept = lines[entry_idx[-keep]:]
+    note = (f"<!-- h-mad assembler: {omitted} of {len(entry_idx)} Version History "
+            f"entries omitted from this inline copy (--vh-tail {keep}); they are dated "
+            f"records, not this audit's subject -- read them with `git show <sha>:{ref}` -->")
+    return body + "\n".join(head + [note] + kept)
+
+
 def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
              sentinel: str, report_file: str, template: Path,
-             design_dir: Path | None = None) -> tuple[str, list[str]]:
+             design_dir: Path | None = None,
+             vh_tail: int | None = None) -> tuple[str, list[str]]:
     text = resolve(strip_orchestrator_note(_read(template, required=True)), phase)
 
     # Design documents do NOT live beside the others: Phase 4 writes
@@ -253,22 +295,30 @@ def assemble(*, feature: str, phase: str, project_root: Path, docs_dir: Path,
         base = design_dir if kind == "design" else docs_dir
         return base / f"{feature}.{kind}.md"
 
+    def doc_text(kind: str) -> str:
+        path = doc(kind)
+        try:
+            ref = str(path.resolve().relative_to(project_root.resolve()))
+        except ValueError:
+            ref = path.name
+        return _trim_version_history(_read(path, required=True), vh_tail, ref=ref)
+
     base_md = _read(SKILL_DIR / "invariants.base.md", required=True)
     project_md = _read(project_root / ".h-mad" / "invariants.md", required=False)
 
     slots = {
-        "<INLINE_TARGET_DOC>": _read(doc(phase), required=True),
+        "<INLINE_TARGET_DOC>": doc_text(phase),
         "<INLINE_BASE_INVARIANTS>": base_md,
         "<INLINE_PROJECT_INVARIANTS>": project_md,
         "<AUDIT_SENTINEL>": sentinel,
         "<REPORT_FILE_PATH>": report_file,
     }
     if phase in ("plan", "design"):
-        slots["<INLINE_PAIRED_SPEC>"] = _read(doc("spec"), required=True)
+        slots["<INLINE_PAIRED_SPEC>"] = doc_text("spec")
     if phase == "design":
-        slots["<INLINE_PAIRED_PLAN>"] = _read(doc("plan"), required=True)
+        slots["<INLINE_PAIRED_PLAN>"] = doc_text("plan")
     if phase == "impl-plan":
-        slots["<INLINE_PAIRED_DESIGN>"] = _read(doc("design"), required=True)
+        slots["<INLINE_PAIRED_DESIGN>"] = doc_text("design")
 
     for slot, value in slots.items():
         text = text.replace(slot, value)
@@ -299,6 +349,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report-file", default="",
                     help="Orca report-file transport path; empty for the sentinel scrape")
     ap.add_argument("--template", type=Path, default=SKILL_DIR / "audit-prompt.template.md")
+    ap.add_argument("--vh-tail", type=int, default=None, metavar="N",
+                    help="inline only the last N `## Version History` entries of every "
+                         "embedded document (target and paired), replacing the rest with a "
+                         "one-line omission note; default: embed the whole history")
     args = ap.parse_args(argv)
 
     docs_dir = args.docs_dir or (args.project_root / "docs/01-plan/features")
@@ -310,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
             feature=args.feature, phase=args.phase, project_root=args.project_root,
             docs_dir=docs_dir, design_dir=args.design_dir, sentinel=sentinel,
             report_file=args.report_file, template=args.template,
+            vh_tail=args.vh_tail,
         )
     except (FileNotFoundError, ValueError) as exc:
         # Operational error, not a verdict: the inputs are unusable.
@@ -322,6 +377,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ASSEMBLE: HALT {args.phase}:preflight")
         for p in problems:
             print(f"  - {p}")
+        return 0
+
+    if len(text) > MAX_PROMPT_CHARS:
+        # A verdict, not a process failure: exit 0, explicit token, NO file --
+        # an unwritten prompt cannot be dispatched by mistake. This replaces a
+        # PASS that two surfaces refused outright on 2026-09-05.
+        print(f"ASSEMBLE: HALT {args.phase}:oversize chars={len(text)} "
+              f"limit={MAX_PROMPT_CHARS}")
+        print("  - no known surface accepts a prompt this large: codex exec refuses it "
+              "(input_too_large) and agy's arg path is capped at the same figure. "
+              "Re-run with --vh-tail N to inline only the last N Version History "
+              "entries of each embedded document; the omitted entries stay reachable "
+              "via `git show <sha>:<doc>`.")
         return 0
 
     out.write_text(text, encoding="utf-8")
@@ -349,9 +417,10 @@ def main(argv: list[str] | None = None) -> int:
     # a 92,055 B pane prompt answered cleanly (agy/Gemini 3.1 Pro; reply fragmented
     # across frames, so read the full buffer, never a tail).
     #
-    # `hmad-dispatch exec` (codex stdin / agy `--print` arg) has NO such frontier:
-    # codex's prompt is delivered on stdin (mechanically uncapped) and agy's is an
-    # arg bounded only by ARG_MAX (~1 MB); a >90 KB exec prompt was confirmed
+    # `hmad-dispatch exec` (codex stdin / agy `--print` arg) has no PANE frontier
+    # but IS capped: codex refuses past MAX_PROMPT_CHARS with `input_too_large`
+    # (measured 2026-09-05, 1,123,643 and 1,053,882 chars both refused) and agy's
+    # arg is bounded at the same figure; a >90 KB exec prompt was confirmed
     # answered 2026-07-30, and 266,342 B (260.1 KB) was confirmed answered 8 of 8 on
     # 2026-08-22 (agy 1.1.18) with both the report-file slot and the sentinel pair
     # honoured every time -- three times the largest audit this assembler emits.
@@ -367,8 +436,9 @@ def main(argv: list[str] | None = None) -> int:
     if size > CONFIRMED_OK:
         print(f"  ! {size / 1024:.1f} KB exceeds the largest prompt confirmed answered "
               f"on the pane path ({CONFIRMED_OK / 1024:.1f} KB) — unverified there, not "
-              "known-bad, and no limit at all via `hmad-dispatch exec` (codex stdin / agy "
-              "arg <1 MB). If a PANE reply comes back empty, suspect size and see SKILL.md "
+              "known-bad; `hmad-dispatch exec` accepts up to 1,048,576 chars on both agents "
+              "(codex refuses past it with input_too_large). If a PANE reply comes back "
+              "empty, suspect size and see SKILL.md "
               "step 5.5; the failure mode is silent, so read the full buffer, never a tail")
     elif size > 84 * 1024:
         print(f"  ~ {size / 1024:.1f} KB is approaching the largest prompt confirmed "

@@ -509,3 +509,105 @@ def test_double_brace_inside_an_inline_code_span_is_content_not_a_conditional():
     # an unterminated backtick must not swallow the rest of the line
     assert [p for p in preflight("prose ` {{ONLY:design}} leaked\n", {})
             if p.startswith("unresolved_conditional")]
+
+
+# --- --vh-tail: the inline copy of a document need not carry its whole history --
+
+def _vh_doc(title: str, n_entries: int) -> str:
+    body = f"# {title}\n\nBODY-SENTINEL-{title}\n\n## Functional Requirements\n- FR-1 (AC-1.1)\n"
+    entries = "\n".join(f"- v1.{i}: entry {i} of {title}" for i in range(1, n_entries + 1))
+    return body + "\n## Version History\n\n" + entries + "\n"
+
+
+def _project_with_history(tmp_path: Path, n: int = 5) -> Path:
+    root = _project(tmp_path)
+    docs = root / "docs/01-plan/features"
+    design = root / "docs/02-design/features"
+    (docs / "demo.spec.md").write_text(_vh_doc("Spec", n))
+    (docs / "demo.plan.md").write_text(_vh_doc("Plan", n))
+    (design / "demo.design.md").write_text(_vh_doc("Design", n))
+    (docs / "demo.impl-plan.md").write_text(_vh_doc("Impl", n))
+    return root
+
+
+def _assemble_tail(root: Path, phase: str, vh_tail):
+    return assemble(
+        feature="demo", phase=phase, project_root=root,
+        docs_dir=root / "docs/01-plan/features",
+        sentinel="AUDIT-demo-x-v1", report_file="/tmp/demo.report.md",
+        template=SKILL_DIR / "audit-prompt.template.md", vh_tail=vh_tail,
+    )
+
+
+def test_vh_tail_default_leaves_every_document_verbatim(tmp_path):
+    """Round fifteen measured Version History at ~36% of every doc-block-exec
+    document and the assembler embedding it verbatim -- which is what pushed two
+    of three gating prompts past the 1 Mi-char limit BOTH agents enforce. The trim
+    is opt-in: with no --vh-tail nothing changes, so every existing caller and
+    every hash taken over an assembled prompt stays valid."""
+    root = _project_with_history(tmp_path)
+    text_default, _ = _assemble_tail(root, "design", None)
+    text_plain, _ = _assemble(root, "design")
+    assert text_default == text_plain
+    for i in range(1, 6):
+        assert f"- v1.{i}: entry {i} of Design" in text_default
+
+
+def test_vh_tail_keeps_the_body_and_the_last_n_entries_and_marks_the_omission(tmp_path):
+    root = _project_with_history(tmp_path, n=5)
+    text, problems = _assemble_tail(root, "plan", 2)
+    assert problems == []
+    # body untouched
+    assert "BODY-SENTINEL-Plan" in text and "## Functional Requirements" in text
+    # last two entries kept, in order; first three gone
+    assert "- v1.4: entry 4 of Plan" in text and "- v1.5: entry 5 of Plan" in text
+    assert text.index("- v1.4: entry 4 of Plan") < text.index("- v1.5: entry 5 of Plan")
+    for i in (1, 2, 3):
+        assert f"- v1.{i}: entry {i} of Plan" not in text
+    # the omission is stated ON the page, with the count and the way back to the record
+    assert "3 of 5 Version History entries omitted" in text
+    assert "--vh-tail 2" in text
+    assert "git show <sha>:docs/01-plan/features/demo.plan.md" in text
+    # the heading survives so a reader still finds the section
+    assert "## Version History" in text
+
+
+def test_vh_tail_applies_to_the_paired_documents_too(tmp_path):
+    """A design audit inlines the spec and the plan beside the design. Their
+    histories were 218 KB of the 1.1 MB design prompt; trimming only the target
+    would leave the paired copies carrying the bulk."""
+    root = _project_with_history(tmp_path, n=5)
+    text, problems = _assemble_tail(root, "design", 1)
+    assert problems == []
+    for title in ("Design", "Spec", "Plan"):
+        assert f"BODY-SENTINEL-{title}" in text
+        assert f"- v1.5: entry 5 of {title}" in text
+        assert f"- v1.4: entry 4 of {title}" not in text
+    assert text.count("4 of 5 Version History entries omitted") == 3
+
+
+def test_vh_tail_larger_than_the_history_is_a_no_op(tmp_path):
+    root = _project_with_history(tmp_path, n=3)
+    text, _ = _assemble_tail(root, "plan", 10)
+    for i in (1, 2, 3):
+        assert f"- v1.{i}: entry {i} of Plan" in text
+    assert "Version History entries omitted" not in text
+
+
+def test_a_prompt_over_the_one_mebichar_limit_halts_instead_of_passing(tmp_path):
+    """Measured 2026-09-05: codex refused two assembled prompts with
+    `input_too_large max_chars=1048576` and agy's arg path is capped at the same
+    figure, while this assembler printed ASSEMBLE: PASS for both and told the
+    caller there was 'no limit at all via exec'. A PASS on a prompt no surface can
+    accept is a false PASS; it halts, names the size, and writes no file."""
+    root = _project(tmp_path)
+    plan = root / "docs/01-plan/features/demo.plan.md"
+    plan.write_text(PLAN + "\n" + ("x" * 1_048_576) + "\n")
+    out = tmp_path / "big.txt"
+    res = _run("--feature", "demo", "--phase", "plan", "--project-root", str(root),
+               "--out", str(out))
+    assert res.returncode == 0, res.stderr
+    first = res.stdout.splitlines()[0]
+    assert first.startswith("ASSEMBLE: HALT plan:oversize"), res.stdout
+    assert "1048576" in first and "--vh-tail" in res.stdout
+    assert not out.exists(), "an undeliverable prompt must not be written"
