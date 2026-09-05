@@ -80,6 +80,51 @@ def _payload(line: str) -> str:
     return remainder if remainder is not None else stripped
 
 
+# --- finding CLASS -------------------------------------------------------------
+#
+# A reviewer classifies each Must-fix / Should-fix bullet on a CONTINUATION line,
+# the same shape as `quote:` — never a `- ` bullet, which would be a second finding:
+#
+#     - <issue> — <why>
+#       class: build | measurement
+#
+# The operational test is one sentence, stated identically in the template, in
+# agents/doc-auditor.md and in SKILL.md: "would the code or tests a 5d/5e
+# implementer writes differ if this finding were fixed?" — yes is `build`, no is
+# `measurement`. Measured on doc-block-exec (18 gating rounds, 98 design cycles):
+# by r18 the union held 15 musts and 9 of them were the documents' own
+# self-measurement layer — a ledger row the audit report landing MOVES, a
+# trip-wire stamp, "eight" over a ten-member list, a self-count of 4 that reads
+# 5. Real findings, none of which changes what an implementer writes, and a gate
+# that scores them like a false timeout semantics cannot converge on a document
+# that publishes numbers about a tree it moves.
+#
+# It fails CLOSED in every direction the reviewer can get wrong: an untagged
+# bullet is `build`; an unknown value is `build`; and a bullet the reviewer
+# tagged `build` cannot be cleared by the `## Acknowledged-not-fixed` sidecar at
+# all (`ack_refused` counts those). Untagged bullets keep the pre-class ack
+# behaviour, because every sidecar written before the tag existed is untagged.
+_CLASS_RE = re.compile(r"^class\s*:\s*([a-z]+)$")
+CLASSES = ("build", "measurement")
+
+
+def _class_of(line: str) -> str | None:
+    """`build` / `measurement` / an unknown word from a `class:` continuation line, else None.
+
+    Only a NON-bullet line qualifies (a `- class: x` line is a finding, per the
+    `quote:` rule). Spelling is canonicalised — emphasis, backticks, case,
+    trailing punctuation — never fuzzed: `class: cosmetic` returns "cosmetic",
+    which the counter treats as untagged (build).
+    """
+    stripped = line.strip()
+    if _bullet_remainder(stripped) is not None:
+        return None
+    s = _ACK_STRIP.sub("", stripped)
+    s = _ACK_WS.sub(" ", s).strip().strip(" .;,").lower()
+    m = _CLASS_RE.match(s)
+    return m.group(1) if m else None
+
+
 _ACK_KEY_RE = re.compile(r"^\[([A-Za-z0-9][A-Za-z0-9 ._:/-]{0,60})\]\s*")
 _ACK_STRIP = re.compile(r"[`*_~]")
 _ACK_WS = re.compile(r"\s+")
@@ -145,41 +190,76 @@ def _is_acknowledged(payload: str, acknowledged: set[str]) -> bool:
 
 
 def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
-    """Findings in one blocking section's non-blank content lines.
+    """Findings in one blocking section — the count alone (see `_section_detail`)."""
+    return _section_detail(content, acknowledged)["count"]
+
+
+def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
+    """Findings in one blocking section's non-blank content lines, by class.
+
+    Returns ``{"count", "build", "measurement", "untagged", "ack_refused"}``.
 
     A section is CLEAN (0) iff every line's payload is the `None` sentinel — this
     covers an empty section, `None`, a stray `- None`, and punctuated/emphasised
     forms like `None.` or `**None**` (see `_is_none_sentinel`). Otherwise it has
     findings. When the section carries `-`/`*`/`•` bullets we count them (so a
-    wrapped multi-line bullet counts once, not once per line). When it carries
-    non-`None` content but NO bullet — a prose, numbered, or blockquote finding a
-    reviewer wrote off-template — we count 1 rather than 0, so such a finding
-    fails the gate (fail-safe) instead of being silently missed (F14).
+    wrapped multi-line bullet counts once, not once per line), and a `class:`
+    continuation line under a bullet classifies THAT bullet (`_class_of`). When
+    it carries non-`None` content but NO bullet — a prose, numbered, or
+    blockquote finding a reviewer wrote off-template — we count 1 rather than 0,
+    so such a finding fails the gate (fail-safe) instead of being silently
+    missed (F14).
 
-    A section that carried bullets and had every one acknowledged is CLEAN. That
-    is the `## Acknowledged-not-fixed` escape working as documented, and it must
-    not fall into the off-template fail-safe below: both cases leave no countable
-    bullet, but only the bulletless one is an unscored finding. Conflating them
-    capped the escape at one bullet per section (a 2-bullet section scored 1 with
-    both bullets acknowledged), so no multi-finding gate could ever be cleared.
+    A bullet that is acknowledged in the `## Acknowledged-not-fixed` sidecar is
+    cleared — UNLESS the reviewer tagged it `class: build`, in which case it is
+    counted anyway and reported under `ack_refused`: a build-class must is what
+    5d/5e would implement wrongly, and no sidecar clears that. A section whose
+    bullets were ALL cleared is CLEAN, and must not fall into the off-template
+    fail-safe below: both cases leave no countable bullet, but only the
+    bulletless one is an unscored finding. Conflating them capped the escape at
+    one bullet per section (a 2-bullet section scored 1 with both bullets
+    acknowledged), so no multi-finding gate could ever be cleared.
     """
+    zero = {"count": 0, "build": 0, "measurement": 0, "untagged": 0, "ack_refused": 0}
     payloads = [_payload(line) for line in content]
     if all(_is_none_sentinel(p) for p in payloads):
-        return 0
-    marked = [
-        p for line, p in zip(content, payloads)
-        if _bullet_remainder(line.strip()) is not None
-        and p and not _is_none_sentinel(p)
-    ]
-    bullets = [p for p in marked if not _is_acknowledged(p, acknowledged)]
-    if bullets:
-        return len(bullets)
-    if marked:
-        # Bullets were present and every one is acknowledged → cleared.
-        return 0
-    # Non-None content with no countable bullet → at least one off-template finding.
-    joined = " ".join(p for p in payloads if p)
-    return 0 if _is_acknowledged(joined, acknowledged) else 1
+        return zero
+
+    # Group into (payload, class) per bullet; continuation lines classify the
+    # bullet they follow. Lines before any bullet are prose (off-template).
+    findings: list[tuple[str, str | None]] = []
+    for line, payload in zip(content, payloads):
+        if _bullet_remainder(line.strip()) is not None:
+            if payload and not _is_none_sentinel(payload):
+                findings.append((payload, None))
+            continue
+        cls = _class_of(line)
+        if cls is not None and findings:
+            text_, _old = findings[-1]
+            findings[-1] = (text_, cls)
+
+    if not findings:
+        # Non-None content with no countable bullet → at least one off-template finding.
+        joined = " ".join(p for p in payloads if p)
+        if _is_acknowledged(joined, acknowledged):
+            return zero
+        return {"count": 1, "build": 1, "measurement": 0, "untagged": 1, "ack_refused": 0}
+
+    out = dict(zero)
+    for payload, cls in findings:
+        acked = _is_acknowledged(payload, acknowledged)
+        if acked and cls != "build":
+            continue                      # cleared by the sidecar
+        if acked:
+            out["ack_refused"] += 1       # tagged build: the sidecar cannot clear it
+        out["count"] += 1
+        if cls == "measurement":
+            out["measurement"] += 1
+        else:
+            out["build"] += 1
+            if cls not in CLASSES:
+                out["untagged"] += 1
+    return out
 
 
 def has_gate_sections(text: str) -> bool:
@@ -193,12 +273,14 @@ def has_gate_sections(text: str) -> bool:
     return all(section in seen for section in BLOCKING_SECTIONS)
 
 
-def classify(text: str, acknowledged: set[str] | None = None) -> dict:
-    """Count findings in Must-fix/Should-fix (indent-, marker- and prose-tolerant).
+def classify_detail(text: str, acknowledged: set[str] | None = None) -> dict:
+    """`classify()` plus the per-class breakdown of both blocking sections.
 
-    A finding is a `-`/`*`/`•` bullet, OR — fail-safe — any non-`None` content in a
-    blocking section that carries no bullet (prose / numbered / blockquote), so an
-    off-template finding fails the gate rather than being silently missed.
+    Keys: verdict, must_count, should_count, must_build, must_measurement,
+    must_untagged, should_build, should_measurement, should_untagged, ack_refused.
+    The verdict is unchanged by the class — a measurement-class must still FAILS
+    the gate; what the class changes is which findings the sidecar may clear and
+    which the orchestrator may carry past a round (SKILL.md, Phase 3 / 5b exit).
     """
     acknowledged_items = acknowledged or set()
     section_content: dict[str, list[str]] = {key: [] for key in BLOCKING_SECTIONS.values()}
@@ -215,12 +297,35 @@ def classify(text: str, acknowledged: set[str] | None = None) -> dict:
         if current_count_key and stripped:
             section_content[current_count_key].append(line)
 
-    counts = {
-        key: _count_section_findings(content, acknowledged_items)
-        for key, content in section_content.items()
+    detail = {key: _section_detail(content, acknowledged_items)
+              for key, content in section_content.items()}
+    must, should = detail["must_count"], detail["should_count"]
+    verdict = "FAIL" if must["count"] or should["count"] else "PASS"
+    return {
+        "verdict": verdict,
+        "must_count": must["count"],
+        "should_count": should["count"],
+        "must_build": must["build"],
+        "must_measurement": must["measurement"],
+        "must_untagged": must["untagged"],
+        "should_build": should["build"],
+        "should_measurement": should["measurement"],
+        "should_untagged": should["untagged"],
+        "ack_refused": must["ack_refused"] + should["ack_refused"],
     }
-    verdict = "FAIL" if counts["must_count"] or counts["should_count"] else "PASS"
-    return {"verdict": verdict, **counts}
+
+
+def classify(text: str, acknowledged: set[str] | None = None) -> dict:
+    """Count findings in Must-fix/Should-fix (indent-, marker- and prose-tolerant).
+
+    A finding is a `-`/`*`/`•` bullet, OR — fail-safe — any non-`None` content in a
+    blocking section that carries no bullet (prose / numbered / blockquote), so an
+    off-template finding fails the gate rather than being silently missed.
+    Returns exactly ``verdict`` / ``must_count`` / ``should_count`` (every
+    existing caller reads those three); `classify_detail()` adds the classes.
+    """
+    d = classify_detail(text, acknowledged)
+    return {"verdict": d["verdict"], "must_count": d["must_count"], "should_count": d["should_count"]}
 
 
 def _acknowledged_from_text(text: str) -> set[str]:
@@ -368,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[H-MAD] {feature} gate INVALID (missing Must-fix/Should-fix sections)")
         return 2
 
-    result = classify(text, acknowledged)
+    result = classify_detail(text, acknowledged)
     verdict = "FAIL" if result["must_count"] or (result["should_count"] and not args.must_only) else "PASS"
 
     stamped = ""
@@ -399,6 +504,17 @@ def main(argv: list[str] | None = None) -> int:
     # The first line is what every existing caller reads, so the stamp count is
     # appended rather than woven in, and is absent entirely without --gated.
     print(f"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped}")
+    # Line 2 is the class breakdown over BOTH blocking sections. It is a second
+    # line, never fields woven into line 1, because `h_mad_audit_cycle.GATE_RE`
+    # anchors on `should=N$` and anything appended there would un-parse every
+    # verdict. Nothing reads "the last line" as the verdict.
+    print(
+        "GATE-CLASS: "
+        f"build={result['must_build'] + result['should_build']} "
+        f"measurement={result['must_measurement'] + result['should_measurement']} "
+        f"untagged={result['must_untagged'] + result['should_untagged']} "
+        f"ack_refused={result['ack_refused']}"
+    )
     print(f"[H-MAD] {feature} gate {verdict}")
     return 0
 

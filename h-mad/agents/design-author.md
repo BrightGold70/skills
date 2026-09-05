@@ -75,6 +75,14 @@ point.
     Version History line match what you last read; if either moved, stop and report — two authors
     on one file is an orchestrator error you can make visible, not fix.
 
+11. **The measurement layer lives in probes, not in this document.** State a claim, the path of the
+   committed probe that derives it (`docs/03-analysis/probes/<feature>/`), and ONE reading stamped at
+   one sha. Do not publish sha-series of your own readings, ledgers of this feature's audit reports,
+   trip-wires over `h-mad/`, or counts of this document's own sections — every one is moved by a
+   commit of this feature's own artifacts and is the next round's must (SKILL.md §"The measurement
+   layer lives in probes"). On an EXISTING document do not restructure to reach this; a measurement
+   finding is answered by the re-run command in the sidecar, never by a hand re-stamp.
+
 ## Output
 
 ```
