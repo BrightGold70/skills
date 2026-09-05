@@ -603,3 +603,30 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   per document audit loop, re-audit only documents that changed since their last gate, codex gates
   while the same-family surface reviews the diff, Phase 5 as the gate. These land after the r19 gating
   pass is collected (any `h-mad/` commit moves the design's trip-wire and the plan's `.py` censuses).
+
+- **C9 — appended 2026-09-06 by session `51a2b6f7` at dispatch of the r19 gating pass (the LAST document
+  round per C8 iii).** (i) **Batch `7fc5f94`** (design v1.111 / plan v1.106 / impl-plan v1.55 / spec v1.64
+  unchanged; fifth probe tracked — `git ls-files docs/03-analysis/probes/doc-block-exec/ | grep -c '\.py$'`
+  = 5). Freeze for gating = `7fc5f94`; HEAD at dispatch = the commit carrying this C9. Precheck at
+  `7fc5f94`: spec / design / plan `PASS issues=0`, impl-plan `FAIL issues=11` (grammar slots), `PINDRIFT`
+  0. Full h-mad suite on the committed tree: running at dispatch, stamped in C10. (ii) **Two waves +
+  three advisory delta reviews + five reopens:** design/plan parallel, impl-plan on the design's shipped
+  strings; rule-3 collision #1 caught at collection by the impl-plan author (the design's row killer
+  `test_substitute_refuses_intersecting_spans` is Task 2's exception-data test and cannot see a
+  renderer mutant; decision: `test_cli_subst_overlap_detail_lines`, design + plan reopened); delta
+  reviews must 4 / 3 / 5 = 12 (plan / impl-plan / design), reviewer-tagged build-class 2 / 1 / 0 — the
+  same twelve as r18, all in the Version History / self-count layer, answered by reopens inside the
+  same revisions. (iii) **Oversize trigger fired live, as the branch's cap section predicts:** design
+  c99 HALTs `oversize` at `--vh-tail 1` (1,051,233 chars, 2,657 over); impl-plan c50 HALTs at 3
+  (1,060,438) and PASSES at 1 (958,810). `--vh-tail 0` is read as "no trim" (1,598,467). The design
+  transport was assembled with `--docs-dir` pointing at staged copies of the paired spec and plan whose
+  `## Version History` is replaced by an omission note (65 and 107 entries; bodies byte-identical) —
+  exactly the layer `--vh-tail` omits, one step further — and PASSES at 1,011,624 chars with both
+  paired bodies present. Plan c90 PASSES at 3 (676,634). **Next round on any of these documents is
+  not assemblable without the measurement-layer extraction; this is the last.** (iv) **Dispatch:** codex
+  ×3 via `hmad-dispatch exec codex … --sandbox read-only --out … --log … --timeout 1800`, stock template
+  (the class-tagging template lives on the unmerged branch); no doc-auditor full pass (C8 iii a — the
+  three delta reviews are the same-family surface this round). (v) **Scoring rule, restated blind:** each
+  codex must is classified by the C8 i test; measurement-class → `.audit.v<N+1>.md` sidecar with its
+  re-run command, `[audit-override]`; build-class → `OPEN-DECISION` on the owning impl-plan Task via
+  one implplan-author reopen; then 5b is stamped and 5c/5d begin.
