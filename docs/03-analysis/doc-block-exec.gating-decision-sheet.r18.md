@@ -308,3 +308,48 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   (iv) **Every `:N` in this sheet is a READ locator for the author, never text to copy.** Design
   writes no line numbers (its rule 2). Impl-plan cites `h-mad/references/codex-implementer-prompt.md`
   by needle ("by construction"), never `:52`. Task #29 is a suite failure from a copied pin.
+
+- **C3 — appended 2026-09-05 by session `adb05ac8` after the batch landed as `ccd8ebd` (design v1.110 /
+  plan v1.105 / impl-plan v1.54 / spec v1.64), before gating.**
+  (i) **Suite stamp (C2 i's promised reading):** `pytest h-mad/tests -q` at `ccd8ebd` → **`2574 passed in
+  377.47s`**; RED span was `b39d9dc..f6849bb`. Precheck at `ccd8ebd`: spec / design / plan `PASS issues=0`;
+  impl-plan `FAIL issues=11`, all 11 `PLACEHOLDER` design-grammar slots, `PINDRIFT` 0 (the noise-floor
+  test asserts ≤ 12 and passes).
+  (ii) **Sheet premises the authors falsified, recorded so the gating legs do not re-file them as new:**
+  FACT 5 "five spec ACs never named" — **seven** (AC-1.2 and AC-3.2 as well); a value grep over five
+  guessed labels was the wrong instrument, the design's AC-range expansion prints `spec 49 covered 49
+  uncovered [] not-in-spec []`. FACT 5 "Task 2 nine/ten" — **eleven**, derived (twelve distinct test
+  names less one Task 4 forward reference). FACT 4 (c) "AC-3.14 asserts `__suppress_context__ False`" —
+  the SPEC never carried that assertion (`git show cac6edc:<spec> | grep -c __suppress_context__` → 0);
+  the assertion lived in the impl-plan (1 site, now withdrawn) and the design's four sites were prose /
+  a probe column / a mutation-row description (kept as prose, 10 body sites at `ccd8ebd`, with the
+  assertion rule stated at AC-3.14). FACT 8 spec cell `__suppress_context__` 0 → **2 by design**: an AC
+  that forbids an assertion names it. C2 iii's residual sentence was handed to the authors with SINGLE
+  quotes around 'each `new_only` member …' while two of three authors wrote double quotes — plan delta
+  must 3, resolved to double everywhere. **Orchestrator error #49v**: a shared string carried a quote
+  style the documents do not use; a shared-facts gate must paste a string in the documents' own spelling.
+  (iii) **Two collisions only the orchestrator could see (rule 3), both resolved in reopen 1:** the design
+  ADDED matrix row 17 `intersect-scan-non-overlapping` (matrix 85 → **86** = 85 helper + 1 SKILL.md; the
+  plan's published awk prints `total=85` at `cac6edc` and `batch total=86` on the shipped design; the
+  plan and impl-plan carry 86 at this batch, 85 at `cac6edc`); and its killer test was named two ways —
+  design `test_substitute_refuses_overlapping_occurrences_of_one_key`, impl-plan
+  `test_intersecting_spans_need_an_overlapping_scan` — the design's name won (impl-plan renamed 2 sites;
+  the old name is 0 in every body).
+  (iv) **Advisory delta reviews** (`docs/03-analysis/doc-block-exec.{spec,plan,impl-plan,design}.delta-review.r18.md`,
+  committed with the batch): must **2 / 3 / 2 / 5**, every one in the self-measurement or Version History
+  layer, none in the substantive decisions; all closed in reopen 2. The fix round introduced the class it
+  hunted (#11's premise, measured again).
+  (v) **Measurable facts for the r18 gating legs (state, do not suppress):** the plan binds the word
+  "freeze" to `4e4a00c` by its own convention (16 sites) and stamps every r18 reading "the measurement
+  commit `cac6edc`" — `the freeze `cac6edc`` is 0 there by design; the impl-plan spells AC-3.14 as
+  "`__cause__` **is** the injected cleanup error, asserted with `is`" rather than the literal
+  `__cause__ is cleanup_error` (spec 1, design 3 carry the literal); the impl-plan's 11 precheck
+  `PLACEHOLDER` findings are the FR-4 grammar slots (`overlap: "<a>" "<b>"`, `intersect: …`,
+  `os_error: "<text>"`, `pgid: "<n>"`, `stream: "<name>"`, `<key>=…`) and are declarations; "N passed"
+  in the present tense is written by nobody but this sheet (C3 i) — the documents publish COLLECTION
+  counts (2574 / 2836) at `cac6edc`.
+  (vi) **Freeze for gating = the commit carrying this C3** (docs-only over `ccd8ebd`: this sheet; no
+  scoped census moves; no document publishes the unscoped `git ls-files | wc -l`). Design **c98** / plan
+  **c89** / impl-plan **c49**, `--vh-tail 3` (`--vh-tail 1` if the assembler HALTs `oversize`), codex via
+  `hmad-dispatch exec … --sandbox read-only --timeout 1800 --log` plus one `doc-auditor` GATING leg per
+  phase told freeze + HEAD; no agy leg (#77).
