@@ -611,3 +611,51 @@ def test_a_prompt_over_the_one_mebichar_limit_halts_instead_of_passing(tmp_path)
     assert first.startswith("ASSEMBLE: HALT plan:oversize"), res.stdout
     assert "1048576" in first and "--vh-tail" in res.stdout
     assert not out.exists(), "an undeliverable prompt must not be written"
+
+
+# ---------------------------------------------------------------------------
+# Headroom for the dispatch boundary. Measured 2026-09-05: a 1,111,059-char prompt
+# file was reported by codex as `actual_chars` 1,111,089 -- the wrapper's
+# `\n===HMAD-DISPATCH-BOUNDARY===\n` (30 chars) is counted against the limit. A
+# bare `len(text) > MAX_PROMPT_CHARS` therefore PASSED the last 30 chars of room
+# that codex then refused.
+from h_mad_assemble_audit import (  # noqa: E402
+    DISPATCH_OVERHEAD_CHARS, MAX_PROMPT_CHARS, prompt_oversize,
+)
+
+WRAPPER = SKILL_DIR / "scripts" / "hmad-dispatch.sh"
+
+
+def test_prompt_oversize_reserves_the_dispatch_boundary_overhead():
+    room = MAX_PROMPT_CHARS - DISPATCH_OVERHEAD_CHARS
+    assert prompt_oversize(room) is False
+    assert prompt_oversize(room + 1) is True
+    # the old comparison's blind window: at the surface limit exactly, refused
+    assert prompt_oversize(MAX_PROMPT_CHARS) is True
+    assert prompt_oversize(MAX_PROMPT_CHARS - 1) is True
+
+
+def test_headroom_covers_the_wrappers_actual_boundary_literal():
+    """Pin the two files together: the overhead reserved here must cover what
+    `_dispatch_boundary` in hmad-dispatch.sh really appends (newline + marker +
+    newline). Read the default out of the wrapper, not from memory."""
+    import re
+    src = WRAPPER.read_text(encoding="utf-8")
+    m = re.search(r'\$\{HMAD_DISPATCH_BOUNDARY:-([^}]+)\}', src)
+    assert m, "wrapper no longer defines the boundary default where this test looks"
+    appended = "\n" + m.group(1) + "\n"
+    assert len(appended) == 30, appended     # the measured figure; move it if the marker moves
+    assert len(appended) <= DISPATCH_OVERHEAD_CHARS
+
+
+def test_oversize_halt_names_the_headroom(tmp_path):
+    root = _project(tmp_path)
+    plan = root / "docs/01-plan/features/demo.plan.md"
+    plan.write_text(PLAN + "\n" + ("x" * 1_048_576) + "\n")
+    out = tmp_path / "big.txt"
+    res = _run("--feature", "demo", "--phase", "plan", "--project-root", str(root),
+               "--out", str(out))
+    first = res.stdout.splitlines()[0]
+    assert first.startswith("ASSEMBLE: HALT plan:oversize"), res.stdout
+    assert f"headroom={DISPATCH_OVERHEAD_CHARS}" in first, first
+    assert not out.exists()

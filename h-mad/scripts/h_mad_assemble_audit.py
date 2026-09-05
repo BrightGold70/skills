@@ -239,9 +239,26 @@ def _read(path: Path, *, required: bool) -> str:
 
 # Every known delivery surface refuses a prompt past this many characters:
 # codex `exec` answers `input_too_large max_chars=1048576` (measured 2026-09-05
-# on two real gating prompts), and agy's `--print` arg is bounded at the same
-# figure. The assembler used to print PASS past it and say exec had no limit.
+# on two real gating prompts, re-measured the same day with a 1,111,089-char
+# probe: rc=1, empty last message, one `Error: turn/start … "input_error_code":
+# "input_too_large"` transcript line), and agy's `--print` arg is bounded at the
+# same figure. The assembler used to print PASS past it and say exec had no limit.
 MAX_PROMPT_CHARS = 1_048_576
+
+# What `hmad-dispatch exec` appends to the assembled text before the agent sees
+# it: a newline, the `===HMAD-DISPATCH-BOUNDARY===` marker, a newline (30 chars;
+# `_dispatch_boundary` in scripts/hmad-dispatch.sh). codex counts THOSE chars
+# too — the probe above was a 1,111,059-char file reported as `actual_chars`
+# 1,111,089. So a text that passes `len(text) <= MAX_PROMPT_CHARS` by fewer than
+# the overhead is still refused. Reserve headroom here rather than in the
+# caller's head; 64 leaves slack for a longer HMAD_DISPATCH_BOUNDARY override.
+DISPATCH_OVERHEAD_CHARS = 64
+
+
+def prompt_oversize(chars: int) -> bool:
+    """True when a prompt of `chars` characters cannot be delivered by any surface
+    once the dispatch wrapper's boundary overhead is added."""
+    return chars + DISPATCH_OVERHEAD_CHARS > MAX_PROMPT_CHARS
 
 
 def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
@@ -379,12 +396,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {p}")
         return 0
 
-    if len(text) > MAX_PROMPT_CHARS:
+    if prompt_oversize(len(text)):
         # A verdict, not a process failure: exit 0, explicit token, NO file --
         # an unwritten prompt cannot be dispatched by mistake. This replaces a
-        # PASS that two surfaces refused outright on 2026-09-05.
+        # PASS that two surfaces refused outright on 2026-09-05. The comparison
+        # reserves the wrapper's boundary overhead (see DISPATCH_OVERHEAD_CHARS):
+        # a bare `len(text) > MAX_PROMPT_CHARS` passed the last 30 chars of room
+        # that codex then refused.
         print(f"ASSEMBLE: HALT {args.phase}:oversize chars={len(text)} "
-              f"limit={MAX_PROMPT_CHARS}")
+              f"limit={MAX_PROMPT_CHARS} headroom={DISPATCH_OVERHEAD_CHARS}")
         print("  - no known surface accepts a prompt this large: codex exec refuses it "
               "(input_too_large) and agy's arg path is capped at the same figure. "
               "Re-run with --vh-tail N to inline only the last N Version History "

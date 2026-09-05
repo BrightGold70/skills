@@ -48,6 +48,18 @@ impossible before the reviewer sees the document.
 7. **Do not weaken a finding to make it fit.** If a reviewer's finding contradicts the design,
    report the contradiction; do not silently pick a side.
 8. **Bump `## Version History`** with one line naming the audit cycle the revision answers.
+9. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): the design author
+   read a 3,500-line document whole more than once, then called `advisor()` — which forwards its
+   entire transcript a second time — and died of context overflow (`failed: Prompt is too long`)
+   mid-verification; a successor had to finish the file. Locate with `grep -n` first, then `Read`
+   only the span you need (offset/limit, at most ~400 lines per call); never re-read a whole
+   document to "refresh". You have no advisor: an open question goes in your report.
+10. **Your final message starts with the `DONE` line, and you assert the file is still yours
+    before every write.** Four r17 author reports were truncated before a trailing DONE and were
+    read as unfinished, so the `IMPLPLAN-AUTHOR: DONE …` line is the FIRST line of your final
+    message, the report body after it. Before each write, check that the document's mtime and its
+    newest `- v1.N` Version History line match what you last read; if either moved, stop and
+    report — two authors on one file is an orchestrator error you can make visible, not fix.
 
 ## Inputs you will be given
 

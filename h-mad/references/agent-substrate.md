@@ -128,12 +128,16 @@ failure of the *measurement*, not of the agent (see below). `h_mad_assemble_audi
 warns on the 92,055 B basis now; it previously predicted failure above 49 KB, which
 caused at least one design audit to be trimmed for no reason.
 
-## Prompt size on the `exec` path: no frontier
+## Prompt size on the `exec` path: no pane frontier, one hard ceiling
 
 `hmad-dispatch exec` does not touch a TUI, so none of the above applies. codex
-receives its prompt on **stdin** (`codex exec -`), which is mechanically uncapped;
-agy receives it as a `--print` **arg**, bounded only by `ARG_MAX` (~1 MB on macOS,
-`getconf ARG_MAX` = 1,048,576). A **>90 KB** exec prompt was confirmed answered
+receives its prompt on **stdin** (`codex exec -`), which has no keystroke cap but is
+**not uncapped**: codex refuses past **1,048,576 characters** with `input_too_large`
+before running a turn (measured 2026-09-05; the wrapper reports it as
+`INPUT_TOO_LARGE max_chars=… actual_chars=…` and skips verdict recovery, and
+`h_mad_assemble_audit.py` HALTs `oversize` before a prompt gets that far — the remedy
+is `--vh-tail N`, never a trimmed document). agy receives it as a `--print` **arg**,
+bounded by `ARG_MAX` — the same 1,048,576 on macOS (`getconf ARG_MAX`). A **>90 KB** exec prompt was confirmed answered
 (2026-07-30), and **266,342 B (260.1 KB) was confirmed answered 8 times out of 8 on
 2026-08-22** (agy 1.1.18, `--output-format stream-json`) — five trivial and three
 work-shaped, every one honouring *both* the `--report-file` slot and the sentinel

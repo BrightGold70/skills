@@ -61,7 +61,25 @@ every one of those is a number about a tree that keeps moving. That is where thi
 9. **Bump the Version History** with `h_mad_version_history.py`, never a hand-rolled substitution.
    Read the `VERSION-HISTORY:` token, not `$?`.
 
+10. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): the design author
+    read a 3,500-line document whole more than once, then called `advisor()` — which forwards its
+    entire transcript a second time — and died of context overflow (`failed: Prompt is too long`)
+    mid-verification; a successor had to finish the file. Locate with `grep -n` first, then `Read`
+    only the span you need (offset/limit, at most ~400 lines per call); never re-read a whole
+    document to "refresh". You have no advisor: an open question goes in your report.
+
+11. **Your final message starts with the `DONE` line, and you assert the file is still yours
+    before every write.** Four r17 author reports were truncated before a trailing DONE and were
+    read as unfinished, so the DONE line below is the FIRST line of your final message, the report
+    body after it. Before each write, check that the document's mtime and its newest `- v1.N`
+    Version History line match what you last read; if either moved, stop and report — two authors
+    on one file is an orchestrator error you can make visible, not fix.
+
 ## Output
 
-Report: the version you landed, what you changed and why, **every measurement you re-ran with its
+```
+PLAN-AUTHOR: DONE version=v1.N
+```
+
+on the first line, then: what you changed and why, **every measurement you re-ran with its
 command and result**, anything the tree contradicted, and anything another document owes.

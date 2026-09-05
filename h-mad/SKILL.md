@@ -863,16 +863,29 @@ each call would re-send the whole context — or when a human wants to watch/int
 the Orca pane live. In short: **one-shot → `exec`; iterative revision loop → pane.**
 
 Codex sandbox defaults to `workspace-write` (5d/5e write test + impl files); its
-prompt is delivered on stdin, so it is mechanically uncapped — the 8192-byte
-keystroke inline cap and the pane-path size frontier both do not apply. agy runs
-`--print --dangerously-skip-permissions` (headless must auto-approve or a tool
-request blocks); its prompt is an arg, bounded only by `ARG_MAX` (~1 MB). Audit
-prompts run 16–90 KB (a large design audit assembles to ~88 KB), and **266,342 B
-(260.1 KB) was confirmed answered 8 of 8 on 2026-08-22** (agy 1.1.18), every run
-honouring both the report-file slot and the sentinel pair — so on the `exec` path
-prompt size is not a transport limit at three times the largest audit, only the
-receiving model's context budget. Do not trim an audit for size when dispatching via
-`exec`. (The pane path is separately confirmed answered to 92,055 B — see
+prompt is delivered on stdin, so the 8192-byte keystroke inline cap and the pane-path
+size frontier both do not apply — but stdin is **not uncapped**: codex refuses any
+prompt past **1,048,576 characters** with `input_too_large` before running a turn
+(measured 2026-09-05 on two real gating prompts — the full-history design and
+impl-plan audits — and re-measured the same day with a 1,111,089-char probe: rc=1,
+an empty last message, one `Error: turn/start … "input_error_code":"input_too_large"`
+transcript line). agy runs `--print --dangerously-skip-permissions` (headless must
+auto-approve or a tool request blocks); its prompt is an arg, bounded by `ARG_MAX` —
+the same 1,048,576 figure. Audit prompts run 16–90 KB (a large design audit
+assembles to ~88 KB), and **266,342 B (260.1 KB) was confirmed answered 8 of 8 on
+2026-08-22** (agy 1.1.18), every run honouring both the report-file slot and the
+sentinel pair — so at the sizes audits reach, the `exec` path has no transport
+limit, only the receiving model's context budget. Do not trim an audit for size when
+dispatching via `exec`. When a prompt does run past the ceiling — a full-history
+design or impl-plan inline can — `h_mad_assemble_audit.py` HALTs `oversize` and
+writes nothing, and the **first remedy is `--vh-tail N`** (body verbatim, only the
+last N Version History entries of each embedded document inlined; the rest stay
+reachable via `git show <sha>:<doc>`), never a trimmed document. If a refused prompt
+does reach codex, `hmad-dispatch exec` reports `INPUT_TOO_LARGE` with
+`max_chars=`/`actual_chars=` on its own stderr line and skips verdict recovery and
+the tree-delta read — it used to flatten the refusal into the generic `EMPTY final
+message` and then print a `tree delta` the recovery protocol reads as "the work
+landed". (The pane path is separately confirmed answered to 92,055 B — see
 `references/agent-substrate.md` §"Prompt size".)
 
 **After GREEN, run the built binary against the design's documented output shapes** — every verdict
@@ -980,8 +993,6 @@ when the work actually finishes rather than at the ceiling. It needs the wrapper
 report path, which it does not currently know — `--out` is the verdict file, and the report path
 lives inside the prompt. With a ceiling and a legible 124 in place the remaining cost is one
 timeout on an intermittent fault, so the smaller fix shipped and the better one is recorded.
-
-#
 
 ## Reading a dispatch verdict
 
@@ -1212,6 +1223,28 @@ the value it is *thinking about* rather than the value that exists. Measured on 
 in the orchestrator's own work were caught by fresh contexts and **none** by the orchestrator
 re-reading its own document. Each agent file states the failure class each of its rules closes;
 they are contracts, not style guides.
+
+**Author dispatch rules the ORCHESTRATOR owns.** Measured 2026-09-05 (r17): the design author
+read a 3,500-line document whole more than once, called `advisor()` — which forwards its entire
+transcript a second time — and died of context overflow (`failed: Prompt is too long`)
+mid-verification. The orchestrator then spawned a successor **without ruling ownership**; the
+original resumed from its transcript and kept writing, and two authors held one file for ~8
+minutes, colliding only because the successor asserted-before-write and stood down. Four rules
+follow, none of which an agent file can enforce for you:
+
+1. **A `failed: Prompt is too long` notification is recoverable, not death.** The author can
+   resume from its transcript. Before concluding it is gone, read the working file's mtime and its
+   newest `- v1.N` Version History line and compare with the last DONE you have.
+2. **Rule ownership explicitly before spawning a successor.** Say in the successor's prompt which
+   author owns the file now, and require it to assert the file has not moved (mtime, newest
+   `- v1.N` line) before every write and to stand down if it has.
+3. **Authors never call `advisor()` and read in slices** — those rules live in every
+   `agents/*-author.md`; do not undo them from the dispatch prompt ("read the whole design" is an
+   instruction to overflow).
+4. **Collect on the `DONE` line, not on the notification.** Every author's final message puts its
+   `<ROLE>: DONE …` line FIRST (four r17 reports were truncated before a trailing DONE); a report
+   file or a bumped Version History is the deliverable, and a DONE message that arrives ~45 minutes
+   after the marker is benign.
 
 ### Delta self-review — review the FIX before you re-dispatch the audit
 
@@ -2028,7 +2061,7 @@ assembling by hand because the script is unavailable:
 5. For design audits only: replace `<INLINE_PAIRED_PLAN>` with audited plan.md.
 5.5. For plan and design audits: replace `<INLINE_PAIRED_SPEC>` with full text of `docs/01-plan/features/<feature>.spec.md` — the Axis C source of truth. Without it the reviewer has no AC list to reconcile against and Axis C degrades to prose review, which is the failure it exists to prevent: the paired plan carries only incidental AC references, not the enumeration. For impl-plan audits leave the slot empty; that audit contracts against the design.
 
-   **Prompt size.** Axis C makes an already-large prompt larger: measured on a real feature, design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB (72 KB without the spec). Whether that is a problem depends on the transport. On the **`exec` path** it is not — codex stdin is uncapped and agy's arg runs to `ARG_MAX` (~1 MB), and 266,342 B was confirmed answered 8 of 8 on 2026-08-22 (agy 1.1.18, both transports honoured every time), so dispatch the whole thing. On the **pane path** the confirmed-answered frontier is ~92 KB via file indirection (a 92,055 B prompt was answered by a live agy pane on 2026-07-30, falsifying the earlier ~61 KB ceiling); the old "49 KB normal / 53 KB silent" figure was a delivery-mode artifact (a paste, not file indirection) and never reproduced (see `references/agent-substrate.md`). A real audit assembles to at most ~88 KB, so it sits inside the confirmed pane frontier — but if a pane prompt ever does run past ~92 KB, two things follow. First, **do not solve it by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC; switching that dispatch to `exec` removes the limit outright. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
+   **Prompt size.** Axis C makes an already-large prompt larger: measured on a real feature, design 45 KB + plan 21 KB + spec 16 KB assembled to 88 KB (72 KB without the spec). Whether that is a problem depends on the transport. On the **`exec` path** it is not at these sizes — 266,342 B was confirmed answered 8 of 8 on 2026-08-22 (agy 1.1.18, both transports honoured every time), so dispatch the whole thing. The one `exec` ceiling is **1,048,576 characters** on both agents (codex refuses past it with `input_too_large`; agy's arg is bounded by `ARG_MAX` at the same figure), and a full-history design or impl-plan inline CAN reach it (measured 2026-09-05): the assembler then HALTs `oversize` and writes no prompt, and the **first remedy is `--vh-tail N`** — keep every body byte, inline only the last N Version History entries of each embedded document — never a trimmed document. On the **pane path** the confirmed-answered frontier is ~92 KB via file indirection (a 92,055 B prompt was answered by a live agy pane on 2026-07-30, falsifying the earlier ~61 KB ceiling); the old "49 KB normal / 53 KB silent" figure was a delivery-mode artifact (a paste, not file indirection) and never reproduced (see `references/agent-substrate.md`). A real audit assembles to at most ~88 KB, so it sits inside the confirmed pane frontier — but if a pane prompt ever does run past ~92 KB, two things follow. First, **do not solve it by trimming the design** — showing the reviewer only its AC-bearing sections is self-defeating, since `absent` becomes undetectable and `absent` is the failure Axis C exists to catch. Inlining the spec's `## Functional Requirements` section alone rather than the whole spec is a legitimate saving (~7 KB) and loses no AC; switching that dispatch to `exec` lifts the ceiling to the 1,048,576-character one above. Second, an over-long prompt is a **safe** failure: `h_mad_extract_report.py` exits 2 on a missing or empty sentinel pair, so the cycle halts instead of scoring silence as a clean gate.
 
    **Before treating a silent reply as a size failure, read the whole buffer.** `hmad-dispatch read <agent> --from-start`, not a tail — the TUI reflows a reply across redraw frames, and a tail-grep for a sentinel reports SILENT for prompts that answered (measured; see `references/agent-substrate.md`). Most "size failures" are this.
 

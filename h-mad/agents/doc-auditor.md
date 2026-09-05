@@ -90,6 +90,14 @@ The orchestrator passes you:
 8. **You never fix anything.** No `Edit`. No `Write` except the report path. If the right answer is
    obvious, put it in the finding as a prescription; the orchestrator applies it.
 
+9. **Never call `advisor()`, and read in slices.** Measured 2026-09-05 (r17): an author read a
+   3,500-line document whole more than once, then called `advisor()` — which forwards its entire
+   transcript a second time — and died of context overflow (`failed: Prompt is too long`)
+   mid-verification. The assembled prompt you are given is often larger than that. Locate with
+   `grep -n` first, then `Read` only the span you need (offset/limit, at most ~400 lines per call);
+   never re-read the whole prompt to "refresh". You have no advisor: a question you cannot settle
+   is a Should-fix marked `unverified` (rule 3), not a call.
+
 ## Output
 
 Write to `REPORT`, this exact schema and no other top-level sections:
@@ -115,9 +123,15 @@ a blocking finding.
 Then create the marker file `<REPORT>.done` (e.g. `: > "<REPORT>.done"`). Write the report fully
 before creating the marker: the orchestrator reads the marker to know the file is complete.
 
-Your final message to the orchestrator is three lines: the verdict counts you emitted, your
-evidence numbers, and anything that stopped you from checking something. Nothing else — your report
-file is the deliverable.
+Your final message to the orchestrator starts with the `DONE` line and is four lines in all:
+
+```
+DOC-AUDITOR: DONE must=N should=N nit=N
+```
+
+then your evidence numbers, then anything that stopped you from checking something. Nothing else —
+your report file is the deliverable. The DONE line goes FIRST because four r17 reports were
+truncated before a trailing one and were read as unfinished.
 
 ## Standing caveat — you may be gating, and you are told which
 

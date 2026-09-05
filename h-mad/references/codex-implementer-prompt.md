@@ -49,7 +49,7 @@ forbidden external CLI dependency besides.
 For RED phase (5d): write failing tests for this module based on the impl-plan task above. Tests should be exhaustive but bounded to the task's scope. Verify they FAIL by running `pytest <test_path> -v`.
 
 **RED acceptance evidence (required — one line per test):**
-1. For each FAILING test: does the failure message name the property under test? (An `ImportError`/`AttributeError` standing in for a behavioural assertion is not a RED — it is an unwritten test.)
+1. For each FAILING test: does the failure message name the property under test? For a `wiring` task (a dispatch carrying `WIRE:`/`WIRE-PIN:` — see below), an `ImportError`/`AttributeError`/`NameError` standing in for a behavioural assertion is not a RED — it is an unwritten test. For a task that introduces a NEW symbol, the first RED is `AttributeError`/`ImportError` **by construction** (the symbol does not exist yet); that is acceptable only when the same test also asserts the behaviour that must hold once the symbol exists, so it stays meaningful after GREEN. Say which case each failing test is.
 2. For each PASSING test: would it still pass if the behaviour it names were deleted? If yes, it is vacuous — fix or remove it.
 3. For each behavioural test: name the method actually invoked, and confirm it is the one that contains the behaviour under test.
 A RED report that omits these answers is incomplete and will be re-dispatched.

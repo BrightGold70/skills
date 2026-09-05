@@ -2613,6 +2613,34 @@ _cmd_progress() {  # <logfile> [--lines <n>] [--pid <pid>]
   return 0
 }
 
+_codex_input_too_large() {  # <log> <pre_lines> -> "max_chars=N actual_chars=M" when codex REFUSED the prompt, else empty
+  # codex `exec` refuses a prompt past 1,048,576 chars BEFORE running a turn.
+  # Measured live 2026-09-05 (1,111,089-char prompt): rc=1, an EMPTY
+  # --output-last-message file, and exactly one transcript line —
+  #   Error: turn/start: turn/start failed: Input exceeds the maximum length of
+  #   1048576 characters. (code -32602), data: {"input_error_code":"input_too_large",
+  #   "max_chars":1048576,"actual_chars":1111089}
+  # The wrapper used to flatten that into the generic `EMPTY final message —
+  # agent exited 1` and then print `tree delta: N changed`, which the recovery
+  # protocol reads as "the work landed, only the report failed". Nothing landed:
+  # no turn ran. So the refusal is surfaced on its own line and the recovery +
+  # tree-delta reads are skipped — they can only launder.
+  #
+  # Scoped past <pre_lines>, like the agy recovery: a caller-supplied --log that
+  # already holds an OLDER dispatch's refusal must not be read as this one's.
+  # Matched on the JSON key, not the English sentence, because the key is the
+  # contract the CLI emits; the prose around it is free to change.
+  local log="$1" pre="${2:-0}" line
+  [ -f "$log" ] || return 0
+  line="$(tail -n +"$((pre + 1))" "$log" 2>/dev/null \
+          | grep -F '"input_error_code":"input_too_large"' | tail -n 1)" || true
+  [ -n "$line" ] || return 0
+  local maxc actc
+  maxc="$(printf '%s' "$line" | sed -n 's/.*"max_chars":\([0-9]*\).*/\1/p')"
+  actc="$(printf '%s' "$line" | sed -n 's/.*"actual_chars":\([0-9]*\).*/\1/p')"
+  printf 'max_chars=%s actual_chars=%s' "${maxc:-?}" "${actc:-?}"
+}
+
 _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <e>] [--out <file>] [--log <file>] [--timeout <s>] [codex: --sandbox <mode>] [agy: --sandbox]
   # The exit-code dispatch path (alternative to the pane REPL). The agent runs
   # HEADLESS as a real subprocess, so — unlike send+wait+read — there IS a process
@@ -2723,11 +2751,18 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # the value as TOML and falls back to the raw string, so a bare `high` lands as
     # the literal the model expects. Unset leaves ~/.codex/config.toml's own default.
     [ -n "$effort" ] && args+=(-c "model_reasoning_effort=$effort")
-    # Prompt via stdin ('-') — no keystroke cap. Transcript is the live progress
-    # signal (the --output-last-message file only lands at completion, so it is
-    # NOT tailable). Transcript always goes to the log (a direct redirect, not a
-    # pipe, so the codex exit code survives) so a watcher can `tail -f` a headless
-    # run. rc comes from the codex process.
+    # Prompt via stdin ('-') — no keystroke cap, but NOT uncapped: codex refuses
+    # past 1,048,576 chars with `input_too_large` before running a turn (see
+    # `_codex_input_too_large`; h_mad_assemble_audit.py HALTs `oversize` first, and
+    # `--vh-tail N` is the remedy). Transcript is the live progress signal (the
+    # --output-last-message file only lands at completion, so it is NOT tailable).
+    # Transcript always goes to the log (a direct redirect, not a pipe, so the
+    # codex exit code survives) so a watcher can `tail -f` a headless run. rc comes
+    # from the codex process.
+    # Line count of any PRE-EXISTING log content, so the refusal scan below is
+    # scoped to THIS dispatch's transcript (same mark the agy path keeps).
+    if [ -f "$log" ]; then pre_lines="$(wc -l < "$log" 2>/dev/null | tr -d " ")"; fi
+    [ -n "$pre_lines" ] || pre_lines=0
     _HMAD_EXEC_BEAT_LOG="$log"
     _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
       "$wait_secs" codex "${args[@]}" - < "$bounded_prompt" >> "$log" 2>&1 || rc=$?
@@ -2746,10 +2781,13 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # agy `--print` prints ONLY the response to stdout (verified), so no last-message
     # file. Headless needs --dangerously-skip-permissions or a tool request blocks
     # until the print timeout; agy is already launched that way in panes. cwd is agy's
-    # workspace root, so cd there. Prompt is an arg, bounded only by ARG_MAX (~1MB);
-    # audit prompts run 16-90KB, and 266,342 B was confirmed answered 8 of 8 on
-    # 2026-08-22 (agy 1.1.18) with both the report-file slot and the sentinel pair
-    # honoured every time, so the arg is never the limit at the sizes audits reach. --timeout maps to BOTH agy's native --print-timeout and the watchdog.
+    # workspace root, so cd there. Prompt is an arg, bounded by ARG_MAX — 1,048,576 on
+    # macOS, the same ceiling codex enforces on stdin, and one a full-history design
+    # inline CAN reach (h_mad_assemble_audit.py HALTs `oversize` first; --vh-tail N is
+    # the remedy). Below it the arg is not the limit: audit prompts run 16-90KB, and
+    # 266,342 B was confirmed answered 8 of 8 on 2026-08-22 (agy 1.1.18) with both the
+    # report-file slot and the sentinel pair honoured every time. --timeout maps to BOTH
+    # agy's native --print-timeout and the watchdog.
     # `--print` consumes the NEXT token as the prompt, so it MUST come last with the
     # prompt adjacent — every other flag goes before it. (A `--print` not adjacent to
     # the prompt silently ate the following flag as its prompt and dropped the real
@@ -2800,7 +2838,16 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   fi
   rm -f "$bounded_prompt"
 
-  if [ "$final_empty" -eq 1 ]; then
+  local refused=""
+  [ "$agent" = codex ] && [ "$final_empty" -eq 1 ] && refused="$(_codex_input_too_large "$log" "$pre_lines")"
+  if [ -n "$refused" ]; then
+    # Distinct from EMPTY: the agent never ran a turn, so there is no verdict to
+    # recover and the tree delta would be noise read as evidence. Keep codex's own
+    # rc (`$?` still answers "did the CLI run"); only the impossible rc=0 case takes
+    # the reserved 3 so the number can never read as success.
+    [ "$rc" -eq 0 ] && rc=3
+    echo "hmad-dispatch: exec: INPUT_TOO_LARGE — codex refused the prompt before running a turn (${refused}); nothing to recover, tree untouched; re-assemble with \`h_mad_assemble_audit.py --vh-tail N\` (or otherwise shrink the prompt) and re-dispatch; transcript: $log" >&2
+  elif [ "$final_empty" -eq 1 ]; then
     local msg
     if [ "$rc" -eq 0 ]; then
       rc=3

@@ -954,3 +954,70 @@ def test_skill_md_documents_the_out_clobber_guard():
     anchor = "refuses to overwrite an `--out` whose content changed"
     assert SKILL_MD_TEXT.count(anchor) > 0, \
         f"anchor matched 0 times — SKILL.md does not document the J29 guard: {anchor!r}"
+
+
+# ---------------------------------------------------------------------------
+# codex refuses an over-1,048,576-char prompt BEFORE running a turn. Measured live
+# 2026-09-05 with a 1,111,089-char prompt: rc=1, empty --output-last-message, and
+# this one transcript line (kept verbatim as the fixture — a tidied version would
+# test a shape codex never emits). The wrapper used to flatten it into the generic
+# `EMPTY final message` and then print `tree delta: 4 changed`, which the recovery
+# protocol reads as "the work landed, only the report failed".
+_REFUSAL = ('Error: turn/start: turn/start failed: Input exceeds the maximum length of '
+            '1048576 characters. (code -32602), data: {"input_error_code":"input_too_large",'
+            '"max_chars":1048576,"actual_chars":1111089}')
+
+
+def test_codex_input_too_large_is_surfaced_distinctly_and_not_laundered(tmp_path):
+    repo = _git_repo(tmp_path)
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(repo)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1", HMAD_STUB_CODEX_STDOUT=_REFUSAL))
+    assert r.returncode == 1, r.stderr                      # codex's own rc survives
+    assert "INPUT_TOO_LARGE" in r.stderr, r.stderr
+    assert "max_chars=1048576 actual_chars=1111089" in r.stderr, r.stderr
+    assert "--vh-tail" in r.stderr, r.stderr                # the remedy is named
+    assert "EMPTY final message" not in r.stderr, r.stderr  # not the generic shape
+    assert "verdict recovered" not in r.stderr, r.stderr    # nothing to recover
+    assert "tree delta" not in r.stderr, r.stderr           # no turn ran; delta = noise
+    assert r.stdout.strip() == ""
+
+
+def test_codex_input_too_large_with_exit_zero_still_takes_reserved_rc3(tmp_path):
+    """Not a shape codex emits today, but rc=0 + refusal must never read as success."""
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_STDOUT=_REFUSAL))
+    assert r.returncode == 3, r.stderr
+    assert "INPUT_TOO_LARGE" in r.stderr
+
+
+def test_codex_empty_without_refusal_keeps_generic_empty_shape_regression_guard(tmp_path):
+    """Control for the refusal branch: an ordinary empty-message crash is unchanged."""
+    repo = _git_repo(tmp_path)
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(repo)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_ECHO_STDIN="1",
+                     HMAD_STUB_CODEX_STDOUT="[codex] died mid-turn"))
+    assert r.returncode == 1, r.stderr
+    assert "EMPTY final message" in r.stderr, r.stderr
+    assert "INPUT_TOO_LARGE" not in r.stderr, r.stderr
+    assert "tree delta" in r.stderr, r.stderr
+
+
+def test_codex_refusal_in_prior_log_content_is_not_read_as_this_dispatch(tmp_path):
+    """A caller --log holding an OLDER dispatch's refusal must not brand this run."""
+    log = tmp_path / "shared.log"
+    log.write_text("previous dispatch\n" + _REFUSAL + "\n")
+    b = _bindir(tmp_path, ["codex"])
+    r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path),
+             "--log", str(log)],
+            env=_env(b, HMAD_STUB_CODEX_LAST="", HMAD_STUB_CODEX_RC="1",
+                     HMAD_STUB_CODEX_STDOUT="[codex] died mid-turn"))
+    assert r.returncode == 1, r.stderr
+    assert "INPUT_TOO_LARGE" not in r.stderr, r.stderr
+    assert "EMPTY final message" in r.stderr, r.stderr
+    # and the pre-existing content survived (append contract)
+    assert log.read_text().startswith("previous dispatch\n")
