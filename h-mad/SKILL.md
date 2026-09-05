@@ -1405,7 +1405,7 @@ self-count about the tree that is stale or mis-derived — the tree is unchanged
 
 **Why the class exists — measured, not chosen.** `doc-block-exec` ran eighteen gating rounds (design
 c98 / plan c89 / impl-plan c49) under "exit only at must = should = 0, no cycle cap", and at r18 the
-union still held 15 musts with **9 of them in the documents' own self-measurement layer**: a ledger row
+union still held 15 distinct musts, and applying the class test to the r18 verification ledger partitions them **9 measurement / 6 build** (the partition is written out in the r18 sheet's C8): a ledger row
 that the gating report LANDING moves (88/88 → 89/89 by the orchestrator's own commit), an unstamped
 trip-wire, "eight shas" over a ten-member list, a self-count of 4 that reads 5. Every one was a real
 finding and not one of them changes a line an implementer writes; the round-over-round delta reviews
@@ -1424,7 +1424,7 @@ round's decision sheet BEFORE reading the round's verdicts, and may re-classify 
 
 **It fails closed** in every direction the reviewer can get wrong. `h_mad_audit_gate.py` counts an
 untagged bullet as build, an unknown class value as build, and REFUSES the sidecar for a bullet tagged
-`class: build` (`ack_refused=N` on the `GATE-CLASS:` line — a build-class must is what 5d/5e would
+`class: build` or carrying an unknown value (`ack_refused=N` on the `GATE-CLASS:` line — a build-class must is what 5d/5e would
 implement wrongly, and no operator note clears that). Untagged bullets keep the pre-class ack
 behaviour because every sidecar written before the tag existed is untagged. The verdict line
 `GATE: PASS|FAIL must=N should=N` is unchanged; the breakdown is a second line,
@@ -2220,6 +2220,7 @@ assembling by hand because the script is unavailable:
     The gate **prints a verdict token and always exits 0** on a verdict (a non-zero exit is reserved for operational errors such as a missing file — never for a FAIL, so the gate never registers as a tool failure). Parse the **token**, not `$?`:
     - `GATE: PASS must=0 should=0` → gate passes (must-fix=0 AND should-fix=0). Proceed.
     - `GATE: FAIL must=N should=M` (N or M > 0) → gate fails. Surface the bullets, revise, re-audit.
+   Then read the second line, `GATE-CLASS: build=N measurement=M untagged=K ack_refused=R`: a FAIL whose musts are all measurement-class is routed to the `## Acknowledged-not-fixed` sidecar with their re-run commands rather than to another cycle, per §"Finding class — build vs measurement"; `ack_refused>0` means a build-class (or unknown-class) bullet was acknowledged and the gate refused it — fix it, do not re-ack it.
       "Revise" is where §"Close the class, never the instance" applies: before writing the fix,
       decide whether each bullet is a singleton or one member of an open-ended set, and for a set
       write the rule **and** the exactly-stated residual. Fixing the member the reviewer named is

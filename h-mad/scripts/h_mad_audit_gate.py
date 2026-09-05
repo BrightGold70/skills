@@ -100,10 +100,10 @@ def _payload(line: str) -> str:
 # that publishes numbers about a tree it moves.
 #
 # It fails CLOSED in every direction the reviewer can get wrong: an untagged
-# bullet is `build`; an unknown value is `build`; and a bullet the reviewer
-# tagged `build` cannot be cleared by the `## Acknowledged-not-fixed` sidecar at
-# all (`ack_refused` counts those). Untagged bullets keep the pre-class ack
-# behaviour, because every sidecar written before the tag existed is untagged.
+# bullet is `build`; an unknown value is `build`; and a bullet tagged `build` OR
+# an unknown value cannot be cleared by the `## Acknowledged-not-fixed` sidecar
+# at all (`ack_refused` counts those). Only untagged bullets keep the pre-class
+# ack behaviour, because every sidecar written before the tag existed is untagged.
 _CLASS_RE = re.compile(r"^class\s*:\s*([a-z]+)$")
 CLASSES = ("build", "measurement")
 
@@ -211,7 +211,8 @@ def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
     missed (F14).
 
     A bullet that is acknowledged in the `## Acknowledged-not-fixed` sidecar is
-    cleared — UNLESS the reviewer tagged it `class: build`, in which case it is
+    cleared when it is tagged `class: measurement` or carries no tag — UNLESS the
+    reviewer tagged it `class: build` or an unknown value, in which case it is
     counted anyway and reported under `ack_refused`: a build-class must is what
     5d/5e would implement wrongly, and no sidecar clears that. A section whose
     bullets were ALL cleared is CLEAN, and must not fall into the off-template
@@ -228,15 +229,22 @@ def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
     # Group into (payload, class) per bullet; continuation lines classify the
     # bullet they follow. Lines before any bullet are prose (off-template).
     findings: list[tuple[str, str | None]] = []
+    target: int | None = None          # index of the bullet a `class:` line classifies
     for line, payload in zip(content, payloads):
         if _bullet_remainder(line.strip()) is not None:
             if payload and not _is_none_sentinel(payload):
                 findings.append((payload, None))
+                target = len(findings) - 1
+            else:
+                # A `- None` sentinel bullet ends the previous bullet's span: a
+                # `class:` line after it classifies nothing (review m1 — otherwise
+                # it downgraded the PREVIOUS finding, the fail-open direction).
+                target = None
             continue
         cls = _class_of(line)
-        if cls is not None and findings:
-            text_, _old = findings[-1]
-            findings[-1] = (text_, cls)
+        if cls is not None and target is not None:
+            text_, _old = findings[target]
+            findings[target] = (text_, cls)
 
     if not findings:
         # Non-None content with no countable bullet → at least one off-template finding.
@@ -248,10 +256,16 @@ def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
     out = dict(zero)
     for payload, cls in findings:
         acked = _is_acknowledged(payload, acknowledged)
-        if acked and cls != "build":
+        # Only two shapes clear through the sidecar: an explicit `measurement`,
+        # and an UNTAGGED bullet (every sidecar written before the tag existed is
+        # untagged, so that is the back-compat surface). An explicit `build` is
+        # refused, and so is an UNKNOWN value: it can only occur in a report
+        # written after the tag existed, so refusing it costs no back-compat and
+        # closes the hole a typo'd `class: buidl` would otherwise open (review M1).
+        if acked and (cls == "measurement" or cls is None):
             continue                      # cleared by the sidecar
         if acked:
-            out["ack_refused"] += 1       # tagged build: the sidecar cannot clear it
+            out["ack_refused"] += 1       # build or unknown: the sidecar cannot clear it
         out["count"] += 1
         if cls == "measurement":
             out["measurement"] += 1
@@ -505,9 +519,12 @@ def main(argv: list[str] | None = None) -> int:
     # appended rather than woven in, and is absent entirely without --gated.
     print(f"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped}")
     # Line 2 is the class breakdown over BOTH blocking sections. It is a second
-    # line, never fields woven into line 1, because `h_mad_audit_cycle.GATE_RE`
-    # anchors on `should=N$` and anything appended there would un-parse every
-    # verdict. Nothing reads "the last line" as the verdict.
+    # line rather than fields woven into line 1: `h_mad_audit_cycle.GATE_RE`
+    # anchors on `should=N\s*$`, so it already refuses a `--gated` line 1 (latent —
+    # the cycle driver never passes `--gated`), and adding more there would make
+    # every verdict un-parse. It is printed on PASS and FAIL only; the INVALID and
+    # UNSTAMPABLE early returns above carry no class line, and a consumer must
+    # never read its absence as `build=0`.
     print(
         "GATE-CLASS: "
         f"build={result['must_build'] + result['should_build']} "

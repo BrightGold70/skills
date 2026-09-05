@@ -185,7 +185,7 @@ finding). The test is one question: **would the code or tests a 5d/5e implemente
 predicate, a fixture, a test's assertion or RED/GREEN count, a false premise about the platform). No →
 `class: measurement` (a published number, stamp, ledger row, sha series, pointer or self-count that is
 stale or mis-derived; the tree is unchanged by fixing it). An untagged bullet is scored as `build`, so
-omitting the line never softens a finding — it only costs the orchestrator the triage.
+omitting the line never softens a finding — it only costs the orchestrator the triage. Put the `class:` line directly under its bullet (before or after `quote:`); do not indent a sub-bullet between a finding and its `class:` line, which leaves the finding untagged.
 
     - <issue> — <why>
       class: build

@@ -946,6 +946,23 @@ def test_unknown_class_value_is_build_and_untagged() -> None:
     assert r["must_build"] == 1 and r["must_measurement"] == 0 and r["must_untagged"] == 1
 
 
+def test_unknown_class_value_is_refused_by_the_ack_sidecar() -> None:
+    """Review M1: a typo'd `class: buidl` must not escape through the sidecar.
+
+    An unknown value can only occur in a report written AFTER the tag existed,
+    so refusing it costs no back-compat (which is owed to UNTAGGED bullets only).
+    """
+    r = classify_detail(_report(["- [k] finding", "  class: buidl"], ack=["- [k] deferred"]),
+                        acknowledged={"[k] deferred"})
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["ack_refused"] == 1
+
+
+def test_class_line_after_a_none_sentinel_bullet_classifies_nothing() -> None:
+    """Review m1: `- None` ends the previous bullet's span (fail-open otherwise)."""
+    r = classify_detail(_report(["- real finding", "- None", "  class: measurement"]))
+    assert r["must_count"] == 1 and r["must_build"] == 1 and r["must_measurement"] == 0
+
+
 @pytest.mark.parametrize("tag", ["class: measurement", "class:measurement",
                                  "Class: Measurement", "class: MEASUREMENT.",
                                  "  **class:** measurement", "class: `measurement`"])
