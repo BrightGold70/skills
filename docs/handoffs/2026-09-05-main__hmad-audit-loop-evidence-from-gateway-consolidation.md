@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · main · session `cab14393-84ea-4753-9183-9c9a1946c239`
+**Taken-Over-By:** skills · main · session adb05ac8 · 2026-09-05
 **Supersedes:** none — first on this topic
 
 ## Session Summary
