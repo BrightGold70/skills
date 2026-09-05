@@ -630,3 +630,29 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   codex must is classified by the C8 i test; measurement-class → `.audit.v<N+1>.md` sidecar with its
   re-run command, `[audit-override]`; build-class → `OPEN-DECISION` on the owning impl-plan Task via
   one implplan-author reopen; then 5b is stamped and 5c/5d begin.
+
+- **C10 — appended 2026-09-06 by session `51a2b6f7`: the r19 gating result and the Phase 5b exit.**
+  (i) **Verdicts at `7fc5f94` (codex only):** plan c90 `FAIL must=1 should=3 nit=2`; impl-plan c50 `FAIL
+  must=3 should=4`; design c99 `FAIL must=3 should=1`. All via `--out`, 0 quota hits. (ii) **Class, per C8
+  i:** plan must 1 = measurement (the composite probe's `python 3.11.8` line is not printed by its fence —
+  verified at plan:3984-3993); impl-plan musts 1–3 and design musts 1–3 = build (a mutation with no
+  distinction at its seam, an unverified rollback unlink, the `--help` bypass — found by BOTH legs — an
+  `OverflowError` outside the timeout mapping, a twice-prescribed key predicate). Six build-class musts,
+  five distinct. (iii) **Disposition (C8 iii):** sidecars `plan.audit.v91.md`, `design.audit.v100.md`,
+  `impl-plan.audit.v51.md` acknowledge the measurement-class must and every should by `[key]` with re-run
+  commands; each gates `PASS must=0 should=0` under the main gate and under the branch's class-aware
+  gate; five `**OPEN-DECISION (r19, 5d):**` lines on impl-plan Tasks 2 / 3 / 3 / 4 / 4 (:2635 :2871 :2873
+  :3374 :3376) carry the build-class musts for the 5d implementer, premises marked "as filed by codex,
+  re-derive before choosing". Committed `[audit-override]` at `4512615`. Suite on `7fc5f94`: **2574
+  passed** in 379.35s. (iv) **Phase 5b EXITS at `4512615`** — not on a two-surface clean, on the
+  operator's cap decision, and the record says so in those words: nineteen document rounds, the last
+  five with two model families, the union never below 15 at r18 and 7 at r19 (build-class 6 of 7 at
+  r19 versus 6 of 15 at r18 — the class rule did what it was written to do), and every round's
+  same-family surface finding its musts in the self-measurement layer. What 5c/5d inherit: three
+  documents at `7fc5f94` bytes (design v1.111 / plan v1.106 / impl-plan v1.55 / spec v1.64), 87 mutation
+  rows, five open decisions, and a precheck floor of 11 grammar slots. (v) **Merge of
+  `feature/hmad-class-scored-gate` follows this entry** — the class-scored gate, the two-round cap,
+  changed-documents-only re-audit, codex-gates-plus-delta-review, and the measurement layer in probes.
+  The design's trip-wire will read 11+ after it and the plan's `.py` censuses move; neither document is
+  re-audited again, so neither reading is re-stamped — the OPEN-DECISION lines and the sidecars are the
+  last document edits of this feature before code.
