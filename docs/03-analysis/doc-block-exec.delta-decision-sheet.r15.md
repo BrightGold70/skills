@@ -311,3 +311,21 @@ absence.
   bracketed correction in this batch's commit message — the treatment `8c6539a` got.
 - The spec's `2486` at AC-6.4 and `BAD_ARGS` in AC-4.2's exit-0 enumeration were both still owed at
   `00b961f`; spec v1.62 reports addressing both. Verify at the new commit, do not assume.
+
+## C5 — the header's "touched only `docs/handoffs/`" was never measured, and it is FALSE (orchestrator error #49n)
+
+Line 5 of this sheet reads: "`df04e8e` and `dfae038` touched only `docs/handoffs/`". Measured after the
+fact — `git show --name-only --format='' dfae038` — `dfae038` touches THREE files: the handoff doc,
+`docs/learnings.md`, and `docs/skill-candidates.md`. `df04e8e` does touch only its handoff doc. The
+compound claim is false for one of its two members, and it was never run before it was written.
+
+It propagated from this line into all four r15 author prompts, all three r15 gating prompts, the
+`7b182b0` commit message, and — via the authors — into `plan.md` (four sites under a markup-admitting
+needle, two under a markup-blind one) and `impl-plan.md` (the v1.51 entry's freeze-field
+justification). Both were filed as musts by the r15 gating legs and repaired in r16 (plan v1.103,
+impl-plan v1.52), each attributing the origin to this sheet by path.
+
+**The conclusion line 5 was supporting survives**: the four documents ARE byte-identical between
+`00b961f` and `dfae038` (`git diff --stat` over both feature dirs, 0 lines). Only the scope word is
+wrong. The line above is left as written, per this sheet's own rule that authors' inputs are appended
+to, never rewritten.
