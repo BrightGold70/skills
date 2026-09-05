@@ -1069,3 +1069,18 @@ def test_author_agents_carry_the_measurement_layer_rule() -> None:
         text = (REPO_ROOT / "h-mad" / "agents" / f"{name}.md").read_text(encoding="utf-8")
         assert "docs/03-analysis/probes/" in text, name
         assert "measurement layer" in text.lower(), name
+
+
+def test_the_skill_caps_document_audit_rounds_and_routes_revisions_to_codex_plus_delta() -> None:
+    skill = (REPO_ROOT / "h-mad" / "SKILL.md").read_text(encoding="utf-8")
+    assert "## Document-audit round cap — Phase 5 is the gate" in skill
+    assert "capped at TWO gating rounds" in skill
+    assert "Re-audit only what changed" in skill
+    assert "OPEN-DECISION" in skill
+    # both exit clauses point at the cap
+    sites = [ln for ln in skill.splitlines() if "Exit ONLY when" in ln or ln.startswith("- **5b**")]
+    assert len(sites) == 2
+    for ln in sites:
+        assert "Document-audit round cap" in ln, ln[:120]
+    # the two-surface rule now distinguishes first gate from revision cycles
+    assert "**Revision cycles**" in skill and "the delta review is the second surface" in skill
