@@ -1423,8 +1423,8 @@ round's decision sheet BEFORE reading the round's verdicts, and may re-classify 
 `measurement` to `build` but never `build` to `measurement`.
 
 **It fails closed** in every direction the reviewer can get wrong. `h_mad_audit_gate.py` counts an
-untagged bullet as build, an unknown class value as build, and REFUSES the sidecar for a bullet tagged
-`class: build` or carrying an unknown value (`ack_refused=N` on the `GATE-CLASS:` line — a build-class must is what 5d/5e would
+untagged bullet as build, an unknown class value as build, and REFUSES the sidecar for a MUST-FIX bullet tagged
+`class: build` or carrying an unknown value (a should-fix of any class stays deferrable, as it always was) (`ack_refused=N` on the `GATE-CLASS:` line — a build-class must is what 5d/5e would
 implement wrongly, and no operator note clears that). Untagged bullets keep the pre-class ack
 behaviour because every sidecar written before the tag existed is untagged. The verdict line
 `GATE: PASS|FAIL must=N should=N` is unchanged; the breakdown is a second line,

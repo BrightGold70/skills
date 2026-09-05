@@ -1084,3 +1084,10 @@ def test_the_skill_caps_document_audit_rounds_and_routes_revisions_to_codex_plus
         assert "Document-audit round cap" in ln, ln[:120]
     # the two-surface rule now distinguishes first gate from revision cycles
     assert "**Revision cycles**" in skill and "the delta review is the second surface" in skill
+
+
+def test_build_class_SHOULD_fix_still_clears_via_the_ack_sidecar() -> None:
+    """The refusal is for Must-fix only: a should-fix of any class was always deferrable."""
+    r = classify_detail(_report(["None"], should=["- [s] transport nit", "  class: build"],
+                                ack=["- [s] deferred to 5d"]), acknowledged={"[s] deferred to 5d"})
+    assert r["verdict"] == "PASS" and r["should_count"] == 0 and r["ack_refused"] == 0

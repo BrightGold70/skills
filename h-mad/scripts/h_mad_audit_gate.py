@@ -100,10 +100,12 @@ def _payload(line: str) -> str:
 # that publishes numbers about a tree it moves.
 #
 # It fails CLOSED in every direction the reviewer can get wrong: an untagged
-# bullet is `build`; an unknown value is `build`; and a bullet tagged `build` OR
-# an unknown value cannot be cleared by the `## Acknowledged-not-fixed` sidecar
-# at all (`ack_refused` counts those). Only untagged bullets keep the pre-class
-# ack behaviour, because every sidecar written before the tag existed is untagged.
+# bullet is `build`; an unknown value is `build`; and a MUST-FIX bullet tagged
+# `build` OR an unknown value cannot be cleared by the `## Acknowledged-not-fixed`
+# sidecar at all (`ack_refused` counts those). Should-fix bullets of any class
+# stay deferrable through the sidecar, as they always were. Only untagged bullets
+# keep the pre-class ack behaviour, because every sidecar written before the tag
+# existed is untagged.
 _CLASS_RE = re.compile(r"^class\s*:\s*([a-z]+)$")
 CLASSES = ("build", "measurement")
 
@@ -194,7 +196,8 @@ def _count_section_findings(content: list[str], acknowledged: set[str]) -> int:
     return _section_detail(content, acknowledged)["count"]
 
 
-def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
+def _section_detail(content: list[str], acknowledged: set[str], *,
+                    refuse_build_ack: bool = True) -> dict:
     """Findings in one blocking section's non-blank content lines, by class.
 
     Returns ``{"count", "build", "measurement", "untagged", "ack_refused"}``.
@@ -262,7 +265,7 @@ def _section_detail(content: list[str], acknowledged: set[str]) -> dict:
         # refused, and so is an UNKNOWN value: it can only occur in a report
         # written after the tag existed, so refusing it costs no back-compat and
         # closes the hole a typo'd `class: buidl` would otherwise open (review M1).
-        if acked and (cls == "measurement" or cls is None):
+        if acked and (cls == "measurement" or cls is None or not refuse_build_ack):
             continue                      # cleared by the sidecar
         if acked:
             out["ack_refused"] += 1       # build or unknown: the sidecar cannot clear it
@@ -311,7 +314,12 @@ def classify_detail(text: str, acknowledged: set[str] | None = None) -> dict:
         if current_count_key and stripped:
             section_content[current_count_key].append(line)
 
-    detail = {key: _section_detail(content, acknowledged_items)
+    # Only a MUST-FIX tagged build (or unknown) is refused by the sidecar: a
+    # build-class must is what 5d/5e would implement wrongly. A should-fix of
+    # any class has always been deferrable through the sidecar (SKILL.md, the
+    # Phase 3 / 5b exit clauses), and the class does not change that.
+    detail = {key: _section_detail(content, acknowledged_items,
+                                   refuse_build_ack=(key == "must_count"))
               for key, content in section_content.items()}
     must, should = detail["must_count"], detail["should_count"]
     verdict = "FAIL" if must["count"] or should["count"] else "PASS"
