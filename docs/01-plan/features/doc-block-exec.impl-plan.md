@@ -2471,11 +2471,16 @@ is GLOB-FED, so this membership statement is a reading of a tree and not a prope
 (impl-plan audit v45). **The rule is over the set, and NO cardinal of the glob sources is
 published here** (delta self-review r15): every `_SCANNED` source spelled with `.glob(` is a tree
 read, so the sources partition into literal paths and tree reads by their own spelling, and which
-files a tree read admits is settled by running it. v1.50 published *three of the eight sources
-are globs* and it was wrong — the quoted list two lines above already names every glob form the
-sentence undercounted, so the sentence contradicted the list it sat beside — and the repair is
+files a tree read admits is settled by running it. v1.50 published a cardinal of the glob sources
+here and it was wrong — the enumeration two lines above already named every glob form that
+cardinal undercounted, so the sentence contradicted the list it sat beside — and the repair is
 the removal of the count rather than a corrected integer, because the next `.glob(` entry a
-reviser adds moves it again and nothing here would see that. A later `references/*.md` or
+reviser adds moves it again and nothing here would see that. **The retired figure is DESCRIBED
+and not quoted**, for the reason the precheck forms are described rather than quoted one bullet
+family over: quoting it would put the wrong cardinal back into the body this sentence claims
+carries none, which is the defect and not a record of it. The wrong value and the reading that
+retired it are in the v1.50 Version History entry's bracketed correction, where a dated record
+is the right place for a retired number. A later `references/*.md` or
 `scripts/*.py` file changes the membership without any instrument here noticing — the same shape
 AC-6.4's suite floor has, and the same disposition. **So membership is RE-DERIVED at 5d from the
 shipped sources rather than read out of this sentence**, exactly as the parametrised collection
