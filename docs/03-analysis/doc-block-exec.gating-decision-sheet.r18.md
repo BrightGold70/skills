@@ -476,3 +476,95 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   per-must verification ledger is `docs/03-analysis/doc-block-exec.r18-gating.verification-ledger.md`.
   (iv) **Not pushed:** `d27d2ce` and this commit are local; `origin/main` is at `093c3ee` until the
   session closeout pushes.
+
+- **C7 — appended 2026-09-06 by session `51a2b6f7` before the r19 authors were spawned: the shared-facts
+  gate for the r19 revision batch (the C2 construction; every string below is pasted from the shipped
+  bytes, never retyped — #49v).**
+  (i) **Freeze = the commit carrying this C7** (docs-only over `c7a75eb`, which is docs-only over
+  `d27d2ce`, which landed the six r18 gating reports). Authors are told the sha verbatim. FACT 2's three
+  clauses apply unchanged. **Two waves:** design-author and plan-author in parallel first; implplan-author
+  AFTER the design's DONE, handed the design's shipped strings for the fault-injection contract and the
+  kind-selection row — the r18 rule-3 collisions (matrix 85→86, one killer test named two ways) came from
+  two authors filling one undecided string at once. spec-author is not dispatched (no r18 finding lands
+  in the spec; its any-pair wording is the source string below). Target versions: design **v1.111**, plan
+  **v1.106**, impl-plan **v1.55**; spec stays v1.64. Authors do NOT run the full h-mad suite (concurrent
+  runs on one pin file); `--collect-only -q` and `git grep` are fine; the orchestrator runs the suite on
+  the committed batch tree and stamps that reading. Precheck floor: impl-plan ≤ 12 hard (the 11 grammar
+  `PLACEHOLDER` slots stay), `PINDRIFT` 0; spec / design / plan `PASS issues=0`.
+  (ii) **Shared strings, decided once.**
+  - **The any-pair offset wording, source = spec body (`grep -nF 'any* intersecting span pair'` → spec:183):**
+    `**`<offset>` is the smallest character index shared by *any* intersecting span pair of` … ; the
+    design's body spelling (design:1408-1409) is `<offset>` is the **smallest character index shared by
+    *any* intersecting span pair of the two keys**, 0-based into `block.text`. The impl-plan rewords its
+    two body sites (`grep -nF 'the two spans SHARE'` → impl-plan:2094 and :2463; the :4146 hit is
+    Version History and stays) to that form; the design adds an owed-elsewhere entry naming those two
+    sites by command.
+  - **The `cleanup-errors-ignored` fault-injection contract — DESIGN CHANGE, the design author writes it
+    once and the impl-plan author copies the shipped sentence:** the injected `rmtree` must **honour
+    `ignore_errors`** — raise the injected error only when `ignore_errors` is falsy, return silently when
+    it is true — so that under the mutant (`ignore_errors=True` restored) nothing raises, nothing is
+    recorded, the read-back trips and `cleanup_error` is `None`, which is what
+    `test_cleanup_failure_carries_the_os_error` then discriminates. Probe (both surfaces filed it):
+    a fake that raises unconditionally raises under `ignore_errors=True` too, so the row's `killed by` at
+    design:1825 and the matrix row at design:4056 are not currently true. Any other discriminating
+    fixture the design author prefers is acceptable; whichever it is, the impl-plan follows the design.
+  - **`communicate(timeout=-1)`:** on Python 3.11.8 AND 3.14.7 it raises **`subprocess.TimeoutExpired`**
+    (a normal non-positive timeout expires immediately); `timeout=1` on `sh -c 'exit 0'` returns. The
+    design:1854 claim that it raises `ValueError` only after the child exists is FALSE and is corrected
+    to `TimeoutExpired`; the AC-5.6 validation rule (`math.isfinite(t) and t > 0`, else `BadTimeout`)
+    stands and is now grounded on "the refusal must happen before the spawn because `communicate` would
+    NOT refuse it".
+  - **The trip-wire reading (design:284 fence, `# expect 0`):** **8** at `cac6edc`, `ccd8ebd`, `bc4688e`,
+    `093c3ee`, `d27d2ce`, `c7a75eb`; the eight are `h-mad/SKILL.md`, `h-mad/agents/design-author.md`,
+    `h-mad/agents/doc-auditor.md`, `h-mad/agents/implplan-author.md`, `h-mad/agents/plan-author.md`,
+    `h-mad/agents/spec-author.md`, `h-mad/references/agent-substrate.md`,
+    `h-mad/references/codex-implementer-prompt.md`, all changed by `b39d9dc`. `git diff --name-only
+    b39d9dc^ b39d9dc -- h-mad handoff` names 13 files including `h-mad/SKILL.md`; `-- '*.py'` names 4
+    (`h-mad/scripts/h_mad_assemble_audit.py`, `h-mad/tests/test_h_mad_agent_definitions.py`,
+    `h-mad/tests/test_h_mad_assemble_audit.py`, `h-mad/tests/test_hmad_dispatch_exec.py`). design:386
+    "`b39d9dc` passed every scoped census predicate" is FALSE; the fixture decision it grounds stands.
+  - **The heading differential at `cac6edc`, plan's spelling (plan:3401):** TRACKED `files=30 both=292
+    old_only=82 new_only=0`, `setext_headings=0`; GLOB `files=35 both=297 old_only=82 new_only=0`.
+    The impl-plan's 25 / **263** / `old_only=76` / **268** at impl-plan:1699-1703 and its "no round having
+    re-run them" clause are replaced by that reading stamped `cac6edc`; the committed probe is
+    `docs/03-analysis/probes/doc-block-exec/heading_differential.2026-09-04.b66afa9c.py`.
+  - **The plan ledger pair (plan's own two `git ls-tree` pipelines at plan:4350-4355):** `fbc2ea0` 87/87 ·
+    `cac6edc` **88/88** · `ccd8ebd` 88/88 · `bc4688e` 88/88 · `093c3ee` 88/88 · `d27d2ce` **89/89** ·
+    `c7a75eb` 89/89 · the r19 freeze 89/89. The series at plan:4359-4362 carries TEN shas; plan:4340
+    says eight.
+  - **The `h-mad/SKILL.md` bare-`#` specimen by commit** (`git show "${s}:h-mad/SKILL.md" | grep -c
+    '^#[[:space:]]*$'`): `a469493` 0 · `1861157` 0 (09-04 08:02) · `bea1b60` 1 (09-04 12:14) · `fbc2ea0` 1
+    · `cac6edc` 0. The `1861157` zero at plan:3462 was a TRUE zero (the specimen did not yet exist), not
+    "the shape had not been looked for correctly"; the `closing_hash` mis-corpus story is a different zero.
+  - **The 13,104 / 194 search:** the design publishes no command (design:1516-1519 "run rather than
+    reasoned"); the r18 design delta review reproduced `52 non-substring pairs × 252 texts = 13,104`,
+    `194` lookahead-only refusals, `0` missed. The design commits the enumeration as a fifth probe under
+    `docs/03-analysis/probes/doc-block-exec/` (the author writes the probe file — the ONE exception to
+    one-author-one-file this round, stated here so nobody else touches that directory) and cites it.
+  - **`intersections` in the design:** whole-file 5 (body design:1436, design:2955; three in the v1.110
+    entry), body 2, `cac6edc` 0; the v1.110 self-count "on this body 4" → re-derived.
+  - **impl-plan Task 4 code-structure block (impl-plan:3120 fence):** `ast.parse` raises at :3153; the
+    three bodiless `def`s are :3152-:3154; ` ...` before the trailing comment, matching `_verify` at :3155.
+    The ast screen the author adds MUST state its fence grammar (opener ```` ```python ```` at 0–3 spaces,
+    closer a bare fence) and publish its own count — the orchestrator's instrument counted 9 fences, the
+    auditor's 10; one defect, two grammars.
+  - **The NUL `--preamble` arm (impl-plan:3178):** a `\x00` inside an argv element raises `ValueError:
+    embedded null byte` in the PARENT (`subprocess.run(['/bin/echo','a\x00b'])`, probed) — the test never
+    reaches the CLI. The second arm goes through `--preamble-file` with the NUL written into the file.
+  - **Task 4 RED count (impl-plan:2334 / :3163 / :3388 / :3413):** `test_invalid_utf8_document_is_unreadable`
+    is a Task 1 test that gains a CLI assertion in Task 4, so "Tasks 1–3 stay green" and `--expect-pass` =
+    Task 3's GREEN figure are both off by one. Decision: the CLI half becomes its own Task 4 test (name
+    chosen by the impl-plan author; value-grep it across all four documents at collection).
+  - **Kind-selection rendering row (impl-plan codex M4):** the DESIGN decides — add a matrix row that
+    changes only the `kind`-based prefix selection in the renderer and name its killer (the CLI
+    detail-line test), or state in the matrix section why the matrix does not carry it. The impl-plan
+    follows the shipped design in wave 2.
+  (iii) **Every `:N` above is a READ locator, never text to copy** (C2 iv). Design writes no line
+  numbers. (iv) **Reopen rule (FACT 6) and version-number rule (FACT 7) apply.** (v) **Should-fixes
+  travel with their document** — plan: softened-set GLOB `closing_hash=5` claim, 81/81 at `09e9307`,
+  "the register below" pointer, three repo-wide `.py` figures outside the re-run set (415 / 5 / 2,
+  unchanged), changed-`.py` 6 → 8 at `cac6edc`, batch stamp now dischargeable at `ccd8ebd`; design:
+  88 → 89 test files at `cac6edc`, AC fence reads the spec blob at `cac6edc` while the batch ships
+  v1.64 (sets identical), `$P` 40 vs 37, the AC census command returning 0 not 7; impl-plan: the
+  six-record `abc` fixture, the five-row collateral enumeration, `abc---abc` offset 1 not 7, Task 5
+  "alone" scope, `overlap:` slot spelling, the discharged `intersect:` row debt. Nits with them.
