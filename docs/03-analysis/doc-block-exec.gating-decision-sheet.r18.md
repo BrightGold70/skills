@@ -568,3 +568,38 @@ not at the sibling's working file. Report "sibling owes X" in the tail; never ed
   v1.64 (sets identical), `$P` 40 vs 37, the AC census command returning 0 not 7; impl-plan: the
   six-record `abc` fixture, the five-row collateral enumeration, `abc---abc` offset 1 not 7, Task 5
   "alone" scope, `overlap:` slot spelling, the discharged `intersect:` row debt. Nits with them.
+
+- **C8 — appended 2026-09-06 by session `51a2b6f7` BEFORE any r19 verdict exists (written blind, per the
+  rule it states): the finding-class rule, the r18 partition under it, and the operator's cap decision.**
+  (i) **The class test, one question:** *would the code or tests a 5d/5e implementer writes differ if
+  this finding were fixed?* Yes → `build`. No → `measurement`. Reviewers state it on a `class:`
+  continuation line from r20 on (template + gate change on `feature/hmad-class-scored-gate`, not yet
+  merged); for r19 the orchestrator applies the test to each collected must and may re-classify only
+  `measurement` → `build`, never the reverse. (ii) **The r18 union under that test, 15 distinct:**
+  build **6** — the `rmtree` fault-injection contract (design codex M3 = impl-plan codex M2, counted
+  once), the NUL-in-argv `--preamble` arm (impl-plan codex M1), the Task 4 RED count over a modified
+  Task 1 test (impl-plan codex M3), the kind-selection rendering row (impl-plan codex M4), the
+  unparsable Task 4 python block (impl-plan teammate M2), the any-pair `<offset>` wording the impl-plan
+  contradicts (design teammate M3); measurement **9** — the `1861157` zero's explanation (plan codex
+  M1), the ledger 87/87 → 88/88 (plan teammate M1), eight vs ten shas (plan teammate M2), the
+  13,104-search command (design codex M1), the `communicate(timeout=-1)` ground sentence (design codex
+  M2 — the AC-5.6 rule an implementer codes against is unchanged), the trip-wire stamp (design teammate
+  M1), the `b39d9dc` ground sentence (design teammate M2), `intersections` 4 → 5 (design teammate M4),
+  the stale heading-differential figures (impl-plan teammate M1). Under the class rule r18 would have
+  read build 6 / measurement 9, and the plan would have gated on build 0 — its only build-class item
+  was the ledger, which is measurement. (iii) **Operator decision, 2026-09-06: r19 is the LAST document
+  round for this feature.** Stated reason: eighteen rounds, zero code; Phase 5 (RED/GREEN, the mutation
+  harness, 6a-prime) is where a defect costs minutes because pytest is the oracle. Consequences,
+  decided now: (a) after the r19 batch lands, ONE gating pass — codex gates each changed document
+  (design c99 / plan c90 / impl-plan c50, `--vh-tail` as the assembler requires, the OLD template);
+  the doc-auditor runs the advisory delta review on each diff and does NOT run a second full gating
+  pass (the delta layer is where 12 of 12 fix-introduced musts lived at r18); (b) every measurement-class
+  must or should from that pass is acknowledged in a `## Acknowledged-not-fixed` sidecar
+  (`.audit.v<N+1>.md`, committed `[audit-override]`) with its RE-RUN COMMAND as the ack text; (c) any
+  build-class must from that pass is carried as an explicit open item in the impl-plan's Tasks
+  (a design/test decision the implementer resolves in 5d, where a wrong choice is a RED failure) — it
+  does NOT open a twentieth document round; (d) 5b is stamped at the commit that carries the sidecars,
+  and 5c/5d begin on that tree. (iv) **Skill-side, on the branch:** a hard cap of two gating rounds
+  per document audit loop, re-audit only documents that changed since their last gate, codex gates
+  while the same-family surface reviews the diff, Phase 5 as the gate. These land after the r19 gating
+  pass is collected (any `h-mad/` commit moves the design's trip-wire and the plan's `.py` censuses).
