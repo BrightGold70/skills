@@ -1,5 +1,5 @@
 {
-  "_why": "Phase-5e Task 3: the 26 execution and bounding rows in docs/01-plan/features/doc-block-exec.impl-plan.md, paragraph Mutation rows added here. D6 removes the preamble pass-through row; D7 adds the isolated timeout upper-bound row.",
+  "_why": "Phase-5e Task 3: the 26 execution and bounding rows in docs/01-plan/features/doc-block-exec.impl-plan.md, paragraph Mutation rows added here. D6 removes the preamble pass-through row; D7 adds the isolated timeout upper-bound row. D9 adds stderr closure and post-collect kill guards, bringing the execution and bounding rows to 28.",
   "root": "../..",
   "command": [
     "/opt/anaconda3/bin/python3.11",
@@ -222,6 +222,22 @@
       "file": "scripts/h_mad_doc_block_exec.py",
       "find": "        if pending is not None:\n            raise err from pending\n        else:\n            raise err from cleanup_error",
       "replace": "        raise err from pending"
+    },
+    {
+      "name": "stderr-not-closed",
+      "_mechanism": "Omit stderr from explicit pipe closure after drain expiry.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_stderr_is_closed_after_drain_timeout",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "for pipe in (proc.stdout, proc.stderr):",
+      "replace": "for pipe in (proc.stdout,):"
+    },
+    {
+      "name": "kill-skipped-after-collect-failure",
+      "_mechanism": "Skip group kill and signalled assignment when collection has failed.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_collect_failure_kills_running_group",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "                        os.killpg(proc.pid, signal.SIGKILL)\n                        signalled = True",
+      "replace": "                        if not isinstance(pending, LaunchFailed):\n                            os.killpg(proc.pid, signal.SIGKILL)\n                            signalled = True"
     }
   ]
 }

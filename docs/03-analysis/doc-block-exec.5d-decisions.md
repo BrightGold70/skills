@@ -503,9 +503,16 @@ defects. The prediction was right about the class and generous about the count.
 
 ---
 
-## D9 — OPEN: the anti-gaming pass found TWO guards with no discriminating test
+## D9 — CLOSED: stderr closure and post-collect kill now have discriminating tests
 
-**Not a decision. A finding, recorded open, and it BLOCKS 5e.**
+**Closed by executed isolated mutation proofs and the 28-row harness run.**
+See [D9 proof](doc-block-exec.d9-proof.md) for the original/mutant outputs,
+including the repaired poll test failing alone under mutant B. The test file now
+reports `98 passed`; anchors report `mutations=28 ok=28`; the harness reports
+`ALL_CAUGHT mutations=28 caught=28 survived=0 refused=0 unreadable=0`.
+Production code is unchanged. The original finding and its evidence follow.
+
+**Originally recorded open, blocking 5e:**
 
 The independent verification pass (`references/codex-verifier-prompt.md`, read-only) returned
 BLOCKED. It re-derived all five claims it was given and confirmed every one — `96 passed`
@@ -540,7 +547,7 @@ the base Mutation verification invariant refuses* — firing from the direction 
 not a row whose killer is wrong, but a property with no row at all. **`ALL_CAUGHT` plus a green
 suite is not sufficient, and this pass is the only thing positioned to show it.**
 
-**Owed, and 5e cannot be called green until it is done:**
+**Original owed list (the D9 guards and assertion repair are now verified above):**
 - a discriminating test for stderr closure, and a mutation row `stderr-not-closed` bound to it;
 - a discriminating test for the post-collect kill, and a row `kill-skipped-after-collect-failure`;
 - **repair `test_poll_oserror_is_launch_failed_collect`'s vacuity** — it must assert the group is

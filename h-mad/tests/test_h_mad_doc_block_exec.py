@@ -1063,6 +1063,9 @@ def collect_case(monkeypatch, method, block, escapee=None, expiry=False):
         if method == "communicate":
             with pytest.raises(ProcessLookupError):
                 real_killpg(proc.pid, 0)
+        if method == "poll":
+            with pytest.raises(ProcessLookupError):
+                real_killpg(proc.pid, 0)
     finally:
         if escapee is not None and escapee[1].exists():
             kill_if_present(os.kill, int(escapee[1].read_text()))
@@ -1074,9 +1077,6 @@ def collect_case(monkeypatch, method, block, escapee=None, expiry=False):
             if entry["real_poll"]() is None:
                 kill_if_present(real_killpg, proc.pid)
             entry["real_wait"](timeout=5)
-            if method == "poll":
-                with pytest.raises(ProcessLookupError):
-                    real_killpg(proc.pid, 0)
 
 
 def test_communicate_oserror_is_launch_failed_collect(monkeypatch):
@@ -1089,6 +1089,76 @@ def test_drain_wait_oserror_is_launch_failed_collect(monkeypatch, escapee):
 
 def test_poll_oserror_is_launch_failed_collect(monkeypatch):
     collect_case(monkeypatch, "poll", execution_block("sleep 300"))
+
+
+@contextmanager
+def owned_recovery_process(monkeypatch, communicate_failure):
+    """Retain real pipes and reap the owned leader even when a guard fails."""
+    real_popen = subprocess.Popen
+    records = []
+
+    def spawn(*args, **kwargs):
+        proc = real_popen(*args, **kwargs)
+        records.append({"proc": proc, "cwd": kwargs["cwd"]})
+        real_communicate = proc.communicate
+        calls = []
+
+        def communicate(*a, **kw):
+            calls.append(kw)
+            communicate_failure(len(calls), kw)
+            return real_communicate(*a, **kw)
+
+        monkeypatch.setattr(proc, "communicate", communicate)
+        return proc
+
+    monkeypatch.setattr(dbe.subprocess, "Popen", spawn)
+    try:
+        yield records
+    finally:
+        for entry in records:
+            proc = entry["proc"]
+            try:
+                # Reap first: a zombie-only group can return EPERM on macOS.
+                if proc.poll() is None:
+                    kill_if_present(os.killpg, proc.pid)
+                proc.wait(timeout=5)
+            finally:
+                proc.stdout.close()
+                proc.stderr.close()
+                if os.path.lexists(entry["cwd"]):
+                    shutil.rmtree(entry["cwd"])
+
+
+def test_stderr_is_closed_after_drain_timeout(monkeypatch):
+    def expire(call, kwargs):
+        # Force both collection and drain expiry without an orphan escapee.
+        raise subprocess.TimeoutExpired(cmd=["bash"], timeout=kwargs["timeout"])
+
+    with owned_recovery_process(monkeypatch, expire) as records:
+        with pytest.raises(dbe.BlockTimeout):
+            dbe.run_block(execution_block("exec sleep 300"), timeout=1)
+        proc = records[0]["proc"]
+        assert proc.stderr.closed, "production must close stderr after drain timeout"
+        assert proc.stdout.closed
+        assert_cwd_gone(records)
+
+
+def test_collect_failure_kills_running_group(monkeypatch):
+    injected = OSError(errno.EIO, "injected collection failure")
+
+    def fail_first(call, kwargs):
+        if call == 1:
+            raise injected
+
+    with owned_recovery_process(monkeypatch, fail_first) as records:
+        with pytest.raises(dbe.LaunchFailed) as error:
+            dbe.run_block(execution_block("exec sleep 300"), timeout=1)
+        proc = records[0]["proc"]
+        assert error.value.stage == "collect" and error.value.err is injected
+        assert proc.poll() == -signal.SIGKILL, "production must kill the leader after collect failure"
+        with pytest.raises(ProcessLookupError):
+            os.killpg(proc.pid, 0)
+        assert_cwd_gone(records)
 
 
 def test_wait_after_kill_is_bounded(monkeypatch, escapee):
