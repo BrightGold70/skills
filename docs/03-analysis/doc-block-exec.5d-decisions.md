@@ -638,3 +638,56 @@ without answering this would publish a total for a population that does not exis
 **Anti-pattern this section is guarding.** 107 raw `\b88\b` hits across the four documents
 (impl-plan 20, spec 3, plan 73, design 11), and most are line numbers. A value sweep alone cannot
 drive this revision; classify every hit before moving any of them.
+
+### D10 — SETTLED at the batch, by the orchestrator's own walk
+
+**Answer: neither reading (1) nor (2) as §D10 posed them, because the question conflated three
+things.** The number's AUTHORITY is the design's mutation table; its VALUE is **90**; the file that
+REALIZES it is `doc_block_exec.json`, into which the staged per-task file merges. All four authors'
+answers are compatible under that split, and the apparent three-way disagreement was three authors
+each naming a different one of the three.
+
+**Orchestrator's walk, run at the batch rather than taken from any author.** Scoped to the matrix
+table alone (`| mutation | guard it removes (mechanism) | killed by (`test` key) |`), row names
+compared AS SETS against each spec's `name` keys:
+
+    MATRIX rows=90 distinct=90
+    on-disk 32 + 28 = 60   intersection=0
+    NOT-IN-MATRIX = []                       <- closes plan-author's routing
+    matrix-not-on-disk = 30                  <- Task 4, unwritten
+    ARITHMETIC: 32 + 28 + 30 = 90
+    control (drop an on-disk row) -> ['adjacent-heading-skipped']
+
+That reproduces impl-plan's `25 + 7 + 28 + 30 = 90` from a different direction — the design's table
+versus the landed specs — and the empty `NOT-IN-MATRIX` is what plan-author asked be re-run here.
+
+**TWO ORCHESTRATOR ERRORS IN THAT WALK, both caught only because a control was demanded.**
+
+1. **The control was vacuous on its first run.** It dropped `registry-row-removed` — a Task 4/5 row
+   that is not on disk — so removing it could not change `on-disk MINUS matrix`, and the walk
+   reported "still empty" whether or not it worked. A control over a set difference must remove a
+   member of the LEFT set. Fixed by dropping an on-disk row, which then surfaced correctly.
+2. **The extractor's grammar was wrong and produced 97.** It scoped to every table with a
+   backticked first cell (catching a second, 8-row `test_h_mad_collect_report_docs.py` matrix that
+   is not part of this population) AND its name pattern `[a-z0-9-]*` excluded UNDERSCORES, silently
+   dropping `substitution-result-not-passed-to-run_block` — so the same run was too wide by one
+   table and too narrow by one row. 97 was published nowhere.
+
+Neither error changed the answer, and that is exactly why they are recorded: both produced
+plausible integers, and only the control separated them from the right one.
+
+**§D10's own FACT 3 is now FALSE, by this round's action.** `doc_block_exec_task3` appeared 0 times
+in all four documents at `6a1693c`; it is named in all four now. The sheet measured a state its own
+round then changed — the instrument-includes-the-instrument class, recorded rather than quietly
+restated.
+
+**§D10 FACT-count UNIT correction, caught by design-author.** The "107 raw `\b88\b` hits
+(impl-plan 20, spec 3, plan 73, design 11)" above are OCCURRENCES and the sheet did not say so.
+Lines differ: 20/17, 3/3, 73/35, 11/9. Both are defensible; publishing either without its unit is
+not.
+
+**What is NOT settled and does not become settled by this batch:** whether the per-task file merges
+into `doc_block_exec.json` before 5f. impl-plan records it as a checkable 5e obligation; design
+lists it as an open residual; plan declines to ratify either intent. No document, decision sheet or
+commit message states the intent behind the per-task naming — plan-author looked and found nothing,
+and declined to infer it. That is an operator call, not a reading.
