@@ -1253,3 +1253,882 @@ def test_unrepresentable_timeout_refuses_before_spawn(monkeypatch, recording_spa
     assert result.rc == 0 and result.stdout == "hi\n", "the representable boundary must execute normally"
     assert len(created) == 1
     assert_cwd_gone(recording_spawn)
+
+
+# Task 4 RED: CLI verdicts, stream ownership, and the helper registry.
+# Keep case loops inside test functions: one function is one dispatch RED item.
+CLI_SCRIPT = SCRIPTS / "h_mad_doc_block_exec.py"
+
+
+@pytest.fixture
+def cli_case(tmp_path, hostile):
+    heading = '## Section [*] "한글" rc=7'
+    marker = tmp_path / 'executed [*] 한글'
+    out = tmp_path / 'stdout [*] 한글'
+    err = tmp_path / 'stderr [*] 한글'
+    doc = write_doc(tmp_path, '')
+
+    def prepare(body=None, *, info='hmad:exec', text=None):
+        if body is None:
+            body = 'printf %s ' + shlex.quote(hostile) + '\n'
+        doc.write_text(text if text is not None else heading + '\n' + tagged(body, info), encoding='utf-8')
+        return [str(doc), '--heading', heading]
+
+    return dict(prepare=prepare, doc=doc, heading=heading, marker=marker,
+                out=out, err=err, hostile=hostile,
+                effect='touch ' + shlex.quote(str(marker)) + '\n')
+
+
+def cli_run(argv, *, env=None, timeout=15):
+    return subprocess.run([sys.executable, str(CLI_SCRIPT), *map(str, argv)],
+                          capture_output=True, text=True, env=env, timeout=timeout)
+
+
+def cli_fields(tail):
+    """Parse the full field grammar; reject trailing garbage or duplicate keys."""
+    fields = {}
+    decoder = json.JSONDecoder()
+    while tail:
+        match = re.match(r' +([a-z_]+)=', tail)
+        assert match, f'invalid verdict field grammar: {tail!r}'
+        key = match[1]
+        assert key not in fields, f'duplicate verdict field: {key}'
+        tail = tail[match.end():]
+        if tail.startswith('"'):
+            value, end = decoder.raw_decode(tail)
+            assert isinstance(value, str), 'quoted verdict values must be strings'
+        else:
+            bare = re.match(r'[^\s"]+', tail)
+            assert bare, f'invalid bare field: {tail!r}'
+            value, end = bare[0], bare.end()
+        fields[key] = value
+        tail = tail[end:]
+    return fields
+
+
+def cli_verdict(result, head, code=0):
+    rc, stdout, stderr = (result.returncode, result.stdout, result.stderr)
+    lines = stdout.splitlines()
+    assert lines and lines[0].startswith('DOCBLOCK: ' + head), f'expected {head} verdict, got {stdout!r}'
+    assert rc == code, f'{head} must exit {code}: {rc}, {stderr!r}'
+    assert sum(line.startswith('DOCBLOCK:') for line in lines) == 1, 'exactly one verdict is required'
+    assert 'Traceback' not in stderr and 'usage:' not in stderr, 'verdict must not leak a traceback or argparse usage'
+    return lines
+
+
+def main_result(main, argv, capsys):
+    rc = main(list(map(str, argv)))
+    captured = capsys.readouterr()
+    return subprocess.CompletedProcess(argv, rc, captured.out, captured.err)
+
+
+def stream_args(case):
+    return ['--stdout', str(case['out']), '--stderr', str(case['err'])]
+
+
+def cli_refusal(case, argv, head, code=0):
+    result = cli_run([*argv, *stream_args(case)])
+    lines = cli_verdict(result, head, code)
+    assert not case['marker'].exists(), 'refused input must not execute the block'
+    assert not case['out'].exists() and not case['err'].exists(), 'input refusal must precede stream reservation'
+    return lines
+
+
+def test_cli_ambiguous_prints_blocks_and_heading(cli_case):
+    c = cli_case
+    argv = c['prepare'](text=c['heading'] + '\n' + tagged(c['effect']) * 2)
+    lines = cli_refusal(c, argv, 'AMBIGUOUS')
+    assert lines[0] == 'DOCBLOCK: AMBIGUOUS blocks=2 heading=' + json.dumps(c['heading'], ensure_ascii=False)
+
+
+def test_cli_index_past_end_is_not_found(cli_case):
+    c = cli_case
+    cli_refusal(c, c['prepare'](c['effect']) + ['--index', '2'], 'NOT_FOUND')
+
+
+def test_cli_duplicate_headings_refuse(cli_case):
+    c = cli_case
+    argv = c['prepare'](text=(c['heading'] + '\n' + tagged(c['effect'])) * 2)
+    lines = cli_refusal(c, argv, 'AMBIGUOUS_HEADING')
+    assert lines[0] == 'DOCBLOCK: AMBIGUOUS_HEADING count=2 heading=' + json.dumps(c['heading'], ensure_ascii=False)
+
+
+def test_cli_index_zero_and_negative_are_bad_index(cli_case):
+    c = cli_case
+    for value in ('0', '-1'):
+        lines = cli_refusal(c, c['prepare'](c['effect']) + ['--index', value], 'BAD_INDEX')
+        assert lines[0] == 'DOCBLOCK: BAD_INDEX index=' + json.dumps(value)
+
+
+def test_non_integer_index_is_bad_index(cli_case):
+    c = cli_case
+    value = c['hostile']
+    lines = cli_refusal(c, c['prepare'](c['effect']) + ['--index', value], 'BAD_INDEX')
+    assert lines[0] == 'DOCBLOCK: BAD_INDEX index=' + json.dumps(value, ensure_ascii=False)
+
+
+def test_cli_missing_keys_list_in_argument_order(cli_case):
+    c = cli_case
+    keys = ['Z' + c['hostile'], 'A' + c['hostile']]
+    argv = c['prepare'](c['effect'])
+    for key in keys:
+        argv += ['--subst', key + '=value']
+    lines = cli_refusal(c, argv, 'SUBST_MISSING')
+    assert lines == ['DOCBLOCK: SUBST_MISSING keys=2'] + ['missing_key: ' + json.dumps(k, ensure_ascii=False) for k in keys]
+
+
+def test_cli_overlap_counts_distinct_keys(cli_case):
+    c = cli_case
+    argv = c['prepare']('true\n') + ['--subst', 'a=1', '--subst', 'ab=2', '--subst', 'abc=3']
+    lines = cli_refusal(c, argv, 'SUBST_OVERLAP')
+    assert lines[0] == 'DOCBLOCK: SUBST_OVERLAP keys=3', 'count distinct keys, not pair endpoints'
+
+
+def test_cli_no_subst_runs(cli_case):
+    c = cli_case
+    cli_verdict(cli_run(c['prepare']() + stream_args(c)), 'RAN rc=0')
+    assert c['out'].read_text() == c['hostile'], 'zero substitutions must preserve executable text'
+
+
+def test_subst_without_equals_is_bad_subst(cli_case):
+    c = cli_case
+    raw = 'invalid\n[*] 한글'
+    lines = cli_refusal(c, c['prepare'](c['effect']) + ['--subst', raw], 'BAD_SUBST')
+    assert lines[0] == 'DOCBLOCK: BAD_SUBST arg=' + json.dumps(raw, ensure_ascii=False)
+
+
+def test_subst_empty_key_is_bad_subst(cli_case):
+    c = cli_case
+    lines = cli_refusal(c, c['prepare'](c['effect']) + ['--subst', '=V'], 'BAD_SUBST')
+    assert lines[0] == 'DOCBLOCK: BAD_SUBST arg="=V"', 'main must preserve the raw empty-key argument'
+
+
+def test_duplicate_substitution_key_refuses(cli_case):
+    c = cli_case
+    lines = cli_refusal(c, c['prepare'](c['effect']) + ['--subst', 'K=first', '--subst', 'K=second'], 'BAD_SUBST')
+    assert lines == ['DOCBLOCK: BAD_SUBST arg="K=second"', 'duplicate_key: "K"']
+
+
+def test_subst_value_may_contain_equals(cli_case):
+    c = cli_case
+    # Argument acceptance isolates split-on-every-equals from D6's pass-through.
+    # Only test_cli_subst_value_reaches_the_child observes substituted stdout.
+    value = shlex.quote('value=with=equals ' + c['hostile'])
+    argv = c['prepare']('echo K\n') + ['--subst', 'K=' + value]
+    cli_verdict(cli_run(argv), 'RAN rc=0')
+
+
+def test_cli_subst_value_reaches_the_child(cli_case):
+    c = cli_case
+    argv = c['prepare']('echo K\n') + ['--subst', 'K=sentinel-value', '--stdout', str(c['out'])]
+    cli_verdict(cli_run(argv), 'RAN rc=0')
+    actual = c['out'].read_bytes()
+    assert b'sentinel-value' in actual and b'K' not in actual, 'run_block must receive substitute\'s returned block'
+
+
+def test_cli_unknown_info_key_is_bad_info(cli_case):
+    c = cli_case
+    key = 'unknown=[*]한글'
+    lines = cli_refusal(c, c['prepare'](c['effect'], info='hmad:exec ' + key), 'BAD_INFO')
+    assert lines[0] == 'DOCBLOCK: BAD_INFO key=' + json.dumps(key, ensure_ascii=False)
+
+
+def test_cli_invalid_utf8_document_is_unreadable(cli_case):
+    c = cli_case
+    argv = c['prepare'](c['effect'])
+    c['doc'].write_bytes(c['doc'].read_bytes() + b'\xff')
+    cli_refusal(c, argv, 'UNREADABLE reason=doc_unreadable', 2)
+
+
+def test_invalid_utf8_preamble_is_unreadable(cli_case):
+    c = cli_case
+    preamble = c['doc'].with_suffix('.pre')
+    preamble.write_bytes(b'\xff')
+    cli_refusal(c, c['prepare'](c['effect']) + ['--preamble-file', str(preamble)], 'UNREADABLE reason=preamble_unreadable', 2)
+
+
+def test_unreadable_preamble_path_refuses(cli_case):
+    c = cli_case
+    preamble = c['doc'].with_suffix('.absent')
+    cli_refusal(c, c['prepare'](c['effect']) + ['--preamble-file', str(preamble)], 'UNREADABLE reason=preamble_unreadable', 2)
+
+
+def test_cli_preamble_file_reaches_the_block(cli_case):
+    c = cli_case
+    preamble = c['doc'].with_suffix('.pre')
+    preamble.write_text('VALUE=' + shlex.quote(c['hostile']), encoding='utf-8')
+    argv = c['prepare']('printf %s "$VALUE"\n') + ['--preamble-file', str(preamble)] + stream_args(c)
+    cli_verdict(cli_run(argv), 'RAN rc=0')
+    assert c['out'].read_text() == c['hostile'], 'preamble file must bind variables in the child'
+
+
+def test_stream_paths_receive_the_streams(cli_case):
+    c = cli_case
+    body = 'printf %s ' + shlex.quote(c['hostile']) + '; printf %s stderr-only >&2\n'
+    cli_verdict(cli_run(c['prepare'](body) + stream_args(c)), 'RAN rc=0')
+    assert c['out'].read_text() == c['hostile'] and c['err'].read_bytes() == b'stderr-only'
+
+
+def test_streams_optional(cli_case):
+    c = cli_case
+    lines = cli_verdict(cli_run(c['prepare']()), 'RAN rc=0')
+    assert len(lines) == 1, 'child streams must not enter the verdict channel when artifact options are absent'
+    assert not c['out'].exists() and not c['err'].exists()
+
+
+def test_stream_paths_truncate_an_existing_file(cli_case):
+    c = cli_case
+    for path in (c['out'], c['err']):
+        path.write_bytes(b'old bytes much longer than new output' * 10)
+    cli_verdict(cli_run(c['prepare']('printf new; printf err >&2\n') + stream_args(c)), 'RAN rc=0')
+    assert c['out'].read_bytes() == b'new' and c['err'].read_bytes() == b'err', 'final writes must truncate both old files'
+
+
+def test_streams_untouched_after_a_timeout(cli_case):
+    c = cli_case
+    for path in (c['out'], c['err']):
+        path.write_bytes(b'keep\xff')
+    lines = cli_verdict(cli_run(c['prepare']('echo partial; sleep 300\n') + stream_args(c) + ['--shell-timeout', '1']), 'TIMEOUT')
+    assert lines[0] == 'DOCBLOCK: TIMEOUT seconds="1.0"'
+    assert all(p.read_bytes() == b'keep\xff' for p in (c['out'], c['err'])), 'reservation must not truncate before RAN'
+
+
+def write_failure_case(cli_case, monkeypatch, capsys, *, fail_at=1, noop=False):
+    main = dbe.main
+    c = cli_case
+    real_write = dbe._final_write
+    calls = []
+    for path in (c['out'], c['err']):
+        path.write_bytes(b'original')
+
+    def injected(handle, text):
+        calls.append(handle)
+        if len(calls) == fail_at:
+            if noop:
+                return
+            raise OSError(errno.EIO, 'write [*] "한글" failed')
+        return real_write(handle, text)
+
+    monkeypatch.setattr(dbe, '_final_write', injected)
+    result = main_result(main, c['prepare']('printf new; printf err >&2\n') + stream_args(c), capsys)
+    lines = cli_verdict(result, 'UNREADABLE reason=stream_write_failed', 2)
+    assert 'rc=' not in lines[0], 'stream refusal must not expose a child rc'
+    return lines, calls
+
+
+def test_stream_write_failure_after_the_run_is_a_refusal(cli_case, monkeypatch, capsys):
+    lines, calls = write_failure_case(cli_case, monkeypatch, capsys)
+    assert len(calls) == 1 and 'failed: "stdout"' in lines
+
+
+def test_first_stream_write_failure_skips_the_second(cli_case, monkeypatch, capsys):
+    lines, calls = write_failure_case(cli_case, monkeypatch, capsys)
+    assert len(calls) == 1, 'stdout failure must skip stderr final write'
+    assert 'failed: "stdout"' in lines and 'skipped: "stderr"' in lines
+    assert cli_case['err'].read_bytes() == b'original'
+
+
+def test_second_stream_write_failure_leaves_the_first_as_written(cli_case, monkeypatch, capsys):
+    lines, calls = write_failure_case(cli_case, monkeypatch, capsys, fail_at=2)
+    assert len(calls) == 2 and 'written: "stdout"' in lines and 'failed: "stderr"' in lines
+    assert cli_case['out'].read_bytes() == b'new'
+
+
+def final_write_proxy_case(cli_case, monkeypatch, capsys, *, flush_fails):
+    main = dbe.main
+    real_write = dbe._final_write
+    closed = []
+
+    class Proxy:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __getattr__(self, key):
+            return getattr(self.handle, key)
+
+        def flush(self):
+            if flush_fails:
+                raise OSError(errno.EIO, 'first flush failure')
+            return self.handle.flush()
+
+        def close(self):
+            closed.append(self.handle)
+            raise OSError(errno.EIO, 'second close failure')
+
+    def injected(handle, text):
+        return real_write(Proxy(handle), text)
+
+    monkeypatch.setattr(dbe, '_final_write', injected)
+    c = cli_case
+    result = main_result(main, c['prepare']() + stream_args(c), capsys)
+    lines = cli_verdict(result, 'UNREADABLE reason=stream_write_failed', 2)
+    assert 'failed: "stdout"' in lines and 'rc=' not in lines[0]
+    assert closed, '_final_write must close in finally, including after flush raises'
+    assert all(handle.closed for handle in closed), 'backstop must close the underlying real handles'
+
+
+def test_final_write_close_failure_is_mapped(cli_case, monkeypatch, capsys):
+    final_write_proxy_case(cli_case, monkeypatch, capsys, flush_fails=False)
+
+
+def test_final_write_failure_before_close_still_closes(cli_case, monkeypatch, capsys):
+    final_write_proxy_case(cli_case, monkeypatch, capsys, flush_fails=True)
+
+
+def test_final_write_readback_catches_a_silent_no_op(cli_case, monkeypatch, capsys):
+    lines, calls = write_failure_case(cli_case, monkeypatch, capsys, noop=True)
+    assert len(calls) == 1, 'verify stdout immediately, before writing stderr'
+    assert 'verify: "stdout"' in lines and 'failed: "stdout"' in lines and 'skipped: "stderr"' in lines
+    assert cli_case['err'].read_bytes() == b'original'
+
+
+def close_failure_case(cli_case, monkeypatch, capsys, *, alias):
+    main = dbe.main
+    c = cli_case
+    handles = []
+    cwds = []
+    real_mkdtemp = dbe.tempfile.mkdtemp
+
+    def mkdtemp(*args, **kwargs):
+        cwd = real_mkdtemp(*args, **kwargs)
+        cwds.append(cwd)
+        return cwd
+
+    def fail(handle):
+        handles.append(handle)
+        raise OSError(errno.EIO, 'close [*] "한글" failed')
+
+    monkeypatch.setattr(dbe, '_close_stream', fail)
+    monkeypatch.setattr(dbe.tempfile, 'mkdtemp', mkdtemp)
+    argv = c['prepare'](c['effect'] if alias else 'sleep 300\n') + ['--stdout', str(c['out'])]
+    argv += ['--stderr', str(c['out'])] if alias else ['--shell-timeout', '1']
+    try:
+        result = main_result(main, argv, capsys)
+        head = 'stream_paths_alias' if alias else 'stream_close_failed'
+        lines = cli_verdict(result, 'UNREADABLE reason=' + head, 2)
+        if alias:
+            assert not c['marker'].exists(), 'alias refusal must precede execution'
+        else:
+            assert 'stream: "stdout"' in lines
+            errors = [line.removeprefix('os_error: ') for line in lines if line.startswith('os_error: ')]
+            assert len(errors) == 1 and 'close [*] "한글" failed' in json.loads(errors[0])
+            assert cwds and all(not os.path.lexists(p) for p in cwds), 'timeout cleanup must still remove cwd'
+        assert handles, 'backstop must call the one closure seam'
+    finally:
+        for handle in handles:
+            if not handle.closed:
+                handle.close()
+
+
+def test_backstop_close_failure_on_timeout_is_mapped(cli_case, monkeypatch, capsys):
+    close_failure_case(cli_case, monkeypatch, capsys, alias=False)
+
+
+def test_backstop_close_failure_does_not_outrank_a_refusal(cli_case, monkeypatch, capsys):
+    close_failure_case(cli_case, monkeypatch, capsys, alias=True)
+
+
+def test_stream_handles_are_closed_on_every_path(cli_case, monkeypatch, capsys):
+    main = dbe.main
+    c = cli_case
+    real_open = os.open
+    for timeout in (True, False):
+        fds = []
+        with monkeypatch.context() as patch:
+            def record(path, flags, *args, **kwargs):
+                fd = real_open(path, flags, *args, **kwargs)
+                if str(path) in (str(c['out']), str(c['err'])):
+                    fds.append(fd)
+                return fd
+
+            def fail(*args):
+                raise OSError(errno.EIO, 'final write failed')
+
+            patch.setattr(dbe.os, 'open', record)
+            if not timeout:
+                patch.setattr(dbe, '_final_write', fail)
+            argv = c['prepare']('sleep 300\n' if timeout else 'echo hi\n') + stream_args(c)
+            if timeout:
+                argv += ['--shell-timeout', '1']
+            result = main_result(main, argv, capsys)
+        cli_verdict(result, 'TIMEOUT' if timeout else 'UNREADABLE reason=stream_write_failed', 0 if timeout else 2)
+        assert len(fds) == 2, 'both stream reservations must be exercised'
+        for fd in fds:
+            with pytest.raises(OSError):
+                os.fstat(fd)
+
+
+def alias_case(c, kind):
+    out, err = c['out'], c['err']
+    if kind == 'symlink':
+        err.symlink_to(out)
+    elif kind == 'hardlink':
+        out.write_bytes(b'keep')
+        os.link(out, err)
+    else:
+        err = str(out.parent) + '/./' + out.name
+    result = cli_run(c['prepare'](c['effect']) + ['--stdout', str(out), '--stderr', str(err)])
+    cli_verdict(result, 'UNREADABLE reason=stream_paths_alias', 2)
+    assert not c['marker'].exists(), 'inode aliases must refuse before child execution'
+    if kind == 'hardlink':
+        assert out.read_bytes() == b'keep' and c['err'].read_bytes() == b'keep'
+    else:
+        assert not out.exists(), 'alias refusal must unlink a newly created reservation'
+
+
+def test_symlinked_stream_paths_refuse(cli_case):
+    alias_case(cli_case, 'symlink')
+
+
+def test_dot_slash_spelling_refuses(cli_case):
+    alias_case(cli_case, 'dot')
+
+
+def test_hard_linked_stream_paths_refuse(cli_case):
+    alias_case(cli_case, 'hardlink')
+
+
+def rollback_case(cli_case, monkeypatch, capsys, *, alias=False, mismatch=False, newline=False):
+    main = dbe.main
+    c = cli_case
+    out = c['out'].with_name('left\nDOCBLOCK: RAN rc=0 blocks=1 shell=strict') if newline else c['out']
+    parent = c['err']
+    parent.write_bytes(b'parent is a regular file')
+    err = out if alias else parent / 'child'
+    real_unlink, real_lstat = os.unlink, os.lstat
+    calls = []
+
+    def unlink(path, *args, **kwargs):
+        calls.append(str(path))
+        if mismatch:
+            return
+        raise PermissionError(errno.EACCES, 'unlink refused')
+
+    def lstat(path, *args, **kwargs):
+        original = real_lstat(path, *args, **kwargs)
+        if str(path) == str(out):
+            values = list(original)
+            values[1] += 1  # st_ino; retain the remaining real stat fields.
+            return os.stat_result(values)
+        return original
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(dbe.os, 'unlink', unlink)
+            if mismatch:
+                patch.setattr(dbe.os, 'lstat', lstat)
+            argv = c['prepare'](c['effect']) + ['--stdout', str(out), '--stderr', str(err)]
+            result = main_result(main, argv, capsys)
+        lines = cli_verdict(result, 'UNREADABLE reason=' + ('stream_paths_alias' if alias else 'stream_path_unwritable'), 2)
+        assert 'leftover: ' + json.dumps(str(out), ensure_ascii=False) in lines, 'surviving reservation must be reported with its exact quoted path'
+        assert out.read_bytes() == b'', 'refusal leftover must be present and empty'
+        assert not c['marker'].exists(), 'failed reservation must never execute the block'
+        if mismatch:
+            assert calls == [], 'rollback must not unlink a path with a different inode identity'
+        else:
+            assert str(out) in calls, 'test must actually reach the injected unlink failure'
+        return lines
+    finally:
+        if os.path.lexists(out):
+            real_unlink(out)
+
+
+def test_alias_refusal_unlink_failure_reports_leftover(cli_case, monkeypatch, capsys):
+    rollback_case(cli_case, monkeypatch, capsys, alias=True)
+
+
+def test_rollback_unlink_failure_reports_leftover(cli_case, monkeypatch, capsys):
+    rollback_case(cli_case, monkeypatch, capsys)
+
+
+def test_rollback_skips_unlink_on_identity_mismatch(cli_case, monkeypatch, capsys):
+    rollback_case(cli_case, monkeypatch, capsys, mismatch=True)
+
+
+def test_stream_path_under_a_regular_file_refuses(cli_case):
+    c = cli_case
+    c['out'].write_bytes(b'parent')
+    result = cli_run(c['prepare'](c['effect']) + ['--stdout', str(c['out'] / 'child')])
+    cli_verdict(result, 'UNREADABLE reason=stream_path_unwritable', 2)
+    assert not c['marker'].exists()
+
+
+def test_stream_path_char_device_refuses(cli_case):
+    c = cli_case
+    result = cli_run(c['prepare'](c['effect']) + ['--stdout', '/dev/null'])
+    cli_verdict(result, 'UNREADABLE reason=stream_path_unwritable', 2)
+    assert not c['marker'].exists(), 'S_ISREG must reject a successfully opened character device'
+
+
+def test_stream_path_fifo_without_reader_refuses_bounded(cli_case):
+    c = cli_case
+    os.mkfifo(c['out'])
+    start = time.monotonic()
+    result = cli_run(c['prepare'](c['effect']) + ['--stdout', str(c['out'])], timeout=5)
+    elapsed = time.monotonic() - start
+    cli_verdict(result, 'UNREADABLE reason=stream_path_unwritable', 2)
+    assert elapsed < 1, 'readerless FIFO reservation must use O_NONBLOCK and refuse within one second'
+    assert not c['marker'].exists()
+
+
+def test_stdout_survives_a_failed_stderr_reservation(cli_case):
+    c = cli_case
+    c['err'].write_bytes(b'regular parent')
+    for existing in (True, False):
+        if existing:
+            c['out'].write_bytes(b'original\xff')
+        else:
+            c['out'].unlink()
+        argv = c['prepare'](c['effect']) + ['--stdout', str(c['out']), '--stderr', str(c['err'] / 'child')]
+        cli_verdict(cli_run(argv), 'UNREADABLE reason=stream_path_unwritable', 2)
+        assert not c['marker'].exists()
+        if existing:
+            assert c['out'].read_bytes() == b'original\xff', 'rollback must preserve a pre-existing stdout'
+        else:
+            assert not c['out'].exists(), 'rollback must remove a stdout created by this invocation'
+
+
+def test_ran_line_and_exit_zero_with_nonzero_rc(cli_case):
+    result = cli_run(cli_case['prepare']('exit 3\n', info='hmad:exec shell=plain'))
+    assert cli_verdict(result, 'RAN')[0] == 'DOCBLOCK: RAN rc=3 blocks=1 shell=plain'
+
+
+def missing_heading_result(c, heading, capsys):
+    main = dbe.main
+    argv = c['prepare']()
+    argv[-1] = heading
+    result = main_result(main, argv, capsys)
+    lines = cli_verdict(result, 'NOT_FOUND')
+    return lines, cli_fields(lines[0].removeprefix('DOCBLOCK: NOT_FOUND'))
+
+
+def test_dynamic_field_cannot_forge_a_token(cli_case, capsys):
+    lines, fields = missing_heading_result(cli_case, 'x rc=0', capsys)
+    assert fields == {'heading': 'x rc=0'}, 'caller spaces must not forge an rc field on NOT_FOUND'
+
+
+def test_quote_in_dynamic_field_cannot_close_the_value(cli_case, capsys):
+    lines, fields = missing_heading_result(cli_case, 'x" rc=0', capsys)
+    assert fields == {'heading': 'x" rc=0'}, 'caller quote must not terminate the JSON value'
+    assert 'heading="x\\" rc=0"' in lines[0], 'embedded quote must retain its JSON backslash escape'
+
+
+def test_malformed_invocation_is_a_verdict(cli_case, capsys):
+    main = dbe.main
+    valid = cli_case['prepare']()
+    for argv, diagnostic in ((valid + ['--nope'], 'unrecognized arguments: --nope'),
+                             ([valid[0], '--heading'], 'argument --heading: expected one argument')):
+        result = main_result(main, argv, capsys)
+        lines = cli_verdict(result, 'BAD_ARGS')
+        assert lines == ['DOCBLOCK: BAD_ARGS message=' + json.dumps(diagnostic)]
+        assert 'usage:' not in result.stdout and 'usage:' not in result.stderr, 'argparse errors must route through BadArgs'
+
+
+def test_help_anywhere_exits_zero_without_a_verdict(cli_case, capsys):
+    main = dbe.main
+    valid = cli_case['prepare']()
+    for argv in (['--help'], ['--bogus', '--help'], valid + ['--help'],
+                 ['--help', '--bogus'], [valid[0], '--help']):
+        with pytest.raises(SystemExit) as raised:
+            main(argv)
+        captured = capsys.readouterr()
+        assert raised.value.code == 0, 'argparse help keeps its exit-zero exemption in every listed position'
+        assert 'usage:' in captured.out and captured.err == ''
+        assert not any(line.startswith('DOCBLOCK:') for line in captured.out.splitlines()), 'help must never emit a verdict'
+
+
+def test_unicode_line_separators_cannot_split_a_verdict_line(cli_case, capsys):
+    heading = 'x\u0085\u2028\u2029\u007f'
+    lines, fields = missing_heading_result(cli_case, heading, capsys)
+    assert len(lines) == 1, 'Cc/Zl/Zp characters must not split one verdict into physical lines'
+    assert fields == {'heading': heading}
+    assert 'heading="x\\u0085\\u2028\\u2029\\u007f"' in lines[0]
+
+
+def test_newline_in_dynamic_fields_cannot_forge_a_verdict_line(cli_case, monkeypatch, capsys):
+    main = dbe.main
+    c = cli_case
+    forged = 'DOCBLOCK: RAN rc=0 blocks=1 shell=strict'
+    payload = 'x\n' + forged
+
+    def check(lines, quoted):
+        assert sum(line.startswith('DOCBLOCK:') for line in lines) == 1
+        assert forged not in lines, 'caller newline must never create a second verdict'
+        assert any(quoted in line for line in lines), 'newline must appear as backslash-n inside a quoted value'
+
+    lines, fields = missing_heading_result(c, payload, capsys)
+    assert fields == {'heading': payload}
+    check(lines, 'heading=' + json.dumps(payload))
+    for raw, head, quoted in (
+        ('missing\n[*]=value\n' + forged, 'SUBST_MISSING', 'missing_key: ' + json.dumps('missing\n[*]')),
+        ('malformed\n' + forged.replace('=', ':'), 'BAD_SUBST', None),
+    ):
+        result = main_result(main, c['prepare'](c['effect']) + ['--subst', raw] + stream_args(c), capsys)
+        lines = cli_verdict(result, head)
+        check(lines, quoted or 'arg=' + json.dumps(raw))
+        assert not c['marker'].exists() and not c['out'].exists() and not c['err'].exists()
+    lines = rollback_case(c, monkeypatch, capsys, newline=True)
+    check(lines, 'leftover: ' + json.dumps(str(c['out'].with_name('left\n' + forged)), ensure_ascii=False))
+
+
+CLI_HEAD_CODES = {
+    'RAN': 0, 'NOT_FOUND': 0, 'AMBIGUOUS': 0, 'AMBIGUOUS_HEADING': 0,
+    'BAD_INDEX': 0, 'BAD_TIMEOUT': 0, 'BAD_ARGS': 0, 'BAD_SUBST': 0,
+    'SUBST_MISSING': 0, 'SUBST_OVERLAP': 0, 'BAD_INFO': 0, 'TIMEOUT': 0,
+    'CLEANUP_FAILED': 2, 'LAUNCH_FAILED stage=mkdtemp': 2,
+    'LAUNCH_FAILED stage=spawn': 2, 'LAUNCH_FAILED stage=reap': 2,
+    'LAUNCH_FAILED stage=collect': 2, 'UNREADABLE reason=doc_unreadable': 2,
+    'UNREADABLE reason=preamble_unreadable': 2, 'UNREADABLE reason=stream_paths_alias': 2,
+    'UNREADABLE reason=stream_path_unwritable': 2, 'UNREADABLE reason=stream_write_failed': 2,
+    'UNREADABLE reason=stream_close_failed': 2,
+}
+CLI_INJECTED_HEADS = {
+    'CLEANUP_FAILED', 'LAUNCH_FAILED stage=mkdtemp', 'LAUNCH_FAILED stage=reap',
+    'LAUNCH_FAILED stage=collect', 'UNREADABLE reason=stream_write_failed',
+    'UNREADABLE reason=stream_close_failed',
+}
+
+
+def real_cli_producer(c, head):
+    argv = c['prepare'](c['effect'])
+    env = None
+    if head == 'NOT_FOUND':
+        argv = c['prepare'](text=c['heading'] + '\nno tagged fence\n')
+    elif head == 'AMBIGUOUS':
+        argv = c['prepare'](text=c['heading'] + '\n' + tagged(c['effect']) * 2)
+    elif head == 'AMBIGUOUS_HEADING':
+        argv = c['prepare'](text=(c['heading'] + '\n' + tagged(c['effect'])) * 2)
+    elif head in ('BAD_INDEX', 'BAD_TIMEOUT', 'BAD_ARGS', 'BAD_SUBST', 'SUBST_MISSING', 'SUBST_OVERLAP'):
+        argv += {
+            'BAD_INDEX': ['--index', '0'], 'BAD_TIMEOUT': ['--shell-timeout', 'nan'],
+            'BAD_ARGS': ['--nope'], 'BAD_SUBST': ['--subst', '=V'],
+            'SUBST_MISSING': ['--subst', 'absent-key=value'],
+            'SUBST_OVERLAP': ['--subst', 'a=1', '--subst', 'ab=2'],
+        }[head]
+    elif head == 'BAD_INFO':
+        argv = c['prepare'](c['effect'], info='hmad:exec unknown=[*]')
+    elif head == 'TIMEOUT':
+        argv = c['prepare']('sleep 300\n') + ['--shell-timeout', '1']
+    elif head == 'LAUNCH_FAILED stage=spawn':
+        env = dict(os.environ, PATH='')
+    elif head == 'UNREADABLE reason=doc_unreadable':
+        c['doc'].write_bytes(b'\xff')
+    elif head == 'UNREADABLE reason=preamble_unreadable':
+        argv += ['--preamble-file', str(c['doc'].with_suffix('.missing'))]
+    elif head == 'UNREADABLE reason=stream_paths_alias':
+        argv += ['--stdout', str(c['out']), '--stderr', str(c['out'])]
+    elif head == 'UNREADABLE reason=stream_path_unwritable':
+        argv += ['--stdout', str(c['doc'] / 'child')]
+    else:
+        assert head == 'RAN', f'no real producer for {head}'
+    return cli_run(argv, env=env)
+
+
+def injected_cli_producer(c, head, monkeypatch, capsys):
+    main = dbe.main
+    real_mkdtemp, real_rmtree, real_killpg = tempfile.mkdtemp, shutil.rmtree, os.killpg
+    cwds, processes = [], []
+    injected = OSError(errno.EIO, 'injected [*] "한글"\nerror')
+
+    def fail(*args, **kwargs):
+        raise injected
+
+    def mkdtemp(*args, **kwargs):
+        cwd = real_mkdtemp(*args, **kwargs)
+        cwds.append(cwd)
+        return cwd
+
+    with monkeypatch.context() as patch:
+        patch.setattr(dbe.tempfile, 'mkdtemp', mkdtemp)
+        argv = c['prepare']('echo hi\n')
+        if head == 'CLEANUP_FAILED':
+            patch.setattr(dbe.shutil, 'rmtree', fail)
+        elif head == 'LAUNCH_FAILED stage=mkdtemp':
+            patch.setattr(dbe.tempfile, 'mkdtemp', fail)
+        elif head == 'LAUNCH_FAILED stage=collect':
+            processes, _ = wrapped_process(patch, 'communicate', injected)
+        elif head == 'LAUNCH_FAILED stage=reap':
+            real_popen = subprocess.Popen
+
+            def popen(*args, **kwargs):
+                proc = real_popen(*args, **kwargs)
+                processes.append(dict(proc=proc, real_poll=proc.poll, real_wait=proc.wait))
+                return proc
+
+            patch.setattr(dbe.subprocess, 'Popen', popen)
+            patch.setattr(dbe.os, 'killpg', fail)
+            argv = c['prepare']('sleep 300\n') + ['--shell-timeout', '1']
+        elif head == 'UNREADABLE reason=stream_write_failed':
+            patch.setattr(dbe, '_final_write', fail)
+            argv += stream_args(c)
+        elif head == 'UNREADABLE reason=stream_close_failed':
+            real_close = dbe._close_stream
+
+            def close(handle):
+                real_close(handle)
+                raise injected
+
+            patch.setattr(dbe, '_close_stream', close)
+            argv = c['prepare']('sleep 300\n') + ['--shell-timeout', '1', '--stdout', str(c['out'])]
+        else:
+            raise AssertionError(f'no injected producer for {head}')
+        try:
+            result = main_result(main, argv, capsys)
+        finally:
+            for entry in processes:
+                proc = entry['proc']
+                if entry['real_poll']() is None:
+                    kill_if_present(real_killpg, proc.pid)
+                entry['real_wait'](timeout=5)
+            for cwd in cwds:
+                if os.path.lexists(cwd):
+                    real_rmtree(cwd)
+    return result
+
+
+def test_verdict_table_exit_codes(cli_case, monkeypatch, capsys):
+    table = dbe.VERDICT_TABLE
+    assert set(CLI_HEAD_CODES) == set(table), 'every full-granularity head needs exactly one producer'
+    assert table == CLI_HEAD_CODES, 'exit-zero refusals and exit-two environmental failures have a fixed partition'
+    for head in CLI_HEAD_CODES:
+        result = (injected_cli_producer(cli_case, head, monkeypatch, capsys) if head in CLI_INJECTED_HEADS
+                  else real_cli_producer(cli_case, head))
+        lines = cli_verdict(result, head, table[head])
+        if head in ('LAUNCH_FAILED stage=reap', 'LAUNCH_FAILED stage=collect'):
+            pgids = [line.removeprefix('pgid: ') for line in lines if line.startswith('pgid: ')]
+            assert len(pgids) == 1 and re.fullmatch(r'"[0-9]+"', pgids[0]), 'reap/collect must expose a quoted pgid'
+
+
+def test_every_docblockerror_subclass_has_a_verdict():
+    renderers = dbe._VERDICT_FOR
+    pending = list(dbe.DocBlockError.__subclasses__())
+    while pending:
+        cls = pending.pop()
+        assert cls in renderers and callable(renderers[cls]), f'{cls.__name__} needs a class-keyed head renderer'
+        pending.extend(cls.__subclasses__())
+
+
+def test_cli_exit_zero_propagates(cli_case):
+    c = cli_case
+    result = cli_run(c['prepare'](text=c['heading'] + '\nno tagged fence\n'))
+    cli_verdict(result, 'NOT_FOUND', 0)
+    assert result.returncode == dbe.VERDICT_TABLE['NOT_FOUND'], '__main__ must propagate main return value'
+
+
+def test_cli_exit_two_propagates(cli_case):
+    c = cli_case
+    argv = c['prepare']()
+    c['doc'].write_bytes(b'\xff')
+    result = cli_run(argv)
+    cli_verdict(result, 'UNREADABLE reason=doc_unreadable', 2)
+    assert result.returncode == dbe.VERDICT_TABLE['UNREADABLE reason=doc_unreadable'], '__main__ must propagate exit two'
+
+
+def test_cli_subst_overlap_detail_lines(cli_case):
+    c = cli_case
+    first = cli_refusal(c, c['prepare']('abc\n') + ['--subst', 'ab=X', '--subst', 'bc=Y'], 'SUBST_OVERLAP')
+    assert first == ['DOCBLOCK: SUBST_OVERLAP keys=2', 'intersect: "ab" "bc" "1"'], 'intersect kind needs three quoted values and the shared offset'
+    # No matching spans: isolate the map-static substring predicate.
+    second = cli_refusal(c, c['prepare']('true\n') + ['--subst', 'a=1', '--subst', 'ab=2', '--subst', 'abc=3'], 'SUBST_OVERLAP')
+    assert second == ['DOCBLOCK: SUBST_OVERLAP keys=3', 'overlap: "a" "ab"', 'overlap: "a" "abc"', 'overlap: "ab" "abc"']
+    assert not any(line.startswith('intersect:') for line in second)
+
+
+def test_no_refusal_carries_rc(cli_case):
+    for head in CLI_HEAD_CODES.keys() - CLI_INJECTED_HEADS - {'RAN'}:
+        result = real_cli_producer(cli_case, head)
+        line = cli_verdict(result, head, CLI_HEAD_CODES[head])[0]
+        fields = cli_fields(' ' + line.split(' ', 2)[2])
+        assert 'rc' not in fields, f'{head} refusal must not carry rc'
+
+
+def test_only_ambiguous_carries_blocks(cli_case):
+    for head in CLI_HEAD_CODES.keys() - CLI_INJECTED_HEADS:
+        result = real_cli_producer(cli_case, head)
+        line = cli_verdict(result, head, CLI_HEAD_CODES[head])[0]
+        fields = cli_fields(' ' + line.split(' ', 2)[2])
+        if head in ('RAN', 'AMBIGUOUS'):
+            assert 'blocks' in fields, f'{head} must carry its bare block count'
+        else:
+            assert 'blocks' not in fields, f'{head} must not carry blocks'
+
+
+def registry_tokens():
+    text = (SCRIPTS.parent / 'SKILL.md').read_text(encoding='utf-8')
+    match = re.search(r'^- `h_mad_doc_block_exec\.py` —.*?(?=^- |\Z)', text, re.M | re.S)
+    assert match, 'SKILL.md must contain the doc-block CLI helper entry'
+    entry = match[0]
+    assert not re.search(r'^ {0,3}`{3,}bash\s+hmad:exec', entry, re.M), 'registry must describe the executable tag inline'
+    rows = re.findall(r'^\| `([^`]+)`([^\n]*)$', entry, re.M)
+    assert rows and all(re.search(r'\|\s*\S', rest) for _, rest in rows), 'every registry row needs a remedy'
+    return [token for token, _ in rows]
+
+
+def test_every_emittable_line_has_a_registry_row():
+    expected = set(dbe.VERDICT_TABLE) | set(dbe.DETAIL_KEYS)
+    tokens = registry_tokens()
+    assert expected <= set(tokens), f'undocumented emittable lines: {expected - set(tokens)}'
+    assert len(tokens) == len(set(tokens)), 'one registry row per emittable line'
+
+
+def test_registry_rows_cover_only_emittable_lines():
+    expected = set(dbe.VERDICT_TABLE) | set(dbe.DETAIL_KEYS)
+    tokens = registry_tokens()
+    assert set(tokens) <= expected, f'registry advertises non-emittable lines: {set(tokens) - expected}'
+    assert '_field' not in dbe.__all__, 'the private renderer is not part of the registry/API'
+
+
+def test_cli_nul_composition_is_a_verdict_on_both_paths(cli_case, tmp_path):
+    c = cli_case
+    root = tmp_path / 'child temporary root [*]'
+    root.mkdir()
+    env = dict(os.environ, TMPDIR=str(root))
+    for preamble in (False, True):
+        argv = c['prepare']('true\n' if preamble else 'true\x00\n')
+        if preamble:
+            path = c['doc'].with_suffix('.pre')
+            path.write_bytes(b'X=a\x00b')
+            argv += ['--preamble-file', str(path)]
+        result = cli_run(argv, env=env)
+        lines = cli_verdict(result, 'LAUNCH_FAILED stage=spawn', 2)
+        assert 'rc=' not in lines[0]
+        diagnostics = [line.removeprefix('os_error: ') for line in lines if line.startswith('os_error: ')]
+        assert diagnostics == [json.dumps('embedded null byte')], 'spawn ValueError must be a quoted os_error diagnostic'
+        assert list(root.iterdir()) == [], 'NUL composition refusal must remove the temporary cwd'
+
+
+def test_cli_launch_failed_lines(cli_case, monkeypatch, capsys):
+    for head in ('LAUNCH_FAILED stage=spawn', 'LAUNCH_FAILED stage=mkdtemp'):
+        result = (real_cli_producer(cli_case, head) if head.endswith('spawn')
+                  else injected_cli_producer(cli_case, head, monkeypatch, capsys))
+        lines = cli_verdict(result, head, 2)
+        assert 'rc=' not in lines[0]
+        diagnostics = [line.removeprefix('os_error: ') for line in lines if line.startswith('os_error: ')]
+        assert len(diagnostics) == 1 and diagnostics[0].startswith('"') and json.loads(diagnostics[0]), 'launch failure must render its quoted OS error'
+
+
+def test_cli_bad_timeout_values(cli_case):
+    c = cli_case
+    c['err'].write_bytes(b'keep\xff')
+    for value in ('0', '-1', 'nan', 'inf', 'abc'):
+        result = cli_run(c['prepare'](c['effect']) + ['--shell-timeout', value] + stream_args(c))
+        lines = cli_verdict(result, 'BAD_TIMEOUT')
+        assert lines[0] == 'DOCBLOCK: BAD_TIMEOUT value=' + json.dumps(value)
+        assert not c['marker'].exists() and not c['out'].exists(), 'validate timeout before execution or reservation'
+        assert c['err'].read_bytes() == b'keep\xff', 'invalid timeout must not change existing stderr'
+
+
+def test_non_numeric_timeout_is_bad_timeout(cli_case):
+    c = cli_case
+    raw = c['hostile']
+    lines = cli_refusal(c, c['prepare'](c['effect']) + ['--shell-timeout', raw], 'BAD_TIMEOUT')
+    assert lines[0] == 'DOCBLOCK: BAD_TIMEOUT value=' + json.dumps(raw, ensure_ascii=False)
+
+
+def test_parser_rejects_all_dir_and_abbreviations(cli_case):
+    c = cli_case
+    for extra in (['--all'], ['--dir', 'x'], ['--shell-t', '5']):
+        result = cli_run(c['prepare'](c['effect']) + extra)
+        lines = cli_verdict(result, 'BAD_ARGS')
+        assert len(lines) == 1 and lines[0].startswith('DOCBLOCK: BAD_ARGS message="')
+        assert 'usage:' not in result.stdout and not c['marker'].exists(), 'complete argv must reject abbreviations before running'
