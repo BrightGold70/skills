@@ -309,3 +309,123 @@ class TestSupersedesNamesEverySourceConsumed:
     def test_the_template_says_the_field_takes_a_list(self) -> None:
         template = _norm(_section("## Required template", "## Writing guidance"))
         assert "comma-separated" in template.lower()
+
+
+class TestABriefUnderThisBranchSlugDoesNotDisplaceThePredecessor:
+    """The mirror of the hole above, and the one the workaround was hiding.
+
+    A sender names the brief for the branch it is TOLD to target, so a brief
+    routinely lands under the RECEIVER's slug rather than the sender's. But
+    `find_latest` returns exactly ONE file, so a brief dated newer than the
+    branch's real predecessor wins the branch lookup -- and the predecessor is
+    returned by nothing: not kind (1), which the brief took, and not kind (2),
+    which only re-adds briefs.
+
+    Measured on this repo 2026-09-06: `carry-forward-sources --branch
+    feature-doc-block-exec` did not return the main-branch predecessor its own
+    handoff had continued, and the handoff carried a standing WARNING telling
+    every future WRITE to run the command a SECOND time under `--branch main`.
+    A documented workaround is what a displaced source looks like from outside.
+    """
+
+    def _store(self, tmp_path: Path) -> Path:
+        d = tmp_path / "docs" / "handoffs"
+        d.mkdir(parents=True)
+        return d
+
+    def test_an_unstamped_brief_does_not_displace_the_predecessor(
+        self, tmp_path: Path
+    ) -> None:
+        import handoff_paths as hp
+
+        d = self._store(tmp_path)
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+        (d / "2026-09-03-feature-41__inbound.md").write_text(
+            "**Handover-From:** other · main · session a\n", encoding="utf-8"
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        names = [p.name for p in sources]
+        assert "2026-09-03-feature-41__inbound.md" in names
+        assert "2026-09-01-feature-41__mine.md" in names, names
+
+    def test_a_stamped_brief_does_not_displace_it_either(self, tmp_path: Path) -> None:
+        """Stamping removes the brief from `pending_handovers`, so if the stamp
+        also cost the predecessor its slot the backlog would leave the chain
+        with nothing raising anywhere -- which is the original defect."""
+        import handoff_paths as hp
+
+        d = self._store(tmp_path)
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+        (d / "2026-09-03-feature-41__inbound.md").write_text(
+            "**Handover-From:** other · main · session a\n"
+            "**Taken-Over-By:** me · feature/41 · session b · 2026-09-03\n",
+            encoding="utf-8",
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        names = [p.name for p in sources]
+        assert "2026-09-01-feature-41__mine.md" in names, names
+        assert len(names) == len(set(names)), f"duplicated source: {names}"
+
+    def test_consecutive_briefs_still_reach_the_predecessor(
+        self, tmp_path: Path
+    ) -> None:
+        """Two briefs in a row must not bury it one hop deeper."""
+        import handoff_paths as hp
+
+        d = self._store(tmp_path)
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+        for day in ("02", "03"):
+            (d / f"2026-09-{day}-feature-41__inbound.md").write_text(
+                "**Handover-From:** other · main · session a\n", encoding="utf-8"
+            )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert "2026-09-01-feature-41__mine.md" in [p.name for p in sources]
+
+    def test_a_superseded_predecessor_is_not_re_offered(self, tmp_path: Path) -> None:
+        """The control. `**Supersedes:**` is the one reason a source leaves --
+        without this the fix would re-offer absorbed work forever, which is the
+        failure mode the queue-that-only-grows note warns about."""
+        import handoff_paths as hp
+
+        d = self._store(tmp_path)
+        (d / "2026-09-01-feature-41__mine.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+        (d / "2026-09-03-feature-41__inbound.md").write_text(
+            "**Handover-From:** other · main · session a\n"
+            "**Supersedes:** 2026-09-01-feature-41__mine.md\n",
+            encoding="utf-8",
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-03-feature-41__inbound.md"]
+
+    def test_an_ordinary_newest_handoff_adds_nothing(self, tmp_path: Path) -> None:
+        """Negative control: the guard fires ONLY when the newest file is a
+        brief. A zero here with no positive control above would be vacuous."""
+        import handoff_paths as hp
+
+        d = self._store(tmp_path)
+        (d / "2026-09-01-feature-41__old.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+        (d / "2026-09-03-feature-41__new.md").write_text(
+            "**Branch:** feature/41\n", encoding="utf-8"
+        )
+
+        sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
+
+        assert [p.name for p in sources] == ["2026-09-03-feature-41__new.md"]
