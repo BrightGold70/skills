@@ -1,7 +1,8 @@
 # Handoff — doc-block-exec Task 4 RED+GREEN shipped; matrix and spec agree at 91; 5e gates still owed
 
 **Date:** 2026-09-06
-**Branch:** `feature/doc-block-exec` (pushed at closeout; 8 feature commits + this handoff)
+**Branch:** `feature/doc-block-exec` — **NOT pushed; 9 commits local.** The push was attempted and
+the pre-push hook correctly BLOCKED it (see Next Step 7).
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Supersedes:** 2026-09-06-feature-doc-block-exec__merge-settled-task4-next.md (branch predecessor), 2026-09-05-main__audit-loop-never-runs-repo-suite.md and 2026-09-05-main__hmad-audit-loop-evidence-from-gateway-consolidation.md (taken over 09-05; re-emitted below, not re-read this session)
 
@@ -76,9 +77,20 @@ because a mutation harness is mid-run against the working tree.
    Note Task 5 writes `doc_block_exec_wire.json`, which does not exist yet — the design's
    verification block labels that absence as schedule, not defect.
 6. **5g** — the D3 provenance bump lands here and nowhere earlier; `phase = null` ONLY after 5f.
-7. ~~Push.~~ **DONE at closeout** — the eight feature commits plus this handoff were pushed.
-   Re-verify with `git rev-list --left-right --count @{u}...HEAD` → expect `0 0`. If it reads
-   otherwise, the push failed after this line was written and the commits are local-only.
+7. **PUSH — attempted at closeout and correctly BLOCKED. Do it AFTER step 2, not before.**
+   `git rev-list --left-right --count @{u}...HEAD` → `0 9`. The pre-push hook returned:
+
+       drifted: drain-unbounded         :: scripts/h_mad_doc_block_exec.py :: hits=0, expected exactly 1
+       drifted: drain-oserror-unmapped  :: scripts/h_mad_doc_block_exec.py :: hits=0, expected exactly 1
+       ANCHORS: ANCHORS_DRIFTED specs=47 mutations=585 ok=583 drifted=2
+
+   **This is NOT anchor drift. It is the harness holding that file mutated mid-run.** The hook
+   sweeps anchors over the WORKING TREE and the harness deliberately mutates the working tree, so
+   the two are mutually exclusive and running them concurrently produces a guaranteed false
+   `ANCHORS_DRIFTED`. The hook is behaving correctly and the two anchors are fine.
+   **Do NOT `--no-verify`.** Wait for the harness (step 1), confirm restoration (step 2), then
+   `git push origin HEAD` — the sweep will then read `ANCHORS_OK` and the push will land. If it
+   still reports these two after the tree is restored, THAT is real drift and needs re-anchoring.
 
 ## Open / Blocked Items
 
