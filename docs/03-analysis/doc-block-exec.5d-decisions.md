@@ -691,3 +691,38 @@ into `doc_block_exec.json` before 5f. impl-plan records it as a checkable 5e obl
 lists it as an open residual; plan declines to ratify either intent. No document, decision sheet or
 commit message states the intent behind the per-task naming — plan-author looked and found nothing,
 and declined to infer it. That is an operator call, not a reading.
+
+### D10 — the merge question SETTLED by the operator, 2026-09-06: MERGE
+
+**Decision: `doc_block_exec_task3.json` MERGES into `doc_block_exec.json`.** The per-task file was
+staging, not a convention. This is the one thing no artifact stated — impl-plan v1.58 recorded a
+checkable obligation, design v1.114 an open residual, plan v1.108 declined to ratify either intent,
+and `grep` found the intent nowhere — so it could only ever be decided, never read. It is now
+decided and this is the record.
+
+**The merge is NOT a file move.** It has four parts, and part 4 exists because the 5e round itself
+created it:
+
+1. **Rows.** Fold Task 3's 28 rows into `doc_block_exec.json` (32 → 60). The two files are
+   name-disjoint (`intersection = 0`, re-derived at `bdc606e`), so the union is 60 distinct names
+   and no row is lost or duplicated. Verify with the same set walk the round used, which must still
+   return `NOT-IN-MATRIX = []` against the design's 90-row matrix.
+2. **`target_command`.** `doc_block_exec_task3.json` carries an ABSOLUTE
+   `/opt/anaconda3/bin/python3.11`. `doc_block_exec.json`'s must be reconciled with it rather than
+   silently inheriting either — a spec that hardcodes one machine's interpreter is not portable, and
+   this is the moment the difference is visible.
+3. **Closure predicate**, from impl-plan v1.58:
+   `ls h-mad/tests/mutation-specs/ | grep -cE '_task[0-9]+\.json$'` must print `0`.
+4. **The four documents name the file that is about to stop existing.** The 5e round put
+   `doc_block_exec_task3` into all four (spec 1, plan 5, impl-plan 6, design 4 matching lines at
+   `bdc606e`, where it had been 0/0/0/0 at `6a1693c`). Every one of those references goes stale on
+   the merge. This is a document reconciliation, and it is the larger half of the work — do NOT
+   merge the files and leave it, or four gated documents point at a deleted path.
+
+**Sequencing (operator, same decision): merge FIRST, then Task 4.** Task 4 adds 30 rows; landing
+them into a file whose shape is still unsettled would repeat the D10 problem one task later.
+
+**Do not treat the row counts as carried.** 32 / 28 / 60 / 90 / 30 were derived at `bdc606e`; the
+merge changes the first three by construction. Re-derive at the merge commit, and re-run
+`--check-anchors` plus a full harness pass on the merged file — a merged spec whose anchors resolve
+but whose rows no longer kill is the failure this feature has already met twice.
