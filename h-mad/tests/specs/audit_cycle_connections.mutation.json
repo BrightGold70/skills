@@ -33,22 +33,22 @@
   {
    "name": "verb-exec-force-2",
    "file": "scripts/hmad-dispatch.sh",
-   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
-   "replace": "  i=1\n  while [ \"$i\" -le 2 ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le 2 ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 — a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
+   "find": "  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le \"$passes\" ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 \u2014 a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
+   "replace": "  i=1\n  while [ \"$i\" -le 2 ]; do\n    (\n      _cmd_exec \"${agent[$i]}\" \"${prompt[$i]}\" --cd \"$root\" \\\n        --out \"${out[$i]}\" --log \"${log[$i]}\" --timeout \"$timeout\" >/dev/null\n    ) &\n    pids[$i]=$!\n    i=$((i + 1))\n  done\n\n  i=1\n  while [ \"$i\" -le 2 ]; do\n    if wait \"${pids[$i]}\"; then rc[$i]=0; else rc[$i]=$?; fi\n    # 5th field: the pass's NDJSON log, so the combiner can report reasoning\n    # effort beside the verdict (J49 \u2014 a hollow pass that read nothing is\n    # indistinguishable from a real clean pass at the AUDITCYCLE line). Optional\n    # in the combiner; reported, never gated.\n    pass_args+=(--pass \"${i}:${report[$i]}:${out[$i]}:${rc[$i]}:${log[$i]}\")",
    "failure_test": "test_verb_passes_one"
   },
   {
    "name": "helper-report-wait-drop",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "    if _run_report_wait(spec.report_path, grace):\n        return \"report-file\", _copy_collected_report(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
-   "replace": "    if False and _run_report_wait(spec.report_path, grace):\n        return \"report-file\", _copy_collected_report(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+   "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+   "replace": "    if False and _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
    "failure_test": "test_collect_delayed_report"
   },
   {
    "name": "helper-report-wait-force",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "    if _has_complete_report(spec.report_path):\n        return \"report-file\", _copy_collected_report(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
-   "replace": "    if False and _has_complete_report(spec.report_path):\n        return \"report-file\", _copy_collected_report(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+   "find": "    if _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
+   "replace": "    if False and _has_complete_report(spec.report_path):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n",
    "failure_test": "test_collect_report_file_present",
    "_mechanism": null
   },
@@ -62,7 +62,7 @@
   {
    "name": "helper-extract-force",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "    if _run_report_wait(spec.report_path, grace):\n        return \"report-file\", _copy_collected_report(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
+   "find": "    if _run_report_wait(spec.report_path, grace):\n        return _deliver_report_file(\n            spec.report_path, collected_path, overwrite=overwrite\n        )\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
    "replace": "    if _run_report_wait(spec.report_path, grace):\n        pass\n\n    if spec.out_path is not None:\n        report_text = _run_extract_report(\n            spec.out_path, feature=feature, phase=phase, cycle=cycle\n        )\n",
    "failure_test": "test_collect_delayed_report"
   },
@@ -76,8 +76,8 @@
   {
    "name": "helper-gate-force-none",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "                if delivered != \"none\":\n                    if collected_path is None:\n                        raise OperationalError(\n                            f\"missing collected path after delivered output for p{spec.index}\"",
-   "replace": "                if True:\n                    if collected_path is None:\n                        raise OperationalError(\n                            f\"missing collected path after delivered output for p{spec.index}\"",
+   "find": "                if delivered != \"none\" and not is_unscorable(delivered):\n                    if collected_path is None:\n                        raise OperationalError(\n                            f\"missing collected path after delivered output for p{spec.index}\"\n",
+   "replace": "                if True:\n                    if collected_path is None:\n                        raise OperationalError(\n                            f\"missing collected path after delivered output for p{spec.index}\"\n",
    "failure_test": "test_main_delivered_none_is_unverified"
   },
   {

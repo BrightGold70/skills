@@ -87,6 +87,27 @@ The orchestrator passes you:
    disagreeing on an exception type) lived 5–15 cycles undetected here. Counts are the cheap
    version: when a document says "seven sites", count the list.
 
+7a. **A count you re-derive is evidence only at the same commit, corpus, grammar and shell.** Three
+   of these were got wrong by a gating auditor here, not only by the orchestrator, and each
+   produced a number that matched something and was still not the number claimed.
+   - *Commit* — presence at a sha is not provenance. "Introduced in revision N" needs the needle
+     present at N's landing commit **and absent at N-1's**; two readings return N and N+1 alike.
+     Run `git rev-list <base>..<sha> -- <path>` first: a commit that does not touch the file is
+     not the figure's provenance.
+   - *Corpus* — **run the command the document DEFINES, not one that reproduces its number.** A
+     head-scoped series verified whole-blob agreed for four shas and then silently did not; a
+     gating auditor re-ran it and reported it reproduced. Agreement with a published value is
+     evidence about arithmetic, never about scope, and the disagreement is the finding.
+   - *Grammar* — `grep -c` counts lines containing a string, never instances of a concept. Print
+     the matching lines and classify them first: a Python kwarg and a diagnostic field spell
+     identically (a census of `pgid=` "proving two spellings" was ten kwargs and one real site).
+     Over markdown, collapse newlines and admit the inline-code delimiters — a needle that cannot
+     match across a backtick found 2 sites where there are 4.
+   - *Shell* — each control in its own invocation; a `cd` in a chained command is not scoped to it.
+
+   And when the document publishes a screen ending `# expect 0`, **run it** rather than reporting
+   that it is present. Full ledger: `h-mad/references/measurement-discipline.md`.
+
 7b. **Classify every finding, on a continuation line.** Under each Must-fix and Should-fix bullet
    write `class: build` or `class: measurement` — a continuation line like `quote:`, never a `- `
    bullet. The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `build` (interface, contract, predicate,

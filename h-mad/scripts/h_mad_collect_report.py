@@ -7,11 +7,13 @@ import sys
 from pathlib import Path
 
 from h_mad_audit_cycle import (
+    UNSCORABLE_PREFIX,
     CollectConflict,
     OperationalError,
     PassSpec,
     _collected_path,
     collect,
+    is_unscorable,
 )
 
 
@@ -98,6 +100,15 @@ def _run(args: argparse.Namespace) -> int:
             overwrite=True,
         )
         forced = True
+
+    if is_unscorable(delivered):
+        # INVALID is its own verdict, never folded into MISSING. A refused report
+        # and an absent one prescribe opposite next moves, and `COLLECT: MISSING`
+        # has already been misread once as evidence that an auditor failed.
+        reason = delivered[len(UNSCORABLE_PREFIX):]
+        print(f"COLLECT: INVALID reason={reason} path={report_path}")
+        print(f"[H-MAD] {args.feature} collect INVALID")
+        return 0
 
     verdict = "OK" if path is not None else "MISSING"
     printed_path = path if path is not None else collected_path

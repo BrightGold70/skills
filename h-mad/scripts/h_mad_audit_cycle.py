@@ -45,6 +45,32 @@ GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$")
 SURFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 PASS_INDEX_RE = re.compile(r"^p\d+$")
 
+# A report can be complete -- non-empty, marker present -- and still not be a
+# scorable audit. Orchestrator errors #49o/#49q, 2026-09-05: two agents were
+# handed one REPORT path, the re-dispatched leg was told to "write early so a
+# partial result survives", and its stub -- `IN PROGRESS`, `None` in all three
+# finding sections, `Evidence: 0 files opened, 0 greps run` -- landed after the
+# original leg's finished 137-grep report, overwrote it, and was collected,
+# committed and pushed as that leg's gating result. `None` in every section is
+# byte-for-byte what an auditor that read everything and found nothing writes, so
+# no consumer downstream of collect could tell them apart.
+#
+# The scope of each screen is load-bearing, and both were calibrated against the
+# corpus that had already passed rather than argued for (test_h_mad_unscorable_
+# report.py::test_calibration_no_committed_report_is_refused). At `a9e6998`: 1001
+# committed `*.audit.v*.md`, 64 carrying an evidence line, 0 refused.
+#
+#  - HEAD-scoped for the sentinel, because a real report DESCRIBES the stub in its
+#    body (`doc-block-exec.impl-plan.audit.v46.teammate.md:84`) and a whole-file
+#    match refuses it -- the GRAMMAR species (#49g) applied to this gate itself.
+#  - The evidence screen fires only on a stated zero. An ABSENT evidence line is
+#    the pre-Effort-contract shape (937 of the 1001) and is not this gate's
+#    business; refusing it would fail every report written before the contract.
+UNSCORABLE_HEAD_LINES = 15
+UNSCORABLE_PREFIX = "unscorable:"
+IN_PROGRESS_RE = re.compile(r"\bIN[ -]PROGRESS\b", re.IGNORECASE)
+EVIDENCE_COUNT_RE = re.compile(r"Evidence:\s*~?(\d+)\b", re.IGNORECASE)
+
 
 class OperationalError(Exception):
     """The audit cycle could not form a trustworthy verdict."""
@@ -108,6 +134,62 @@ def _collected_path(
 
 def _done_path(report_path: Path) -> Path:
     return Path(str(report_path) + ".done")
+
+
+def _unscorable_reason(report_path: Path) -> str | None:
+    """Return why a complete-looking report must not be SCORED, or None.
+
+    Narrow on purpose: only what is provably not a finished audit. An unreadable
+    file returns None rather than a refusal, because `_copy_collected_report`
+    raises on it a moment later -- "I could not read it" must not be spelled the
+    same way as "I read it and it is bad".
+    """
+    try:
+        text = report_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    return _unscorable_reason_text(text)
+
+
+def _unscorable_reason_text(text: str) -> str | None:
+    """The same screen over report TEXT, for the `--out` extraction path.
+
+    Closing the class rather than the instance: the stub arrives the same way
+    whether the leg wrote a report file or the orchestrator extracted one from a
+    transcript, and a gate on only the first spelling is the defect wearing the
+    other hat.
+    """
+    head = "\n".join(text.splitlines()[:UNSCORABLE_HEAD_LINES])
+    if IN_PROGRESS_RE.search(head):
+        return "in-progress-sentinel"
+    evidence = EVIDENCE_COUNT_RE.search(text)
+    if evidence is not None and int(evidence.group(1)) == 0:
+        return "zero-evidence"
+    return None
+
+
+def is_unscorable(delivered: str) -> bool:
+    """True for the `unscorable:<reason>` delivery token."""
+    return delivered.startswith(UNSCORABLE_PREFIX)
+
+
+def _deliver_report_file(
+    report_path: Path, collected_path: Path, *, overwrite: bool, copy: bool = True
+) -> tuple[str, Path | None]:
+    """Deliver a complete report unless it is unscorable.
+
+    The refusal happens BEFORE the copy: an unscorable report that reached the
+    docs store is the #49q defect, and a later refusal cannot un-write it. The
+    `.done` marker is left alone for the same reason -- the leg has not finished.
+    """
+    reason = _unscorable_reason(report_path)
+    if reason is not None:
+        return f"{UNSCORABLE_PREFIX}{reason}", None
+    if not copy:
+        return "report-file", collected_path
+    return "report-file", _copy_collected_report(
+        report_path, collected_path, overwrite=overwrite
+    )
 
 
 def _has_complete_report(report_path: Path) -> bool:
@@ -330,7 +412,7 @@ def _collect_unguarded(
         if _has_complete_report(spec.report_path) or (
             grace > 0 and _run_report_wait(spec.report_path, grace)
         ):
-            return "report-file", _copy_collected_report(
+            return _deliver_report_file(
                 spec.report_path, collected_path, overwrite=overwrite
             )
         return "none", None
@@ -341,19 +423,21 @@ def _collect_unguarded(
         collected_bytes = collected_path.read_bytes()
         if report_bytes == collected_bytes:
             if report_bytes:
-                return "report-file", collected_path
+                return _deliver_report_file(
+                    spec.report_path, collected_path, overwrite=overwrite, copy=False
+                )
             empty_matching_pair = True
 
     if empty_matching_pair:
         overwrite = True
 
     if _has_complete_report(spec.report_path):
-        return "report-file", _copy_collected_report(
+        return _deliver_report_file(
             spec.report_path, collected_path, overwrite=overwrite
         )
 
     if _run_report_wait(spec.report_path, grace):
-        return "report-file", _copy_collected_report(
+        return _deliver_report_file(
             spec.report_path, collected_path, overwrite=overwrite
         )
 
@@ -362,6 +446,9 @@ def _collect_unguarded(
             spec.out_path, feature=feature, phase=phase, cycle=cycle
         )
         if report_text:
+            reason = _unscorable_reason_text(report_text)
+            if reason is not None:
+                return f"{UNSCORABLE_PREFIX}{reason}", None
             return "out", _write_collected_report(
                 report_text, collected_path, overwrite=overwrite
             )
@@ -547,12 +634,23 @@ def gate(collected: Path, *, ack_file: Path | None) -> tuple[str | None, int, in
 def combine(results: list[PassResult]) -> tuple[str, str | None]:
     """Combine pass results into an audit-cycle verdict and reason."""
     for result in results:
-        if result.delivered != "none" and result.verdict is None:
+        if (
+            result.delivered != "none"
+            and not is_unscorable(result.delivered)
+            and result.verdict is None
+        ):
             raise OperationalError(
                 f"missing GATE token for p{result.index} after delivered output"
             )
 
     for result in results:
+        # A refused report is NOT a missing one, and the two prescribe opposite
+        # next moves: `no_report` says re-dispatch, `unscorable_report` says the
+        # leg is still writing (or wrote nothing it read) and the path may have a
+        # second writer. Collapsing them into one reason is the #61 defect --
+        # `COLLECT: MISSING` read as evidence the auditor failed.
+        if is_unscorable(result.delivered):
+            return "UNVERIFIED", f"unscorable_report:p{result.index}"
         if result.delivered == "none":
             return "UNVERIFIED", f"no_report:p{result.index}"
         if result.verdict == "INVALID":
@@ -806,7 +904,7 @@ def main(argv: list[str] | None = None) -> int:
                     phase=args.phase,
                     cycle=args.cycle,
                 )
-                if delivered != "none":
+                if delivered != "none" and not is_unscorable(delivered):
                     if collected_path is None:
                         raise OperationalError(
                             f"missing collected path after delivered output for p{spec.index}"

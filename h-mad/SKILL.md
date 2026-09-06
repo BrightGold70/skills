@@ -1316,6 +1316,38 @@ a document:
    "contradictions: none" in good faith, and be wrong. Re-state what moved, or re-dispatch, rather
    than believing a sibling-document claim made against a version you have since replaced.
 
+### Your own measurements — `references/measurement-discipline.md`
+
+The four duties above are about the round. This one is about the decision sheet and the dispatch
+prompts you write, and it is not optional reading: **eighteen orchestrator verification errors were
+filed across nineteen rounds on one feature, every one caught by an author, an auditor, or by
+reading raw output, and none by the orchestrator that made it.** Three rounds running, an author
+corrected a claim in the sheet. A sheet is read by four authors and three gating legs, which makes
+it a single point of failure for an unmeasured claim exactly as much as a single source of truth
+for a measured one.
+
+> A count is evidence only against another count taken at the same **commit**, over the same
+> **corpus**, in the same **grammar**, in a **shell whose state you did not inherit** — and derived
+> by the command the document **defines**, not by a command that reproduces the document's number.
+
+The reference sorts the eighteen into the species that each need a different countermeasure —
+PROVENANCE, SCOPE, GRAMMAR, FREEZE, COMPLETION SIGNAL, VERIFIER, CHANGE SIZE, OWNERSHIP TABLE,
+SPAN — with the command that closes each. The four that cost the most wall clock:
+
+- **Before naming a commit as a freeze, run every census the four documents publish at that sha**,
+  and every `expect 0` screen among them. Byte-identical documents is not the predicate: a tooling
+  commit under `h-mad/` and a probe commit under `docs/03-analysis/probes/` each moved censuses the
+  documents had stamped, and each passed the check that was actually run.
+- **The only valid completion signal is an author's own DONE report.** A version bump is the first
+  thing an author writes, not the last.
+- **Never re-dispatch to a report path another agent was handed** — suffix it.
+- **A claim about the tree in a sheet carries the command that produced it, including the ones that
+  are only context.**
+
+Say in the sheet that a reader's run beats a reading printed in it. The ledger's honest conclusion
+is that the orchestrator is the least reliable measuring surface in the loop, because it is the
+only one writing claims about the tree with no second surface reading them.
+
 ### The measurement layer lives in probes, not in the phase document
 
 A phase document states a **claim** and the path of the **committed probe** that derives it
@@ -2664,6 +2696,7 @@ is the one returned.
 - `references/inline-protocols.md` — **Inline protocols for all phases (standalone, no external skills)**
 - `references/phase-table.md` — full phase gate table
 - `references/failure-recovery.md` — halt routes + recovery hints
+- `references/measurement-discipline.md` — the orchestrator's OWN verification errors, by species, with the command that closes each (§"Your own measurements")
 - `references/state-schema.md` — state schema details
 - `references/agent-substrate.md` — Agent dispatch substrate (cmux | orca) — hmad-dispatch verbs, detection, identity pins, pane launch
 - `references/orchestration-mode.md` — Orca structured orchestration and Phase-5 worktree fanout protocol

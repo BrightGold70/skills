@@ -26,15 +26,15 @@
   {
    "name": "combine-missing-gate-token-guard-drop",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "    for result in results:\n        if result.delivered != \"none\" and result.verdict is None:\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )",
-   "replace": "    for result in results:\n        if False and result.delivered != \"none\" and result.verdict is None:\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )",
+   "find": "    for result in results:\n        if (\n            result.delivered != \"none\"\n            and not is_unscorable(result.delivered)\n            and result.verdict is None\n        ):\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )\n",
+   "replace": "    for result in results:\n        if (\n            False\n            and not is_unscorable(result.delivered)\n            and result.verdict is None\n        ):\n            raise OperationalError(\n                f\"missing GATE token for p{result.index} after delivered output\"\n            )\n",
    "failure_test": "test_combine_raises_when_delivered_pass_has_no_gate_token"
   },
   {
    "name": "combine-none-report-guard-drop",
    "file": "scripts/h_mad_audit_cycle.py",
-   "find": "    for result in results:\n        if result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":",
-   "replace": "    for result in results:\n        if False and result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":",
+   "find": "        if result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":\n",
+   "replace": "        if False and result.delivered == \"none\":\n            return \"UNVERIFIED\", f\"no_report:p{result.index}\"\n        if result.verdict == \"INVALID\":\n",
    "failure_test": "test_combine_distinguishes_missing_report_from_invalid_gate_sections"
   },
   {

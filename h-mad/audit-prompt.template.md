@@ -139,6 +139,26 @@ Effort contract (binding on you either way; MEASURED only on some dispatches):
   which is exactly why a pass can look thorough having opened nothing. Their claims are
   *about* the tree — a `path:symbol`, a signature, a test name, a count against its own
   list — and those are the claims that turn out to be wrong.
+- **When you re-derive a published figure, four things must match or your reading answers a
+  different question. Each has been got wrong here by an auditor, not only by the orchestrator:**
+  - *Commit.* Presence at a sha is not provenance. "X was introduced in revision N" needs the
+    needle PRESENT at N's landing commit **and ABSENT at N-1's** — two readings return N and
+    N+1 alike. `git rev-list <base>..<sha> -- <path>` first: if that commit does not touch the
+    file, it is not the figure's provenance.
+  - *Corpus.* **Run the command the document DEFINES, not one that reproduces the document's
+    number.** A head-scoped series verified whole-blob agreed for four shas and then did not;
+    the gating auditor re-ran it, reported it reproduced, and the scope was wrong the whole
+    time. Agreement with a published value is evidence about arithmetic, never about scope.
+  - *Grammar.* `grep -c` answers "how many lines contain this string", never "how many
+    instances of this concept exist". Print the matching lines and classify them before you
+    publish a count — a Python kwarg and a diagnostic field spell identically. Over markdown,
+    collapse newlines and admit the inline-code delimiters (`` ` ``): a needle that cannot
+    match across a backtick reported 2 sites where there are 4.
+  - *Shell.* Take each control in its own invocation; a `cd` in a chained command is not
+    scoped to that command.
+- **If a document publishes a screen with `# expect 0`, RUN IT** rather than reporting that it
+  is present. Three sheet entries certified "no scoped census moved" over a commit at which the
+  document's own trip-wire read 8.
 - **A pass at or below two successful tool calls cannot certify a clean.** Writing the
   report and its marker costs those two by itself, so at that floor nothing was read.
   When your transcript is captured — an `audit-cycle` dispatch — the combiner enforces
