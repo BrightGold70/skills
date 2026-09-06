@@ -1024,7 +1024,8 @@ def wrapped_process(monkeypatch, method, injected):
 
     def record(*args, **kwargs):
         inst = real_popen(*args, **kwargs)
-        records.append({"proc": inst, "cwd": kwargs["cwd"]})
+        records.append({"proc": inst, "cwd": kwargs["cwd"],
+                        "real_poll": inst.poll, "real_wait": inst.wait})
         real_method = getattr(inst, method)
 
         def raise_once(*a, **kw):
@@ -1067,8 +1068,12 @@ def collect_case(monkeypatch, method, block, escapee=None, expiry=False):
             kill_if_present(os.kill, int(escapee[1].read_text()))
         for entry in records:
             proc = entry["proc"]
-            kill_if_present(real_killpg, proc.pid)
-            proc.wait(timeout=5)
+            # The injected wait can leave the killed leader unreaped: its
+            # zombie-only group yields EPERM on macOS. Reap via the original
+            # poll, and signal only if the owned leader is still running.
+            if entry["real_poll"]() is None:
+                kill_if_present(real_killpg, proc.pid)
+            entry["real_wait"](timeout=5)
             if method == "poll":
                 with pytest.raises(ProcessLookupError):
                     real_killpg(proc.pid, 0)
