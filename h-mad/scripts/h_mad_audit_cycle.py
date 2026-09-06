@@ -69,7 +69,14 @@ PASS_INDEX_RE = re.compile(r"^p\d+$")
 UNSCORABLE_HEAD_LINES = 15
 UNSCORABLE_PREFIX = "unscorable:"
 IN_PROGRESS_RE = re.compile(r"\bIN[ -]PROGRESS\b", re.IGNORECASE)
-EVIDENCE_COUNT_RE = re.compile(r"Evidence:\s*~?(\d+)\b", re.IGNORECASE)
+# `[*_]*` after the colon is the GRAMMAR rule applied to this gate itself. Measured at
+# a9e6998: 0 of the 64 committed evidence lines are emphasised, so this widening changes
+# nothing about the corpus -- it closes a hole the corpus does not happen to contain.
+# Without it, `**Evidence:** 0 files opened` returns None (the needle cannot match across
+# the emphasis marker) and a bold-spelled zero stub reads as "no evidence line" and is
+# collected. The template prescribes the plain spelling; a reviewer emphasising it is not
+# a contract violation, so the screen must not depend on which one they chose.
+EVIDENCE_COUNT_RE = re.compile(r"Evidence:[*_]*\s*~?(\d+)\b", re.IGNORECASE)
 
 
 class OperationalError(Exception):

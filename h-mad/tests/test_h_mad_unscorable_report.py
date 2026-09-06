@@ -165,12 +165,35 @@ def test_nonzero_and_absent_evidence_lines_are_scorable(tmp_path: Path) -> None:
         report = tmp_path / "r.md"
         report.write_text(f"# t\n\n## Summary\n{line}\n", encoding="utf-8")
         assert ac._unscorable_reason(report) is None, line
+        # Not-refused is not enough: assert the line was PARSED. The bold case
+        # first passed this test while the regex could not match across `**` at
+        # all, so it was scorable because it was unread — a pass for the wrong
+        # reason, which is the mirror of the defect the whole gate is about.
+        match = ac.EVIDENCE_COUNT_RE.search(line)
+        assert match is not None and int(match.group(1)) > 0, (
+            f"evidence line must be parsed, not merely unmatched: {line}"
+        )
 
     # No evidence line at all is the pre-Effort-contract shape: 937 of the 1001
     # committed reports. It is not this gate's business.
     report = tmp_path / "old.md"
     report.write_text("# t\n\n## Must-fix\nNone\n", encoding="utf-8")
     assert ac._unscorable_reason(report) is None
+    assert ac.EVIDENCE_COUNT_RE.search(report.read_text(encoding="utf-8")) is None
+
+
+def test_an_emphasised_zero_evidence_line_is_still_refused(tmp_path: Path) -> None:
+    """A reviewer emphasising the line is not a contract violation, so the screen
+    must not depend on which spelling they chose."""
+    ac = audit_cycle()
+    for line in (
+        "**Evidence:** 0 files opened, 0 greps run.",
+        "_Evidence:_ 0 files opened, 0 greps run.",
+        "- Evidence: 0 files opened, 0 greps run.",
+    ):
+        report = tmp_path / "r.md"
+        report.write_text(f"# t\n\n## Summary\n{line}\n", encoding="utf-8")
+        assert ac._unscorable_reason(report) == "zero-evidence", line
 
 
 # --- the collect path --------------------------------------------------------

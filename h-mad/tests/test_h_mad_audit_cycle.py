@@ -1225,6 +1225,61 @@ def test_fail_in_either_pass_fails_cycle(
         )
 
 
+IN_PROGRESS_STUB_REPORT = """# plan c1 -- teammate leg
+
+IN PROGRESS -- written incrementally so a partial result survives.
+
+## Summary
+Evidence: 0 files opened, 0 greps run.
+
+## Must-fix
+None
+
+## Should-fix
+None
+
+## Notes
+None
+"""
+
+
+def test_main_unscorable_report_is_unverified_not_clean(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    """The #49o/#49q stub, driven through main() rather than through collect().
+
+    `collect`, `combine` and the collect-report CLI were each covered on their own
+    (test_h_mad_unscorable_report.py) while `render` had never been handed a
+    delivery whose collected_path is None -- which would have shipped a traceback
+    where a verdict token was promised.
+    """
+    ac = audit_cycle()
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    write_done_report(p1, IN_PROGRESS_STUB_REPORT)
+    calls_path = install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    install_audit_gate_stub(
+        monkeypatch,
+        tmp_path,
+        {"hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0)},
+        existing_script_dir=calls_path.parent,
+    )
+
+    rc, stdout, stderr = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=[p1]
+    )
+
+    assert rc == 0, stderr
+    assert stderr == ""
+    assert auditcycle_lines(stdout) == [
+        "AUDITCYCLE: UNVERIFIED reason=unscorable_report:p1 passes=1 "
+        "delivered=unscorable:in-progress-sentinel size_status=verified"
+    ], stdout
+    collected = tmp_path / "docs/01-plan/features/hostile-feature.plan.audit.v1.p1.md"
+    assert not collected.exists(), "an unscorable report must not reach the docs store"
+
+
 def test_main_delivered_none_is_unverified(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
