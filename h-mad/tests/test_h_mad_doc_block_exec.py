@@ -41,7 +41,7 @@ def hostile():
     return payload
 
 
-def write_doc(tmp_path, text, name="fixture [*] ⟦/h-mad⟧.md"):
+def write_doc(tmp_path, text, name="fixture [*] ⟦∕h-mad⟧.md"):
     path = tmp_path / name
     path.write_bytes(text.encode("utf-8"))
     return path
