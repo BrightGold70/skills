@@ -1,5 +1,5 @@
 {
-  "_why": "Tasks 1, 2 and 3 mutation contracts, anchored at Phase 5e against the scanner, consumers, the substitution API, and the execution and bounding seams. Task 3's 28 rows were staged in doc_block_exec_task3.json and MERGED here by the operator's D10 decision (2026-09-06): the per-task file was staging, not a convention. Task 3's own history is preserved: D6 removes the preamble pass-through row; D7 adds the isolated timeout upper-bound row; D9 adds stderr closure and post-collect kill guards, bringing the execution and bounding rows to 28. The two row sets were name-disjoint, so 32 + 28 = 60 distinct names and nothing is lost or duplicated. The authority for the total is the design's mutation table (90 rows); the remaining 30 are Task 4 and Task 5, unwritten.",
+  "_why": "Tasks 1–4: 90 distinct mutation rows, 89 targeting the helper source and one targeting SKILL.md. Tasks 1–3 contribute 25 + 7 + 28 rows; Task 4 contributes 30. Task 3 includes the D7 timeout bound and D9 pipe-closure/post-collect-kill guards; D6 pass-through is in Task 4. D10 merged the former Task 3 staging spec into this file.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -519,6 +519,217 @@
       "file": "scripts/h_mad_doc_block_exec.py",
       "find": "                        os.killpg(proc.pid, signal.SIGKILL)\n                        signalled = True",
       "replace": "                        if not isinstance(pending, LaunchFailed):\n                            os.killpg(proc.pid, signal.SIGKILL)\n                            signalled = True"
+    },
+    {
+      "name": "substitution-result-not-passed-to-run_block",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_cli_subst_value_reaches_the_child",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "_run_with_streams(args, substituted, preamble, timeout)",
+      "replace": "_run_with_streams(args, block, preamble, timeout)"
+    },
+    {
+      "name": "subst-split-on-every-equals",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_subst_value_may_contain_equals",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "key, value = raw.split(\"=\", 1)",
+      "replace": "key, value = raw.split(\"=\")[:2]"
+    },
+    {
+      "name": "subst-duplicate-key-last-wins",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_duplicate_substitution_key_refuses",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if key in subs:\n                raise BadSubstArg(raw, duplicate_key=key)",
+      "replace": "if False:\n                raise BadSubstArg(raw, duplicate_key=key)"
+    },
+    {
+      "name": "cli-empty-key-delegated",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_subst_empty_key_is_bad_subst",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if \"=\" not in raw or raw.startswith(\"=\"):",
+      "replace": "if \"=\" not in raw:"
+    },
+    {
+      "name": "index-nonint-unmapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_non_integer_index_is_bad_index",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "except ValueError:\n            raise BadIndex(args.index)",
+      "replace": "except ValueError:\n            raise"
+    },
+    {
+      "name": "timeout-nonnumeric-unmapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_non_numeric_timeout_is_bad_timeout",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "timeout = _validate_timeout(args.shell_timeout)",
+      "replace": "timeout = _validate_timeout(float(args.shell_timeout))"
+    },
+    {
+      "name": "preamble-decode-error-unwrapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_invalid_utf8_preamble_is_unreadable",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "except (OSError, UnicodeDecodeError) as err:\n                raise PreambleUnreadable() from err",
+      "replace": "except OSError as err:\n                raise PreambleUnreadable() from err"
+    },
+    {
+      "name": "stream-reserved-with-truncation",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_streams_untouched_after_a_timeout",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK",
+      "replace": "os.O_WRONLY | os.O_TRUNC | os.O_NONBLOCK"
+    },
+    {
+      "name": "final-write-close-not-in-finally",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_final_write_failure_before_close_still_closes",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "    except OSError as err:\n        pending = err\n    finally:\n        try:\n            _close_stream(handle)",
+      "replace": "    except OSError:\n        raise\n    else:\n        try:\n            _close_stream(handle)"
+    },
+    {
+      "name": "verify-deferred-past-second-write",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_final_write_readback_catches_a_silent_no_op",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "            if not _verify(path, text):\n                raise StreamWriteFailed(written, name, skipped, verify=name)\n            written.append(name)",
+      "replace": "            written.append(name)\n        for i, (name, path, handle, created) in enumerate(streams):\n            if not _verify(path, getattr(result, name)):\n                raise StreamWriteFailed(written, name, [], verify=name)"
+    },
+    {
+      "name": "final-write-not-verified",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_final_write_readback_catches_a_silent_no_op",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if not _verify(path, text):",
+      "replace": "if False:"
+    },
+    {
+      "name": "nonregular-stream-accepted",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_stream_path_char_device_refuses",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if not stat.S_ISREG(identity.st_mode):",
+      "replace": "if False:"
+    },
+    {
+      "name": "stream-open-blocking",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_stream_path_fifo_without_reader_refuses_bounded",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK",
+      "replace": "os.O_WRONLY | os.O_APPEND"
+    },
+    {
+      "name": "stream-alias-check-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_symlinked_stream_paths_refuse",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino):",
+      "replace": "if False:"
+    },
+    {
+      "name": "exit-partition-flipped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_verdict_table_exit_codes",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "\"RAN\": 0, \"NOT_FOUND\": 0",
+      "replace": "\"RAN\": 2, \"NOT_FOUND\": 0"
+    },
+    {
+      "name": "rc-leaked-into-refusal",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_no_refusal_carries_rc",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "print(\"DOCBLOCK: \" + head + fields)",
+      "replace": "print(\"DOCBLOCK: \" + head + fields + \" rc=0\")"
+    },
+    {
+      "name": "field-escape-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_quote_in_dynamic_field_cannot_close_the_value",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "encoded = json.dumps(str(value), ensure_ascii=False)",
+      "replace": "encoded = '\"' + str(value) + '\"' "
+    },
+    {
+      "name": "c1-escape-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_unicode_line_separators_cannot_split_a_verdict_line",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "    return \"\".join(f\"\\\\u{ord(ch):04x}\" if unicodedata.category(ch) in {\"Cc\", \"Zl\", \"Zp\"}\n                   else ch for ch in encoded)",
+      "replace": "    return encoded"
+    },
+    {
+      "name": "field-quoting-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_dynamic_field_cannot_forge_a_token",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "encoded = json.dumps(str(value), ensure_ascii=False)",
+      "replace": "encoded = json.dumps(str(value), ensure_ascii=False)[1:-1]"
+    },
+    {
+      "name": "rollback-leftover-unreported",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_rollback_unlink_failure_reports_leftover",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "    if os.path.lexists(path):\n        return path\n    return None",
+      "replace": "    return None"
+    },
+    {
+      "name": "rollback-identity-check-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_rollback_skips_unlink_on_identity_mismatch",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if (current.st_dev, current.st_ino) != handle.reserved_identity:",
+      "replace": "if False:"
+    },
+    {
+      "name": "stream-open-oserror-unwrapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_stream_path_under_a_regular_file_refuses",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "except (OSError, StreamPathUnwritable) as err:",
+      "replace": "except StreamPathUnwritable as err:"
+    },
+    {
+      "name": "backstop-close-unmapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_backstop_close_failure_on_timeout_is_mapped",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "                except OSError as err:\n                    if close_error is None:\n                        close_error = (name, err)",
+      "replace": "                except OSError:\n                    raise"
+    },
+    {
+      "name": "backstop-close-outranks-error",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_backstop_close_failure_does_not_outrank_a_refusal",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if pending is not None and VERDICT_TABLE[_VERDICT_FOR[type(pending)](pending)] == 2:",
+      "replace": "if pending is not None and close_error is None and VERDICT_TABLE[_VERDICT_FOR[type(pending)](pending)] == 2:"
+    },
+    {
+      "name": "registry-row-removed",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_every_emittable_line_has_a_registry_row",
+      "file": "SKILL.md",
+      "find": "| `RAN` | `rc=3 blocks=1 shell=plain` | Inspect the child rc and stream artifacts. |\n",
+      "replace": ""
+    },
+    {
+      "name": "detail-line-undocumented",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_every_emittable_line_has_a_registry_row",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "DETAIL_KEYS: tuple[str, ...] = (\n    \"missing_key:\", \"overlap:\", \"intersect:\", \"duplicate_key:\", \"os_error:\", \"pgid:\",\n    \"written:\", \"failed:\", \"skipped:\", \"verify:\", \"stream:\", \"leftover:\",\n)\n\n\ndef _field(value: object) -> str:\n    \"\"\"Quote the 20 dynamic values; the seven bare fields never reach this renderer.\n\n    Stringify first, JSON-escape quotes and backslashes, then escape remaining\n    control and line separator characters while keeping other Unicode readable.\n    \"\"\"\n    encoded = json.dumps(str(value), ensure_ascii=False)\n    return \"\".join(f\"\\\\u{ord(ch):04x}\" if unicodedata.category(ch) in {\"Cc\", \"Zl\", \"Zp\"}\n                   else ch for ch in encoded)\n\n\ndef _reserve(path: str) -> tuple[io.TextIOWrapper, bool]:\n    for _ in range(3):\n        try:\n            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL, 0o644)\n            created = True\n        except FileExistsError:\n            try:\n                fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK)\n                created = False\n            except FileNotFoundError:\n                continue\n        try:\n            identity = os.fstat(fd)\n            if not stat.S_ISREG(identity.st_mode):\n                raise OSError(\"stream path is not a regular file\")\n            handle = os.fdopen(fd, \"a\", encoding=\"utf-8\")\n        except BaseException:\n            os.close(fd)\n            raise\n        handle.reserved_identity = (identity.st_dev, identity.st_ino)\n        return handle, created\n    raise StreamPathUnwritable() from None\n\n\ndef _close_stream(handle: io.TextIOWrapper) -> None:\n    handle.close()\n\n\ndef _final_write(handle: io.TextIOWrapper, text: str) -> None:\n    pending = None\n    try:\n        handle.seek(0)\n        handle.truncate()\n        handle.write(text)\n        handle.flush()\n    except OSError as err:\n        pending = err\n    finally:\n        try:\n            _close_stream(handle)\n        except OSError as err:\n            if pending is None:\n                pending = err\n            else:\n                pending.__context__ = err\n    if pending is not None:\n        raise pending\n\n\ndef _verify(path: str, text: str) -> bool:\n    try:\n        return Path(path).read_bytes() == text.encode(\"utf-8\", errors=\"replace\")\n    except OSError:\n        return False\n\n\ndef _remove_created(path: str, handle: io.TextIOWrapper) -> str | None:\n    \"\"\"Remove only the reserved inode, and report any surviving path.\"\"\"\n    try:\n        current = os.lstat(path)\n        if (current.st_dev, current.st_ino) != handle.reserved_identity:\n            return path\n        os.unlink(path)\n    except OSError:\n        pass\n    if os.path.lexists(path):\n        return path\n    return None\n\n\ndef _run_with_streams(args, block: Block, preamble: str | None, timeout: float) -> RunResult:\n    streams = []\n    pending = None\n    close_error = None\n    try:\n        try:\n            for name in (\"stdout\", \"stderr\"):\n                path = getattr(args, name)\n                if path is not None:\n                    handle, created = _reserve(path)\n                    streams.append((name, path, handle, created))\n        except (OSError, StreamPathUnwritable) as err:\n            leftover = None\n            for name, path, handle, created in streams:\n                try:\n                    _close_stream(handle)\n                except OSError:\n                    pass\n                finally:\n                    if created:\n                        leftover = _remove_created(path, handle) or leftover\n            failure = StreamPathUnwritable(leftover)\n            if isinstance(err, OSError):\n                raise failure from err\n            raise failure from None\n\n        try:\n            if len(streams) == 2:\n                first, second = (os.fstat(entry[2].fileno()) for entry in streams)\n                if (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino):\n                    leftover = None\n                    for name, path, handle, created in streams:\n                        if created:\n                            leftover = _remove_created(path, handle) or leftover\n                    raise StreamPathsAlias(leftover)\n        except OSError as err:\n            raise StreamPathUnwritable() from err\n\n        result = run_block(block, preamble=preamble, timeout=timeout)\n        written = []\n        for i, (name, path, handle, created) in enumerate(streams):\n            skipped = [entry[0] for entry in streams[i + 1:]]\n            text = getattr(result, name)\n            try:\n                _final_write(handle, text)\n            except OSError as err:\n                raise StreamWriteFailed(written, name, skipped) from err\n            if not _verify(path, text):\n                raise StreamWriteFailed(written, name, skipped, verify=name)\n            written.append(name)\n    except DocBlockError as err:\n        pending = err\n    finally:\n        for name, path, handle, created in streams:\n            if not handle.closed:\n                try:\n                    _close_stream(handle)\n                except OSError as err:\n                    if close_error is None:\n                        close_error = (name, err)\n    if pending is not None and VERDICT_TABLE[_VERDICT_FOR[type(pending)](pending)] == 2:\n        if close_error is not None:\n            pending.__context__ = close_error[1]\n        raise pending\n    if close_error is not None:\n        raise StreamCloseFailed(*close_error) from pending\n    if pending is not None:\n        raise pending\n    return result\n\n\ndef _render_error(error: DocBlockError, heading: str | None) -> int:\n    head = _VERDICT_FOR[type(error)](error)\n    fields = \"\"\n    details = []\n    if isinstance(error, (BlockNotFound, AmbiguousBlock, AmbiguousHeading)):\n        if isinstance(error, AmbiguousBlock):\n            fields += f\" blocks={error.n}\"\n        elif isinstance(error, AmbiguousHeading):\n            fields += f\" count={error.n}\"\n        fields += f\" heading={_field(heading)}\"\n    elif isinstance(error, BadIndex):\n        fields = f\" index={_field(error.n)}\"\n    elif isinstance(error, BadTimeout):\n        fields = f\" value={_field(error.value)}\"\n    elif isinstance(error, BadArgs):\n        fields = f\" message={_field(error.message)}\"\n    elif isinstance(error, BadSubstArg):\n        fields = f\" arg={_field(error.raw)}\"\n        if error.duplicate_key is not None:\n            details.append(\"duplicate_key: \" + _field(error.duplicate_key))\n    elif isinstance(error, MissingSubstitution):\n        fields = f\" keys={len(error.keys)}\"\n        details.extend(\"missing_key: \" + _field(key) for key in error.keys)",
+      "replace": "DETAIL_KEYS: tuple[str, ...] = (\n    \"absent_key:\", \"overlap:\", \"intersect:\", \"duplicate_key:\", \"os_error:\", \"pgid:\",\n    \"written:\", \"failed:\", \"skipped:\", \"verify:\", \"stream:\", \"leftover:\",\n)\n\n\ndef _field(value: object) -> str:\n    \"\"\"Quote the 20 dynamic values; the seven bare fields never reach this renderer.\n\n    Stringify first, JSON-escape quotes and backslashes, then escape remaining\n    control and line separator characters while keeping other Unicode readable.\n    \"\"\"\n    encoded = json.dumps(str(value), ensure_ascii=False)\n    return \"\".join(f\"\\\\u{ord(ch):04x}\" if unicodedata.category(ch) in {\"Cc\", \"Zl\", \"Zp\"}\n                   else ch for ch in encoded)\n\n\ndef _reserve(path: str) -> tuple[io.TextIOWrapper, bool]:\n    for _ in range(3):\n        try:\n            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL, 0o644)\n            created = True\n        except FileExistsError:\n            try:\n                fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK)\n                created = False\n            except FileNotFoundError:\n                continue\n        try:\n            identity = os.fstat(fd)\n            if not stat.S_ISREG(identity.st_mode):\n                raise OSError(\"stream path is not a regular file\")\n            handle = os.fdopen(fd, \"a\", encoding=\"utf-8\")\n        except BaseException:\n            os.close(fd)\n            raise\n        handle.reserved_identity = (identity.st_dev, identity.st_ino)\n        return handle, created\n    raise StreamPathUnwritable() from None\n\n\ndef _close_stream(handle: io.TextIOWrapper) -> None:\n    handle.close()\n\n\ndef _final_write(handle: io.TextIOWrapper, text: str) -> None:\n    pending = None\n    try:\n        handle.seek(0)\n        handle.truncate()\n        handle.write(text)\n        handle.flush()\n    except OSError as err:\n        pending = err\n    finally:\n        try:\n            _close_stream(handle)\n        except OSError as err:\n            if pending is None:\n                pending = err\n            else:\n                pending.__context__ = err\n    if pending is not None:\n        raise pending\n\n\ndef _verify(path: str, text: str) -> bool:\n    try:\n        return Path(path).read_bytes() == text.encode(\"utf-8\", errors=\"replace\")\n    except OSError:\n        return False\n\n\ndef _remove_created(path: str, handle: io.TextIOWrapper) -> str | None:\n    \"\"\"Remove only the reserved inode, and report any surviving path.\"\"\"\n    try:\n        current = os.lstat(path)\n        if (current.st_dev, current.st_ino) != handle.reserved_identity:\n            return path\n        os.unlink(path)\n    except OSError:\n        pass\n    if os.path.lexists(path):\n        return path\n    return None\n\n\ndef _run_with_streams(args, block: Block, preamble: str | None, timeout: float) -> RunResult:\n    streams = []\n    pending = None\n    close_error = None\n    try:\n        try:\n            for name in (\"stdout\", \"stderr\"):\n                path = getattr(args, name)\n                if path is not None:\n                    handle, created = _reserve(path)\n                    streams.append((name, path, handle, created))\n        except (OSError, StreamPathUnwritable) as err:\n            leftover = None\n            for name, path, handle, created in streams:\n                try:\n                    _close_stream(handle)\n                except OSError:\n                    pass\n                finally:\n                    if created:\n                        leftover = _remove_created(path, handle) or leftover\n            failure = StreamPathUnwritable(leftover)\n            if isinstance(err, OSError):\n                raise failure from err\n            raise failure from None\n\n        try:\n            if len(streams) == 2:\n                first, second = (os.fstat(entry[2].fileno()) for entry in streams)\n                if (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino):\n                    leftover = None\n                    for name, path, handle, created in streams:\n                        if created:\n                            leftover = _remove_created(path, handle) or leftover\n                    raise StreamPathsAlias(leftover)\n        except OSError as err:\n            raise StreamPathUnwritable() from err\n\n        result = run_block(block, preamble=preamble, timeout=timeout)\n        written = []\n        for i, (name, path, handle, created) in enumerate(streams):\n            skipped = [entry[0] for entry in streams[i + 1:]]\n            text = getattr(result, name)\n            try:\n                _final_write(handle, text)\n            except OSError as err:\n                raise StreamWriteFailed(written, name, skipped) from err\n            if not _verify(path, text):\n                raise StreamWriteFailed(written, name, skipped, verify=name)\n            written.append(name)\n    except DocBlockError as err:\n        pending = err\n    finally:\n        for name, path, handle, created in streams:\n            if not handle.closed:\n                try:\n                    _close_stream(handle)\n                except OSError as err:\n                    if close_error is None:\n                        close_error = (name, err)\n    if pending is not None and VERDICT_TABLE[_VERDICT_FOR[type(pending)](pending)] == 2:\n        if close_error is not None:\n            pending.__context__ = close_error[1]\n        raise pending\n    if close_error is not None:\n        raise StreamCloseFailed(*close_error) from pending\n    if pending is not None:\n        raise pending\n    return result\n\n\ndef _render_error(error: DocBlockError, heading: str | None) -> int:\n    head = _VERDICT_FOR[type(error)](error)\n    fields = \"\"\n    details = []\n    if isinstance(error, (BlockNotFound, AmbiguousBlock, AmbiguousHeading)):\n        if isinstance(error, AmbiguousBlock):\n            fields += f\" blocks={error.n}\"\n        elif isinstance(error, AmbiguousHeading):\n            fields += f\" count={error.n}\"\n        fields += f\" heading={_field(heading)}\"\n    elif isinstance(error, BadIndex):\n        fields = f\" index={_field(error.n)}\"\n    elif isinstance(error, BadTimeout):\n        fields = f\" value={_field(error.value)}\"\n    elif isinstance(error, BadArgs):\n        fields = f\" message={_field(error.message)}\"\n    elif isinstance(error, BadSubstArg):\n        fields = f\" arg={_field(error.raw)}\"\n        if error.duplicate_key is not None:\n            details.append(\"duplicate_key: \" + _field(error.duplicate_key))\n    elif isinstance(error, MissingSubstitution):\n        fields = f\" keys={len(error.keys)}\"\n        details.extend(\"absent_key: \" + _field(key) for key in error.keys)",
+      "_mechanism": "Rename both the emitted detail prefix and its enumerable key, leaving the registry unchanged."
+    },
+    {
+      "name": "argparse-error-unrouted",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_malformed_invocation_is_a_verdict",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "raise BadArgs(message)",
+      "replace": "super().error(message)"
+    },
+    {
+      "name": "allow-abbrev-restored",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_parser_rejects_all_dir_and_abbreviations",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "_ArgumentParser(allow_abbrev=False)",
+      "replace": "_ArgumentParser(allow_abbrev=True)"
+    },
+    {
+      "name": "stream-write-oserror-unwrapped",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_stream_write_failure_after_the_run_is_a_refusal",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "            except OSError as err:\n                raise StreamWriteFailed(written, name, skipped) from err",
+      "replace": "            except OSError:\n                raise"
+    },
+    {
+      "name": "intersect-kind-ignored",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_cli_subst_overlap_detail_lines",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if kind == \"intersect\":",
+      "replace": "if False:"
     }
   ]
 }

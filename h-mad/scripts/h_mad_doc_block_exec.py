@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 import math
@@ -12,6 +12,12 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import argparse
+import io
+import json
+import stat
+import sys
+import unicodedata
 
 __all__ = [
     "DocBlockError", "DocUnreadable", "BadInfoString", "BlockNotFound",
@@ -20,7 +26,7 @@ __all__ = [
     "CleanupFailed", "LaunchFailed", "StreamPathUnwritable", "StreamPathsAlias",
     "PreambleUnreadable", "StreamWriteFailed", "StreamCloseFailed", "BadArgs",
     "Block", "extract", "select", "fence_aware_end", "find_heading", "substitute",
-    "RunResult", "run_block",
+    "RunResult", "run_block", "main",
 ]
 
 
@@ -114,7 +120,9 @@ class StreamPathUnwritable(DocBlockError):
 
 
 class StreamPathsAlias(DocBlockError):
-    pass
+    def __init__(self, leftover: str | None = None):
+        self.leftover = leftover
+        super().__init__(leftover)
 
 
 class PreambleUnreadable(DocBlockError):
@@ -463,3 +471,310 @@ def run_block(block: Block, *, preamble: str | None = None,
     elif pending is not None:
         raise pending
     return RunResult(rc=proc.returncode, stdout=stdout, stderr=stderr, shell=block.shell)
+
+
+VERDICT_TABLE: dict[str, int] = {
+    "RAN": 0, "NOT_FOUND": 0, "AMBIGUOUS": 0, "AMBIGUOUS_HEADING": 0,
+    "BAD_INDEX": 0, "BAD_TIMEOUT": 0, "BAD_ARGS": 0, "BAD_SUBST": 0,
+    "SUBST_MISSING": 0, "SUBST_OVERLAP": 0, "BAD_INFO": 0, "TIMEOUT": 0,
+    "CLEANUP_FAILED": 2,
+    "LAUNCH_FAILED stage=mkdtemp": 2, "LAUNCH_FAILED stage=spawn": 2,
+    "LAUNCH_FAILED stage=reap": 2, "LAUNCH_FAILED stage=collect": 2,
+    "UNREADABLE reason=doc_unreadable": 2,
+    "UNREADABLE reason=preamble_unreadable": 2,
+    "UNREADABLE reason=stream_paths_alias": 2,
+    "UNREADABLE reason=stream_path_unwritable": 2,
+    "UNREADABLE reason=stream_write_failed": 2,
+    "UNREADABLE reason=stream_close_failed": 2,
+}
+_VERDICT_FOR: dict[type[DocBlockError], Callable[[DocBlockError], str]] = {
+    BlockNotFound: lambda e: "NOT_FOUND",
+    AmbiguousBlock: lambda e: "AMBIGUOUS",
+    AmbiguousHeading: lambda e: "AMBIGUOUS_HEADING",
+    BadIndex: lambda e: "BAD_INDEX",
+    BadTimeout: lambda e: "BAD_TIMEOUT",
+    BadArgs: lambda e: "BAD_ARGS",
+    BadSubstArg: lambda e: "BAD_SUBST",
+    MissingSubstitution: lambda e: "SUBST_MISSING",
+    OverlappingSubstitution: lambda e: "SUBST_OVERLAP",
+    BadInfoString: lambda e: "BAD_INFO",
+    BlockTimeout: lambda e: "TIMEOUT",
+    CleanupFailed: lambda e: "CLEANUP_FAILED",
+    LaunchFailed: lambda e: f"LAUNCH_FAILED stage={e.stage}",
+    DocUnreadable: lambda e: "UNREADABLE reason=doc_unreadable",
+    PreambleUnreadable: lambda e: "UNREADABLE reason=preamble_unreadable",
+    StreamPathsAlias: lambda e: "UNREADABLE reason=stream_paths_alias",
+    StreamPathUnwritable: lambda e: "UNREADABLE reason=stream_path_unwritable",
+    StreamWriteFailed: lambda e: "UNREADABLE reason=stream_write_failed",
+    StreamCloseFailed: lambda e: "UNREADABLE reason=stream_close_failed",
+}
+DETAIL_KEYS: tuple[str, ...] = (
+    "missing_key:", "overlap:", "intersect:", "duplicate_key:", "os_error:", "pgid:",
+    "written:", "failed:", "skipped:", "verify:", "stream:", "leftover:",
+)
+
+
+def _field(value: object) -> str:
+    """Quote the 20 dynamic values; the seven bare fields never reach this renderer.
+
+    Stringify first, JSON-escape quotes and backslashes, then escape remaining
+    control and line separator characters while keeping other Unicode readable.
+    """
+    encoded = json.dumps(str(value), ensure_ascii=False)
+    return "".join(f"\\u{ord(ch):04x}" if unicodedata.category(ch) in {"Cc", "Zl", "Zp"}
+                   else ch for ch in encoded)
+
+
+def _reserve(path: str) -> tuple[io.TextIOWrapper, bool]:
+    for _ in range(3):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL, 0o644)
+            created = True
+        except FileExistsError:
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_NONBLOCK)
+                created = False
+            except FileNotFoundError:
+                continue
+        try:
+            identity = os.fstat(fd)
+            if not stat.S_ISREG(identity.st_mode):
+                raise OSError("stream path is not a regular file")
+            handle = os.fdopen(fd, "a", encoding="utf-8")
+        except BaseException:
+            os.close(fd)
+            raise
+        handle.reserved_identity = (identity.st_dev, identity.st_ino)
+        return handle, created
+    raise StreamPathUnwritable() from None
+
+
+def _close_stream(handle: io.TextIOWrapper) -> None:
+    handle.close()
+
+
+def _final_write(handle: io.TextIOWrapper, text: str) -> None:
+    pending = None
+    try:
+        handle.seek(0)
+        handle.truncate()
+        handle.write(text)
+        handle.flush()
+    except OSError as err:
+        pending = err
+    finally:
+        try:
+            _close_stream(handle)
+        except OSError as err:
+            if pending is None:
+                pending = err
+            else:
+                pending.__context__ = err
+    if pending is not None:
+        raise pending
+
+
+def _verify(path: str, text: str) -> bool:
+    try:
+        return Path(path).read_bytes() == text.encode("utf-8", errors="replace")
+    except OSError:
+        return False
+
+
+def _remove_created(path: str, handle: io.TextIOWrapper) -> str | None:
+    """Remove only the reserved inode, and report any surviving path."""
+    try:
+        current = os.lstat(path)
+        if (current.st_dev, current.st_ino) != handle.reserved_identity:
+            return path
+        os.unlink(path)
+    except OSError:
+        pass
+    if os.path.lexists(path):
+        return path
+    return None
+
+
+def _run_with_streams(args, block: Block, preamble: str | None, timeout: float) -> RunResult:
+    streams = []
+    pending = None
+    close_error = None
+    try:
+        try:
+            for name in ("stdout", "stderr"):
+                path = getattr(args, name)
+                if path is not None:
+                    handle, created = _reserve(path)
+                    streams.append((name, path, handle, created))
+        except (OSError, StreamPathUnwritable) as err:
+            leftover = None
+            for name, path, handle, created in streams:
+                try:
+                    _close_stream(handle)
+                except OSError:
+                    pass
+                finally:
+                    if created:
+                        leftover = _remove_created(path, handle) or leftover
+            failure = StreamPathUnwritable(leftover)
+            if isinstance(err, OSError):
+                raise failure from err
+            raise failure from None
+
+        try:
+            if len(streams) == 2:
+                first, second = (os.fstat(entry[2].fileno()) for entry in streams)
+                if (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino):
+                    leftover = None
+                    for name, path, handle, created in streams:
+                        if created:
+                            leftover = _remove_created(path, handle) or leftover
+                    raise StreamPathsAlias(leftover)
+        except OSError as err:
+            raise StreamPathUnwritable() from err
+
+        result = run_block(block, preamble=preamble, timeout=timeout)
+        written = []
+        for i, (name, path, handle, created) in enumerate(streams):
+            skipped = [entry[0] for entry in streams[i + 1:]]
+            text = getattr(result, name)
+            try:
+                _final_write(handle, text)
+            except OSError as err:
+                raise StreamWriteFailed(written, name, skipped) from err
+            if not _verify(path, text):
+                raise StreamWriteFailed(written, name, skipped, verify=name)
+            written.append(name)
+    except DocBlockError as err:
+        pending = err
+    finally:
+        for name, path, handle, created in streams:
+            if not handle.closed:
+                try:
+                    _close_stream(handle)
+                except OSError as err:
+                    if close_error is None:
+                        close_error = (name, err)
+    if pending is not None and VERDICT_TABLE[_VERDICT_FOR[type(pending)](pending)] == 2:
+        if close_error is not None:
+            pending.__context__ = close_error[1]
+        raise pending
+    if close_error is not None:
+        raise StreamCloseFailed(*close_error) from pending
+    if pending is not None:
+        raise pending
+    return result
+
+
+def _render_error(error: DocBlockError, heading: str | None) -> int:
+    head = _VERDICT_FOR[type(error)](error)
+    fields = ""
+    details = []
+    if isinstance(error, (BlockNotFound, AmbiguousBlock, AmbiguousHeading)):
+        if isinstance(error, AmbiguousBlock):
+            fields += f" blocks={error.n}"
+        elif isinstance(error, AmbiguousHeading):
+            fields += f" count={error.n}"
+        fields += f" heading={_field(heading)}"
+    elif isinstance(error, BadIndex):
+        fields = f" index={_field(error.n)}"
+    elif isinstance(error, BadTimeout):
+        fields = f" value={_field(error.value)}"
+    elif isinstance(error, BadArgs):
+        fields = f" message={_field(error.message)}"
+    elif isinstance(error, BadSubstArg):
+        fields = f" arg={_field(error.raw)}"
+        if error.duplicate_key is not None:
+            details.append("duplicate_key: " + _field(error.duplicate_key))
+    elif isinstance(error, MissingSubstitution):
+        fields = f" keys={len(error.keys)}"
+        details.extend("missing_key: " + _field(key) for key in error.keys)
+    elif isinstance(error, OverlappingSubstitution):
+        fields = f" keys={len({key for pair in error.pairs for key in pair[1:3]})}"
+        for kind, a, b, offset in error.pairs:
+            if kind == "intersect":
+                details.append(f"intersect: {_field(a)} {_field(b)} {_field(offset)}")
+            else:
+                details.append(f"overlap: {_field(a)} {_field(b)}")
+    elif isinstance(error, BadInfoString):
+        fields = f" key={_field(error.key)}"
+    elif isinstance(error, BlockTimeout):
+        fields = f" seconds={_field(error.seconds)}"
+    elif isinstance(error, CleanupFailed):
+        fields = f" path={_field(error.path)}"
+        if error.cleanup_error is not None:
+            details.append("os_error: " + _field(error.cleanup_error))
+    elif isinstance(error, LaunchFailed):
+        details.append("os_error: " + _field(error.err))
+        if error.pgid is not None:
+            details.append("pgid: " + _field(error.pgid))
+    elif isinstance(error, StreamWriteFailed):
+        if error.written:
+            details.append("written: " + _field(" ".join(error.written)))
+        details.append("failed: " + _field(error.failed))
+        if error.skipped:
+            details.append("skipped: " + _field(" ".join(error.skipped)))
+        if error.verify is not None:
+            details.append("verify: " + _field(error.verify))
+    elif isinstance(error, StreamCloseFailed):
+        details.append("stream: " + _field(error.stream))
+        details.append("os_error: " + _field(error.close_error))
+    elif isinstance(error, (StreamPathUnwritable, StreamPathsAlias)):
+        if error.leftover is not None:
+            details.append("leftover: " + _field(error.leftover))
+    print("DOCBLOCK: " + head + fields)
+    for line in details:
+        print(line)
+    return VERDICT_TABLE[head]
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise BadArgs(message)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    heading = None
+    try:
+        parser = _ArgumentParser(allow_abbrev=False)
+        parser.add_argument("doc")
+        parser.add_argument("--heading", required=True)
+        parser.add_argument("--index", type=str)
+        parser.add_argument("--subst", action="append")
+        parser.add_argument("--preamble-file")
+        parser.add_argument("--shell-timeout", type=str, default="30")
+        parser.add_argument("--stdout")
+        parser.add_argument("--stderr")
+        args = parser.parse_args(argv)
+        heading = args.heading
+        blocks = extract(args.doc, heading)
+        try:
+            index = int(args.index) if args.index is not None else None
+        except ValueError:
+            raise BadIndex(args.index)
+        block = select(blocks, index)
+        subs = {}
+        for raw in args.subst or []:
+            if "=" not in raw or raw.startswith("="):
+                raise BadSubstArg(raw)
+            key, value = raw.split("=", 1)
+            if key in subs:
+                raise BadSubstArg(raw, duplicate_key=key)
+            subs[key] = value
+        substituted, counts = substitute(block, subs)
+        timeout = _validate_timeout(args.shell_timeout)
+        preamble = None
+        if args.preamble_file is not None:
+            try:
+                preamble = Path(args.preamble_file).read_bytes().decode("utf-8")
+            except (OSError, UnicodeDecodeError) as err:
+                raise PreambleUnreadable() from err
+        result = _run_with_streams(args, substituted, preamble, timeout)
+    except DocBlockError as err:
+        return _render_error(err, heading)
+    print(f"DOCBLOCK: RAN rc={result.rc} blocks=1 shell={result.shell}")
+    return VERDICT_TABLE["RAN"]
+
+
+if __name__ == "__main__":
+    sys.exit(main())
