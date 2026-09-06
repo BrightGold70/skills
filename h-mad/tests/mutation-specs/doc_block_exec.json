@@ -1,5 +1,5 @@
 {
-  "_why": "Task 1 mutation contracts, anchored at Phase 5e against the authoritative scanner and consumers.",
+  "_why": "Task 1 and Task 2 mutation contracts, anchored at Phase 5e against the scanner, consumers, and substitution API.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -53,7 +53,7 @@
     },
     {
       "name": "adjacent-heading-skipped",
-      "_mechanism": "the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address",
+      "_mechanism": "the boundary predicate becomes `>` `start` instead of `\u2265`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address",
       "test": "tests/test_h_mad_doc_block_exec.py::test_adjacent_heading_bounds_the_section",
       "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_adjacent_heading_bounds_the_section",
       "file": "scripts/h_mad_doc_block_exec.py",
@@ -239,6 +239,62 @@
       "file": "scripts/h_mad_doc_block_exec.py",
       "find": "closer = re.compile(r\"^ {0,3}(?P<marks>`{3,}|~{3,})[ \\t]*$\")",
       "replace": "closer = re.compile(r\"^ *(?P<marks>`{3,}|~{3,})[ \\t]*$\")"
+    },
+    {
+      "name": "missing-key-silently-skipped",
+      "_mechanism": "Missing keys no longer refuse.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_absent_key_refuses",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "raise MissingSubstitution(missing)",
+      "replace": "pass"
+    },
+    {
+      "name": "overlap-resolved-by-order",
+      "_mechanism": "Remove only the map-static substring predicate.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_overlapping_keys_refuse",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if a in b or b in a:",
+      "replace": "if False:"
+    },
+    {
+      "name": "replacement-sequential",
+      "_mechanism": "Replacement values are rescanned by subsequent replacements.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_value_containing_another_key_is_not_rescanned",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "    result = re.sub(\"|\".join(map(re.escape, keys)), lambda m: subs[m.group(0)], text)",
+      "replace": "    result = text\n    for key in keys:\n        result = result.replace(key, subs[key])"
+    },
+    {
+      "name": "empty-map-not-short-circuited",
+      "_mechanism": "Empty maps reach regex work instead of returning early.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_empty_substitution_map_is_a_no_op",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if not subs:",
+      "replace": "if False:"
+    },
+    {
+      "name": "empty-key-accepted-by-api",
+      "_mechanism": "Remove API empty-key validation.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_empty_key_is_refused_by_the_api",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if \"\" in subs:",
+      "replace": "if False:"
+    },
+    {
+      "name": "intersect-scan-non-overlapping",
+      "_mechanism": "Keep the intersection predicate but enumerate only non-overlapping occurrences.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_substitute_refuses_overlapping_occurrences_of_one_key",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "re.finditer(r\"(?=\" + re.escape(k) + r\")\", text)",
+      "replace": "re.finditer(re.escape(k), text)"
+    },
+    {
+      "name": "intersect-check-removed",
+      "_mechanism": "Remove only the span-intersection predicate, retaining substring refusal.",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_substitute_refuses_intersecting_spans",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "if max(a_start, b_start) < min(a_end, b_end):",
+      "replace": "if False:"
     }
   ]
 }

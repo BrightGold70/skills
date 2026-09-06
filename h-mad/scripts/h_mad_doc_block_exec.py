@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 import re
 import subprocess
@@ -14,7 +14,7 @@ __all__ = [
     "MissingSubstitution", "OverlappingSubstitution", "BadTimeout", "BlockTimeout",
     "CleanupFailed", "LaunchFailed", "StreamPathUnwritable", "StreamPathsAlias",
     "PreambleUnreadable", "StreamWriteFailed", "StreamCloseFailed", "BadArgs",
-    "Block", "extract", "select", "fence_aware_end", "find_heading",
+    "Block", "extract", "select", "fence_aware_end", "find_heading", "substitute",
 ]
 
 
@@ -69,7 +69,7 @@ class MissingSubstitution(DocBlockError):
 
 class OverlappingSubstitution(DocBlockError):
     def __init__(self, pairs: list[tuple[str, str, str, int | None]]):
-        self.pairs = pairs
+        self.pairs = list(pairs)
         super().__init__(pairs)
 
 
@@ -285,3 +285,51 @@ def select(blocks: Sequence[Block], index: int | None = None) -> Block:
     if index is None and len(blocks) > 1:
         raise AmbiguousBlock(len(blocks))
     return blocks[0 if index is None else index - 1]
+
+
+def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]:
+    """Replace independent literal keys once, preserving original-text counts."""
+    if not subs:
+        return replace(block), {}
+    if "" in subs:
+        raise BadSubstArg("")
+
+    text = block.text
+    keys = sorted(subs)
+    pairs = []
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            if a in b or b in a:
+                shorter, longer = sorted((a, b), key=len)
+                pairs.append(("overlap", shorter, longer, None))
+    pairs.sort(key=lambda pair: (pair[1], pair[2]))
+
+    spans = {
+        k: [(m.start(), m.start() + len(k))
+            for m in re.finditer(r"(?=" + re.escape(k) + r")", text)]
+        for k in keys
+    }
+    intersections = []
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            left = right = 0
+            while left < len(spans[a]) and right < len(spans[b]):
+                a_start, a_end = spans[a][left]
+                b_start, b_end = spans[b][right]
+                if max(a_start, b_start) < min(a_end, b_end):
+                    intersections.append(("intersect", a, b, max(a_start, b_start)))
+                    break
+                if a_end <= b_end:
+                    left += 1
+                else:
+                    right += 1
+    pairs.extend(sorted(intersections, key=lambda pair: (pair[3], pair[1], pair[2])))
+    if pairs:
+        raise OverlappingSubstitution(pairs)
+
+    counts = {key: text.count(key) for key in subs}
+    missing = [key for key, count in counts.items() if count == 0]
+    if missing:
+        raise MissingSubstitution(missing)
+    result = re.sub("|".join(map(re.escape, keys)), lambda m: subs[m.group(0)], text)
+    return replace(block, text=result), counts
