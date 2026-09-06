@@ -802,7 +802,20 @@ probe failing to reach `error()` at all. codex filed two rows; **five hold**, in
 not name (`--help --bogus`) and one where a *required* option is absent.
 
 **Decision: BROADEN.** `--help` in any argv position yields argparse's own help at exit 0 and never
-reaches the `BAD_ARGS` verdict. Three reasons, in the order they carry weight:
+reaches the `BAD_ARGS` verdict.
+[correction, D13 round: **"in any argv position" is FALSE, and writing it bare repeats the very
+defect this decision was repairing — an over-broad universal — one scope wider.** I executed the
+five shapes that CONFIRMED the decision and none of the three that BOUND it. spec-author ran them
+on the pinned 3.11.8: `-h` -> `SystemExit(0)` with the same usage, so the class is the option TOKEN
+and not the spelling; `d.md --heading --help` -> `BadArgs`, because there `--help` is consumed as a
+VALUE and is data, not a request; `-- --help` -> `BadArgs`, because after the terminator it is the
+positional `doc`. The rule is written over argparse's own axis, never over position: **recognised
+AS AN OPTION anywhere -> exit 0; consumed as data -> the `DOCBLOCK:` contract.** Residual stated
+exactly: the two spellings argparse's default help action registers, so a self-declared help option
+or an `add_help` change moves the boundary. The SPEC already ships the correct form at AC-5.6
+(v1.68) — the tree was right and only this sheet was wrong, which is the finding: the decision
+sheet is read by four authors and gated by nobody. Species: DECISION Q / §CONTROLS-3 — a stated
+property of a mechanism is a claim about CODE and must be executed, including at its boundary.] Three reasons, in the order they carry weight:
 
 1. **A pre-scan re-implements argparse's help detection**, including `-h`, the `--` terminator, and
    `--help` appearing as an option *value* (`--heading --help` — where it is data, not a request).
@@ -899,3 +912,39 @@ read the deletion back.
 blocks Task 4's RED — `--expect-fail 62` already counts both new tests — but (a) blocks 5e, because
 the mutation matrix is what 5e scores `ALL_CAUGHT` against, and a guard with no row is a guard 5e
 cannot see.
+
+### D13(a) — SETTLED by design-author: ADD the row. Matrix 90 -> 91.
+
+**Decision: add `alias-leftover-unreported`.** Option (ii) — record why the alias arm needs no row —
+fails on a ground this sheet had not identified, and the sharper argument is design-author's, not the
+orchestrator's: it fails on the killer's **REACHABILITY**, which is a different question from why the
+read-back is needed at all. `rollback-leftover-unreported`'s killer,
+`test_rollback_unlink_failure_reports_leftover`, drives the ROLLBACK path and never enters the alias
+branch, so deleting the alias arm's read-back leaves that test GREEN and the mutant survives.
+**A row whose killer cannot reach the mutated code is not coverage of it.**
+
+Counts re-derived by the orchestrator, independently of the author, at this tree:
+
+    design's own awk census                      91
+    matrix rows=91 distinct=91                   `alias-leftover-unreported` present
+    spec on-disk 60 · NOT-IN-MATRIX []           matrix-not-on-disk 31
+    ARITHMETIC 60 + 31 = 91
+    control (drop an on-disk row)  31 -> 32      non-vacuous
+    killer landed: 1 def · test file 160 defs    = Task 3's 98 + Task 4's 62
+
+Split re-derived from the mechanism column, not carried: **90 helper + 1 `SKILL.md`**
+(`registry-row-removed`), the `SKILL.md` half unmoved because the new row mutates the helper.
+
+`DETAIL_KEYS` is UNMOVED and owes nothing: `leftover:` was already emittable, so the row adds no
+detail-line token and no AC-4.5 registry row.
+
+**A grammar trap this round found, worth more than the row.** The design's summary paragraph spells
+the total in WORDS — "Ninety rows, ninety mutations" — which **no numeric sweep reaches**; `grep -c
+'[Nn]inety'` returns 6. Every `\b90\b` value sweep this feature has run was blind to it. Add the
+spelled-out form to any future total sweep.
+
+**Scope note, left deliberately reversible.** The author repaired three body surfaces beyond the row
+(the reservation paragraph, the `stream_paths_alias` verdict-table row's conditional `leftover:`, and
+the exception row `StreamPathsAlias(leftover=None)`) so the matrix does not pin a guard the body never
+states. Reverting those three hunks alone leaves the row and every count standing, and the document
+internally inconsistent. Recorded so the choice stays visible rather than buried.
