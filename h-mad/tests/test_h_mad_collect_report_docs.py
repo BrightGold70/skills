@@ -22,6 +22,7 @@ SCRIPT_DIR = SKILL_DIR / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from h_mad_audit_gate import is_transport_path  # noqa: E402
+import h_mad_doc_block_exec as dbe  # noqa: E402
 
 
 SECOND_SURFACE_HEADING = "## Second surface — the codex leg"
@@ -264,14 +265,44 @@ def test_second_surface_gates_the_path_printed_by_collect_report() -> None:
     )
 
 
-def _gate_bash_block() -> str:
-    """Return the fenced bash block of the Second surface section that gates."""
+def _gate_block() -> dbe.Block:
     section = _second_surface()
     blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
-    gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
-    assert gating, "Second surface must contain a bash block that runs the gate"
-    assert len(gating) == 1, f"expected exactly one gating bash block, got {len(gating)}"
-    return gating[0]
+    _gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
+    assert _gating, "Second surface must contain a bash block that runs the gate"
+    assert len(_gating) == 1, f"expected exactly one gating bash block, got {len(_gating)}"
+    return dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")
+
+
+def _gate_bash_block() -> str:
+    return _gate_block().text
+
+
+def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:
+    import subprocess
+
+    collector = SCRIPT_DIR / "h_mad_collect_report.py"
+    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
+    block = _gate_block()
+    # the doc addresses the installed skill; point the snippet at this tree
+    subbed = dbe.Block(
+        text=block.text.replace(
+            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
+        ),
+        shell=block.shell,
+        lineno=block.lineno,
+        info=block.info,
+    )
+    # quote every interpolated path: the harness must not be the thing that
+    # breaks on whitespace, or it measures itself instead of the recipe
+    q = shlex.quote
+    preamble = (
+        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
+        f'--feature f --phase {phase} --cycle {cycle} '
+        f'--report {q(str(report))} --project-root {q(str(root))})\n'
+    )
+    p = subprocess.run(["bash", "-c", preamble + subbed.text], capture_output=True, text=True, timeout=60.0)
+    return dbe.RunResult(rc=p.returncode, stdout=p.stdout, stderr=p.stderr, shell=subbed.shell)
 
 
 def test_gate_block_guards_on_the_collect_token_before_gating() -> None:
@@ -301,31 +332,6 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
     operational error and no halt marker, exactly the delivery failure the
     section says to halt on.
     """
-    import subprocess
-
-    collector = SCRIPT_DIR / "h_mad_collect_report.py"
-    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
-
-    def run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> subprocess.CompletedProcess[str]:
-        block = _gate_bash_block()
-        # the doc addresses the installed skill; point the snippet at this tree
-        script = block.replace(
-            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
-        )
-        # quote every interpolated path: the harness must not be the thing that
-        # breaks on whitespace, or it measures itself instead of the recipe
-        q = shlex.quote
-        preamble = (
-            f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
-            f'--feature f --phase {phase} --cycle {cycle} '
-            f'--report {q(str(report))} --project-root {q(str(root))})\n'
-        )
-        return subprocess.run(
-            ["bash", "-c", preamble + script],
-            capture_output=True,
-            text=True,
-        )
-
     # a root with a space: this machine's own codex home is under
     # "Application Support", so whitespace in a project root is ordinary.
     root = tmp_path / "pro j"
@@ -337,13 +343,13 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
     report.write_text("## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n", encoding="utf-8")
     report.with_suffix(report.suffix + ".done").write_text("", encoding="utf-8")
 
-    ok = run_recipe(phase="plan", cycle=3, report=report, root=root)
+    ok = _run_recipe(phase="plan", cycle=3, report=report, root=root)
     assert "GATE: PASS" in ok.stdout, (
         f"delivered report must reach the gate; stdout={ok.stdout!r} stderr={ok.stderr!r}"
     )
 
     # undelivered: MISSING must halt, never gate an empty path
-    missing = run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
+    missing = _run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
     combined = missing.stdout + missing.stderr
 
     assert "GATE:" not in combined, (
