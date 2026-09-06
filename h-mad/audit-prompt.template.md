@@ -159,6 +159,19 @@ Effort contract (binding on you either way; MEASURED only on some dispatches):
 - **If a document publishes a screen with `# expect 0`, RUN IT** rather than reporting that it
   is present. Three sheet entries certified "no scoped census moved" over a commit at which the
   document's own trip-wire read 8.
+- **An ABSENCE claim is a figure.** "No corpus instance …", "the corpus has none", "nothing in
+  this repository" — hold each to the same command and sha as a count; both that shipped here
+  were false. A zero bounded only by some *unrelated* constraint is a defect: the document says
+  why it is zero and whether that reason is load-bearing.
+- **A stated PROPERTY of a screen is a claim about code — execute it.** "No working-file edit can
+  move this" was false of the shipped line. Do the thing it says cannot move it, and re-run. A
+  control over an ALTERNATION tests the alternation, never its branches: a healthy sibling covers
+  a sick one (one boundary repair was half-applied three rounds running and passed every time).
+- **Your report is held to this too.** Every count carries its UNIT (`grep -n` lines are not
+  occurrences); a population you prescribe is derived once and cited twice; and your PRESCRIPTION
+  is a claim about the tree — one prescribed naming an enclosing function for a line that has
+  none. Check it or mark it unchecked, and give every alternative repair rather than the best-
+  reading one.
 - **A pass at or below two successful tool calls cannot certify a clean.** Writing the
   report and its marker costs those two by itself, so at that floor nothing was read.
   When your transcript is captured — an `audit-cycle` dispatch — the combiner enforces

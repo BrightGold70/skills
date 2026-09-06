@@ -105,6 +105,32 @@ value it is thinking about rather than the value that exists. Your fresh context
    layer lives in probes"). On an EXISTING document do not restructure to reach this; a measurement
    finding is answered by the re-run command in the sidecar, never by a hand re-stamp.
 
+15. **An absence claim, a frozen figure and a control are the three things that look like
+   background and are not.** All three shipped false here more than once.
+   - **A zero is a measurement.** "No corpus instance exercises either arm" / "the corpus has none"
+     / "nothing in this repository" carries its command, its sha, and evidence it was RUN in the
+     revision that ships it — never reasoned about. Twice it was false: 29 fence openers across 4
+     files behind one, 8 indented markers behind the other. Say WHY the zero is zero and whether
+     that reason is load-bearing or incidental; a zero held up by an unrelated constraint is a
+     defect waiting for that constraint to move.
+   - **A figure your own fix moves cannot be frozen.** If a dispatch tells you a count is
+     "reproduced and UNMOVED — do not disturb", check which kind it is: a tree measurement the
+     revision cannot affect (freeze it) or a count OVER A CLASS your repair adds to or removes from
+     (re-derive it after the fix). An author here was right to override exactly this instruction —
+     repairing the one routable instance created the fifth member of the class the ledger counted.
+     **Announce the override, give the reasoning, offer the revert.** If the brief contradicts the
+     tree, file it; do not work around it.
+   - **A control's stated properties are claims about code — execute them.** "This screen cannot be
+     moved by X": do X and re-run. "The old form scores 0 on this phrase": run it (one such control
+     wrote its own needle into the document and scored 3). And a control over an ALTERNATION tests
+     the alternation, not its branches — a healthy sibling covers a sick one, which let one boundary
+     repair be half-applied in three consecutive revisions while passing every time. Give each
+     branch its own fixture and run it with that branch ALONE. A boundary or delimiter fix applies
+     to BOTH SIDES and to every sibling alternative in the same expression.
+
+   Publish every count with its UNIT — occurrences, matching lines, distinct values, files. `grep -n`
+   output lines are not occurrences. Full ledger: `h-mad/references/measurement-discipline.md`.
+
 ## Report format (your final message)
 
 ```

@@ -289,11 +289,21 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # after, on the merged main: 2320 -> 92,155 B (100 B PAST the frontier — this
     # test went red on the merge, and the worktree run had passed on the previous
     # commit's template); re-anchored 2226 -> mid-band; 2526 -> past the frontier.
-    approaching, mid = size_of(2226)
+    # Was 2226/2526 for one day. The 2026-09-06 measurement-discipline batch added
+    # ~2.8 KB to the template across two commits (the commit/corpus/grammar/shell
+    # rules, then the absence/property/unit rules), which took 2226 to 93,622 B.
+    # Trimming the second block to its load-bearing minimum recovered 833 B and it
+    # was still 92,789 — over. Re-anchored by measurement, not estimate:
+    #   2150 -> 91,041 B   2190 -> 91,961 B   2194 -> 92,053 B   2200 -> 92,191 B
+    # 2194 sits 2 B under the frontier, which is exactly the margin that made the
+    # previous anchor last one day, so 2150 is chosen instead: 1,014 B of headroom
+    # (~44 filler lines at ~23 B/line) before the next template edit moves it.
+    # 2450 -> 97,941 B keeps the ~300-line gap and stays clear past the frontier.
+    approaching, mid = size_of(2150)
     assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
     assert "approaching" in approaching
 
-    past, big = size_of(2526)
+    past, big = size_of(2450)
     assert big > 92_055, f"fixture drifted: {big}B"
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer

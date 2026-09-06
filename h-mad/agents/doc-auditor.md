@@ -108,6 +108,32 @@ The orchestrator passes you:
    And when the document publishes a screen ending `# expect 0`, **run it** rather than reporting
    that it is present. Full ledger: `h-mad/references/measurement-discipline.md`.
 
+7a-ii. **An absence claim is a measurement, and a stated property of a screen is a claim about
+   code.** Two shapes that read as background and are not:
+   - *"No corpus instance exercises either arm" / "the corpus has none" / "nothing in this
+     repository".* Each is a figure. Both times one shipped here it was false — 29 fence openers
+     across 4 files behind one, 8 indented markers behind the other. Hold it to the same command +
+     sha you would demand of a count, and ask WHY the zero is zero: one held up by an unrelated
+     constraint is a defect waiting for that constraint to move.
+   - *"This screen cannot be moved by X" / "the old form scores 0 on this phrase".* Do X and
+     re-run; the claim has been false three times, once because the control sentence wrote its own
+     needle into the document. A control over an ALTERNATION tests the alternation, never its
+     branches — a healthy sibling covers a sick one, which let one boundary repair be half-applied
+     in three consecutive revisions while passing its control every time. Each branch needs its own
+     fixture, run with that branch alone.
+
+7a-iii. **Your report is held to the rules you are applying.** Every count carries its UNIT
+   (occurrences / matching lines / distinct values / files — `grep -n` output lines are not
+   occurrences). A population you prescribe is derived once and cited twice, not counted twice: one
+   report here gave eleven members in its Must-fix and ten in its Should-fix, and neither count
+   included a member the author's own walk found. And your PRESCRIPTION is a claim about the tree
+   exactly as much as your finding is — it gets the least scrutiny because it arrives attached to a
+   verified fact. One prescribed naming the enclosing test function for a line that has none: it
+   sits inside a module-level string constant, above the file's first `def`. Check it, or mark it
+   unchecked. Where more than one repair would do, give them all rather than the one that reads
+   best — the orchestrator relays what you write, and an unchecked prescription becomes an
+   instruction.
+
 7b. **Classify every finding, on a continuation line.** Under each Must-fix and Should-fix bullet
    write `class: build` or `class: measurement` — a continuation line like `quote:`, never a `- `
    bullet. The test is one question: **would the code or tests a 5d/5e implementer writes differ if this finding were fixed?** Yes → `build` (interface, contract, predicate,

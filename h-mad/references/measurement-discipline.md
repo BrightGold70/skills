@@ -1,11 +1,12 @@
 # Measurement discipline — the orchestrator's own verification errors
 
-Eighteen orchestrator verification errors were filed across nineteen document rounds on one
-feature (`doc-block-exec`, 2026-09-04 → 2026-09-06), plus one more on the round before them. Every
-single one was caught by an author, an auditor, or by reading raw output — **none by the
-orchestrator that made it.** They are not carelessness and "be more careful" does not close any of
-them: each is a distinct way a command can return a number that is correct and answers a different
-question than the one asked.
+Thirty orchestrator verification errors were filed across nineteen document rounds on one feature
+(`doc-block-exec`, 2026-09-04 → 2026-09-06) — eighteen carried the `#49` label, twelve more were
+filed as DECISION letters or buried in round-result notes and had no label at all. Every single one
+was caught by an author, an auditor, or by reading raw output — **none by the orchestrator that made
+it.** They are not carelessness and "be more careful" does not close any of them: each is a distinct
+way a command can return a number that is correct and answers a different question than the one
+asked.
 
 The pattern that makes them worth a file of their own: **the orchestrator demanded of the four
 phase documents a discipline it was not applying to its own decision sheets and dispatch prompts.**
@@ -21,7 +22,7 @@ author corrected a claim in the sheet.
 > derived by the command the document **defines**, not by a command that reproduces the
 > document's number.
 
-Related: SKILL.md §"The four rules that are the ORCHESTRATOR's, not the author's" (round-level
+Related: SKILL.md §"The six rules that are the ORCHESTRATOR's, not the author's" (round-level
 duties), §"An agent's reported numbers are a claim, not a measurement" (an agent's figures),
 §"Re-measure a carried premise before working it" (a stale item's figures). This file is about
 **your own**.
@@ -280,6 +281,172 @@ command that produced it, **including the ones that are only context**. If a sen
 what a diff contains, it runs that diff.
 
 ---
+
+## ABSENCE — a zero is a measurement, and a zero that is right by accident is a defect
+
+The species that gets skipped because it does not look like a count. "No corpus instance exercises
+either arm", "the corpus has none of either", "nothing in this repository", "no guard covers any of
+them" — every one of those is a figure, and each was shipped without ever being run.
+
+- Round six, impl-plan: "no corpus instance exercises either arm" — **false**, 29 space-arm fence
+  openers across 4 files, one of them `h-mad/SKILL.md`. Reproduced independently twice.
+- Round seven, design: "The corpus has none of either" — **false** for one arm; 8 indented fence
+  markers, and the published `0` was safe only because two other constraints happen to be
+  indent-bounded. Right by accident, not by measurement.
+
+**The root cause was the orchestrator's, not the authors'.** The impl-plan wrote the correct rule
+when it repaired its own instance — and wrote it **only for itself**, scoped to that document. The
+round-six sheet said a figure travels with its sha and a runnable command, and never said an absence
+claim *is* a figure. So a rule discovered in one document was closed in that document instead of
+lifted into the sheet, and the design author, who never saw it, shipped the same shape one round
+later.
+
+**Rules.**
+
+- Every absence or zero claim carries (i) the runnable command, (ii) the sha it was run at, and
+  (iii) evidence it was **run in the revision that ships it** — not reasoned about.
+- **Say WHY the zero is zero, and whether that reason is load-bearing or incidental.** A zero held
+  up by an unrelated constraint is a defect waiting for that constraint to move.
+- **A rule discovered inside one document is lifted into the sheet, or the other three re-derive the
+  defect.** "Close the class, never the instance" applied one level up: the class here is the
+  *round*, not the document.
+
+## UNIT — a count without its unit is four different numbers
+
+One `grep -n` produced four true figures and one wrong one in a single round, and the wrong one was
+the orchestrator's: **`grep -n` output LINES were counted as occurrences.** The spec carried 7 bare
+pins on 5 prose lines; the published figure was 3. Elsewhere in the same round: 22 occurrences / 19
+lines / 17 distinct / 8 files, published as 21. And "19 path-qualified pins folded" was 19 *folded
+paragraphs* against 49 occurrences — frozen as a contract while the revision's own edit moved the
+population 47 → 49.
+
+**Rule.** Publish every count with its unit — occurrences, matching lines, distinct values, files,
+folded paragraphs — and never let a figure derived in one unit be compared against a figure derived
+in another. Where a relation between two units matters, state it as a relation with a dated example
+explicitly marked *not* a contract.
+
+## PRESCRIPTION — a fix instruction is a claim about the tree, and it gets the least scrutiny
+
+A finding has three separable parts — **facts, concern, prescription** — and they fail
+independently. The prescription arrives attached to a verified fact, which is exactly why it is
+relayed unchecked.
+
+- An auditor prescribed "name the enclosing test function for `test_docsections.py:27`". **There is
+  none.** That line is inside a module-level string constant beginning at `:20`; the first `def` in
+  the file is at `:44`, below the hit. The orchestrator relayed it and asserted it as viable; the
+  author discovered the impossibility.
+
+**Rules.**
+
+- Apply the three-part discipline to the **prescription** too, by whoever relays it. Relaying an
+  unchecked prescription launders it into an instruction.
+- **When a report offers alternatives, relay all of them.** That is the only reason the round above
+  cost nothing — the author had an escape and lost no cycle. Do not narrow to the one that reads
+  best.
+- An interpretation you supply is a finding you authored. Adjudicating "on this axis the word means
+  X" is a claim about the document, and if the document says it nowhere else and it is not derivable
+  from the shipped bytes, it is not an adjudication — it is a new requirement.
+
+## FROZEN FIGURES — a "do not disturb" list written before the revision is stale by construction
+
+The sheet told an author "reproduced and UNMOVED — do not disturb: ledger consistent at four". The
+author moved it to five **against the instruction**, announced the override, gave its reasoning and
+offered the one-line revert. It was right: repairing the one routable instance *creates* the fifth
+member of the class the ledger counts. Leaving it at four would have shipped exactly the defect the
+audit had just caught — a repaired member the count does not reflect.
+
+The error: the list enumerated what the auditor found in the **pre-revision** document, and it was
+applied as a **post-revision** constraint.
+
+**Rule.** A "do not disturb" list MUST separate, and say which bucket each figure is in:
+
+- **(a) figures the revision cannot affect** — tree measurements, sibling-independent counts,
+  matrix totals when no row is touched. Freeze these.
+- **(b) figures the revision's own fixes will move** — any count over a **class the revision adds to
+  or removes from**. These are re-derived after the fix, never frozen.
+
+An unbucketed freeze instruction is an instruction to ship an inconsistency. And verification of a
+state is not authority over a change to it: having personally checked a figure is not grounds to
+forbid the revision from moving it.
+
+**Keep the behaviour that caught this** — announce the override, give the reasoning, offer the
+revert. Three of four authors in that session caught something their own dispatch got wrong. Ask for
+it explicitly in every dispatch: *if the brief contradicts the tree, file it, do not work around it.*
+
+## CONTROLS — the four ways a control can be alive and prove nothing
+
+`§VERIFIER` covers a matcher that cannot fire. These are its siblings, and together they are the
+reason the round-on-round finding count plateaued: once the documents are past feature defects, the
+findings are overwhelmingly about the verification apparatus the previous round added — and
+specifically about **self-descriptive claims** regarding that apparatus.
+
+1. **A control over a COMPOSITE tests the composite, not its members.** A marker alternation had a
+   boundary repair applied three times, half-applied every time, and passed its control every time,
+   because **a healthy sibling branch covers a sick one** — the fixture matched the working branch
+   first. Every branch must be controlled against its OWN fixture, run with that branch ALONE.
+2. **A boundary, anchor or delimiter fix applies to BOTH SIDES and to EVERY sibling alternative in
+   the same expression.** The same three rounds: `\b` fixed for one alternative while the trailing
+   `[,)]` stayed on its neighbour, and a third branch was unbounded on both sides in the revision
+   that bolded "every marker is bounded on both sides".
+3. **A stated PROPERTY of a mechanism is a claim about code and must be executed, never asserted.**
+   Three instances in one round, one per document: "the old fold scores 0 on this phrase" (it scored
+   3 — the control sentence wrote its own needle into the document); "this screen reads both sides as
+   committed blobs so no working-file edit can move it" (the shipped line is a working-tree `open()`;
+   the correct `git show` form is four paragraphs away). An author who says "this screen cannot be
+   moved by X" demonstrates it **by doing X and re-running**.
+4. **Before believing a 0 from a check YOU wrote, run a positive control** — grep for a substring
+   you know is present in the target region. A verification grep written against *assumed* phrasing
+   returned 0 on text that was present; it cost nothing only because the orchestrator asked rather
+   than asserted. A 0 with no positive control is a vacuous zero, applied to verification instead of
+   to a shipped screen.
+
+**Why this cannot be fixed by adding machinery:** more machinery means more self-description. It
+converges only by requiring the property claim to be **executed at authoring time**.
+
+## THE ROUND AS AN ARTIFACT — what only the orchestrator can see, and therefore only it can get wrong
+
+- **Collect every teammate report into `docs/` BEFORE writing the sheet or dispatching an author.**
+  `audit-cycle` writes an in-process leg's report to `docs/` itself; a teammate report lands only in
+  `/tmp` until `collect-report --surface teammate` runs. Skipped once, the sheet cited three paths
+  that did not exist and two authors opened with a blocker. Assert every path exists before
+  dispatching a single author; anything but `COLLECT: OK` is a halt, not a warning. Knowing the rule
+  and having a step that enforces it are different things — this was skipped in the round *after* it
+  was applied correctly, in the same session that had already invoked it.
+- **A cross-document debt claim needs an orchestrator reading taken AFTER all N authors land**, not
+  at the freeze. Measured: one commit repaired a field in two documents while three authors, in that
+  same commit, each wrote an OWED-ELSEWHERE saying a sibling still owed it. All three false at the
+  moment of commit — and the **commit message knew**: it names the repair the documents describe as
+  pending. No author could have seen it; each read siblings being revised concurrently. Write the
+  commit message from the post-landing reading, never from the decision sheet.
+- **Do not mutate the shared decision sheet while authors are running.** A correction to it lands
+  after the batch, not during — mutating shared input under running readers is orchestrator rule 4's
+  staleness hazard, caused deliberately.
+- **Do not carry a premise from the previous round's dispatch.** It is the most tempting source to
+  copy from precisely because it is structurally identical and was correct last time. "All three
+  siblings moved in `<a>..<b>`" went into two dispatches; the diff returns three files and the spec
+  is unchanged at both shas — and the orchestrator had itself decided not to dispatch a spec author
+  that round, so the brief contradicted its own decision. Before sending, run
+  `git diff --name-only <prev-freeze> <this-freeze>` and write what it actually returns.
+- **A hand-assembled list in a sheet is the same object as a transcribed number.** The rule against
+  copying a figure out of an audit report applies to spans, populations and file lists the
+  orchestrator assembled by hand. The sheet must apply its own rules to itself.
+- **The delta review's SUBJECT is not a freeze sha.** The commit a delta diff was taken over is what
+  was audited; a document's freeze sha is the last commit, the tree its tree-derived figures are
+  taken over. They are different commits and a sheet that calls the first "the freeze" makes the
+  batch restamp backwards into the defect it is repairing. The boundary, because the correction
+  invites over-application: **every reading stamped at a BLOB stays stamped there** — only an
+  entry's own freeze-sha field moves.
+- **A carve-out exempting a claim from sha-stamping must name what determines the behaviour and show
+  that thing is not tracked.** Otherwise it is an unfalsifiable exemption.
+- **A Version History entry is a historical record. Correct it with a bracket in place, naming the
+  refuting command — never by rewriting or deleting it.** An entry that was TRUE WHEN WRITTEN and
+  has since been discharged is not a defect; rewriting it to satisfy a rule about the present
+  falsifies a correct record. Measured twice: an auditor routed two such entries as must-fixes, and
+  a separate entry was found to overclaim a repair the diff does not contain — both correctly
+  handled by bracketing rather than editing.
+- **An audit report that prescribes a POPULATION must derive it once and cite it twice.** One report
+  gave eleven members in its must and ten in its should, and neither count included a member the
+  author's own walk found.
 
 ## What this costs, and why it is worth stating in the sheet
 

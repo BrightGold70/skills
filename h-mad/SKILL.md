@@ -1289,7 +1289,7 @@ document.
 revision. A delta review that blocked would just be another cycle, which is the cost it exists to
 avoid.
 
-### The four rules that are the ORCHESTRATOR's, not the author's
+### The six rules that are the ORCHESTRATOR's, not the author's
 
 An author cannot enforce any of these, because each one is a property of the round rather than of
 a document:
@@ -1316,15 +1316,30 @@ a document:
    "contradictions: none" in good faith, and be wrong. Re-state what moved, or re-dispatch, rather
    than believing a sibling-document claim made against a version you have since replaced.
 
+5. **Collect every teammate report into `docs/` BEFORE you write the sheet or dispatch an author.**
+   `audit-cycle` writes an in-process leg's report to `docs/` itself; a teammate report lands only
+   in `/tmp` until `collect-report --surface teammate` runs. Skipped once, the sheet cited three
+   paths that did not exist and two authors opened with a blocker. Assert every path exists before
+   dispatching a single author — anything but `COLLECT: OK` is a halt, not a warning.
+
+6. **Take the cross-document reading AFTER all N authors land, and write the commit message from
+   THAT.** Duty 3 cross-checks a shared AC; this is its other half — a debt claim *about a sibling*.
+   Measured: one commit repaired a field in two documents while three authors, in that same commit,
+   each wrote an OWED-ELSEWHERE saying a sibling still owed it. All three false at the moment of
+   commit, and the **commit message knew** — it names the repair the documents call pending. No
+   author could have seen it; each read siblings being revised concurrently. And do **not** mutate
+   the shared decision sheet while authors are running: that is duty 4's staleness hazard caused
+   deliberately. A correction to the sheet lands after the batch.
+
 ### Your own measurements — `references/measurement-discipline.md`
 
-The four duties above are about the round. This one is about the decision sheet and the dispatch
-prompts you write, and it is not optional reading: **eighteen orchestrator verification errors were
-filed across nineteen rounds on one feature, every one caught by an author, an auditor, or by
-reading raw output, and none by the orchestrator that made it.** Three rounds running, an author
-corrected a claim in the sheet. A sheet is read by four authors and three gating legs, which makes
-it a single point of failure for an unmeasured claim exactly as much as a single source of truth
-for a measured one.
+The six duties above are about the round. This one is about the decision sheet and the dispatch
+prompts you write, and it is not optional reading: **thirty orchestrator verification errors were
+filed across nineteen rounds on one feature — eighteen labelled `#49`, twelve more filed as DECISION
+letters with no label — every one caught by an author, an auditor, or by reading raw output, and
+none by the orchestrator that made it.** Three rounds running, an author corrected a claim in the
+sheet. A sheet is read by four authors and three gating legs, which makes it a single point of
+failure for an unmeasured claim exactly as much as a single source of truth for a measured one.
 
 > A count is evidence only against another count taken at the same **commit**, over the same
 > **corpus**, in the same **grammar**, in a **shell whose state you did not inherit** — and derived
