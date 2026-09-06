@@ -746,6 +746,12 @@ but whose rows no longer kill is the failure this feature has already met twice.
 **Part 2's reconciliation, stated rather than inherited.** `doc_block_exec_task3.json` carried an
 absolute `/opt/anaconda3/bin/python3.11` in both `command` and `target_command`. Resolved to the
 bare `python3.11`: 30 of the 42 specs in `h-mad/tests/mutation-specs/` use the bare form, and it
+[correction, r20: **41, not 42** — `ls h-mad/tests/mutation-specs/ | wc -l` -> 41 at `861efbe`. The
+merge deleted `doc_block_exec_task3.json`, and this sentence was written in the SAME session that
+executed it, from a count taken before the `git rm`: a post-merge claim carrying a pre-merge
+denominator. The 30 is unaffected — the pre-merge split was 30 bare + 10 absent + 2 absolute, and
+the deleted file was one of the two absolute, so it is 30 of 41 with 1 absolute left
+(`collect_report.json`). Found by design-author, not by the orchestrator re-reading its own work.]
 resolves to that same interpreter on this machine (Python 3.11.8). `collect_report.json` is the
 only remaining spec with the absolute path — pre-existing, out of this decision's scope, untouched.
 
@@ -857,3 +863,39 @@ on a surviving file, refuses with the `leftover:` detail line rather than a bare
 same `os.unlink` injection, alias trigger instead of the second-arm `ENOTDIR` — asserting the
 `leftover:` line carries the reservation's name. **Without the injection the test is vacuous**: the
 unlink succeeds, nothing is left over, and a branch with no read-back at all passes it.
+
+## D13 — OPEN, raised by the r20 round: D12's read-back is an UNGUARDED property, and the spec still states the contract D11 overturned
+
+**Not a decision. Three consequences the r20 author round surfaced, each verified, none settled here.**
+
+**(a) D12's alias read-back has no mutation row, and that is the D9 shape.** The design's matrix
+carries `stream-alias-check-removed` (the `fstat` `(st_dev, st_ino)` comparison, killed by
+`test_hard_linked_stream_paths_refuse`) and `rollback-leftover-unreported` (the **rollback** path's
+`lexists` read-back). Neither covers the ALIAS arm's read-back that §D12 now requires:
+
+    grep -nE '^\| `[a-z0-9_-]*(alias|leftover)[a-z0-9_-]*`' docs/02-design/features/doc-block-exec.design.md
+
+returns exactly those two rows. So §D12 creates a guard the matrix does not pin — the same shape
+§D9 was opened for, one branch over. Deciding it is the DESIGN's authority, not the orchestrator's:
+a row would move the matrix total **90 -> 91**, and the killer already exists
+(`test_alias_refusal_unlink_failure_reports_leftover`, landed by impl-plan v1.59 at AC-3.9 and
+inside Task 4's `--expect-fail 62`). The alternative is to record why the alias arm's read-back
+needs no row of its own given `rollback-leftover-unreported` — but note that answer is the one §D12
+already refused for the read-back itself, so it does not come free.
+
+**(b) The SPEC states D11's narrow scope, which D11 measured as FALSE.** `…spec.md:629` reads
+``(`--help` alone keeps argparse's exit-0 help text)``. "alone" is exactly the boundary the D11
+probe refuted — five help-bearing argv shapes short-circuit, including `--bogus --help` and
+`d.md --help` with the required `--heading` absent. One `grep -n -- '--help' <spec>` returns that
+single hit, so it is a one-site repair, and it is spec-author's.
+
+**(c) The SPEC specifies D12's read-back on ONE of the two reserving branches.** `…spec.md:314` is
+its only `stream_paths_alias` and promises head + exit 2 + block-not-run with no `leftover:` clause,
+while its seven `leftover` hits are all AC-3.10's ROLLBACK path or Version History. Half-applied
+boundary: two branches create a reservation and delete it, and only one of them is specified to
+read the deletion back.
+
+**Sequencing.** (b) and (c) are one spec-author dispatch; (a) is a design-author decision. Neither
+blocks Task 4's RED — `--expect-fail 62` already counts both new tests — but (a) blocks 5e, because
+the mutation matrix is what 5e scores `ALL_CAUGHT` against, and a guard with no row is a guard 5e
+cannot see.
