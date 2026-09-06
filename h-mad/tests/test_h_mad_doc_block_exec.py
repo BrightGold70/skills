@@ -519,3 +519,140 @@ def test_exception_hierarchy_and_star_exports_are_complete(hostile):
             assert getattr(error, field) == expected, f"{name}.{field} must preserve constructor data"
     for name in ("DocBlockError", "DocUnreadable", "BlockNotFound", "StreamPathsAlias", "PreambleUnreadable"):
         assert str(getattr(dbe, name)(hostile)) == hostile, f"{name} retains normal Exception constructor behaviour"
+
+
+# Task 2 RED: substitute is a new symbol; every call also pins its GREEN contract.
+def test_path_substitution_replaces_the_key(hostile):
+    key = "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py"
+    block = dbe.Block(f"{hostile}\npython {key}\n", "plain", 17, " hmad:exec\tshell=plain")
+    original = dataclasses.replace(block)
+    result, counts = dbe.substitute(block, {key: "/tmp/x y/gate.py"})
+    assert result == dataclasses.replace(block, text=f"{hostile}\npython /tmp/x y/gate.py\n")
+    assert result is not block, "substitute must return a new Block preserving metadata"
+    assert block == original, "substitute must not mutate the input Block"
+    assert counts == {key: 1}, "the path must be replaced exactly once"
+    assert "substitute" in dbe.__all__
+
+
+def test_absent_key_refuses(hostile):
+    block = dbe.Block("no matching token", "strict", 1, "hmad:exec")
+    with pytest.raises(dbe.MissingSubstitution) as error:
+        dbe.substitute(block, {hostile: "replacement"})
+    assert error.value.keys == [hostile], "missing-key diagnostics preserve the literal hostile key"
+
+
+def test_empty_substitution_map_is_a_no_op(hostile, monkeypatch):
+    block = dbe.Block(hostile, "plain", 19, "hmad:exec shell=plain")
+    calls = []
+
+    def forbidden_regex(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("empty substitution maps must return before building or running regexes")
+
+    # Scope patches to the API call so pytest's own regex use is unaffected.
+    with monkeypatch.context() as patch:
+        for name in ("compile", "escape", "finditer", "sub"):
+            patch.setattr(re, name, forbidden_regex)
+        result, counts = dbe.substitute(block, {})
+    assert result == block and result is not block, "even a no-op must copy the Block"
+    assert counts == {} and calls == [], "an empty map must short-circuit all regex work"
+
+
+def test_two_missing_keys_are_listed_in_map_order(hostile):
+    block = dbe.Block("neither token occurs", "strict", 1, "hmad:exec")
+    with pytest.raises(dbe.MissingSubstitution) as error:
+        dbe.substitute(block, {"B": hostile, "A": "2"})
+    assert error.value.keys == ["B", "A"], "missing keys retain map insertion order, not sorted order"
+
+
+def test_metacharacter_key_is_literal(hostile):
+    block = dbe.Block("a.[b]* | axbbb | aZ | a.[b]", "strict", 3, "hmad:exec")
+    result, counts = dbe.substitute(block, {"a.[b]*": hostile})
+    assert result == dataclasses.replace(block, text=hostile + " | axbbb | aZ | a.[b]")
+    assert counts == {"a.[b]*": 1}, "regex metacharacters in keys must match literally"
+
+
+def test_multi_occurrence_count_equals_replacements(hostile):
+    block = dbe.Block("TOKEN / TOKEN\nTOKEN", "strict", 4, "hmad:exec")
+    result, counts = dbe.substitute(block, {"TOKEN": hostile})
+    assert result.text == f"{hostile} / {hostile}\n{hostile}"
+    assert counts == {"TOKEN": 3}
+    assert result.text.count(hostile) == 3, "reported count must equal the replacements performed"
+    # Overlapping occurrences of the SAME key remain valid; str.count agrees
+    # with the simultaneous replacement pass's non-overlapping replacements.
+    result, counts = dbe.substitute(dataclasses.replace(block, text="aaa"), {"aa": "Z"})
+    assert (result.text, counts) == ("Za", {"aa": 1})
+
+
+def test_value_containing_another_key_is_not_rescanned(hostile):
+    block = dbe.Block("A B", "strict", 1, "hmad:exec")
+    for subs in ({"A": "B", "B": "C"}, {"B": "C", "A": "B"}):
+        result, counts = dbe.substitute(block, subs)
+        assert (result.text, counts) == ("B C", {"A": 1, "B": 1}), (
+            "replacement values must not be rescanned, regardless of map order"
+        )
+    for subs in ({"A": "B" + hostile, "B": "C"}, {"B": "C", "A": "B" + hostile}):
+        result, counts = dbe.substitute(block, subs)
+        assert (result.text, counts) == ("B" + hostile + " C", {"A": 1, "B": 1})
+    assert block.text == "A B"
+
+
+def test_overlapping_keys_refuse(hostile):
+    block = dbe.Block("", "strict", 1, "hmad:exec")
+    expected = [("overlap", "a", "ab", None), ("overlap", "a", "abc", None), ("overlap", "ab", "abc", None)]
+    for keys in (("a", "ab", "abc"), ("abc", "ab", "a")):
+        with pytest.raises(dbe.OverlappingSubstitution) as error:
+            dbe.substitute(block, dict.fromkeys(keys, hostile))
+        assert error.value.pairs == expected, "map-static substring overlap outranks missing keys"
+        assert isinstance(error.value.pairs, list)
+        assert {key for _, a, b, _ in error.value.pairs for key in (a, b)} == {"a", "ab", "abc"}
+
+
+def test_substitute_refuses_intersecting_spans(hostile):
+    for subs in ({"ab": "X", "bc": "Y"}, {"bc": "Y", "ab": "X"}):
+        for text in ("abc", "abc---abc"):
+            block = dbe.Block(text, "plain", 7, "hmad:exec shell=plain")
+            original = dataclasses.replace(block)
+            with pytest.raises(dbe.OverlappingSubstitution) as error:
+                dbe.substitute(block, subs)
+            assert error.value.pairs == [("intersect", "ab", "bc", 1)], (
+                "one lexically ordered pair carries the minimum shared index across all spans"
+            )
+            assert {key for _, a, b, _ in error.value.pairs for key in (a, b)} == {"ab", "bc"}
+            assert block == original, "refusal must leave the original Block unchanged"
+        block = dbe.Block("ab bc ab bc", "strict", 1, "hmad:exec")
+        result, counts = dbe.substitute(block, subs)
+        assert (result.text, counts) == ("X Y X Y", {"ab": 2, "bc": 2}), (
+            "different keys with disjoint spans must substitute successfully"
+        )
+    with pytest.raises(dbe.OverlappingSubstitution) as error:
+        dbe.substitute(dataclasses.replace(block, text="abc"), {"missing": hostile, "ab": "X", "bc": "Y"})
+    assert error.value.pairs == [("intersect", "ab", "bc", 1)], "intersection outranks missing keys"
+    # Both predicates contribute to one tagged list, even when a substring
+    # pair is also present; intersection ordering is by offset, then keys.
+    with pytest.raises(dbe.OverlappingSubstitution) as error:
+        dbe.substitute(dataclasses.replace(block, text="xyz abc"), {"bc": "Y", "yz": "Q", "a": hostile, "xy": "P", "ab": "X"})
+    assert error.value.pairs == [
+        ("overlap", "a", "ab", None),
+        ("intersect", "xy", "yz", 1),
+        ("intersect", "a", "ab", 4),
+        ("intersect", "ab", "bc", 5),
+    ], "substring and span predicates must both run before refusing"
+
+
+def test_substitute_refuses_overlapping_occurrences_of_one_key(hostile):
+    block = dbe.Block("aaab", "strict", 1, "hmad:exec")
+    with pytest.raises(dbe.OverlappingSubstitution) as error:
+        dbe.substitute(block, {"aa": hostile, "ab": "Y"})
+    assert error.value.pairs == [("intersect", "aa", "ab", 2)], (
+        "lookahead must see aa at [1, 3), which shares index 2 with ab"
+    )
+    assert block.text == "aaab"
+
+
+def test_empty_key_is_refused_by_the_api(hostile):
+    block = dbe.Block(hostile, "strict", 1, "hmad:exec")
+    for subs in ({"": "v"}, {"missing": hostile, "": "v", "a": "X", "ab": "Y"}):
+        with pytest.raises(dbe.BadSubstArg) as error:
+            dbe.substitute(block, subs)
+        assert error.value.raw == "", "empty-key validation precedes overlaps and missing-key checks"
