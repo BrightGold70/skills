@@ -131,7 +131,28 @@ revision, not an orchestrator edit, and it is owed.
 
 ---
 
-## D3 — OPEN: the impl-plan's own noise floor cannot survive Phase 5 (Task 1, unresolved)
+## D3 — SETTLED (operator, 2026-09-06): remedy 3, carry the red to 5g
+
+**Decided by the operator on 2026-09-06, which is what §D3 required — the three remedies below
+were presented verbatim and remedy 3 was chosen.** Accept the red through 5e and settle it at 5g,
+when the implementation is final and one provenance bump covers every drifted pin at once.
+
+Re-derived at `aa89d62` by running the node itself rather than carrying a figure:
+
+    /opt/anaconda3/bin/python3.11 -m pytest \
+      "h-mad/tests/test_h_mad_precheck_doc.py::test_noise_floor_on_documents_that_survived_eighty_cycles[docs/01-plan/features/doc-block-exec.impl-plan.md-impl-plan]" \
+      -q -p no:cacheprovider --tb=long
+    assert 19 <= 12          # issues=19, floor 12
+
+**The obligation this remedy carries is not discharged by the decision.** §D3's own sentence stands:
+5e must not be called green on a suite carrying this failure without saying so explicitly. Every
+green claim from here to 5g names this red. A grep-derived tally is NOT the figure — `grep -c
+PINDRIFT` returns 10 and `grep -c PLACEHOLDER` returns 12 on the same capture, summing to 22, which
+is neither the count nor close to it; those are grep OUTPUT LINES inflated by pytest's summary and
+its `+ where 19 = len([...])` expansion. The only defensible figure is the one the assertion
+derives itself.
+
+**The original finding follows unchanged.**
 
 **Not a decision. A finding, recorded open, owed to 5e/5g.**
 
@@ -559,3 +580,61 @@ suite is not sufficient, and this pass is the only thing positioned to show it.*
 appending prose to the token. `h_mad_extract_verdict.py` REFUSED it (exit 2, off-contract) and that
 is correct fail-closed behaviour: the token is a fixed vocabulary precisely so it cannot be parsed
 loosely. The concern was named beside the token as asked; only its placement broke the contract.
+
+---
+
+## D10 — OPEN: the documents publish ONE 88-row spec; the implementation writes per-task specs
+
+**Not a decision yet. The shared fact set for the 5e document round, derived by the orchestrator at
+`aa89d62` and handed identically to all four authors.** Every author re-runs these before using
+them — a fact one author derives alone is the defect this section exists to prevent (two authors
+independently "corrected" the same figure to 18 and to 20 in one cycle, each document internally
+consistent, so no audit leg could see it).
+
+**FACT 1 — what the documents publish.** `impl-plan:19`:
+
+    (`doc_block_exec.json` 88 rows, `doc_block_exec_wire.json` 8, `docsections.json` 8) must report `ALL_CAUGHT`.
+
+**FACT 2 — what is on disk.**
+
+    doc_block_exec.json           32 rows
+    doc_block_exec_task3.json     28 rows
+    doc_block_exec_wire.json      ABSENT
+    docsections.json               8 rows
+
+    for f in h-mad/tests/mutation-specs/*.json; do \
+      python3 -c "import json,sys;print(len(json.load(open(sys.argv[1]))['mutations']), sys.argv[1])" "$f"; done
+
+`doc_block_exec_wire.json` is ABSENT because Task 5 has not run; that is expected and is NOT part
+of this finding. Naming it here so nobody re-files it as one.
+
+**FACT 3 — no document names the per-task file.** `doc_block_exec_task3` appears **0** times across
+all four documents:
+
+    grep -c 'doc_block_exec_task3' \
+      docs/01-plan/features/doc-block-exec.{impl-plan,spec,plan}.md \
+      docs/02-design/features/doc-block-exec.design.md      # expect 0 0 0 0
+
+No document names a per-task spec convention at all.
+
+**FACT 4 — D2 says the spec is written at 5e**, and Task 3's was, as
+`h-mad/tests/mutation-specs/doc_block_exec_task3.json`.
+
+**THE QUESTION, which is not "26 → 28".** D9 added two rows and the harness now reports
+`ALL_CAUGHT mutations=28`, re-derived at `2b64747`. But 28 is the row count of a FILE THE DOCUMENTS
+DO NOT NAME. So the owed revision is not a `+2` anywhere; it is whichever of these is true:
+
+1. The per-task split is the intended shape, `impl-plan:19`'s three-spec enumeration is stale as
+   written, and the documents must publish the per-task convention plus a total derived across the
+   files that exist.
+2. `doc_block_exec.json` is meant to hold all 88 and the per-task files are a staging step, in which
+   case the documents are right and the IMPLEMENTATION owes a merge — a Phase-5 task, not a
+   document revision.
+
+**Do not assume (1) because the disk looks that way, and do not assume (2) because the document
+says so.** Read the matrix and say which, with the command that settles it. A `88 → 90` bump applied
+without answering this would publish a total for a population that does not exist.
+
+**Anti-pattern this section is guarding.** 107 raw `\b88\b` hits across the four documents
+(impl-plan 20, spec 3, plan 73, design 11), and most are line numbers. A value sweep alone cannot
+drive this revision; classify every hit before moving any of them.
