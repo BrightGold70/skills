@@ -9,13 +9,21 @@ reach the subprocess assertion, not break collection of its own killer.
 from __future__ import annotations
 
 import ast
+from contextlib import contextmanager
 import dataclasses
+import errno
 import json
+import math
 import os
 from pathlib import Path
 import re
+import shlex
+import shutil
+import signal
 import subprocess
 import sys
+import tempfile
+import time
 
 import pytest
 
@@ -656,3 +664,517 @@ def test_empty_key_is_refused_by_the_api(hostile):
         with pytest.raises(dbe.BadSubstArg) as error:
             dbe.substitute(block, subs)
         assert error.value.raw == "", "empty-key validation precedes overlaps and missing-key checks"
+
+
+# Task 3 RED: execution and bounded reclamation (all behavioural calls use run_block).
+
+
+def execution_block(text, shell="strict"):
+    return dbe.Block(text, shell, 1, "hmad:exec")
+
+
+@pytest.fixture
+def recording_spawn(monkeypatch):
+    real_popen = subprocess.Popen
+    records = []
+
+    def record(*args, **kwargs):
+        entry = {"argv": args[0], "cwd": kwargs.get("cwd"), "proc": None}
+        records.append(entry)
+        entry["proc"] = real_popen(*args, **kwargs)
+        return entry["proc"]
+
+    monkeypatch.setattr(dbe.subprocess, "Popen", record)
+    return records
+
+
+def assert_cwd_gone(records):
+    assert len(records) == 1, "run_block must launch exactly one bash"
+    assert records[0]["cwd"] is not None, "run_block must supply its private cwd"
+    assert not os.path.lexists(records[0]["cwd"]), "private cwd must be removed"
+
+
+def test_block_runs_in_the_temp_cwd(tmp_path):
+    result = dbe.run_block(execution_block("pwd"))
+    cwd = Path(result.stdout.strip())
+    assert cwd.resolve() not in (REPO_ROOT.resolve(), tmp_path.resolve())
+    assert not cwd.exists(), "reported execution directory must be removed"
+    assert isinstance(result, dbe.RunResult)
+    assert result.shell == "strict"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.rc = 99
+    assert {"RunResult", "run_block"} <= set(dbe.__all__)
+
+
+def test_block_leaves_the_working_tree_untouched(hostile):
+    before = subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO_ROOT)
+    result = dbe.run_block(execution_block("printf %s " + shlex.quote(hostile) + " > created-file"))
+    after = subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO_ROOT)
+    assert result.rc == 0
+    assert after == before, "block-created files must not touch the working tree"
+
+
+def test_unset_variable_fails_under_strict(monkeypatch):
+    monkeypatch.delenv("UNSET_X", raising=False)
+    assert dbe.run_block(execution_block("echo $UNSET_X")).rc != 0
+    assert dbe.run_block(execution_block("echo $UNSET_X", "plain")).rc == 0
+
+
+def test_bare_exit_in_plain_mode_returns_rc():
+    result = dbe.run_block(execution_block("exit 3", "plain"))
+    assert result.rc == 3 and result.shell == "plain"
+
+
+def test_pipefail_strict_vs_plain():
+    assert dbe.run_block(execution_block("false | true")).rc != 0
+    assert dbe.run_block(execution_block("false | true", "plain")).rc == 0
+
+
+def test_streams_are_separate_str(hostile):
+    result = dbe.run_block(execution_block("printf %s " + shlex.quote(hostile + "é") + "; printf '\\xff' >&2"))
+    assert result.rc == 0
+    assert result.stdout == hostile + "é"
+    assert result.stderr == "\ufffd", "invalid UTF-8 must be replaced in the separate stderr stream"
+
+
+def test_preamble_binds_a_variable_and_leaves_text_unchanged(hostile):
+    block = execution_block('printf %s "$VALUE"')
+    original = dataclasses.replace(block)
+    result = dbe.run_block(block, preamble="VALUE=" + shlex.quote(hostile) + "\n\n")
+    assert result.stdout == hostile and result.rc == 0
+    assert block == original, "composition must not mutate Block.text"
+
+
+def test_preamble_and_substitution_compose(hostile):
+    block = execution_block('printf "%s|%s" "$PREFIX" VALUE_TOKEN')
+    substituted = dbe.substitute(block, {"VALUE_TOKEN": shlex.quote(hostile)})[0]
+    result = dbe.run_block(substituted, preamble="PREFIX=bound")
+    assert result.stdout == "bound|" + hostile and result.rc == 0
+
+
+def test_preamble_without_trailing_newline_still_precedes_the_block():
+    result = dbe.run_block(execution_block('printf %s "$X"'), preamble="X=separated")
+    assert result.stdout == "separated" and result.rc == 0
+
+
+def test_failing_preamble_is_visible_as_the_combined_rc(hostile):
+    result = dbe.run_block(execution_block("echo should-not-run"),
+                           preamble="printf %s " + shlex.quote(hostile) + " >&2\nfalse")
+    assert result.rc != 0 and result.stderr == hostile and result.stdout == ""
+
+
+def test_cwd_mode_is_0700_under_hostile_umask():
+    old = os.umask(0o777)
+    try:
+        result = dbe.run_block(execution_block("stat -f %Lp ." if sys.platform == "darwin" else "stat -c %a ."))
+    finally:
+        os.umask(old)
+    assert result.rc == 0 and result.stdout.strip() == "700"
+
+
+def test_chmod_failure_is_a_verdict_and_removes_the_cwd(monkeypatch):
+    run = dbe.run_block
+    created = []
+    injected = PermissionError(errno.EACCES, "chmod refused")
+
+    def fail(path, mode):
+        created.append(path)
+        raise injected
+
+    monkeypatch.setattr(dbe.os, "chmod", fail)
+    with pytest.raises(dbe.LaunchFailed) as error:
+        run(execution_block("true"))
+    assert error.value.stage == "mkdtemp" and error.value.err is injected
+    assert len(created) == 1 and not os.path.lexists(created[0])
+
+
+def test_chmod_rollback_failure_is_cleanup_failed(monkeypatch):
+    run = dbe.run_block
+    real_rmtree = shutil.rmtree
+    created = []
+    chmod_error = PermissionError(errno.EACCES, "chmod refused")
+    cleanup_error = PermissionError(errno.EACCES, "remove refused")
+
+    def fail_chmod(path, mode):
+        created.append(path)
+        raise chmod_error
+
+    def fail_remove(*args, **kwargs):
+        raise cleanup_error
+
+    monkeypatch.setattr(dbe.os, "chmod", fail_chmod)
+    monkeypatch.setattr(dbe.shutil, "rmtree", fail_remove)
+    try:
+        with pytest.raises(dbe.CleanupFailed) as error:
+            run(execution_block("true"))
+        assert isinstance(error.value.__cause__, dbe.LaunchFailed)
+        assert error.value.__cause__.stage == "mkdtemp"
+        assert error.value.__cause__.err is chmod_error
+    finally:
+        for cwd in created:
+            real_rmtree(cwd)
+
+
+def forbidden_command_in_source(names):
+    """Scan string values for argv tokens or shell command words."""
+    tree = ast.parse(Path(dbe.__file__).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            value = node.value
+            if value in names or re.search(r"(?:^|[;&|\n])\s*(?:" + "|".join(names) + r")(?:\s|$)", value):
+                return value
+    return None
+
+
+def test_no_mktemp_invocation_in_source():
+    assert forbidden_command_in_source({"mktemp"}) is None, "external mktemp invocation is forbidden"
+
+
+def test_no_timeout_invocation_in_source():
+    assert forbidden_command_in_source({"timeout", "gtimeout"}) is None, "external timeout invocation is forbidden"
+
+
+def permission_cleanup_case(timeout=None):
+    run = dbe.run_block
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses directory permissions")
+    cwd = None
+    try:
+        text = "mkdir keep && chmod 000 keep" + ("; sleep 300" if timeout else "")
+        with pytest.raises(dbe.CleanupFailed) as error:
+            run(execution_block(text), **({"timeout": timeout} if timeout else {}))
+        cwd = error.value.path
+        assert isinstance(error.value.cleanup_error, PermissionError)
+        if timeout:
+            assert isinstance(error.value.__cause__, dbe.BlockTimeout)
+    finally:
+        if cwd is not None:
+            os.chmod(Path(cwd) / "keep", 0o700)
+            shutil.rmtree(cwd)
+
+
+def test_cleanup_failure_is_reported():
+    permission_cleanup_case()
+
+
+def test_cleanup_failure_outranks_timeout():
+    permission_cleanup_case(timeout=1)
+
+
+@contextmanager
+def cleanup_injection(monkeypatch, mode, *, timeout=None):
+    run = dbe.run_block
+    real_rmtree = shutil.rmtree
+    retained = []
+    injected = PermissionError(errno.EACCES, "injected cleanup failure")
+
+    def fake(path, ignore_errors=False, **kwargs):
+        retained.append(path)
+        if mode == "silent":
+            return
+        if mode == "removed":
+            real_rmtree(path)
+        if mode == "honour" and ignore_errors:
+            return
+        raise injected
+
+    monkeypatch.setattr(dbe.shutil, "rmtree", fake)
+    try:
+        with pytest.raises(dbe.CleanupFailed) as error:
+            run(execution_block("sleep 300" if timeout else "echo hi"),
+                **({"timeout": timeout} if timeout else {}))
+        assert len(retained) == 1 and error.value.path == retained[0]
+        yield error.value, injected, retained[0]
+    finally:
+        for cwd in retained:
+            real_rmtree(cwd, ignore_errors=mode == "removed")
+
+
+def test_cleanup_failure_carries_the_os_error(monkeypatch):
+    with cleanup_injection(monkeypatch, "honour") as (error, injected, cwd):
+        assert error.cleanup_error is injected, "rmtree errors must be retained, not ignored"
+        assert os.path.lexists(cwd)
+
+
+def test_cleanup_readback_catches_silent_retention(monkeypatch):
+    with cleanup_injection(monkeypatch, "silent") as (error, _, cwd):
+        assert error.cleanup_error is None and os.path.lexists(cwd)
+
+
+def test_cleanup_error_after_successful_removal_is_still_a_failure(monkeypatch):
+    with cleanup_injection(monkeypatch, "removed") as (error, injected, cwd):
+        assert error.cleanup_error is injected and not os.path.lexists(cwd)
+
+
+def test_cleanup_failure_outranks_timeout_injected(monkeypatch):
+    with cleanup_injection(monkeypatch, "raise", timeout=1) as (error, injected, cwd):
+        assert isinstance(error.__cause__, dbe.BlockTimeout)
+        assert error.cleanup_error is injected and os.path.lexists(cwd)
+
+
+def test_cleanup_failure_after_successful_run_is_chained(monkeypatch):
+    with cleanup_injection(monkeypatch, "raise") as (error, injected, _):
+        assert error.__cause__ is injected, "successful-run cleanup must explicitly chain the cleanup error"
+
+
+def test_normal_run_reads_back_absent(recording_spawn):
+    assert dbe.run_block(execution_block("true")).rc == 0
+    assert_cwd_gone(recording_spawn)
+
+
+def test_mkdtemp_failure_is_a_verdict(monkeypatch, recording_spawn):
+    run = dbe.run_block
+    injected = OSError(errno.ENOSPC, "no temporary space")
+
+    def fail(*args, **kwargs):
+        raise injected
+
+    monkeypatch.setattr(dbe.tempfile, "mkdtemp", fail)
+    with pytest.raises(dbe.LaunchFailed) as error:
+        run(execution_block("true"))
+    assert error.value.stage == "mkdtemp" and error.value.err is injected
+    assert recording_spawn == []
+
+
+def test_spawn_failure_is_a_verdict(tmp_path, monkeypatch, recording_spawn):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(dbe.LaunchFailed) as error:
+        dbe.run_block(execution_block("true"))
+    assert error.value.stage == "spawn" and isinstance(error.value.err, OSError)
+    assert recording_spawn[0]["proc"] is None
+    assert_cwd_gone(recording_spawn)
+
+
+def test_nul_in_document_block_is_a_launch_failure(recording_spawn):
+    with pytest.raises(dbe.LaunchFailed) as error:
+        dbe.run_block(execution_block("true\x00"))
+    assert error.value.stage == "spawn" and isinstance(error.value.err, ValueError)
+    assert recording_spawn[0]["proc"] is None, "NUL argv must fail before a child instance exists"
+    assert_cwd_gone(recording_spawn)
+
+
+def test_nul_in_preamble_is_a_launch_failure(recording_spawn):
+    with pytest.raises(dbe.LaunchFailed) as error:
+        dbe.run_block(execution_block("true"), preamble="true\x00")
+    assert error.value.stage == "spawn" and isinstance(error.value.err, ValueError)
+    assert recording_spawn[0]["proc"] is None
+    assert_cwd_gone(recording_spawn)
+
+
+def kill_if_present(kill, pid, sig=signal.SIGKILL):
+    try:
+        kill(pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+def assert_bounded(start):
+    assert time.monotonic() - start < 1 + 2 * dbe.DRAIN_SECONDS + 2, "reclamation exceeded timeout plus two drain bounds"
+
+
+def test_reap_failure_is_a_verdict_within_the_drain_bound(monkeypatch, recording_spawn):
+    run = dbe.run_block
+    real_killpg = os.killpg
+    seen = []
+
+    def fail(pgid, sig):
+        seen.append(pgid)
+        raise PermissionError(errno.EPERM, "group denied")
+
+    monkeypatch.setattr(dbe.os, "killpg", fail)
+    start = time.monotonic()
+    try:
+        with pytest.raises(dbe.LaunchFailed) as error:
+            run(execution_block("sleep 300"), timeout=1)
+        proc = recording_spawn[0]["proc"]
+        assert error.value.stage == "reap" and error.value.pgid == proc.pid
+        assert seen == [proc.pid]
+        assert_bounded(start)
+        assert_cwd_gone(recording_spawn)
+    finally:
+        for entry in recording_spawn:
+            proc = entry["proc"]
+            if proc is not None:
+                kill_if_present(real_killpg, proc.pid)
+                proc.wait(timeout=5)
+                with pytest.raises(ProcessLookupError):
+                    real_killpg(proc.pid, 0)
+
+
+@pytest.fixture
+def escapee(tmp_path):
+    esc = tmp_path / "escape [*] é.py"
+    pid_file = tmp_path / "escape [*] é.pid"
+    esc.write_text("import os, sys, time\nos.setsid()\nwith open(sys.argv[1], 'w') as f:\n    f.write(str(os.getpid()))\ntime.sleep(300)\n")
+    yield esc, pid_file
+    if pid_file.exists():
+        kill_if_present(os.kill, int(pid_file.read_text()))
+
+
+def escape_block(escapee, tail="sleep 300"):
+    esc, pid_file = escapee
+    return dbe.substitute(execution_block("python3 ESC_PATH PID_PATH & " + tail),
+                          {"ESC_PATH": shlex.quote(str(esc)), "PID_PATH": shlex.quote(str(pid_file))})[0]
+
+
+def wrapped_process(monkeypatch, method, injected):
+    real_popen = subprocess.Popen
+    records = []
+    calls = []
+
+    def record(*args, **kwargs):
+        inst = real_popen(*args, **kwargs)
+        records.append({"proc": inst, "cwd": kwargs["cwd"]})
+        real_method = getattr(inst, method)
+
+        def raise_once(*a, **kw):
+            calls.append(kw)
+            if len(calls) == 1:
+                raise injected
+            return real_method(*a, **kw)
+
+        setattr(inst, method, raise_once)
+        return inst
+
+    monkeypatch.setattr(dbe.subprocess, "Popen", record)
+    return records, calls
+
+
+def collect_case(monkeypatch, method, block, escapee=None, expiry=False):
+    run = dbe.run_block
+    real_killpg = os.killpg
+    injected = (subprocess.TimeoutExpired(cmd=["bash"], timeout=dbe.DRAIN_SECONDS) if expiry
+                else OSError(errno.ECHILD if method == "poll" else errno.EIO, "injected child I/O failure"))
+    records, calls = wrapped_process(monkeypatch, method, injected)
+    start = time.monotonic()
+    try:
+        with pytest.raises(dbe.LaunchFailed) as error:
+            run(block, **({} if method == "communicate" else {"timeout": 1}))
+        proc = records[0]["proc"]
+        assert error.value.stage == ("reap" if expiry else "collect")
+        assert error.value.err is injected and error.value.pgid == proc.pid
+        if method != "communicate":
+            assert isinstance(error.value.__context__, dbe.BlockTimeout)
+        if expiry:
+            assert calls[0].get("timeout") == dbe.DRAIN_SECONDS, "helper wait must receive the bounded timeout keyword"
+        assert_bounded(start)
+        assert_cwd_gone(records)
+        if method == "communicate":
+            with pytest.raises(ProcessLookupError):
+                real_killpg(proc.pid, 0)
+    finally:
+        if escapee is not None and escapee[1].exists():
+            kill_if_present(os.kill, int(escapee[1].read_text()))
+        for entry in records:
+            proc = entry["proc"]
+            kill_if_present(real_killpg, proc.pid)
+            proc.wait(timeout=5)
+            if method == "poll":
+                with pytest.raises(ProcessLookupError):
+                    real_killpg(proc.pid, 0)
+
+
+def test_communicate_oserror_is_launch_failed_collect(monkeypatch):
+    collect_case(monkeypatch, "communicate", execution_block("echo hi"))
+
+
+def test_drain_wait_oserror_is_launch_failed_collect(monkeypatch, escapee):
+    collect_case(monkeypatch, "wait", escape_block(escapee), escapee)
+
+
+def test_poll_oserror_is_launch_failed_collect(monkeypatch):
+    collect_case(monkeypatch, "poll", execution_block("sleep 300"))
+
+
+def test_wait_after_kill_is_bounded(monkeypatch, escapee):
+    collect_case(monkeypatch, "wait", escape_block(escapee), escapee, expiry=True)
+
+
+def test_sleeping_block_times_out():
+    start = time.monotonic()
+    with pytest.raises(dbe.BlockTimeout) as error:
+        dbe.run_block(execution_block("sleep 300"), timeout=1)
+    assert error.value.seconds == 1
+    assert_bounded(start)
+
+
+def test_in_group_descendant_is_reaped(tmp_path):
+    pid_file = tmp_path / "descendant [*] é.pid"
+    block = dbe.substitute(execution_block("sleep 300 & echo $! > PID_PATH; sleep 300"),
+                           {"PID_PATH": shlex.quote(str(pid_file))})[0]
+    try:
+        with pytest.raises(dbe.BlockTimeout):
+            dbe.run_block(block, timeout=1)
+        pid = int(pid_file.read_text())
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        if pid_file.exists():
+            kill_if_present(os.kill, int(pid_file.read_text()))
+
+
+def test_temp_cwd_removed_after_timeout(recording_spawn):
+    with pytest.raises(dbe.BlockTimeout):
+        dbe.run_block(execution_block("sleep 300"), timeout=1)
+    assert_cwd_gone(recording_spawn)
+
+
+def test_timeout_survives_a_group_that_already_emptied(escapee, recording_spawn):
+    try:
+        with pytest.raises(dbe.BlockTimeout):
+            dbe.run_block(escape_block(escapee, "exit 0"), timeout=1)
+    finally:
+        if escapee[1].exists():
+            kill_if_present(os.kill, int(escapee[1].read_text()))
+        if recording_spawn:
+            assert_cwd_gone(recording_spawn)
+
+
+def test_timeout_drain_is_bounded_against_an_escapee(escapee, recording_spawn):
+    start = time.monotonic()
+    try:
+        with pytest.raises(dbe.BlockTimeout):
+            dbe.run_block(escape_block(escapee), timeout=1)
+        assert_bounded(start)
+    finally:
+        if escapee[1].exists():
+            kill_if_present(os.kill, int(escapee[1].read_text()))
+        if recording_spawn:
+            assert_cwd_gone(recording_spawn)
+
+
+def timeout_recorders(monkeypatch):
+    real_mkdtemp = tempfile.mkdtemp
+    created = []
+
+    def record(*args, **kwargs):
+        path = real_mkdtemp(*args, **kwargs)
+        created.append(path)
+        return path
+
+    monkeypatch.setattr(dbe.tempfile, "mkdtemp", record)
+    return created
+
+
+def test_nonpositive_timeout_refuses_before_spawn(monkeypatch, recording_spawn):
+    run = dbe.run_block
+    created = timeout_recorders(monkeypatch)
+    for value in (0, -1, math.nan, math.inf, "not-a-timeout"):
+        with pytest.raises(dbe.BadTimeout) as error:
+            run(execution_block("echo hi"), timeout=value)
+        assert error.value.value is value, "BadTimeout must preserve the raw caller value"
+        assert recording_spawn == [] and created == [], "validation must precede allocation and spawn"
+
+
+def test_unrepresentable_timeout_refuses_before_spawn(monkeypatch, recording_spawn):
+    run = dbe.run_block
+    created = timeout_recorders(monkeypatch)
+    value = 2147483.648
+    with pytest.raises(dbe.BadTimeout) as error:
+        run(execution_block("echo hi"), timeout=value)
+    assert error.value.value is value
+    assert recording_spawn == [] and created == [], "unrepresentable bounds must refuse before allocation"
+    result = run(execution_block("echo hi"), timeout=(2**31 - 1) / 1000)
+    assert result.rc == 0 and result.stdout == "hi\n", "the representable boundary must execute normally"
+    assert len(created) == 1
+    assert_cwd_gone(recording_spawn)
