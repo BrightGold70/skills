@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-06 · pattern · [0.7] · `h-mad,handoff,decisions,handoff:2026-09-06-merge-settled-task4-next` — A decision that exists nowhere in the tree is the only thing a session cannot reconstruct. Code, counts and history are re-derivable; an unstated intent is not. Record the decision before executing it.
 - 2026-09-06 · gotcha · [0.9] · `doc-block-exec,h-mad,measurement,handoff:2026-09-06-5e-documents-closed-and-tooling-batch` — A cold heartbeat is not death. h-mad's 2h ownership window is a deadline every LIVE session races: --claim is the only writer of owner_heartbeat_ts, and ordinary work goes through --set, which never beats it.
 - 2026-09-06 · pattern · [0.7] · `doc-block-exec,h-mad,measurement,handoff:2026-09-06-5e-documents-closed-and-tooling-batch` — Removing a whole class to kill noise can flip a false positive into a worse false negative. Name the class by what it IS (h-mad .done markers), not by an accident it shares with real work (untracked).
 - 2026-09-06 · gotcha · [0.7] · `doc-block-exec,h-mad,measurement,handoff:2026-09-06-5e-documents-closed-and-tooling-batch` — COLLECT: MISSING / no_report can be the GUARD, not the defect: a leg that answers the WRONG DOCUMENT is indistinguishable from one that answered nothing. Never loosen a banner match to fix an absence.
