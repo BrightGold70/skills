@@ -1,8 +1,9 @@
 # Handoff — doc-block-exec Task 4 RED+GREEN shipped; matrix and spec agree at 91; 5e gates still owed
 
 **Date:** 2026-09-06
-**Branch:** `feature/doc-block-exec` — **NOT pushed; 9 commits local.** The push was attempted and
-the pre-push hook correctly BLOCKED it (see Next Step 7).
+**Branch:** `feature/doc-block-exec` — **PUSHED** (`b5f33b5..81c0f36`, `0 behind / 0 ahead`), after
+the harness finished and the tree restored. The first attempt was correctly BLOCKED; see Next Step 7
+for why, because the reason is a standing hazard rather than a one-off.
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Supersedes:** 2026-09-06-feature-doc-block-exec__merge-settled-task4-next.md (branch predecessor), 2026-09-05-main__audit-loop-never-runs-repo-suite.md and 2026-09-05-main__hmad-audit-loop-evidence-from-gateway-consolidation.md (taken over 09-05; re-emitted below, not re-read this session)
 
@@ -53,17 +54,19 @@ because a mutation harness is mid-run against the working tree.
 
 ## Next Steps
 
-1. **Read the 91-row harness result** — `grep -E '^MUTATION:' <scratchpad>/harness91.txt`. Require
-   `ALL_CAUGHT mutations=91 caught=91 survived=0`. codex reported exactly that; this run is the
-   orchestrator's own and had not finished. **If it is absent or the file is empty, re-run it** —
-   `cd h-mad && python3 ~/.claude/skills/h-mad/scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json`.
-   Read the token, never `$?`.
-2. **Confirm the working tree is restored before anything else** — `git status --short` must show no
-   `M h-mad/scripts/h_mad_doc_block_exec.py`. The harness restores on every path including SIGINT,
-   but it was mid-run at handoff and the helper was mutated at that moment. **Verify by EXECUTING
-   the symbol, not by grepping the source** — a same-mtime-second restore leaves stale `.pyc`
-   running while the source reads correct.
-3. **The 5e revert test for Task 4**, which has NOT been run. Production is committed now, so the
+1. ~~Read the 91-row harness result.~~ **DONE — `MUTATION: ALL_CAUGHT mutations=91 caught=91
+   survived=0 refused=0 unreadable=0`**, the orchestrator's own run, 0 survivor lines, agreeing with
+   codex's report. Nothing owed here.
+2. ~~Confirm the tree is restored.~~ **DONE.** `git status --short` clean, and restoration was
+   verified by EXECUTING the shipped entry point rather than grepping the source: `--help` → exit 0
+   (D11's broadened contract, live), `--nope` → `DOCBLOCK: BAD_ARGS message="the following arguments
+   are required: doc, --heading"`, and an import with `sys.modules` registered gives `main` callable
+   with `VERDICT_TABLE` at 23 entries, matching AC-4.2's 23 heads. **Note the probe that failed
+   first**: `module_from_spec` WITHOUT registering in `sys.modules` raises `AttributeError:
+   'NoneType' object has no attribute '__dict__'` from inside `@dataclass`, because dataclasses
+   resolves `sys.modules.get(cls.__module__)`. That is the probe's bug, not the helper's — do not
+   read it as a broken restore.
+3. **The 5e revert test for Task 4**, which has NOT been run. **This is now the top open item.** Production is committed now, so the
    `git stash push -u` sequence in h-mad §5e is not the destructive case it warns about — but follow
    it anyway: revert production only, confirm the RED split returns EXACTLY `62 failed, 98 passed`,
    restore, confirm green returns, and assert the revert LANDED with an existence check
@@ -148,13 +151,14 @@ because a mutation harness is mid-run against the working tree.
 
 ## In-Flight Processes
 
-| PID | Command | Log | Started | Elapsed @ handoff | ETA | What to check on exit |
-|---|---|---|---|---|---|---|
-| (bg task `b3s2b9jtb`) | `python3 h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json` from `h-mad/` | `<scratchpad>/harness91.txt` | ~22:10 | ~15 min | 91 mutations × one scoped test each | `MUTATION: ALL_CAUGHT mutations=91 caught=91 survived=0`; then `git status --short` shows NO `M h-mad/scripts/h_mad_doc_block_exec.py` |
+**None — the one process this session handed off has since COMPLETED and is recorded here rather
+than deleted, so a reader can tell a finished job from one that was never started.**
+
+| PID | Command | Log | Started | Elapsed | Result |
+|---|---|---|---|---|---|
+| (bg `b3s2b9jtb`) | `h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json` from `h-mad/` | `<scratchpad>/harness91.txt` | ~22:10 | ~20 min | `MUTATION: ALL_CAUGHT mutations=91 caught=91 survived=0 refused=0 unreadable=0`; tree restored, verified by execution |
 
 `<scratchpad>` = `/private/tmp/claude-501/-Users-kimhawk-orca-skills/49c8fdee-3f5c-4cd3-93c3-c14c4e889554/scratchpad`.
-**The helper was MUTATED at the moment this doc was written** — that is the harness working, not a
-defect, but nothing may be committed until it restores.
 
 ## Context for Next Session
 
