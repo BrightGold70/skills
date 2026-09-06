@@ -128,3 +128,69 @@ and the sweep stays green, because a spec that is not under the glob is not a sp
 the only thing that closes this, and the impl-plan's Conventions bullet should be corrected to say
 "write the spec at 5e" rather than "write it unanchored at 5d" — that is an `implplan-author`
 revision, not an orchestrator edit, and it is owed.
+
+---
+
+## D3 — OPEN: the impl-plan's own noise floor cannot survive Phase 5 (Task 1, unresolved)
+
+**Not a decision. A finding, recorded open, owed to 5e/5g.**
+
+`test_noise_floor_on_documents_that_survived_eighty_cycles[...impl-plan]` went red on the RED
+commit `954958a`. Re-derived rather than inferred:
+
+    python3 h-mad/scripts/h_mad_precheck_doc.py \
+      docs/01-plan/features/doc-block-exec.impl-plan.md --phase impl-plan --root .
+    PRECHECK: FAIL issues=13
+    PINDRIFT: L369  h-mad/tests/test_docsections.py:77      — changed since provenance 0021c77
+    PINDRIFT: L3822 h-mad/tests/test_h_mad_audit_cycle.py:18 — changed since provenance 0021c77
+    PLACEHOLDER: x11  (Tasks 2-4 template slots, all pre-existing)
+
+The floor is 12. At `ce9ffe1` the count was exactly 12 — 11 PLACEHOLDER plus the one
+`test_h_mad_audit_cycle.py` PINDRIFT that the `#49x` batch introduced — and the test passed, which
+is why the 2026-09-06 baseline run was `2617 passed, 0 failed`. The RED commit added a test to
+`h-mad/tests/test_docsections.py`, a file the impl-plan pins at L369, and that thirteenth issue
+crossed the floor.
+
+**The general shape, which is why this is not just a number to bump.** PINDRIFT means "a pin into a
+file that changed since the document's own provenance commit". Phase 5 exists to change exactly
+those files. So every 5d/5e commit that touches a file the impl-plan pins drifts another pin, and
+the count only rises from here: Task 1 GREEN writes `h-mad/scripts/h_mad_doc_block_exec.py` and
+edits `h-mad/tests/docsections.py`, both pinned; Tasks 2-5 add more. The guard cannot distinguish
+"stale because nobody maintained it" — the decay it was written to catch — from "stale because the
+implementation phase is underway", which is the feature working.
+
+**Three remedies, none of them the orchestrator's to pick alone:**
+
+1. **Bump the impl-plan's provenance sha** as each Phase-5 commit lands. Keeps the guard armed and
+   honest, but it is a `implplan-author` revision per dispatch, on a document whose audit loop is
+   capped and closed — and it re-stamps a gated document repeatedly, which is the measurement-layer
+   churn the class rule was written to stop.
+2. **Exempt the feature's own impl-plan while `phase == "step5"`.** Correct in principle — the
+   document is by definition mid-implementation — but it is an h-mad tooling change made mid-feature,
+   and it disarms the guard for the one document most likely to drift.
+3. **Accept the red through 5e and settle it at 5g**, when the implementation is final and one
+   provenance bump covers every drifted pin at once. Cheapest, and it leaves the suite reporting a
+   failure unrelated to the wire for the whole window — the noise that hides a real one.
+
+**Until it is settled, 5e must not be called green on a suite carrying this failure without saying
+so explicitly.** A green claim that silently excludes a known red is the failure mode the whole
+verification discipline exists to prevent.
+
+**RED-state suite, for the record** (`954958a`, `--continue-on-collection-errors` required — see
+below): `2 failed, 2616 passed, 1 error`. The error and the WIRE-PIN failure are the intended RED;
+the second failure is this finding.
+
+## D4 — the suite needs `--continue-on-collection-errors` during 5d
+
+Task 1's prescribed RED is a module-level `import h_mad_doc_block_exec` in a test file, so pytest
+raises a **collection** error and then refuses to run anything:
+
+    pytest h-mad/tests -q -p no:cacheprovider
+    !!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!
+    1 error in 0.49s
+
+Zero tests run — not "two red tests". For the whole 5d-to-5e window the suite gives no signal at
+all unless `--continue-on-collection-errors` is passed, which is what produced the numbers in D3.
+This is a property of the impl-plan's own prescribed RED shape and resolves itself the moment Task 1
+GREEN creates the module. It is recorded because the next person to run the suite in this window
+will otherwise read `1 error` as the suite being broken.
