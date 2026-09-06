@@ -194,3 +194,55 @@ all unless `--continue-on-collection-errors` is passed, which is what produced t
 This is a property of the impl-plan's own prescribed RED shape and resolves itself the moment Task 1
 GREEN creates the module. It is recorded because the next person to run the suite in this window
 will otherwise read `1 error` as the suite being broken.
+
+---
+
+## D5 — the RED's hostile fixture name is not a legal filename (Task 1)
+
+**Raised by**: the Task 1 GREEN dispatch, `STATUS: BLOCKED`, 22 of 46 tests raising
+`FileNotFoundError` before reaching production code.
+
+**Premise: CONFIRMED.** `h-mad/tests/test_h_mad_doc_block_exec.py:44` defines
+
+    def write_doc(tmp_path, text, name="fixture [*] ⟦/h-mad⟧.md"):
+
+and `tmp_path / name` yields
+
+    .../test_duplicate_headings_refuse0/fixture [*] ⟦/h-mad⟧.md
+                                                    ^ a path separator
+
+so the write targets a file `h-mad⟧.md` inside a directory `fixture [*] ⟦` that does not exist.
+
+**Prescription: REJECTED.** The dispatch proposed "parent-directory creation while preserving its
+hostile name". It does not preserve it. On POSIX a filename cannot contain `/` under any
+circumstances — the byte is the separator — so `mkdir(parents=True)` would split the hostile string
+across a directory boundary and leave the *file* named `h-mad⟧.md`, which is not hostile at all.
+The fixture would then exercise a hostile DIRECTORY name plus a mundane filename while reading, at
+the call site, exactly as it does today. That is a worse outcome than the crash, because the crash
+is loud.
+
+**Decision (2026-09-06): drop the separator, keep every hostile property that a filename can
+actually carry.** Replace U+002F SOLIDUS with **U+2215 DIVISION SLASH `∕`**, which is a legal
+filename byte sequence, renders near-identically, and adds a confusable-character axis the ASCII
+form did not have:
+
+    name="fixture [*] ⟦∕h-mad⟧.md"
+
+The spaces, `*`, `[`, `]` and the `⟦ ⟧` brackets are unchanged, so every hostile property that
+survives contact with a filesystem survives this edit.
+
+**Residual, stated exactly.** A literal `/` inside a single path COMPONENT is not representable on
+POSIX, so that axis cannot be tested at the filename level by any fixture, here or elsewhere. If
+the feature needs to prove something about a `/` inside a heading, an info string, or a document
+BODY, that is a different test with a different input, and this fixture never covered it. Nothing
+is lost by the substitution because nothing was ever exercised.
+
+**What this says about the RED gate, and it is the part worth keeping.** The defect was
+undetectable at 5d. Task 1's prescribed RED is a module-level `import h_mad_doc_block_exec`, so
+every test failed at COLLECTION with `ModuleNotFoundError` and not one test body ran. A RED whose
+failure mode is a collection error therefore certifies nothing about the tests it collects — it
+proves only that the module is absent, which was already known. Every defect in the test bodies is
+invisible until GREEN makes the import succeed, and 22 of them surfaced in the first second of the
+first GREEN run. This is a general property of the new-module RED shape, not a fact about this
+fixture, and it belongs in the impl-plan's Conventions as a stated limit of that RED — an
+`implplan-author` revision, owed, not an orchestrator edit.
