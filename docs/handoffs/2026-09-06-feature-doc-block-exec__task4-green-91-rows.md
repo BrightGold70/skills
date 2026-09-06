@@ -10,12 +10,12 @@ for why, because the reason is a standing hazard rather than a one-off.
 ## Session Summary
 
 Executed the operator's §D10 merge, settled the last three r19 OPEN-DECISIONs, and took Task 4
-through RED and GREEN. **Eight commits, none pushed.** `doc_block_exec_task3.json` is merged and
+through RED and GREEN. **Eleven commits, all PUSHED (`0 behind / 0 ahead`).** `doc_block_exec_task3.json` is merged and
 deleted; the design's matrix and the spec now hold the same 91 names; Task 4's 62 tests are written
 and passing and the CLI, stream artifacts and SKILL.md registry entry are implemented. **5e is NOT
-complete** — the revert test and the independent anti-gaming verification have not been run, and a
-full 91-row harness pass was still executing when this was written. The claim is HELD, not released,
-because a mutation harness is mid-run against the working tree.
+complete** — the revert test and the independent anti-gaming verification have not been run. The
+91-row harness finished after this doc was first written: `ALL_CAUGHT mutations=91 caught=91
+survived=0`. The claim is RELEASED and the tree is clean.
 
 ## Key Learnings
 
@@ -80,8 +80,8 @@ because a mutation harness is mid-run against the working tree.
    Note Task 5 writes `doc_block_exec_wire.json`, which does not exist yet — the design's
    verification block labels that absence as schedule, not defect.
 6. **5g** — the D3 provenance bump lands here and nowhere earlier; `phase = null` ONLY after 5f.
-7. **PUSH — attempted at closeout and correctly BLOCKED. Do it AFTER step 2, not before.**
-   `git rev-list --left-right --count @{u}...HEAD` → `0 9`. The pre-push hook returned:
+7. ~~Push.~~ **DONE — `b5f33b5..c28cc97`, `0 behind / 0 ahead`.** Kept here because the FIRST
+   attempt was correctly BLOCKED and the reason is a standing hazard worth knowing. The hook returned:
 
        drifted: drain-unbounded         :: scripts/h_mad_doc_block_exec.py :: hits=0, expected exactly 1
        drifted: drain-oserror-unmapped  :: scripts/h_mad_doc_block_exec.py :: hits=0, expected exactly 1
@@ -91,8 +91,8 @@ because a mutation harness is mid-run against the working tree.
    sweeps anchors over the WORKING TREE and the harness deliberately mutates the working tree, so
    the two are mutually exclusive and running them concurrently produces a guaranteed false
    `ANCHORS_DRIFTED`. The hook is behaving correctly and the two anchors are fine.
-   **Do NOT `--no-verify`.** Wait for the harness (step 1), confirm restoration (step 2), then
-   `git push origin HEAD` — the sweep will then read `ANCHORS_OK` and the push will land. If it
+   **Do NOT `--no-verify`** if you meet this again. Wait for the harness, confirm restoration, then
+   push — which is what happened here: the sweep then read clean and the push landed. If it
    still reports these two after the tree is restored, THAT is real drift and needs re-anchoring.
 
 ## Open / Blocked Items
