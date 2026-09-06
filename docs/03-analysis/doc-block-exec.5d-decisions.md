@@ -766,3 +766,94 @@ figure, `assert 19 <= 12`. Species: the §PROVENANCE class — a carried figure 
 present-tense claim — and, like `#49e`, it reached a commit message, which is the one surface that
 cannot be edited afterwards. It is corrected here because that is the only place a correction can
 live.
+
+---
+
+## D11 — SETTLED: `--help` anywhere exits 0; the contract is BROADENED, not pre-scanned
+
+**The OPEN-DECISION** (impl-plan Task 4, r19/5d, from `doc-block-exec.impl-plan.audit.v50.codex.md`
+must 3, filed by BOTH legs): enforce the standalone-`--help` exemption explicitly by pre-scanning
+argv, with negative tests for the mixed help forms — or broaden the contract and test its boundary.
+
+**Premise re-derived before choosing, as the OPEN-DECISION line requires. It HOLDS, and the
+population is larger than the two forms codex filed.** Probe: the exact parser Task 4 prescribes —
+`allow_abbrev=False`, `error()` overridden to raise `BadArgs`, `exit_on_error` left at its default —
+on the pinned 3.11.8, every case its own parser instance:
+
+| argv | result |
+|---|---|
+| `--help` | `SystemExit(0)`, usage on stdout |
+| `--bogus --help` | `SystemExit(0)`, usage on stdout |
+| `d.md --heading H --help` | `SystemExit(0)`, usage on stdout |
+| `--help --bogus` | `SystemExit(0)`, usage on stdout |
+| `d.md --help` (no `--heading`) | `SystemExit(0)`, usage on stdout |
+| **control** `--bogus` alone | `BadArgs('the following arguments are required: doc, -…')` |
+| **control** `d.md --heading` (no value) | `BadArgs('argument --heading: expected one argument')` |
+
+The controls are what make this a measurement rather than an assertion: without `--help`, both
+malformed shapes reach the override exactly as AC-4.1 requires, so the five help rows are not the
+probe failing to reach `error()` at all. codex filed two rows; **five hold**, including one it did
+not name (`--help --bogus`) and one where a *required* option is absent.
+
+**Decision: BROADEN.** `--help` in any argv position yields argparse's own help at exit 0 and never
+reaches the `BAD_ARGS` verdict. Three reasons, in the order they carry weight:
+
+1. **A pre-scan re-implements argparse's help detection**, including `-h`, the `--` terminator, and
+   `--help` appearing as an option *value* (`--heading --help` — where it is data, not a request).
+   That is new surface with its own defect budget, purchased to make a widely-expected CLI behave
+   unusually.
+2. **The exemption already exists in the contract; only its BOUNDARY was mis-stated.** Task 4's
+   prose says "`--help` alone keeps argparse's own exit-0 help … the override is never reached,
+   because `--help` is not an error". That reasoning is position-independent — `--help` is not an
+   error anywhere — so the document's *rule* was already right and only its stated scope was narrow.
+   This decision widens a stated carve-out; it does not create one.
+3. **The Audit-gate signal discipline is not breached**, because it governs the helper's *verdict*
+   channel. `--help` is a request for usage, answered on stdout at exit 0, and was already outside
+   that channel by the document's own carve-out.
+
+**What Task 4 owes for it** — the boundary is TESTED, which is the half that makes broadening
+legitimate rather than a shrug: `test_help_anywhere_exits_zero_without_a_verdict`, parametrised
+over the five rows above, asserting `SystemExit(0)`, usage text on stdout, and **no line starting
+`DOCBLOCK:`** — that last clause is the discriminating one, since a pre-scan implementation that
+emitted a verdict *and* help would pass a weaker test. Its control is the two `BadArgs` rows, which
+belong to `test_malformed_invocation_is_a_verdict` (AC-4.1) and stay there.
+
+    python3.11 - <<'PY'   # the probe above, re-runnable; see the table for expected values
+    PY
+
+## D12 — SETTLED: the alias-refusal branch DOES verify its unlink with a read-back
+
+**The OPEN-DECISION** (impl-plan Task 4, r19/5d, from `…audit.v50.codex.md` must 2): decide whether
+the alias-refusal branch verifies its unlink with a read-back and a discriminating failure test, or
+records why that unlink cannot fail silently — since the branch deletes a reservation it created
+while the task states it grows no read-back.
+
+**Premise re-derived, and it needed CORRECTING before it could be answered.** The finding reads as
+though a shipped branch were missing a read-back. It is not: at `7afc0ef`,
+`h-mad/scripts/h_mad_doc_block_exec.py` is **465 lines** carrying exactly one `lexists` — the cwd
+cleanup check at `:457` — and no `O_EXCL`, no stream-path reservation, no alias detection and no
+rollback unlink anywhere.
+
+    grep -c 'O_EXCL\|lexists' h-mad/scripts/h_mad_doc_block_exec.py    # 1, and it is :457's cwd check
+
+The whole stream-path apparatus is **Task 4's deliverable**, not landed code. codex audited the
+impl-plan *document*, so the finding stands — but as a forward constraint on what Task 4 writes,
+never as a missing read-back in shipped code. Recorded because acting on the finding as filed would
+have sent an implementer looking for a branch to repair.
+
+**Decision: REQUIRE the read-back.** The alternative — record why the unlink cannot fail silently —
+is refuted by the sibling path this document already specifies: AC-3.10's
+`test_rollback_unlink_failure_reports_leftover` injects `PermissionError` into `os.unlink` and the
+rollback read-back then finds the created file still present, yielding
+`UNREADABLE reason=stream_path_unwritable` carrying `leftover:`. The alias branch creates a
+reservation by the same mechanism and removes it by the same call, so it fails in the same way and
+under the same injection. "It cannot fail silently" is not available as an answer when the identical
+call on the identical artifact demonstrably can.
+
+**What Task 4 owes for it**: the alias branch re-reads with `os.path.lexists` after its unlink and,
+on a surviving file, refuses with the `leftover:` detail line rather than a bare
+`UNREADABLE reason=stream_paths_alias`. Its discriminating test is
+`test_alias_refusal_unlink_failure_reports_leftover`, built exactly as AC-3.10's rollback test is —
+same `os.unlink` injection, alias trigger instead of the second-arm `ENOTDIR` — asserting the
+`leftover:` line carries the reservation's name. **Without the injection the test is vacuous**: the
+unlink succeeds, nothing is left over, and a branch with no read-back at all passes it.
