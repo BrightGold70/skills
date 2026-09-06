@@ -2132,3 +2132,54 @@ def test_parser_rejects_all_dir_and_abbreviations(cli_case):
         lines = cli_verdict(result, 'BAD_ARGS')
         assert len(lines) == 1 and lines[0].startswith('DOCBLOCK: BAD_ARGS message="')
         assert 'usage:' not in result.stdout and not c['marker'].exists(), 'complete argv must reject abbreviations before running'
+
+
+def test_exactly_one_tagged_fence_in_the_tree():
+    tagged = []
+    for path in REPO_ROOT.glob("*/**/*.md"):
+        rel = path.relative_to(REPO_ROOT)
+        if (
+            rel.parts[0] not in ("h-mad", "handoff")
+            or "archive" in rel.parts
+            or any(part.startswith(".") for part in rel.parts)
+        ):
+            continue
+        tagged.extend(
+            event for event in dbe._fence_events(path.read_text(encoding="utf-8"))
+            if event.kind == "open" and event.candidate and "hmad:exec" in event.info.split()[1:]
+        )
+    assert len(tagged) == 1, "the executed markdown documentation surface must contain exactly one hmad:exec fence"
+
+
+def test_suite_floor_holds():
+    if os.environ.get("DOCBLOCK_FLOOR_INNER") == "1":
+        pytest.skip("inner collection run")
+
+    env = {**os.environ, "DOCBLOCK_FLOOR_INNER": "1"}
+    common = [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"]
+    suite = subprocess.run(common, cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=120)
+    module = subprocess.run(
+        common + ["h-mad/tests/test_h_mad_doc_block_exec.py"],
+        cwd=REPO_ROOT, env=env, capture_output=True, text=True, timeout=120,
+    )
+    assert suite.returncode == 0 and module.returncode == 0, (
+        f"collection must succeed:\n{suite.stdout}\n{suite.stderr}\n{module.stdout}\n{module.stderr}"
+    )
+    required = (
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_gate_block_resolves_through_doc_block_exec",
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_recipe_runs_through_run_block",
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_gate_block_refuses_an_untagged_recipe",
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_exec_block_scan_performs_no_execution",
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_consumer_calls_the_helper_module_qualified",
+        "h-mad/tests/test_h_mad_collect_report_docs.py::test_only_the_exec_scan_hand_rolls_extraction",
+        "h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder",
+        "h-mad/tests/test_h_mad_portable_timeout.py::test_no_document_or_script_emits_a_bare_timeout_command[h_mad_doc_block_exec.py]",
+        "h-mad/tests/test_h_mad_portable_timeout.py::test_no_document_or_script_rests_on_an_unconditional_absence_claim[h_mad_doc_block_exec.py]",
+    )
+    for node in required:
+        assert node in suite.stdout, f"the suite floor must account for {node}"
+    suite_count = int(re.search(r"(\d+) tests collected", suite.stdout).group(1))
+    module_count = int(re.search(r"(\d+) tests collected", module.stdout).group(1))
+    assert suite_count >= 2748 + module_count + len(required), (
+        "the repository-root suite floor must include this feature's collected nodes"
+    )
