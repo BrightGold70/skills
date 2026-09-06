@@ -1373,3 +1373,65 @@ def test_mutation_spec_shape() -> None:
             problems.append(f"{name}: {rel} has no `def {func}(`")
 
     assert not problems, "mutation spec shape problems:\n  " + "\n  ".join(problems)
+
+
+def test_cli_missing_names_the_report_and_marker_it_waited_for(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`COLLECT: MISSING path=...` prints the COLLECTED DESTINATION, so on its own
+    it names neither the report wanted nor the marker blocked on -- three paths,
+    and the printed one is the least useful. Measured 2026-09-05: a complete
+    13.7 kB gating report was hunted as "missing" while it sat on disk."""
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=False)
+
+    result = run_collect_cli(collect_args(tmp_path, report, grace=0))
+
+    waited = [ln for ln in result.stdout.splitlines() if ln.startswith("waited: ")]
+    assert len(waited) == 1, f"MISSING must name what it waited for, once: {result.stdout}"
+    assert f"report={report} exists=yes" in waited[0], waited[0]
+    assert f"marker={report}.done exists=no" in waited[0], waited[0]
+
+
+def test_cli_missing_names_the_dropped_md_marker_but_does_not_accept_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The doc-auditor path wrote `<report-basename>.done` instead of
+    `<report>.done`. Name it so a human can rename it deliberately -- and keep the
+    verdict MISSING. Loosening the wait would be unsafe: on plan c83 a leg emitted
+    a complete all-clean verdict for a DIFFERENT document, and the strict wait is
+    the only thing that kept it out of the record."""
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=1)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=False)
+    near = report.with_suffix(".done")
+    near.write_text("", encoding="utf-8")
+    expected_docs = docs_path(tmp_path)
+
+    result = run_collect_cli(collect_args(tmp_path, report, grace=0))
+
+    assert result.stdout.splitlines()[0] == (
+        f"COLLECT: MISSING path={expected_docs} delivered=none"
+    ), "a dropped-.md marker must NOT be accepted as delivery"
+    hint = [ln for ln in result.stdout.splitlines() if ln.startswith("hint: ")]
+    assert len(hint) == 1, f"the near-miss marker must be named: {result.stdout}"
+    assert str(near) in hint[0], hint[0]
+    assert "NOT accepted" in hint[0], hint[0]
+    assert not expected_docs.exists(), "the hint must not cause a copy into docs"
+
+
+def test_cli_ok_prints_no_waited_or_hint_lines(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Negative control. Without this, a `waited:` assertion that matched on every
+    run would be vacuous -- the diagnosis must fire on MISSING alone."""
+    install_report_wait_stub(monkeypatch, tmp_path, return_code=0)
+    report = tmp_path / "dispatch" / "audit_f_plan_cycle8_codex.report.md"
+    write_report(report, HOSTILE_REPORT, done=True)
+
+    result = run_collect_cli(collect_args(tmp_path, report))
+
+    assert result.stdout.splitlines()[0].startswith("COLLECT: OK "), result.stdout
+    assert not [ln for ln in result.stdout.splitlines() if ln.startswith("waited: ")]
+    assert not [ln for ln in result.stdout.splitlines() if ln.startswith("hint: ")]

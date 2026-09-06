@@ -17,6 +17,40 @@ from h_mad_audit_cycle import (
 )
 
 
+def missing_diagnosis(report_path: Path) -> list[str]:
+    """Lines naming what the collector actually waited for, on a MISSING.
+
+    `COLLECT: MISSING path=...` prints the COLLECTED DESTINATION, so its own error
+    names neither the report it wanted nor the marker it blocked on -- three
+    different paths, and the one printed is the least useful. Measured
+    2026-09-05: a complete 13.7 kB gating report (156 lines, must=3 should=2
+    nit=2) was hunted as "missing" while it sat on disk, because the auditor had
+    written `<report-basename>.done` instead of `<report>.done`.
+
+    This DIAGNOSES and never accepts. The near-miss marker is named so a human can
+    rename it deliberately; it is not treated as delivery. Loosening the wait would
+    be unsafe for a reason measured 2026-09-06 on plan c83, where the leg emitted a
+    complete, confident, all-clean verdict for a DIFFERENT DOCUMENT (asked for
+    `plan-v83`, returned `impl-plan-v38`) -- the strict wait is the only thing that
+    kept it out of the record, and `no_report` was the guard rather than the defect.
+    """
+    marker = report_path.with_name(report_path.name + ".done")
+    lines = [
+        f"waited: report={report_path} exists={'yes' if report_path.exists() else 'no'}"
+        f" marker={marker} exists={'yes' if marker.exists() else 'no'}"
+    ]
+    # `a.report.md` -> `a.report.done`: the exact shape the doc-auditor path emitted.
+    if report_path.suffix:
+        near = report_path.with_suffix(".done")
+        if near != marker and near.exists():
+            lines.append(
+                f"hint: a marker exists at {near} (the `.md` was dropped). Rename it to"
+                f" {marker} and re-collect. The report's contents are NOT accepted on"
+                f" the strength of this hint -- the banner must still match."
+            )
+    return lines
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feature", required=True)
@@ -116,6 +150,9 @@ def _run(args: argparse.Namespace) -> int:
     if forced:
         line += " forced=1"
     print(line)
+    if verdict == "MISSING":
+        for diagnosis in missing_diagnosis(report_path):
+            print(diagnosis)
     if same_report_path and delivered == "report-file":
         print(f"marker: removed {report_path}.done")
     print(f"[H-MAD] {args.feature} collect {verdict}")
