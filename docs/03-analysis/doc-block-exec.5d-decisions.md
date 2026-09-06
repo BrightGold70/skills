@@ -66,3 +66,65 @@ A row for the neutral-fields rule, if the design wants one, is the design's to a
 stands in for it is the fixture: the AC-1.8 trace test asserts the neutral values on every
 non-`open` event of every hostile fixture, on LF and CRLF, so an implementation that carries
 opener metadata through fails outright.
+
+---
+
+## D2 — 5d mutation specs are PARKED, not committed unanchored (Task 1)
+
+**Raised by**: the Task 1 RED, which delivered `doc_block_exec.json` (25 rows) and a rewritten
+`docsections.json` (8 rows) with anchors omitted or re-pointed at 5e source. Codex followed the
+impl-plan's Conventions exactly; the Conventions are what turn out to conflict with an enforced
+guard.
+
+**The conflict, measured.** The impl-plan's Conventions say a 5d spec omits `file`/`find`/`replace`
+until 5e source exists — "intentionally not yet harness-runnable". But
+`h-mad/tests/test_h_mad_mutation_harness.py` sweeps `tests/mutation-specs/*.json` by **filesystem
+glob** (`:1900`, `rglob`; also `:81`, `specs_dir.glob`), and `git-hooks/pre-push` sweeps every
+tracked `*.json`, and both score an unanchored row as `ANCHORS_UNREADABLE`. Observed with the RED
+in the working tree, before any commit:
+
+    FAILED test_h_mad_mutation_harness.py::test_committed_mutation_specs_are_not_drifted
+    FAILED test_h_mad_mutation_harness.py::test_committed_mutation_harness_anchor_sweep_is_ok
+    2 failed, 96 passed
+
+So the Conventions' rule is unreachable as written: there is no state in which an unanchored spec
+sits under `tests/mutation-specs/` and the repo's own guards are satisfied.
+
+Second, narrower defect in the same delivery: 6 of `docsections.json`'s 8 rows had their anchors
+re-pointed at post-5e source (`_dbe.fence_aware_end(...)`, `assert found`) and 2 stripped entirely
+— but `h-mad/tests/docsections.py` is UNCHANGED at RED, so none of those anchors resolves on the
+current tree. A guard that worked before this dispatch would have been disabled for the whole
+5d-to-5e window.
+
+**Positive control, run before deciding.** With both spec files moved aside and `docsections.json`
+reverted, the sweep is `11 passed` and the WIRE-PIN still fails on its call-record assertion. So
+the specs are the sole cause of the two failures, and parking them costs the RED nothing.
+
+**Decision (operator, 2026-09-06): park both until 5e.**
+
+- `docs/03-analysis/doc-block-exec.pending-mutation-specs/doc_block_exec.json.pending` — the 25 rows.
+- `docs/03-analysis/doc-block-exec.pending-mutation-specs/docsections.json.pending` — the 8-row
+  rewrite, including the 4 new rows and the 6 re-pointed anchors.
+- `h-mad/tests/mutation-specs/docsections.json` reverted to its committed 4 anchored rows, which
+  still resolve against the untouched `docsections.py`, so that guard stays ARMED through the window.
+
+**The `.json.pending` suffix is load-bearing, not cosmetic.** The pre-push hook sweeps every tracked
+`*.json` **anywhere in the repository**, not only under `tests/mutation-specs/`, so a parked spec
+that still ended in `.json` would block the very push it was parked to unblock.
+
+**At 5e**: move both files back under `h-mad/tests/mutation-specs/`, drop the `.pending` suffix, and
+anchor every row against the source that now exists — which is the one moment an anchor can be
+verified rather than guessed. The harness refuses any anchor not matching exactly once, so the
+anchoring is checked at the moment it is written.
+
+**Verified after parking**, NUL-safe over every tracked `*.json` (a whitespace-split first attempt
+inflated the count with phantom paths and had to be redone):
+
+    ANCHORS: ANCHORS_OK specs=46 mutations=490 ok=490 drifted=0 unreadable=0 unclassifiable=0
+
+**Residual, stated exactly.** Nothing detects a parked spec that is never moved back. If 5e lands
+without restoring these two files, the feature ships with no mutation coverage for the new module
+and the sweep stays green, because a spec that is not under the glob is not a spec. The 5e task is
+the only thing that closes this, and the impl-plan's Conventions bullet should be corrected to say
+"write the spec at 5e" rather than "write it unanchored at 5d" — that is an `implplan-author`
+revision, not an orchestrator edit, and it is owed.

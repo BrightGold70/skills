@@ -1,0 +1,169 @@
+{
+  "_why": "Task 1 RED mutation contracts. Per impl-plan Conventions, file/find/replace for the new module are populated at 5e from landed source, never invented during RED. This is intentionally not harness-runnable until GREEN.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_doc_block_exec.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "tag-check-removed",
+      "_mechanism": "`extract` returns every ```bash fence, tagged or not",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_untagged_fence_is_not_a_candidate",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_untagged_fence_is_not_a_candidate"
+    },
+    {
+      "name": "fence-run-length-ignored",
+      "_mechanism": "any ``` line closes a fence, regardless of run length",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_quoted_tag_inside_longer_fence_is_not_an_opener",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_quoted_tag_inside_longer_fence_is_not_an_opener"
+    },
+    {
+      "name": "section-bound-ignores-level",
+      "_mechanism": "the section ends at the next heading of *any* level",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_section_owns_deeper_headings",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_section_owns_deeper_headings"
+    },
+    {
+      "name": "heading-lookalike-accepted",
+      "_mechanism": "heading recognition is loosened to `line.lstrip().startswith(\"#\")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_heading_lookalikes_are_not_headings",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_heading_lookalikes_are_not_headings"
+    },
+    {
+      "name": "adjacent-heading-skipped",
+      "_mechanism": "the boundary predicate becomes `>` `start` instead of `≥`, so a same-or-shallower heading on the very next line after the requested heading is not a boundary and its tagged block is extracted under the wrong address",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_adjacent_heading_bounds_the_section",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_adjacent_heading_bounds_the_section"
+    },
+    {
+      "name": "heading-level-pin-ignored",
+      "_mechanism": "`find_heading` matches the full `## Text` form on text alone, ignoring the hash count",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_find_heading_accepts_full_and_bare_forms",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_find_heading_accepts_full_and_bare_forms"
+    },
+    {
+      "name": "request-predicate-space-only",
+      "_mechanism": "the full-form request predicate accepts only a space after the hash run while the scanner accepts a space, a tab or end of line, so `##\\tText` and `##` requests fall to the bare form and cannot select their headings",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_full_form_request_accepts_tab_and_eol",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_full_form_request_accepts_tab_and_eol"
+    },
+    {
+      "name": "form-precedence-bare-first",
+      "_mechanism": "`find_heading` tries the bare form first (or unions both forms), so the request `## Text` also matches a `### ## Text` heading and refuses as ambiguous",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_heading_form_precedence_full_wins",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_heading_form_precedence_full_wins"
+    },
+    {
+      "name": "closing-hash-run-kept",
+      "_mechanism": "`_fence_events` leaves the optional closing hash run in a heading event's text, so `## Text ##` no longer matches `## Text` and a `## Text`/`## Text ##` pair counts as one",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_closing_hash_run_does_not_change_heading_identity",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_closing_hash_run_does_not_change_heading_identity"
+    },
+    {
+      "name": "heading-match-ignores-fence-state",
+      "_mechanism": "the heading search runs over every line instead of the scanner's `heading` events, so a fenced `## <heading>` starts the section",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_requested_heading_quoted_inside_a_fence_is_not_a_section_start",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_requested_heading_quoted_inside_a_fence_is_not_a_section_start"
+    },
+    {
+      "name": "duplicate-heading-takes-first",
+      "_mechanism": "`AmbiguousHeading` never raised; first match wins",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_duplicate_headings_refuse"
+    },
+    {
+      "name": "select-first-on-ambiguous",
+      "_mechanism": "`select` returns `blocks[0]` when >1 and no index",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_two_tagged_blocks_without_index_are_ambiguous",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_two_tagged_blocks_without_index_are_ambiguous"
+    },
+    {
+      "name": "index-below-one-accepted",
+      "_mechanism": "`index < 1` reaches `blocks[index - 1]`",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_index_zero_refuses",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_index_zero_refuses"
+    },
+    {
+      "name": "duplicate-info-token-last-wins",
+      "_mechanism": "a repeated recognised token overwrites instead of refusing",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_duplicate_info_tokens_refuse",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_duplicate_info_tokens_refuse"
+    },
+    {
+      "name": "doc-decode-error-unwrapped",
+      "_mechanism": "the document read drops `UnicodeDecodeError` from the `DocUnreadable` wrap (or reads with `errors=\"replace\"`)",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_invalid_utf8_document_is_unreadable",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_invalid_utf8_document_is_unreadable"
+    },
+    {
+      "name": "unknown-info-key-ignored",
+      "_mechanism": "an unrecognised token falls back to strict",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_unknown_info_key_refuses",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_unknown_info_key_refuses"
+    },
+    {
+      "name": "scanner-duplicated-in-consumer",
+      "_mechanism": "`extract` regrows a private fence toggle instead of consuming `_fence_events`",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_extract_has_no_fence_state_of_its_own",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_extract_has_no_fence_state_of_its_own"
+    },
+    {
+      "name": "closer-trailing-text-accepted",
+      "_mechanism": "a line whose marker run is followed by non-blank text closes the fence",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_closer_with_trailing_text_does_not_close",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_closer_with_trailing_text_does_not_close"
+    },
+    {
+      "name": "body-indent-not-stripped",
+      "_mechanism": "`extract` returns fence body lines with the opener's indentation still on them",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_indented_fence_body_is_deindented",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_indented_fence_body_is_deindented"
+    },
+    {
+      "name": "indented-opener-accepted",
+      "_mechanism": "a run preceded by 4+ spaces is treated as an opener",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_bounder_ignores_an_indented_literal_fence",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_bounder_ignores_an_indented_literal_fence"
+    },
+    {
+      "name": "prefix-state-truncated-mid-line",
+      "_mechanism": "the prefix is fed as `text[:start]` instead of whole lines through the line containing `start`, so a ```` ```trailing ```` line cut after its run reads as a closer",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_bounder_offset_after_a_marker_run_on_a_non_closing_line",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_bounder_offset_after_a_marker_run_on_a_non_closing_line"
+    },
+    {
+      "name": "prefix-fence-state-skipped",
+      "_mechanism": "`fence_aware_end` starts its fence state at `start` instead of scanning the lines before it",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_bounder_from_an_offset_inside_a_fence",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_bounder_from_an_offset_inside_a_fence"
+    },
+    {
+      "name": "backtick-in-info-accepted",
+      "_mechanism": "`_fence_events` treats a backtick-fence line whose info string contains a backtick as an opener",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_backtick_in_info_string_is_not_an_opener",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_backtick_in_info_string_is_not_an_opener"
+    },
+    {
+      "name": "tilde-fence-not-tracked",
+      "_mechanism": "`~~~` fences are not tracked, so a heading inside one ends a section and a quoted ```bash opener inside one is a candidate",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_bounder_ignores_a_heading_inside_a_tilde_fence",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_bounder_ignores_a_heading_inside_a_tilde_fence"
+    },
+    {
+      "name": "indented-closer-accepted",
+      "_mechanism": "the scanner closes a fence on a marker run preceded by four or more spaces",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_indented_closer_does_not_close",
+      "_killed_by": "tests/test_h_mad_doc_block_exec.py::test_indented_closer_does_not_close"
+    }
+  ]
+}
