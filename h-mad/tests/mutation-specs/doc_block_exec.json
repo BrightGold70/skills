@@ -730,6 +730,14 @@
       "file": "scripts/h_mad_doc_block_exec.py",
       "find": "if kind == \"intersect\":",
       "replace": "if False:"
+    },
+    {
+      "name": "alias-leftover-unreported",
+      "file": "scripts/h_mad_doc_block_exec.py",
+      "find": "                            leftover = _remove_created(path, handle) or leftover\n                    raise StreamPathsAlias(leftover)",
+      "replace": "                            try:\n                                current = os.lstat(path)\n                                if (current.st_dev, current.st_ino) != handle.reserved_identity:\n                                    leftover = path\n                                else:\n                                    os.unlink(path)\n                            except OSError:\n                                pass\n                    raise StreamPathsAlias(leftover)",
+      "test": "tests/test_h_mad_doc_block_exec.py::test_alias_refusal_unlink_failure_reports_leftover",
+      "_mechanism": "Replace only the ALIAS arm's _remove_created read-back call with its inode-guarded unlink, omitting os.path.lexists so a surviving reservation is not reported as leftover; the ROLLBACK arm retains the helper."
     }
   ]
 }
