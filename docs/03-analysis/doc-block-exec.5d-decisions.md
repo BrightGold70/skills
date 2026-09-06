@@ -726,3 +726,43 @@ them into a file whose shape is still unsettled would repeat the D10 problem one
 merge changes the first three by construction. Re-derive at the merge commit, and re-run
 `--check-anchors` plus a full harness pass on the merged file — a merged spec whose anchors resolve
 but whose rows no longer kill is the failure this feature has already met twice.
+
+### D10 — merge parts 1–3 EXECUTED at `7afc0ef`; part 4 open; one orchestrator error
+
+**Parts 1, 2 and 3 landed.** Every figure re-derived at that tree rather than carried from
+`bdc606e`, as the paragraph above requires:
+
+| what | value | how |
+|---|---|---|
+| matrix total | **90** | the design's OWN awk census over `\| mutation \| guard it removes (mechanism) \| killed by` |
+| merged spec | **60** rows, 60 distinct | `32 + 28`, intersection empty |
+| set walk | `NOT-IN-MATRIX = []`, `matrix-not-on-disk = 30`, `60 + 30 = 90` | spec `name` keys vs the table's backticked first cells |
+| control | 30 → **31** | dropped `adjacent-heading-skipped`, a member of the LEFT (on-disk) set |
+| anchors | `ANCHORS_OK specs=1 mutations=60 ok=60 drifted=0` | `--check-anchors` |
+| harness | `MUTATION: ALL_CAUGHT mutations=60 caught=60 survived=0 refused=0 unreadable=0` | full pass, scored on the summary line |
+| module suite | `98 passed` | `pytest h-mad/tests/test_h_mad_doc_block_exec.py -q` |
+| closure predicate | `0` | `ls h-mad/tests/mutation-specs/ \| grep -cE '_task[0-9]+\.json$'` |
+
+**Part 2's reconciliation, stated rather than inherited.** `doc_block_exec_task3.json` carried an
+absolute `/opt/anaconda3/bin/python3.11` in both `command` and `target_command`. Resolved to the
+bare `python3.11`: 30 of the 42 specs in `h-mad/tests/mutation-specs/` use the bare form, and it
+resolves to that same interpreter on this machine (Python 3.11.8). `collect_report.json` is the
+only remaining spec with the absolute path — pre-existing, out of this decision's scope, untouched.
+
+**Part 4 is NOT done, and nothing gates it.** The four documents still name
+`doc_block_exec_task3`. It is batched with Task 4's 30 rows so the four documents open once rather
+than twice. The pre-push hook (`h-mad/git-hooks/pre-push`) sweeps mutation ANCHORS only — it reads
+tracked JSON and scores `ANCHORS_*`, never document-cited paths — so a push with the stale
+references passes it. This paragraph is the record; there is no check.
+
+**ORCHESTRATOR ERROR in `7afc0ef`'s own message — [correction: `2717` should read `2720`].**
+The message closes with "the full h-mad suite is still 1 failed / 2717 passed". `2717` is stamped
+at `2b64747` and was written in the present tense without being re-run; the suite at `7afc0ef` is
+**`1 failed, 2720 passed in 418.58s`**. Three tests were added by the h-mad tooling commits between
+those two shas (`f67454e`, `eb79500`), so the delta is real and not a collection artefact. The
+sentence's other two claims hold: the failure is the same test
+(`test_noise_floor_on_documents_that_survived_eighty_cycles[impl-plan]`) and D3's red is the same
+figure, `assert 19 <= 12`. Species: the §PROVENANCE class — a carried figure published as a
+present-tense claim — and, like `#49e`, it reached a commit message, which is the one surface that
+cannot be edited afterwards. It is corrected here because that is the only place a correction can
+live.
