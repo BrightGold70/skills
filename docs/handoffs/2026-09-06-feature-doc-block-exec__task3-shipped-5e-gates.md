@@ -1,4 +1,4 @@
-# Handoff — doc-block-exec: Task 3 shipped and mutation-verified; the anti-gaming pass is the one 5e gate left
+# Handoff — doc-block-exec: Task 3 shipped and mutation-verified; the anti-gaming pass then found TWO unguarded properties (D9)
 
 **Date:** 2026-09-06
 **Branch:** `feature/doc-block-exec`
@@ -19,8 +19,11 @@ shipped, Tasks 3–5 owed" to **Task 3 implemented, mutation-verified, and green
 were brought into agreement. Eight commits, **all pushed**. The module suite is `96 passed`, the
 full suite `1 failed, 2715 passed` where the one failure is D3, and
 `MUTATION: ALL_CAUGHT mutations=26 caught=26 survived=0 refused=0` — every figure re-derived by the
-orchestrator rather than taken from a dispatch. **5e is NOT complete**: the anti-gaming verification
-pass has not run, and D3 remains an open operator call.
+orchestrator rather than taken from a dispatch. **5e is NOT complete, and the reason is now specific rather than procedural.** The
+anti-gaming verification pass RAN and returned BLOCKED: it confirmed all five claims it was given
+and then found **two plausible regressions that survive both the 96-test suite and the 26-row
+ALL_CAUGHT spec** — recorded as **D9**, reproduced by the orchestrator, and blocking. D3 remains a
+separate open operator call.
 
 ## Key Learnings
 
@@ -57,9 +60,12 @@ pass has not run, and D3 remains an open operator call.
 
 ## Next Steps
 
-1. **The anti-gaming verification pass** (`references/codex-verifier-prompt.md`) — the one 5e gate
-   not yet run for Task 3: module count, test-discrimination audit, quote the source line for each
-   pinned property, full suite vs the reference, every count cross-checked a second way.
+1. **Close D9** — the anti-gaming pass has RUN; this is its remedy, and 5e cannot be green first.
+   Write a discriminating test for stderr closure plus a row `stderr-not-closed`; write one for the
+   post-collect kill plus a row `kill-skipped-after-collect-failure`; and **repair
+   `test_poll_oserror_is_launch_failed_collect`'s vacuity** — its `finally` kills the group before
+   the assertion checks the group is gone, so the assertion measures its own teardown. Then re-run
+   the harness (26 → 28) and re-derive the totals in all four documents rather than incrementing.
 2. **Settle D3** (#114) before anything calls the suite green — `docs/03-analysis/doc-block-exec.5d-decisions.md` §D3,
    three remedies, none picked, and §D3 says none is the orchestrator's to pick alone. Current
    posture is remedy 3 (carry the red to 5g, one provenance bump) by default because it needs no
@@ -84,8 +90,12 @@ pass has not run, and D3 remains an open operator call.
 
 **doc-block-exec (this lane) — `repo: /Users/kimhawk/orca/skills · branch: feature/doc-block-exec · worktree: /Users/kimhawk/orca/skills`**
 
-- **Anti-gaming verify NOT run for Task 3** — the only 5e gate outstanding. The revert test and the
-  mutation harness both passed and are recorded below.
+- **D9 — OPEN, and it BLOCKS 5e.** The anti-gaming pass ran, confirmed all five claims, changed
+  nothing (`git status` byte-identical, both sides hashing `dee785ee…`), and found two guards with
+  NO discriminating test: the stderr pipe is never closed, and the kill is skipped entirely after a
+  collect failure — each leaving `96 passed`, both reproduced here. The second is a VACUOUS
+  ASSERTION rather than a missing one. **`ALL_CAUGHT` plus a green suite did not catch either**,
+  because a mutation spec only covers mechanisms someone wrote a row for, and neither has one.
 - **D3 — OPEN, and still the sole full-suite failure** (#114). `issues=19` vs a floor of 12, up from
   13 at the last handoff. It rises through Tasks 4–5 by construction: PINDRIFT means "a pin into a
   file changed since the document's provenance `0021c77`", and Phase 5 changes exactly those files.

@@ -500,3 +500,55 @@ convenient repair hides the mechanism.
 symbol, so no assertion after that point had ever executed. Task 1 surfaced 22 body defects of 46
 at its first GREEN; Task 3 surfaced **2 of 37**, and both are fixture defects rather than assertion
 defects. The prediction was right about the class and generous about the count.
+
+---
+
+## D9 — OPEN: the anti-gaming pass found TWO guards with no discriminating test
+
+**Not a decision. A finding, recorded open, and it BLOCKS 5e.**
+
+The independent verification pass (`references/codex-verifier-prompt.md`, read-only) returned
+BLOCKED. It re-derived all five claims it was given and confirmed every one — `96 passed`
+(cross-checked as 96 AST definitions and 96 unique collected nodes), 39 added tests, the 26-row
+reconciliation, the constant and guard by source, imported value AND bytecode disassembly, and the
+full suite at `1 failed, 2715 passed` with D3 as the sole failure. It changed nothing: `git status`
+byte-identical before and after, both hashing to `dee785ee…`.
+
+**Then it found two plausible regressions that survive EVERYTHING — the 96-test suite AND the
+26-row `ALL_CAUGHT` mutation spec. Both reproduced by the orchestrator:**
+
+1. **The stderr pipe is never closed.**
+   `for pipe in (proc.stdout, proc.stderr):` → `for pipe in (proc.stdout,):` → **96 passed**.
+   The verifier reports `test_timeout_drain_is_bounded_against_an_escapee` passing with the
+   recorded stderr pipe demonstrably still open.
+
+2. **The kill is skipped entirely after a collect failure.**
+   Guarding `os.killpg(...)` and `signalled = True` with `if not isinstance(pending, LaunchFailed):`
+   → **96 passed**. And the test named for exactly this seam,
+   `test_poll_oserror_is_launch_failed_collect`, **passes ALONE under the mutant** (`1 passed`).
+
+**Number 2 is the more serious, and it is a VACUOUS ASSERTION rather than a missing one.** That
+test's own `finally` kills the process group, and only then does the assertion check that the group
+is gone. The assertion therefore passes whether or not production killed anything — the teardown
+manufactures the postcondition the test claims to verify. It is the `#49`/CONTROLS-4 shape at the
+fixture level: a zero with no positive control.
+
+**Why 26 mutation rows did not catch either.** A mutation spec can only cover mechanisms someone
+wrote a row for. `ALL_CAUGHT` says every row that EXISTS is killed; it is silent about guards with
+no row, and neither of these has one. This is the standing rule — *a guard without a row is what
+the base Mutation verification invariant refuses* — firing from the direction that is hard to see:
+not a row whose killer is wrong, but a property with no row at all. **`ALL_CAUGHT` plus a green
+suite is not sufficient, and this pass is the only thing positioned to show it.**
+
+**Owed, and 5e cannot be called green until it is done:**
+- a discriminating test for stderr closure, and a mutation row `stderr-not-closed` bound to it;
+- a discriminating test for the post-collect kill, and a row `kill-skipped-after-collect-failure`;
+- **repair `test_poll_oserror_is_launch_failed_collect`'s vacuity** — it must assert the group is
+  gone BEFORE its teardown kills anything, or the assertion measures the teardown;
+- then re-run the harness, whose count moves 26 → 28, with the totals in all four documents
+  re-derived rather than incremented.
+
+**Contract note.** codex ended with `STATUS: BLOCKED — stderr-closure regression survives…`,
+appending prose to the token. `h_mad_extract_verdict.py` REFUSED it (exit 2, off-contract) and that
+is correct fail-closed behaviour: the token is a fixed vocabulary precisely so it cannot be parsed
+loosely. The concern was named beside the token as asked; only its placement broke the contract.
