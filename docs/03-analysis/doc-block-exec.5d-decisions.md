@@ -246,3 +246,192 @@ invisible until GREEN makes the import succeed, and 22 of them surfaced in the f
 first GREEN run. This is a general property of the new-module RED shape, not a fact about this
 fixture, and it belongs in the impl-plan's Conventions as a stated limit of that RED — an
 `implplan-author` revision, owed, not an orchestrator edit.
+
+---
+
+## D6 — `preamble-composed-with-unsubstituted-text` has no seam at `run_block` (Task 3, OPEN-DECISION `:2871`)
+
+**Raised by**: `docs/01-plan/features/doc-block-exec.impl-plan.audit.v50.codex.md` must 1, carried
+to the impl-plan as the first of Task 3's two `OPEN-DECISION (r19, 5d)` lines.
+
+**Premise, re-derived rather than taken.** The signature is
+`run_block(block: Block, *, preamble: str | None = None, timeout: float = 30.0) -> RunResult`
+(`docs/02-design/features/doc-block-exec.design.md:2404`,
+`docs/01-plan/features/doc-block-exec.impl-plan.md:2828`) — **one** `Block`, and the caller has
+already substituted it (`dbe.substitute(block, {...})[0]`, the form every Task 3 AC uses). Inside
+`run_block` there is therefore no `text` against which `text′` could be preferred: `block.text`
+**is** `text′`. The design's mutation table row —
+
+    | `preamble-composed-with-unsubstituted-text` | composition uses `block.text`, not `text′` | `test_preamble_and_substitution_compose` (AC-3.11) |
+
+at `design.md:4335` — describes a distinction that does not exist at the seam it is assigned to.
+The mutation as specified is a no-op, so `ALL_CAUGHT` over it would be vacuous. **Codex is right.**
+
+**The property is nonetheless real and is UNGUARDED today.** Task 4's `Mutation rows added here`
+list (impl-plan `:3379` onward) holds `subst-split-on-every-equals`, `subst-duplicate-key-last-wins`,
+`cli-empty-key-delegated`, `index-nonint-unmapped`, `timeout-nonnumeric-unmapped`,
+`preamble-decode-error-unwrapped`, `stream-reserved-with-truncation`,
+`final-write-close-not-in-finally`, `verify-deferred-past-second-write`, `final-write-not-verified`,
+`nonregular-stream-accepted`, `stream-open-blocking`, `stream-alias-check-removed`,
+`exit-partition-flipped`, `rc-leaked-into-refusal`, `field-escape-removed` and the rest — **none of
+which asks whether the value `substitute` RETURNED is the one handed on.** Withdrawing the row
+would therefore lose coverage rather than remove a duplicate, which is why this is a move and not a
+withdrawal.
+
+**Decision (orchestrator, session `22e0a5f1`, 2026-09-06): MOVE it to Task 4, and RENAME it.**
+
+    Task 4 gains: `substitution-result-not-passed-to-run_block`
+      mechanism — `main` passes the ORIGINAL block to `run_block` instead of the block
+                  `substitute` returned, so a `--subst` key reaches the child unexpanded
+      killer    — a Task 4 CLI subprocess test on the SUCCESS path that asserts the executed
+                  text carries a substituted VALUE (to be named by `implplan-author` from
+                  Task 4's own AC list; it must observe the executed text, not the refusal
+                  rendering, because the mutant only moves the success path)
+    Task 3 loses: `preamble-composed-with-unsubstituted-text`
+
+The name change is load-bearing: the old name says *preamble*, and the mechanism has nothing to do
+with the preamble — any `--subst` success-path test kills it. Moving it under the old name would
+carry the wrong mechanism to a new document.
+
+**`test_preamble_and_substitution_compose` STAYS in Task 3**, unchanged, as an AC-3.11 behavioural
+test. It stops being any mutation row's `test` key; it does not stop being a test. **Task 3's test
+count is unchanged by D6.**
+
+**Residual, stated exactly.** Two things this does not cover. (1) A **library** caller that invokes
+`run_block` directly with an unsubstituted block is guarded by nothing, here or elsewhere — that is
+the caller's own bug and lies outside this module's surface, and no mutation of this module's source
+can express it. (2) The moved row guards the CLI's **pass-through** only; it says nothing about
+whether `substitute` computes the right text, which is Task 2's rows' job and is already covered
+there.
+
+**Owed elsewhere.**
+- `design-author`: the row at `design.md:4335` is now false in all three cells — name, mechanism and
+  killer. It is a design change, not a prose repair.
+- `implplan-author`: strike the row from Task 3's `Mutation rows added here`, add the renamed row to
+  Task 4's with its killer named from Task 4's own AC list, and resolve the `OPEN-DECISION` line at
+  `:2871`.
+
+---
+
+## D7 — a timeout the platform cannot represent (Task 3, OPEN-DECISION `:2873`)
+
+**Raised by**: `docs/02-design/features/doc-block-exec.design.audit.v99.codex.md` must 1, carried
+to the impl-plan as the second of Task 3's two `OPEN-DECISION (r19, 5d)` lines.
+
+**Premise CONFIRMED — and the filed value understates the surface by five orders of magnitude.**
+Measured on the pinned interpreter `/opt/anaconda3/bin/python3.11` (3.11.8, conda-forge, darwin),
+run rather than reasoned, each arm carrying its control:
+
+- `math.isfinite(1e300)` is `True` and `1e300 > 0` is `True`, so AC-5.6's guard as written
+  (`math.isfinite(t) and t > 0`, design `:2043`) **accepts** it.
+- `Popen(["/bin/sh","-c","echo hi"], …).communicate(timeout=1e300)` raises
+  `OverflowError: timestamp too large to convert to C _PyTime_t`. It is **not** an `OSError` and
+  **not** a `ValueError` — it **is** an `ArithmeticError`. The design's error mapping names none of
+  those, so the traceback escapes the helper.
+- **The boundary is nowhere near `1e300`.** `1e8` already refuses, with a *different* message,
+  `OverflowError: timeout is too large`. The filed premise's `1e300` is true and is not the edge.
+- **The exact pair**: `2147483.647` is **accepted**; `2147483.648` is **refused**
+  (`timeout is too large`). A tight binary search over `[2147483.0, 2147485.0]` returns largest
+  accepted `2147483.6470458433`, smallest refused `2147483.647045844`.
+- `(2**31 - 1) / 1000 == 2147483.647` returns **`True`** on the same interpreter. The limit is
+  `INT_MAX` **milliseconds** — about 24.855 days — which is what makes the constant derivable rather
+  than chosen.
+- **It is not deadline-dependent.** The boundary re-measured 3 s later differs by `-1.91e-05` s,
+  i.e. search noise, not wall-clock drift. A fixed constant is therefore sound; had the limit been
+  an absolute deadline the pair test would have been flaky by construction, so this control is what
+  licenses the constant.
+- A child that genuinely waits behaves identically: `sleep 0.2; echo y` under
+  `communicate(timeout=2147483.0)` returns `('y\n', '')`.
+
+**Decision (orchestrator, session `22e0a5f1`, 2026-09-06): (a) — `BadTimeout` gains a representable
+upper bound. `OverflowError` is NOT mapped into the launch-failure path.**
+
+**Why not (b).** The `OverflowError` fires inside `communicate`, which is **after** the spawn and
+after `mkdtemp`. Mapping it downstream means launching a child and creating a directory for a bound
+already known to be unhonourable — the exact leak AC-5.6's pre-spawn rule exists to prevent, in the
+design's own words at `:2076`: *"That is why the refusal must precede the spawn"*. It would also
+have to surface as `LaunchFailed(stage="collect")`, filing a caller-input error as a fault of the
+launch.
+
+**Why (a).** A bound the platform cannot represent is a bound that cannot be honoured — the same
+category as `inf`, which AC-5.6 already refuses for that reason and no other (design `:2081`:
+*"it is finite-checked because it is no bound at all"*). The upper bound joins the existing list; it
+does not open a new one.
+
+**The change, stated as a diff.**
+
+    design.md:2043    was : `timeout` must satisfy `math.isfinite(t) and t > 0`, else `BadTimeout(value)`
+                      now : `timeout` must satisfy `math.isfinite(t) and 0 < t <= _MAX_TIMEOUT_SECONDS`,
+                            else `BadTimeout(value)`
+
+    source constant   `_MAX_TIMEOUT_SECONDS = (2**31 - 1) / 1000`   # == 2147483.647
+                      Written in THAT form, not as the literal, so the reason is visible: it is
+                      CPython's INT_MAX-milliseconds selector limit, not a chosen round number.
+
+    spec.md:577       was : `timeout` must be a finite number greater than zero: `0`, a negative
+                            value, `nan`, `inf` and a non-numeric `--shell-timeout` argument all
+                            refuse with `DOCBLOCK: BAD_TIMEOUT value="<v>"` …
+                      now : the same sentence with the upper bound added to BOTH halves — "a finite
+                            number greater than zero and no greater than `(2**31 - 1) / 1000`
+                            seconds (the platform's representable bound)", and the refusal list
+                            gaining "a value above that bound".
+
+**Test added — ONE, carrying its own control.**
+
+    test_unrepresentable_timeout_refuses_before_spawn  (AC-5.6)
+      refusal arm : timeout=2147483.648 -> BadTimeout; the recording `Popen` pass-through was
+                    never called and no directory was created (the same three assertions
+                    `test_nonpositive_timeout_refuses_before_spawn` already makes)
+      control arm : timeout=2147483.647 on a fast block (`echo hi`) RUNS normally
+                    -- this is what stops the guard degenerating into "refuse everything large",
+                    and it is the arm that fails loudly if a future interpreter moves the limit
+
+**Mutation row added to Task 3.**
+
+    `timeout-upper-bound-removed` — the `<= _MAX_TIMEOUT_SECONDS` clause is dropped, leaving
+    `math.isfinite(t) and t > 0` — killed by `test_unrepresentable_timeout_refuses_before_spawn`.
+
+It is **mutually discriminating** with the existing `timeout-validation-removed`
+(`design.md:4369`, killed by `test_nonpositive_timeout_refuses_before_spawn`): that row drops the
+WHOLE predicate, this one drops only the upper clause, and under this mutant the nonpositive test
+stays green — so neither row's killer can stand in for the other's.
+
+**Count consequence — and it must be re-derived, not carried.** Task 3's AC list holds **38**
+distinct tests at `8ae4924` (re-derived over the full AC span `2846,2869`, which includes AC-5.5's
+continuation lines `2865-2868`; the whole-section span `2688,2970` returns 40, the two extras being
+the module filename `test_h_mad_doc_block_exec` and `test_rollback_skips_unlink_on_identity_mismatch`,
+which is named outside the AC list). D7 makes it **39**, so
+`--expect-fail = 39 - 2 = 37` and `--expect-pass = 57 + 2 = 59` (57 being the module suite's
+`passed` at `8ae4924`, re-run, not carried). **Both figures are to be re-derived from the REVISED
+impl-plan before `h_mad_assemble_tdd.py` is invoked** — the +1 exists only once the revision lands,
+and the assembler's counts must match the section codex is actually handed.
+
+**Residual, stated exactly.** The constant pins CPython's `INT_MAX`-milliseconds limit **as measured
+on 3.11.8 / darwin**. On an interpreter or platform whose limit is LOWER, a value between that limit
+and this constant would still reach `communicate` and raise an unmapped `OverflowError`. That
+residual is deliberately **not** closed by adding an `except OverflowError` backstop: on the pinned
+interpreter that branch is unreachable, an unreachable branch cannot be tested or mutation-verified,
+and shipping one would be the appearance of coverage rather than coverage. It is closed the way the
+design already closes its sibling reading at `:2081` — by re-running the pair probe on any
+interpreter this feature is later supported on.
+
+**Owed elsewhere.**
+- `spec-author`: AC-5.6's wording, per the diff above.
+- `design-author`: the guard sentence at `:2043`, the `_MAX_TIMEOUT_SECONDS` constant, and the new
+  `timeout-upper-bound-removed` row in the mutation matrix (with the matrix total re-derived from
+  the table, never incremented).
+- `implplan-author`: Task 3's `Code structure` (`:2825`, `:2695`) and `:3010`, the AC-5.6 bullet at
+  `:2869`, the new mutation row, and the resolution of the `OPEN-DECISION` line at `:2873`.
+
+---
+
+## Orchestrator note on D6/D7 — two measurement corrections worth carrying
+
+1. **A filed premise's VALUE is not its BOUNDARY.** The D7 finding named `1e300`; the real edge is
+   `2147483.647`, five orders of magnitude lower and reachable by an ordinary "very large timeout".
+   The conclusion was right and the surface it described was ~10^294 times too small. Re-derive the
+   edge, not just the example.
+2. **A per-bullet `awk` over a markdown checklist scans one line per bullet.** The first count here
+   used `awk '/^- \[ \] AC-/'`, which never read AC-5.5's continuation lines `2865-2868`. Re-run
+   over the full span `sed -n '2846,2869p'` the figure is the same **38** — but the first command
+   could not have shown that, which is the point: it was a vacuous agreement, not a confirmation.
