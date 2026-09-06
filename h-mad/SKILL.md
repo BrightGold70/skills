@@ -2403,7 +2403,7 @@ halt `<phase>:report_not_collected` and print `[H-MAD] <feature> <phase> halted 
 Only the path printed on the `COLLECT: OK` line is gateable; the transport file
 is never the audit document.
 
-```bash
+```bash hmad:exec
 if ! printf '%s\n' "$COLLECT_OUT" | grep -q '^COLLECT: OK '; then
   printf '%s\n' '[H-MAD] <feature> <phase> halted reason=report_not_collected'
 else

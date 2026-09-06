@@ -266,12 +266,7 @@ def test_second_surface_gates_the_path_printed_by_collect_report() -> None:
 
 
 def _gate_block() -> dbe.Block:
-    section = _second_surface()
-    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
-    _gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
-    assert _gating, "Second surface must contain a bash block that runs the gate"
-    assert len(_gating) == 1, f"expected exactly one gating bash block, got {len(_gating)}"
-    return dbe.Block(text=_gating[0], shell="strict", lineno=0, info="hmad:exec")
+    return dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))
 
 
 def _gate_bash_block() -> str:
@@ -279,30 +274,20 @@ def _gate_bash_block() -> str:
 
 
 def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:
-    import subprocess
-
     collector = SCRIPT_DIR / "h_mad_collect_report.py"
     gate = SCRIPT_DIR / "h_mad_audit_gate.py"
     block = _gate_block()
     # the doc addresses the installed skill; point the snippet at this tree
-    subbed = dbe.Block(
-        text=block.text.replace(
-            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
-        ),
-        shell=block.shell,
-        lineno=block.lineno,
-        info=block.info,
+    subbed, _ = dbe.substitute(
+        block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))}
     )
-    # quote every interpolated path: the harness must not be the thing that
-    # breaks on whitespace, or it measures itself instead of the recipe
     q = shlex.quote
     preamble = (
         f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
         f'--feature f --phase {phase} --cycle {cycle} '
         f'--report {q(str(report))} --project-root {q(str(root))})\n'
     )
-    p = subprocess.run(["bash", "-c", preamble + subbed.text], capture_output=True, text=True, timeout=60.0)
-    return dbe.RunResult(rc=p.returncode, stdout=p.stdout, stderr=p.stderr, shell=subbed.shell)
+    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)
 
 
 def test_gate_block_resolves_through_doc_block_exec(monkeypatch) -> None:
