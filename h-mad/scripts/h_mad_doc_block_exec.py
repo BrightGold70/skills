@@ -5,8 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+import math
+import os
 import re
+import shutil
+import signal
 import subprocess
+import tempfile
 
 __all__ = [
     "DocBlockError", "DocUnreadable", "BadInfoString", "BlockNotFound",
@@ -15,6 +20,7 @@ __all__ = [
     "CleanupFailed", "LaunchFailed", "StreamPathUnwritable", "StreamPathsAlias",
     "PreambleUnreadable", "StreamWriteFailed", "StreamCloseFailed", "BadArgs",
     "Block", "extract", "select", "fence_aware_end", "find_heading", "substitute",
+    "RunResult", "run_block",
 ]
 
 
@@ -333,3 +339,127 @@ def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, 
         raise MissingSubstitution(missing)
     result = re.sub("|".join(map(re.escape, keys)), lambda m: subs[m.group(0)], text)
     return replace(block, text=result), counts
+
+
+@dataclass(frozen=True)
+class RunResult:
+    rc: int
+    stdout: str
+    stderr: str
+    shell: str
+
+
+_MAX_TIMEOUT_SECONDS = (2**31 - 1) / 1000  # CPython's INT_MAX-milliseconds selector limit.
+DRAIN_SECONDS = 5.0
+
+
+def _validate_timeout(value: object) -> float:
+    """Refuse invalid bounds before allocating a directory or launching a child."""
+    try:
+        t = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise BadTimeout(value)
+    if not (math.isfinite(t) and 0 < t <= _MAX_TIMEOUT_SECONDS):
+        raise BadTimeout(value)
+    return t
+
+
+def _compose(preamble: str | None, text: str) -> str:
+    return preamble.rstrip("\n") + "\n" + text if preamble is not None else text
+
+
+def run_block(block: Block, *, preamble: str | None = None,
+              timeout: float = 30.0) -> RunResult:
+    """Execute one bash in a private cwd, bounding recovery and verifying cleanup."""
+    timeout = _validate_timeout(timeout)
+    cwd = None
+    pending = None
+    cleanup_error = None
+
+    def record_collect(err: OSError) -> None:
+        nonlocal pending
+        if isinstance(pending, LaunchFailed):
+            # Preserve an existing collect/reap verdict and its earlier context.
+            err.__context__ = pending.__context__
+            pending.__context__ = err
+        else:
+            outcome = LaunchFailed("collect", err, pgid=proc.pid)
+            outcome.__context__ = pending
+            pending = outcome
+
+    try:
+        try:
+            cwd = tempfile.mkdtemp()
+            os.chmod(cwd, 0o700)
+        except OSError as err:
+            pending = LaunchFailed("mkdtemp", err)
+        if pending is None:
+            script = _compose(preamble, block.text)
+            try:
+                proc = subprocess.Popen(
+                    ["bash", "-euo", "pipefail", "-c", script]
+                    if block.shell == "strict" else ["bash", "-c", script],
+                    cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding="utf-8", errors="replace",
+                    start_new_session=True,
+                )
+            except (OSError, ValueError) as err:
+                pending = LaunchFailed("spawn", err)
+            else:
+                try:
+                    stdout, stderr = proc.communicate(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    pending = BlockTimeout(timeout)
+                except OSError as err:
+                    pending = LaunchFailed("collect", err, pgid=proc.pid)
+
+                if pending is not None:
+                    try:
+                        proc.poll()
+                    except OSError as err:
+                        record_collect(err)
+                    signalled = False
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                        signalled = True
+                    except ProcessLookupError:
+                        signalled = True
+                    except OSError as err:
+                        outcome = LaunchFailed("reap", err, pgid=proc.pid)
+                        outcome.__context__ = pending
+                        pending = outcome
+                    try:
+                        proc.communicate(timeout=DRAIN_SECONDS)
+                    except subprocess.TimeoutExpired:
+                        for pipe in (proc.stdout, proc.stderr):
+                            try:
+                                pipe.close()
+                            except OSError as err:
+                                record_collect(err)
+                        if signalled:
+                            try:
+                                proc.wait(timeout=DRAIN_SECONDS)
+                            except OSError as err:
+                                record_collect(err)
+                            except subprocess.TimeoutExpired as err:
+                                outcome = LaunchFailed("reap", err, pgid=proc.pid)
+                                outcome.__context__ = pending
+                                pending = outcome
+                    except OSError as err:
+                        record_collect(err)
+    finally:
+        if cwd is not None:
+            try:
+                shutil.rmtree(cwd)
+            except OSError as err:
+                cleanup_error = err
+
+    if cwd is not None and (cleanup_error is not None or os.path.lexists(cwd)):
+        err = CleanupFailed(cwd, cleanup_error)
+        if pending is not None:
+            raise err from pending
+        else:
+            raise err from cleanup_error
+    elif pending is not None:
+        raise pending
+    return RunResult(rc=proc.returncode, stdout=stdout, stderr=stderr, shell=block.shell)

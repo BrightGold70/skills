@@ -435,3 +435,68 @@ interpreter this feature is later supported on.
    used `awk '/^- \[ \] AC-/'`, which never read AC-5.5's continuation lines `2865-2868`. Re-run
    over the full span `sed -n '2846,2869p'` the figure is the same **38** — but the first command
    could not have shown that, which is the point: it was a vacuous agreement, not a confirmation.
+
+---
+
+## D8 — OPEN: Task 3 GREEN reaches 94 of 96; the two escapee tests fail in TEARDOWN
+
+**Not a decision. A finding, recorded open, owed to the next 5e dispatch.**
+
+Task 3 GREEN (`STATUS: BLOCKED`, codex, 5e) implemented the production module and returned
+**94 passed, 2 failed**. The orchestrator re-ran it and reproduced exactly that. codex REFUSED to
+go further, on the ground that the failures are in test teardown and repairing tests is outside a
+GREEN dispatch's authority. **That refusal is correct** and is the fourth time on this feature a
+codex refusal has been right.
+
+**What is established, each by a command that was run:**
+
+- `2 failed, 94 passed`, re-derived by the orchestrator, matching the dispatch's claim.
+- The two are `test_wait_after_kill_is_bounded` and `test_drain_wait_oserror_is_launch_failed_collect`
+  — **both of the escapee-fixture tests, and only those**.
+- **Deterministic, not a race**: 3 consecutive runs, `2 failed` every time.
+- **Control passes**: the two non-escapee siblings of the same helper,
+  `test_poll_oserror_is_launch_failed_collect` and `test_communicate_oserror_is_launch_failed_collect`,
+  return `2 passed`. So the defect is not in `collect_case` as such.
+- **The failing line is in the `finally:`, not the assertions.** Isolated with `--tb=long`: it is
+  `test_h_mad_doc_block_exec.py:1070`, `kill_if_present(real_killpg, proc.pid)` — the **leader's
+  process group**. Every production assertion sits in the `try:` above it and completed.
+- `kill_if_present` catches `ProcessLookupError` only. `PermissionError` (EPERM) escapes it.
+- Only `h-mad/scripts/h_mad_doc_block_exec.py` changed. No test was weakened; the dispatch reports
+  `git diff --check` clean and the orchestrator confirms the test file is untouched since the RED
+  commit `0bfcaa7`.
+
+**The obvious hypothesis is FALSIFIED, and that is the useful half.** The first reading was pid /
+pgid recycling: the leader is reaped, its pid is freed, a new group takes the number, and `killpg`
+answers EPERM because the group is no longer ours — the same shape as the `is_pid_alive` EPERM
+finding (EPERM means the target EXISTS and is not yours, never that it is gone). A standalone probe
+was written to drive that path:
+
+    /bin/sh -c "python3 esc.py PIDFILE & sleep 300"   under start_new_session
+    -> leader 76382 pgid 76382; escapee 76383 pgid 76383 (setsid gives it its own group)
+    -> killpg #1 ok; leader reaped, returncode -9
+    -> killpg #2 SIGKILL: ProcessLookupError ESRCH (3)
+    -> killpg #2 sig 0  : ProcessLookupError ESRCH (3)
+    -> escapee still alive, pgid 76383
+
+**ESRCH, which `kill_if_present` already catches — so the escapee/`setsid` arrangement alone does
+NOT produce EPERM.** The probe differs from the real fixture in one respect: it has no
+monkeypatched `Popen` and no injected `wait`/`communicate` failure. Both failing tests do, and both
+non-failing siblings differ from them precisely in the escapee. So the EPERM depends on the
+interaction of the fault-injection wrapper with the escapee fixture, and not on either alone.
+That is where the next dispatch should look, and it is as far as this session took it.
+
+**Not yet done, and none of it optional before 5e can be called green:** the wire/whole-module
+revert test, the mutation harness over Task 3's rows including the new `timeout-upper-bound-removed`,
+and the anti-gaming verification pass. None of them can run against a suite that is not green.
+
+**Do NOT repair this by widening `kill_if_present` to swallow `PermissionError`.** That converts a
+signal aimed at a process group the test no longer owns into a silent no-op, which is strictly worse
+than the failure: `killpg` on a recycled group id would then fire SIGKILL at an unrelated process
+group and report success. The repair has to establish WHY the group id is unsignalable at that
+moment and stop signalling it, not catch the symptom. This is the same shape as D5 — the
+convenient repair hides the mechanism.
+
+**Carried prediction from D5, and it held.** The RED failed exclusively on the missing `run_block`
+symbol, so no assertion after that point had ever executed. Task 1 surfaced 22 body defects of 46
+at its first GREEN; Task 3 surfaced **2 of 37**, and both are fixture defects rather than assertion
+defects. The prediction was right about the class and generous about the count.
