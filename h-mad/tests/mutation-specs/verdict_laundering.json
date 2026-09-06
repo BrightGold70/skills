@@ -44,8 +44,8 @@
       "name": "tree-delta-drops-the-pathspec",
       "_mechanism": "`git -C <subdir> status --porcelain` with no pathspec reports the whole work tree, so a clean --cd subdir is reported as changed and the caller reads work that did not happen. `-- .` is the entire guard.",
       "file": "scripts/hmad-dispatch.sh",
-      "find": "      delta=\"$(git -C \"$cd_dir\" status --porcelain -- . 2>/dev/null | grep -c . || true)\"",
-      "replace": "      delta=\"$(git -C \"$cd_dir\" status --porcelain 2>/dev/null | grep -c . || true)\"",
+      "find": "      delta=\"$(git -C \"$cd_dir\" status --porcelain -- . 2>/dev/null | grep -vc '^?? .*\\.done$' || true)\"",
+      "replace": "      delta=\"$(git -C \"$cd_dir\" status --porcelain 2>/dev/null | grep -vc '^?? .*\\.done$' || true)\"",
       "test": "tests/test_hmad_dispatch_exec.py::test_codex_tree_delta_counts_only_the_cd_subdir"
     },
     {
