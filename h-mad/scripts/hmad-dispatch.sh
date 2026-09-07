@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hmad-dispatch — substrate-agnostic agent transport for the H-MAD skill.
-# Verbs: env | resolve | launch | pin | pin-agents | send | read | wait | alive | clear | interrupt | notify | run | run-ensure | task-create | dispatch | await | gate-create | gate-resolve | gate-wait | report-wait | collect-report | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
+# Verbs: alive | ask | audit-cycle | automation-create | automation-list | automation-remove | automation-run | await | clear | collect-report | dispatch | env | exec | exec-pane | file-diff | file-open-changed | gate-create | gate-resolve | gate-wait | interrupt | launch | notify | pin | pin-agents | progress | read | report-wait | resolve | resolved-model | run | run-ensure | send | task-create | verify | wait | worktree-comment | worktree-create | worktree-current | worktree-list | worktree-ps | worktree-rm
 # Substrate: cmux (manaflow-ai/cmux) or orca (stablyai/orca). Auto-detected.
 set -euo pipefail
 
@@ -3859,13 +3859,14 @@ main() {
     automation-run) _cmd_automation_run "$@" ;;
     automation-list) _cmd_automation_list "$@" ;;
     automation-remove) _cmd_automation_remove "$@" ;;
-    -h|--help|'')
+    -h|--help)
       # Top-level help lists the verbs; each verb documents itself with `<verb> --help`
-      # where it takes options (`run` does). A bare invocation is the same question.
+      # where it takes options (`run` does). A BARE invocation stays `unknown verb ''`
+      # at exit 2 — the shim tests pin that as the location-independence probe.
       echo "usage: hmad-dispatch <verb> [options]"
       echo "verbs: env resolve verify launch pin pin-agents resolved-model send ask exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
       echo "help:  hmad-dispatch run --help"
-      [ -n "$verb" ] && return 0 || return 2 ;;
+      return 0 ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

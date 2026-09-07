@@ -148,3 +148,15 @@ def test_top_level_help_names_every_dispatched_verb(tmp_path):
     listed = set(run(["--help"], substrate="orca", env=env).stdout.split())
     missing = sorted(verbs - listed)
     assert not missing, f"verbs dispatched by main but absent from --help: {missing}"
+
+
+def test_the_header_verb_list_matches_mains_case_arms():
+    """The `# Verbs:` header was stale by 13 verbs while --help was pinned; pin both."""
+    import re
+    src = WRAPPER.read_text(encoding="utf-8")
+    main_body = src[src.index("\nmain() {"):]
+    verbs = set(re.findall(r"^\s+([a-z][a-z-]*)\)\s+_", main_body, re.MULTILINE))
+    header = src.splitlines()[2]
+    assert header.startswith("# Verbs:"), header
+    listed = {v.strip() for v in header[len("# Verbs:"):].split("|")}
+    assert listed == verbs, (sorted(verbs - listed), sorted(listed - verbs))
