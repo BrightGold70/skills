@@ -323,9 +323,12 @@ def test_control_todays_impl_plan_dropped_the_six_stale_SKILL_pins(c33_corpus):
 @pytest.mark.parametrize(
     "doc,phase",
     [
-        ("docs/02-design/features/doc-block-exec.design.md", "design"),
-        ("docs/01-plan/features/doc-block-exec.plan.md", "plan"),
-        ("docs/01-plan/features/doc-block-exec.impl-plan.md", "impl-plan"),
+        # Archived 2026-09-07 when Phase 7c was completed for this closed feature:
+        # the calibration corpus follows the documents. They are the same three
+        # that survived 80+ audit cycles, which is what the floor calibrates.
+        ("docs/archive/2026-09/doc-block-exec/doc-block-exec.design.md", "design"),
+        ("docs/archive/2026-09/doc-block-exec/doc-block-exec.plan.md", "plan"),
+        ("docs/archive/2026-09/doc-block-exec/doc-block-exec.impl-plan.md", "impl-plan"),
     ],
 )
 def test_noise_floor_on_documents_that_survived_eighty_cycles(doc, phase):
