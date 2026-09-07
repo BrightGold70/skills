@@ -17,6 +17,7 @@ SKILL_DIR = REPO_ROOT / "h-mad"
 SCRIPT = SKILL_DIR / "scripts" / "h_mad_assemble_audit.py"
 
 sys.path.insert(0, str(SKILL_DIR / "scripts"))
+import h_mad_assemble_audit as aa  # noqa: E402
 from h_mad_assemble_audit import (  # noqa: E402
     CONTRACT_SEPARATOR,
     assemble,
@@ -675,3 +676,37 @@ def test_oversize_halt_names_the_headroom(tmp_path):
     assert first.startswith("ASSEMBLE: HALT plan:oversize"), res.stdout
     assert f"headroom={DISPATCH_OVERHEAD_CHARS}" in first, first
     assert not out.exists()
+
+
+class TestAgentToolSizeTier:
+    """#100 defect B — `size_status=unverified` is a PANE figure; the Agent-tool
+    leg has its own, lower ceiling (~740 KB killed one with "Prompt is too long")
+    and nothing named that axis. The tier is a warning, never a refusal, and it
+    prints the layout so a windowed leg can be briefed by line range.
+    """
+
+    SAMPLE = ("!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!\ncontract line\n"
+              "# Design — demo\nbody\nbody\n# Spec — demo\nbody\n"
+              "# Invariants\nrule\n!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!\ntail\n")
+
+    def test_layout_names_contract_blocks_and_every_h1(self):
+        got = aa.layout(self.SAMPLE)
+        assert got == [("contract", 1, 2), ("Design — demo", 3, 5), ("Spec — demo", 6, 7),
+                       ("Invariants", 8, 9), ("contract (repeated)", 10, 11)], got
+
+    def test_below_the_tier_prints_nothing(self):
+        assert aa.size_notes(aa.AGENT_TOOL_WARN_BYTES, self.SAMPLE) == []
+
+    def test_above_the_tier_names_the_axis_and_the_layout(self):
+        notes = aa.size_notes(aa.AGENT_TOOL_WARN_BYTES + 1, self.SAMPLE)
+        assert notes and "Agent-tool" in notes[0] and "Prompt is too long" in notes[0]
+        assert any("lines 3–5: Design — demo" in n for n in notes), notes
+
+    def test_the_tier_is_the_measured_figure_not_merely_in_range(self):
+        """A range assertion holds for any value across ~950 KB, so it pins nothing.
+        The figure is the measurement: a 740 KB prompt killed an Agent-tool leg."""
+        assert aa.AGENT_TOOL_WARN_BYTES == 700 * 1024
+        assert 92_055 < aa.AGENT_TOOL_WARN_BYTES < aa.MAX_PROMPT_CHARS
+
+    def test_a_prompt_at_the_measured_kill_size_trips_the_tier(self):
+        assert aa.size_notes(740 * 1024, self.SAMPLE), "740 KB is the measured kill size"

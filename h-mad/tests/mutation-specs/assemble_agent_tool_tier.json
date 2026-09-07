@@ -1,0 +1,45 @@
+{
+  "_why": "#100 defect B: the Agent-tool leg has a lower ceiling than either CLI and nothing named that axis; the tier must fire above ~700 KB and print the layout.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_assemble_audit.py",
+    "-q",
+    "-k",
+    "AgentToolSizeTier"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "agent-tool-tier-never-fires",
+      "_mechanism": "size_status=unverified (a PANE figure) is again the only size signal; a 740 KB prompt kills an Opus leg with no warning.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "    if size > AGENT_TOOL_WARN_BYTES:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAgentToolSizeTier::test_above_the_tier_names_the_axis_and_the_layout"
+    },
+    {
+      "name": "layout-drops-the-repeated-contract",
+      "_mechanism": "The tail contract block is folded into the last document's range, so a windowed leg briefed by these ranges never sees the repeated contract.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "            starts.append((\"contract (repeated)\" if seen_contract else \"contract\", i))\n            seen_contract = True",
+      "replace": "            if not seen_contract:\n                starts.append((\"contract\", i))\n            seen_contract = True",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAgentToolSizeTier::test_layout_names_contract_blocks_and_every_h1"
+    },
+    {
+      "name": "the-tier-constant-is-raised-past-the-measured-kill-size",
+      "_mechanism": "Nothing pinned the figure, so a constant of 1 MB (or 100 KB) stayed ALL_CAUGHT-clean while the 740 KB prompt that actually killed an Agent-tool leg passed unwarned.",
+      "file": "scripts/h_mad_assemble_audit.py",
+      "find": "AGENT_TOOL_WARN_BYTES = 700 * 1024",
+      "replace": "AGENT_TOOL_WARN_BYTES = 1000 * 1024",
+      "test": "tests/test_h_mad_assemble_audit.py::TestAgentToolSizeTier::test_a_prompt_at_the_measured_kill_size_trips_the_tier"
+    }
+  ]
+}

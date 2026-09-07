@@ -245,6 +245,58 @@ def _read(path: Path, *, required: bool) -> str:
 # same figure. The assembler used to print PASS past it and say exec had no limit.
 MAX_PROMPT_CHARS = 1_048_576
 
+# The Agent-tool (in-process Opus/Sonnet) leg has a LOWER ceiling than either
+# CLI: a 740 KB assembled prompt killed one with "Prompt is too long" (measured
+# 2026-09-05 on gateway-consolidation, #100 defect B). The CLIs take it fine, so
+# this is a warning tier, not a refusal — but it names the axis the old
+# `size_status=unverified` (a PANE figure) did not, and prints the prompt's
+# layout so a windowed leg can be briefed by line range instead of by feel.
+AGENT_TOOL_WARN_BYTES = 700 * 1024
+_CONTRACT_HEAD = "!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!"
+
+
+def layout(text: str) -> list[tuple[str, int, int]]:
+    """`(label, first_line, last_line)` for each top-level region of an assembled prompt.
+
+    Regions are the two contract blocks (head and repeated tail) and every H1
+    (`# `) heading in between — which is how the inlined documents, the
+    invariants and the rubrics announce themselves. Derived from the text, not
+    from the assembler's parts, so it stays true for a prompt a caller edited.
+    """
+    lines = text.splitlines()
+    starts: list[tuple[str, int]] = []
+    seen_contract = False
+    for i, line in enumerate(lines, 1):
+        if line.startswith(_CONTRACT_HEAD):
+            starts.append(("contract (repeated)" if seen_contract else "contract", i))
+            seen_contract = True
+        elif line.startswith("# "):
+            starts.append((line[2:].strip()[:60], i))
+    out: list[tuple[str, int, int]] = []
+    for idx, (label, first) in enumerate(starts):
+        last = starts[idx + 1][1] - 1 if idx + 1 < len(starts) else len(lines)
+        out.append((label, first, last))
+    return out
+
+
+def size_notes(size: int, text: str) -> list[str]:
+    """Advisory lines to print after `ASSEMBLE: PASS`, largest concern first."""
+    notes: list[str] = []
+    if size > AGENT_TOOL_WARN_BYTES:
+        notes.append(
+            f"  ! {size / 1024:.1f} KB exceeds ~{AGENT_TOOL_WARN_BYTES // 1024} KB, the size at "
+            "which an Agent-tool (in-process Opus) leg was killed with \"Prompt is too long\" "
+            "(measured 2026-09-05 at 740 KB). Dispatch such a leg via `hmad-dispatch exec` "
+            "(codex/agy read files themselves), or brief a windowed leg with the contract "
+            "and rubric ranges below and the documents by path:"
+        )
+        regions = layout(text)
+        if not regions:
+            notes.append("    (no contract block or H1 heading found — nothing to window on)")
+        for label, first, last in regions:
+            notes.append(f"    lines {first}–{last}: {label}")
+    return notes
+
 # What `hmad-dispatch exec` appends to the assembled text before the agent sees
 # it: a newline, the `===HMAD-DISPATCH-BOUNDARY===` marker, a newline (30 chars;
 # `_dispatch_boundary` in scripts/hmad-dispatch.sh). codex counts THOSE chars
@@ -453,6 +505,8 @@ def main(argv: list[str] | None = None) -> int:
     size_status = "verified" if size <= CONFIRMED_OK else "unverified"
     print(f"ASSEMBLE: PASS {out} {size}B ({size / 1024:.1f} KB) "
           f"sentinel={sentinel} size_status={size_status}")
+    for note in size_notes(size, text):
+        print(note)
     if size > CONFIRMED_OK:
         print(f"  ! {size / 1024:.1f} KB exceeds the largest prompt confirmed answered "
               f"on the pane path ({CONFIRMED_OK / 1024:.1f} KB) — unverified there, not "
