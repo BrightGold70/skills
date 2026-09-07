@@ -60,6 +60,41 @@ confirmed absent by probing the tree. One measurement note for the next reader: 
 of this reconciliation grepped `h-mad/bin/hmad-dispatch.sh` — the script is under `scripts/` — and a
 wrong-path zero reads exactly like "already landed".
 
+**Reconcile of 2026-09-07 evening — a SAME-DAY re-check, and the finding is that a same-day label is
+not a current one.** The morning pass above ran at `d61dd93` **08:30**; twenty of that session's
+twenty-one commits landed after it, through **19:31**. So every `RE-CHECKED 2026-09-07` note in this
+file was written before the day's work existed, and one of them had already gone stale by nine hours:
+`a delta-self-review verb` was re-checked "still open" at 08:30 and `e7b97db` shipped its mechanical
+half at **17:51**. **The generalisable trap is that a date is not a timestamp** — a row stamped with
+today's date reads as current to the next reader and to a `grep` for the date, and there is no signal
+that the tree moved twenty commits underneath it. Re-checks in this file now carry the time.
+All 19 open `yes` rows were re-probed against the tree at `5a6ad11`: **18 confirmed still open**
+(`h_mad_ac_census.py` absent and no `ACS:` token anywhere under `h-mad/`; no `probe)` arm in
+`hmad-dispatch.sh`; no lockfile or `MUTATION: BUSY` in the mutation harness; `h_mad_assemble_tdd.py`
+still carries no `Node`; the mutation harness still discovers specs by `glob("*.json")` at `:470` and
+`git-hooks/pre-push` still greps no markdown; the live-shape rule still unwritten in `SKILL.md`,
+`invariants.base.md` or `references/`), and **one changed status in part** — see the row itself.
+Two adjacency notes, recorded so the next reader does not read them as closures: `h_mad_adoption_check.py`
+(#11/H5) checks shared SENTENCES across sibling documents and is **not** the live-run check that
+`check for a live run before merging a shared skill change` asks for; and `#142`'s parked-mutation-spec
+gate in `h_mad_phase7_preconditions.py` is a *precondition* on one spec, **not** the completeness
+check `a closure check that the archive is COMPLETE` asks for (that row's incident was 6 of 641 files
+moved by copy). **The census read `candidates=196 OPEN(yes+maybe)=35 yes=19 maybe=16 LANDED=81
+DECLINED=36 no=36 SUPERSEDED=7 done=1` at reconcile time (coverage 202/202); this same scout then
+appended 5 new rows, so the live count is `candidates=201 OPEN=40 yes=23 maybe=17`** (coverage
+207/207) — stated both ways because the reconcile number and the post-append number are different
+questions and a reader who cites the wrong one is off by five. Note the open count ROSE 32 → 35 before
+the append: the day closed nothing and opened three, which is the honest shape of a session that
+shipped five gates and found six more gaps. **One defect found in this pass by the census rather than
+by reading**: the note on `a delta-self-review verb` was first written as `**SUPERSEDED IN PART**`,
+and `TERM` matches a terminal marker ANYWHERE in a row — so a note whose own words said "stays open"
+moved the row into the closed set (`SUPERSEDED` 7→8, `yes` 22 not 23). Prose qualifying a terminal
+marker does not reach the parser. Never put `LANDED`/`SUPERSEDED`/`DECLINED` in bold in a row you mean
+to leave open, and re-run the census after editing a row — the delta in the counts is the check. **A hand-parse of this
+file was attempted three times the same day and disagreed with itself every time** (51 flat
+occurrences / 45 in-row / 44 rows; open reading 16 or 18 depending only on whether the terminal marker
+must be bold) — all three were wrong, the census reads 19. Ask the census.
+
 **Triage of 2026-08-25 — `DECLINED` here also means "not codable".** Every open row was sorted into
 useful/codable, useful/NOT-codable, or not-useful, and the two non-actionable buckets were closed with
 `DECLINED`, each note naming its bucket and its reason. Read those carefully: for a useful/not-codable
@@ -1444,11 +1479,23 @@ individually re-verified this pass; that is stated rather than left implied.
   this branch's newest handoff names its branch predecessor AND two taken-over briefs in one
   `**Supersedes:**` line, which is the shape the row said was unreachable.
 - **a delta-self-review verb (`audit-cycle --delta` or equivalent)**: dispatched by hand six times across two rounds on 2026-09-04/05, identical shape each time — one `doc-auditor` per phase, ADVISORY, subject `git show <sha> -- <doc>` plus the reports that diff answered, reports named OUTSIDE the audit filename grammar so they cannot join the codex-leg ledger. Found fix-introduced musts in 3 of 3 passes at roughly a quarter of a gating round's cost. The naming constraint is the part a verb should enforce rather than leave to the caller. `candidate: yes`
-  — **RE-CHECKED 2026-09-07 (scout): still open.** `audit-cycle` takes `--phase` and `--passes` only
-  (`hmad-dispatch.sh:2969-2980`, with `_unknown_opt audit-cycle` as the fallthrough); there is no
+  — **RE-CHECKED 2026-09-07 08:30 (scout): still open.** `audit-cycle` takes `--phase` and `--passes`
+  only (`hmad-dispatch.sh:2969-2980`, with `_unknown_opt audit-cycle` as the fallthrough); there is no
   `--delta`. Every `delta` hit in the wrapper is `text_delta` or `tree delta`. Still six-plus hand
   dispatches per round, and the report-naming constraint the row wanted enforced is still the
   caller's to remember.
+  — **PARTLY MET, STAYS OPEN — and the line above is the reason this note exists: `e7b97db` landed at
+  17:51, NINE HOURS after the 08:30 re-check that called this open, so the evidence above is stale
+  rather than wrong-at-the-time.** The row's "or equivalent" is met for the mechanical half:
+  `h-mad/scripts/h_mad_delta_review.py` (#11/H4) re-executes the claims a revision ADDS and emits
+  `DELTA: CLEAN|CLAIMS|UNREADABLE claims=N executed=E unverified=U`, prescribed as a step at
+  `h-mad/SKILL.md:1284` §"Run the delta self-review as a SCRIPT before re-dispatching" and registered
+  at `:2664`. **Stays open for two halves the script deliberately does not cover**, and they are not
+  the same instrument: H4 checks *claims* mechanically, whereas this row asked to automate a
+  `doc-auditor` **dispatch** per phase — so a run of H4 does not answer what a delta auditor answers.
+  Second, the naming constraint is still the caller's: there is no `audit-cycle --delta` arm
+  (re-verified at `5a6ad11`) and nothing forces a delta report OUT of the audit filename grammar, so
+  it can still join the codex-leg ledger it was meant to stay out of.
 
 - **assembler HALTs on a prompt no surface can accept, and trims Version History with `--vh-tail N`**: candidate: yes · recurrence: 2 real prompts refused by codex (`input_too_large`, 1,123,643 / 1,053,882 chars) while `ASSEMBLE: PASS` was printed and the advisory said "no limit via exec" · VH was ~36% of each doc, embedded for target AND siblings
   — **LANDED 2026-09-05** at `af19d53`: `h_mad_assemble_audit.py --vh-tail N`, `MAX_PROMPT_CHARS=1048576`, `ASSEMBLE: HALT <phase>:oversize`; 5 tests, suite 2552. Owed: SKILL.md 5.5 mention.
@@ -1529,3 +1576,60 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   trying the CLI with hostile inputs. Already doctrine in memory
   (`feedback_fresh_reviewer_on_a_green_batch`); a row here so the recurrence is countable.
   Recurrence: 2 — candidate: maybe.
+
+## 2026-09-07 — hmad-fold-and-takeover-mode
+
+- **grep the ENFORCEMENT, not the rule**: five h-mad rules that were correct, measured, argued from
+  evidence and written down existed only as prose, each one skippable — the two-consecutive-clean
+  streak, the suite gate, the leg set, the author REPORT contract, and the document-audit round cap.
+  All five shipped as code in one session (`e54f920`, `a90c365`, `9a31357`, `96fca5f`/`6e1554a`,
+  `85fe94a`). The pattern is not carelessness: writing the rule *feels* like shipping it, and nothing
+  distinguishes a §section that a script executes from one that only asks — recurrence: 5 in one
+  session — candidate: yes — mechanical shape, and it is cheap because the gates already announce
+  themselves: every enforced h-mad gate emits a verdict token (`EXIT:`, `DELTA:`, `INTEGRATE:`,
+  `PRECHECK:`, `MUTATION:`), so a lint can list each `SKILL.md` section whose text states a gate
+  (MUST / refuses / blocks / never) and report the ones with no token and no script reference in the
+  §. Output is a list to triage, not a block — some rules are correctly doctrine-only (H8 is, by
+  decision). Deliberately NOT "every imperative sentence needs a script": that fires on the whole
+  document, which is the noise floor `calibrate a new detector against artifacts that already passed`
+  already measured at 104/49/48 hits.
+- **a positional shell arg in a skill body is REWRITTEN before the agent sees it**: the
+  slash-command renderer substitutes the invocation's argument into `$1`, so a documented command
+  containing one silently does something else — and the rendered text gives the reader no signal.
+  Measured twice on ONE line of `handoff/SKILL.md`: it reached the agent as `…": "read}` under
+  `/handoff read` and `…": "takeover}` under `/handoff takeover`, while the file on disk held awk's
+  whole-record variable, so the command printed the ARGUMENT instead of the matching line — recurrence:
+  2 (one line, two invocations) — candidate: yes — fully mechanical and a one-pass lint: flag `$1`,
+  `$2`, `$@`, `$*` inside fenced blocks in any `SKILL.md` reachable as a slash command. The fix is
+  already known and applied (rewrite as a heredoc'd python block), so this is a guard against
+  regression rather than a design question. Severe out of proportion to its size: the failure is a
+  documented command that runs and returns a plausible wrong answer.
+- **a fixture that is distinct BY CONSTRUCTION cannot express the collision it guards**: `exit_check`
+  certified a two-cycle clean streak from **one cycle's two legs**, and neither the 2936-test suite
+  nor a purpose-written field tracer could see it — both used fixtures that were distinct cycles by
+  construction (`v1.gated.json`/`v2.gated.json`, and v43/v44). The gate counts DISTINCT cycles; no
+  fixture ever handed it two stamps that collide on the discriminating key, so the property under
+  test was never exercised — recurrence: 1 (systemic: the same shape hid the defect from two
+  independent instruments) — candidate: yes — mechanical: for any gate that counts distinct things,
+  require at least one fixture whose entries COLLIDE on the discriminating key, and assert the gate
+  says so. Adjacent to the LANDED `mutation-test-every-guard` (which stubs the guard) and to
+  `fix-the-fixture-not-just-the-assertion`, but neither asks the question this one does — whether the
+  fixture set can *represent* the failure at all.
+- **a mutation that can never fire reads as a passing battery**: six rows this session SURVIVED or
+  were REFUSED for reasons that were properties of the SPEC, not of the code — the assertion named
+  the *topic* rather than the prescription; the mutation was aimed at a line that never carried the
+  property; `shlex.split` meant a canary for an executed redirect could never fire; and one mutant's
+  replacement text contained the phrase the assertion greps for (`names no feature`), so the mutated
+  tree still matched — recurrence: 6 — candidate: yes — two of the four are a pure spec lint needing
+  no execution: refuse a mutation whose `find` string occurs in its own `replace` text (self-matching,
+  can never be detected by a grep-shaped assertion), and refuse a `find` that does not occur in the
+  named file at all. The other two need the run. `-s` on a file read is an optimisation, not a guard,
+  and this row is the reason to say so in the spec schema rather than in a session's memory.
+- **a count is comparable only at the same COLLECTION ROOT**: the handoff suite read **155** from the
+  repo root and **295** from `handoff/` — same commit, same tree, two numbers, because the root-level
+  run never collects `handoff/scripts/`, where a real test lives. A floor or a regression check
+  written against one of those numbers is silently measuring a different population than the reader
+  assumes — recurrence: 1 — candidate: maybe — the mechanical half is small (a doc lint requiring any
+  published pytest count to name the directory it was run from) but the general rule is already
+  doctrine in `measurement-discipline.md`, so this may be one sentence added to the existing
+  §"same commit, corpus and grammar" — the ROOT axis is the part that section does not currently name.
