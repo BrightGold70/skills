@@ -23,6 +23,7 @@ different sets, and 0 when the file ran alone.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -190,7 +191,10 @@ class TestTheStampCarriesTheSuite:
 
 class TestTheExitGateIsWhatRefuses:
     def _stamp(self, tmp_path: Path, name: str, verdict: str, suite) -> Path:
-        p = tmp_path / name
+        # REAL grammar (see test_h_mad_audit_leg_set_gate.py): a cycle emits one
+        # stamp per leg, and `vN.gated.json` cannot express that.
+        n = re.match(r"v(\d+)\.gated\.json$", name)
+        p = tmp_path / (f"f.design.audit.v{n.group(1)}.codex.md.gated.json" if n else name)
         p.write_text(json.dumps({"verdict": verdict, "files": {}, "suite": suite}),
                      encoding="utf-8")
         return p
@@ -205,7 +209,7 @@ class TestTheExitGateIsWhatRefuses:
     def test_a_red_suite_in_either_cycle_blocks(self, tmp_path: Path) -> None:
         a = self._stamp(tmp_path, "v1.gated.json", "PASS", "PASS")
         b = self._stamp(tmp_path, "v2.gated.json", "PASS", "FAIL")
-        assert "BLOCKED reason=suite_fail:v2.gated.json" in token(
+        assert "BLOCKED reason=suite_fail:f.design.audit.v2.codex.md.gated.json" in token(
             run("x", "--exit-check", str(a), str(b)).stdout, "EXIT:")
 
     def test_an_unmeasured_suite_blocks_too(self, tmp_path: Path) -> None:

@@ -1,5 +1,5 @@
 {
-  "_why": "#91: the audit gate had no execution path, so a repo test enforcing the audit loop's own invariant stayed red for 95 cycles while every cycle scored clean. Each row restores one way the suite result can be lost, softened, or read as a pass it never was — and the two that matter most are the ones where SILENCE becomes green.",
+  "_why": "#91: the audit gate had no execution path, so a repo test enforcing the audit loop's own invariant stayed red for 95 cycles while every cycle scored clean. Each row restores one way the suite result can be lost, softened, or read as a pass it never was \u2014 and the two that matter most are the ones where SILENCE becomes green.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -25,10 +25,10 @@
     },
     {
       "name": "an-unmeasured-cycle-may-close-the-exit-gate",
-      "_mechanism": "Silence passes at the streak instead of at the stamp — the same hole reached from the other side.",
+      "_mechanism": "Silence passes at the streak instead of at the stamp \u2014 the same hole reached from the other side.",
       "file": "scripts/h_mad_audit_gate.py",
-      "find": "        if suite is None:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
-      "replace": "        if False:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
+      "find": "            if suite is None:\n                return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
+      "replace": "            if False:\n                return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
       "test": "tests/test_h_mad_audit_suite_gate.py::TestTheExitGateIsWhatRefuses::test_an_unmeasured_suite_blocks_too"
     },
     {
@@ -73,7 +73,7 @@
     },
     {
       "name": "the-suite-result-is-woven-into-the-GATE-line",
-      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fourth field there makes EVERY verdict un-parse — the reason GATE-CLASS is its own line too.",
+      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fourth field there makes EVERY verdict un-parse \u2014 the reason GATE-CLASS is its own line too.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "    print(f\"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped}\")",
       "replace": "    print(f\"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped} suite={suite}\")",

@@ -29,6 +29,7 @@ keeps it from becoming prose an orchestrator can skip.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -124,7 +125,10 @@ class TestTheStampCarriesTheLegSet:
 class TestTheExitGateRefusesAChangedLegSet:
     def _stamp(self, tmp_path: Path, name: str, legs, verdict: str = "PASS",
                suite: str = "PASS") -> Path:
-        p = tmp_path / name
+        # REAL grammar, not `v1.gated.json`: the tidy fixture is exactly what let a
+        # same-cycle leg pair read as a two-cycle streak for as long as it did.
+        n = re.match(r"v(\d+)\.gated\.json$", name)
+        p = tmp_path / (f"f.design.audit.v{n.group(1)}.codex.md.gated.json" if n else name)
         payload = {"verdict": verdict, "files": {}, "suite": suite}
         if legs is not None:
             payload["legs"] = legs
@@ -213,3 +217,100 @@ class TestDocumented:
     def test_the_skill_names_the_leg_set_flag(self) -> None:
         text = (SCRIPTS.parent / "SKILL.md").read_text(encoding="utf-8")
         assert "--legs" in text
+
+
+class TestAStreakIsTwoCyclesNotTwoStamps:
+    """A cycle emits one stamp PER LEG, so "the last two stamps" is not "two cycles".
+
+    Measured 2026-09-07 on real archived artifacts: of 17 cycles carrying stamps,
+    **8 have two**, and same-cycle legs sort ADJACENTLY, so a glob feeds
+    `--exit-check` two legs of ONE cycle. Executed against the shipped gate, the
+    pair `doc-block-exec.design.audit.v20.codex` + `…v20.p1` returned
+    `EXIT: READY … legs=agy+codex` — the exit gate certified a two-consecutive-
+    clean-cycle streak from a single cycle.
+
+    H3 made it read WORSE rather than catching it: both legs of one cycle carry the
+    same declared leg set, so the leg check passes and lends false confidence.
+
+    Neither existing gate could see this. The offline fixtures were named
+    `v1.gated.json` / `v2.gated.json` — synthetic, distinct-by-construction — and
+    the field tracer used v43 and v44, distinct by construction too. Tidy fixtures
+    hiding a defect class, which is why the fixtures below carry the REAL grammar.
+    """
+
+    def _stamp(self, tmp_path: Path, feature: str, phase: str, cycle: int, leg: str,
+               legs=("agy", "codex"), verdict: str = "PASS", suite: str = "PASS") -> Path:
+        p = tmp_path / f"{feature}.{phase}.audit.v{cycle}.{leg}.md.gated.json"
+        payload = {"verdict": verdict, "files": {}, "suite": suite}
+        if legs is not None:
+            payload["legs"] = list(legs)
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        return p
+
+    def test_two_legs_of_ONE_cycle_are_not_a_streak(self, tmp_path: Path) -> None:
+        """THE defect, reproduced from the real archived pair."""
+        a = self._stamp(tmp_path, "doc-block-exec", "design", 20, "codex")
+        b = self._stamp(tmp_path, "doc-block-exec", "design", 20, "p1")
+        line = token(run("x", "--exit-check", str(a), str(b)).stdout, "EXIT:")
+        assert "BLOCKED" in line
+        assert "not_two_cycles:1" in line
+
+    def test_two_distinct_cycles_are_a_streak(self, tmp_path: Path) -> None:
+        a = self._stamp(tmp_path, "doc-block-exec", "design", 20, "codex")
+        b = self._stamp(tmp_path, "doc-block-exec", "design", 21, "codex")
+        out = run("x", "--exit-check", str(a), str(b))
+        assert out.returncode == 0
+        assert "READY" in token(out.stdout, "EXIT:")
+
+    def test_every_leg_of_a_counted_cycle_must_be_clean(self, tmp_path: Path) -> None:
+        """One dirty leg makes the whole cycle dirty — a cycle is not clean per-leg."""
+        a = self._stamp(tmp_path, "f", "design", 20, "codex")
+        b = self._stamp(tmp_path, "f", "design", 21, "codex")
+        self._stamp(tmp_path, "f", "design", 21, "p1", verdict="FAIL")
+        line = token(run("x", "--exit-check", str(a), str(b),
+                         str(tmp_path / "f.design.audit.v21.p1.md.gated.json")).stdout, "EXIT:")
+        assert "BLOCKED" in line and "not_clean" in line
+
+    def test_a_red_suite_on_any_leg_of_a_cycle_blocks(self, tmp_path: Path) -> None:
+        a = self._stamp(tmp_path, "f", "design", 20, "codex")
+        b = self._stamp(tmp_path, "f", "design", 21, "codex")
+        c = self._stamp(tmp_path, "f", "design", 21, "p1", suite="FAIL")
+        assert "suite_fail" in token(
+            run("x", "--exit-check", str(a), str(b), str(c)).stdout, "EXIT:")
+
+    def test_a_name_outside_the_grammar_is_UNREADABLE_never_a_pass(self, tmp_path: Path) -> None:
+        """Fail closed: a stamp whose cycle cannot be established is a cannot-judge.
+
+        `A.json` is exactly what the 2026-09-07 field tracer wrote, and it is why
+        that run could not have caught this.
+        """
+        a = self._stamp(tmp_path, "f", "design", 20, "codex")
+        b = tmp_path / "A.json"
+        b.write_text(json.dumps({"verdict": "PASS", "files": {}, "suite": "PASS",
+                                 "legs": ["agy", "codex"]}), encoding="utf-8")
+        result = run("x", "--exit-check", str(a), str(b))
+        assert result.returncode == 2
+        assert "UNREADABLE" in token(result.stdout, "EXIT:")
+
+    def test_impl_plan_parses_as_one_phase_not_plan(self, tmp_path: Path) -> None:
+        """`impl-plan` must win the alternation, or the feature absorbs `impl`."""
+        a = self._stamp(tmp_path, "f", "impl-plan", 20, "codex")
+        b = self._stamp(tmp_path, "f", "impl-plan", 21, "codex")
+        assert "READY" in token(run("x", "--exit-check", str(a), str(b)).stdout, "EXIT:")
+
+    def test_the_two_NEWEST_cycles_count_not_the_first_two(self, tmp_path: Path) -> None:
+        """v9 vs v10 must order numerically; lexically `v10` sorts before `v9`."""
+        self._stamp(tmp_path, "f", "design", 8, "codex", verdict="FAIL")
+        a = self._stamp(tmp_path, "f", "design", 9, "codex")
+        b = self._stamp(tmp_path, "f", "design", 10, "codex")
+        old = tmp_path / "f.design.audit.v8.codex.md.gated.json"
+        assert "READY" in token(
+            run("x", "--exit-check", str(old), str(a), str(b)).stdout, "EXIT:")
+
+    def test_legs_must_agree_across_the_legs_of_one_cycle(self, tmp_path: Path) -> None:
+        """Two stamps of one cycle declaring different leg sets is a cannot-judge."""
+        self._stamp(tmp_path, "f", "design", 20, "codex")
+        self._stamp(tmp_path, "f", "design", 21, "codex", legs=("agy", "codex"))
+        self._stamp(tmp_path, "f", "design", 21, "p1", legs=("codex",))
+        out = run("x", "--exit-check", *[str(p) for p in sorted(tmp_path.glob("*.gated.json"))])
+        assert "legs_disagree" in token(out.stdout, "EXIT:")

@@ -106,3 +106,41 @@ that `h_mad_audit_gate.py` names as the reason 91 cycles ran with a red suite. `
 invokes the gate at `:627` and passes none of them, so a cycle driven through the driver still records
 `suite: null` and no leg set, and its exit gate is refused for `suite_unmeasured`. This run removed
 the *does-it-work* risk and left the *will-anyone-pass-it* risk untouched.
+
+---
+
+## Follow-up, same day: the tracer's own blind spot
+
+Wiring the flags into `h_mad_audit_cycle.py` was the next step, and reading that driver surfaced a
+defect the tracer above could not have found.
+
+A cycle emits **one stamp per leg**, and `exit_check` took `stamps[-2:]`. Over the real archive: 25
+stamps, **17 distinct cycles, 8 of them carrying two stamps**, and same-cycle legs sort *adjacently*.
+So a glob hands the gate two legs of one cycle. Executed against the then-shipped gate on the real
+pair:
+
+```
+EXIT: READY cycles=doc-block-exec.design.audit.v20.codex.md.gated.json,
+                   doc-block-exec.design.audit.v20.p1.md.gated.json   legs=agy+codex   rc=0
+```
+
+Both stamps are cycle **v20**. The exit gate certified a two-consecutive-clean-cycle streak from a
+single cycle — #91's central promise inverted. H3 made it read *worse* rather than catching it: two
+legs of one cycle carry the same declared leg set, so the leg check passed and lent confidence.
+
+**Why neither gate saw it, and why that is the lesson.** The offline suite's fixtures were named
+`v1.gated.json` / `v2.gated.json` — distinct cycles *by construction*. The tracer above used v43 and
+v44 — distinct *by construction*. Both instruments were built around the happy path they were meant
+to test, so a pass proved only that the designed-for case works. Tidy fixtures hiding a defect class.
+The fixtures now carry the real filename grammar, which is what makes them able to express the
+failure at all.
+
+Fixed: cycle identity derived from the stamp name, ordered numerically, every leg of a counted cycle
+required clean with a green suite, legs of one cycle required to agree, and a name outside the
+grammar returning `EXIT: UNREADABLE reason=stamp_name:<name>` rather than a pass. Verified on the
+same real artifacts — the v20 pair now returns `BLOCKED reason=not_two_cycles:1`, while the genuine
+v43/v44 pair still returns `READY`.
+
+One consequence for the run recorded above: it fed `--exit-check` two copies named `A.json` and
+`B.json`, which are outside the grammar and now correctly return `UNREADABLE`. Re-run against the
+conforming names, the same pair still reports `READY legs=agy+codex`.

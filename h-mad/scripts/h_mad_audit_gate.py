@@ -459,6 +459,38 @@ def stamp_path(audit_file: Path) -> Path:
     return audit_file.with_name(audit_file.name + STAMP_SUFFIX)
 
 
+# The alternation order does NOT matter here, though it looks like it should: the
+# feature group is non-greedy and the alternation is tried at a position fixed by
+# the preceding `\.`, so `plan` cannot match inside `impl-plan`. Measured both
+# orders on `doc-block.impl-plan.audit.v20.codex.md.gated.json` — identical parse.
+# `impl-plan` is listed first anyway, for readers who expect the longest-first rule
+# that WOULD be load-bearing if the group were greedy or unanchored.
+_STAMP_NAME_RE = re.compile(
+    r"^(?P<feature>.+?)\.(?P<phase>impl-plan|design|plan)\.audit\.v(?P<cycle>\d+)"
+    r"\.(?P<leg>[^.]+)\.md" + re.escape(STAMP_SUFFIX) + r"$"
+)
+
+
+def cycle_of(stamp: Path) -> tuple[str, str, int] | None:
+    """`(feature, phase, cycle)` from a stamp's name, or None if it is not in the grammar.
+
+    A cycle emits one stamp PER LEG, so "the last two stamps" is not "two cycles".
+    Measured 2026-09-07 over the real archive: of 17 cycles carrying stamps, **8
+    have two**, and same-cycle legs sort ADJACENTLY — so a glob hands `exit_check`
+    two legs of ONE cycle. Executed against the shipped gate, the real pair
+    `doc-block-exec.design.audit.v20.codex` + `…v20.p1` returned `EXIT: READY`:
+    the exit gate certified a two-consecutive-clean-cycle streak from one cycle.
+
+    None is a CANNOT-JUDGE and its caller must refuse, never pass. A stamp whose
+    cycle cannot be established could be a second leg of a cycle already counted,
+    and treating it as its own cycle is the defect this closes.
+    """
+    m = _STAMP_NAME_RE.match(stamp.name)
+    if m is None:
+        return None
+    return m.group("feature"), m.group("phase"), int(m.group("cycle"))
+
+
 def _leg_key(legs) -> list[str]:
     """The comparable form of a leg set: sorted, deduped, whitespace-stripped.
 
@@ -502,25 +534,50 @@ def exit_check(stamps: list[Path]) -> dict:
     line, and `GATE-LEGS: unrecorded` at stamp time — because not-blocking and
     not-saying are different things, and only the second turns H3 back into prose.
     """
-    if len(stamps) < 2:
-        return {"verdict": "BLOCKED", "reason": f"not_two_cycles:{len(stamps)}"}
-    considered = stamps[-2:]
+    # Group by CYCLE first: a cycle emits one stamp per leg, so counting stamps
+    # counts legs. Fail closed on a name outside the grammar — an unplaceable
+    # stamp may be a second leg of a cycle already counted.
+    grouped: dict[tuple[str, str, int], list[Path]] = {}
+    for path in stamps:
+        key = cycle_of(path)
+        if key is None:
+            return {"verdict": "UNREADABLE", "reason": f"stamp_name:{path.name}"}
+        grouped.setdefault(key, []).append(path)
+
+    # Numeric on the cycle number, never lexical: `v10` sorts before `v9` as text,
+    # which would silently consider the wrong pair.
+    order = sorted(grouped, key=lambda k: (k[0], k[1], k[2]))
+    if len(order) < 2:
+        return {"verdict": "BLOCKED", "reason": f"not_two_cycles:{len(order)}"}
+    considered_keys = order[-2:]
+    considered = [grouped[k][0] for k in considered_keys]
+
     leg_sets: list[list[str] | None] = []
-    for path in considered:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            return {"verdict": "UNREADABLE",
-                    "reason": f"stamp:{exc.__class__.__name__.lower()}:{path.name}"}
-        if data.get("verdict") != "PASS":
-            return {"verdict": "BLOCKED", "reason": f"not_clean:{path.name}"}
-        suite = data.get("suite")
-        if suite is None:
-            return {"verdict": "BLOCKED", "reason": f"suite_unmeasured:{path.name}"}
-        if suite != "PASS":
-            return {"verdict": "BLOCKED", "reason": f"suite_{suite.lower()}:{path.name}"}
-        recorded = data.get("legs")
-        leg_sets.append(None if recorded is None else _leg_key(recorded))
+    for key in considered_keys:
+        # EVERY leg of a counted cycle must be clean — a cycle is not clean per-leg.
+        cycle_legs: list[list[str] | None] = []
+        for path in sorted(grouped[key]):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                return {"verdict": "UNREADABLE",
+                        "reason": f"stamp:{exc.__class__.__name__.lower()}:{path.name}"}
+            if data.get("verdict") != "PASS":
+                return {"verdict": "BLOCKED", "reason": f"not_clean:{path.name}"}
+            suite = data.get("suite")
+            if suite is None:
+                return {"verdict": "BLOCKED", "reason": f"suite_unmeasured:{path.name}"}
+            if suite != "PASS":
+                return {"verdict": "BLOCKED", "reason": f"suite_{suite.lower()}:{path.name}"}
+            recorded = data.get("legs")
+            cycle_legs.append(None if recorded is None else _leg_key(recorded))
+        # The legs of one cycle must agree about what that cycle ran. Disagreement
+        # is a cannot-judge, not a set to pick a winner from.
+        distinct = {tuple(v) if v is not None else None for v in cycle_legs}
+        if len(distinct) > 1:
+            return {"verdict": "BLOCKED",
+                    "reason": f"legs_disagree:{key[1]}.v{key[2]}"}
+        leg_sets.append(cycle_legs[0])
 
     # Compared only when BOTH cycles recorded one: a mismatch against a cycle
     # that recorded nothing is not a mismatch, it is a cannot-judge.
@@ -625,13 +682,29 @@ def main(argv: list[str] | None = None) -> int:
             # an unknown leg set is still a fact the reader needs (#11/H3).
             line += f" legs={'+'.join(result['legs']) if result.get('legs') else 'unrecorded'}"
         print(line)
-        if result["verdict"] == "BLOCKED":
-            if str(result.get("reason", "")).startswith("legs_changed"):
+        reason = str(result.get("reason", ""))
+        if result["verdict"] == "UNREADABLE" and reason.startswith("stamp_name"):
+            print("  that stamp's name is outside the audit grammar "
+                  "(`<feature>.<phase>.audit.v<N>.<leg>.md.gated.json`), so which CYCLE "
+                  "it belongs to cannot be established — and an unplaceable stamp may be "
+                  "a second leg of a cycle already counted. A cannot-judge, never a pass.")
+        elif result["verdict"] == "BLOCKED":
+            if reason.startswith("legs_changed"):
                 print("  the two cycles ran different reviewer legs, so the streak "
                       "measures two different questions. Σmust tracked the leg count "
                       "on #18 and the exit was reset four times by legs, never "
                       "approached by the documents (#11/H3). Run two cycles under "
                       "the new set — that IS the new baseline.")
+            elif reason.startswith("legs_disagree"):
+                print("  two legs of the SAME cycle disagree about which legs that cycle "
+                      "ran. There is no winner to pick between them — re-stamp the cycle "
+                      "with one leg set (#11/H3).")
+            elif reason.startswith("not_two_cycles"):
+                print("  a streak is two CYCLES, not two stamps — a cycle emits one stamp "
+                      "per leg. Measured 2026-09-07: 8 of 17 archived cycles carry two "
+                      "stamps, they sort adjacently, and the real pair "
+                      "`design.audit.v20.codex`+`…v20.p1` returned READY before this. "
+                      "Gate another cycle, do not add another leg.")
             else:
                 print("  a cycle whose suite was red or unmeasured cannot close the exit "
                       "gate; the per-cycle verdicts are untouched (#91).")

@@ -1,5 +1,5 @@
 {
-  "_why": "#11/H3: on HemaSuite #18 the exit streak was reset four times by legs being added and never once approached by the documents — zero at c99 when measured and still zero at c104 — while Sigma-must tracked the LEG COUNT. Each row restores one way a streak can close over two cycles that asked DIFFERENT questions, plus the two ways the calibration can invert: refusing an unrecorded leg set (a false hard fail on every pre-H3 stamp) and letting order or duplication read as a change.",
+  "_why": "#11/H3: on HemaSuite #18 the exit streak was reset four times by legs being added and never once approached by the documents \u2014 zero at c99 when measured and still zero at c104 \u2014 while Sigma-must tracked the LEG COUNT. Each row restores one way a streak can close over two cycles that asked DIFFERENT questions, plus the two ways the calibration can invert: refusing an unrecorded leg set (a false hard fail on every pre-H3 stamp) and letting order or duplication read as a change.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -17,7 +17,7 @@
   "mutations": [
     {
       "name": "a-changed-leg-set-no-longer-blocks-the-exit",
-      "_mechanism": "THE defect: the streak closes over two cycles that ran different legs, which is c92 (doc-auditor+crossdoc added) and c97 (codex returning) exactly — the reset nobody was counting.",
+      "_mechanism": "THE defect: the streak closes over two cycles that ran different legs, which is c92 (doc-auditor+crossdoc added) and c97 (codex returning) exactly \u2014 the reset nobody was counting.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "        if first != second:",
       "replace": "        if False:",
@@ -25,7 +25,7 @@
     },
     {
       "name": "an-unrecorded-leg-set-blocks-the-exit",
-      "_mechanism": "The calibration inverted: a hard fail fires on every stamp written before the field existed. This is the 104/49/48 error (docs/learnings.md:77) — a detector that refuses artifacts which legitimately passed. Not-blocking is the assertion here, so it gets a row. The named test is the MIXED pair, not the both-unrecorded one: two unrecorded cycles compare equal even with the guard removed, so that pair leaves the mutant alive and the battery reports it caught by the wrong assertion.",
+      "_mechanism": "The calibration inverted: a hard fail fires on every stamp written before the field existed. This is the 104/49/48 error (docs/learnings.md:77) \u2014 a detector that refuses artifacts which legitimately passed. Not-blocking is the assertion here, so it gets a row. The named test is the MIXED pair, not the both-unrecorded one: two unrecorded cycles compare equal even with the guard removed, so that pair leaves the mutant alive and the battery reports it caught by the wrong assertion.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "    if first is not None and second is not None:",
       "replace": "    if True:",
@@ -33,7 +33,7 @@
     },
     {
       "name": "the-leg-set-is-recorded-unnormalised",
-      "_mechanism": "Order and duplication become leg-set changes, so the gate refuses a streak for the order the orchestrator typed its flags in — a block with no defect behind it, which is how a gate gets switched off.",
+      "_mechanism": "Order and duplication become leg-set changes, so the gate refuses a streak for the order the orchestrator typed its flags in \u2014 a block with no defect behind it, which is how a gate gets switched off.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "    return sorted({str(name).strip() for name in legs if str(name).strip()})",
       "replace": "    return [str(name) for name in legs]",
@@ -41,7 +41,7 @@
     },
     {
       "name": "an-unnamed-leg-set-is-stamped-as-an-empty-list",
-      "_mechanism": "`[]` CLAIMS the cycle ran zero legs, so two unnamed cycles compare equal and close the exit gate on a set nobody declared — silence reaching green through the comparison instead of around it.",
+      "_mechanism": "`[]` CLAIMS the cycle ran zero legs, so two unnamed cycles compare equal and close the exit gate on a set nobody declared \u2014 silence reaching green through the comparison instead of around it.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "        legs = _leg_key(args.legs) or None",
       "replace": "        legs = _leg_key(args.legs)",
@@ -49,7 +49,7 @@
     },
     {
       "name": "the-unrecorded-leg-set-is-not-reported-at-stamp-time",
-      "_mechanism": "The nudge disappears from the point of use and survives only at the exit gate, so H3 degrades into prose an orchestrator can skip — the failure mode h_mad_audit_gate.py:466 names for the streak rule itself.",
+      "_mechanism": "The nudge disappears from the point of use and survives only at the exit gate, so H3 degrades into prose an orchestrator can skip \u2014 the failure mode h_mad_audit_gate.py:466 names for the streak rule itself.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "    if legs_line is not None:\n        print(f\"GATE-LEGS: {legs_line}\")",
       "replace": "    if False:\n        print(f\"GATE-LEGS: {legs_line}\")",
@@ -65,7 +65,7 @@
     },
     {
       "name": "the-leg-set-is-woven-into-the-GATE-line",
-      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fifth field on line 1 makes EVERY verdict un-parse — the same reason GATE-CLASS and SUITE are their own lines.",
+      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fifth field on line 1 makes EVERY verdict un-parse \u2014 the same reason GATE-CLASS and SUITE are their own lines.",
       "file": "scripts/h_mad_audit_gate.py",
       "find": "        stamped = f\" gated={len(files)}\"\n        # Deferred, not printed here",
       "replace": "        stamped = f\" gated={len(files)} legs={legs}\"\n        # Deferred, not printed here",
@@ -75,9 +75,49 @@
       "name": "the-leg-set-outranks-the-red-suite",
       "_mechanism": "#91's refusal softened by the one added beside it: a cycle with a red suite but a matching leg set would report legs_changed=no and close. The suite check must still run first, per stamp, before anything is compared.",
       "file": "scripts/h_mad_audit_gate.py",
-      "find": "        if suite != \"PASS\":\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
-      "replace": "        if False:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
+      "find": "            if suite != \"PASS\":\n                return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
+      "replace": "            if False:\n                return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
       "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheExitGateRefusesAChangedLegSet::test_a_red_suite_still_outranks_the_leg_set"
+    },
+    {
+      "name": "a-streak-counts-stamps-again-not-cycles",
+      "_mechanism": "THE new defect: two legs of ONE cycle sort adjacently and read as a two-cycle streak. Reproduced on the real archive \u2014 design.audit.v20.codex + v20.p1 returned EXIT: READY against the shipped gate.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    order = sorted(grouped, key=lambda k: (k[0], k[1], k[2]))",
+      "replace": "    order = sorted(grouped, key=lambda k: (k[0], k[1], k[2]))\n    order = order + order",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_two_legs_of_ONE_cycle_are_not_a_streak"
+    },
+    {
+      "name": "an-unplaceable-stamp-name-is-let-through",
+      "_mechanism": "Fail-open on cycle identity: a stamp whose cycle cannot be established is counted as its own cycle, so any two files close the gate. This is what the 2026-09-07 field tracer's A.json/B.json would have done.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if key is None:\n            return {\"verdict\": \"UNREADABLE\", \"reason\": f\"stamp_name:{path.name}\"}",
+      "replace": "        if key is None:\n            key = (path.name, \"\", 0)",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_a_name_outside_the_grammar_is_UNREADABLE_never_a_pass"
+    },
+    {
+      "name": "cycles-are-ordered-lexically-not-numerically",
+      "_mechanism": "`v10` sorts before `v9` as text, so the gate considers the wrong pair and a stale failing cycle can be skipped over or a fresh clean one ignored.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    order = sorted(grouped, key=lambda k: (k[0], k[1], k[2]))",
+      "replace": "    order = sorted(grouped, key=lambda k: (k[0], k[1], str(k[2])))",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_the_two_NEWEST_cycles_count_not_the_first_two"
+    },
+    {
+      "name": "only-the-first-leg-of-a-cycle-is-scored",
+      "_mechanism": "A cycle with one clean leg and one dirty leg counts as clean \u2014 the per-leg reading of a rule that is about cycles.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        for path in sorted(grouped[key]):",
+      "replace": "        for path in sorted(grouped[key])[:1]:",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_every_leg_of_a_counted_cycle_must_be_clean"
+    },
+    {
+      "name": "legs-disagreeing-within-one-cycle-picks-a-winner",
+      "_mechanism": "Two legs of one cycle claiming different leg sets is a cannot-judge; silently taking the first makes the H3 comparison depend on filename order.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if len(distinct) > 1:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_legs_must_agree_across_the_legs_of_one_cycle"
     }
   ]
 }
