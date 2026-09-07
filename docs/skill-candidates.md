@@ -1498,3 +1498,34 @@ individually re-verified this pass; that is stated rather than left implied.
 Reconciliation pass only — this session is a handoff READ, a claim, and this scout. No new pattern
 recurred, so no candidate is appended; fabricating one to make the section look worked is the defect
 this file's own header warns about. The 21 `yes` rows re-verified above are the output.
+
+## 2026-09-07 — tooling-backlog-drained-7f-and-91 (scout)
+
+Reconciled first: the census reads `OPEN(yes+maybe)=32` (17 `yes`, 15 `maybe`) over 193 candidates,
+and **no `yes` row landed this session**. Two were *followed* rather than shipped —
+`calibrate a new detector against artifacts that already passed` (:1417) was obeyed twice, for the
+widened `_RATE` and for the parked-spec detector, and `a measured value must carry the commit it was
+measured at` (:1376) for every figure in the handoff — but obeying a doctrine row is not landing it,
+and flipping one on that basis is how this file's statuses decayed before. They stay open.
+
+- **a tree lock around the mutation harness**: a mutation run and a pytest run over one working tree
+  measure each other. This session launched a spec while still editing the files it anchors into, and
+  the harness returned `REFUSED` for an anchor that was fine — a verdict about my own torn tree, not
+  about the code, and indistinguishable from a real drift at the token. The harness already restores
+  the tree on every path, so it knows when it holds it; a lockfile that refuses a second run (and a
+  loud `MUTATION: BUSY holder=<pid>`) turns a silent wrong measurement into a wait. Recurrence: 1 —
+  candidate: yes — severe, because the failure mode is a *plausible* verdict rather than an error.
+- **a closure check that the archive is COMPLETE**: Phase 7c is `mv docs/…/<feature>*`, but for
+  doc-block-exec it had moved **6 of 641** files — by copy, leaving the originals live. A merged
+  feature's impl-plan therefore stayed in the working population and kept gating live code, and an
+  unrelated tooling commit shifting three of its line-pins turned the suite red weeks later. The
+  check is one command (`ls docs/0*/**/<feature>.*` after 7c) and the fix is mechanical; the reason it
+  was never noticed is that nothing reads the archive for completeness. Recurrence: 1 —
+  candidate: yes.
+- **a fresh-context review of a batch that is already green**: two rounds this session returned
+  **12 and 19 findings** on trees where the suite, the mutations and the anchors were all clean —
+  three CRITICAL, and two of those caused by the *previous* round's fixes. The reviewer's leverage is
+  not finding what tests miss; it is reading each file's own stated doctrine against the change and
+  trying the CLI with hostile inputs. Already doctrine in memory
+  (`feedback_fresh_reviewer_on_a_green_batch`); a row here so the recurrence is countable.
+  Recurrence: 2 — candidate: maybe.
