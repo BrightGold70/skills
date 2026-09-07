@@ -1686,6 +1686,41 @@ Three rules that make the cap safe rather than a shortcut:
 3. **The cap counts rounds, not cycles.** A round is one assembled prompt per changed document at
    one freeze; reopens inside a round and the delta review do not count. Two rounds means: batch →
    gate → batch → gate → exit.
+4. **The cap forbids a third GATING ROUND, not a final corrective revision — and an
+   `OPEN-DECISION` is only ever a DECISION.** This is the reading; the section said "the phase
+   EXITS whatever the verdict" and did not say which of the two it meant, and the two prescribe
+   opposite actions on the same finding.
+
+   A corrective revision after the second gate is permitted and is **not** a third round, provided
+   all three hold: it is **not re-audited** (no assembled prompt, no dispatch, no new gate stamp);
+   it fixes **only findings the two rounds already filed** — a fix that discovers something new is
+   a new finding for Phase 5, not a licence to keep editing; and every fix is **mechanically
+   checkable**, so the delta self-review can confirm it rather than a reviewer re-reading prose.
+   Run §"Delta self-review" over that revision — it is advisory and costs a quarter of a round.
+
+   **What may become an `OPEN-DECISION`, and what may not.** The exit terms send an open
+   build-class must to its impl-plan Task as `OPEN-DECISION: <finding> — resolve in 5d`, and the
+   premise underneath that is explicit: *a wrong choice is a RED failure that costs minutes*. That
+   premise requires a choice to exist. So:
+
+   **Name an implementation that satisfies the criterion. If you cannot name one, it is not an
+   open decision — it is a defect, and it is fixed by the corrective revision above.** A criterion
+   no implementation can satisfy does not produce a decision 5d can settle; it produces a RED that
+   no branch can clear, which arrives in Phase 5 as a blocked task rather than a minutes-long test
+   failure. The whole argument for the cap is that Phase 5 is the *better* gate — that argument
+   does not extend to handing Phase 5 something it provably cannot pass.
+
+   Measured, and this is the case that forced the rule: `#18` Phase 5b cycle 2 filed a must where a
+   revision had moved a mutation count 88 → 94 while Task 25's AC-7.5d still required **88** rows
+   against a document enumerating **94**. Shipping that as an `OPEN-DECISION` would have been a
+   misreading of the cap — there is no implementation of "94 rows" that satisfies "requires 88".
+   (Re-probed 2026-09-07: the lane fixed it rather than deferring it, and at impl-plan v1.76 the AC
+   requires 101 rows against exactly 101 enumerated ids. The rule is written from a case that was
+   decided correctly by hand, not from a live failure.)
+
+   The same shape as the vacuous-criterion rule in `invariants.base.md` §"Test discrimination":
+   there, name the observation that differs between the implemented and unimplemented states; here,
+   name the implementation that satisfies the criterion. Both fail closed on "I cannot name one".
 
 The cap does not license skipping the class rule, the precheck, the delta review or the freeze; it
 bounds how many times they run on one revision line.

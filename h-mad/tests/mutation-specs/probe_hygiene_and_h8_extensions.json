@@ -1,8 +1,19 @@
 {
   "_why": "#11/H8 extensions plus the author-side probe rule. All three close classes that a GREEN run and a passing audit both report as fine: a probe left executable at a repo root is collected by a suite it was never written for; a criterion that returns the same observation in both states is scored as caught by the very mutation battery that should kill it; and a count contract three sections away from the edit is missed by an internal-consistency check that is, correctly, internally consistent. Each row restores one of those silences.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_agent_definitions.py", "-q"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_agent_definitions.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "design-author-is-no-longer-told-to-delete-its-probe",
@@ -67,6 +78,38 @@
       "find": "The failure mode to recognise: **an internal-consistency check cannot find this class**, because\nthe enumeration really is consistent.",
       "replace": "Check the numbers carefully.",
       "test": "tests/test_h_mad_agent_definitions.py::test_self_counting_screens_cover_contracts_stated_elsewhere"
+    },
+    {
+      "name": "the-cap-goes-back-to-not-saying-which-reading-it-means",
+      "_mechanism": "Restores the ambiguity exactly: 'the phase EXITS whatever the verdict' with no statement of whether that forbids a third GATING ROUND or all further editing. The two readings prescribe OPPOSITE actions on the same finding -- fix it now, or defer it to 5d -- and the section carried that ambiguity while a live lane was standing on it.",
+      "file": "SKILL.md",
+      "find": "4. **The cap forbids a third GATING ROUND, not a final corrective revision — and an\n   `OPEN-DECISION` is only ever a DECISION.**",
+      "replace": "4. **Use judgement about what the cap permits.**",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_cap_says_which_reading_it_means"
+    },
+    {
+      "name": "a-corrective-revision-stops-being-bounded",
+      "_mechanism": "Without the three conditions, 'not a third round' is a loophole rather than a rule: an unbounded post-cap edit that is never re-audited is strictly worse than a third gating round, because it ships unreviewed. The no-new-findings condition is the load-bearing one -- a fix that discovers something new is Phase 5's input, not a licence to keep editing.",
+      "file": "SKILL.md",
+      "find": "it is **not re-audited**",
+      "replace": "it is reasonable in scope",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_cap_says_which_reading_it_means"
+    },
+    {
+      "name": "an-unsatisfiable-criterion-may-ship-as-an-OPEN-DECISION",
+      "_mechanism": "Deletes the discriminator. OPEN-DECISION's premise is that a wrong choice is a RED failure costing minutes -- which requires a choice to EXIST. A criterion no implementation satisfies produces a RED no branch can clear: Phase 5 receives a blocked task, not a fast test failure. The measured case is the 88-vs-94 AC, which was fixed by hand rather than deferred; losing this sentence is what would have made deferring it look correct.",
+      "file": "SKILL.md",
+      "find": "**Name an implementation that satisfies the criterion. If you cannot name one, it is not an\n   open decision — it is a defect, and it is fixed by the corrective revision above.**",
+      "replace": "Use care when writing an `OPEN-DECISION`.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_an_open_decision_must_be_an_actual_decision"
+    },
+    {
+      "name": "the-rule-loses-the-re-probe-that-says-it-is-not-a-live-failure",
+      "_mechanism": "The parenthetical records that the lane FIXED the 88-vs-94 AC rather than deferring it, and that at v1.76 the criterion is consistent at 101/101. Without it the rule reads as written from a live failure, when it was written from a case decided correctly by hand -- a different and weaker evidentiary claim, and exactly the kind of carried premise this repo re-probes before acting on.",
+      "file": "SKILL.md",
+      "find": "at impl-plan v1.76 the AC\n   requires 101 rows against exactly 101 enumerated ids.",
+      "replace": "the lane has since moved on.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_an_open_decision_must_be_an_actual_decision"
     }
   ]
 }

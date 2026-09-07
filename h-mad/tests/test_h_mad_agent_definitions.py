@@ -230,3 +230,37 @@ def test_self_counting_screens_cover_contracts_stated_elsewhere() -> None:
     assert "must include contracts stated ELSEWHERE in the document" in body
     assert "an internal-consistency check cannot find this class" in body
     assert "AC-7.5d still required 88" in body
+
+
+# --- the two-round cap's exit terms (#11/H2): which of the two readings ---
+
+def test_the_cap_says_which_reading_it_means() -> None:
+    """The section prescribed "the phase EXITS whatever the verdict" and did not
+    say whether that forbids a third GATING ROUND or all further editing. The two
+    readings prescribe opposite actions on the same finding."""
+    body = _norm(SKILL)
+    assert "The cap forbids a third GATING ROUND, not a final corrective revision" in body
+    # The three conditions are what make "not a third round" checkable rather than
+    # a loophole: no re-audit, no new findings, mechanically checkable fixes.
+    assert "it is **not re-audited**" in body
+    assert "it fixes **only findings the two rounds already filed**" in body
+    # `_norm` joins on whitespace, so only the COLLAPSED spelling can ever match.
+    # An earlier version of this assertion offered a `\n`-containing alternative as
+    # an `or` branch; that branch is unreachable by construction, and a disjunction
+    # with a dead half hides which spelling the rule actually has.
+    assert "every fix is **mechanically checkable**" in body
+
+
+def test_an_open_decision_must_be_an_actual_decision() -> None:
+    """`OPEN-DECISION`'s premise is "a wrong choice is a RED failure that costs
+    minutes" — which requires a choice to exist. An unsatisfiable criterion
+    produces a RED no branch can clear, i.e. a blocked Phase-5 task."""
+    body = _norm(SKILL)
+    assert ("Name an implementation that satisfies the criterion. If you cannot name one, "
+            "it is not an open decision") in body
+    assert "it is a defect, and it is fixed by the corrective revision" in body
+    # The measured case must stay attached, and so must the re-probe that found it
+    # already resolved — a rule written from a live failure and a rule written from
+    # a case decided correctly by hand are different claims.
+    assert "AC-7.5d still required **88** rows against a document enumerating **94**" in body
+    assert "impl-plan v1.76 the AC requires 101 rows" in body
