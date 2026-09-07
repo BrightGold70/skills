@@ -1646,3 +1646,37 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   published pytest count to name the directory it was run from) but the general rule is already
   doctrine in `measurement-discipline.md`, so this may be one sentence added to the existing
   §"same commit, corpus and grammar" — the ROOT axis is the part that section does not currently name.
+
+## 2026-09-07 — h7-origin-tagging
+
+- **a data fixture floods the delta self-review with claims that are not the revision's**:
+  running `h_mad_delta_review.py --rev 4fd01b3` over the commit that shipped H7
+  returned `claims=19 executed=4 unverified=15` — and **every one of the 19 came from the 152-line
+  JSONL fixture** the commit adds, not from a single line the author wrote. The spans are backticked
+  fragments inside other people's finding text (`except pydantic.ValidationError as exc`,
+  `grep -o 'git log -S'`), so they are command-SHAPED by construction while being data. Scoping with
+  `--path` to the four authored files returns `claims=2`, both the column name `origins tagged`.
+  H4's existing filter is about shape (a verb plus an argument) and cannot see this, because these
+  really are commands — they are just quoted evidence rather than claims the revision makes —
+  recurrence: 1 — candidate: yes — mechanical and narrow: skip added lines that are wholly inside a
+  file the commit ADDS whose every line parses as JSON, or more generally treat a fixture/corpus path
+  as data rather than prose. `--path` is a workaround the caller must remember, and H4's own row
+  (`a delta-self-review verb`) already records that a constraint left to the caller is the half that
+  does not hold. Severity is the ordinary one for this family: an alert that is 19/19 noise on a
+  commit that adds a corpus gets ignored on the commit where it matters.
+- **a wrapped bold row name is not a row, and COVERAGE cannot see it**: `ROW` is
+  `^- \*\*(.+?)\*\*`, so a row whose bolded name wraps before its closing `**` is not matched — it is
+  not counted, not censused, and never appears in any open/terminal bucket. Hit while filing the row
+  above: it was appended, `git diff` showed 18 inserted lines, and the census read `candidates=201`
+  both before and after. **The COVERAGE line cannot catch this**, because `row-shaped` is computed
+  with the same single-line regex, so a wrapped row is absent from BOTH sides and the ratio stays a
+  reassuring `207/207`. That is precisely the failure the census docstring says it exists to prevent
+  ("an unsupported shape reads as an empty backlog"), surviving inside the instrument built against
+  it — recurrence: 3 (the row above, plus **two pre-existing rows already in this file**, at the
+  `.result.terminal.handle` J1 row and the `handover_landed.py` row, which no census run has ever
+  counted) — candidate: yes — two mechanical halves, and the second is the one that matters:
+  (a) match a row name across a wrap by scanning to the closing `**` rather than to end-of-line;
+  (b) make COVERAGE count `^- \*\*` openers independently of `ROW`, so the two numbers can DISAGREE.
+  A coverage metric derived from the same pattern as the thing it audits can only ever report
+  agreement with itself. Do NOT reflow the two rows as the fix — that hides the defect and leaves the
+  next wrapped row equally invisible.

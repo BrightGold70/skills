@@ -272,3 +272,38 @@ class TestAgainstTheRealCorpus:
         assert sorted(per_cycle) == [98, 99, 100, 101, 102, 103]
         assert per_cycle[98]["fix-introduced"] == 3
         assert per_cycle[103]["fix-introduced"] == 9
+
+
+class TestTheDocumentedFlagsActuallyRun:
+    """`--per-cycle` and `--cell` are prescribed in SKILL.md §H7.
+
+    Both are documented commands, and a documented command that silently does the
+    wrong thing is worse than no command at all — this repo has the measurement:
+    a positional shell arg in a skill body was rewritten by the renderer and printed
+    the argument instead of the matching line, invisible in the rendered text. These
+    are smoke tests over the CLI, not guards, so they carry no mutation row; they
+    exist so the flags cannot be documented and broken at the same time.
+    """
+
+    def test_per_cycle_prints_a_line_per_cycle(self, capsys):
+        rc = origins.main(["--sidecar", str(PROTOTYPE), "summary", "--per-cycle"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "cycle 98: n=12 fix-introduced=3" in out
+        assert "cycle 103: n=14 fix-introduced=9" in out
+        assert out.count("  cycle ") == 6
+
+    def test_cell_prints_pasteable_ledger_rows(self, capsys):
+        rc = origins.main(["--sidecar", str(PROTOTYPE), "summary", "--cell"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "| 98 |" in out
+        assert "3 fix-introduced" in out
+
+    def test_the_summary_line_carries_the_headline_share(self, capsys):
+        origins.main(["--sidecar", str(PROTOTYPE), "summary"])
+        out = capsys.readouterr().out
+        assert "ORIGINS: OK n=152" in out
+        assert "fix-introduced=51/152 (33.6%)" in out, (
+            "the share and its denominator are the finding; a bare percentage here "
+            "is the H8 class this instrument is meant to help measure")
