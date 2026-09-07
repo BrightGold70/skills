@@ -220,9 +220,15 @@ def main(argv: list[str] | None = None) -> int:
         and value == "DONE_WITH_CONCERNS"
         and not concern_stated(scrape)
     ):
+        # The remedy names the SHAPE (#152): a report that stated its doubt in
+        # running prose with no `Concerns:` label is rejected here too, and an
+        # error that only says "names no concern" sends the operator to re-read
+        # a report that plainly has one.
         print(
             "ERROR: STATUS: DONE_WITH_CONCERNS but the report names no concern "
-            "— re-dispatch, or have the agent report DONE",
+            "under a `Concerns:` / `Concern:` / `Blockers:` label line (a concern "
+            "stated only in prose is not parsed) — re-dispatch with the label, "
+            "or have the agent report DONE",
             file=sys.stderr,
         )
         return 2

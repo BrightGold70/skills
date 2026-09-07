@@ -85,13 +85,7 @@ Do NOT flag:
 - "Could be better" refactors that aren't load-bearing
 - Issues already present in the codebase before this feature
 
-## Report Format (REQUIRED — orchestrator parses this)
-
-Emit a final line in this exact format:
-
-```
-ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>
-```
+## What each verdict means
 
 If READY_TO_MERGE: confirm no Critical issues. Orchestrator advances to Phase 6a (inline gap analysis).
 
@@ -103,3 +97,18 @@ If WITH_FIXES or NO: list Critical + Important issues with:
 The orchestrator halts with `step6a-prime:architectural_review_failed` and surfaces findings. Operator either fixes and re-runs, or authors `.archreview.override.md` with justifications + commits `[archreview-override]` to bypass.
 
 Do NOT issue OVERRIDE prompts. Use only `view_file` for code inspection.
+
+## Report Format (REQUIRED — orchestrator parses this)
+
+Write your findings first. Then the **very last line of your reply** must be the verdict line,
+alone on its own line, with nothing after it — no closing sentence, no signature, no blank
+summary, no code fence around it. The orchestrator reads the LAST line that begins with
+`ASSESSMENT:` and refuses a reply that has none; a reply whose verdict is buried mid-text, or that
+ends with anything else, is re-dispatched at the cost of a full cycle. Three real dispatches
+omitted this line entirely while writing fluent prose above it.
+
+The line is exactly one of these three, and nothing else:
+
+```
+ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>
+```

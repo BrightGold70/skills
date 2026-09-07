@@ -96,15 +96,6 @@ one quoted source line per stated property; full-suite numbers vs the reference;
 discrepancy. Do NOT weaken, delete, or loosen any assertion; no skip/xfail. If a suite fails, report
 it — do not repair and re-run silently.
 
-End with exactly one line, nothing after it:
-
-```
-STATUS: DONE
-```
-or `STATUS: DONE_WITH_CONCERNS` (name at least one specific concern — a contentless one is rejected)
-or `STATUS: BLOCKED` (a property was false, or a suite failed — give the specific blocker)
-or `STATUS: NEEDS_CONTEXT` (a reference or path was missing).
-
 ## Report file (preferred delivery under Orca)
 
 <REPORT_FILE_PATH>
@@ -112,3 +103,21 @@ or `STATUS: NEEDS_CONTEXT` (a reference or path was missing).
 If a path appears above, your **final two actions** are: (1) write your full report there — the same
 `STATUS: <value>` line and summary; then (2) create the marker `<that-path>.done`. The coordinator
 reads the file, not your terminal. If the path is empty, print your `STATUS:` line to the terminal.
+
+## The last line
+
+The **very last line of your reply** (and of the report file) is the STATUS line: alone on its own
+line, with nothing after it — no closing sentence, no signature, no code fence around it. The
+orchestrator reads the LAST line that begins with `STATUS:` and refuses a reply that has none; a
+verdict buried mid-report, or a reply that ends with anything else, costs a full re-dispatch (#153).
+
+- `STATUS: DONE` — every pinned property held and the suite numbers match the reference.
+- `STATUS: DONE_WITH_CONCERNS` — name at least one specific concern under a `Concerns:` label line above
+  the STATUS line; the parser keys on that label, and a concern stated only in running prose is
+  rejected as contentless (#152).
+- `STATUS: BLOCKED` — a property was false, or a suite failed; give the specific blocker.
+- `STATUS: NEEDS_CONTEXT` — a reference or path was missing.
+
+```
+STATUS: <DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT>
+```

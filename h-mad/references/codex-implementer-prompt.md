@@ -106,17 +106,11 @@ Before reporting status, re-read the task description and verify:
 
 ## Report Format (REQUIRED — orchestrator parses this)
 
-Emit a final line in this exact format:
-
-```
-STATUS: <DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT>
-```
-
-Followed by:
+Your report carries, in this order:
 - Files changed (paths)
 - pytest output (last 10 lines)
 - Self-review findings (if any)
-- Concerns / blockers / context needed (if any)
+- `Concerns:` / blockers / context needed (if any) — in the shape below
 
 The orchestrator parses the STATUS line. Anything else is human-readable. Use `DONE` only when tests are GREEN AND self-review found no issues; use `DONE_WITH_CONCERNS` when work is complete but you have doubts; use `BLOCKED` when you cannot complete (provide the specific blocker); use `NEEDS_CONTEXT` when you need information that wasn't provided.
 
@@ -129,3 +123,20 @@ and that concern must be specific. If the work is complete and there is no
 concern to name, report `DONE`
 instead. The orchestrator will reject a contentless `DONE_WITH_CONCERNS` report,
 so this is a required reporting rule rather than optional advice.
+
+**The shape the orchestrator parses:** state each concern under a line that begins with the
+label `Concerns:` (or `Concern:` / `Blockers:`), either on that line after the colon or as the
+first non-blank line below it. The parser keys on that label; a concern stated only in running
+prose — "the timeout path is not exercised" three paragraphs up, with no label — is invisible to
+it and the report is rejected as contentless (#152). `Concerns: none` is the same as no concern.
+
+### The last line
+
+The **very last line of your reply** is the STATUS line: alone on its own line, with nothing
+after it — no closing sentence, no signature, no code fence around it. The orchestrator reads the
+LAST line that begins with `STATUS:` and refuses a reply that has none; a verdict buried mid-report,
+or a reply that ends with anything else, costs a full re-dispatch (#153). It is exactly one of:
+
+```
+STATUS: <DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT>
+```

@@ -313,3 +313,47 @@ class TestCli:
             capture_output=True, text=True,
         )
         assert r.returncode == 2
+
+
+class TestTheConcernShapeIsSpelled:
+    """#152 — the extractor refused a DONE_WITH_CONCERNS whose concern was in prose.
+
+    The refusal is right (the parser keys on a label), but neither codex prompt said
+    so and the error message did not either, so the agent could not have complied
+    and the operator could not tell why a report with a visible concern was
+    "contentless". Both prompts and the error now spell the label.
+    """
+
+    REFS = Path(__file__).resolve().parents[1] / "references"
+
+    def test_prose_only_concern_is_still_rejected_and_the_error_names_the_label(self, tmp_path):
+        scrape = tmp_path / "out.txt"
+        scrape.write_text(
+            "Work is complete. I am not sure the timeout path is exercised by the\n"
+            "wire test, which worries me.\n\nSTATUS: DONE_WITH_CONCERNS\n",
+            encoding="utf-8",
+        )
+        r = subprocess.run([sys.executable, str(SCRIPT), str(scrape), "--key", "STATUS"],
+                           capture_output=True, text=True)
+        assert r.returncode == 2
+        assert "Concerns:" in r.stderr, r.stderr
+
+    def test_a_labelled_concern_is_accepted(self, tmp_path):
+        scrape = tmp_path / "out.txt"
+        scrape.write_text(
+            "Work is complete.\n\nConcerns: the timeout path is not exercised by the wire test.\n"
+            "\nSTATUS: DONE_WITH_CONCERNS\n",
+            encoding="utf-8",
+        )
+        r = subprocess.run([sys.executable, str(SCRIPT), str(scrape), "--key", "STATUS"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == "STATUS: DONE_WITH_CONCERNS"
+
+    @pytest.mark.parametrize("name", ["codex-implementer-prompt.md", "codex-verifier-prompt.md"])
+    def test_both_codex_prompts_spell_the_label(self, name):
+        text = (self.REFS / name).read_text(encoding="utf-8")
+        assert "`Concerns:`" in text, f"{name} does not tell the agent the label the parser keys on"
+        after = text.split("`Concerns:`", 1)[1]
+        assert "prose" in after and "contentless" in after, (
+            f"{name} names the label but not that prose-only is rejected")
