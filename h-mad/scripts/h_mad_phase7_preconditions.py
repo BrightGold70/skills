@@ -26,9 +26,13 @@ from h_mad_telemetry import resolve_docs_root
 
 MATCH_RATE_THRESHOLD = 90.0
 
-# Tolerates "## Match Rate: 96%", "Match rate: 89.5%", and the bolded "**0%**"
-# a real analysis used — 0 is a measurement, not an absence.
-_RATE = re.compile(r"match\s*rate\s*[:=]\s*\**\s*(\d+(?:\.\d+)?)\s*%", re.I)
+# Tolerates "## Match Rate: 96%", "Match rate: 89.5%", the bolded "**0%**" a real
+# analysis used — 0 is a measurement, not an absence — and `match_rate=100.00%`,
+# the spelling the Phase-6a awk template itself emits (#155). `_` is not `\s`:
+# with only `\s*` here, `PHASE7: match_rate_unreadable` fired on an analysis that
+# stated its rate correctly, and the blocker text named a real hazard (no
+# measurement) that was not the one present.
+_RATE = re.compile(r"match[\s_]*rate\s*[:=]\s*\**\s*(\d+(?:\.\d+)?)\s*%", re.I)
 
 
 def parse_match_rate(text: str) -> float | None:

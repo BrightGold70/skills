@@ -62,6 +62,56 @@ class TestMatchRateParsing:
     def test_takes_the_first_rate(self):
         assert p7.parse_match_rate("## Match Rate: 96%\nlater: 12%") == 96.0
 
+    def test_reads_the_underscore_spelling_the_analysis_template_emits(self):
+        """#155 — the Phase-6a awk template prints `match_rate=`; `_` is not `\s`.
+
+        `PHASE7: match_rate_unreadable` fired on an analysis that stated its rate
+        correctly in the shape the template emits, and the closure had to add a
+        second prose line for the gate to read. The blocker text named a real
+        hazard (no measurement) that was not the one present.
+        """
+        line = "Result: `satisfied=49 partial=0 not_satisfied=0 total=49 match_rate=100.00% (49/49)`."
+        assert p7.parse_match_rate(line) == 100.0
+
+    def test_the_templates_own_format_string_is_not_a_rate(self):
+        """The awk command itself carries `match_rate=%.2f%%` — no digits, no match."""
+        assert p7.parse_match_rate('printf "match_rate=%.2f%%"') is None
+
+
+class TestCalibrationAgainstDocumentsThatAlreadyPassed:
+    """Widening the regex must not move any rate a passed analysis already stated.
+
+    Every hard detector this repo wrote fired on documents that had already passed
+    audit; a widened pattern is calibrated the same way — against the live tree,
+    not a fixture (§feedback: calibrate a new gate against artifacts that passed).
+    """
+
+    _NARROW = __import__("re").compile(
+        r"match\s*rate\s*[:=]\s*\**\s*(\d+(?:\.\d+)?)\s*%", __import__("re").I
+    )
+
+    def _docs(self):
+        root = Path(__file__).resolve().parents[2] / "docs"
+        return sorted(list((root / "03-analysis").glob("*.analysis.md"))
+                      + list((root / "archive").glob("*/*/*.analysis.md")))
+
+    def test_every_rate_the_narrow_pattern_read_is_read_identically(self):
+        docs = self._docs()
+        assert docs, "no analysis documents found — the calibration measured nothing"
+        moved = []
+        for doc in docs:
+            text = doc.read_text(encoding="utf-8", errors="replace")
+            narrow = self._NARROW.search(text)
+            wide = p7.parse_match_rate(text)
+            if narrow is not None and wide != float(narrow.group(1)):
+                moved.append((doc.name, narrow.group(1), wide))
+        assert not moved, f"widened pattern moved a passed rate: {moved}"
+
+    def test_the_doc_block_exec_analysis_reads_100(self):
+        doc = (Path(__file__).resolve().parents[2] / "docs" / "03-analysis"
+               / "doc-block-exec.analysis.md")
+        assert p7.parse_match_rate(doc.read_text(encoding="utf-8")) == 100.0
+
 
 class TestBlockers:
     def test_ready_state_passes(self, tmp_path):

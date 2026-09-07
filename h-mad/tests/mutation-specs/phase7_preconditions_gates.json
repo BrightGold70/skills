@@ -1,0 +1,27 @@
+{
+  "root": "../..",
+  "_why": "Phase-7 precondition gates added after doc-block-exec closed (#155 match-rate spelling, #142 parked mutation specs). Each row reverts one guard to the shape that produced a false blocker or a silent pass, and names the test that must bite.",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase7_preconditions.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "match-rate-regex-narrows-back-to-whitespace-only",
+      "_mechanism": "#155 exactly. `_` is not `\\s`, so the awk template's own `match_rate=100.00%` reads as no rate stated and the gate raises `match_rate_unreadable` on a correct analysis.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "_RATE = re.compile(r\"match[\\s_]*rate\\s*[:=]\\s*\\**\\s*(\\d+(?:\\.\\d+)?)\\s*%\", re.I)",
+      "replace": "_RATE = re.compile(r\"match\\s*rate\\s*[:=]\\s*\\**\\s*(\\d+(?:\\.\\d+)?)\\s*%\", re.I)",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestMatchRateParsing::test_reads_the_underscore_spelling_the_analysis_template_emits"
+    }
+  ]
+}
