@@ -1711,3 +1711,22 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   two lists, or delete it. As of 2026-09-07 the tests import it (`set(HARD_KINDS)` and
   `set(HARD_KINDS) - {"PINDRIFT"}`) so the name has one consumer and the two filters cannot drift
   apart, but the script still does not consult it — that half is open.
+- **structure the 6a-prime archreview reports before any code-phase instrument is built**: measured
+  across the 28 archreviews in HemaSuite (analysis:
+  `docs/03-analysis/hmad-code-phase-ledger-not-warranted.md`) — median **2,114 B**, `Major` appears
+  **0** times in any of them, and 14 of 28 carry no `READY_TO_MERGE`/`WITH_FIXES`/`NO` token in their
+  text at all. The verdict survives only because the orchestrator extracts it into state, which
+  `h_mad_phase7_preconditions.py:192` then reads fail-closed — the reports themselves are not a
+  parseable surface — recurrence: 1 (28-report corpus) — candidate: yes — mechanical and small: give
+  the archreview a required token line the way every other h-mad surface has one, so a report can be
+  scored without a human reading it. This is the PREREQUISITE the code-phase ledger row was blocked
+  on, and it is worth more than the ledger: a 2 KB free-prose report is the input no later instrument
+  can use.
+- **the code-phase ledger itself**: the same origin-tagging instrument applied to Phase 5–6
+  artifacts. — candidate: **DECLINED 2026-09-07 (triage: useful, not codable)** — measured out
+  rather than deferred: **2 of 136** archived features ever ran a second Phase-6 analysis, so the
+  code phase does not loop and there is no tail to tag. `#46 grounding-evidence-coverage`, the
+  candidate named for having the strongest code-phase evidence, carries **71** document audit cycles
+  against **3** Phase-6 analyses and **0** archreviews — about 24:1. A rate computed over
+  single-digit events spread across months moves by whole percentage points on one record. Revisit
+  only if 6b iterate rounds become routine; the row above is the prerequisite either way.
