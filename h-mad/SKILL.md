@@ -1205,9 +1205,25 @@ dispatch a fresh-context teammate that owns exactly one file:
 | 5a | `docs/01-plan/features/<feature>.impl-plan.md` | `implplan-author` | `agents/implplan-author.md` |
 
 ```
+RP=/tmp/author_<feature>_<phase>_v<N>.report.md; rm -f "$RP"
 Agent(subagent_type: "plan-author", prompt: "<feature>; documents: <spec> <design> <current plan>;
-      audit reports for the cycle being answered: <paths>; orchestrator decisions: <none | list>")
+      audit reports for the cycle being answered: <paths>; orchestrator decisions: <none | list>;
+      REPORT=$RP")
 ```
+
+**Pass `REPORT=` on every author dispatch, and read the file rather than the message.** The message
+transport truncates at ~4 KB and cuts the **tail**, which is where an author's report puts the owed
+list, the declines with their reasons, and the text owed to sibling authors — none of which is in
+the document, so losing it loses it entirely. Measured on `gateway-consolidation` c105: two of three
+messages from one `design-author` run were cut mid-word, recovery cost three `SendMessage`
+round-trips, and a retry explicitly scoped to "ONLY the tail, under 15 lines" was **itself**
+truncated — a retry is not a workaround when the retry has the same limit. Independent prior
+evidence 2026-09-06: 3 of 3 authors, always at the owed list. `doc-auditor` has carried a `REPORT`
+path all along (`agents/doc-auditor.md` §"What you are given"); the authors did not, and that
+asymmetry was the whole defect. This is **not** the r17 DONE-line failure and does not mean that fix
+regressed: r17 targets DONE-line loss and works — the DONE line survived all three c105 messages.
+`REPORT=<none>` remains legitimate for a dispatch that cannot stage a path, and the author must then
+say on the line after DONE that the body is inline.
 
 The same routing applies to a **revision**, not only a first draft. A cycle's must-fixes go to the
 author that owns the document they land in; you relay findings and decisions, you do not apply

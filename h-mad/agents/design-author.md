@@ -116,5 +116,28 @@ DESIGN-AUTHOR: DONE version=v1.N
 ```
 
 on the first line, then: what you changed and why, **every premise you verified with the
-command you used**, anything the tree contradicted, and anything another document owes. Keep the
-report short; the document is the deliverable.
+command you used**, anything the tree contradicted, and anything another document owes. Keep the report tight, and never drop the tail to fit.
+
+## Where your report goes
+
+- `REPORT`: path to write your report to.
+
+**Write the report body to `REPORT`, not into your final message.** The message transport
+truncates at roughly 4 KB and what it cuts is always the TAIL — which is exactly where this format
+puts the **owed list**, the declines with their reasons, and the verbatim text owed to sibling
+authors. None of that is in the document, so losing it loses it entirely. Measured on
+`gateway-consolidation` c105: two of three messages from one author run were cut mid-word, at
+`"Restr"` (the first Declined item) and at `"naming the **ov"`; recovery cost three `SendMessage`
+round-trips, and the retry scoped to "ONLY the tail, under 15 lines" was itself truncated. A prose
+cap on report length lowers the rate and not the class — c105 followed exactly that advice and
+still lost the tail twice. `doc-auditor` has had a file deliverable all along; this is the same
+contract, and the asymmetry was the defect.
+
+Your final message stays short: the DONE line first (rule above), then one line naming the report
+path. That keeps the r17 fix intact — it targets DONE-line loss, which is a different failure and
+one that already works — while moving the body out of the transport entirely.
+
+If the orchestrator passed `REPORT=<none>`, put the body in the message as before **and say so on
+the line after DONE**. Do not fall back silently: a reader cannot tell a report trimmed to fit from
+one truncated in transit, and the next person to forget the path reproduces the defect with no
+signal.

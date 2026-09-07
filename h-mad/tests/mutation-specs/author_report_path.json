@@ -1,0 +1,67 @@
+{
+  "_why": "The four author agents had no file deliverable for their report, so the body travelled a transport that truncates at ~4 KB and always cuts the TAIL \u2014 the owed list, the declines with reasons, and the text owed to sibling authors, none of it in the document. Measured on gateway-consolidation c105: 2 of 3 messages from one design-author run cut mid-word; recovery cost 3 SendMessage round-trips and the retry scoped to 'ONLY the tail, under 15 lines' was itself truncated. doc-auditor has had a REPORT path all along; the asymmetry was the defect. Each row deletes one half of the contract, on a DIFFERENT agent file, so a per-file regression cannot hide behind a sibling.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_agent_definitions.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "design-author-loses-its-REPORT-parameter",
+      "_mechanism": "No path is declared, so the author has nowhere to write and the body returns to the truncating transport.",
+      "file": "agents/design-author.md",
+      "find": "- `REPORT`: path to write your report to.",
+      "replace": "",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_is_given_a_report_path[design-author]"
+    },
+    {
+      "name": "plan-author-stops-being-told-to-write-the-body-to-the-file",
+      "_mechanism": "The parameter survives and the instruction does not, which is the state the auditor was NEVER in \u2014 a path nobody is told to use.",
+      "file": "agents/plan-author.md",
+      "find": "**Write the report body to `REPORT`, not into your final message.**",
+      "replace": "Write what you like where you like.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_writes_the_body_to_the_file_not_the_message[plan-author]"
+    },
+    {
+      "name": "spec-author-falls-back-silently-when-no-path-is-passed",
+      "_mechanism": "The fail-open becomes invisible: a dispatch that forgets the path reproduces the defect with no signal, and a reader cannot tell a trimmed report from a truncated one.",
+      "file": "agents/spec-author.md",
+      "find": "If the orchestrator passed `REPORT=<none>`, put the body in the message as before **and say so on\nthe line after DONE**.",
+      "replace": "If no path was passed, put the body in the message as before.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_handles_an_absent_report_path_explicitly[spec-author]"
+    },
+    {
+      "name": "spec-author-is-told-again-that-only-the-document-is-the-deliverable",
+      "_mechanism": "The retired line restored beside the new rule tells the author to do the exact thing that loses the tail \u2014 two instructions, the older one winning because it is shorter. Targeted at spec-author because only design-author and spec-author ever CARRIED that line: for plan-author and implplan-author the assertion is a forward guard against it being added, and a row aimed there would have been vacuous. The harness refused exactly that aim.",
+      "file": "agents/spec-author.md",
+      "find": "Keep the report tight, and never drop the tail to fit.",
+      "replace": "Keep the report short; the document is the deliverable.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_no_author_still_says_only_the_document_is_the_deliverable[spec-author]"
+    },
+    {
+      "name": "the-orchestrator-stops-passing-REPORT",
+      "_mechanism": "A contract only the agent side knows about is never exercised: every author is told to write to a path the dispatcher never supplies, so all four take the REPORT=<none> branch forever.",
+      "file": "SKILL.md",
+      "find": "      REPORT=$RP\")",
+      "replace": "      \")",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_orchestrator_passes_REPORT_when_dispatching_an_author"
+    },
+    {
+      "name": "the-owed-list-stops-being-named-as-the-cost",
+      "_mechanism": "Without naming WHAT the tail carries, 'keep it tight' reads as licence to trim exactly the part that matters, which is how the prose cap lowered the rate and not the class.",
+      "file": "agents/design-author.md",
+      "find": "puts the **owed list**, the declines with their reasons, and the verbatim text owed to sibling",
+      "replace": "puts some closing remarks and the text owed to sibling",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_owed_list_is_named_as_what_truncation_costs[design-author]"
+    }
+  ]
+}

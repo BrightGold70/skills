@@ -98,3 +98,83 @@ def test_skill_has_no_bare_heading_stub() -> None:
     """A lone `#` line arrived with commit bea1b60 and sat between two sections for weeks."""
     lines = SKILL.read_text(encoding="utf-8").splitlines()
     assert "#" not in lines, [i + 1 for i, l in enumerate(lines) if l == "#"]
+
+
+# --- the authors' report body has no file deliverable (taken-over brief, 2026-09-07) ---
+#
+# `doc-auditor.md` carries `REPORT`: path to write your report to (:40) and "your
+# report file is the deliverable" (:192). The four AUTHORS carried none, so their
+# report body travelled through a transport that truncates at ~4 KB and always cuts
+# the TAIL -- which is where the h-mad report format puts the owed list, the declines
+# with their reasons, and the text owed to sibling authors, none of which is in the
+# document. Measured on gateway-consolidation c105: two of three messages from one
+# `design-author` run truncated mid-word (at "Restr", first Declined item, and at
+# "naming the **ov"), recovery cost three SendMessage round-trips, and the retry
+# scoped to "ONLY the tail, under 15 lines" was itself truncated. Independent prior
+# evidence 2026-09-06: 3 of 3 authors, always at the owed list.
+#
+# This is NOT the r17 DONE-line failure and does not mean that fix regressed. r17
+# targeted DONE-line loss and succeeded -- the DONE line arrived intact in all three
+# c105 messages. Two different failures, one of which had a fix.
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_author_is_given_a_report_path(name: str) -> None:
+    """Same parameter, same words as the auditor's -- one phrasing, not two."""
+    body = _norm(AGENTS / f"{name}.md")
+    assert "`REPORT`: path to write your report to" in body, name
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_author_writes_the_body_to_the_file_not_the_message(name: str) -> None:
+    body = _norm(AGENTS / f"{name}.md")
+    assert "Write the report body to `REPORT`" in body, name
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_author_handles_an_absent_report_path_explicitly(name: str) -> None:
+    """`REPORT=<none>` must be legitimate AND declared, never silently inline.
+
+    Fail-open is right -- an older dispatch that passes no path must still work --
+    but a silent fall-back reproduces the defect the next time someone forgets the
+    flag, and the reader cannot tell a short report from a truncated one.
+    """
+    body = _norm(AGENTS / f"{name}.md")
+    assert "REPORT=<none>" in body, name
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_the_owed_list_is_named_as_what_truncation_costs(name: str) -> None:
+    """The rule must say WHY the tail matters, or a reader trims the report to fit."""
+    body = _norm(AGENTS / f"{name}.md")
+    assert "owed list" in body, name
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_no_author_still_says_only_the_document_is_the_deliverable(name: str) -> None:
+    """`design-author.md:120` read "report short; the document is the deliverable".
+
+    True of the DOCUMENT and false of the report, which carries the owed list and
+    the declines. Left standing beside the new rule it tells the author to do the
+    thing that loses the tail.
+    """
+    body = _norm(AGENTS / f"{name}.md")
+    assert "the document is the deliverable" not in body, name
+
+
+def test_the_orchestrator_passes_REPORT_when_dispatching_an_author() -> None:
+    """A contract only the agent side knows about is never exercised."""
+    body = _norm(SKILL)
+    assert 'subagent_type: "plan-author"' in body
+    # Anchor on the SECTION HEADING, not the phrase: "Teammate authors" also appears
+    # as a cross-reference earlier in the file, so splitting on the phrase lands in
+    # the wrong place and the assertion measures a region that was never the target.
+    heading = "## Teammate authors — one author, one document, fresh context every time"
+    assert heading in body
+    section = body.split(heading, 1)[1][:2500]
+    assert 'subagent_type: "plan-author"' in section
+    # The DISPATCH TEMPLATE, not the prose around it. A bare `REPORT=` check passed
+    # while the template had been stripped, because the same section explains
+    # `REPORT=<none>` and says "Pass `REPORT=` on every author dispatch" — the
+    # mutation battery reported the row SURVIVED and that is what it meant.
+    assert 'REPORT=$RP")' in section
