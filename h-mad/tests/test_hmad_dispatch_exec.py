@@ -1021,3 +1021,45 @@ def test_codex_refusal_in_prior_log_content_is_not_read_as_this_dispatch(tmp_pat
     assert "EMPTY final message" in r.stderr, r.stderr
     # and the pre-existing content survived (append contract)
     assert log.read_text().startswith("previous dispatch\n")
+
+
+def test_agy_empty_response_names_the_last_step_reached(tmp_path):
+    """#77b: an agy leg ran 86 steps and died on `run_command pytest`; the EMPTY
+    line read the same as a leg that never started. Name the last step."""
+    import json as _json
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "agy.log"
+    transcript = "\n".join([
+        _json.dumps({"event": "init", "init": {"cwd": str(tmp_path)}}),
+        _json.dumps({"event": "step_update", "step_update": {"step_type": "tool", "tool_name": "view_file", "state": "DONE"}}),
+        _json.dumps({"event": "step_update", "step_update": {"step_type": "agent_response", "state": "DONE"}}),
+        _json.dumps({"event": "step_update", "step_update": {"step_type": "tool", "tool_name": "run_command", "state": "ACTIVE",
+                                                              "tool_info": {"parameters": {"command": "pytest -q"}}}}),
+    ])
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RESP="", HMAD_STUB_AGY_TRANSCRIPT_PATH=str(log),
+                     HMAD_STUB_AGY_TRANSCRIPT=transcript))
+    assert "EMPTY final message" in r.stderr
+    # The stub's own stream contributes two run_command steps before the appended
+    # transcript's three, so the count is 5; the LAST tool is the one that matters.
+    assert "last step reached — 5 step_update events; last tool: run_command ACTIVE" in r.stderr, r.stderr
+
+
+def test_agy_last_step_ignores_steps_written_before_this_dispatch(tmp_path):
+    """Shared --log: a prior dispatch's steps must not be reported as this one's.
+
+    Discriminates on the COUNT, not on a name: the stale steps below are the same
+    tool the stub then runs, so an assertion that a stale NAME is absent would
+    hold even while the whole prior log was being read (J23's shape). The stub
+    emits exactly two `step_update` events of its own.
+    """
+    import json as _json
+    b = _bindir(tmp_path, ["agy"])
+    log = tmp_path / "shared.log"
+    stale = _json.dumps({"event": "step_update", "step_update": {
+        "step_type": "tool", "tool_name": "run_command", "state": "DONE"}})
+    log.write_text(stale + "\n" + stale + "\n" + stale + "\n")
+    r = run(["exec", "agy", str(_prompt(tmp_path)), "--cd", str(tmp_path), "--log", str(log)],
+            env=_env(b, HMAD_STUB_AGY_RESP=""))
+    assert "last step reached — 2 step_update events" in r.stderr, r.stderr
+    assert "5 step_update events" not in r.stderr, "read the prior dispatch's steps too"

@@ -2017,6 +2017,34 @@ _agy_ndjson_response() {  # <logfile> <lines-before-this-dispatch>
   printf '%s' "$resp"
 }
 
+# How far an agy run got before its final message went missing (#77b). Reads only
+# the lines this dispatch appended (after <pre_lines>), so a prior dispatch's
+# steps in a shared --log cannot be reported as this one's.
+_agy_last_step() {  # <log> <pre_lines> -> "N step_update events; last tool: <name> <state>" or ""
+  local log="$1" pre="${2:-0}"
+  # An empty/unset pre degrades to the WHOLE log, which contradicts this helper's
+  # own scoping claim; 0 is the honest floor and the callers pass a real count.
+  case "$pre" in ''|*[!0-9]*) pre=0 ;; esac
+  [ -s "$log" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  # `|| true`, and the pipeline is bounded. Under `set -euo pipefail` a non-zero
+  # jq abandons _cmd_exec BEFORE the recovery block below (verdict recovery, the
+  # boundary scan, the echo), turning a diagnostic into a lost answer — and ONE
+  # stray scalar JSON line is enough: `fromjson?` yields the scalar and
+  # `select(.event …)` then errors "Cannot index string with string", silently,
+  # past the 2>/dev/null. `select(type == "object")` removes that cause and
+  # `|| true` removes the class. The tail bound matches the `progress` lens: this
+  # names one step, never worth slurping a multi-hundred-MB transcript for.
+  tail -n +"$((pre + 1))" "$log" 2>/dev/null | tail -n 2000 | jq -R -r -s '
+    [ split("\n")[] | fromjson? // empty | select(type == "object")
+      | select(.event == "step_update") | .step_update ] as $s
+    | if ($s | length) == 0 then ""
+      else ($s | map(select(.step_type == "tool")) | last) as $t
+        | (($s | length) | tostring) + " step_update events; last tool: "
+          + (if $t == null then "none" else (($t.tool_name // "?") + " " + ($t.state // "?")) end)
+      end' 2>/dev/null || true
+}
+
 # Classify a transcript so `progress` renders it with the right lens.
 _exec_log_format() {  # <logfile> -> agy-ndjson | codex-text | empty | missing
   local log="$1"
@@ -2856,6 +2884,14 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       msg="agent exited ${rc} with no final message"
     fi
     echo "hmad-dispatch: exec: EMPTY final message — ${msg}; transcript: $log" >&2
+    # #77b: rc, EMPTY and tree delta say nothing about how far the agent got. An
+    # agy leg once ran 86 steps and died on a `run_command pytest`; the summary
+    # read the same as a leg that never started. Name the last step reached.
+    if [ "$agent" = agy ] && [ -s "$log" ]; then
+      local last_step
+      last_step="$(_agy_last_step "$log" "$pre_lines")"
+      [ -n "$last_step" ] && echo "hmad-dispatch: exec: last step reached — ${last_step}" >&2
+    fi
     local recovered
     local echo_expected=0
     [ "$agent" = codex ] && echo_expected=1

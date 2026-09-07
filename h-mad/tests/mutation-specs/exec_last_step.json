@@ -1,0 +1,37 @@
+{
+  "_why": "#77b: an agy leg that dies mid-run must say how far it got; rc, EMPTY and tree delta read the same for a leg that never started.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec.py",
+    "-q",
+    "-k",
+    "last_step"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "last-step-line-never-printed",
+      "_mechanism": "The diagnostic goes dark; the EMPTY line is all the operator sees again.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    if [ \"$agent\" = agy ] && [ -s \"$log\" ]; then\n      local last_step",
+      "replace": "    if false; then\n      local last_step",
+      "test": "tests/test_hmad_dispatch_exec.py::test_agy_empty_response_names_the_last_step_reached"
+    },
+    {
+      "name": "last-step-reads-the-whole-shared-log",
+      "_mechanism": "A prior dispatch's steps in a shared --log are reported as this one's — the J23 laundering shape, one line down.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  tail -n +\"$((pre + 1))\" \"$log\" 2>/dev/null | tail -n 2000 | jq -R -r -s '",
+      "replace": "  cat \"$log\" 2>/dev/null | tail -n 2000 | jq -R -r -s '",
+      "test": "tests/test_hmad_dispatch_exec.py::test_agy_last_step_ignores_steps_written_before_this_dispatch"
+    }
+  ]
+}
