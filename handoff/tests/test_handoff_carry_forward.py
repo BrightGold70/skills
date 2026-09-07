@@ -429,3 +429,68 @@ class TestABriefUnderThisBranchSlugDoesNotDisplaceThePredecessor:
         sources, _ = hp.carry_forward_sources("feature-41", start=tmp_path)
 
         assert [p.name for p in sources] == ["2026-09-03-feature-41__new.md"]
+
+
+class TestSupersedesNamesTheChainActuallyWrites:
+    """#65 — a source named in `**Supersedes:**` was never retired when the name
+    carried a trailing parenthetical or sat after `and`. Measured 2026-09-07 on
+    this repo's 2026-09-06 main handoff: four sources named, ONE retired, and the
+    other three listed in `carry-forward-sources` on every WRITE since 09-05.
+    """
+
+    FIELD_0906 = (" 2026-09-05-main__doc-block-exec-r18-batch-landed.md (branch predecessor — "
+                  "read in full at resume; every open item walked below), "
+                  "2026-09-03-main__hmad-audit-evidence-gate.md, "
+                  "2026-09-05-main__audit-loop-never-runs-repo-suite.md and "
+                  "2026-09-05-main__hmad-audit-loop-evidence-from-gateway-consolidation.md "
+                  "(taken over 09-03 / 09-05 by earlier sessions; they still appear in "
+                  "`carry-forward-sources`, see #65)")
+
+    def test_the_real_0906_field_retires_all_four(self) -> None:
+        import handoff_paths as hp
+        assert hp._superseded_names(self.FIELD_0906) == {
+            "2026-09-05-main__doc-block-exec-r18-batch-landed.md",
+            "2026-09-03-main__hmad-audit-evidence-gate.md",
+            "2026-09-05-main__audit-loop-never-runs-repo-suite.md",
+            "2026-09-05-main__hmad-audit-loop-evidence-from-gateway-consolidation.md",
+        }
+
+    def test_backticked_and_bare_forms_still_work(self) -> None:
+        import handoff_paths as hp
+        assert hp._superseded_names(" `a.md`, b.md") == {"a.md", "b.md"}
+
+    def test_the_sentinel_retires_nothing(self) -> None:
+        import handoff_paths as hp
+        assert hp._superseded_names(" none — first on this branch") == set()
+        assert hp._superseded_names(" none — first on this topic") == set()
+
+    def test_prose_mentioning_md_as_a_word_is_not_a_name(self) -> None:
+        import handoff_paths as hp
+        assert hp._superseded_names(" none (the md files were not read)") == set()
+
+    def test_a_doc_MENTIONED_in_a_parenthetical_is_not_retired(self) -> None:
+        """The mirror of #65: prose inside parentheses names other docs ("carried
+        through X.md"), and retiring those drops a live source silently."""
+        import handoff_paths as hp
+        got = hp._superseded_names(" a.md (its items carried through b.md), c.md")
+        assert got == {"a.md", "c.md"}, got
+
+    def test_a_name_wrapped_in_markup_is_still_the_bare_filename(self) -> None:
+        import handoff_paths as hp
+        assert hp._superseded_names(" **a.md**, [b.md](docs/handoffs/b.md)") == {"a.md", "b.md"}
+
+    def test_each_mechanism_handles_a_backticked_name_alone(self) -> None:
+        """Backticks are handled twice over, so no single mutation can reach the
+        behaviour (the `a-backticked-filename-fails-to-match` row SURVIVED and was
+        retired for exactly that). Exercise each mechanism on its own instead.
+        """
+        import re
+        import handoff_paths as hp
+        # 1. the token class excludes the backtick, so the match never carries one
+        assert hp._MD_TOKEN_RE.findall("`a.md`") == ["a.md"]
+        # 2. and if it ever did, the markup strip removes it
+        loose = re.compile(r"[^\s(),;]+\.md\b")
+        from pathlib import Path
+        assert {Path(t.strip(hp._MARKUP)).name for t in loose.findall("`a.md`")} == {"a.md"}
+        # end to end, unchanged
+        assert hp._superseded_names(" `a.md`") == {"a.md"}

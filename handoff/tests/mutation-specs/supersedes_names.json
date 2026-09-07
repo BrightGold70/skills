@@ -1,0 +1,27 @@
+{
+  "_why": "#65: the Supersedes parser must extract every .md name in the field, not only comma tokens that END in .md. The mutant restores the shape that retired one of four named sources for three sessions.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_handoff_carry_forward.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "supersedes-parser-back-to-comma-tokens-ending-in-md",
+      "_mechanism": "A.md (…) and C.md and D.md (…) retire nothing; the queue only grows and the next dropped handover hides in it.",
+      "file": "scripts/handoff_paths.py",
+      "find": "    return {Path(token.strip(_MARKUP)).name for token in _MD_TOKEN_RE.findall(text)}",
+      "replace": "    return {t.strip().strip('`').strip() for t in field.split(',') if t.strip().strip('`').strip().endswith('.md')}",
+      "test": "tests/test_handoff_carry_forward.py::TestSupersedesNamesTheChainActuallyWrites::test_the_real_0906_field_retires_all_four"
+    }
+  ]
+}

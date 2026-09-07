@@ -177,6 +177,9 @@ def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]
 
 
 _SUPERSEDES_RE = re.compile(r"^\*\*Supersedes:\*\*(.*)$", re.MULTILINE)
+_MD_TOKEN_RE = re.compile(r"[^\s`(),;]+\.md\b")
+_PARENS_RE = re.compile(r"\([^()]*\)")
+_MARKUP = "*_`\"'[]()<>“”‘’"
 
 
 def _superseded_names(field: str) -> set[str]:
@@ -193,12 +196,29 @@ def _superseded_names(field: str) -> set[str]:
     `none — first on this branch` sentinel from matching anything: it is prose,
     and prose split on commas must not accidentally retire a source.
     """
-    names: set[str] = set()
-    for token in field.split(","):
-        name = token.strip().strip("`").strip()
-        if name.endswith(".md"):
-            names.add(name)
-    return names
+    # Every `.md` token in the field, wherever it sits (#65). The previous form
+    # split on commas and kept a token only if it ENDED with `.md`, so the shape
+    # every real chain writes — `A.md (branch predecessor — …), B.md, C.md and
+    # D.md (taken over …)` — retired B alone: A, C and D carried a parenthetical
+    # or an `and` and were never retired, and listed on every WRITE forever.
+    # Measured 2026-09-07 on this repo's 09-06 main handoff: four named, one
+    # retired. The sentinel `none — first on this branch` has no `.md` token.
+    # Parenthesized spans are PROSE, never the list: this field's own style is
+    # `A.md (branch predecessor — …), B.md and C.md (taken over 09-05)`, and a
+    # parenthetical that MENTIONS another doc ("carried through X.md") would
+    # otherwise retire it — the mirror of the defect this parser was widened to
+    # fix, and the same silent loss. Nested spans are stripped to a fixed point.
+    # Measured 2026-09-07 over all 35 `**Supersedes:**` fields in this store: the
+    # strip changes no field's result (87 names either way) and drops no real
+    # handoff file, so it is a guard against a shape the corpus has not written
+    # yet rather than a change to what is retired today.
+    text, previous = field, None
+    while previous != text:
+        previous, text = text, _PARENS_RE.sub(" ", text)
+    # A name wrapped in markup (`**A.md**`, `[A.md](p/A.md)`) never equals a
+    # `path.name`, so it would sit in the queue forever; strip the decoration and
+    # take the basename.
+    return {Path(token.strip(_MARKUP)).name for token in _MD_TOKEN_RE.findall(text)}
 
 
 def carry_forward_sources(
