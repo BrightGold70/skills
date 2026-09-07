@@ -735,7 +735,7 @@ delivery receipt answers neither. Run it when you next think of that lane, not o
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handover_landed.py" \
   --state "<target-repo>/docs/.bkit-memory.json" --feature "<feature>" \
   --sender-session "<your-session-id>" --worktree-path "<target-worktree-path>" \
-  --repo "<target-repo>" --branch "<target-branch>"
+  --repo "<target-repo>" --branch "<target-branch>" --slug "<the brief's slug>"
 ```
 
 It reports only what the RECEIVER produced, on three signals: the claim moved to a
@@ -743,6 +743,9 @@ session that is not you; the worktree comment is no longer the `handover:` stamp
 left; the target branch carries commits of its own. Any ONE is proof — the others being
 unavailable is the normal case (no Orca runtime, no branch given), so it never demands
 all three.
+
+**Pass `--slug` too.** It is the only thing that can tell a receiver's own closeout stamp
+from a sibling lane's, and without it the comment signal keeps the older permissive rule.
 
 **Pass `--repo`/`--branch` when you have them.** They are optional only so the older
 invocation keeps working; without them the third signal is permanently `unknown`, and it
@@ -755,9 +758,16 @@ re-delivering work that was already on `main`.
 
 Two consequences of that fix worth knowing before you read the output:
 
-- **A comment that is neither stamp counts as pickup.** You left `handover:` on that
-  worktree in Step 4; if it is gone and something else is there, the receiver wrote it.
-  Visible completion outranks the expected prefix. An EMPTY comment does not count.
+- **A comment that is neither stamp counts as pickup — unless `--slug` proves it is a
+  different lane's.** You left `handover:` on that worktree in Step 4; if it is gone and
+  something else is there, the receiver wrote it. Visible completion outranks the expected
+  prefix, and an EMPTY comment does not count. The one exception is a `handoff:` WRITE
+  closeout stamp that does NOT name the brief's slug: a sibling session closing out on the
+  same worktree writes exactly that, and it was read as pickup for a brief nobody had
+  opened (#100 defect A, measured 2026-09-05). That case reports `unknown`, never absence
+  — and only when you pass `--slug`, because without it a receiver's own closeout stamp is
+  indistinguishable from a stranger's and calling it `unknown` would restore the
+  2026-09-01 false NOT_YET. Pass `--slug`.
 - **The branch signal can only ever say `taken` or `unknown`, never `not_yet`.** A branch
   that merged and one that was created and never committed to are both level with the
   default and both listed by `git branch --merged`; refs cannot tell them apart. So it

@@ -257,3 +257,76 @@ def test_the_script_never_invokes_orca_directly() -> None:
     import re
     calls = re.findall(r'"orca[ "]|\borca\s+terminal\b|\borca\s+worktree\b', src)
     assert not calls, f"direct orca invocation in the script: {calls}"
+
+
+# --- #100 defect A: a sibling session's closeout stamp is not pickup -----------
+
+SIBLING = "handoff: doc-block-exec-rounds-fifteen-sixteen · next: r17"
+
+
+def test_a_sibling_handoff_stamp_is_unknown_not_landed(tmp_path) -> None:
+    """Measured 2026-09-05: the skills main worktree carried a sibling session's
+    `handoff: doc-block-exec-rounds-…` stamp; a brief nobody picked up (no claim,
+    no Taken-Over-By) was reported LANDED on that comment alone.
+
+    Discriminated by the brief's own slug: the stamp does not name it."""
+    d = fake_dispatch(tmp_path, ps("/wt", SIBLING))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d, "--slug", "audit-loop-evidence")
+    assert "comment: UNKNOWN" in r.stdout, r.stdout
+    assert "closeout stamp" in r.stdout
+    assert "LANDED" not in r.stdout
+
+
+def test_a_receivers_own_closeout_stamp_is_still_pickup(tmp_path) -> None:
+    """The 2026-09-01 fix must survive: a receiver who picks the brief up, does the
+    work and runs WRITE leaves a `handoff:` stamp of its own. Calling that UNKNOWN
+    (or NOT_YET) prescribes re-delivering work that is already done."""
+    d = fake_dispatch(tmp_path, ps("/wt", "handoff: audit-loop-evidence-shipped · next: merge"))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d, "--slug", "audit-loop-evidence")
+    assert "comment: TAKEN" in r.stdout, r.stdout
+    assert "LANDED" in r.stdout
+
+
+def test_without_a_slug_a_closeout_stamp_keeps_the_older_pickup_rule(tmp_path) -> None:
+    """No slug means no discriminator; the 2026-09-01 rule stands rather than
+    manufacturing an UNKNOWN that reads as 'nobody took it'."""
+    d = fake_dispatch(tmp_path, ps("/wt", SIBLING))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d)
+    assert "comment: TAKEN" in r.stdout, r.stdout
+
+
+def test_a_slug_the_stamp_EXTENDS_is_pickup(tmp_path) -> None:
+    """Right-extension is the receiver's own follow-on lane, so it counts: the
+    brief's slug is the leading component of the stamp's."""
+    d = fake_dispatch(tmp_path, ps("/wt", SIBLING))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d, "--slug", "doc-block-exec")
+    assert "comment: TAKEN" in r.stdout, r.stdout
+
+
+def test_a_slug_the_stamp_only_ENDS_with_is_not_a_match(tmp_path) -> None:
+    """The strict side: a foreign lane whose slug merely ends with the brief's."""
+    d = fake_dispatch(tmp_path, ps("/wt", "handoff: legacy-audit-loop-evidence · next: x"))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d, "--slug", "audit-loop-evidence")
+    assert "comment: UNKNOWN" in r.stdout, r.stdout
+    assert "LANDED" not in r.stdout
+
+
+def test_a_closeout_stamp_that_names_the_brief_is_pickup(tmp_path) -> None:
+    d = fake_dispatch(tmp_path, ps("/wt", "handoff: evidence-gate-fixed · brief audit-loop-evidence done"))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d, "--slug", "audit-loop-evidence")
+    assert "comment: TAKEN" in r.stdout, r.stdout
+    assert "LANDED" in r.stdout
+
+
+def test_a_receivers_completion_note_is_still_pickup(tmp_path) -> None:
+    """The 2026-09-01 case stays: a replacement that is NOT a closeout stamp."""
+    d = fake_dispatch(tmp_path, ps("/wt", "Complete: SIGPIPE wait gates fixed; main @ 282a3a5"))
+    r = run("--state", state(tmp_path, None), "--feature", "f", "--sender-session", "s",
+            "--worktree-path", "/wt", "--hmad-dispatch", d)
+    assert "comment: TAKEN" in r.stdout, r.stdout

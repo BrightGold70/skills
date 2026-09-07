@@ -1,5 +1,5 @@
 {
-  "_why": "The sender has already released the claim and stopped watching, so this tool is consulted precisely when nobody is looking at the receiving lane. Every mutant here makes it answer confidently in the direction that costs something: a false NOT_YET sends the sender to re-deliver work already in progress (two sessions, one feature, one branch, contradictory conclusions), and a false LANDED closes the loop on a handover that fell on the floor. None of them change the tool's shape \u2014 it still prints two signal lines and one verdict.",
+  "_why": "The sender has already released the claim and stopped watching, so this tool is consulted precisely when nobody is looking at the receiving lane. Every mutant here makes it answer confidently in the direction that costs something: a false NOT_YET sends the sender to re-deliver work already in progress (two sessions, one feature, one branch, contradictory conclusions), and a false LANDED closes the loop on a handover that fell on the floor. None of them change the tool's shape — it still prints two signal lines and one verdict.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -19,7 +19,7 @@
     },
     {
       "name": "missing-worktrees-container-reads-as-no-such-worktree",
-      "_mechanism": "Restore the `.get(\"worktrees\", [])` shape. A payload whose container moved (a raw `orca` response nests it under `.result`) then scans an empty list and reports 'no worktree at <path>' \u2014 a wrong key and an empty list are the same value and opposite answers, and the tool picks the wrong one silently.",
+      "_mechanism": "Restore the `.get(\"worktrees\", [])` shape. A payload whose container moved (a raw `orca` response nests it under `.result`) then scans an empty list and reports 'no worktree at <path>' — a wrong key and an empty list are the same value and opposite answers, and the tool picks the wrong one silently.",
       "file": "scripts/handover_landed.py",
       "find": "    if \"worktrees\" not in payload:",
       "replace": "    if False:",
@@ -27,7 +27,7 @@
     },
     {
       "name": "both-signals-required-instead-of-one",
-      "_mechanism": "Demand that BOTH signals say taken. Off Orca the comment signal is permanently `unknown`, so a genuine pickup proven by the claim reads as NOT_YET on every machine without a runtime \u2014 the tool becomes useless exactly where it is most needed, and does it by being stricter, which looks like rigour.",
+      "_mechanism": "Demand that BOTH signals say taken. Off Orca the comment signal is permanently `unknown`, so a genuine pickup proven by the claim reads as NOT_YET on every machine without a runtime — the tool becomes useless exactly where it is most needed, and does it by being stricter, which looks like rigour.",
       "file": "scripts/handover_landed.py",
       "find": "    if \"taken\" in signals:",
       "replace": "    if all(s == \"taken\" for s in signals):",
@@ -72,6 +72,36 @@
       "find": "    return \"unknown\", (f\"{branch} is level with {default}: that is what a merged-and-\"",
       "replace": "    return \"taken\", (f\"{branch} is level with {default}: that is what a merged-and-\"",
       "_killed_by": "scripts/test_handover_landed.py::test_a_merged_target_branch_is_unknown_because_it_is_indistinguishable"
+    },
+    {
+      "name": "a-sibling-closeout-stamp-reads-as-pickup-again",
+      "_mechanism": "#100 defect A restored: any non-stamp comment is pickup, so a brief nobody saw is LANDED on a sibling session's own handoff: stamp and never re-delivered.",
+      "file": "scripts/handover_landed.py",
+      "find": "            if slug and CLOSEOUT in comment:",
+      "replace": "            if False:",
+      "test": "scripts/test_handover_landed.py::test_a_sibling_handoff_stamp_is_unknown_not_landed"
+    },
+    {
+      "name": "slug-matched-with-no-left-boundary",
+      "_mechanism": "A foreign lane whose slug merely ENDS with the brief's (`legacy-audit-loop-evidence`) reads as pickup, so a brief nobody read is LANDED.",
+      "file": "scripts/handover_landed.py",
+      "find": "    return re.search(rf\"(?<![A-Za-z0-9_-]){re.escape(slug)}(?![A-Za-z0-9_])\", comment) is not None",
+      "replace": "    return slug in comment",
+      "test": "scripts/test_handover_landed.py::test_a_slug_the_stamp_only_ENDS_with_is_not_a_match"
+    },
+    {
+      "name": "a-receivers-own-closeout-reads-as-unknown",
+      "_mechanism": "The closeout guard fires without a slug, so a receiver who did the work and closed out is reported UNKNOWN/NOT_YET and the sender re-delivers merged work — the 2026-09-01 defect, restored by its own fix.",
+      "file": "scripts/handover_landed.py",
+      "find": "            if slug and CLOSEOUT in comment:",
+      "replace": "            if CLOSEOUT in comment:",
+      "test": "scripts/test_handover_landed.py::test_without_a_slug_a_closeout_stamp_keeps_the_older_pickup_rule"
     }
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
   ]
 }

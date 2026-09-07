@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,12 @@ from pathlib import Path
 
 TAKEN = "taken over:"
 HANDED = "handover:"
+# A WRITE closeout stamp. It is worktree-scoped and written by whichever session
+# closes out on that worktree — including a SIBLING session that never saw the
+# brief. Measured 2026-09-05 (#100 defect A): the skills main worktree carried
+# `handoff: doc-block-exec-rounds-fifteen-sixteen …` and a brief nobody had picked
+# up (no Taken-Over-By, no claim) was reported LANDED on that comment alone.
+CLOSEOUT = "handoff:"
 
 
 def owner_signal(state_path: str, feature: str, sender: str) -> tuple[str, str]:
@@ -72,8 +79,35 @@ def owner_signal(state_path: str, feature: str, sender: str) -> tuple[str, str]:
     return "taken", f"{feature} is owned by {owner} (heartbeat {record.get('owner_heartbeat_ts')})"
 
 
-def comment_signal(worktree_path: str | None, dispatch: str) -> tuple[str, str]:
-    """(verdict, detail) over the target worktree's checkpoint stamp."""
+def _names_slug(comment: str, slug: str) -> bool:
+    """True when *comment* names *slug* at a slug boundary.
+
+    The LEFT boundary is strict and the RIGHT one is not, because the two real
+    comments differ on exactly that side:
+
+      * a receiver that picks the brief up and closes out writes its own WRITE
+        stamp, whose slug EXTENDS the brief's — `handoff: audit-loop-evidence-
+        shipped · next: merge`. A whole-token test rejects it and the sender
+        re-delivers merged work (the 2026-09-01 defect);
+      * a lane whose slug merely CONTAINS the brief's as a later word, or a
+        different slug entirely, must not match — hence the strict left side.
+
+    A right-extension shares the brief's slug as its leading component, which is
+    what a receiver's own follow-on work looks like and what a foreign lane's
+    slug does not. `--slug doc-block-exec` therefore does match
+    `doc-block-exec-rounds-fifteen-sixteen`: that IS the same feature's lane, and
+    a slug is only ever passed when it is the brief's own.
+    """
+    return re.search(rf"(?<![A-Za-z0-9_-]){re.escape(slug)}(?![A-Za-z0-9_])", comment) is not None
+
+
+def comment_signal(worktree_path: str | None, dispatch: str,
+                   slug: str | None = None) -> tuple[str, str]:
+    """(verdict, detail) over the target worktree's checkpoint stamp.
+
+    `slug` is the brief's slug when the caller has it: a replacement comment that
+    names it is pickup evidence whatever prefix it carries.
+    """
     if not worktree_path:
         return "unknown", "no --worktree-path given"
     if shutil.which(dispatch) is None and not Path(dispatch).is_file():
@@ -104,6 +138,26 @@ def comment_signal(worktree_path: str | None, dispatch: str) -> tuple[str, str]:
                 return "taken", f"comment reads {comment[:80]!r}"
             if HANDED in comment:
                 return "not_yet", "comment still carries the sender's `handover:` stamp"
+            if slug and _names_slug(comment, slug):
+                return "taken", f"comment names the brief: {comment[:80]!r}"
+            if slug and CLOSEOUT in comment:
+                # A `handoff:` stamp is a session's OWN WRITE closeout, and this
+                # one does not name the brief. It says A session worked on this
+                # worktree; it does not say that session saw the brief — a
+                # sibling lane closing out on the same worktree writes exactly
+                # this (#100 defect A, measured 2026-09-05 on the skills main
+                # worktree: `handoff: doc-block-exec-rounds-fifteen-sixteen …`
+                # for a brief nobody had picked up). Neither pickup nor absence.
+                #
+                # Gated on `slug` because without it there is NO discriminator:
+                # a receiver who picks the brief up and closes out writes a
+                # `handoff:` stamp too, and calling that `unknown` would resurrect
+                # the 2026-09-01 false NOT_YET this tool exists to prevent. With
+                # no slug the older rule stands — visible completion outranks the
+                # expected prefix — and the verdict line says the check was
+                # unavailable.
+                return "unknown", (f"comment is a session closeout stamp that does not name "
+                                   f"the brief, so it may be a sibling lane's: {comment[:80]!r}")
             if comment.strip():
                 # Neither stamp, but SOMETHING is there. Step 4 left `handover:`
                 # on this worktree, so its absence means the receiver overwrote
@@ -171,10 +225,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--repo", help="target repo, for the branch signal")
     ap.add_argument("--branch", help="target branch, for the branch signal")
     ap.add_argument("--hmad-dispatch", default="hmad-dispatch")
+    ap.add_argument("--slug", help="the brief's slug; a replacement comment naming it is pickup")
     a = ap.parse_args(argv)
 
     owner_v, owner_d = owner_signal(a.state, a.feature, a.sender_session)
-    comment_v, comment_d = comment_signal(a.worktree_path, a.hmad_dispatch)
+    comment_v, comment_d = comment_signal(a.worktree_path, a.hmad_dispatch, a.slug)
     branch_v, branch_d = branch_signal(a.repo, a.branch)
     print(f"  claim:   {owner_v.upper():8s} {owner_d}")
     print(f"  comment: {comment_v.upper():8s} {comment_d}")
