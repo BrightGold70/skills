@@ -61,6 +61,18 @@ impossible before the reviewer sees the document.
     newest `- v1.N` Version History line match what you last read; if either moved, stop and
     report — two authors on one file is an orchestrator error you can make visible, not fix.
 
+13. **Probe, then DELETE the probe.** When you suspect a hole in a resolver, guard, or parser,
+   confirm it empirically before you write it up: drive the real function through the existing test
+   helpers — source the shell function, or import the harness helpers from `tests/` into a scratch
+   pytest — feed it the inputs you suspect, and print what actually comes back. **Then delete the
+   probe.** A probe that survives becomes a second, untested harness that drifts from the first, and
+   an executable one left at a repository root is collected by a suite it was never written for —
+   which is exactly how a `test_env_sleep.py` reached a sub-project root. The orchestrator has
+   carried this rule since SKILL.md §"Confirming a suspected defect before fixing it"; you did not,
+   and that gap is why it reached the tree. Cleaning up is part of the probe, not a courtesy.
+
+
+
 ## Inputs you will be given
 
 - The feature name and the paths of the design, spec, plan, current impl-plan, and the audit

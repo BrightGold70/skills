@@ -300,12 +300,32 @@ def test_size_warning_fires_before_the_cliff_not_only_past_it(tmp_path):
     # previous anchor last one day, so 2150 is chosen instead: 1,014 B of headroom
     # (~44 filler lines at ~23 B/line) before the next template edit moves it.
     # 2450 -> 97,941 B keeps the ~300-line gap and stays clear past the frontier.
-    approaching, mid = size_of(2150)
-    assert 84 * 1024 < mid <= 92_055, f"fixture drifted: {mid}B"
+    #
+    # Was 2150/2450 for one day. The 2026-09-07 H8-extension batch added the
+    # vacuous-criterion bullet to `invariants.base.md` and the contracts-stated-
+    # elsewhere block to `measurement-discipline.md`; both splice into the audit
+    # prompt, and together they took 2150 to 92,176 B -- 121 B past the frontier,
+    # consuming the whole 1,014 B of headroom the previous anchor was given.
+    # THIRD consecutive re-anchor caused by an invariants/template edit, which is
+    # the recurrence the skill-candidate row on this fixture predicts. Re-measured,
+    # not estimated (23 B per filler line, confirmed across the range):
+    #   1950 -> 87,576 B   2000 -> 88,726 B   2050 -> 89,876 B   2100 -> 91,026 B
+    #   2150 -> 92,176 B (over)   2300 -> 95,626 B   2450 -> 99,076 B
+    # 2000 is chosen for 3,329 B of headroom (~145 filler lines) rather than 2100's
+    # 1,029 B, which is the size that has now failed to survive a single edit twice.
+    # 2300 keeps the ~300-line gap and sits 3,571 B clear past the frontier.
+    #
+    # The assertion prints the MARGIN, not just the size: "fixture drifted" alone
+    # made every re-anchor a judgement call about how much room was left, and the
+    # number is what that judgement needs.
+    approaching, mid = size_of(2000)
+    assert 84 * 1024 < mid <= 92_055, (
+        f"fixture drifted: {mid}B, margin to the 92,055 B frontier {92_055 - mid:+}B")
     assert "approaching" in approaching
 
-    past, big = size_of(2450)
-    assert big > 92_055, f"fixture drifted: {big}B"
+    past, big = size_of(2300)
+    assert big > 92_055, (
+        f"fixture drifted: {big}B, margin to the 92,055 B frontier {92_055 - big:+}B")
     assert "exceeds the largest prompt confirmed answered" in past
     # The old wording predicted a failure ("past the measured 49 KB reviewer
     # cliff ... a silent empty reply is the expected failure") at sizes since

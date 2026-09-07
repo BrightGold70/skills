@@ -121,6 +121,18 @@
   component words already appeared in nearby prose. Neither was visible to review or to a green run.
 - The mutation must itself be verified (§"Mutation verification"): a `.replace()` that matches
   nothing exits 0 and reports the guard as enforced.
+- **A criterion that cannot discriminate in EITHER direction is vacuous, and it survives both a
+  green run and a mutation battery.** The stronger case of the bullet above: not "this check never
+  fails" but "this check returns the same observation whether the behaviour is present or absent".
+  Measured on AC-2.5b, which spied on `is_cli_available` *returning* `False` — the forced-`True`
+  mutation emits an identical record and returns the same value, so neither the passing run nor the
+  mutated run could tell the two states apart. AC-7.5c was the same shape. **Neither audit leg saw
+  either one**; the revising author found AC-2.5b while fixing an unrelated must. A document audit
+  reads prose and cannot ask "does this pin discriminate?", so the question has to be asked where the
+  criterion is written: **name the observation that differs between the implemented and unimplemented
+  states, and if you cannot name one, the criterion is decoration** — delete it or replace it with a
+  positive assertion only the implemented behaviour produces. Spying on a return value that both
+  states produce is the recurring form.
 - **Mutating a path-resolution function can disable the suite's own isolation.** Tests usually
   isolate by pointing an env override at a temp path, and that override is honoured by a branch —
   the same kind of branch a mutation deletes. Stubbing the override branch in `_pin_file` redirected

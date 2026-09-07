@@ -1,0 +1,72 @@
+{
+  "_why": "#11/H8 extensions plus the author-side probe rule. All three close classes that a GREEN run and a passing audit both report as fine: a probe left executable at a repo root is collected by a suite it was never written for; a criterion that returns the same observation in both states is scored as caught by the very mutation battery that should kill it; and a count contract three sections away from the edit is missed by an internal-consistency check that is, correctly, internally consistent. Each row restores one of those silences.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_agent_definitions.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "design-author-is-no-longer-told-to-delete-its-probe",
+      "_mechanism": "The author writes a probe to confirm a suspected defect and leaves it. An executable probe at a repository root is collected by the project suite — which is exactly how a `test_env_sleep.py` reached a sub-project root and ran as part of a suite nobody wrote it for.",
+      "file": "agents/design-author.md",
+      "find": "**Then delete the\n   probe.**",
+      "replace": "Keep the probe around in case it is useful again.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_is_told_to_delete_its_probe[design-author]"
+    },
+    {
+      "name": "spec-author-loses-the-REASON-the-probe-must-go",
+      "_mechanism": "The instruction survives as a bare imperative with no mechanism attached. This repo's own measurement is that a rule without its reason is the first thing dropped under pressure — and the reason here is the load-bearing half: a surviving probe is a SECOND harness, untested, drifting from the first.",
+      "file": "agents/spec-author.md",
+      "find": "A probe that survives becomes a second, untested harness that drifts from the first, and\n   an executable one left at a repository root is collected by a suite it was never written for —",
+      "replace": "Probes should generally be tidied up afterwards —",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_is_told_to_delete_its_probe[spec-author]"
+    },
+    {
+      "name": "the-cleanup-stops-being-part-of-the-work",
+      "_mechanism": "Downgrades cleanup from a step to an optional courtesy in the plan author. The measured failure is precisely an author that finished the useful part and treated the deletion as discretionary.",
+      "file": "agents/plan-author.md",
+      "find": "Cleaning up is part of the probe, not a courtesy.",
+      "replace": "Tidy up if convenient.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_author_is_told_to_delete_its_probe[plan-author]"
+    },
+    {
+      "name": "the-orchestrator-section-the-authors-cite-is-renamed",
+      "_mechanism": "Four agent files cite SKILL.md §\"Confirming a suspected defect before fixing it\" by name. Rename or drop it and all four point at nothing — the rule reads as sourced while its source is gone, which is worse than an unsourced rule because the citation discourages checking.",
+      "file": "SKILL.md",
+      "find": "## Confirming a suspected defect before fixing it",
+      "replace": "## Checking a hunch",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_orchestrator_still_owns_the_rule_the_authors_now_mirror"
+    },
+    {
+      "name": "a-vacuous-criterion-collapses-back-into-cannot-fail",
+      "_mechanism": "H8 extension A erased. The remaining bullet covers 'a check that cannot fail', which a mutation battery DOES catch. The vacuous case is the one it does not: the criterion returns the same observation in both states, so the mutant is scored as killed and the battery reports ALL_CAUGHT over a criterion that discriminates nothing. Losing the distinction restores a gap that reads as covered.",
+      "file": "invariants.base.md",
+      "find": "- **A criterion that cannot discriminate in EITHER direction is vacuous, and it survives both a\n  green run and a mutation battery.**",
+      "replace": "- A criterion should be able to fail.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_a_vacuous_criterion_is_named_as_its_own_class"
+    },
+    {
+      "name": "the-vacuous-rule-loses-its-actionable-question",
+      "_mechanism": "The rule keeps its name and loses the only part an author can execute — naming the observation that differs between the implemented and unimplemented states. A rule that identifies a class without giving the question that detects it is a label, and AC-2.5b passed a full gating cycle under exactly that condition.",
+      "file": "invariants.base.md",
+      "find": "**name the observation that differs between the implemented and unimplemented\n  states, and if you cannot name one, the criterion is decoration**",
+      "replace": "**make sure the criterion is meaningful**",
+      "test": "tests/test_h_mad_agent_definitions.py::test_a_vacuous_criterion_is_named_as_its_own_class"
+    },
+    {
+      "name": "self-counting-screens-go-back-to-covering-only-edited-sites",
+      "_mechanism": "H8 extension B erased. The rule reverts to the form under which the 88-vs-94 defect shipped: the author swept the sites it had edited, reported '88 to 94, Exec Summary and the spec section and task rows 4 and 12 all updated', and AC-7.5d three sections away still required 88 — making the criterion provably unsatisfiable against a document enumerating 94.",
+      "file": "references/measurement-discipline.md",
+      "find": "**The instrument list must include contracts stated ELSEWHERE in the document, not just the sites\nthat publish the count.**",
+      "replace": "Remember to update the count everywhere it appears.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_self_counting_screens_cover_contracts_stated_elsewhere"
+    },
+    {
+      "name": "the-reason-internal-consistency-cannot-see-it-is-dropped",
+      "_mechanism": "The extension survives without the diagnosis. TWO independent arithmetic checks missed this defect the same way, both verifying that the enumeration was internally consistent — which it was. Without the sentence naming why that class of check is blind, a reader satisfies the rule by running the same check again.",
+      "file": "references/measurement-discipline.md",
+      "find": "The failure mode to recognise: **an internal-consistency check cannot find this class**, because\nthe enumeration really is consistent.",
+      "replace": "Check the numbers carefully.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_self_counting_screens_cover_contracts_stated_elsewhere"
+    }
+  ]
+}

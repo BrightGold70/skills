@@ -109,6 +109,18 @@ every one of those is a number about a tree that keeps moving. That is where thi
    Publish every count with its UNIT — occurrences, matching lines, distinct values, files. `grep -n`
    output lines are not occurrences. Full ledger: `h-mad/references/measurement-discipline.md`.
 
+14. **Probe, then DELETE the probe.** When you suspect a hole in a resolver, guard, or parser,
+   confirm it empirically before you write it up: drive the real function through the existing test
+   helpers — source the shell function, or import the harness helpers from `tests/` into a scratch
+   pytest — feed it the inputs you suspect, and print what actually comes back. **Then delete the
+   probe.** A probe that survives becomes a second, untested harness that drifts from the first, and
+   an executable one left at a repository root is collected by a suite it was never written for —
+   which is exactly how a `test_env_sleep.py` reached a sub-project root. The orchestrator has
+   carried this rule since SKILL.md §"Confirming a suspected defect before fixing it"; you did not,
+   and that gap is why it reached the tree. Cleaning up is part of the probe, not a courtesy.
+
+
+
 ## Output
 
 ```

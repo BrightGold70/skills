@@ -182,3 +182,51 @@ def test_the_orchestrator_passes_REPORT_when_dispatching_an_author() -> None:
     # `REPORT=<none>` and says "Pass `REPORT=` on every author dispatch" — the
     # mutation battery reported the row SURVIVED and that is what it meant.
     assert 'REPORT=$RP")' in section
+
+
+# --- probe hygiene (#11/H8 sibling): the orchestrator carried the rule, the authors did not ---
+
+MEASUREMENT = SKILL_DIR / "references" / "measurement-discipline.md"
+INVARIANTS = SKILL_DIR / "invariants.base.md"
+
+
+@pytest.mark.parametrize("name", sorted(AUTHOR_DONE))
+def test_author_is_told_to_delete_its_probe(name: str) -> None:
+    """An author left an executable `test_env_sleep.py` at a sub-project root.
+
+    SKILL.md has carried "Then delete the probe" for the orchestrator since the
+    worktree-selector investigation; none of the four authors did, which is why the
+    file reached the tree — an executable probe at a repo root is collected by a
+    suite it was never written for.
+    """
+    body = _norm(AGENTS / f"{name}.md")
+    assert "Then delete the probe." in body, name
+    assert "becomes a second, untested harness that drifts from the first" in body, name
+    assert "Cleaning up is part of the probe, not a courtesy." in body, name
+
+
+def test_the_orchestrator_still_owns_the_rule_the_authors_now_mirror() -> None:
+    """The authors' rule cites SKILL's section by name; if that section is renamed
+    or dropped, four agent files point at nothing."""
+    body = _norm(SKILL)
+    assert "## Confirming a suspected defect before fixing it" in body
+    assert "Then **delete the probe**" in body
+
+
+def test_a_vacuous_criterion_is_named_as_its_own_class() -> None:
+    """H8 extension A. Distinct from "a check that cannot fail": this one returns
+    the SAME observation in both states, so a mutation battery reports it caught."""
+    body = _norm(INVARIANTS)
+    assert "cannot discriminate in EITHER direction is vacuous" in body
+    assert "name the observation that differs between the implemented and unimplemented" in body
+    # The measured case must stay attached to the rule — it is what makes it checkable.
+    assert "AC-2.5b" in body and "is_cli_available" in body
+
+
+def test_self_counting_screens_cover_contracts_stated_elsewhere() -> None:
+    """H8 extension B. The 88-vs-94 defect: the edited region was internally
+    consistent and two arithmetic checks both verified only that."""
+    body = _norm(MEASUREMENT)
+    assert "must include contracts stated ELSEWHERE in the document" in body
+    assert "an internal-consistency check cannot find this class" in body
+    assert "AC-7.5d still required 88" in body

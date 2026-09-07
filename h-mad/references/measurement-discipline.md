@@ -450,6 +450,29 @@ it is a false claim the document makes about itself, and the next reader cannot 
 true one. Name the instrument's needle beside the value so the next revision can re-run it rather
 than trust it.
 
+**The instrument list must include contracts stated ELSEWHERE in the document, not just the sites
+that publish the count.** This is the extension the r-cycle-2 defect forced, and it is one level out
+from the rule above: a revision appended M89–M94 and moved the mutation count 88 → 94, and the
+author's own re-derivation reported "88 → 94, Exec Summary and the spec section and task rows 4 and
+12 all updated" — it swept **the sites it had edited**. But Task 25's **AC-7.5d still required 88
+rows**, making the acceptance criterion provably unsatisfiable against a document that enumerates
+94. **Two independent arithmetic checks missed it the same way**: both verified that the
+enumeration was internally consistent (`ids M1–M94 contiguous, per-task totals sum`) and neither
+asked what else in the document had been promised a number.
+
+So step 1's list is built by needle, not by edit site, and it has a second half:
+
+1b. List every place the document states a **contract over an enumerable set it contains** — "all N
+    ACs pass", "requires 88 rows", "the N members of X" — even where the current revision did not
+    touch it. A count that is *correct where it is written* and *contradicted by a contract three
+    sections away* is the same false self-claim, and it is harder to see precisely because the
+    edited region is consistent. Grep the document for bare integers adjacent to the set's noun
+    before DONE, not the sites in your own diff.
+
+The failure mode to recognise: **an internal-consistency check cannot find this class**, because
+the enumeration really is consistent. The question that finds it is "what did this document promise
+about this number somewhere I did not edit?"
+
 ## THE ROUND AS AN ARTIFACT — what only the orchestrator can see, and therefore only it can get wrong
 
 - **Collect every teammate report into `docs/` BEFORE writing the sheet or dispatching an author.**
