@@ -192,13 +192,76 @@ def create_feature(state_file: Path, feature: str, started_ts: str | None = None
     return _mutate(state_file, feature, apply)
 
 
-def set_fields(state_file: Path, feature: str, **fields: Any) -> dict:
-    """Merge `fields` into an existing record, validating before writing."""
+def merge_fields(state_file: Path, feature: str, fields: dict[str, Any], *,
+                 session_id: str | None = None, now: str | None = None) -> dict:
+    """Merge `fields` into an existing record, validating before writing.
+
+    A phase write by the session that HOLDS the claim is a sign of life, so when
+    `session_id` names the current owner the heartbeat is refreshed in the same
+    write (#126). Without `session_id`, or from a session that is not the owner,
+    the write proceeds as before and the heartbeat is left alone: a bystander's
+    write must not manufacture liveness for a claim it does not hold.
+
+    `fields` is an explicit dict, not `**kwargs`, so a `--set` key can never
+    collide with this signature: with kwargs, `--set now=<ts>` was swallowed as
+    the heartbeat timestamp (an operator-chosen, possibly future value, defeating
+    the very window #126 exists for) and `--set session_id=x` raised a TypeError
+    at exit 1, both bypassing the undeclared-key refusal that exits 2.
+    """
 
     def apply(records: dict):
         if feature not in records:
             raise StateWriteError(f"no such feature: {feature}")
-        return {**records[feature], **fields}
+        record = {**records[feature], **fields}
+        if session_id and records[feature].get("owner_session_id") == session_id:
+            record["owner_heartbeat_ts"] = now or _utc_now()
+        return record
+
+    return _mutate(state_file, feature, apply)
+
+
+def set_fields(state_file: Path, feature: str, **fields: Any) -> dict:
+    """Keyword form of `merge_fields` for library callers. No heartbeat semantics."""
+    return merge_fields(state_file, feature, fields)
+
+
+def beat(state_file: Path, feature: str, session_id: str | None,
+         now: str | None = None) -> dict:
+    """Refresh the heartbeat of a claim THIS session holds. Never claims.
+
+    `claim` was the only heartbeat writer, so a claim beat exactly once — at
+    Phase 0 — and then aged toward the two-hour staleness window while the owner
+    was busiest (#126; measured: one beat, then nothing for hours, on a live
+    session). A stale-looking live claim is takeable by any other session with a
+    plain `--claim`, which is the collision the window exists to prevent.
+
+    Fails closed in both other cases, and names the right verb each time:
+      * unowned -> refused; a beat must not create a claim (`--claim` does that);
+      * owned by someone else -> refused; a beat refreshes only your own claim,
+        and a beat that could refresh another session's would keep a dead claim
+        alive forever.
+    """
+    if not session_id:
+        raise StateWriteError("--beat needs --session-id: a beat refreshes YOUR claim, "
+                              "and an anonymous beat cannot say whose")
+
+    def apply(records: dict):
+        if feature not in records:
+            raise StateWriteError(f"no such feature: {feature}")
+        record = records[feature]
+        holder = record.get("owner_session_id")
+        if not holder:
+            raise StateWriteError(
+                f"{feature!r} is unowned; a beat cannot create a claim — pass "
+                f"--claim {session_id!r} instead"
+            )
+        if holder != session_id:
+            raise StateWriteError(
+                f"{feature!r} is owned by session {holder!r}, not {session_id!r}; a beat "
+                "refreshes only your own claim (last seen "
+                f"{record.get('owner_heartbeat_ts')})"
+            )
+        return {**record, "owner_heartbeat_ts": now or _utc_now()}
 
     return _mutate(state_file, feature, apply)
 
@@ -389,10 +452,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claim", metavar="SESSION_ID", help="Take ownership of the feature")
     parser.add_argument("--release", action="store_true", help="Give up ownership")
     parser.add_argument(
+        "--beat", action="store_true",
+        help="Refresh the heartbeat of the claim --session-id holds (#126). Refuses "
+             "an unowned feature (use --claim) and a claim held by another session; "
+             "never claims.",
+    )
+    parser.add_argument(
         "--session-id", dest="session_id", default=None,
-        help="With --release, who you are. A session releasing its OWN live claim "
-             "needs this; a stale or unowned claim does not. Without it, releasing a "
-             "LIVE claim is refused rather than silently taking it (J45).",
+        help="Who you are. With --release: a session releasing its OWN live claim "
+             "needs this; a stale or unowned claim does not, and without it releasing "
+             "a LIVE claim is refused rather than silently taking it (J45). With "
+             "--beat: required. With --set: when it names the current owner, the "
+             "write also refreshes the heartbeat — a phase write is a sign of life.",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -417,6 +488,11 @@ def main(argv: list[str] | None = None) -> int:
             claim(args.state_file, args.feature, args.claim, force=args.force)
         if args.release:
             release(args.state_file, args.feature, args.session_id, args.force)
+        if args.beat:
+            record = beat(args.state_file, args.feature, args.session_id)
+            print(f"STATE-WRITE: BEAT feature={args.feature} "
+                  f"owner={record.get('owner_session_id')} "
+                  f"ts={record.get('owner_heartbeat_ts')}")
         fields = {}
         for item in args.set:
             if "=" not in item:
@@ -425,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
             key, _, raw = item.partition("=")
             fields[key.strip()] = _parse_value(raw)
         if fields:
-            set_fields(args.state_file, args.feature, **fields)
+            merge_fields(args.state_file, args.feature, fields, session_id=args.session_id)
     except StateWriteError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

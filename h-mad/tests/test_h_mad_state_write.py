@@ -381,3 +381,105 @@ class TestUndeclaredKeys:
         for key in ("current_step", "phase5_baseline", "phase5_progress"):
             assert key in result.stdout, f"CLI does not report dropping {key}"
         assert read(p)["demo"]["owner_session_id"] is None
+
+
+class TestHeartbeatBeats:
+    """#126 — the heartbeat that did not beat.
+
+    `claim` was the only writer of `owner_heartbeat_ts`, so a claim beat once at
+    Phase 0 and then aged toward the two-hour staleness window while its owner was
+    busiest. Measured live: one beat, then nothing for hours. A stale-looking live
+    claim is takeable with a plain `--claim`, which is the collision the window
+    exists to prevent. Two writers now: an explicit `--beat`, and any `--set` made
+    by the owner (a phase write is a sign of life).
+    """
+
+    OWNED = dict(VALID, owner_session_id="me", owner_heartbeat_ts="2026-07-22T00:00:00Z")
+
+    def test_beat_refreshes_the_owners_heartbeat(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        sw.beat(p, "demo", "me", now="2026-07-22T01:30:00Z")
+        assert read(p)["demo"]["owner_heartbeat_ts"] == "2026-07-22T01:30:00Z"
+        assert read(p)["demo"]["owner_session_id"] == "me"
+
+    def test_a_beat_keeps_a_claim_live_past_the_window(self, tmp_path):
+        from h_mad_state_ownership import owner_is_live
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        assert not owner_is_live("2026-07-22T00:00:00Z", "2026-07-22T03:00:00Z")
+        sw.beat(p, "demo", "me", now="2026-07-22T02:30:00Z")
+        assert owner_is_live(read(p)["demo"]["owner_heartbeat_ts"], "2026-07-22T03:00:00Z")
+
+    def test_beat_refuses_an_unowned_feature_and_does_not_claim(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(VALID)})
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.beat(p, "demo", "me")
+        assert "--claim" in str(exc.value)
+        assert read(p)["demo"].get("owner_session_id") is None
+
+    def test_beat_refuses_a_foreign_claim_and_leaves_its_heartbeat_alone(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        with pytest.raises(sw.StateWriteError) as exc:
+            sw.beat(p, "demo", "someone-else", now="2026-07-22T01:00:00Z")
+        assert "'me'" in str(exc.value)
+        assert read(p)["demo"]["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
+
+    def test_beat_without_a_session_id_is_refused(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        with pytest.raises(sw.StateWriteError):
+            sw.beat(p, "demo", None)
+        assert read(p)["demo"]["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
+
+    def test_a_set_by_the_owner_refreshes_the_heartbeat(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="me", now="2026-07-22T01:00:00Z")
+        rec = read(p)["demo"]
+        assert rec["current_phase"] == 6
+        assert rec["owner_heartbeat_ts"] == "2026-07-22T01:00:00Z"
+
+    def test_a_set_without_a_session_id_leaves_the_heartbeat_alone(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        sw.set_fields(p, "demo", current_phase=6)
+        assert read(p)["demo"]["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
+
+    def test_a_set_by_a_bystander_does_not_manufacture_liveness(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        sw.merge_fields(p, "demo", {"current_phase": 6}, session_id="someone-else",
+                        now="2026-07-22T01:00:00Z")
+        rec = read(p)["demo"]
+        assert rec["current_phase"] == 6, "the write itself is not refused"
+        assert rec["owner_heartbeat_ts"] == "2026-07-22T00:00:00Z"
+        assert rec["owner_session_id"] == "me"
+
+    def test_cli_beat_prints_a_token_and_exits_0(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        r = run(p, "--feature", "demo", "--beat", "--session-id", "me")
+        assert r.returncode == 0, r.stderr
+        assert "STATE-WRITE: BEAT feature=demo owner=me ts=" in r.stdout
+        assert read(p)["demo"]["owner_heartbeat_ts"] != "2026-07-22T00:00:00Z"
+
+    def test_cli_beat_without_session_id_exits_2_and_writes_nothing(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--beat")
+        assert r.returncode == 2
+        assert "--session-id" in r.stderr
+        assert p.read_bytes() == before
+
+    def test_cli_set_with_owner_session_id_beats(self, tmp_path):
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        r = run(p, "--feature", "demo", "--set", "current_phase=6", "--session-id", "me")
+        assert r.returncode == 0, r.stderr
+        assert read(p)["demo"]["owner_heartbeat_ts"] != "2026-07-22T00:00:00Z"
+
+    @pytest.mark.parametrize("key", ["now", "session_id", "fields"])
+    def test_a_set_key_named_like_the_signature_is_refused_not_swallowed(self, tmp_path, key):
+        """Review finding: with **kwargs, `--set now=<ts>` became the heartbeat value
+        and `--set session_id=x` was a TypeError at exit 1. Both must be the ordinary
+        undeclared-key refusal at exit 2, writing nothing."""
+        p = store(tmp_path, {"demo": dict(self.OWNED)})
+        before = p.read_bytes()
+        r = run(p, "--feature", "demo", "--set", f"{key}=2030-01-01T00:00:00Z",
+                "--session-id", "me")
+        assert r.returncode == 2, (r.returncode, r.stderr)
+        assert "Traceback" not in r.stderr
+        assert p.read_bytes() == before

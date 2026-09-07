@@ -1,0 +1,51 @@
+{
+  "root": "../..",
+  "_why": "#126: the heartbeat that did not beat. Two writers refresh owner_heartbeat_ts (an explicit --beat, and the owner's --set); each guard that keeps a beat from manufacturing liveness for a claim the caller does not hold is reverted here.",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_state_write.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "beat-refreshes-a-foreign-claim",
+      "_mechanism": "A beat from any session keeps any claim alive: a dead owner's claim is refreshed forever by bystanders and can never go stale.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if holder != session_id:\n            raise StateWriteError(\n                f\"{feature!r} is owned by session {holder!r}, not {session_id!r}; a beat \"",
+      "replace": "        if False:\n            raise StateWriteError(\n                f\"{feature!r} is owned by session {holder!r}, not {session_id!r}; a beat \"",
+      "test": "tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_beat_refuses_a_foreign_claim_and_leaves_its_heartbeat_alone"
+    },
+    {
+      "name": "beat-on-an-unowned-feature-writes-a-heartbeat-without-an-owner",
+      "_mechanism": "A heartbeat with no owner is a record that reads as claimed-by-nobody-yet-live; the resume router then cannot classify it.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if not holder:\n            raise StateWriteError(\n                f\"{feature!r} is unowned; a beat cannot create a claim",
+      "replace": "        if False:\n            raise StateWriteError(\n                f\"{feature!r} is unowned; a beat cannot create a claim",
+      "test": "tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_beat_refuses_an_unowned_feature_and_does_not_claim"
+    },
+    {
+      "name": "the-owners-set-no-longer-beats",
+      "_mechanism": "The original defect restored one writer at a time: --claim is again the only beat on the ordinary phase-write path.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if session_id and records[feature].get(\"owner_session_id\") == session_id:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
+      "replace": "        if False:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
+      "test": "tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_a_set_by_the_owner_refreshes_the_heartbeat"
+    },
+    {
+      "name": "a-bystanders-set-beats-too",
+      "_mechanism": "Any session's phase write refreshes the owner's heartbeat, so a claim is kept alive by work that is not the owner's.",
+      "file": "scripts/h_mad_state_write.py",
+      "find": "        if session_id and records[feature].get(\"owner_session_id\") == session_id:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
+      "replace": "        if session_id:\n            record[\"owner_heartbeat_ts\"] = now or _utc_now()",
+      "test": "tests/test_h_mad_state_write.py::TestHeartbeatBeats::test_a_set_by_a_bystander_does_not_manufacture_liveness"
+    }
+  ]
+}
