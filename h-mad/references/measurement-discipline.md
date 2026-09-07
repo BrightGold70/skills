@@ -150,6 +150,15 @@ being got wrong: the four documents being byte-identical is **not** the predicat
   census the spec and plan publish (fences 6→8, files 24→25, changed `.py` 0→6) because one probe
   carries ``` fences inside string literals. **A predicate that names no root is moved by a file
   anywhere.**
+- **`\b` is a BACKSPACE in awk, not a word boundary.** POSIX awk has no `\b` anchor, so
+  `awk '/\b88\b/'` matches a literal backspace character and screens **nothing** — it returns 0 on a
+  file full of hits, which reads as a clean screen. `grep -E` and `python re` do support it, so the
+  same needle behaves differently in the three tools a measurement typically passes through, and the
+  awk leg is the one that fails silently. Use `grep -oE '\b<n>\b'` for the count, or an explicit
+  `[^0-9]` guard in awk. Recovered 2026-09-07 from orchestrator label `#30`, which recorded the fix
+  as HALF applied (`\b` closed on one needle, the trailing `[,)]` left on another) and then lost the
+  reason across four handoffs; the feature it was filed against has since merged and archived, so
+  what survives is the trap, not the fix.
 - `#49w` — three sheet entries certified "no scoped census moved" over a commit while the design's
   OWN published trip-wire (`… | grep -vc '^docs/'   # expect 0`) read 8 there. None of the three
   ran it.

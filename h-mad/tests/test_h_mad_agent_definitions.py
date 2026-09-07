@@ -264,3 +264,19 @@ def test_an_open_decision_must_be_an_actual_decision() -> None:
     # a case decided correctly by hand are different claims.
     assert "AC-7.5d still required **88** rows against a document enumerating **94**" in body
     assert "impl-plan v1.76 the AC requires 101 rows" in body
+
+
+def test_the_awk_backspace_trap_is_recorded() -> None:
+    """Recovered from orchestrator label `#30` (2026-09-07).
+
+    The label was carried across four handoffs as an opaque token and then written
+    off as unrecoverable. It was recoverable — the definition sat in a 2026-09-05
+    handoff. The feature it was filed against has merged and archived, so the FIX is
+    moot; the trap is not, and it is a silent-zero: a screen that returns 0 on a file
+    full of hits reads as clean.
+    """
+    body = _norm(MEASUREMENT)
+    assert "`\\b` is a BACKSPACE in awk, not a word boundary." in body
+    assert "returns 0 on a file full of hits, which reads as a clean screen" in body
+    # The remedy must be named, or the rule is a warning with no action.
+    assert "grep -oE" in body and "[^0-9]" in body

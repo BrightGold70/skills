@@ -110,6 +110,14 @@
       "find": "at impl-plan v1.76 the AC\n   requires 101 rows against exactly 101 enumerated ids.",
       "replace": "the lane has since moved on.",
       "test": "tests/test_h_mad_agent_definitions.py::test_an_open_decision_must_be_an_actual_decision"
+    },
+    {
+      "name": "the-awk-backspace-trap-loses-its-silent-zero-warning",
+      "_mechanism": "The rule survives as a portability note instead of a SILENT-ZERO warning. `awk '/\\b88\\b/'` returns 0 on a file that contains 88 — verified by execution, against `grep -oE` returning 1 on the same line — so the failure presents as a clean screen, not an error. A reader who takes this as mere portability advice keeps using the awk leg and keeps reading its zero as evidence.",
+      "file": "references/measurement-discipline.md",
+      "find": "file full of hits, which reads as a clean screen.",
+      "replace": "file that may differ across awk implementations.",
+      "test": "tests/test_h_mad_agent_definitions.py::test_the_awk_backspace_trap_is_recorded"
     }
   ]
 }
