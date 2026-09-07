@@ -301,11 +301,16 @@ def select(blocks: Sequence[Block], index: int | None = None) -> Block:
     return blocks[0 if index is None else index - 1]
 
 
+def _is_valid_substitution_key(key: str) -> bool:
+    """Return whether a substitution key is valid on every public surface."""
+    return bool(key)
+
+
 def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]:
     """Replace independent literal keys once, preserving original-text counts."""
     if not subs:
         return replace(block), {}
-    if "" in subs:
+    if not all(_is_valid_substitution_key(key) for key in subs):
         raise BadSubstArg("")
 
     text = block.text
@@ -755,9 +760,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         block = select(blocks, index)
         subs = {}
         for raw in args.subst or []:
-            if "=" not in raw or raw.startswith("="):
+            if "=" not in raw:
                 raise BadSubstArg(raw)
             key, value = raw.split("=", 1)
+            if not _is_valid_substitution_key(key):
+                raise BadSubstArg(raw)
             if key in subs:
                 raise BadSubstArg(raw, duplicate_key=key)
             subs[key] = value

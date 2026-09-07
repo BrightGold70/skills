@@ -666,6 +666,25 @@ def test_empty_key_is_refused_by_the_api(hostile):
         assert error.value.raw == "", "empty-key validation precedes overlaps and missing-key checks"
 
 
+def test_empty_substitution_key_validation_routes_api_and_cli_through_one_predicate(tmp_path, monkeypatch):
+    class PredicateCalled(Exception):
+        pass
+
+    calls = []
+
+    def predicate(key):
+        calls.append(key)
+        raise PredicateCalled
+
+    monkeypatch.setattr(dbe, "_is_valid_substitution_key", predicate)
+    with pytest.raises(PredicateCalled):
+        dbe.substitute(dbe.Block("true\n", "strict", 1, "hmad:exec"), {"": "v"})
+    doc = write_doc(tmp_path, "## Section\n" + tagged("true\n"))
+    with pytest.raises(PredicateCalled):
+        dbe.main([str(doc), "--heading", "## Section", "--subst", "=V"])
+    assert calls == ["", ""], "API and CLI empty-key validation must delegate to the shared predicate"
+
+
 # Task 3 RED: execution and bounded reclamation (all behavioural calls use run_block).
 
 

@@ -277,7 +277,7 @@
       "_mechanism": "Remove API empty-key validation.",
       "test": "tests/test_h_mad_doc_block_exec.py::test_empty_key_is_refused_by_the_api",
       "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "if \"\" in subs:",
+      "find": "if not all(_is_valid_substitution_key(key) for key in subs):",
       "replace": "if False:"
     },
     {
@@ -545,8 +545,8 @@
       "name": "cli-empty-key-delegated",
       "test": "tests/test_h_mad_doc_block_exec.py::test_subst_empty_key_is_bad_subst",
       "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "if \"=\" not in raw or raw.startswith(\"=\"):",
-      "replace": "if \"=\" not in raw:"
+      "find": "if not _is_valid_substitution_key(key):",
+      "replace": "if False:"
     },
     {
       "name": "index-nonint-unmapped",
