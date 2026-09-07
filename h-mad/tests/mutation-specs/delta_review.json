@@ -1,0 +1,56 @@
+{
+  "_why": "#11/H4: the hand-run delta review found fix-introduced defects in 3 of 3 passes, and the hand-rolled instrument failed twice in one sitting — a review whose instrument fails silently reports CLEAN. Each row restores one way this script can report a clean or useless delta: by reviewing the wrong lines, by executing text from prose that was never meant to run, by dropping a cannot-judge, or by flooding the report until a reader ignores it.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_delta_review.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "every-backticked-span-is-a-claim-again",
+      "_mechanism": "Measured on the real commit 8af16d9: without the command-shape filter this reported `claims=15 executed=0 unverified=15`, every one an identifier (`doc-auditor`, `DIVERGED`, `[H-MAD]`, `--sentence-file`). An alert that is always wrong is worse than no alert — the reader stops reading it, and the two real claims on a90c365 are then buried.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "            if not is_command_shaped(span):\n                continue",
+      "replace": "            if False:\n                continue",
+      "test": "tests/test_h_mad_delta_review.py::TestSignalToNoise::test_prose_backticks_do_not_flood_the_report"
+    },
+    {
+      "name": "removed-lines-are-reviewed-too",
+      "_mechanism": "A claim the revision DELETED is reported as one the revision makes, so the reviewer re-runs commands about text that is already gone and the real added claims are diluted.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "        if line.startswith(\"+\") and not line.startswith(\"+++\"):",
+      "replace": "        if not line.startswith(\"+++\") and not line.startswith(\"---\"):",
+      "test": "tests/test_h_mad_delta_review.py::TestExtraction::test_only_ADDED_lines_are_reviewed"
+    },
+    {
+      "name": "the-allowlist-is-matched-as-a-substring",
+      "_mechanism": "`rm -rf / # grep` contains `grep` and would be executed. The verb is the whole safety property; a substring test hands prose examples to subprocess.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    return verb in _ALLOWED",
+      "replace": "    return any(a in command for a in _ALLOWED)",
+      "test": "tests/test_h_mad_delta_review.py::TestSafety::test_the_allowlist_is_matched_on_the_VERB_not_a_substring"
+    },
+    {
+      "name": "shell-metacharacters-no-longer-refuse-execution",
+      "_mechanism": "A redirect, a pipe or a substitution out of a document's prose gets run. The canary test writes a real file if this fires — the script would be executing text an author wrote to illustrate, not to run.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    if _METACHARS & set(command):\n        return False",
+      "replace": "    if False:\n        return False",
+      "test": "tests/test_h_mad_delta_review.py::TestSafety::test_a_command_with_shell_metacharacters_is_UNVERIFIED_not_run"
+    },
+    {
+      "name": "unverified-claims-vanish-from-the-verdict-line",
+      "_mechanism": "The count of what could NOT be checked disappears, so a delta with ten unrunnable claims and none executed reads exactly like a clean one. A cannot-judge that is not in the token is a pass.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    print(f\"DELTA: CLAIMS claims={len(found)} executed={executed} \"\n          f\"unverified={unverified}\")",
+      "replace": "    print(f\"DELTA: CLAIMS claims={len(found)} executed={executed}\")",
+      "test": "tests/test_h_mad_delta_review.py::TestSafety::test_unverified_commands_are_COUNTED_in_the_verdict_line"
+    },
+    {
+      "name": "a-revision-git-cannot-read-is-reported-CLEAN",
+      "_mechanism": "The exact shape this repo keeps paying for: 'I could not measure it' spelled the same way as 'I measured it and it is fine'. A typo'd rev then certifies a delta nobody reviewed.",
+      "file": "scripts/h_mad_delta_review.py",
+      "find": "    if lines is None:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
+      "replace": "    if lines is None:\n        print(\"DELTA: CLEAN claims=0 executed=0 unverified=0\")\n        return 0\n    if False:\n        print(f\"DELTA: UNREADABLE reason=git:{args.rev}\")",
+      "test": "tests/test_h_mad_delta_review.py::TestSignalDiscipline::test_an_unknown_rev_is_UNREADABLE_at_exit_2"
+    }
+  ]
+}
