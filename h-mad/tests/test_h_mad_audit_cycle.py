@@ -2226,3 +2226,74 @@ def test_a_zero_byte_report_with_its_marker_does_not_beat_a_good_out(tmp_path):
     )
     assert delivered == "out", f"delivered={delivered}"
     assert path is not None and "the real answer" in path.read_text()
+
+
+class TestEffortSidecar:
+    """#48 — every `tools=N` in the permanent record was reconstructed from /tmp.
+    The report is collected into docs; its effort must travel with it."""
+
+    def test_writes_the_figures_beside_the_collected_report(self, tmp_path: Path) -> None:
+        ac = audit_cycle()
+        collected = tmp_path / "demo.plan.audit.v3.codex.md"
+        collected.write_text("## Summary\n", encoding="utf-8")
+        effort = {"readable": True, "tools": 12, "ok": 11, "failed": 1, "thinking": 5356,
+                  "status": "SUCCESS", "shape": "parsed"}
+        side = ac.write_effort_sidecar(collected, 2, tmp_path / "run.log", effort)
+        assert side == tmp_path / "demo.plan.audit.v3.codex.md.effort.json"
+        data = json.loads(side.read_text(encoding="utf-8"))
+        assert data["pass"] == 2 and data["tools"] == 12 and data["thinking"] == 5356
+        assert data["collected"] == collected.name and data["log"].endswith("run.log")
+
+    def test_no_collected_report_writes_nothing(self, tmp_path: Path) -> None:
+        ac = audit_cycle()
+        assert ac.write_effort_sidecar(None, 1, tmp_path / "x.log", {"tools": 1}) is None
+        assert ac.write_effort_sidecar(tmp_path / "missing.md", 1, None, {"tools": 1}) is None
+        assert list(tmp_path.iterdir()) == []
+
+    def test_no_effort_writes_nothing_rather_than_zeros(self, tmp_path: Path) -> None:
+        ac = audit_cycle()
+        collected = tmp_path / "r.md"
+        collected.write_text("x", encoding="utf-8")
+        assert ac.write_effort_sidecar(collected, 1, None, None) is None
+        assert not (tmp_path / "r.md.effort.json").exists()
+
+    def test_an_unreadable_log_is_recorded_as_unreadable_not_zero(self, tmp_path: Path) -> None:
+        ac = audit_cycle()
+        collected = tmp_path / "r.md"
+        collected.write_text("x", encoding="utf-8")
+        side = ac.write_effort_sidecar(collected, 1, tmp_path / "gone.log", {"readable": False})
+        assert json.loads(side.read_text())["readable"] is False
+        assert "tools" not in json.loads(side.read_text())
+
+
+def test_the_cycle_writes_an_effort_sidecar_beside_the_collected_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """#48 end to end: a pass with a log leaves `<collected>.effort.json` in the
+    project tree, carrying the same figures the stdout line prints."""
+    ac = audit_cycle()
+    report = tmp_path / "dispatch" / "p1.report.md"
+    write_done_report(report, HOSTILE_PASS_REPORT)
+    install_audit_gate_stub(
+        monkeypatch, tmp_path,
+        {"hostile-feature.plan.audit.v1.p1.md": ("PASS", 0, 0)},
+    )
+    log = tmp_path / "p1.log"
+    log.write_text(
+        json.dumps({"event": "init"}) + "\n"
+        + json.dumps({"event": "step_update", "step_update": {
+            "step_type": "tool", "tool_name": "view_file", "state": "DONE"}}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__], "pass_arg",
+        lambda index, report_path, rc=0:
+            f"{index}:{report_path}:{report_path.with_suffix('.out')}:{rc}:{log}",
+    )
+    rc, out, err = run_collect_cycle(ac, tmp_path=tmp_path, capsys=capsys, report_paths=[report])
+    sidecars = sorted(tmp_path.glob("**/*.effort.json"))
+    assert len(sidecars) == 1, (rc, out, err, sidecars)
+    data = json.loads(sidecars[0].read_text(encoding="utf-8"))
+    assert data["tools"] == 1 and data["ok"] == 1 and data["pass"] == 1
+    assert sidecars[0].name.endswith(".md.effort.json")
+    assert "p1 tools=1 ok=1" in out

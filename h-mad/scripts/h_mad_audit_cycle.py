@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import json
 import math
 import os
 import re
@@ -498,6 +499,42 @@ def measure_effort(log_path: Path | None) -> dict | None:
     return counts
 
 
+EFFORT_SUFFIX = ".effort.json"
+
+
+def write_effort_sidecar(collected_path: Path | None, index: int,
+                         log_path: Path | None, effort: dict | None) -> Path | None:
+    """Persist one pass's effort figures beside its COLLECTED report (#48).
+
+    `tools=N`, `ok=`, `failed=`, `thinking=` used to exist only on this driver's
+    stdout and in the /tmp log, so every effort figure in the permanent record
+    was reconstructed by hand (one auditor rebuilt `tools=113` from tool-name
+    occurrences that appear twice per call) and none was checkable from the
+    repo. The report is collected into docs; its effort now travels with it as
+    `<report>.effort.json`. Returns the path written, or None when there is no
+    collected report or no effort to record — an absent sidecar means "not
+    measured", never "measured as zero".
+    """
+    if collected_path is None or effort is None:
+        return None
+    collected_path = Path(collected_path)
+    if not collected_path.is_file():
+        return None
+    sidecar = collected_path.with_name(collected_path.name + EFFORT_SUFFIX)
+    payload = {"pass": index, "log": str(log_path) if log_path else None,
+               "collected": collected_path.name, **effort}
+    try:
+        sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                           encoding="utf-8")
+    except OSError:
+        # Advisory, and the loop's only handler is OperationalError — so an
+        # unwritable docs directory would otherwise lose `combine`, `render` and
+        # the collected verdict of a pass that completed, over a sidecar. An
+        # absent sidecar already means "not measured" (see above).
+        return None
+    return sidecar
+
+
 def _effort_items(results: list[PassResult]) -> list[str]:
     """One human line per pass that carried a log.
 
@@ -935,6 +972,8 @@ def main(argv: list[str] | None = None) -> int:
                         rc=spec.rc,
                     )
                 )
+                write_effort_sidecar(collected_path, spec.index, spec.log_path,
+                                     results[-1].effort)
             verdict, reason = combine(results)
             text = render(
                 results,

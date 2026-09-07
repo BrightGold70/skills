@@ -1591,7 +1591,11 @@ def test_verb_writes_only_reports(tmp_path):
     assert after - before == {
         f"01-plan/features/{feature}.plan.audit.v7.p1.md",
         f"01-plan/features/{feature}.plan.audit.v7.p2.md",
-    }, "audit-cycle must add only the per-pass collected reports under docs/"
+        f"01-plan/features/{feature}.plan.audit.v7.p1.md.effort.json",
+        f"01-plan/features/{feature}.plan.audit.v7.p2.md.effort.json",
+    }, ("audit-cycle must add only the per-pass collected reports and their effort "
+        "sidecars under docs/ (#48: every tools=N in the permanent record used to be "
+        "hand-reconstructed from /tmp because the figures were never collected)")
     # UNVERIFIED, not PASS, since #13: the stub dispatch writes a log carrying a
     # single `result` event and no tool calls, so `ok=0` — below the delivery floor.
     # That is the correct verdict for what this fixture models. The stub is a fake
