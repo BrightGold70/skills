@@ -485,10 +485,12 @@ def exit_check(stamps: list[Path]) -> dict:
 
     **H3 — the streak is measured over a leg set, not over cycles alone.** On
     HemaSuite `#18 gateway-consolidation` Σmust tracked the LEG COUNT rather than
-    document quality: the last 13 design cycles ran `3 3 7 5 3 5 4 3 8 4 7 12 6`,
-    and every rise coincided with a leg added or returning (teammate c87,
-    doc-auditor+crossdoc c92, codex c97). The exit streak was reset by new legs
-    four times and never approached by the documents — 99 cycles, streak zero.
+    document quality: the 13 design cycles ending at c99 ran
+    `3 3 7 5 3 5 4 3 8 4 7 12 6`, and every rise coincided with a leg added or
+    returning (teammate c87, doc-auditor+crossdoc c92, codex c97). Re-derive the
+    series from the ledger rather than reading that window as current; it has
+    grown since. The exit streak was reset by new legs four times and never
+    approached by the documents — zero at c99 when measured, still zero at c104.
     Two cycles therefore close the gate only if they asked the same question; a
     changed set starts a new baseline by construction, since two fresh cycles
     under it agree with each other.
@@ -724,7 +726,11 @@ def main(argv: list[str] | None = None) -> int:
         # explicitly empty one, and `[]` would CLAIM the cycle ran zero legs.
         # Claiming nothing is the honest record, and the exit gate reads it as a
         # cannot-judge rather than as a mismatch (#11/H3).
-        legs = _leg_key(args.legs) if args.legs else None
+        # `or None`, not `if args.legs`: `--legs ""` makes the list TRUTHY and
+        # `_leg_key` then strips it back to `[]`, which stamped a recorded-empty
+        # set while `GATE-LEGS:` printed `unrecorded` — two surfaces disagreeing
+        # about the same cycle. Normalise after the strip, not before it.
+        legs = _leg_key(args.legs) or None
         stamp_path(args.audit_file).write_text(
             json.dumps({"verdict": verdict, "files": files, "suite": suite,
                         "legs": legs}, indent=1) + "\n",

@@ -1,5 +1,5 @@
 {
-  "_why": "#11/H3: on HemaSuite #18 the exit streak was reset four times by legs being added and never once approached by the documents — 99 cycles, streak zero, while Sigma-must tracked the LEG COUNT. Each row restores one way a streak can close over two cycles that asked DIFFERENT questions, plus the two ways the calibration can invert: refusing an unrecorded leg set (a false hard fail on every pre-H3 stamp) and letting order or duplication read as a change.",
+  "_why": "#11/H3: on HemaSuite #18 the exit streak was reset four times by legs being added and never once approached by the documents — zero at c99 when measured and still zero at c104 — while Sigma-must tracked the LEG COUNT. Each row restores one way a streak can close over two cycles that asked DIFFERENT questions, plus the two ways the calibration can invert: refusing an unrecorded leg set (a false hard fail on every pre-H3 stamp) and letting order or duplication read as a change.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -43,7 +43,7 @@
       "name": "an-unnamed-leg-set-is-stamped-as-an-empty-list",
       "_mechanism": "`[]` CLAIMS the cycle ran zero legs, so two unnamed cycles compare equal and close the exit gate on a set nobody declared — silence reaching green through the comparison instead of around it.",
       "file": "scripts/h_mad_audit_gate.py",
-      "find": "        legs = _leg_key(args.legs) if args.legs else None",
+      "find": "        legs = _leg_key(args.legs) or None",
       "replace": "        legs = _leg_key(args.legs)",
       "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheStampCarriesTheLegSet::test_an_unrecorded_leg_set_is_null_never_an_empty_list"
     },

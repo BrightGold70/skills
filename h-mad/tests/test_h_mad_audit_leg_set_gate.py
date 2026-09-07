@@ -2,11 +2,13 @@
 
 Measured on HemaSuite `#18 gateway-consolidation` and recorded in
 `gateway-consolidation.audit-ledger.md`: Sigma-must tracked the LEG COUNT, not
-document quality. The last 13 design cycles ran `3 3 7 5 3 5 4 3 8 4 7 12 6`
+document quality. The 13 design cycles ending at c99 ran `3 3 7 5 3 5 4 3 8 4 7 12 6`
 must-fixes, and every rise coincided with a leg being added or returning
 (teammate c87, doc-auditor+crossdoc c92, codex c97). The two-consecutive-both-
 clean exit was therefore RESET by new legs four times and never once approached
-by the documents. 99 cycles, exit streak zero.
+by the documents. Zero at c99 when this was measured, still zero at c104; the
+series has grown since, so re-derive it from the ledger rather than reading the
+window above as current.
 
 The defect is not that a leg was added. It is that adding one silently reset a
 streak nobody was counting, so the loop could not distinguish "the documents got
@@ -85,6 +87,16 @@ class TestTheStampCarriesTheLegSet:
     def test_an_unrecorded_leg_set_is_null_never_an_empty_list(self, tmp_path: Path) -> None:
         """`[]` would claim a cycle ran zero legs. It claims nothing instead."""
         assert self._stamped(tmp_path, None)["legs"] is None
+
+    def test_a_leg_set_that_strips_to_nothing_is_also_null(self, tmp_path: Path) -> None:
+        """`--legs ""` makes argparse's list TRUTHY, and the strip empties it again.
+
+        Guarding on `args.legs` rather than on the normalised result stamped
+        `[]` — a RECORDED empty set — while `GATE-LEGS:` printed `unrecorded`,
+        so the stamp and the line disagreed about the same cycle. `[]` then
+        compares unequal to any real set and blocks with `legs_changed:-|agy`.
+        """
+        assert self._stamped(tmp_path, ["", "  "])["legs"] is None
 
     def test_stamping_without_legs_says_so_on_its_own_line(self, tmp_path: Path) -> None:
         """Non-skippable at the point of use, not only at the exit gate."""
