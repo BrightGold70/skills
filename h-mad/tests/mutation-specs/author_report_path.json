@@ -62,6 +62,14 @@
       "find": "puts the **owed list**, the declines with their reasons, and the verbatim text owed to sibling",
       "replace": "puts some closing remarks and the text owed to sibling",
       "test": "tests/test_h_mad_agent_definitions.py::test_the_owed_list_is_named_as_what_truncation_costs[design-author]"
+    },
+    {
+      "name": "the-orchestrator-never-reads-the-report-file",
+      "_mechanism": "The end-to-end hole: the path is staged, passed and written, and nobody opens it. The orchestrator acts on the DONE pointer, so the owed list is skipped \u2014 the same loss the file deliverable prevents, moved one step later. Wiring both ends and consuming neither is worse than not wiring at all, because it reads as done.",
+      "file": "SKILL.md",
+      "find": "5. **Read `$RP` after every author DONE \u2014 staging a path is not consuming it.**",
+      "replace": "5. **Optional: glance at `$RP` if convenient.**",
+      "test": "tests/test_h_mad_agent_definitions.py::test_skill_orchestrator_owns_the_successor_ownership_rules"
     }
   ]
 }

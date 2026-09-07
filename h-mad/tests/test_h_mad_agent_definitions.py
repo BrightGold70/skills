@@ -61,6 +61,10 @@ def test_skill_orchestrator_owns_the_successor_ownership_rules() -> None:
         "recoverable, not death",
         "Rule ownership explicitly before spawning a successor.",
         "Collect on the `DONE` line, not on the notification.",
+        # Staging a path is not consuming it: the body lands in $RP and the message
+        # carries only a pointer, so an orchestrator that acts on the message has
+        # skipped exactly the owed list the file deliverable was added to protect.
+        "Read `$RP` after every author DONE — staging a path is not consuming it.",
     ):
         assert literal in body, f"SKILL.md dropped orchestrator author rule: {literal!r}"
 

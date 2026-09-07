@@ -1270,6 +1270,16 @@ follow, none of which an agent file can enforce for you:
    `<ROLE>: DONE …` line FIRST (four r17 reports were truncated before a trailing DONE); a report
    file or a bumped Version History is the deliverable, and a DONE message that arrives ~45 minutes
    after the marker is benign.
+5. **Read `$RP` after every author DONE — staging a path is not consuming it.** You passed
+   `REPORT=$RP` on dispatch (§"Teammate authors"); the author's body is in that file and its message
+   now carries only the DONE line and a pointer. If you act on the message alone you have read the
+   pointer and not the report, and the **owed list is the part you skipped** — the declines with
+   their reasons, and the verbatim text owed to sibling authors, none of which is in the document.
+   That is the same loss the file deliverable was added to prevent, moved one step later. If the
+   file is absent or empty while the message claims a body, say so and re-ask; an empty `$RP` beside
+   a DONE is a cannot-judge, not an empty report. When the author declared `REPORT=<none>` on the
+   line after DONE, the body is inline and may be truncated — treat a message that ends mid-word as
+   incomplete rather than as a short report.
 
 ### Delta self-review — review the FIX before you re-dispatch the audit
 
