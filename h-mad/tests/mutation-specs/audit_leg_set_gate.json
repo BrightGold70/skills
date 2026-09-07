@@ -1,0 +1,83 @@
+{
+  "_why": "#11/H3: on HemaSuite #18 the exit streak was reset four times by legs being added and never once approached by the documents — 99 cycles, streak zero, while Sigma-must tracked the LEG COUNT. Each row restores one way a streak can close over two cycles that asked DIFFERENT questions, plus the two ways the calibration can invert: refusing an unrecorded leg set (a false hard fail on every pre-H3 stamp) and letting order or duplication read as a change.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_leg_set_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-changed-leg-set-no-longer-blocks-the-exit",
+      "_mechanism": "THE defect: the streak closes over two cycles that ran different legs, which is c92 (doc-auditor+crossdoc added) and c97 (codex returning) exactly — the reset nobody was counting.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if first != second:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheExitGateRefusesAChangedLegSet::test_a_leg_added_between_the_two_cycles_BLOCKS"
+    },
+    {
+      "name": "an-unrecorded-leg-set-blocks-the-exit",
+      "_mechanism": "The calibration inverted: a hard fail fires on every stamp written before the field existed. This is the 104/49/48 error (docs/learnings.md:77) — a detector that refuses artifacts which legitimately passed. Not-blocking is the assertion here, so it gets a row. The named test is the MIXED pair, not the both-unrecorded one: two unrecorded cycles compare equal even with the guard removed, so that pair leaves the mutant alive and the battery reports it caught by the wrong assertion.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if first is not None and second is not None:",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheExitGateRefusesAChangedLegSet::test_a_mixed_recorded_and_unrecorded_pair_does_not_block"
+    },
+    {
+      "name": "the-leg-set-is-recorded-unnormalised",
+      "_mechanism": "Order and duplication become leg-set changes, so the gate refuses a streak for the order the orchestrator typed its flags in — a block with no defect behind it, which is how a gate gets switched off.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    return sorted({str(name).strip() for name in legs if str(name).strip()})",
+      "replace": "    return [str(name) for name in legs]",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheStampCarriesTheLegSet::test_the_legs_are_recorded_sorted_and_deduped"
+    },
+    {
+      "name": "an-unnamed-leg-set-is-stamped-as-an-empty-list",
+      "_mechanism": "`[]` CLAIMS the cycle ran zero legs, so two unnamed cycles compare equal and close the exit gate on a set nobody declared — silence reaching green through the comparison instead of around it.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        legs = _leg_key(args.legs) if args.legs else None",
+      "replace": "        legs = _leg_key(args.legs)",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheStampCarriesTheLegSet::test_an_unrecorded_leg_set_is_null_never_an_empty_list"
+    },
+    {
+      "name": "the-unrecorded-leg-set-is-not-reported-at-stamp-time",
+      "_mechanism": "The nudge disappears from the point of use and survives only at the exit gate, so H3 degrades into prose an orchestrator can skip — the failure mode h_mad_audit_gate.py:466 names for the streak rule itself.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if legs_line is not None:\n        print(f\"GATE-LEGS: {legs_line}\")",
+      "replace": "    if False:\n        print(f\"GATE-LEGS: {legs_line}\")",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheStampCarriesTheLegSet::test_stamping_without_legs_says_so_on_its_own_line"
+    },
+    {
+      "name": "the-unrecorded-leg-set-is-not-reported-at-the-exit-gate",
+      "_mechanism": "A READY that closed over an unknown leg set reads identically to one that closed over a declared one. Not blocking and not saying are different things; only the second makes the field pointless.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "            line += f\" legs={'+'.join(result['legs']) if result.get('legs') else 'unrecorded'}\"",
+      "replace": "            pass",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheExitGateRefusesAChangedLegSet::test_an_unrecorded_leg_set_is_REPORTED_on_the_exit_line"
+    },
+    {
+      "name": "the-leg-set-is-woven-into-the-GATE-line",
+      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fifth field on line 1 makes EVERY verdict un-parse — the same reason GATE-CLASS and SUITE are their own lines.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        stamped = f\" gated={len(files)}\"\n        # Deferred, not printed here",
+      "replace": "        stamped = f\" gated={len(files)} legs={legs}\"\n        # Deferred, not printed here",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheStampCarriesTheLegSet::test_the_gate_line_is_untouched_by_the_leg_set"
+    },
+    {
+      "name": "the-leg-set-outranks-the-red-suite",
+      "_mechanism": "#91's refusal softened by the one added beside it: a cycle with a red suite but a matching leg set would report legs_changed=no and close. The suite check must still run first, per stamp, before anything is compared.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if suite != \"PASS\":\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
+      "replace": "        if False:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_{suite.lower()}:{path.name}\"}",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheExitGateRefusesAChangedLegSet::test_a_red_suite_still_outranks_the_leg_set"
+    }
+  ]
+}

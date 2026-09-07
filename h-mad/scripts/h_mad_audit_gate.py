@@ -459,6 +459,16 @@ def stamp_path(audit_file: Path) -> Path:
     return audit_file.with_name(audit_file.name + STAMP_SUFFIX)
 
 
+def _leg_key(legs) -> list[str]:
+    """The comparable form of a leg set: sorted, deduped, whitespace-stripped.
+
+    Order is not a leg-set change and neither is naming a leg twice, so both are
+    normalised away before anything is compared. Without this the gate would
+    refuse a streak for the order the orchestrator happened to type its flags in.
+    """
+    return sorted({str(name).strip() for name in legs if str(name).strip()})
+
+
 def exit_check(stamps: list[Path]) -> dict:
     """Are the last two cycles eligible to close the exit gate?
 
@@ -472,10 +482,28 @@ def exit_check(stamps: list[Path]) -> dict:
     Unmeasured is refused for the same reason a missing summary is: a cycle that
     never ran the suite has not shown it green, and treating silence as a pass is
     the defect this closes.
+
+    **H3 — the streak is measured over a leg set, not over cycles alone.** On
+    HemaSuite `#18 gateway-consolidation` Σmust tracked the LEG COUNT rather than
+    document quality: the last 13 design cycles ran `3 3 7 5 3 5 4 3 8 4 7 12 6`,
+    and every rise coincided with a leg added or returning (teammate c87,
+    doc-auditor+crossdoc c92, codex c97). The exit streak was reset by new legs
+    four times and never approached by the documents — 99 cycles, streak zero.
+    Two cycles therefore close the gate only if they asked the same question; a
+    changed set starts a new baseline by construction, since two fresh cycles
+    under it agree with each other.
+
+    An UNRECORDED leg set does **not** block. Every stamp written before the
+    field existed has none and was not thereby wrong, and a detector that fires
+    on artifacts which legitimately passed is the calibration error this repo has
+    already paid for. It is reported instead — `legs=unrecorded` on the EXIT
+    line, and `GATE-LEGS: unrecorded` at stamp time — because not-blocking and
+    not-saying are different things, and only the second turns H3 back into prose.
     """
     if len(stamps) < 2:
         return {"verdict": "BLOCKED", "reason": f"not_two_cycles:{len(stamps)}"}
     considered = stamps[-2:]
+    leg_sets: list[list[str] | None] = []
     for path in considered:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -489,7 +517,20 @@ def exit_check(stamps: list[Path]) -> dict:
             return {"verdict": "BLOCKED", "reason": f"suite_unmeasured:{path.name}"}
         if suite != "PASS":
             return {"verdict": "BLOCKED", "reason": f"suite_{suite.lower()}:{path.name}"}
-    return {"verdict": "READY", "cycles": [p.name for p in considered]}
+        recorded = data.get("legs")
+        leg_sets.append(None if recorded is None else _leg_key(recorded))
+
+    # Compared only when BOTH cycles recorded one: a mismatch against a cycle
+    # that recorded nothing is not a mismatch, it is a cannot-judge.
+    first, second = leg_sets
+    legs: list[str] | None = None
+    if first is not None and second is not None:
+        if first != second:
+            return {"verdict": "BLOCKED",
+                    "reason": f"legs_changed:{'+'.join(first) or '-'}"
+                              f"|{'+'.join(second) or '-'}"}
+        legs = first
+    return {"verdict": "READY", "cycles": [p.name for p in considered], "legs": legs}
 
 
 def verify_stamp(audit_file: Path) -> dict:
@@ -553,9 +594,18 @@ def main(argv: list[str] | None = None) -> int:
         "--suite-cmd", help="override the suite command (default: pytest <root> -q)",
     )
     parser.add_argument(
+        "--legs", action="append", default=[], metavar="NAME",
+        help="a reviewer leg this cycle ran (`codex`, `agy`, `doc-auditor`, …); "
+             "recorded in the stamp on PASS. Repeatable. Two cycles close the "
+             "exit gate only over the SAME leg set (#11/H3): adding or dropping "
+             "a leg starts a new baseline instead of silently resetting a streak "
+             "nobody was counting.",
+    )
+    parser.add_argument(
         "--exit-check", nargs="+", type=Path, metavar="STAMP",
         help="read the cycle stamps and report whether the exit gate may close. "
-             "A cycle whose suite was red or unmeasured cannot contribute.",
+             "A cycle whose suite was red or unmeasured cannot contribute, and a "
+             "leg set that changed between the two cycles blocks it (#11/H3).",
     )
     parser.add_argument(
         "--verify-stamp", action="store_true",
@@ -566,11 +616,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.exit_check:
         result = exit_check(sorted(args.exit_check))
         detail = result.get("reason") or ",".join(result.get("cycles", []))
-        print(f"EXIT: {result['verdict']} "
-              f"{'reason' if result.get('reason') else 'cycles'}={detail}")
+        line = (f"EXIT: {result['verdict']} "
+                f"{'reason' if result.get('reason') else 'cycles'}={detail}")
+        if result["verdict"] == "READY":
+            # Reported on every READY, recorded or not. A streak that closed over
+            # an unknown leg set is still a fact the reader needs (#11/H3).
+            line += f" legs={'+'.join(result['legs']) if result.get('legs') else 'unrecorded'}"
+        print(line)
         if result["verdict"] == "BLOCKED":
-            print("  a cycle whose suite was red or unmeasured cannot close the exit "
-                  "gate; the per-cycle verdicts are untouched (#91).")
+            if str(result.get("reason", "")).startswith("legs_changed"):
+                print("  the two cycles ran different reviewer legs, so the streak "
+                      "measures two different questions. Σmust tracked the leg count "
+                      "on #18 and the exit was reset four times by legs, never "
+                      "approached by the documents (#11/H3). Run two cycles under "
+                      "the new set — that IS the new baseline.")
+            else:
+                print("  a cycle whose suite was red or unmeasured cannot close the exit "
+                      "gate; the per-cycle verdicts are untouched (#91).")
         return 2 if result["verdict"] == "UNREADABLE" else 0
 
     if args.verify_stamp:
@@ -635,6 +697,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"SUITE: {suite} passed={outcome['passed']} failed={outcome['failed']}")
 
+    # Declared ABOVE `stamped` deliberately: `audit_suite_gate.json` anchors the
+    # red-suite-hostage row on `stamped = ""` immediately followed by the `if`,
+    # and splitting that pair drifts a neighbouring feature's mutation spec.
+    legs_line: str | None = None
     stamped = ""
     if args.gated and verdict == "PASS":
         # Hash everything BEFORE writing anything: a stamp covering three files
@@ -654,12 +720,22 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 print(f"[H-MAD] {feature} gate UNSTAMPABLE")
                 return 2
+        # `None`, never `[]`: argparse cannot distinguish "no --legs" from an
+        # explicitly empty one, and `[]` would CLAIM the cycle ran zero legs.
+        # Claiming nothing is the honest record, and the exit gate reads it as a
+        # cannot-judge rather than as a mismatch (#11/H3).
+        legs = _leg_key(args.legs) if args.legs else None
         stamp_path(args.audit_file).write_text(
-            json.dumps({"verdict": verdict, "files": files, "suite": suite},
-                       indent=1) + "\n",
+            json.dumps({"verdict": verdict, "files": files, "suite": suite,
+                        "legs": legs}, indent=1) + "\n",
             encoding="utf-8",
         )
         stamped = f" gated={len(files)}"
+        # Deferred, not printed here: the emission order is GATE -> GATE-CLASS ->
+        # GATE-LEGS, and this block runs BEFORE the verdict line. Printing in
+        # place put GATE-LEGS above GATE and falsified the order this file's own
+        # registry entry documents — caught by executing the CLI, not by reading it.
+        legs_line = '+'.join(legs) if legs else 'unrecorded'
 
     # The first line is what every existing caller reads, so the stamp count is
     # appended rather than woven in, and is absent entirely without --gated.
@@ -678,6 +754,13 @@ def main(argv: list[str] | None = None) -> int:
         f"untagged={result['must_untagged'] + result['should_untagged']} "
         f"ack_refused={result['ack_refused']}"
     )
+    # Line 3, on a stamped PASS only. Its own line for the same reason as
+    # GATE-CLASS and SUITE: `h_mad_audit_cycle.GATE_RE` anchors on `should=N\s*$`,
+    # so anything woven into line 1 un-parses every verdict. An orchestrator that
+    # never names its legs is told so each cycle, at the point of use, rather
+    # than once at the exit gate — which is what keeps H3 from being prose.
+    if legs_line is not None:
+        print(f"GATE-LEGS: {legs_line}")
     print(f"[H-MAD] {feature} gate {verdict}")
     return 0
 
