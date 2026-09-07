@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-07 · gotcha · [0.7] · `h-mad,fixtures,gates,tracer,handoff:2026-09-07-main__tooling-backlog-drained-7f-and-91` — An instrument built around the happy path proves only the happy path. Offline fixtures and a live tracer both used distinct-by-construction cycles, so neither saw two legs of ONE cycle read as a two-cycle streak.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,mutation,fixtures,calibration,handoff:2026-09-07-main__tooling-backlog-drained-7f-and-91` — A not-blocking guard needs a MIXED-state fixture: both-absent inputs compare equal even with the comparison removed, so that pair kills no mutant. The battery reported 'caught by the wrong assertion' and named the real discriminator.
 - 2026-09-07 · gotcha · [0.9] · `h-mad,measurement,session:2026-09-07` — Editing files while a mutation/pytest job runs invalidates that run: a REFUSED anchor measured my own torn tree, not the code. Wait for the tree to be quiet, then measure.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,mutation,testing,session:2026-09-07` — A guard whose mutation SURVIVES may be a bad test, not a weak guard: an empty-selection stub printing only 'no tests ran' never reached the verdict logic, so the row it was meant to kill lived. Make the fixture reach the branch.
