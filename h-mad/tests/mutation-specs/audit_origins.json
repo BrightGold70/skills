@@ -1,0 +1,104 @@
+{
+  "_why": "#11/H7: the instrument exists because the fix-introduced rate had to be reconstructed from memory at handoff, and the ledger could only say 'at least 17 of 98 — a lower bound'. Every row below restores a way this script reports a NUMBER THAT IS TOO GOOD: a miscategorised origin, a dropped record, a denominator that includes false findings, an untagged feature reading as zero. All four make the fix-introduced rate fall without any defect being fixed, which is the exact conclusion H7 is supposed to be able to refute.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_audit_origins.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "an-unknown-origin-becomes-its-own-category",
+      "_mechanism": "A typo (`fix-intoduced`) stops being refused and silently becomes a ninth bucket. `fix-introduced` then reads LOWER by exactly the typo's count, and the ledger reads a spelling error as the audit loop improving. This is the one hard rule over content, so it is the row that matters most.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    if \"origin\" in record and origin not in ORIGINS:",
+      "replace": "    if \"origin\" in record and False:",
+      "test": "tests/test_h_mad_audit_origins.py::TestVocabulary::test_an_unknown_origin_is_REFUSED_not_counted_as_its_own_category"
+    },
+    {
+      "name": "by_cycle-stops-being-required-for-seeded-origins",
+      "_mechanism": "`fix-introduced` with no seed cycle is admitted. The ledger's own warning is that a blank cell means UNCLASSIFIED, not new — so an unseeded record is a claim nobody can trace back to the fix that caused it, and the class becomes unauditable while still counting.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    if origin in BY_CYCLE_REQUIRED and not isinstance(record.get(\"by_cycle\"), int):",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_origins.py::TestByCycle::test_by_cycle_is_REQUIRED_for_the_two_seeded_origins"
+    },
+    {
+      "name": "an-absent-sidecar-reports-a-clean-zero",
+      "_mechanism": "An untagged feature reads as `fix-introduced=0` instead of UNREADABLE. This is the worst failure in the file: it turns 'nobody ran the instrument' into 'the instrument found nothing', which is the same shape as the missing-tool failure that made a handoff resume restore an empty todo list while every other check read correct.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    if not sidecar.is_file():",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_origins.py::TestAbsenceIsNotZero::test_an_absent_sidecar_is_UNREADABLE_not_a_clean_measurement"
+    },
+    {
+      "name": "an-unparsable-line-is-skipped-silently",
+      "_mechanism": "A record lost to a torn write vanishes from every count with no signal. Every aggregate gets SMALLER, and smaller is indistinguishable from progress. The verdict would stay OK rather than INVALID, so nothing tells the reader the numbers are a lower bound.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "            problems.append((lineno, f\"unparsable-json:{exc.__class__.__name__}\"))\n            continue",
+      "replace": "            continue",
+      "test": "tests/test_h_mad_audit_origins.py::TestUnparsableLinesAreNeverSilent::test_a_bad_line_is_reported_with_its_number"
+    },
+    {
+      "name": "rejected-findings-re-enter-the-denominator",
+      "_mechanism": "`accepted` becomes `len(records)`, so false findings pad the denominator. A cycle that filed seven rejected findings and three real fix-introduced ones reports 30% instead of 100% — the noisiest cycles score BEST. Measured in the test: 3/3 becomes 3/10.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    accepted = len(records) - rejected",
+      "replace": "    accepted = len(records)",
+      "test": "tests/test_h_mad_audit_origins.py::TestTheDenominator::test_rejected_is_EXCLUDED_from_the_fix_introduced_share"
+    },
+    {
+      "name": "an-invalid-record-is-appended-anyway",
+      "_mechanism": "The refusal becomes a warning and the malformed record lands in the sidecar, where every later summary counts it. A bad record on disk is strictly worse than a rejected write: the write can be retried, the counted-forever record cannot be found without re-reading the whole file.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    reasons = validate(record)\n    if reasons:",
+      "replace": "    reasons = []\n    if reasons:",
+      "test": "tests/test_h_mad_audit_origins.py::TestAppendRefusesRatherThanWrites::test_an_invalid_record_is_NOT_written"
+    },
+    {
+      "name": "the-share-drops-its-denominator",
+      "_mechanism": "`51/152 (33.6%)` becomes a bare `33.6%`. A percentage with no denominator cannot be compared across features or cycles and gets re-derived wrongly by the next reader — the same class as the bare counts H8 is about.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    return f\"{count}/{denominator} ({100.0 * count / denominator:.1f}%)\"",
+      "replace": "    return f\"({100.0 * count / denominator:.1f}%)\"",
+      "test": "tests/test_h_mad_audit_origins.py::TestTheDenominator::test_the_share_carries_its_denominator"
+    },
+    {
+      "name": "a-zero-denominator-reports-zero-percent-instead-of-n-a",
+      "_mechanism": "An empty corpus reports `0/0 (0.0%)` — a fix-introduced rate of zero for a feature where nothing was measured at all. Same absence-reads-as-success family as the absent-sidecar row, one level down. Guarded separately because this path is reached with the sidecar PRESENT.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    if denominator <= 0:\n        return \"n/a\"",
+      "replace": "    if denominator < 0:\n        return \"n/a\"",
+      "test": "tests/test_h_mad_audit_origins.py::TestTheDenominator::test_a_zero_denominator_is_n_a_not_a_crash_and_not_zero_percent"
+    },
+    {
+      "name": "the-item-truncation-is-dropped",
+      "_mechanism": "A 500-character finding goes into the sidecar whole. The ledger's schema pins `item` at 80 chars precisely so the sidecar stays greppable and diffable; an untruncated item makes a line-oriented store unreadable and buries the origin field the instrument is for.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "        \"item\": args.item[:args.item_chars],",
+      "replace": "        \"item\": args.item,",
+      "test": "tests/test_h_mad_audit_origins.py::TestAppendRefusesRatherThanWrites::test_item_is_truncated_to_the_ledgers_eighty_chars"
+    },
+    {
+      "name": "append-overwrites-instead-of-accumulating",
+      "_mechanism": "Opening the sidecar with 'w' keeps only the most recent must-fix, so every summary reports n=1. The instrument would report a fix-introduced rate over a single record forever, and the per-cycle trend — H7's entire purpose — would never have more than one point.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    with sidecar.open(\"a\", encoding=\"utf-8\") as handle:",
+      "replace": "    with sidecar.open(\"w\", encoding=\"utf-8\") as handle:",
+      "test": "tests/test_h_mad_audit_origins.py::TestAppendRefusesRatherThanWrites::test_appends_accumulate_rather_than_overwrite"
+    },
+    {
+      "name": "unknown-keys-start-failing-validation",
+      "_mechanism": "The inverse direction, and it needs its own row because every other mutation here loosens the gate. Rejecting `severity`/`note` would have refused the 152-record prototype this instrument was calibrated against — a gate too strict is not safe, it is a gate that cannot read the real corpus.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "    reasons = []\n    for key in REQUIRED_KEYS:",
+      "replace": "    reasons = [f\"unknown-key:{k}\" for k in record if k not in REQUIRED_KEYS]\n    for key in REQUIRED_KEYS:",
+      "test": "tests/test_h_mad_audit_origins.py::TestUnknownKeysPassThrough::test_severity_and_note_do_not_make_a_record_invalid"
+    },
+    {
+      "name": "by_cycle-becomes-required-for-EVERY-origin",
+      "_mechanism": "The calibration claim, mutated at the CODE rather than at the assertion. Widening BY_CYCLE_REQUIRED to the whole vocabulary makes the detector fire on 51 of the 152 already-correct records — the ones that legitimately carry `by_cycle: null` because their origin is not seeded. This is the 104/49/48 failure the precheck detectors had, reproduced: a rule that is defensible in the abstract and unusable against the corpus. Scored on the real-corpus noise-floor test so the row proves the 152-record fixture is load-bearing and not decoration.\n\nAn earlier version of this row mutated the noise-floor test's own assertion to a tautology and named that same test as its killer. It SURVIVED, necessarily: a mutated test passes itself, so the row could never have been caught by anything. Recorded here rather than silently swapped — the battery kept catching my tests instead of my code, and this is that class one more time.",
+      "file": "scripts/h_mad_audit_origins.py",
+      "find": "BY_CYCLE_REQUIRED = (\"fix-introduced\", \"propagation-gap\")",
+      "replace": "BY_CYCLE_REQUIRED = ORIGINS",
+      "test": "tests/test_h_mad_audit_origins.py::TestAgainstTheRealCorpus::test_every_hard_rule_fires_ZERO_times_on_it"
+    }
+  ]
+}
