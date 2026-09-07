@@ -653,6 +653,14 @@ def main(argv: list[str] | None = None) -> int:
         "--suite-cmd", help="override the suite command (default: pytest <root> -q)",
     )
     parser.add_argument(
+        "--suite-result", choices=("PASS", "FAIL", "UNREADABLE"), metavar="VERDICT",
+        help="record a suite verdict measured ONCE for the whole cycle instead of "
+             "running one here. The cycle driver calls this gate once per LEG, and "
+             "running the suite per leg is minutes each and the design "
+             "`audit_suite_gate.json` already rejects. Mutually exclusive with "
+             "--project-tests: two sources for one field is how they disagree.",
+    )
+    parser.add_argument(
         "--legs", action="append", default=[], metavar="NAME",
         help="a reviewer leg this cycle ran (`codex`, `agy`, `doc-auditor`, …); "
              "recorded in the stamp on PASS. Repeatable. Two cycles close the "
@@ -762,8 +770,18 @@ def main(argv: list[str] | None = None) -> int:
     result = classify_detail(text, acknowledged)
     verdict = "FAIL" if result["must_count"] or (result["should_count"] and not args.must_only) else "PASS"
 
+    if args.suite_result and args.project_tests is not None:
+        print("ERROR: --suite-result and --project-tests are mutually exclusive — "
+              "one field, one source", file=sys.stderr)
+        return 2
+
     suite = SUITE_UNMEASURED
-    if args.project_tests is not None:
+    if args.suite_result:
+        # Measured once for the cycle by the driver and forwarded here. `source=cycle`
+        # so a reader can never mistake a recorded verdict for one this call measured.
+        suite = args.suite_result
+        print(f"SUITE: {suite} source=cycle")
+    elif args.project_tests is not None:
         command = args.suite_cmd.split() if args.suite_cmd else None
         outcome = run_suite(args.project_tests, command)
         suite = outcome["verdict"]

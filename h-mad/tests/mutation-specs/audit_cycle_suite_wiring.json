@@ -1,0 +1,48 @@
+{
+  "_why": "#91 and #11/H3 both shipped and neither was reachable through the cycle driver: `gate()` built its command with the collected report and `--ack-file` and nothing else, so every cycle driven through the script recorded `suite: null` with no leg set and its exit gate was refused `suite_unmeasured`. Three flags an orchestrator had to remember by hand — the 'instruction an orchestrator can skip' the gate itself names as the reason 91 cycles ran red. Each row restores one way the wiring can be present and inert.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_audit_cycle.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-suite-runs-once-per-LEG-instead-of-once-per-cycle",
+      "_mechanism": "The rejected design restored: minutes per leg, and `audit_suite_gate.json` already carries a row against running it on every gate invocation. Moving the run inside the loop also makes two legs of one cycle able to disagree about the suite.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                    verdict, must, should, findings = gate(\n                        collected_path,\n                        ack_file=args.ack_file,\n                        gated=args.gated,\n                        legs=args.legs,\n                        suite_result=suite_result,\n                    )",
+      "replace": "                    if args.project_tests is not None:\n                        from h_mad_audit_gate import run_suite as _rs\n                        _rs(args.project_tests, args.suite_cmd.split() if args.suite_cmd else None)\n                    verdict, must, should, findings = gate(\n                        collected_path,\n                        ack_file=args.ack_file,\n                        gated=args.gated,\n                        legs=args.legs,\n                        suite_result=suite_result,\n                    )",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_suite_runs_ONCE_for_a_multi_leg_cycle"
+    },
+    {
+      "name": "the-driver-stops-forwarding-the-leg-set",
+      "_mechanism": "Stamps carry no legs, so H3 can never refuse a changed leg set through the normal path — the gate is wired and inert, which reads as done.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for leg in legs or []:\n        command.extend([\"--legs\", leg])",
+      "replace": "    for leg in []:\n        command.extend([\"--legs\", leg])",
+      "test": "tests/test_h_mad_audit_cycle.py::test_every_leg_of_the_cycle_records_the_same_suite_and_leg_set"
+    },
+    {
+      "name": "the-driver-stops-forwarding-the-gated-documents",
+      "_mechanism": "No stamp is written at all, so nothing exists for `--exit-check` to read and the streak can never be established — the state every pre-#91 cycle was already in.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    for path in gated or []:\n        command.extend([\"--gated\", str(path)])",
+      "replace": "    for path in []:\n        command.extend([\"--gated\", str(path)])",
+      "test": "tests/test_h_mad_audit_cycle.py::test_every_leg_of_the_cycle_records_the_same_suite_and_leg_set"
+    },
+    {
+      "name": "the-suite-runs-on-every-cycle-whether-asked-or-not",
+      "_mechanism": "Every existing caller suddenly runs a test suite it never asked for — minutes per cycle and a behaviour change nobody opted into.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if args.project_tests is not None:\n        from h_mad_audit_gate import run_suite",
+      "replace": "    if True:\n        from h_mad_audit_gate import run_suite",
+      "test": "tests/test_h_mad_audit_cycle.py::test_without_the_flag_no_suite_runs_and_behaviour_is_unchanged"
+    },
+    {
+      "name": "GATE_RE-goes-back-to-refusing-a-gated-line",
+      "_mechanism": "The collision the gate's own comment recorded as latent: `--gated` appends ` gated=N` to line 1, and the anchored form then matches nothing, so every gated cycle dies with `ERROR: missing GATE token`. Latent only while the driver never passed the flag — which it now does.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "GATE_RE = re.compile(r\"^GATE:\\s+(\\S+)\\s+must=(\\d+)\\s+should=(\\d+)(?:\\s+\\S+)*\\s*$\")",
+      "replace": "GATE_RE = re.compile(r\"^GATE:\\s+(\\S+)\\s+must=(\\d+)\\s+should=(\\d+)\\s*$\")",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_gated_GATE_line_still_parses"
+    }
+  ]
+}

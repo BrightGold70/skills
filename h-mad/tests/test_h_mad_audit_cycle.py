@@ -2297,3 +2297,102 @@ def test_the_cycle_writes_an_effort_sidecar_beside_the_collected_report(
     assert data["tools"] == 1 and data["ok"] == 1 and data["pass"] == 1
     assert sidecars[0].name.endswith(".md.effort.json")
     assert "p1 tools=1 ok=1" in out
+
+
+# --- the cycle driver feeds the suite and leg-set gates (#91, #11/H3) ---
+#
+# Both gates shipped and neither was reachable through the driver: `gate()` built its
+# command with the collected report and `--ack-file` and nothing else, so every cycle
+# driven through this script recorded `suite: null` and no leg set, and its exit gate
+# was then refused for `suite_unmeasured`. Three flags an orchestrator had to remember
+# by hand, documented in SKILL.md prose -- the "instruction an orchestrator can skip"
+# that `h_mad_audit_gate.py` names as the reason 91 cycles ran with a red suite.
+#
+# The suite runs ONCE PER CYCLE and its verdict is forwarded to each per-leg gate call.
+# Running it inside `gate()` would cost minutes per leg and is the design that
+# `audit_suite_gate.json` already rejects ("the-suite-runs-on-every-invocation").
+
+
+def _counting_suite(tmp_path: Path, marks: Path) -> str:
+    """A real command that records each invocation, so ONCE is measured not assumed."""
+    script = tmp_path / "fake_suite.sh"
+    script.write_text(f'#!/bin/sh\necho x >> "{marks}"\necho "9 passed in 0.1s"\n',
+                      encoding="utf-8")
+    script.chmod(0o755)
+    return str(script)
+
+
+def _two_leg_reports(tmp_path: Path) -> list[Path]:
+    p1 = tmp_path / "dispatch" / "p1.report.md"
+    p2 = tmp_path / "dispatch" / "p2.report.md"
+    write_done_report(p1, HOSTILE_PASS_REPORT)
+    write_done_report(p2, HOSTILE_PASS_REPORT)
+    return [p1, p2]
+
+
+def test_the_suite_runs_ONCE_for_a_multi_leg_cycle(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    marks = tmp_path / "runs.txt"
+    doc = tmp_path / "d.md"
+    doc.write_text("body\n", encoding="utf-8")
+    reports = _two_leg_reports(tmp_path)
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=reports,
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd",
+                    _counting_suite(tmp_path, marks), "--gated", str(doc)],
+    )
+    assert rc == 0, out
+    runs = marks.read_text().count("x") if marks.exists() else 0
+    assert runs == 1, f"suite ran {runs}x for 2 legs -- must be once per CYCLE"
+
+
+def test_without_the_flag_no_suite_runs_and_behaviour_is_unchanged(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    ac = audit_cycle()
+    marks = tmp_path / "runs.txt"
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+    )
+    assert rc == 0, out
+    assert not marks.exists()
+    assert "SUITE:" not in out
+
+
+def test_every_leg_of_the_cycle_records_the_same_suite_and_leg_set(
+    capsys: pytest.CaptureFixture, tmp_path: Path
+) -> None:
+    """A cycle's legs must agree, or `--exit-check` reports `legs_disagree`."""
+    import json as _json
+    ac = audit_cycle()
+    marks = tmp_path / "runs.txt"
+    doc = tmp_path / "d.md"
+    doc.write_text("body\n", encoding="utf-8")
+    rc, out, _ = run_collect_cycle(
+        ac, tmp_path=tmp_path, capsys=capsys, report_paths=_two_leg_reports(tmp_path),
+        extra_args=["--project-tests", str(tmp_path), "--suite-cmd",
+                    _counting_suite(tmp_path, marks), "--gated", str(doc),
+                    "--legs", "codex", "--legs", "agy"],
+    )
+    assert rc == 0, out
+    stamps = sorted(Path(tmp_path).rglob("*.gated.json"))
+    assert stamps, "no stamp written -- --gated never reached the gate"
+    seen = [_json.loads(p.read_text()) for p in stamps]
+    assert {s.get("suite") for s in seen} == {"PASS"}, seen
+    assert {tuple(s.get("legs") or []) for s in seen} == {("agy", "codex")}, seen
+
+
+def test_a_gated_GATE_line_still_parses(capsys: pytest.CaptureFixture, tmp_path: Path) -> None:
+    """`--gated` appends ` gated=N` to line 1, and GATE_RE must survive it.
+
+    `h_mad_audit_gate.py` recorded this collision as latent "because the cycle driver
+    never passes --gated". Wiring #91/H3 through the driver made it live: the first run
+    returned `ERROR: missing GATE token` for a gate that had answered
+    `GATE: PASS must=0 should=0 gated=1`.
+    """
+    ac = audit_cycle()
+    assert ac.GATE_RE.match("GATE: PASS must=0 should=0 gated=1")
+    assert ac.GATE_RE.match("GATE: PASS must=0 should=0")
+    assert not ac.GATE_RE.match("GATE: PASS must=0")

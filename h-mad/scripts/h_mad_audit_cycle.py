@@ -42,7 +42,14 @@ DELIVERY_FLOOR = 2
 # `timeout(1)` exits 124 when it kills the command. `_cmd_exec agy` wraps the
 # dispatch in it, so this is the rc a pass that ran out of wall-clock carries.
 TIMEOUT_RC = 124
-GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)\s*$")
+# Trailing fields are TOLERATED, and that is load-bearing rather than lax.
+# `h_mad_audit_gate.py` appends ` gated=N` to this line when `--gated` is passed, and
+# its own comment recorded the collision as latent "because the cycle driver never
+# passes `--gated`". Wiring #91/H3 through this driver made it live: the first run
+# with `--gated` returned `ERROR: missing GATE token` for a gate that had answered
+# `GATE: PASS must=0 should=0 gated=1`. The leading structure is what identifies the
+# line; what follows `should=N` is the gate's to extend.
+GATE_RE = re.compile(r"^GATE:\s+(\S+)\s+must=(\d+)\s+should=(\d+)(?:\s+\S+)*\s*$")
 SURFACE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 PASS_INDEX_RE = re.compile(r"^p\d+$")
 
@@ -617,7 +624,9 @@ def _must_findings_from_gate_parser(text: str, acknowledged: set[str]) -> list[d
     ]
 
 
-def gate(collected: Path, *, ack_file: Path | None) -> tuple[str | None, int, int, list[dict]]:
+def gate(collected: Path, *, ack_file: Path | None,
+         gated: list[Path] | None = None, legs: list[str] | None = None,
+         suite_result: str | None = None) -> tuple[str | None, int, int, list[dict]]:
     """(verdict, must, should, must_fix_bullets).
 
     INVALID returns ("INVALID", 0, 0, []) immediately: counts are discarded and the
@@ -627,6 +636,17 @@ def gate(collected: Path, *, ack_file: Path | None) -> tuple[str | None, int, in
     command = [sys.executable, str(_script("h_mad_audit_gate.py")), str(collected)]
     if ack_file is not None:
         command.extend(["--ack-file", str(ack_file)])
+    # #91 and #11/H3 were unreachable from here: this command carried the report and
+    # the ack file and nothing else, so every cycle driven through this script stamped
+    # `suite: null` with no leg set and its exit gate was refused `suite_unmeasured`.
+    # `--suite-result` and NOT `--project-tests`: the caller ran the suite once for the
+    # whole cycle, and re-running it per leg is minutes each and the rejected design.
+    for path in gated or []:
+        command.extend(["--gated", str(path)])
+    for leg in legs or []:
+        command.extend(["--legs", leg])
+    if suite_result is not None:
+        command.extend(["--suite-result", suite_result])
     try:
         result = subprocess.run(
             command,
@@ -921,6 +941,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pass", dest="pass_specs", action="append", type=_parse_pass_spec)
     parser.add_argument("--grace", type=float, default=30.0)
     parser.add_argument("--ack-file", type=Path)
+    parser.add_argument(
+        "--gated", action="append", default=[], type=Path, metavar="PATH",
+        help="a document this cycle's audit judged; forwarded to every per-leg gate "
+             "call so each leg's stamp records it (#91)",
+    )
+    parser.add_argument(
+        "--legs", action="append", default=[], metavar="NAME",
+        help="the reviewer legs this CYCLE ran; forwarded identically to every "
+             "per-leg gate call, so the legs of one cycle cannot disagree about what "
+             "that cycle ran (#11/H3)",
+    )
+    parser.add_argument(
+        "--project-tests", type=Path, metavar="TEST_ROOT",
+        help="run the project suite ONCE for this cycle and forward the verdict to "
+             "every per-leg gate call (#91). A scoped root, never the repo root.",
+    )
+    parser.add_argument("--suite-cmd", help="override the suite command")
 
     try:
         args = parser.parse_args(argv)
@@ -935,6 +972,21 @@ def main(argv: list[str] | None = None) -> int:
     if bool(args.halt_reason) == bool(pass_specs):
         print("ERROR: exactly one audit-cycle mode is required", file=sys.stderr)
         return 2
+
+    # ONCE per cycle, before any leg is gated. Inside the per-leg loop this would be
+    # minutes per leg and is the design `audit_suite_gate.json` rejects; after the loop
+    # it could not reach the stamps the loop already wrote.
+    suite_result = None
+    if args.project_tests is not None:
+        from h_mad_audit_gate import run_suite
+        outcome = run_suite(args.project_tests,
+                            args.suite_cmd.split() if args.suite_cmd else None)
+        suite_result = outcome["verdict"]
+        if suite_result == "UNREADABLE":
+            print(f"SUITE: UNREADABLE reason={outcome['reason']}")
+        else:
+            print(f"SUITE: {suite_result} passed={outcome['passed']} "
+                  f"failed={outcome['failed']}")
 
     if pass_specs:
         try:
@@ -956,6 +1008,9 @@ def main(argv: list[str] | None = None) -> int:
                     verdict, must, should, findings = gate(
                         collected_path,
                         ack_file=args.ack_file,
+                        gated=args.gated,
+                        legs=args.legs,
+                        suite_result=suite_result,
                     )
                 else:
                     verdict, must, should, findings = None, 0, 0, []

@@ -81,10 +81,10 @@
     },
     {
       "name": "the-suite-runs-on-every-invocation",
-      "_mechanism": "Every existing caller suddenly runs a test suite it never asked for, which is minutes per gate call and a behaviour change nobody opted into.",
+      "_mechanism": "Every existing caller suddenly runs a test suite it never asked for, which is minutes per gate call and a behaviour change nobody opted into. (Re-anchored 2026-09-07: the branch became `elif` when `--suite-result` was added for the cycle driver, which records a verdict measured once per cycle instead of running one per leg.)",
       "file": "scripts/h_mad_audit_gate.py",
-      "find": "    if args.project_tests is not None:",
-      "replace": "    if True:",
+      "find": "    elif args.project_tests is not None:",
+      "replace": "    elif True:",
       "test": "tests/test_h_mad_audit_suite_gate.py::TestTheGateNowExecutes::test_without_the_flag_nothing_runs_and_the_output_is_unchanged"
     }
   ]
