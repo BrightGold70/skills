@@ -1,0 +1,91 @@
+{
+  "_why": "#91: the audit gate had no execution path, so a repo test enforcing the audit loop's own invariant stayed red for 95 cycles while every cycle scored clean. Each row restores one way the suite result can be lost, softened, or read as a pass it never was — and the two that matter most are the ones where SILENCE becomes green.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_suite_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "an-unmeasured-suite-is-recorded-as-green",
+      "_mechanism": "THE defect, one level up: a cycle that never ran the suite contributes to the streak, so the exit gate closes on evidence nobody produced.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "SUITE_UNMEASURED = None",
+      "replace": "SUITE_UNMEASURED = \"PASS\"",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheStampCarriesTheSuite::test_an_unmeasured_suite_is_null_never_PASS"
+    },
+    {
+      "name": "an-unmeasured-cycle-may-close-the-exit-gate",
+      "_mechanism": "Silence passes at the streak instead of at the stamp — the same hole reached from the other side.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if suite is None:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
+      "replace": "        if False:\n            return {\"verdict\": \"BLOCKED\", \"reason\": f\"suite_unmeasured:{path.name}\"}",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheExitGateIsWhatRefuses::test_an_unmeasured_suite_blocks_too"
+    },
+    {
+      "name": "a-red-suite-no-longer-blocks-the-exit",
+      "_mechanism": "The decision reverts to advisory: the streak closes over a cycle whose suite was red, which is the 95-cycle case exactly.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        if suite != \"PASS\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheExitGateIsWhatRefuses::test_a_red_suite_in_either_cycle_blocks"
+    },
+    {
+      "name": "the-suite-verdict-is-scored-on-the-exit-code",
+      "_mechanism": "rc has fooled this repo in both directions: a skipped selection and a killed run both exit 0, and a summary saying `2 failed` beside rc=0 then reads as a pass.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    verdict = \"PASS\" if failed == 0 and passed > 0 else \"FAIL\"",
+      "replace": "    verdict = \"PASS\" if run_rc_is_zero else \"FAIL\"",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteVerdictIsScoredOnTheSummary::test_a_zero_exit_with_a_red_summary_is_FAIL"
+    },
+    {
+      "name": "a-collected-nothing-run-reads-as-a-pass",
+      "_mechanism": "A run that collected nothing exits 0 and is scored as a clean suite, so an empty selection closes the exit gate.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if passed == 0 and failed == 0:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteVerdictIsScoredOnTheSummary::test_an_empty_selection_is_not_a_pass"
+    },
+    {
+      "name": "a-missing-summary-becomes-a-verdict",
+      "_mechanism": "A run that never reported is scored rather than refused, so a crash before collection reads as either green or red depending on nothing.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        return {\"verdict\": \"UNREADABLE\", \"reason\": \"no_summary\", \"rc\": run.returncode}",
+      "replace": "        return {\"verdict\": \"PASS\", \"passed\": 0, \"failed\": 0, \"rc\": run.returncode}",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheSuiteVerdictIsScoredOnTheSummary::test_no_summary_is_UNREADABLE_not_PASS_and_not_FAIL"
+    },
+    {
+      "name": "the-red-suite-hostages-the-cycle-verdict",
+      "_mechanism": "The rejected design: every audit cycle becomes hostage to an unrelated flaky test, and skill-candidates.md:1277 records the same tree giving 6, 3 and 0 failures across runs.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    stamped = \"\"\n    if args.gated and verdict == \"PASS\":",
+      "replace": "    if suite == \"FAIL\":\n        verdict = \"FAIL\"\n    stamped = \"\"\n    if args.gated and verdict == \"PASS\":",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestARedSuiteDoesNotHostageTheCycle::test_a_failing_suite_leaves_the_cycle_verdict_alone"
+    },
+    {
+      "name": "the-suite-result-is-woven-into-the-GATE-line",
+      "_mechanism": "`h_mad_audit_cycle.GATE_RE` anchors on `should=N\\s*$`, so a fourth field there makes EVERY verdict un-parse — the reason GATE-CLASS is its own line too.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    print(f\"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped}\")",
+      "replace": "    print(f\"GATE: {verdict} must={result['must_count']} should={result['should_count']}{stamped} suite={suite}\")",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheGateNowExecutes::test_the_suite_line_is_separate_from_the_gate_line"
+    },
+    {
+      "name": "the-suite-runs-on-every-invocation",
+      "_mechanism": "Every existing caller suddenly runs a test suite it never asked for, which is minutes per gate call and a behaviour change nobody opted into.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    if args.project_tests is not None:",
+      "replace": "    if True:",
+      "test": "tests/test_h_mad_audit_suite_gate.py::TestTheGateNowExecutes::test_without_the_flag_nothing_runs_and_the_output_is_unchanged"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import hashlib
 import json
 import os
@@ -386,8 +387,109 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# --- the project suite (#91) ---------------------------------------------------
+#
+# Measured on HemaSuite `#18 gateway-consolidation`: a dual-surface design audit
+# ran 95 cycles without meeting its exit gate while a repo test enforcing the
+# AUDIT LOOP'S OWN invariant stayed red for the entire life of the feature. This
+# file had ZERO occurrences of `subprocess|pytest|check_call|os.system` — a
+# document scorer with no execution path — and SKILL.md ran pytest only at 5e and
+# 5f. Phases 3 and 4 had no suite run in the protocol and none here.
+#
+# A red suite BLOCKS THE EXIT, not each cycle. Blocking every cycle makes an audit
+# hostage to an unrelated flaky test, and this repo has the receipt:
+# `docs/skill-candidates.md:1277` records two pytest runs over one working tree
+# producing 6 and 3 failures in DIFFERENT sets, and 0 when the file ran alone. So
+# the per-cycle `GATE:` verdict is untouched and the streak is what refuses.
+SUITE_UNMEASURED = None
+
+
+def run_suite(test_root: Path, command: list[str] | None = None,
+              timeout: int = 3600) -> dict:
+    """Run the project suite once. Returns a verdict dict; raises nothing.
+
+    The test root is NAMED, never inferred: `SKILL.md` step 5f already documents
+    why an unscoped pytest from a repository root collects sibling-project import
+    mismatches, and HemaSuite carries two suites under a monorepo root.
+    """
+    argv = command or [sys.executable, "-m", "pytest", str(test_root), "-q"]
+    try:
+        run = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"verdict": "UNREADABLE", "reason": f"timeout_after_{timeout}s"}
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"verdict": "UNREADABLE", "reason": exc.__class__.__name__.lower()}
+    tail = (run.stdout or "") + (run.stderr or "")
+    summary = _suite_summary(tail)
+    if summary is None:
+        # No parseable summary line: pytest did not get far enough to report.
+        # That is a cannot-judge, NOT a failure — and never a pass. Reading a
+        # missing summary as either is how a run that collected nothing scores.
+        return {"verdict": "UNREADABLE", "reason": "no_summary", "rc": run.returncode}
+    passed, failed = summary
+    if passed == 0 and failed == 0:
+        # A run that collected nothing MEASURED nothing, and it exits 0. `pytest -k`
+        # with a selection that matches no test is the standing example in this
+        # repo. Neither PASS (it showed nothing green) nor FAIL (nothing was
+        # broken) — the third answer is the honest one.
+        return {"verdict": "UNREADABLE", "reason": "no_tests_ran", "rc": run.returncode}
+    verdict = "PASS" if failed == 0 and passed > 0 else "FAIL"
+    return {"verdict": verdict, "passed": passed, "failed": failed, "rc": run.returncode}
+
+
+_SUITE_RE = re.compile(r"(?:(\d+) failed[,.]? )?(?:(\d+) passed)")
+
+
+def _suite_summary(text: str) -> tuple[int, int] | None:
+    """`(passed, failed)` from pytest's own summary line, or None.
+
+    Scored on the SUMMARY, never on the exit code: this repo has been fooled by
+    rc in both directions — a skipped selection and a killed run both exit 0.
+    """
+    best = None
+    for match in _SUITE_RE.finditer(text):
+        failed, passed = match.group(1), match.group(2)
+        if passed is None and failed is None:
+            continue
+        best = (int(passed or 0), int(failed or 0))
+    return best
+
+
 def stamp_path(audit_file: Path) -> Path:
     return audit_file.with_name(audit_file.name + STAMP_SUFFIX)
+
+
+def exit_check(stamps: list[Path]) -> dict:
+    """Are the last two cycles eligible to close the exit gate?
+
+    The enforcement point for #91, and the reason this is gate-level rather than
+    protocol-level: nothing counts the streak. `grep -in 'streak|consecutive'`
+    over `scripts/` returns nothing, so the two-consecutive-both-clean rule lives
+    only in SKILL prose — and an instruction an orchestrator can skip is exactly
+    what 91 cycles of a red suite already demonstrated.
+
+    A cycle whose suite was RED or UNMEASURED cannot contribute to the streak.
+    Unmeasured is refused for the same reason a missing summary is: a cycle that
+    never ran the suite has not shown it green, and treating silence as a pass is
+    the defect this closes.
+    """
+    if len(stamps) < 2:
+        return {"verdict": "BLOCKED", "reason": f"not_two_cycles:{len(stamps)}"}
+    considered = stamps[-2:]
+    for path in considered:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return {"verdict": "UNREADABLE",
+                    "reason": f"stamp:{exc.__class__.__name__.lower()}:{path.name}"}
+        if data.get("verdict") != "PASS":
+            return {"verdict": "BLOCKED", "reason": f"not_clean:{path.name}"}
+        suite = data.get("suite")
+        if suite is None:
+            return {"verdict": "BLOCKED", "reason": f"suite_unmeasured:{path.name}"}
+        if suite != "PASS":
+            return {"verdict": "BLOCKED", "reason": f"suite_{suite.lower()}:{path.name}"}
+    return {"verdict": "READY", "cycles": [p.name for p in considered]}
 
 
 def verify_stamp(audit_file: Path) -> dict:
@@ -441,10 +543,35 @@ def main(argv: list[str] | None = None) -> int:
              "Repeatable — a cycle that gates a design and an impl-plan must name both",
     )
     parser.add_argument(
+        "--project-tests", type=Path, metavar="TEST_ROOT",
+        help="run the project suite at TEST_ROOT and report it as its own `SUITE:` "
+             "line, recording the result in the stamp (#91). A scoped root, never "
+             "the repository root: an unscoped pytest collects sibling-project "
+             "import mismatches (SKILL.md 5f).",
+    )
+    parser.add_argument(
+        "--suite-cmd", help="override the suite command (default: pytest <root> -q)",
+    )
+    parser.add_argument(
+        "--exit-check", nargs="+", type=Path, metavar="STAMP",
+        help="read the cycle stamps and report whether the exit gate may close. "
+             "A cycle whose suite was red or unmeasured cannot contribute.",
+    )
+    parser.add_argument(
         "--verify-stamp", action="store_true",
         help="re-hash what a previous PASS recorded and report CURRENT / STALE / UNSTAMPED",
     )
     args = parser.parse_args(argv)
+
+    if args.exit_check:
+        result = exit_check(sorted(args.exit_check))
+        detail = result.get("reason") or ",".join(result.get("cycles", []))
+        print(f"EXIT: {result['verdict']} "
+              f"{'reason' if result.get('reason') else 'cycles'}={detail}")
+        if result["verdict"] == "BLOCKED":
+            print("  a cycle whose suite was red or unmeasured cannot close the exit "
+                  "gate; the per-cycle verdicts are untouched (#91).")
+        return 2 if result["verdict"] == "UNREADABLE" else 0
 
     if args.verify_stamp:
         result = verify_stamp(args.audit_file)
@@ -498,6 +625,16 @@ def main(argv: list[str] | None = None) -> int:
     result = classify_detail(text, acknowledged)
     verdict = "FAIL" if result["must_count"] or (result["should_count"] and not args.must_only) else "PASS"
 
+    suite = SUITE_UNMEASURED
+    if args.project_tests is not None:
+        command = args.suite_cmd.split() if args.suite_cmd else None
+        outcome = run_suite(args.project_tests, command)
+        suite = outcome["verdict"]
+        if suite == "UNREADABLE":
+            print(f"SUITE: UNREADABLE reason={outcome['reason']}")
+        else:
+            print(f"SUITE: {suite} passed={outcome['passed']} failed={outcome['failed']}")
+
     stamped = ""
     if args.gated and verdict == "PASS":
         # Hash everything BEFORE writing anything: a stamp covering three files
@@ -518,7 +655,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[H-MAD] {feature} gate UNSTAMPABLE")
                 return 2
         stamp_path(args.audit_file).write_text(
-            json.dumps({"verdict": verdict, "files": files}, indent=1) + "\n",
+            json.dumps({"verdict": verdict, "files": files, "suite": suite},
+                       indent=1) + "\n",
             encoding="utf-8",
         )
         stamped = f" gated={len(files)}"
