@@ -3777,10 +3777,24 @@ _cmd_notify() {
 # Exit code is the child's, or 124 at the deadline (the GNU `timeout` convention,
 # so a caller that already branches on 124 needs no change). stdin/stdout/stderr
 # are inherited, so `hmad-dispatch run --timeout 30 -- foo < in > out` works.
+_cmd_run_usage() {
+  cat <<'USAGE'
+usage: hmad-dispatch run --timeout <seconds> -- <cmd...>
+
+Run <cmd> under h-mad's exec watchdog with a hard deadline. Exit code is the
+child's, or 124 at the deadline (GNU `timeout` convention). stdin/stdout/stderr
+are inherited. --timeout is required and must be a positive integer.
+USAGE
+}
+
 _cmd_run() {  # --timeout <s> -- <cmd...>
   local secs=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      # A help request is not an unknown option (#143): `run --help` used to
+      # exit 2 with `unknown option '--help'`, which is the operator asking a
+      # question and being told their request was malformed.
+      -h|--help) _cmd_run_usage; return 0 ;;
       --timeout) secs="${2:-}"; shift 2 ;;
       --) shift; break ;;
       *) _unknown_opt run "$1"; return 2 ;;
@@ -3845,6 +3859,13 @@ main() {
     automation-run) _cmd_automation_run "$@" ;;
     automation-list) _cmd_automation_list "$@" ;;
     automation-remove) _cmd_automation_remove "$@" ;;
+    -h|--help|'')
+      # Top-level help lists the verbs; each verb documents itself with `<verb> --help`
+      # where it takes options (`run` does). A bare invocation is the same question.
+      echo "usage: hmad-dispatch <verb> [options]"
+      echo "verbs: env resolve verify launch pin pin-agents resolved-model send ask exec clear interrupt read wait alive notify progress exec-pane audit-cycle run run-ensure task-create dispatch await gate-create gate-resolve gate-wait report-wait collect-report worktree-comment worktree-create worktree-current worktree-ps worktree-list worktree-rm file-diff file-open-changed automation-create automation-run automation-list automation-remove"
+      echo "help:  hmad-dispatch run --help"
+      [ -n "$verb" ] && return 0 || return 2 ;;
     *)      echo "hmad-dispatch: unknown verb '$verb'" >&2; return 2 ;;
   esac
 }

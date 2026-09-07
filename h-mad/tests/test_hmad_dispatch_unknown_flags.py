@@ -86,3 +86,65 @@ def test_known_flags_still_work(tmp_path):
             capture=cap)
     assert r.returncode == 0, r.stderr
     assert "--limit 5" in cap.read_text()
+
+
+# --- #143: a help request is a question, not a malformed request ---------------
+
+def test_run_help_is_answered_not_rejected(tmp_path):
+    """`hmad-dispatch run --help` exited 2 with `unknown option '--help'` (#143).
+
+    The unknown-flag guard above is right to be loud, but `--help` is the operator
+    asking what the flags ARE; answering "malformed request" to that question is
+    the one outcome worse than silence. Usage goes to stdout at exit 0, names the
+    required option, and nothing on stderr calls it unknown.
+    """
+    b = _bindir(tmp_path, ["orca", "cmux"])
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(tmp_path / "pins.env")}
+    for flag in ("--help", "-h"):
+        r = run(["run", flag], substrate="orca", env=env)
+        assert r.returncode == 0, (flag, r.returncode, r.stderr)
+        assert "--timeout" in r.stdout, (flag, r.stdout)
+        assert "unknown option" not in r.stderr.lower(), (flag, r.stderr)
+
+
+def test_run_help_runs_nothing(tmp_path):
+    """Help must not fall through into a dispatch: no `--timeout` complaint, no exec."""
+    b = _bindir(tmp_path, ["orca", "cmux"])
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(tmp_path / "pins.env")}
+    r = run(["run", "--help", "--", "false"], substrate="orca", env=env)
+    assert r.returncode == 0
+    assert "nothing ran" not in r.stderr and "required" not in r.stderr, r.stderr
+
+
+def test_top_level_help_lists_the_verbs(tmp_path):
+    b = _bindir(tmp_path, ["orca", "cmux"])
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(tmp_path / "pins.env")}
+    r = run(["--help"], substrate="orca", env=env)
+    assert r.returncode == 0, r.stderr
+    assert "unknown verb" not in r.stderr
+    for verb in ("run", "exec", "collect-report", "worktree-ps"):
+        assert verb in r.stdout, verb
+
+
+def test_a_misspelled_verb_is_still_rejected(tmp_path):
+    """The help arm must not widen into accepting anything dash-led."""
+    b = _bindir(tmp_path, ["orca", "cmux"])
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(tmp_path / "pins.env")}
+    r = run(["--hlep"], substrate="orca", env=env)
+    assert r.returncode == 2
+    assert "unknown verb" in r.stderr
+
+
+def test_top_level_help_names_every_dispatched_verb(tmp_path):
+    """The verb list in the help arm is typed by hand; pin it to the case arms
+    so a verb added to `main` cannot be missing from `--help`."""
+    import re
+    src = WRAPPER.read_text(encoding="utf-8")
+    main_body = src[src.index("\nmain() {"):]
+    verbs = set(re.findall(r"^\s+([a-z][a-z-]*)\)\s+_", main_body, re.MULTILINE))
+    assert len(verbs) > 20, verbs
+    b = _bindir(tmp_path, ["orca", "cmux"])
+    env = {"_BINDIR": b, "HMAD_ORCA_PIN_FILE": str(tmp_path / "pins.env")}
+    listed = set(run(["--help"], substrate="orca", env=env).stdout.split())
+    missing = sorted(verbs - listed)
+    assert not missing, f"verbs dispatched by main but absent from --help: {missing}"
