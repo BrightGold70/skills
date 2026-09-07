@@ -63,7 +63,7 @@ class TestMatchRateParsing:
         assert p7.parse_match_rate("## Match Rate: 96%\nlater: 12%") == 96.0
 
     def test_reads_the_underscore_spelling_the_analysis_template_emits(self):
-        """#155 — the Phase-6a awk template prints `match_rate=`; `_` is not `\s`.
+        """#155 — the Phase-6a awk template prints `match_rate=`; `_` is not whitespace.
 
         `PHASE7: match_rate_unreadable` fired on an analysis that stated its rate
         correctly in the shape the template emits, and the closure had to add a
@@ -108,9 +108,12 @@ class TestCalibrationAgainstDocumentsThatAlreadyPassed:
         assert not moved, f"widened pattern moved a passed rate: {moved}"
 
     def test_the_doc_block_exec_analysis_reads_100(self):
-        doc = (Path(__file__).resolve().parents[2] / "docs" / "03-analysis"
-               / "doc-block-exec.analysis.md")
-        assert p7.parse_match_rate(doc.read_text(encoding="utf-8")) == 100.0
+        """Located by glob: Phase 7 archives `docs/03-analysis/<feature>*`."""
+        docs = Path(__file__).resolve().parents[2] / "docs"
+        found = [p for p in docs.glob("**/doc-block-exec.analysis.md")]
+        assert found, "doc-block-exec.analysis.md is gone from docs/ entirely"
+        for doc in found:
+            assert p7.parse_match_rate(doc.read_text(encoding="utf-8")) == 100.0, doc
 
 
 class TestBlockers:
@@ -314,3 +317,131 @@ class TestCli:
         p = self.store(tmp_path, READY)
         r = self.run(p, "--feature", "nope", "--analysis", tmp_path / "a.md")
         assert r.returncode == 2
+
+
+class TestParkedMutationSpecs:
+    """#142 — D2's residual. A spec parked as `<name>.json.pending` and never
+    restored to `tests/mutation-specs/<name>.json` has guards nobody measured, and
+    the sibling sweep cannot see it because parking moved it out of the swept dir.
+    A parked copy WITH a live twin is provenance and passes (the convention says
+    keep it). Anchored on the state file's docs root, never the analysis path.
+    """
+
+    def _tree(self, tmp_path, feature="demo", parked=(), live=()):
+        docs = tmp_path / "docs"
+        pend = docs / "03-analysis" / f"{feature}.pending-mutation-specs"
+        pend.mkdir(parents=True)
+        for name in parked:
+            (pend / f"{name}.json.pending").write_text("{}", encoding="utf-8")
+        specs = tmp_path / "proj" / "tests" / "mutation-specs"
+        specs.mkdir(parents=True)
+        for name in live:
+            (specs / f"{name}.json").write_text("{}", encoding="utf-8")
+        a = docs / "03-analysis" / f"{feature}.analysis.md"
+        a.write_text(ANALYSIS, encoding="utf-8")
+        return a, specs, docs
+
+    def test_a_parked_spec_with_a_live_twin_is_provenance_not_a_blocker(self, tmp_path):
+        a, _, docs = self._tree(tmp_path, parked=["x"], live=["x"])
+        result = p7.check(READY, a, docs_root=docs)
+        assert "pending_mutation_spec_not_restored" not in codes(result)
+        assert result["ready"] and not result["warnings"]
+
+    def test_a_parked_spec_never_moved_back_blocks(self, tmp_path):
+        a, _, docs = self._tree(tmp_path, parked=["x", "y"], live=["x"])
+        result = p7.check(READY, a, docs_root=docs)
+        assert "pending_mutation_spec_not_restored" in codes(result)
+        detail = next(b["detail"] for b in result["blockers"]
+                      if b["code"] == "pending_mutation_spec_not_restored")
+        assert "y.json.pending" in detail and "x.json.pending" not in detail
+
+    def test_no_pending_dir_is_silent(self, tmp_path):
+        a, _, docs = self._tree(tmp_path)
+        result = p7.check(READY, a, docs_root=docs)
+        assert result["ready"] and not result["warnings"]
+
+    def test_no_specs_dir_at_all_is_a_warning_not_a_verdict(self, tmp_path):
+        """'I could not check' must not read as 'never moved back'."""
+        docs = tmp_path / "docs"
+        pend = docs / "03-analysis" / "demo.pending-mutation-specs"
+        pend.mkdir(parents=True)
+        (pend / "x.json.pending").write_text("{}", encoding="utf-8")
+        a = docs / "03-analysis" / "demo.analysis.md"
+        a.write_text(ANALYSIS, encoding="utf-8")
+        result = p7.check(READY, a, docs_root=docs)
+        assert "pending_mutation_spec_not_restored" not in codes(result)
+        assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified"}
+
+    def test_no_docs_root_skips_with_a_warning_never_derives_from_the_analysis_path(self, tmp_path):
+        a, _, _ = self._tree(tmp_path, parked=["x"], live=[])
+        result = p7.check(READY, a)
+        assert "pending_mutation_spec_not_restored" not in codes(result)
+        assert {w["code"] for w in result["warnings"]} == {"pending_specs_unverified"}
+
+    def test_an_explicit_analysis_elsewhere_does_not_move_the_root(self, tmp_path):
+        """`--analysis /tmp/x.analysis.md` used to derive the repo root as `/`."""
+        a, _, docs = self._tree(tmp_path, parked=["x"], live=[])
+        elsewhere = tmp_path / "elsewhere" / "x.analysis.md"
+        elsewhere.parent.mkdir()
+        elsewhere.write_text(ANALYSIS, encoding="utf-8")
+        assert "pending_mutation_spec_not_restored" in codes(p7.check(READY, elsewhere, docs_root=docs))
+
+    def test_a_sibling_projects_specs_are_not_adopted(self, tmp_path):
+        """Monorepo: HemaSuite/docs beside hematology-paper-writer/tests/mutation-specs.
+        The docs root's own parent has no spec dir; the sibling's must not count."""
+        docs = tmp_path / "HemaSuite" / "docs"
+        pend = docs / "03-analysis" / "demo.pending-mutation-specs"
+        pend.mkdir(parents=True)
+        (pend / "x.json.pending").write_text("{}", encoding="utf-8")
+        sib = tmp_path / "HemaSuite" / "hematology-paper-writer" / "tests" / "mutation-specs"
+        sib.mkdir(parents=True)
+        (sib / "x.json").write_text("{}", encoding="utf-8")
+        a = docs / "03-analysis" / "demo.analysis.md"
+        a.write_text(ANALYSIS, encoding="utf-8")
+        # The default walk is bounded (two levels below the docs root's parent), so
+        # from HemaSuite/ it DOES find the sub-project's dir: the default is
+        # layout-bounded, not project-aware, and the monorepo case passes its own
+        # dir explicitly. Pin both halves: the default adopts the sibling (documented
+        # residual), the explicit form does not.
+        by_default = p7.check(READY, a, docs_root=docs)
+        assert "pending_mutation_spec_not_restored" not in codes(by_default)
+        explicit = p7.check(READY, a, spec_dirs=[tmp_path / "HemaSuite" / "tests" / "mutation-specs"],
+                            docs_root=docs)
+        assert "pending_mutation_spec_not_restored" in codes(explicit)
+
+    def test_the_selecting_name_gates_even_when_the_records_feature_field_drifted(self, tmp_path):
+        a, _, docs = self._tree(tmp_path, parked=["x"], live=[])
+        drifted = dict(READY, feature="something-else")
+        assert "pending_mutation_spec_not_restored" in codes(
+            p7.check(drifted, a, docs_root=docs, feature="demo"))
+
+    def test_explicit_specs_dir_is_honoured(self, tmp_path):
+        a, specs, docs = self._tree(tmp_path, parked=["x"], live=[])
+        elsewhere = tmp_path / "other"
+        elsewhere.mkdir()
+        (elsewhere / "x.json").write_text("{}", encoding="utf-8")
+        assert p7.check(READY, a, [elsewhere], docs_root=docs)["ready"]
+        assert not p7.check(READY, a, [specs], docs_root=docs)["ready"]
+
+    def test_cli_anchors_on_the_state_file_and_reports_the_blocker(self, tmp_path):
+        a, specs, docs = self._tree(tmp_path, parked=["x"], live=[])
+        state = docs / ".bkit-memory.json"
+        state.write_text(json.dumps({"orchestrator_state": {"demo": READY}}), encoding="utf-8")
+        r = subprocess.run([sys.executable, str(SCRIPT), str(state), "--feature", "demo",
+                            "--analysis", str(a), "--mutation-specs-dir", str(specs)],
+                           capture_output=True, text=True, cwd=str(tmp_path / "proj"))
+        assert r.returncode == 0
+        assert "PHASE7: BLOCKED" in r.stdout
+        assert "pending_mutation_spec_not_restored" in r.stdout
+
+    def test_calibrated_against_doc_block_exec_which_closed_with_two_provenance_copies(self):
+        """The live tree: both parked specs have live twins, so the gate must pass.
+        Located by glob because Phase 7 archives `docs/03-analysis/<feature>*`."""
+        repo = Path(__file__).resolve().parents[2]
+        dirs = [d for d in (repo / "docs").glob("**/doc-block-exec.pending-mutation-specs")
+                if d.is_dir()]
+        assert dirs, "doc-block-exec's parked specs are gone from docs/ entirely"
+        specs = [repo / "h-mad" / "tests" / "mutation-specs"]
+        for d in dirs:
+            restored, unrestored = p7.split_parked(d, specs)
+            assert len(restored) == 2 and unrestored == [], (d, unrestored)

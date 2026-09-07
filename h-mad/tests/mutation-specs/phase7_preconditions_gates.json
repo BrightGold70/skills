@@ -22,6 +22,22 @@
       "find": "_RATE = re.compile(r\"match[\\s_]*rate\\s*[:=]\\s*\\**\\s*(\\d+(?:\\.\\d+)?)\\s*%\", re.I)",
       "replace": "_RATE = re.compile(r\"match\\s*rate\\s*[:=]\\s*\\**\\s*(\\d+(?:\\.\\d+)?)\\s*%\", re.I)",
       "test": "tests/test_h_mad_phase7_preconditions.py::TestMatchRateParsing::test_reads_the_underscore_spelling_the_analysis_template_emits"
+    },
+    {
+      "name": "a-parked-spec-with-no-live-twin-reads-as-provenance",
+      "_mechanism": "#142 exactly: the name-match check goes dark, every parked spec is 'restored', and a spec never moved back closes the feature with its guards unmeasured.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "        target = restored if any((Path(d) / live_name).is_file() for d in spec_dirs) else unrestored",
+      "replace": "        target = restored",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestParkedMutationSpecs::test_a_parked_spec_never_moved_back_blocks"
+    },
+    {
+      "name": "no-specs-dir-becomes-a-blocker-instead-of-a-warning",
+      "_mechanism": "'I could not check' scored as 'never moved back': a project without a mutation-specs directory can never close a feature that parked anything.",
+      "file": "scripts/h_mad_phase7_preconditions.py",
+      "find": "            if not parked[\"spec_dirs\"]:",
+      "replace": "            if False:",
+      "test": "tests/test_h_mad_phase7_preconditions.py::TestParkedMutationSpecs::test_no_specs_dir_at_all_is_a_warning_not_a_verdict"
     }
   ]
 }

@@ -41,8 +41,78 @@ def parse_match_rate(text: str) -> float | None:
     return float(found.group(1)) if found else None
 
 
-def check(record: dict, analysis_path: Path) -> dict:
-    """Report blockers and warnings for closing this feature."""
+PENDING_SUFFIX = ".json.pending"
+
+
+def find_mutation_spec_dirs(repo_root: Path) -> list[Path]:
+    """Every `tests/mutation-specs` directory at most two levels below `repo_root`.
+
+    Bounded rather than recursive: a monorepo root is where H-MAD is routinely
+    driven from, and an unbounded walk from there is both slow and liable to pick
+    up a vendored tree's specs as this project's.
+    """
+    found: set[Path] = set()
+    for pattern in ("tests/mutation-specs", "*/tests/mutation-specs",
+                    "*/*/tests/mutation-specs"):
+        found.update(p for p in Path(repo_root).glob(pattern) if p.is_dir())
+    return sorted(found)
+
+
+def split_parked(pending_dir: Path, spec_dirs: list[Path]) -> tuple[list[Path], list[Path]]:
+    """`(restored, unrestored)` for every `<name>.json.pending` in `pending_dir`.
+
+    Restored means a live `<name>.json` exists in some `spec_dirs` entry. The NAME
+    MATCH is the whole convention.
+    """
+    pending_dir = Path(pending_dir)
+    parked = sorted(pending_dir.glob(f"*{PENDING_SUFFIX}")) if pending_dir.is_dir() else []
+    restored: list[Path] = []
+    unrestored: list[Path] = []
+    for path in parked:
+        live_name = path.name[: -len(".pending")]
+        target = restored if any((Path(d) / live_name).is_file() for d in spec_dirs) else unrestored
+        target.append(path)
+    return restored, unrestored
+
+
+def parked_specs(docs_root: Path, feature: str, spec_dirs: list[Path] | None = None) -> dict:
+    """Parked mutation specs for `feature`, split by whether each was moved back.
+
+    Anchored on `docs_root` — the STATE FILE's docs directory, per
+    `resolve_docs_root` — never on the analysis path. Deriving the repo root from
+    the analysis path was wrong three ways (review, 2026-09-07): an explicit
+    `--analysis /tmp/x.analysis.md` derived `/`; an ARCHIVED analysis derived
+    `docs/archive/<month>` and found no spec dir, downgrading the blocker to a
+    warning; and a monorepo `HemaSuite/docs/03-analysis` derived `HemaSuite` and
+    adopted a sub-project's `tests/mutation-specs` as its own.
+
+    D2's parking convention (SKILL §5e): a mutation spec drafted before its source
+    lands is unanchored, so it is parked as
+    `docs/03-analysis/<feature>.pending-mutation-specs/<name>.json.pending` and
+    restored to `tests/mutation-specs/<name>.json` at that task's GREEN. The parked
+    copy stays afterwards as provenance. The NAME MATCH is the whole convention, so
+    a parked `<name>.json.pending` with no live `<name>.json` in any mutation-specs
+    directory is a spec that was never moved back (#142) — its guards were never
+    measured, and nothing else reports that.
+    """
+    docs_root = Path(docs_root)
+    pending_dir = docs_root / "03-analysis" / f"{feature}.pending-mutation-specs"
+    if spec_dirs is None:
+        spec_dirs = find_mutation_spec_dirs(docs_root.parent)
+    restored, unrestored = split_parked(pending_dir, spec_dirs)
+    return {"parked": restored + unrestored, "restored": restored, "unrestored": unrestored,
+            "spec_dirs": list(spec_dirs), "pending_dir": pending_dir}
+
+
+def check(record: dict, analysis_path: Path, spec_dirs: list[Path] | None = None,
+          docs_root: Path | None = None, feature: str | None = None) -> dict:
+    """Report blockers and warnings for closing this feature.
+
+    `docs_root` anchors the parked-spec check (#142); `main` passes the state
+    file's docs root. Without it the parked-spec check is SKIPPED and reported as
+    a warning rather than derived from `analysis_path` — "I could not check" must
+    not read as either verdict.
+    """
     blockers: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
 
@@ -132,6 +202,45 @@ def check(record: dict, analysis_path: Path) -> dict:
             ),
         })
 
+    # #142 — a parked mutation spec that was never moved back. Its guards were
+    # never run, and the sibling sweep cannot see it: it is not under
+    # tests/mutation-specs, which is the whole point of parking it.
+    # The name that SELECTED the record, when the caller has it: a record whose
+    # `feature` field drifted from its key would otherwise skip this gate silently.
+    feature = feature or record.get("feature")
+    if docs_root is None:
+        warnings.append({
+            "code": "pending_specs_unverified",
+            "detail": "no docs root given, so parked mutation specs were not checked "
+                      "(#142); pass docs_root, or run the CLI, which anchors on the state file.",
+        })
+    elif isinstance(feature, str) and feature:
+        parked = parked_specs(docs_root, feature, spec_dirs)
+        if parked["unrestored"]:
+            names = ", ".join(p.name for p in parked["unrestored"])
+            if not parked["spec_dirs"]:
+                warnings.append({
+                    "code": "pending_specs_unverified",
+                    "detail": (
+                        f"{len(parked['unrestored'])} parked spec(s) at "
+                        f"{parked['pending_dir']} ({names}) and no tests/mutation-specs "
+                        "directory found under the repo root, so a provenance copy "
+                        "cannot be told from a spec never moved back. Pass "
+                        "--mutation-specs-dir."
+                    ),
+                })
+            else:
+                blockers.append({
+                    "code": "pending_mutation_spec_not_restored",
+                    "detail": (
+                        f"{len(parked['unrestored'])} parked spec(s) at "
+                        f"{parked['pending_dir']} never moved back: {names}. No live "
+                        f"<name>.json exists in {', '.join(str(d) for d in parked['spec_dirs'])}; "
+                        "the guards in a parked spec were never measured. Restore it "
+                        "to tests/mutation-specs/ and run it (SKILL §5e, D2)."
+                    ),
+                })
+
     return {"ready": not blockers, "blockers": blockers, "warnings": warnings}
 
 
@@ -174,6 +283,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to the gap analysis; defaults to "
         "docs/03-analysis/<feature>.analysis.md",
     )
+    parser.add_argument(
+        "--mutation-specs-dir", type=Path, action="append", default=None,
+        metavar="DIR",
+        help="A tests/mutation-specs directory to check parked specs against "
+        "(repeatable). Default: every such directory up to two levels below the "
+        "repo root derived from the analysis path.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -191,7 +307,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     analysis = resolve_analysis_path(args.analysis, args.state_file, args.feature)
-    result = check(record, analysis)
+    result = check(record, analysis, args.mutation_specs_dir,
+                   docs_root=resolve_docs_root(None, args.state_file), feature=args.feature)
 
     verdict = "READY" if result["ready"] else "BLOCKED"
     print(f"PHASE7: {verdict} blockers={len(result['blockers'])}")
