@@ -69,3 +69,32 @@ If the orchestrator dies mid-Phase 5 without clearing `phase = "step5"`, the hoo
 
 1. `/h-mad status` heuristic surfaces stale flags (60min `autonomous_entry_ts` + `halt_reason = null`).
 2. `/h-mad reset "<feature>"` clears all `orchestrator_state[<feature>]`. Does NOT touch git or docs.
+
+## `exec agy` lingers after its `result` event — the report survives, the process does not exit
+
+The mirror of "`exec agy` loses the report to its own last message" (2026-08-01): there the process
+ended and the report was lost; here the report is complete and the process will not end.
+
+Measured 2026-09-03 across 29 dual-surface design audits: twice (`c18`, `c29`),
+`hmad-dispatch exec agy … --timeout 1800` ran the **full 30 minutes** after agy had finished. The
+`--log` ends with `{"event":"result",…}`, the `<report>.done` marker exists within ~4 minutes, and
+the wrapper returned only when its own timeout killed the child — `hmad-dispatch: agy exec rc=124`.
+The other 27 execs returned in 3–5 minutes with rc=0. Codex on the same runner exits normally every
+time. Cause of the linger is unknown: the process is idle, no further log lines, heartbeats continue.
+
+**The report was never at risk.** Both times the collected report gated fine. The cost is wall-clock
+plus a misleading `rc=124` that a coordinator reads as "no verdict" and re-dispatches — work that is
+already on disk.
+
+**Fixed by waiting on the SIGNAL, not the pid.** `_exec_run` takes `--complete-log <transcript>`
+(and `--complete-marker <path>`), and `exec agy` passes the transcript. When the terminal `result`
+event appears the wrapper TERMs the process group, reaps it, and returns **0**. `--timeout` remains
+the ceiling for the no-signal case only. Both signals are opt-in, so every other caller is unchanged.
+
+Only the TERMINAL event counts: `init` and `step_update` are mid-turn, and matching any event would
+end every wait on the first line the agent writes. An absent log is not a signal either — "I could
+not look" must never be spelled the same way as "the turn is done".
+
+**A related red herring, if you are reading a timed-out exec's output:** its `tree delta: N changed`
+is meaningless. The coordinator commits collected reports while the child lingers, so the post-exec
+snapshot differs from the pre-exec one for reasons that have nothing to do with the agent.

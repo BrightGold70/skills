@@ -2371,7 +2371,40 @@ _exec_stamp() {  # <kind> <agent> <label> <cd_dir> [rc] [verdict]
   return 0
 }
 
-_exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cmd...>
+_exec_completed() {  # <logfile|""> <markerfile|""> <after-lines>
+  # Has the child SIGNALLED completion, whatever its process is still doing?
+  #
+  # Measured 2026-09-03 over 29 dual-surface design audits: twice, `exec agy` ran the
+  # full 30-minute timeout AFTER agy finished — the `--log` ended with the terminal
+  # `result` event and the `<report>.done` marker existed within ~4 minutes, but the
+  # wrapper waited on the pid. The caller paid the whole timeout and got rc=124, which
+  # a coordinator reads as "no verdict" and re-dispatches work already on disk. Codex
+  # on the same runner exits normally every time; the linger is agy-side and its cause
+  # is unknown, so this waits on the signal instead of explaining the process.
+  #
+  # An absent file is NOT a signal: "I could not look" must never be spelled the same
+  # way as "the turn is done", or every wait ends immediately.
+  local log="${1:-}" marker="${2:-}" after="${3:-0}"
+  if [ -n "$marker" ] && [ -f "$marker" ]; then return 0; fi
+  # `-s` is an OPTIMISATION, not the guard: a missing or empty log is already refused
+  # by the grep below finding nothing. Do not "restore" a check here believing the
+  # fail-closed property depends on it — it depends on grep's exit status, and the
+  # mutation row aimed at `-s` survived precisely because the property lives there.
+  if [ -n "$log" ] && [ -s "$log" ]; then
+    # Only the TERMINAL event. `init`/`step_update` are mid-turn, and matching any
+    # event would end every wait on the first line the agent wrote. Tail-bounded
+    # because this runs on a poll and the transcript can be megabytes.
+    # Scoped to THIS run's lines, exactly as `_agy_ndjson_response` is. The log is
+    # APPENDED to across passes, so an unscoped grep sees the PREVIOUS pass's `result`
+    # and kills the new child on its first poll — measured: `test_verb_passes_one`
+    # dropped to `dispatch_count == 0`, a defect strictly worse than the linger.
+    tail -n "+$(( after + 1 ))" "$log" 2>/dev/null | tail -c 65536 \
+      | grep -aqE '"event"[[:space:]]*:[[:space:]]*"result"' && return 0
+  fi
+  return 1
+}
+
+_exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] [--complete-log <f>] [--complete-marker <f>] <seconds> <cmd...>
   local heartbeat=0
   local hb_agent="" hb_label="" hb_cd_dir="" hb_interval=0
   if [ "${1:-}" = "--heartbeat" ]; then
@@ -2379,6 +2412,17 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
     heartbeat=1
     shift 5
   fi
+  # Completion signals are OPT-IN and order-independent, so every existing caller —
+  # five internal sites plus the `run` verb — keeps its exact behaviour untouched.
+  local complete_log="" complete_marker="" complete_after=0
+  while true; do
+    case "${1:-}" in
+      --complete-log) complete_log="${2:-}"; shift 2 ;;
+      --complete-after) complete_after="${2:-0}"; shift 2 ;;
+      --complete-marker) complete_marker="${2:-}"; shift 2 ;;
+      *) break ;;
+    esac
+  done
   local secs="${1:-}"; shift
   # Returns the child's exit code, or 124 if it had to be killed at the deadline
   # (the GNU `timeout` convention). stdin/stdout/stderr are inherited by the child,
@@ -2402,6 +2446,7 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
   local deadline=0 poll=0.25
   if [ -n "$secs" ]; then deadline=$(( SECONDS + secs )); fi
   local last_beat="$SECONDS"
+  local last_complete_check=-1
   "$@" <&0 &
   local pid=$!
   if [ "$had_m" -eq 0 ]; then set +m; fi
@@ -2418,6 +2463,26 @@ _exec_run() {  # [--heartbeat <agent> <label> <cd_dir> <interval>] <seconds> <cm
       done
       kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null; return 124
+    fi
+    # Checked at most once a second: the deadline test above is the hot path and a
+    # grep per 0.25s poll would read the transcript four times a second for an hour.
+    if { [ -n "$complete_log" ] || [ -n "$complete_marker" ]; } \
+      && [ "$SECONDS" -ne "$last_complete_check" ]; then
+      last_complete_check="$SECONDS"
+      if _exec_completed "$complete_log" "$complete_marker" "$complete_after"; then
+        # The turn is done and the response is already on disk. Take the child down
+        # the same way the deadline path does — group first, grandchildren included —
+        # but return 0: this is a COMPLETED run, and reporting 124 here is exactly
+        # what makes a coordinator re-dispatch finished work.
+        kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+        local dticks=0
+        while [ "$dticks" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do
+          sleep 0.1; dticks=$(( dticks + 1 ))
+        done
+        kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null
+        return 0
+      fi
     fi
     if [ "$heartbeat" -eq 1 ] && [ "$hb_interval" -gt 0 ] \
       && [ $(( SECONDS - last_beat )) -ge "$hb_interval" ]; then
@@ -2846,7 +2911,14 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # and `hmad-dispatch progress "$log"` show work in flight.
     # Appending (>>) preserves any caller-supplied content already in the file.
     _HMAD_EXEC_BEAT_LOG="$log"
+    # `--complete-log`: wait on agy's terminal `result` event, not on its pid. Measured
+    # 2026-09-03 over 29 dual-surface audits — twice agy finished (result event written,
+    # `.done` marker present within ~4 min) and the process lingered until the 30-minute
+    # timeout killed it, so the caller paid the full wait and got rc=124, which reads as
+    # "no verdict" and re-dispatches finished work. agy only: codex on the same runner
+    # exits normally every time, and this grep is agy's NDJSON shape.
     ( cd "$cd_dir" && _exec_run --heartbeat "$agent" "$label" "$cd_dir" "$heartbeat_sec" \
+      --complete-log "$log" --complete-after "$pre_lines" \
       "$wait_secs" agy "${args[@]}" ) >> "$log" 2>/dev/null || rc=$?
     _HMAD_EXEC_BEAT_LOG=""
     resp="$(_agy_ndjson_response "$log" "$pre_lines")"
