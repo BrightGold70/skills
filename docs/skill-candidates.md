@@ -1698,3 +1698,16 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   scores is not retained**, so no agy log survives to re-audit that `tools=41` — the gate's own
   verdict cannot be checked after the fact, which is why the mechanism above had to be inferred from
   report text rather than from what the leg opened.
+- **`HARD_KINDS` is defined and read by nothing, while two tests spell the same set as literals**:
+  `h_mad_precheck_doc.py:93` declares `HARD_KINDS = ("PLACEHOLDER", "LINEPIN", "PINDRIFT",
+  "UNKNOWNSHA")` and no code path reads it — the verdict is `"FAIL" if findings else "PASS"`, so
+  hardness is decided solely by whether a hit is appended to `findings` or to `advisories`. Found by
+  mutation: a row that dropped `PINDRIFT` from the constant SURVIVED, and the survival was correct —
+  the constant is inert, and the `_mechanism` I had written for that row ("the verdict silently
+  becomes PASS") was a property I asserted without executing — recurrence: 1 — candidate: yes — the
+  danger is not the dead line, it is that a constant with an authoritative NAME reads as the source
+  of truth for anyone changing the detector set, so a future edit to it is silently a no-op while
+  looking like a policy change. Two mechanical options: make the script read it where it builds the
+  two lists, or delete it. As of 2026-09-07 the tests import it (`set(HARD_KINDS)` and
+  `set(HARD_KINDS) - {"PINDRIFT"}`) so the name has one consumer and the two filters cannot drift
+  apart, but the script still does not consult it — that half is open.

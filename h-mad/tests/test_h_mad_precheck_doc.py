@@ -23,6 +23,16 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "h-mad" / "scripts" / "h_mad_precheck_doc.py"
 
+sys.path.insert(0, str(SCRIPT.parent))
+from h_mad_precheck_doc import HARD_KINDS  # noqa: E402
+
+# `HARD_KINDS` was defined at :93 and read by NOTHING — the script decides hardness
+# by which list a hit is appended to, and both filters below used to spell the set
+# out as their own literal. That duplication is what made a mutation of the constant
+# look like a behavioural change; it survived, correctly, because the constant is
+# inert. Importing it here gives the name one consumer, so the two sets cannot drift
+# from each other again. It still does not drive the script — see the filed row.
+
 
 def run(*args, cwd=None):
     r = subprocess.run(
@@ -85,8 +95,7 @@ def test_issue_count_in_the_token_matches_the_detail_lines(tmp_path):
     r = run(doc, "--phase", "impl-plan", "--root", REPO)
     line = token(r.stdout)
     n = int(line.split("issues=")[1].split()[0])
-    hard = [l for l in r.stdout.splitlines() if l.split(":")[0] in
-            {"PLACEHOLDER", "LINEPIN", "PINDRIFT", "UNKNOWNSHA"}
+    hard = [l for l in r.stdout.splitlines() if l.split(":")[0] in set(HARD_KINDS)
             and "advisory" not in l]
     assert n == len(hard), f"token says {n}, detail lines are {len(hard)}:\n{r.stdout}"
 
@@ -166,6 +175,15 @@ def test_LINEPIN_is_reported_for_every_phase(tmp_path):
         doc = write(tmp_path, f"x.{phase}.md", body)
         r = run(doc, "--phase", phase, "--root", REPO)
         assert details(r.stdout, "LINEPIN"), f"{phase}: {r.stdout}"
+        # "Reported, not blocking" is half this test's own docstring and was never
+        # asserted: `details()` matches the printed line, which looks identical
+        # whether the hit landed in `findings` or `advisories`. Promoting this
+        # branch to a hard finding therefore survived the mutation battery — and it
+        # is the cannot-judge direction, where the document carries no provenance
+        # sha to measure drift against. "I could not check" must not be scored as
+        # "it is broken".
+        assert token(r.stdout).startswith("PRECHECK: PASS"), (
+            f"{phase}: an unprovenanced pin must not move the verdict\n{r.stdout}")
 
 
 def test_LINEPIN_catches_the_bare_colon_form_the_c33_corpus_used(tmp_path):
@@ -210,6 +228,57 @@ def test_UNKNOWNSHA_is_hard_when_the_commit_is_not_in_this_repository(tmp_path):
     r = run(doc, "--phase", "impl-plan", "--root", REPO)
     assert details(r.stdout, "UNKNOWNSHA"), r.stdout
     assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_PINDRIFT_fires_when_a_pinned_file_changed_since_the_provenance(tmp_path):
+    """PINDRIFT had NO test of its own until 2026-09-07, though it is one of the
+    four hard kinds.
+
+    Its only exercise was being counted by the noise-floor test at the bottom of
+    this file, and `test_corpus_c33_the_six_stale_line_pins_are_caught` accepts a
+    hit under EITHER `LINEPIN` or `PINDRIFT`, so neither discriminated it. When the
+    floor stopped counting PINDRIFT — it measures tree drift against a frozen
+    document, not document quality — that would have left the detector with zero
+    behavioural coverage. Found by asking what the floor change cost before making
+    it, which is the "name the observation that differs" rule applied to a test.
+    """
+    changed = subprocess.run(
+        ["git", "log", "-1", "--format=%h", "--", "h-mad/scripts/h_mad_precheck_doc.py"],
+        cwd=str(REPO), capture_output=True, text=True,
+    ).stdout.strip()
+    older = subprocess.run(
+        ["git", "rev-parse", "--short", f"{changed}~1"],
+        cwd=str(REPO), capture_output=True, text=True,
+    ).stdout.strip()
+    if not older:
+        pytest.skip("no commit before the last change to the pinned file")
+    doc = write(
+        tmp_path, "x.impl-plan.md",
+        f"Anchors verified at HEAD `{older}`.\n\n"
+        "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the scanner.\n",
+    )
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    hits = details(r.stdout, "PINDRIFT")
+    assert hits, r.stdout
+    assert "h_mad_precheck_doc.py" in "\n".join(hits), hits
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_PINDRIFT_is_quiet_when_the_pinned_file_has_not_moved(tmp_path):
+    """The other direction. Without this the detector could fire unconditionally
+    and the test above would still pass — a criterion that cannot discriminate in
+    either direction is vacuous (`invariants.base.md` §Test discrimination)."""
+    head = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=str(REPO), capture_output=True, text=True,
+    ).stdout.strip()
+    doc = write(
+        tmp_path, "x.impl-plan.md",
+        f"Anchors verified at HEAD `{head}`.\n\n"
+        "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the scanner.\n",
+    )
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert not details(r.stdout, "PINDRIFT"), r.stdout
 
 
 def test_STALESHA_is_quiet_when_the_provenance_commit_is_HEAD(tmp_path):
@@ -342,8 +411,24 @@ def test_noise_floor_on_documents_that_survived_eighty_cycles(doc, phase):
     if not p.exists():
         pytest.skip(f"{doc} absent")
     r = run(p, "--phase", phase, "--root", REPO)
+    # PINDRIFT is deliberately NOT counted here, and this is the one detector
+    # exclusion in the file. The floor asks "is this detector measuring style
+    # rather than defects?" — a property of the DOCUMENT. These three documents are
+    # archived and frozen, so their PINDRIFT count measures how far the TREE has
+    # moved since the freeze: every later commit touching any pinned file adds one,
+    # without the document changing at all. It is therefore monotonically
+    # increasing and unrelated to precision.
+    #
+    # Measured 2026-09-07: the impl-plan stood at 11 PLACEHOLDER + 2 PINDRIFT = 13
+    # against a ceiling of 12, and the suite went red on `88cea92` — a commit to
+    # `handoff/scripts/test_handover_docs.py`, which this archived document happens
+    # to pin. `85fe94a` was green at 12, i.e. exactly at the boundary, so one
+    # ordinary commit tipped it. Raising the ceiling would buy a few commits and
+    # recur; this is the third time this shape has been recorded.
+    # PINDRIFT keeps its own two tests above (added in the same change, because it
+    # had NONE and this count was its only exercise).
     hard = [l for l in r.stdout.splitlines()
-            if l.split(":")[0] in {"PLACEHOLDER", "LINEPIN", "PINDRIFT", "UNKNOWNSHA"}
+            if l.split(":")[0] in set(HARD_KINDS) - {"PINDRIFT"}
             and "advisory" not in l]
     assert len(hard) <= 12, (
         f"{doc}: {len(hard)} hard findings — too noisy to gate on:\n"
