@@ -57,6 +57,9 @@
 | 7a | Telemetry record failed | `step7:telemetry_failed` | "Non-fatal — emit warning, continue to report step" |
 | 7b | Report generation failed | `step7:report_failed` | "Inspect error; re-run" |
 | 7c | Archive failed | `step7:archive_failed:<stderr>` | "Inspect archive collision; resolve; re-run" |
+| 7f | Integrate blocked | `step7:integrate_blocked:<reason>` | "Read the `INTEGRATE:` token. `base_checked_out_elsewhere` → another worktree holds the base; merge from there or free it. `base_not_a_local_branch` → the base is a tag or a remote-tracking ref, which would detach HEAD; name a local branch. `no_default_base` → no origin/HEAD and no main/master; pass `--base`. `untracked_collision` → an untracked file is tracked on the base and would abort the checkout. `unknown_branch` → the feature branch does not exist. `dirty_tree` → commit or stash the tracked changes; `detached_head` → check the feature branch out; `unknown_base` → name the base with `--base`; `nothing_to_integrate` → the branch is not ahead, so there is nothing to merge; `base_is_the_feature_branch` → you are already on the base." |
+| 7f | Integrate unreadable | `step7:integrate_unreadable` | "git did not answer — not a verdict about the tree. Check `--repo-root` names a work tree, then re-run." |
+| 7f | Merged tree is new (`identity=n`) | `step7:merged_tree_unverified` | "The base moved, so no existing run covers the merged tree. Re-run the suite on it before 7e." |
 | 7d | Pre-commit rejected | `step7:commit_failed:<stderr>` | "Fix pre-commit issue; re-run" |
 | 7e | Push failed | `step7:push_failed:<stderr>` | "Resolve upstream conflict; re-run" |
 

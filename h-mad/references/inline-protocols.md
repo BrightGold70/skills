@@ -533,4 +533,4 @@ mv docs/03-analysis/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || tr
 mv docs/04-report/features/${FEATURE}* docs/archive/$YYYYMM/$FEATURE/ 2>/dev/null || true
 ```
 
-After archive: commit + push per SKILL.md §Phase 7 sub-steps 7d–7e.
+After archive: commit (7d), then **7f integrate**, then push (7e) — see SKILL.md §"Closure (autonomous)" for 7f and `references/phase-table.md` for the 7d/7e commands. (This pointer used to name "SKILL.md §Phase 7 sub-steps 7d–7e", a section that does not exist: 7d and 7e are defined in the phase table.)

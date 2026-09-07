@@ -8,7 +8,7 @@
 | 4 | Design + Audit-Design | Inline design generation (`references/inline-protocols.md §Phase 4`). Output: `docs/02-design/features/<feature>.design.md`. Same audit cycle pattern as Phase 3 (must-fix=0 AND should-fix=0; no cycle cap). Back-propagation: if design fix invalidates a plan decision, return to Phase 3 for re-clean, then re-enter Phase 4 audit from cycle 1. | Design exists AND latest `.design.audit.vN.md` must-fix=0 AND should-fix=0 AND plan unchanged-since-last-audit | Manual (per audit cycle) — **last user touchpoint** |
 | **5** | **Implementation** | Autonomous sub-steps 5a–5g (see SKILL.md §Phase 5). | All RED→GREEN; impl-plan audit must-fix=0; zero hook violations | **Autonomous** |
 | **6** | **Verification** | Autonomous: 6a-prime (agy architectural review), 6a (inline gap analysis), 6b (inline iterate). | Architectural review READY_TO_MERGE; match rate ≥90% AND 100% test pass | **Autonomous** |
-| **7** | **Closure** | Autonomous: 7a (telemetry), 7b (inline report), 7c (inline archive), 7d (commit), 7e (push). | Push to origin/main succeeds | **Autonomous** |
+| **7** | **Closure** | Autonomous: 7a (telemetry), 7b (inline report), 7c (inline archive), 7d (commit), 7f (integrate), 7e (push). | Push to `origin/<base>` succeeds | **Autonomous** |
 
 ## Phase 6 sub-steps
 
@@ -21,8 +21,9 @@
 - **7a** — `python3 ~/.claude/skills/h-mad/scripts/h_mad_telemetry.py record --feature <feature> --state docs/.bkit-memory.json --out .h-mad/telemetry.jsonl`. Non-fatal on failure.
 - **7b** — Inline report (`references/inline-protocols.md §Phase 7 §Report`) → `docs/04-report/features/<feature>.report.md`.
 - **7c** — Inline archive (`references/inline-protocols.md §Phase 7 §Archive`) → moves feature docs to `docs/archive/<YYYY-MM>/<feature>/`.
-- **7d** — `git add -A && git commit -m "feat(<feature>): closure — report + archive"`.
-- **7e** — `git push origin main`. Emit `[H-MAD] <feature> phase7 complete`.
+- **7d** — `git add -A -- ':/' ':(top,exclude)*.done' && git add -u -- ':/' && git commit -m "feat(<feature>): closure — report + archive"`.
+- **7f** — `h_mad_phase7_integrate.py` — merge the feature branch onto its base (or record `pr`/`keep`). Read the `INTEGRATE:` token, never `$?`. Plans by default; `--apply` merges. Runs AFTER 7d, because 7c's archive leaves tracked deletions that 7f's own dirty-tree gate would block on. Reports removable worktrees, removes none. The pathspec excludes the untracked audit markers, which a bare `-A` would commit (see SKILL.md §5g for why gitignoring them instead would break the `tree delta` count).
+- **7e** — `git push origin <base>`. Emit `[H-MAD] <feature> phase7 complete`.
 
 ## Cycle caps
 

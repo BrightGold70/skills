@@ -1,0 +1,171 @@
+{
+  "_why": "7f is the merge step Phase 7 never had, and every guard on it protects against the same class: acting on a tree the operator did not mean. Each row restores one way it could merge, or refuse, on a false premise — and one row restores the `git add -A` that commits 88 untracked audit markers.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase7_integrate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "merge-happens-without-apply",
+      "_mechanism": "The plan becomes the act: a token read as advisory silently moves the base branch, which is the one hard-to-undo step in the phase.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if not args.apply:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestPlanIsTheDefault::test_plans_without_touching_the_tree"
+    },
+    {
+      "name": "a-dirty-tracked-tree-no-longer-blocks",
+      "_mechanism": "Uncommitted work is swept into a merge commit nobody reviewed.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if env[\"dirty\"]:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_a_dirty_tracked_tree_blocks"
+    },
+    {
+      "name": "untracked-markers-count-as-a-dirty-tree",
+      "_mechanism": "The opposite failure: every closure blocks, because 88 untracked audit markers are the NORMAL state of this repository.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "             if not line.startswith(\"??\")]",
+      "replace": "             if True]",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_untracked_done_markers_do_NOT_block"
+    },
+    {
+      "name": "a-detached-head-is-merged-anyway",
+      "_mechanism": "An externally managed workspace's HEAD is merged onto the base under a branch name that does not exist.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if env[\"detached\"]:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_a_detached_head_blocks"
+    },
+    {
+      "name": "an-unknown-base-becomes-a-cannot-judge",
+      "_mechanism": "git ANSWERED (no such ref) and the answer is reported as 'I could not check', which is the one confusion every gate in this skill exists to prevent.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            blockers.append(f\"unknown_base:{base}\")",
+      "replace": "            raise",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_an_unknown_base_is_BLOCKED_not_unreadable"
+    },
+    {
+      "name": "a-moved-base-still-claims-identity",
+      "_mechanism": "identity=y on a base that moved: the merged tree is new and nothing has run on it, but the token says the existing run covers it.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            identity = behind == 0",
+      "replace": "            identity = True",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestIdentity::test_a_base_that_moved_does_not"
+    },
+    {
+      "name": "a-fast-forward-instead-of-a-no-ff-merge",
+      "_mechanism": "The feature's commits are replayed with no merge commit, so 6a-prime's BASE..HEAD range and every later `--merges` count lose the boundary.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    git(repo, \"merge\", \"--no-ff\", branch, \"-m\", message)",
+      "replace": "    git(repo, \"merge\", branch, \"-m\", message)",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestApply::test_merges_no_ff_onto_the_base"
+    },
+    {
+      "name": "keep-is-blocked-by-a-base-fact-it-does-not-use",
+      "_mechanism": "The honest no-op route reports BLOCKED, so an operator who chose `keep` reads a failure and re-runs.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if route == \"merge\" and not blockers:",
+      "replace": "    if not blockers:",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestRoutes::test_keep_on_the_base_itself_is_still_KEPT"
+    },
+    {
+      "name": "a-sibling-worktree-is-removed-rather-than-reported",
+      "_mechanism": "7f deletes a lane that may have a live owner. The removal command is the deliverable; running it is the operator's call.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    for path in report[\"worktrees\"]:\n        print(f\"  worktree {path}",
+      "replace": "    for path in report[\"worktrees\"]:\n        git(repo, \"worktree\", \"remove\", path.split(\" [\")[0])\n        print(f\"  worktree {path}",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestWorktreesAreReportedNeverRemoved::test_a_MERGED_sibling_worktree_is_named_with_its_command"
+    },
+    {
+      "name": "the-closure-commit-stages-the-whole-tree-again",
+      "_mechanism": "`git add -A` with no pathspec commits the 88 untracked audit markers that every handoff carried a manual 'do not commit' warning about.",
+      "file": "references/phase-table.md",
+      "find": "- **7d** — `git add -A -- ':/' ':(top,exclude)*.done' && git add -u -- ':/' && git commit",
+      "replace": "- **7d** — `git add -A && git commit",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestDocumented::test_no_step_stages_the_whole_tree"
+    },
+    {
+      "name": "a-tag-or-remote-ref-is-accepted-as-the-base",
+      "_mechanism": "`git checkout <tag>` DETACHES: the merge lands on nothing, the base never moves, the merge commit is unreferenced, and the verdict still says MERGED at exit 0.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "        elif not local_branch_exists(repo, base):",
+      "replace": "        elif False:",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_an_unknown_base_is_BLOCKED_not_unreadable"
+    },
+    {
+      "name": "the-base-being-checked-out-elsewhere-is-ignored",
+      "_mechanism": "Orca's sibling layout is the COMMON case: `git checkout <base>` dies `already used by worktree at ...`, so a plan that said identity=y ends in UNREADABLE exit 2.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            held = worktree_holding(repo, base)",
+      "replace": "            held = None",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestWorktreesAreReportedNeverRemoved::test_the_worktree_holding_the_base_blocks_rather_than_being_offered"
+    },
+    {
+      "name": "merged-ness-is-assumed-instead-of-checked",
+      "_mechanism": "Every other worktree is offered for removal, including one holding unmerged work — the docstring claimed the check and the code did not do it.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "            if (name not in (branch, base) and name in merged",
+      "replace": "            if (name not in (branch, base)",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestWorktreesAreReportedNeverRemoved::test_an_UNMERGED_sibling_worktree_is_not_offered_for_removal"
+    },
+    {
+      "name": "the-worktree-marker-prefix-goes-back-to-star-only",
+      "_mechanism": "`git branch --merged` marks a branch checked out in another worktree with `+`, so stripping only `*` drops the entire population this function reports.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "                  for line in git(repo, \"branch\", \"--merged\", base).splitlines()}",
+      "replace": "                  for line in git(repo, \"branch\", \"--merged\", base).splitlines() if not line.startswith(\"+\")}",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestWorktreesAreReportedNeverRemoved::test_a_MERGED_sibling_worktree_is_named_with_its_command"
+    },
+    {
+      "name": "identity-is-asserted-from-the-prediction-not-the-trees-2",
+      "_mechanism": "Re-armed against the discriminating case: base moves with content the branch already has, so ancestry predicts n while the merged tree really is identical.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "        matched = merged_tree_matches(repo, base, branch)",
+      "replace": "        matched = report[\"identity\"]",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestIdentity::test_apply_reports_identity_from_the_REAL_trees"
+    },
+    {
+      "name": "every-untracked-file-blocks-not-only-a-collision",
+      "_mechanism": "88 untracked audit markers are this repository's NORMAL state, so blocking on any untracked file blocks every closure.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    return sorted(path for path in untracked if path in tracked)",
+      "replace": "    return sorted(untracked)",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_untracked_done_markers_do_NOT_block"
+    },
+    {
+      "name": "default-base-ignores-origin-head",
+      "_mechanism": "A repo whose trunk is neither main nor master silently falls through to the conventional names, so the closure merges onto a branch nobody named.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "        ref = git(repo, \"symbolic-ref\", \"--quiet\", \"--short\", \"refs/remotes/origin/HEAD\")",
+      "replace": "        ref = \"\"",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestBlockers::test_a_default_base_comes_from_origin_HEAD_when_it_is_set"
+    },
+    {
+      "name": "merge-checks-out-whatever-it-was-given",
+      "_mechanism": "THE counterexample to the identity claim: `git checkout <tag>` detaches, the merge lands on nothing, the base never moves, and the verdict is MERGED at exit 0.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "    if not local_branch_exists(repo, base):\n        raise GitError(f\"{base!r} is not a local branch; refusing to checkout\")",
+      "replace": "    if False:\n        pass",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestApply::test_the_api_refuses_a_non_branch_base_even_when_reached_directly"
+    },
+    {
+      "name": "a-cannot-judge-exits-zero",
+      "_mechanism": "UNREADABLE at exit 0 reads as a verdict, so a caller branching on the exit code treats 'I could not look' as 'nothing to do'.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "        _emit(f\"UNREADABLE reason={exc.kind}\")\n        return 2",
+      "replace": "        _emit(f\"UNREADABLE reason={exc.kind}\")\n        return 0",
+      "test": "tests/test_h_mad_phase7_integrate.py::TestCannotJudge::test_a_non_repo_is_unreadable_and_exits_2"
+    }
+  ]
+}
