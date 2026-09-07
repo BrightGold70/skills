@@ -799,6 +799,27 @@ A **failed** search is not an empty one, and more than one hit is not a reason t
 this repository has three. No state file means nothing is claimed: say so, skip to point 2, and do
 not invent one. Otherwise pass the path it printed:
 
+**If the brief names NO feature but a state file exists, CREATE the record and claim it.** Use the
+brief's **slug** as the feature name — derived and traceable back to the document that asked for the
+work, never invented:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
+  "<the path the find printed>" --feature "<the brief's slug>" --create --claim "<your-session-id>"
+```
+
+Run the oracle for that name first, exactly as above — on a name with no record it answers
+`start_fresh`, and `owned_elsewhere` **still stops** you; the create path is a way to own unclaimed
+work, never a way around the live-owner check.
+
+Measured 2026-09-07, on this mode's first live run: the `audit-loop-cycle-count-evidence` brief
+carried `**Handover-From:**` and named no feature, the state file held 34 records, and the rule above
+covers only "no STATE FILE" — so the takeover concluded "nothing to claim" and five adopted items sat
+owned by nobody. That is the failure this mode exists to prevent, reached *through* this mode. READ
+Step 3.6 already carried the repair (`feature record absent, brief carries Handover-From` →
+`--create --claim`) and TAKEOVER deliberately excludes Step 3.6, so it could not reach it. The repair
+lives here now rather than TAKEOVER growing a resume's allowlist.
+
 ```bash
 python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
   --state "<the path the find printed>" \
@@ -905,7 +926,23 @@ Create the file with a `# Handoffs Index\n\nNewest first. Format: ISO date · pr
 
 ```bash
 # lists only strays BELOW the first entry — the real header is above it and must survive
-awk 'f && /Newest first\.|^Format:/ {print FILENAME":"NR": "$0} /^- /{f=1}' ~/.claude/handoffs/INDEX.md
+# lists only strays BELOW the first entry — the real header is above it and must survive.
+# NO positional shell args anywhere in this snippet: one in a skill body is REWRITTEN by the
+# slash-command renderer. Measured twice on this very line — it reached the agent as
+# `…": "read}` under `/handoff read` and `…": "takeover}` under `/handoff takeover`, while
+# the file on disk held the awk whole-record variable, so the command printed the ARGUMENT
+# instead of the matching line. A documented command that silently does the wrong thing is
+# worse than no command at all.
+python3 - <<'EOF'
+import pathlib
+p = pathlib.Path.home() / ".claude/handoffs/INDEX.md"
+seen_entry = False
+for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+    if line.startswith("- "):
+        seen_entry = True
+    elif seen_entry and ("Newest first." in line or line.startswith("Format:")):
+        print(f"{p}:{n}: {line}")
+EOF
 ```
 
 Do not pipe that into a blind `sed -i` delete-by-pattern: the same strings appear in the legitimate header block, and a pattern-scoped delete that guesses the header's line range removes it too.

@@ -62,6 +62,38 @@
       "find": "### Step T1: Find what is addressed to this repo",
       "replace": "### Step T1: Assume the user handed you the path",
       "test": "tests/test_handoff_takeover_mode.py::TestItDiscoversAndDoesNotOverreach::test_takeover_runs_the_pending_handovers_scan"
+    },
+    {
+      "name": "an-unnamed-feature-leaves-the-work-unowned",
+      "_mechanism": "THE live defect, 2026-09-07: the brief named no feature, the state file held 34 records, and the mode said nothing about that case \u2014 so five adopted items sat owned by nobody, which is the failure this mode exists to prevent, reached through this mode. A third session could then start the same work with no collision visible to either.",
+      "file": "SKILL.md",
+      "find": "**If the brief names NO feature but a state file exists, CREATE the record and claim it.**",
+      "replace": "If the brief names no feature, there is nothing to claim.",
+      "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_the_unnamed_feature_case_PRESCRIBES_a_claim"
+    },
+    {
+      "name": "the-create-path-becomes-a-way-around-the-live-owner-check",
+      "_mechanism": "`owned_elsewhere` is the one branch that must never be softened by a more convenient entry point. A create path that skips the oracle takes a feature out from under a running session \u2014 exactly what `--force` exists to gate, reached without it.",
+      "file": "SKILL.md",
+      "find": "`start_fresh`, and `owned_elsewhere` **still stops** you; the create path is a way to own unclaimed\nwork, never a way around the live-owner check.",
+      "replace": "`start_fresh`, so you may create and claim it.",
+      "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_owned_elsewhere_still_stops_the_create_path"
+    },
+    {
+      "name": "the-feature-name-is-invented-rather-than-derived",
+      "_mechanism": "An invented name is unfindable by the sender and by the next reader: the brief asked for the work, and the claim must be traceable back to it. Two sessions inventing different names for one brief both believe they own it.",
+      "file": "SKILL.md",
+      "find": "brief's **slug** as the feature name \u2014 derived and traceable back to the document that asked for the\nwork, never invented:",
+      "replace": "any short name you like:",
+      "test": "tests/test_handoff_takeover_mode.py::TestAnUnnamedFeatureIsStillClaimed::test_the_feature_name_comes_from_the_briefs_slug"
+    },
+    {
+      "name": "a-positional-shell-arg-returns-to-the-skill-body",
+      "_mechanism": "A positional arg in a skill body is REWRITTEN by the slash-command renderer before the agent sees it. Measured twice on one line: it arrived as the literal word `read` and then `takeover`, matching the invocation, so the documented command printed the argument instead of the matching line. Silent, and wrong in a way the reader cannot see from the rendered text.",
+      "file": "SKILL.md",
+      "find": "        print(f\"{p}:{n}: {line}\")",
+      "replace": "        print(FILENAME + \":\" + str(n) + \": \" + \"$0\")",
+      "test": "tests/test_handoff_takeover_mode.py::TestNoDollarArgInTheSkillBody::test_no_positional_shell_arg_survives_in_the_body"
     }
   ]
 }

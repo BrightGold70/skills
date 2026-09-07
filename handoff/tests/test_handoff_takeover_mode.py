@@ -156,3 +156,72 @@ class TestTheModeCanActuallyTrigger:
         """So an invocation is routed here rather than to READ's halt."""
         flat = _norm(self.FRONTMATTER)
         assert "does NOT halt" in flat
+
+
+class TestAnUnnamedFeatureIsStillClaimed:
+    """A brief that names NO feature must not leave the work owned by nobody.
+
+    Hit live on TAKEOVER's first run, 2026-09-07. The
+    `audit-loop-cycle-count-evidence` brief carried `**Handover-From:**` and named
+    no feature; the state file held 34 records; point 1 handles "no STATE FILE" and
+    said nothing about "state file present, feature unnamed". So the takeover
+    concluded "nothing to claim" and five adopted items sat unowned — precisely the
+    failure this mode exists to prevent, reached THROUGH this mode.
+
+    READ Step 3.6 already carries the repair (`feature record absent, brief carries
+    Handover-From` → `--create --claim`), and TAKEOVER deliberately excludes Step
+    3.6, so it could not reach it. The repair moves here rather than TAKEOVER
+    growing a resume's allowlist.
+
+    The name is DERIVED, never invented: the brief's slug, which is traceable back
+    to the document that asked for the work.
+    """
+
+    SECTION = BODY.split("## TAKEOVER mode", 1)[1]
+    FLAT = _norm(SECTION)
+
+    def test_the_unnamed_feature_case_PRESCRIBES_a_claim(self) -> None:
+        """Assert the PRESCRIPTION, not the topic.
+
+        The first version asserted "names no feature", which the mutant's own
+        replacement text ("If the brief names no feature, there is nothing to
+        claim.") also contains — so the row SURVIVED. Naming the subject is not
+        the same as requiring the remedy.
+        """
+        assert "CREATE the record and claim it" in self.FLAT
+
+    def test_it_prescribes_create_and_claim(self) -> None:
+        assert "--create" in self.FLAT and "--claim" in self.FLAT
+
+    def test_the_feature_name_comes_from_the_briefs_slug(self) -> None:
+        """Derived and traceable — an invented name is unfindable by the sender.
+
+        Not a bare `"slug" in FLAT`: T3's report template already contains `<slug>`,
+        so deleting the derivation rule left the word behind and the row SURVIVED.
+        """
+        assert "derived and traceable back to the document" in self.FLAT
+
+    def test_owned_elsewhere_still_stops_the_create_path(self) -> None:
+        """The new path must not become a way around the live-owner check."""
+        assert self.FLAT.count("owned_elsewhere") >= 1
+        assert "never a way around" in self.FLAT or "still stops" in self.FLAT
+
+    def test_the_live_incident_is_recorded(self) -> None:
+        """A rule without its measurement gets optimised away by the next reader."""
+        assert "2026-09-07" in self.FLAT
+
+
+class TestNoDollarArgInTheSkillBody:
+    """`$0` in a documented command is REWRITTEN by slash-command arg substitution.
+
+    Measured twice this session on the same line: it arrived as `…": "read}` when
+    invoked as `/handoff read` and as `…": "takeover}` when invoked as
+    `/handoff takeover`, while the file on disk holds `$0`. So the INDEX-cleanup
+    snippet, as the agent actually receives it, prints the literal argument instead
+    of the matching line — a command that silently does the wrong thing.
+    """
+
+    def test_no_positional_shell_arg_survives_in_the_body(self) -> None:
+        import re as _re
+        hits = _re.findall(r"\$[0-9]", BODY)
+        assert not hits, f"positional args are rewritten by the renderer: {hits}"
