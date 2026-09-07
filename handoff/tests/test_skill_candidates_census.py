@@ -504,3 +504,69 @@ def test_no_arguments_still_refuses_after_the_guard() -> None:
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "1", r.stdout
     assert "usage:" in r.stderr
+
+
+# --- a WRAPPED bold name, and a coverage check that can disagree with the reader ---
+
+def test_a_row_whose_bold_name_wraps_is_still_a_row(tmp_path: Path) -> None:
+    """`ROW` needed the closing `**` on one line, so a row whose NAME wrapped was
+    not a row at all: not counted, not censused, in no bucket.
+
+    Measured 2026-09-07 on the live store — a row was appended (git diff: 18 lines
+    inserted) and the census read `candidates=201` before and after. Two rows
+    already in that file had never been counted by any run.
+    """
+    p = write(tmp_path, "- **a name long enough that it wraps before\n"
+                        "  its closing bold**: body — candidate: yes\n")
+    c = counts(run(p))
+    assert c["candidates"] == 1, run(p)
+    assert c["OPEN"] == 1
+
+
+def test_the_wrapped_name_is_normalised_not_left_with_its_newline(tmp_path: Path) -> None:
+    """Assert the parsed NAME, not the printed column spacing — an `or` chain over
+    three paddings tests the formatter, not the fix."""
+    p = write(tmp_path, "- **wrapped\n  name**: body — candidate: yes\n")
+    sys.path.insert(0, str(SCRIPT.parent))
+    import skill_candidates_census as m
+
+    (lineno, body), = m.rows(str(p))
+    name, tail = m.row_name(body)
+    assert name == "wrapped name", name
+    assert "\n" not in name
+    assert tail.startswith(": body"), tail
+
+
+def test_the_tail_that_BUMP_reads_is_the_closing_line_only(tmp_path: Path) -> None:
+    """A bump marker is a first-line annotation. Widening the tail to the whole row
+    makes `BUMP` search the body, which silently reclassifies a real terminal row.
+
+    This is not hypothetical: the first version of the wrap fix returned the whole
+    remainder as the tail, and a LANDED row three lines down became a bump — the
+    LANDED total stayed put and looked correct while one row had moved buckets.
+    """
+    p = write(tmp_path, "- **a**: body — candidate: yes\n"
+                        "  — **LANDED 2026-09-07.** and here the prose happens to say\n"
+                        "  no new recurrence, which is NOT a bump marker for this row\n")
+    c = counts(run(p))
+    assert c.get("LANDED") == 1, run(p)
+    assert "1 bump rows excluded" not in run(p)
+
+
+def test_coverage_DISAGREES_when_a_bold_name_never_closes(tmp_path: Path) -> None:
+    """The load-bearing half. COVERAGE used to be computed with the same `ROW`
+    regex as the reader, so an unparsed row was missing from BOTH sides and the
+    ratio stayed a reassuring `N/N`. A coverage metric derived from the pattern it
+    audits can only ever report agreement with itself.
+    """
+    p = write(tmp_path, "- **a**: fine — candidate: yes\n"
+                        "- **this name never closes its bold at all\n"
+                        "  and neither does this line\n")
+    out = run(p)
+    assert "never closes" in out, out
+    c = counts(out)
+    assert c["candidates"] == 1, out
+    # The point of the whole change: parsed < row-shaped, and the check SAYS so.
+    parsed, rowish = re.search(r"parsed=(\d+) row-shaped=(\d+)", out).groups()
+    assert int(parsed) < int(rowish), out
+    assert "ROW-SHAPED LINES NOT PARSED" in out, out

@@ -28,6 +28,36 @@ def _label(p):
 
 
 ROW  = re.compile(r'^- \*\*(.+?)\*\*')
+# A row STARTS here whether or not its bolded name closes on the same line. `ROW`
+# needs the closing `**` on one line, so a row whose name WRAPS was matched by
+# neither the reader nor the coverage check -- it was missing from both sides of
+# the ratio, which therefore stayed a reassuring `207/207`. Measured 2026-09-07: a
+# row was appended (git diff: 18 lines inserted) and the census read `candidates=201`
+# before and after; two rows already in the store, at the `.result.terminal.handle`
+# J1 entry and the `handover_landed.py` entry, had never been counted by any run.
+OPENER = re.compile(r'^- \*\*')
+# `re.S` so the name can span the wrap. Non-greedy still stops at the FIRST `**`.
+NAME = re.compile(r'^- \*\*(.+?)\*\*', re.S)
+
+
+def row_name(body):
+    """(name, text after the closing `**`) for a row, matched ACROSS a wrap.
+
+    Returns (None, "") when the bold never closes anywhere in the row -- a real
+    malformation, and one the caller must report rather than silently drop, since
+    dropping it is the defect this whole block exists to close.
+    """
+    joined = "\n".join(body)
+    m = NAME.match(joined)
+    if not m:
+        return None, ""
+    # The tail is the remainder of the LINE the name closed on -- NOT the whole row.
+    # Returning the whole row here silently widened `BUMP` from a first-line marker
+    # to a body-wide search, which reclassified a LANDED row as a bump and kept the
+    # LANDED total looking unchanged. Same semantics as the original first-line
+    # slice for an unwrapped name, and its natural analogue for a wrapped one.
+    rest = joined[m.end():]
+    return " ".join(m.group(1).split()), rest.split("\n", 1)[0]
 TERM = re.compile(r'\*\*(LANDED|SUPERSEDED|DECLINED)\b')
 # `DECLINED` carries two meanings on purpose -- "idea rejected" and "useful, but
 # no tool will be built" -- and the header documents that. A reader who skims
@@ -50,7 +80,7 @@ OPEN = ("yes", "maybe")
 def rows(p):
     cur=None; out=[]
     for i,ln in enumerate(open(p).read().split("\n"),1):
-        if ROW.match(ln):
+        if OPENER.match(ln):
             if cur: out.append(cur)
             cur=(i,[ln])
         elif ln.startswith("#") or ln.startswith("|"):
@@ -160,11 +190,12 @@ def main(argv=None):
                       f"deliberate gaps): {', '.join(dangling)}")
             continue
 
-        c=collections.Counter(); bumps=[]; declined=collections.Counter()
+        c=collections.Counter(); bumps=[]; declined=collections.Counter(); unclosed=[]
         for ln,body in rows(f):
-            m0=ROW.match(body[0])
-            name=m0.group(1)
-            tail=body[0][m0.end():]                     # text AFTER the closing ** of the name
+            name,tail=row_name(body)                    # matched ACROSS a wrap
+            if name is None:
+                unclosed.append(f"{tag}:{ln} {body[0][:70]}")
+                continue
             blob="\n".join(body)
             if BUMP.search(tail):
                 bumps.append(f"{tag}:{ln} {name}"); continue
@@ -193,8 +224,19 @@ def main(argv=None):
         grand.update(c); bumps_all+=bumps
         # Same coverage question for a candidate store: `- **` lines the reader did
         # not turn into a row are lines it did not understand.
-        rowish=sum(1 for ln in open(f).read().split("\n") if ROW.match(ln))
+        # Counted with OPENER, NOT with ROW. A coverage metric derived from the same
+        # pattern as the reader it audits can only ever report agreement with itself;
+        # these two numbers must be able to DISAGREE or the check is decoration.
+        rowish=sum(1 for ln in open(f).read().split("\n") if OPENER.match(ln))
+        # `unclosed` is deliberately NOT added to `parsed`: an opener the reader
+        # could not turn into a row is a line it did not understand, and counting it
+        # as parsed would restore the ratio to N/N — which is the exact tautology
+        # this change exists to remove. The two numbers must be able to diverge.
         coverage.append((Path(f).name, n+len(bumps), rowish, []))
+        if unclosed:
+            print(f"  ~ {len(unclosed)} row(s) whose bold name never closes — NOT counted "
+                  f"in any verdict bucket:")
+            for u in unclosed: print(f"      {u}")
     print()
     n=sum(grand.values()); op=sum(v for k,v in grand.items() if k in OPEN)
     # A monitoring-only run has no candidates, and printing `TOTAL candidates=0`
