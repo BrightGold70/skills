@@ -63,12 +63,24 @@ def _log(tmp_path: Path, tools: int) -> Path:
     # rather than from memory of the log format — a fixture in the wrong shape
     # reports zero tools, which is indistinguishable from a review that read
     # nothing, and would have made every evidence assertion here vacuous.
-    lines = []
+    # Bracketed with the `init`/`result` events every real agy transcript carries,
+    # so a zero-tool log is an agy run that called nothing (NO_EVIDENCE) rather
+    # than an empty or foreign file (UNREADABLE) — the two zeros #154 separates.
+    lines = [json.dumps({"event": "init"})]
     for i in range(tools):
         lines.append(json.dumps({
+            "event": "step_update",
             "step_update": {"step_type": "tool", "state": "DONE", "name": f"view_file_{i}"},
         }))
+    lines.append(json.dumps({"event": "result", "result": {"status": "SUCCESS"}}))
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
+def _codex_text_log(tmp_path: Path) -> Path:
+    p = tmp_path / "codex.log"
+    p.write_text("OpenAI Codex v0.153.2\n--------\nworkdir: /x\n--------\nuser\nreview\n"
+                 "codex\nI read the files.\nASSESSMENT: READY_TO_MERGE\n", encoding="utf-8")
     return p
 
 
@@ -97,6 +109,64 @@ class TestScoreRecordsOnlyAProvenReview:
         assert "tools=12" in result.stdout
         record = json.loads(state.read_text())["orchestrator_state"]["feat"]
         assert record["archreview"] == "READY_TO_MERGE"
+
+    def test_the_owners_score_write_beats_the_heartbeat(self, tmp_path):
+        """#126 applied to h-mad's own writer: score --session-id <owner> refreshes."""
+        state = tmp_path / "bkit.json"
+        rec = dict(VALID_STATE, owner_session_id="me", owner_heartbeat_ts="2026-07-22T00:00:00Z")
+        state.write_text(json.dumps({"orchestrator_state": {"feat": rec}}), encoding="utf-8")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 4)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")),
+                      "--session-id", "me")
+        assert result.returncode == 0, result.stdout + result.stderr
+        stored = json.loads(state.read_text())["orchestrator_state"]["feat"]
+        assert stored["archreview"] == "READY_TO_MERGE"
+        assert stored["owner_heartbeat_ts"] != "2026-07-22T00:00:00Z"
+
+    def test_a_codex_text_log_is_a_cannot_judge_not_no_evidence(self, tmp_path):
+        """#154. A transcript this gate cannot parse must not score as a review that
+        read nothing: the diagnosis was wrong for a cycle. Records nothing either way."""
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_codex_text_log(tmp_path)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+        assert result.returncode == 2
+        assert "ARCHREVIEW: UNREADABLE reason=unsupported_format" in result.stdout, result.stdout
+        assert "NO_EVIDENCE" not in result.stdout
+        assert "archreview" not in json.loads(state.read_text())["orchestrator_state"]["feat"]
+
+    def test_an_unreadable_log_is_a_cannot_judge_with_a_token_not_a_traceback(self, tmp_path):
+        """Review finding: the log was read outside the try, so a mode-000 or
+        non-UTF-8 log crashed at exit 1 with NO ARCHREVIEW: token at all."""
+        import os
+        state = _state(tmp_path)
+        log = _log(tmp_path, 3)
+        os.chmod(log, 0)
+        try:
+            result = _run("score", "--feature", "feat", "--state", str(state),
+                          "--log", str(log),
+                          "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+        finally:
+            os.chmod(log, 0o644)
+        if os.geteuid() == 0:
+            return  # root reads a mode-000 file; the probe cannot run as root
+        assert result.returncode == 2, result.stderr
+        assert "ARCHREVIEW: UNREADABLE reason=log:" in result.stdout, result.stdout
+        assert "Traceback" not in result.stderr
+        assert "archreview" not in json.loads(state.read_text())["orchestrator_state"]["feat"]
+
+    def test_a_non_utf8_log_does_not_crash(self, tmp_path):
+        state = _state(tmp_path)
+        log = tmp_path / "run.log"
+        log.write_bytes(b"\xff\xfe not utf-8 \n" + json.dumps({"event": "init"}).encode()
+                        + b"\n" + json.dumps({"event": "step_update", "step_update": {
+                            "step_type": "tool", "state": "DONE"}}).encode() + b"\n")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(log),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+        assert "Traceback" not in result.stderr
+        assert "ARCHREVIEW: READY_TO_MERGE" in result.stdout, result.stdout
 
     def test_a_review_that_read_nothing_is_refused_and_records_nothing(self, tmp_path):
         """The 1510-confident-bytes case. The verdict line says READY_TO_MERGE and
@@ -361,3 +431,32 @@ class TestSummaryReachesTheReviewer:
 
         assert result.returncode != 0, result.stdout + result.stderr
         assert "INLINE_PHASE_5_SUMMARY" in (result.stdout + result.stderr)
+
+
+class TestTheVerdictLineIsTheLastThingTheTemplateSays:
+    """#153 — three dispatches, three replies with no ASSESSMENT line.
+
+    The template asked for "a final line" and then kept talking for three more
+    paragraphs, so the reviewer's own final line was whatever it chose. `stage()`
+    writes the template verbatim, so the template's tail IS the prompt's tail: the
+    verdict instruction must be the last thing in the file, and the file must say
+    "last line of your reply" in words the extractor's regex agrees with.
+    """
+
+    TEMPLATE = SCRIPTS.parent / "references" / "agy-architectural-reviewer-prompt.md"
+
+    def test_the_template_ends_with_the_verdict_line(self):
+        tail = self.TEMPLATE.read_text(encoding="utf-8").rstrip().splitlines()[-3:]
+        assert tail == ["```", "ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>", "```"], tail
+
+    def test_the_template_says_last_line_and_nothing_after(self):
+        text = self.TEMPLATE.read_text(encoding="utf-8")
+        assert "very last line of your reply" in text
+        assert "nothing after it" in text
+        assert "no code fence around it" in text
+
+    def test_no_instruction_follows_the_report_format_heading_except_the_verdict(self):
+        text = self.TEMPLATE.read_text(encoding="utf-8")
+        after = text.split("## Report Format", 1)[1]
+        assert "## " not in after, "a section after Report Format pushes the verdict off the tail"
+        assert "If READY_TO_MERGE" not in after, "verdict meanings belong ABOVE the format section"

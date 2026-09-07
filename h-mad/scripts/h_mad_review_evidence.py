@@ -38,6 +38,9 @@ import sys
 from pathlib import Path
 
 
+_AGY_EVENTS = frozenset({"init", "step_update", "result"})
+
+
 def scan(log_text: str) -> dict:
     """Count tool events by outcome, and sum reasoning effort. Any tool name counts.
 
@@ -58,6 +61,7 @@ def scan(log_text: str) -> dict:
     reading; a clean is not.
     """
     tools = ok = failed = thinking = 0
+    agy_events = 0
     status: str | None = None
     for line in log_text.splitlines():
         line = line.strip()
@@ -71,6 +75,14 @@ def scan(log_text: str) -> dict:
             continue
         if not isinstance(event, dict):
             continue
+        # Format evidence, counted separately from tool evidence (#154). An agy
+        # transcript carries `event` lines (init/step_update/result) — the SAME
+        # criterion `hmad-dispatch`'s `_exec_log_format` keys on, and deliberately
+        # not wider: a bare `{"step_update": …}` line with no `event` key is what
+        # a hand-built fixture emits, never agy, and counting it here while the
+        # shell calls the file codex-text would make the two instruments disagree.
+        if event.get("event") in _AGY_EVENTS:
+            agy_events += 1
 
         result = event.get("result")
         if isinstance(result, dict) and result.get("status"):
@@ -107,7 +119,7 @@ def scan(log_text: str) -> dict:
             tools += 1
             failed += 1
     return {"tools": tools, "ok": ok, "failed": failed,
-            "thinking": thinking, "status": status}
+            "thinking": thinking, "status": status, "agy_events": agy_events}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -130,6 +142,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     counts = scan(text)
+    if counts["agy_events"] == 0:
+        # #154. `EVIDENCE: NONE tools=0` once fired on a codex review that had
+        # verifiably read the tree: this gate parses agy NDJSON, codex transcripts
+        # are `codex-text`, and a zero from an instrument that cannot read its
+        # input is not a measurement. A codex review still does not satisfy the
+        # 6a-prime evidence gate — this says so, instead of reporting a false zero.
+        print(f"ERROR: {path} carries no agy NDJSON event (init/step_update/"
+              "result); this gate reads agy transcripts only. Either a codex-text "
+              "transcript, or an agy run that died before emitting `init` (the "
+              "wrapper's `#hmad-beat` lines alone are not evidence) — neither can "
+              "be judged here", file=sys.stderr)
+        print("EVIDENCE: UNREADABLE reason=unsupported_format")
+        return 2
     verdict = "PASS" if counts["ok"] >= 1 else "NONE"
     line = (
         f"EVIDENCE: {verdict} tools={counts['tools']} "

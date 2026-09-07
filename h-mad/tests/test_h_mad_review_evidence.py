@@ -156,6 +156,85 @@ class TestRobustness:
         assert "status=ERROR" in tok, "surface it for triage, but do not gate on it"
 
 
+CODEX_TEXT = """OpenAI Codex v0.153.2
+--------
+workdir: /Users/x/repo
+model: gpt-5.6-terra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: high
+--------
+user
+Review the diff between BASE and HEAD.
+codex
+I read scripts/h_mad_doc_block_exec.py lines 40-118 and the tests.
+No Critical or Important issues.
+ASSESSMENT: READY_TO_MERGE
+"""
+
+
+class TestUnsupportedFormat:
+    """#154 — a gate's zero is only a measurement if the instrument can read that input.
+
+    `EVIDENCE: NONE tools=0` fired on a codex review that verifiably read the tree,
+    because this gate parses agy NDJSON and codex transcripts are `codex-text`. The
+    blocker named a real hazard (a review that read nothing) that was not the one
+    present, and cost a cycle to diagnose. A transcript this gate cannot parse is a
+    cannot-judge carrying no counts — the same rule as a missing or empty log.
+    """
+
+    def test_a_codex_text_transcript_is_unreadable_not_none(self, tmp_path):
+        log = tmp_path / "codex.log"
+        log.write_text(CODEX_TEXT, encoding="utf-8")
+        r = _run(str(log))
+        tok = _token(r.stdout)
+        assert tok == "EVIDENCE: UNREADABLE reason=unsupported_format", tok
+        assert r.returncode == 2
+        assert "tools=" not in tok and "ok=" not in tok, "a cannot-judge carries no counts"
+
+    def test_stderr_names_what_the_gate_can_read(self, tmp_path):
+        log = tmp_path / "codex.log"
+        log.write_text(CODEX_TEXT, encoding="utf-8")
+        err = _run(str(log)).stderr.lower()
+        assert "agy" in err and "ndjson" in err, err
+
+    def test_an_agy_log_with_no_tools_is_still_none_not_unreadable(self, tmp_path):
+        """The two zeros this fix separates: `NONE` is an agy run that called no
+        tool; `UNREADABLE` is a transcript the gate cannot read at all."""
+        log = _log(tmp_path, json.dumps({"event": "init"}),
+                   json.dumps({"event": "result", "result": {"status": "SUCCESS"}}))
+        assert _token(_run(str(log)).stdout).startswith("EVIDENCE: NONE ")
+
+    def test_scan_reports_the_format_it_saw(self, tmp_path):
+        assert ev.scan(CODEX_TEXT)["agy_events"] == 0
+        agy = "\n".join([json.dumps({"event": "init"}), _tool("view_file", "DONE")])
+        assert ev.scan(agy)["agy_events"] >= 1
+
+    def test_agrees_with_the_wrappers_own_log_classifier(self, tmp_path):
+        """`hmad-dispatch` classifies the same file with `_exec_log_format`; the two
+        instruments must not disagree about what an agy transcript is, or one
+        renders it with the agy lens while the other calls it unreadable."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_hmad_dispatch import run_fn  # noqa: E402
+        agy = tmp_path / "agy.log"
+        agy.write_text(json.dumps({"event": "init"}) + "\n" + _tool("view_file", "DONE") + "\n",
+                       encoding="utf-8")
+        codex = tmp_path / "codex.log"
+        codex.write_text(CODEX_TEXT, encoding="utf-8")
+        # The divergent shape: a bare step_update line with no `event` key — what a
+        # hand-built fixture emits, never agy. Both instruments must call it foreign.
+        bare = tmp_path / "bare.log"
+        bare.write_text(json.dumps({"step_update": {"step_type": "tool", "state": "DONE"}}) + "\n",
+                        encoding="utf-8")
+        for path, expect_shell, expect_agy in ((agy, "agy-ndjson", True),
+                                               (codex, "codex-text", False),
+                                               (bare, "codex-text", False)):
+            shell = run_fn(f"_exec_log_format '{path}'").stdout.strip()
+            assert shell == expect_shell, (path.name, shell)
+            assert (ev.scan(path.read_text())["agy_events"] > 0) is expect_agy, path.name
+
+
 class TestDocumented:
     """A gate nobody is obliged to run is documentation, not a gate.
 
@@ -192,6 +271,19 @@ class TestDocumented:
         i = s.index("h_mad_review_evidence.py")
         block = section_from(s, i)
         assert "result.status" in block or "`result.status`" in block
+
+    def test_says_brief_with_the_question_never_the_answer(self):
+        """#153: handing the reviewer the conclusion drove tools=12 -> tools=0."""
+        text = self._skill()
+        assert "never the answer" in text
+        assert "tools=12" in text and "tools=0" in text
+
+    def test_says_unsupported_format_is_a_cannot_judge(self):
+        """#154: the skill must say a codex-text log is UNREADABLE, never tools=0,
+        and that a codex review does not satisfy 6a-prime's evidence gate."""
+        text = self._skill()
+        assert "reason=unsupported_format" in text
+        assert "codex" in text.split("reason=unsupported_format", 1)[1][:600].lower()
 
     def test_says_it_knows_no_tool_names(self):
         s = self._skill()

@@ -27,8 +27,8 @@
       "name": "the-verdict-gate-runs-before-the-evidence-gate",
       "_mechanism": "Order IS the contract. Extract first and a hollow review with a verdict word is recorded before anything asks whether it read -- the gates both exist, in the wrong sequence, which reads as correct in review.",
       "file": "scripts/h_mad_archreview_cycle.py",
-      "find": "    tools = _tools_that_completed(log_path)",
-      "replace": "    tools = 1 if _extract_assessment(review) else _tools_that_completed(log_path)",
+      "find": "    tools = int(counts.get(\"ok\", 0))",
+      "replace": "    tools = 1 if _extract_assessment(review) else int(counts.get(\"ok\", 0))",
       "test": "tests/test_h_mad_archreview_cycle.py::TestScoreRecordsOnlyAProvenReview::test_a_review_that_read_nothing_is_refused_and_records_nothing"
     },
     {

@@ -45,6 +45,8 @@ Verdicts, printed as a canonical token:
     ARCHREVIEW: UNSUBSTITUTED slots=<a,b>                            exit 2
     ARCHREVIEW: DEGENERATE_RANGE base=<b>                            exit 2
     ARCHREVIEW: UNREADABLE reason=<r>                                exit 2
+      (r ∈ review:<exc>, no_log, empty_log, unsupported_format — the last is a
+       codex-text transcript, which this gate cannot read; never `tools=0`, #154)
 
 The gate ORDER is the contract: evidence before verdict, always. A review that
 read nothing has no verdict to record, whatever its last line says — recording it
@@ -74,7 +76,7 @@ def _emit(line: str) -> None:
     print(f"{TOKEN} {line}")
 
 
-def _tools_that_completed(log_path: Path) -> int:
+def _evidence_counts(log_text: str) -> dict:
     """Delegate the evidence count to the gate that owns it.
 
     Imported rather than re-counted: a second copy of "what counts as a tool call
@@ -85,8 +87,7 @@ def _tools_that_completed(log_path: Path) -> int:
     sys.path.insert(0, str(SCRIPTS))
     from h_mad_review_evidence import scan
 
-    result = scan(log_path.read_text(encoding="utf-8"))
-    return int(result.get("ok", 0))
+    return scan(log_text)
 
 
 def _extract_assessment(text: str) -> str | None:
@@ -103,7 +104,8 @@ def _extract_assessment(text: str) -> str | None:
     return None
 
 
-def score(feature: str, state_file: Path, log_path: Path, review_path: Path) -> int:
+def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
+          session_id: str | None = None) -> int:
     try:
         review = review_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -116,8 +118,28 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path) -> 
         return 2
 
     # Evidence FIRST. A review that read nothing has no verdict to record, whatever
-    # its last line says.
-    tools = _tools_that_completed(log_path)
+    # its last line says. But a transcript this gate cannot READ is a cannot-judge,
+    # not a zero (#154): an empty log, or a codex-text one, carries no counts.
+    try:
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        _emit(f"UNREADABLE reason=log:{exc.__class__.__name__}")
+        print("  the dispatch log could not be read, so whether the review read "
+              "anything is unknown — a cannot-judge, not a verdict about the review.")
+        return 2
+    counts = _evidence_counts(log_text)
+    if not log_text.strip():
+        _emit("UNREADABLE reason=empty_log")
+        print("  the dispatch log is empty, so whether the review read anything is "
+              "unknown — a cannot-judge, not a verdict about the review.")
+        return 2
+    if counts.get("agy_events", 0) == 0:
+        _emit("UNREADABLE reason=unsupported_format")
+        print("  the dispatch log carries no agy NDJSON event; this gate reads agy "
+              "transcripts only. A codex-text review cannot be judged here and does "
+              "not satisfy the 6a-prime evidence gate — this is not `tools=0`.")
+        return 2
+    tools = int(counts.get("ok", 0))
     if tools == 0:
         _emit("NO_EVIDENCE tools=0")
         print("  the reviewer judged without reading anything → halt "
@@ -134,11 +156,14 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path) -> 
         return 2
 
     writer = SCRIPTS / "h_mad_state_write.py"
-    subprocess.run(
-        [sys.executable, str(writer), str(state_file), "--feature", feature,
-         "--set", f"archreview={verdict}"],
-        capture_output=True, text=True,
-    )
+    # `--session-id` when the caller has one: this is a phase write by the owner,
+    # and the owner's `--set` is what refreshes the heartbeat (#126). Without it
+    # the write still lands; only the beat is skipped.
+    argv = [sys.executable, str(writer), str(state_file), "--feature", feature,
+            "--set", f"archreview={verdict}"]
+    if session_id:
+        argv += ["--session-id", session_id]
+    subprocess.run(argv, capture_output=True, text=True)
     # Read back, always. `archreview` is not in the schema's `required` array, so a
     # dropped write still reports STATE: PASS — the comparison is the only check.
     try:
@@ -287,12 +312,16 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--state", type=Path, required=True)
     c.add_argument("--log", type=Path, required=True)
     c.add_argument("--review", type=Path, required=True)
+    c.add_argument("--session-id", default=None,
+                   help="this session's id; the owner's archreview write also beats "
+                        "the claim heartbeat (#126)")
 
     args = parser.parse_args(argv)
     if args.verb == "stage":
         return stage(args.feature, args.template, args.base, args.head, args.design,
                      args.diff_files, args.summary, args.prompt)
-    return score(args.feature, args.state, args.log, args.review)
+    return score(args.feature, args.state, args.log, args.review,
+                     session_id=args.session_id)
 
 
 if __name__ == "__main__":
