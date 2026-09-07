@@ -808,7 +808,14 @@ defect this decision was repairing — an over-broad universal — one scope wid
 five shapes that CONFIRMED the decision and none of the three that BOUND it. spec-author ran them
 on the pinned 3.11.8: `-h` -> `SystemExit(0)` with the same usage, so the class is the option TOKEN
 and not the spelling; `d.md --heading --help` -> `BadArgs`, because there `--help` is consumed as a
-VALUE and is data, not a request; `-- --help` -> `BadArgs`, because after the terminator it is the
+VALUE and is data, not a request [correction, 2026-09-07 post-merge: **the mechanism named here is
+FALSE.** Measured with a control: `d.md --heading --help` and `d.md --heading` both return
+`DOCBLOCK: BAD_ARGS message="argument --heading: expected one argument"`, byte-identical. argparse
+does NOT consume `--help` as `--heading`'s value — it recognises a dash-led token as an option and
+reports the preceding option as missing its argument. The verdict (`BAD_ARGS`) was right; the stated
+reason was wrong, and the third §D11 orchestrator error was written INSIDE the bracket that corrected
+the first two. A stated mechanism is a claim about code and is executed with its control, or it is
+not stated.]; `-- --help` -> `BadArgs`, because after the terminator it is the
 positional `doc`. The rule is written over argparse's own axis, never over position: **recognised
 AS AN OPTION anywhere -> exit 0; consumed as data -> the `DOCBLOCK:` contract.** Residual stated
 exactly: the two spellings argparse's default help action registers, so a self-declared help option
@@ -818,7 +825,9 @@ sheet is read by four authors and gated by nobody. Species: DECISION Q / §CONTR
 property of a mechanism is a claim about CODE and must be executed, including at its boundary.] Three reasons, in the order they carry weight:
 
 1. **A pre-scan re-implements argparse's help detection**, including `-h`, the `--` terminator, and
-   `--help` appearing as an option *value* (`--heading --help` — where it is data, not a request).
+   `--help` appearing after an option that wants a value (`--heading --help` — [correction,
+   2026-09-07: not "data"; argparse refuses `--heading` as missing its argument, the same as a bare
+   `--heading` — see the bracket above]).
    That is new surface with its own defect budget, purchased to make a widely-expected CLI behave
    unusually.
 2. **The exemption already exists in the contract; only its BOUNDARY was mis-stated.** Task 4's
