@@ -87,6 +87,12 @@ awk -F'|' '/^\| AC-[0-9]+\.[0-9]+ / {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $3)
 ```
 
 Result: `satisfied=49 partial=0 not_satisfied=0 total=49 match_rate=100.00% (49/49)`.
+
+**Match rate: 100.00% (49 of 49 acceptance criteria satisfied).** Stated here in prose as well
+as in the command output above because `h_mad_phase7_preconditions.py` reads the rate with
+`match\s*rate\s*[:=]\s*\**\s*(\d+(?:\.\d+)?)\s*%`, which does not match the `match_rate=`
+spelling the awk emits — `_` is not `\s`. The two figures are the same measurement, and the
+command above is the authority; this line exists so the Phase-7 gate can read it.
 [Bracket-correction: first published as `satisfied=48 ... match_rate=97.96% (48/49)`. The single
 `not satisfied` was AC-6.4, marked so on a torn-tree suite reading taken while the Phase-6b fix was
 editing the module underneath this analysis — see that row. The figure above is the output of the
