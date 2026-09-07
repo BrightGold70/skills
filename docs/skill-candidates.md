@@ -1680,3 +1680,21 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   A coverage metric derived from the same pattern as the thing it audits can only ever report
   agreement with itself. Do NOT reflow the two rows as the fix — that hides the defect and leaves the
   next wrapped row equally invisible.
+- **the evidence gate counts tool CALLS, not their TARGETS**: `EVIDENCE: PASS tools=41 ok=41` is
+  the same verdict whether a pass opened the module under discussion or spent all 41 calls in
+  `docs/`. Measured over 32 paired agy/codex audit cycles on HemaSuite `#18` (analysis:
+  `docs/03-analysis/hmad-surface-disagreement-second-mechanism.md`): the disagreement is
+  **one-directional** — 27 of 32 cycles disagreed on whether any must existed and **25 of the 27
+  are agy-clean-while-codex-files**, two the reverse — and the surviving discriminator is
+  code-grounding, not document reading. Controlled to reports that actually filed something and
+  scanning only the finding bodies, codex cites a code file in 18/29 (62 %) against agy's 4/14
+  (29 %); agy refers to sibling DOCUMENTS *more* (72 % vs 36 %), so the deficit is specifically the
+  code. Build-class findings on an impl-plan live in the gap between the plan and the code, so a
+  document-only leg passes H6 at `tools=41` and is structurally unable to reach them — recurrence: 1
+  feature, 32 cycles — candidate: yes — mechanical half: record per pass the count of DISTINCT paths
+  opened, split by documents-dir versus the code the document plans, and surface it beside `tools=`.
+  Not a gate yet: one feature is not enough to gate on, and the number is the input any future
+  hypothesis needs. **Prerequisite, and it is a defect on its own: the transcript the evidence gate
+  scores is not retained**, so no agy log survives to re-audit that `tools=41` — the gate's own
+  verdict cannot be checked after the fact, which is why the mechanism above had to be inferred from
+  report text rather than from what the leg opened.
