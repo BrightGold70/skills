@@ -403,6 +403,53 @@ specifically about **self-descriptive claims** regarding that apparatus.
 **Why this cannot be fixed by adding machinery:** more machinery means more self-description. It
 converges only by requiring the property claim to be **executed at authoring time**.
 
+## PARTITION — a total that reconciles proves nothing about its parts
+
+A four-way split of 73 reconciled exactly while three of the four parts were wrong, because the
+last bucket absorbed the remainder (plan-author, doc-block-exec r15). A remainder bucket cannot
+fail to reconcile: it is DEFINED as the total minus the others, so the sum is an identity, not a
+measurement. Reconciliation of a partition that contains a remainder carries no information about
+any part.
+
+What to publish instead:
+
+```bash
+# Every part derived by its OWN command, and the sum compared to a total derived SEPARATELY.
+# Never "the rest".
+a=$(grep -c '<needle A>' doc.md); b=$(grep -c '<needle B>' doc.md); c=$(grep -c '<needle C>' doc.md)
+t=$(grep -cE '<needle A>|<needle B>|<needle C>' doc.md)
+echo "a=$a b=$b c=$c sum=$((a+b+c)) total=$t"   # sum != total is the finding; sum == total is one check, not proof
+```
+
+A part named "other", "remaining", "the rest", or given as `total - (the named ones)` is a
+remainder and must be labelled as such in the sheet — it is not a measured figure and cannot be
+cited as one. If a part genuinely cannot be derived independently, the partition is two figures
+(the measured ones and the total), not four.
+
+## SELF-COUNTING SCREENS — a screen whose needle matches the prose being written runs last, per instrument
+
+A document that states "the debt word appears **29** times" and is then revised gains a 30th
+occurrence in the revision that fixes it; a screen for `\b91\b` in a document that carries the
+grep command for `\b91\b` counts the command. Any screen whose needle can match text the current
+revision is still producing is a **self-counting instrument**: its correct value is only known
+AFTER the last edit, and a value written mid-revision is stale by construction.
+
+The class produced 12 of 12 delta-review musts in two consecutive rounds (r18, r19) and one
+document carried ten such instruments; the reopen re-ran some and not others. So the rule is a
+per-instrument checklist, not a re-count:
+
+1. Before DONE, list every self-counting instrument in the document by its needle — a count over
+   the document's own body, a `grep -c` whose needle appears in the document, a "N members" over a
+   list the revision edits.
+2. Run each one LAST, after the final edit, and write the value it returns.
+3. Re-run the whole list after ANY further edit, including the one that fixes a stale member —
+   fixing one instrument's value is itself an edit the others can see.
+
+A self-count that is stale is not a defect in the tree — the tree is unchanged by fixing it — but
+it is a false claim the document makes about itself, and the next reader cannot tell it from a
+true one. Name the instrument's needle beside the value so the next revision can re-run it rather
+than trust it.
+
 ## THE ROUND AS AN ARTIFACT — what only the orchestrator can see, and therefore only it can get wrong
 
 - **Collect every teammate report into `docs/` BEFORE writing the sheet or dispatching an author.**
