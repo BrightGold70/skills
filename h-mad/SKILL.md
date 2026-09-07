@@ -1593,6 +1593,36 @@ three rounds running, so the union never approached zero — each round found *n
 documents of ~4,600 lines, not fewer. The operator called the cap on r19 and moved the feature to
 Phase 5. A document loop with no cap is not rigour; it is the loop measuring itself.
 
+**Enforced since 2026-09-07, having been prose until then.** A grep for cap logic over
+`scripts/` returned nothing, which is why `#18 gateway-consolidation` reached **c105** with this cap
+on the books — the same class as the two-consecutive-clean rule before #91. Check it before starting
+another round:
+
+```bash
+python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py x --round-cap 2 <cycle stamps…>
+```
+
+Read the `ROUNDS:` token: `OK` / `OVER cap=N cycles=M`, exit 0 on a verdict and 2 only on a
+cannot-judge (a stamp whose name is outside the audit grammar, since a stamp that cannot be placed
+must never read as "under the cap"). Counted in **cycles per document** — legs of one cycle are
+grouped out, and a plan cycle is not a design round. Not in "revision lines": those have no
+mechanical definition, and a cap that cannot be computed is the prose it replaces.
+
+**`cycles=N` is a FLOOR.** It counts cycles that were STAMPED, and a stamp exists only where
+`--gated` was passed. Measured on the real doc-block-exec archive: 4 design and 9 plan cycles carry
+stamps against the eighteen document rounds recorded above. The gap closes now that the cycle driver
+passes `--gated` every cycle (§"Drive the gate through `h_mad_audit_cycle.py`"). Read it as "at
+least N", never as evidence a loop was short.
+
+**Why a cap is safe, measured.** Of 152 origin-tagged must-fixes on `#18` from c98–c105, only **10
+(6.6%)** are `new-mechanism` — an actual design defect. 51 are fix-introduced, 27 are about
+instruments the document publishes, 6 are stale records, 17 are propagation gaps. `design.md` grew
+30 KB at c1 to 608 KB at c105, more than tripling in the last fourteen cycles. The late loop is not
+finding design defects; it is correcting itself. A *yield*-based cap — stop when the last N cycles
+produce no `new-mechanism` finding — is the better instrument and needs per-must origin tagging
+(H7) first, which is still doctrine-only: of 1001 audit reports, 833 reviewer legs carry zero
+`class:` lines.
+
 Three rules that make the cap safe rather than a shortcut:
 
 1. **Re-audit only what changed.** A document with no diff since the commit its last gate was

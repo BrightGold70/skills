@@ -1,0 +1,59 @@
+{
+  "_why": "SKILL.md capped every document audit loop at TWO gating rounds on 2026-09-06, and a grep for cap logic over scripts/ returned NOTHING \u2014 prose an orchestrator can skip, which is why gateway-consolidation reached c105 with the cap on the books. Each row restores one way the cap stops binding or starts firing on the wrong population.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_leg_set_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-cap-never-fires",
+      "_mechanism": "Back to prose: the loop is unbounded and a 105-cycle phase reports OK.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    verdict = \"OVER\" if worst > cap else \"OK\"",
+      "replace": "    verdict = \"OK\"",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheRoundCapIsEnforced::test_over_the_cap_is_OVER"
+    },
+    {
+      "name": "the-cap-is-off-by-one-and-fires-at-the-cap",
+      "_mechanism": "A cap of two must PERMIT two. Firing at the cap costs a whole legitimate round every time and is how a gate gets switched off.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "    verdict = \"OVER\" if worst > cap else \"OK\"",
+      "replace": "    verdict = \"OVER\" if worst >= cap else \"OK\"",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheRoundCapIsEnforced::test_exactly_at_the_cap_is_still_OK"
+    },
+    {
+      "name": "legs-are-counted-as-rounds",
+      "_mechanism": "A cycle emits one stamp per leg, so counting stamps counts legs: a two-leg cycle trips a cap of two on its first round. The same defect the streak had.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        grouped.add(key)",
+      "replace": "        grouped.add((key[0], key[1], key[2], path.name))",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheRoundCapIsEnforced::test_the_LEGS_of_one_cycle_do_not_inflate_the_count"
+    },
+    {
+      "name": "all-documents-share-one-budget",
+      "_mechanism": "Plan cycles are counted against the design's cap, so a document that has had one round is stopped because a SIBLING had two.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        per_doc[(feature, phase)] = per_doc.get((feature, phase), 0) + 1",
+      "replace": "        per_doc[(\"\", \"\")] = per_doc.get((\"\", \"\"), 0) + 1",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheRoundCapIsEnforced::test_phases_are_counted_separately"
+    },
+    {
+      "name": "an-unplaceable-stamp-is-counted-as-under-cap",
+      "_mechanism": "A stamp whose cycle cannot be established is silently dropped, so the count is short and the cap never trips \u2014 'I could not read it' reading as 'under the cap'.",
+      "file": "scripts/h_mad_audit_gate.py",
+      "find": "        key = cycle_of(path)\n        if key is None:\n            return {\"verdict\": \"UNREADABLE\", \"reason\": f\"stamp_name:{path.name}\"}\n        grouped.add(key)",
+      "replace": "        key = cycle_of(path)\n        if key is None:\n            continue\n        grouped.add(key)",
+      "test": "tests/test_h_mad_audit_leg_set_gate.py::TestTheRoundCapIsEnforced::test_an_unplaceable_stamp_is_UNREADABLE_at_exit_2"
+    }
+  ]
+}

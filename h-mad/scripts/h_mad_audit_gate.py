@@ -592,6 +592,54 @@ def exit_check(stamps: list[Path]) -> dict:
     return {"verdict": "READY", "cycles": [p.name for p in considered], "legs": legs}
 
 
+def round_check(stamps: list[Path], cap: int) -> dict:
+    """Has this document had more gating cycles than the cap allows?
+
+    `SKILL.md` has capped every document audit loop at TWO gating rounds since
+    2026-09-06 — and a grep for cap logic over `scripts/` returned NOTHING, so it was
+    prose an orchestrator could skip. `#18 gateway-consolidation` reached **c105** with
+    that cap on the books. Same class as the two-consecutive-clean rule before #91.
+
+    **Why a cap is safe, and not a shortcut.** Of 152 origin-tagged must-fixes from
+    c98-c105, only **10 (6.6%)** are `new-mechanism` — an actual design defect. 51 are
+    fix-introduced, 27 are about instruments the document publishes, 6 are stale
+    records; `design.md` grew 30 KB at c1 to 608 KB at c105. The late loop is not
+    finding design defects, it is correcting itself. Phase 5 is the gate that matters:
+    RED/GREEN, the mutation harness and 6a-prime run pytest against the tree, so a
+    design-logic defect that survived the documents surfaces as a failing test rather
+    than as a twentieth round.
+
+    Counted in CYCLES per (feature, phase) — per DOCUMENT — and not in "revision
+    lines", which have no mechanical definition. A cap that cannot be computed is the
+    prose it replaces. Legs are grouped out for the same reason the streak groups them:
+    one cycle emits one stamp per leg, and counting stamps counts legs.
+
+    **The count is a FLOOR, not the true cycle count.** It counts cycles that were
+    STAMPED, and a stamp exists only where `--gated` was passed. Measured on the real
+    doc-block-exec archive: 4 design and 9 plan cycles carry stamps, while `SKILL.md`
+    records eighteen document rounds for that feature. The gap closes as the cycle
+    driver passes `--gated` on every cycle, which it now does. Read `cycles=N` as "at
+    least N", and never as evidence that a loop was short.
+
+    `OVER` does not mean the phase failed. It means the exit criterion is wrong for
+    this document: stop looping, carry each open build-class must into the impl-plan as
+    an `OPEN-DECISION`, and let 5d settle it against code.
+    """
+    grouped: set[tuple[str, str, int]] = set()
+    for path in stamps:
+        key = cycle_of(path)
+        if key is None:
+            return {"verdict": "UNREADABLE", "reason": f"stamp_name:{path.name}"}
+        grouped.add(key)
+    # Per document: a plan cycle is not a design round.
+    per_doc: dict[tuple[str, str], int] = {}
+    for feature, phase, _cycle in grouped:
+        per_doc[(feature, phase)] = per_doc.get((feature, phase), 0) + 1
+    worst = max(per_doc.values(), default=0)
+    verdict = "OVER" if worst > cap else "OK"
+    return {"verdict": verdict, "cycles": worst, "cap": cap, "per_doc": per_doc}
+
+
 def verify_stamp(audit_file: Path) -> dict:
     """Is the recorded verdict still about the content on disk?
 
@@ -675,10 +723,43 @@ def main(argv: list[str] | None = None) -> int:
              "leg set that changed between the two cycles blocks it (#11/H3).",
     )
     parser.add_argument(
+        "--round-cap", nargs="+", metavar="N STAMP",
+        help="with a list of cycle stamps: report whether this document has had more "
+             "than N gating cycles (§\"Document-audit round cap\"). `OVER` means the "
+             "exit criterion is wrong for this document — stop looping, carry open "
+             "build-class musts as OPEN-DECISIONs, and let Phase 5 settle them.",
+    )
+    parser.add_argument(
         "--verify-stamp", action="store_true",
         help="re-hash what a previous PASS recorded and report CURRENT / STALE / UNSTAMPED",
     )
     args = parser.parse_args(argv)
+
+    if args.round_cap:
+        # `--round-cap 2 <stamp> <stamp> …`: the cap FIRST, then the stamps. Variadic
+        # rather than a bare int so the stamps do not collide with `audit_file`, which
+        # every other mode requires positionally.
+        try:
+            cap = int(args.round_cap[0])
+        except ValueError:
+            print(f"ROUNDS: UNREADABLE reason=cap_not_an_integer:{args.round_cap[0]}")
+            return 2
+        result = round_check(sorted(Path(s) for s in args.round_cap[1:]), cap)
+        if result["verdict"] == "UNREADABLE":
+            print(f"ROUNDS: UNREADABLE reason={result['reason']}")
+            print("  that stamp's name is outside the audit grammar, so its cycle "
+                  "cannot be established — a cannot-judge, never an under-cap pass.")
+            return 2
+        print(f"ROUNDS: {result['verdict']} cap={result['cap']} "
+              f"cycles={result['cycles']}")
+        if result["verdict"] == "OVER":
+            print("  the exit criterion is wrong for this document, not the document. "
+                  "Of 152 origin-tagged musts at c98-c105 only 10 were new-mechanism; "
+                  "the rest were the loop correcting itself. Stop looping, write each "
+                  "open build-class must into the impl-plan as `OPEN-DECISION: <f> — "
+                  "resolve in 5d`, and let Phase 5 settle it against code.")
+        print(f"[H-MAD] rounds {result['verdict']}")
+        return 0
 
     if args.exit_check:
         result = exit_check(sorted(args.exit_check))

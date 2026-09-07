@@ -89,10 +89,10 @@
     },
     {
       "name": "an-unplaceable-stamp-name-is-let-through",
-      "_mechanism": "Fail-open on cycle identity: a stamp whose cycle cannot be established is counted as its own cycle, so any two files close the gate. This is what the 2026-09-07 field tracer's A.json/B.json would have done.",
+      "_mechanism": "Fail-open on cycle identity: a stamp whose cycle cannot be established is counted as its own cycle, so any two files close the gate. This is what the 2026-09-07 field tracer's A.json/B.json would have done. (Anchor widened 2026-09-07: `round_check` introduced the same guard shape, so the narrow form matched twice and the precheck refused.)",
       "file": "scripts/h_mad_audit_gate.py",
-      "find": "        if key is None:\n            return {\"verdict\": \"UNREADABLE\", \"reason\": f\"stamp_name:{path.name}\"}",
-      "replace": "        if key is None:\n            key = (path.name, \"\", 0)",
+      "find": "        if key is None:\n            return {\"verdict\": \"UNREADABLE\", \"reason\": f\"stamp_name:{path.name}\"}\n        grouped.setdefault(key, []).append(path)",
+      "replace": "        if key is None:\n            key = (path.name, \"\", 0)\n        grouped.setdefault(key, []).append(path)",
       "test": "tests/test_h_mad_audit_leg_set_gate.py::TestAStreakIsTwoCyclesNotTwoStamps::test_a_name_outside_the_grammar_is_UNREADABLE_never_a_pass"
     },
     {

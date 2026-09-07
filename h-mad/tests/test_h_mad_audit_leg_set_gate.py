@@ -314,3 +314,72 @@ class TestAStreakIsTwoCyclesNotTwoStamps:
         self._stamp(tmp_path, "f", "design", 21, "p1", legs=("codex",))
         out = run("x", "--exit-check", *[str(p) for p in sorted(tmp_path.glob("*.gated.json"))])
         assert "legs_disagree" in token(out.stdout, "EXIT:")
+
+
+class TestTheRoundCapIsEnforced:
+    """`SKILL.md:1576` capped every document audit loop at TWO gating rounds — and a
+    grep for any cap logic across `scripts/` returned NOTHING. Prose an orchestrator
+    can skip, which is why `gateway-consolidation` reached **c105** with the cap on the
+    books, and the same class as the streak rule before #91.
+
+    Why capping is safe, measured: of 152 origin-tagged must-fixes from c98–c105, only
+    **10 (6.6%)** are `new-mechanism`. 51 are fix-introduced, 33 are the document's own
+    instruments and records. `design.md` went 30 KB at c1 to 608 KB at c105. The late
+    loop is not finding design defects; it is correcting itself.
+
+    Counted in CYCLES per document, not "revision lines": a revision line has no
+    mechanical definition, and a cap that cannot be computed is the prose it replaces.
+    """
+
+    def _stamp(self, tmp_path: Path, phase: str, cycle: int, leg: str = "codex") -> Path:
+        p = tmp_path / f"f.{phase}.audit.v{cycle}.{leg}.md.gated.json"
+        p.write_text(json.dumps({"verdict": "PASS", "files": {}, "suite": "PASS"}),
+                     encoding="utf-8")
+        return p
+
+    def test_under_the_cap_is_OK(self, tmp_path: Path) -> None:
+        a = self._stamp(tmp_path, "design", 1)
+        out = run("x", "--round-cap", "2", str(a))
+        assert out.returncode == 0
+        assert token(out.stdout, "ROUNDS:").startswith("ROUNDS: OK")
+
+    def test_exactly_at_the_cap_is_still_OK(self, tmp_path: Path) -> None:
+        """A cap of two permits two. Off-by-one here costs a whole round."""
+        a = self._stamp(tmp_path, "design", 1)
+        b = self._stamp(tmp_path, "design", 2)
+        assert "OK" in token(run("x", "--round-cap", "2", str(a), str(b)).stdout, "ROUNDS:")
+
+    def test_over_the_cap_is_OVER(self, tmp_path: Path) -> None:
+        s = [self._stamp(tmp_path, "design", n) for n in (1, 2, 3)]
+        line = token(run("x", "--round-cap", "2", *[str(p) for p in s]).stdout, "ROUNDS:")
+        assert line.startswith("ROUNDS: OVER")
+        assert "cycles=3" in line and "cap=2" in line
+
+    def test_the_LEGS_of_one_cycle_do_not_inflate_the_count(self, tmp_path: Path) -> None:
+        """The same defect as the streak: a cycle emits one stamp per leg."""
+        s = [self._stamp(tmp_path, "design", 1, "codex"),
+             self._stamp(tmp_path, "design", 1, "p1"),
+             self._stamp(tmp_path, "design", 2, "codex")]
+        line = token(run("x", "--round-cap", "2", *[str(p) for p in s]).stdout, "ROUNDS:")
+        assert "cycles=2" in line, line
+        assert "OK" in line
+
+    def test_phases_are_counted_separately(self, tmp_path: Path) -> None:
+        """The cap is per DOCUMENT — a plan cycle is not a design round."""
+        s = [self._stamp(tmp_path, "design", n) for n in (1, 2)] + \
+            [self._stamp(tmp_path, "plan", n) for n in (1, 2)]
+        assert "OK" in token(run("x", "--round-cap", "2", *[str(p) for p in s]).stdout,
+                             "ROUNDS:")
+
+    def test_an_unplaceable_stamp_is_UNREADABLE_at_exit_2(self, tmp_path: Path) -> None:
+        a = self._stamp(tmp_path, "design", 1)
+        b = tmp_path / "A.json"
+        b.write_text("{}", encoding="utf-8")
+        out = run("x", "--round-cap", "2", str(a), str(b))
+        assert out.returncode == 2
+        assert "UNREADABLE" in token(out.stdout, "ROUNDS:")
+
+    def test_OVER_is_a_verdict_and_exits_zero(self, tmp_path: Path) -> None:
+        """Read the token, never `$?`: OVER means stop looping, not that a tool broke."""
+        s = [self._stamp(tmp_path, "design", n) for n in (1, 2, 3)]
+        assert run("x", "--round-cap", "2", *[str(p) for p in s]).returncode == 0
