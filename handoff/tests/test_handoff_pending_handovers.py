@@ -205,11 +205,22 @@ class TestTheSkillDocumentsTheMechanism:
         assert "pending-handovers" in locate
         assert "in addition to" in locate.lower()
 
-    def test_step_3_5_stamps_the_marker_the_scan_filters_on(self) -> None:
+    def test_the_adoption_procedure_stamps_the_marker_the_scan_filters_on(self) -> None:
+        """Follows the procedure to TAKEOVER, where it now lives.
+
+        The assertion is unchanged: whatever adopts a brief must stamp the marker this
+        scan filters on, or every future resume re-offers work already picked up. Only
+        the LOCATOR moved — the body left READ Step 3.5 on 2026-09-07 so that adopting
+        a brief mid-session no longer requires a mode that halts on a loaded context,
+        and READ Step 3.5 now delegates rather than carrying a second copy.
+        """
         text = self.SKILL.read_text(encoding="utf-8")
-        step = text[text.index("### Step 3.5: Take over handed-over work") :]
+        section = text[text.index("## TAKEOVER mode") :]
+        assert "**Taken-Over-By:**" in section
+        # and READ still routes into it, so the marker is reached from a resume too
+        step = text[text.index("### Step 3.5"):]
         step = step[: step.index("### Step 3.6")]
-        assert "**Taken-Over-By:**" in step
+        assert "TAKEOVER" in step
 
     def test_the_cold_start_over_report_is_documented(self) -> None:
         """`Taken-Over-By:` is newer than the stores it filters, so the first run

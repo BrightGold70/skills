@@ -1,0 +1,67 @@
+{
+  "_why": "The adoption procedure lived only in READ Step 3.5, and READ Step 0a HALTS on a loaded session \u2014 so the one operation you need precisely BECAUSE you are mid-session was reachable only through a mode that refuses to run there, and the `pending-handovers` scan that discovers a brief was READ Step 1. Observed 2026-09-07: an inbound brief landed mid-session and every step had to be hand-executed. Each row restores one way the new mode becomes unreachable, unsafe, or a second drifting copy of READ.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_handoff_takeover_mode.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-mode-vanishes-from-the-routing-table",
+      "_mechanism": "The section exists and nothing routes to it. A mode you can only reach by reading the file is the hand-execution this replaces.",
+      "file": "SKILL.md",
+      "find": "| **TAKEOVER** |",
+      "replace": "| **READ** |",
+      "test": "tests/test_handoff_takeover_mode.py::TestTheModeExists::test_the_routing_table_names_TAKEOVER"
+    },
+    {
+      "name": "the-frontmatter-still-advertises-four-modes",
+      "_mechanism": "The description is the surface an invocation is matched against. A mode missing from it is documentation of something that never runs \u2014 strictly worse than no mode, because the section makes it look handled.",
+      "file": "SKILL.md",
+      "find": "Use this skill in five modes.",
+      "replace": "Use this skill in four modes.",
+      "test": "tests/test_handoff_takeover_mode.py::TestTheModeCanActuallyTrigger::test_the_description_says_five_modes"
+    },
+    {
+      "name": "the-halt-exception-loses-its-reason",
+      "_mechanism": "An unexplained exception to a safety gate is the thing a later reader either DELETES (restoring the hand-execution this mode replaces) or COPIES to a mode with no such justification. Aimed at the REASON SENTENCE, not the bold header above it: a row against the header SURVIVED, because the paragraph beneath still carried the contrast and the test still passed. The mutation was mis-specified, not the assertion.",
+      "file": "SKILL.md",
+      "find": "READ's halt exists\nbecause a resume *replaces* context \u2014 the prior session's working assumptions would silently outrank\nthe document just read. A takeover *adds* one owned item and replaces nothing, so that conflict cannot\narise.",
+      "replace": "The halt does not apply here.",
+      "test": "tests/test_handoff_takeover_mode.py::TestTheHaltExceptionIsStatedNotJustTaken::test_the_REASON_is_given"
+    },
+    {
+      "name": "READ-regrows-its-own-copy-of-the-claim",
+      "_mechanism": "Two adoption procedures, internally consistent, drifting apart \u2014 precisely the shared-sentence divergence h_mad_adoption_check.py exists to catch, and neither reader can see it from their own copy.",
+      "file": "SKILL.md",
+      "find": "\u00a7\"TAKEOVER mode\" in full \u2014 the procedure lives there, single-sourced",
+      "replace": "the steps below \u2014 copied here for convenience: run `h_mad_state_write.py --claim`, single-sourced",
+      "test": "tests/test_handoff_takeover_mode.py::TestTheProcedureIsSingleSourced::test_READ_step_3_5_carries_no_claim_procedure_of_its_own"
+    },
+    {
+      "name": "takeover-stops-disclaiming-the-resume-work",
+      "_mechanism": "Without the never-list the mode grows into a resume \u2014 syncing, reconciling and rebuilding the todo list on a loaded session, which is exactly what READ's halt exists to prevent. The exception would then have eaten the rule.",
+      "file": "SKILL.md",
+      "find": "- It does **not** sync with the remote, locate this branch's newest handoff, or read it.",
+      "replace": "- It may sync and reconcile if that seems useful.",
+      "test": "tests/test_handoff_takeover_mode.py::TestItDiscoversAndDoesNotOverreach::test_takeover_names_what_it_does_NOT_do"
+    },
+    {
+      "name": "the-discovery-scan-is-dropped-from-the-mode",
+      "_mechanism": "Half the original gap was DISCOVERY: `pending-handovers` was READ Step 1, so mid-session you could not learn a brief had arrived. A takeover mode that cannot find one only helps when you already knew.",
+      "file": "SKILL.md",
+      "find": "### Step T1: Find what is addressed to this repo",
+      "replace": "### Step T1: Assume the user handed you the path",
+      "test": "tests/test_handoff_takeover_mode.py::TestItDiscoversAndDoesNotOverreach::test_takeover_runs_the_pending_handovers_scan"
+    }
+  ]
+}

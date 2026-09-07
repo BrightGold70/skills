@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use this skill in four modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, resolving the divergences that have exactly one correct repair (a short allowlist, each gated to fail closed; everything else is reported, never repaired) and restoring the todo list (a task tool where one exists, else OMC's durable `.omc/notepad.md`, else an inline checklist in the report — the step never no-ops, and always names the sink it used); READ halts before doing anything when the session is not fresh, printing the `/clear` + re-invoke sequence for the user to run (no tool can trigger /clear), and switches output to caveman-ultra when that skill is installed. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
+description: Use this skill in five modes. WRITE mode — create a session handoff document, end-of-session summary, session closeout, wrap-up doc, or notes for the next session — produces a project-local markdown handoff at docs/handoffs/YYYY-MM-DD-<slug>.md capturing session summary, key learnings, next steps, open/blocked items, and resume context, aimed at future-you opening a fresh Claude Code session. READ mode — resume work after /clear or at the start of a fresh session by loading the most recent handoff, reconciling its state with the working tree, resolving the divergences that have exactly one correct repair (a short allowlist, each gated to fail closed; everything else is reported, never repaired) and restoring the todo list (a task tool where one exists, else OMC's durable `.omc/notepad.md`, else an inline checklist in the report — the step never no-ops, and always names the sink it used); READ halts before doing anything when the session is not fresh, printing the `/clear` + re-invoke sequence for the user to run (no tool can trigger /clear), and switches output to caveman-ultra when that skill is installed. When running under Orca, WRITE also stamps a durable, mobile-visible checkpoint on the active worktree and READ reconciles against Orca's worktree model (both best-effort via `hmad-dispatch`, skipped cleanly when Orca is absent). TAKEOVER mode — adopt an inbound handover brief MID-SESSION (`/handoff takeover`, "take over", "adopt the handover", "pick up that brief"): scan `pending-handovers` for briefs addressed to this repo, claim the feature through the liveness oracle, re-verify the brief's premises before adopting them, restore its todos under their ORIGIN repo/branch, stamp `**Taken-Over-By:**` into the brief and commit it, and acknowledge on the worktree. Unlike READ it does NOT halt on a loaded session — a resume REPLACES context and must start clean, while a takeover ADDS one owned item and replaces nothing — and it deliberately does not sync, reconcile, or rebuild the whole todo list. LEARN mode — record a single durable cross-session learning to <project>/docs/learnings.md via the bundled scripts/learn.py (no external skill or plugin dependency); also exposes a search command for grep-style retrieval across past learnings. Invoke for WRITE whenever the user says /handoff, "handoff", "session summary", "wrap up session", "close out session", "document what we did", "leave notes for next time"; invoke for READ whenever the user says "read handoff", "/handoff resume", "load handoff", "resume from handoff", "where did we leave off", "pick up where we left off", "continue from last session", or any variant about loading prior session state — especially right after /clear; invoke for LEARN whenever the user says "save this learning", "remember this for next time", "log this gotcha", "capture this pattern", "add to learnings", "this is a recurring issue, save it", "what learnings do we have on X", "search past learnings for Y", or any variant about recording or retrieving durable cross-session knowledge outside a full handoff. Use this skill whether or not the exact word "handoff" appears, and prefer LEARN mode for single-shot lesson capture, READ mode when phrasing is about *picking up* prior state, and WRITE mode when *closing out* a session. HANDOVER mode — move ownership of tracked work to ANOTHER worktree, repo, or agent: writes the brief into the RECEIVER's canonical store (`handoff_paths.py --repo <target>`), releases any advisory claim so the receiver never has to reach for `--force`, stamps the target's Orca worktree comment, then delegates delivery to the `orca-cli` skill's Full Handoffs commands and stops monitoring. Invoke for HANDOVER whenever the user says "hand this over", "hand off X to <worktree>", "give this task to another worktree/repo/agent", "transfer this feature", "this belongs to <other repo>'s todo", or otherwise moves OWNERSHIP of work that has state behind it — a parked task, a claimed feature, or in-flight context. Use the `orca-cli` skill directly instead when the ask is merely to run a self-contained prompt elsewhere with no ownership or state to transfer, and the `orchestration` skill when the user wants the work supervised, waited on, or tracked to completion.
 ---
 
 # Handoff
@@ -15,6 +15,7 @@ Before doing anything else, identify which mode applies:
 | "read handoff", "resume", "where did we leave off", "pick up where we left off", "continue from last session", invoked right after `/clear` | **READ** |
 | "save this learning", "remember this", "log this gotcha", "capture this pattern", "add to learnings", "search past learnings" | **LEARN** |
 | "hand this over", "hand off <work> to <worktree/repo>", "give this task to another worktree", "transfer this feature", "this belongs to <other repo>'s todo" — **when there is tracked work to transfer** (a parked task, a claimed feature, in-flight state) | **HANDOVER** |
+| `/handoff takeover`, "take over", "adopt the handover", "pick up that brief", "claim the inbound work" — **an inbound brief addressed to THIS repo, adopted mid-session** | **TAKEOVER** |
 
 **HANDOVER vs `orca-cli`.** `orca-cli` owns full handoffs and already documents the transport (`worktree create --no-parent --agent … --prompt …`, `terminal send --enter`). Reach for it directly when the ask is "run this prompt over there" — a self-contained instruction with no state behind it. HANDOVER is for when *ownership* moves: there is a claim to release, context that would take a forensic hunt to reconstruct, or a todo that must stop being yours and start being theirs. HANDOVER **composes with** `orca-cli` rather than replacing it — it prepares the brief and releases ownership, then delegates delivery to `orca-cli`'s commands. Never reimplement that transport here.
 
@@ -227,72 +228,11 @@ In parallel:
 A divergence is not a failure — it's just information the user needs before acting. State each one as a single sentence.
 
 ### Step 3.5: Take over handed-over work
+Skip this unless the doc carries a `**Handover-From:**` line. If it does, run
+§"TAKEOVER mode" in full — the procedure lives there, single-sourced, because the same
+adoption is needed mid-session and a second copy of it would drift out of step with this one.
 
-Skip this unless the doc carries a `**Handover-From:**` line. If it does, the work arrived from another lane and READ's default behaviour is **half a protocol**: it restores the todos and never claims anything. The sender released ownership and stopped watching; if you do not take it, the feature is owned by nobody, and a third session can start the same work without either of you seeing a collision.
-
-**1. Claim it — this is the step with no other home.** If the brief names a feature, locate the
-state file the same way HANDOVER Step 2 does — canonical path first, then `find`; never a `**/`
-glob, never `2>/dev/null`, never `head -1`. All three fail-opens are documented there, and all
-three end in the same false "nothing is claimed":
-
-```bash
-STATE="./docs/.bkit-memory.json"
-if [ ! -f "$STATE" ]; then
-  ERR=$(mktemp)
-  HITS="$(command find . -name .bkit-memory.json -path '*/docs/*' -not -path '*/.git/*' 2>"$ERR")"
-  RC=$?
-  N=$(printf '%s' "$HITS" | grep -c .)
-  if [ "$RC" -ne 0 ] && [ "$N" -eq 0 ]; then
-    echo "SEARCH FAILED — NOT 'nothing is claimed':"; cat "$ERR"; exit 1
-  fi
-  case "$N" in
-    0) STATE="" ;;
-    1) STATE="$HITS" ;;
-    *) printf 'AMBIGUOUS — %s state files:\n%s\nPick the repo-root one by hand.\n' "$N" "$HITS"
-       exit 1 ;;
-  esac
-fi
-echo "${STATE:-no state file}"
-```
-
-A **failed** search is not an empty one, and more than one hit is not a reason to take the first —
-this repository has three. No state file means nothing is claimed: say so, skip to point 2, and do
-not invent one. Otherwise pass the path it printed:
-
-```bash
-python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
-  --state "<the path the find printed>" \
-  --feature "<feature>" --session-id "<your-session-id>"
-```
-
-- `owned_elsewhere` → someone **live** holds it. Do not take it; surface the collision. The handover may have raced another session, and that is a real finding, not a formality.
-- anything else → claim it:
-
-```bash
-python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
-  "<the path the find printed>" --feature "<feature>" --claim "<your-session-id>"
-```
-
-A stale claim is takeable by plain `--claim` — reach for `--force` only against a **live** owner, which the oracle just told you there isn't. If the brief says a claim was left deliberately unreleased (a dead session's), that is the one it means; taking it is your decision to make and now is when you make it.
-
-**2. Verify the premises before adopting them.** A brief is a claim about the world made by a session that has stopped. Its reproduce commands are the cheap part — run them. Any premise that no longer holds becomes a divergence line, not a todo. A confident brief is not evidence.
-
-**3. Restore the todos with their ORIGIN, not yours.** Continue to Step 4, but prefix from the brief's `**Handover-From:**` and location block rather than the branch you are sitting on — the work belongs where the sender said it does.
-
-**4. Stamp the BRIEF, so the next resume does not re-adopt it.** Add a `**Taken-Over-By:**` line directly under the brief's `**Handover-From:**` line, in the doc itself:
-
-```markdown
-**Handover-From:** <sender-repo> · <sender-branch> · session <sender-session-id>
-**Taken-Over-By:** <this-repo> · <this-branch> · session <your-session-id> · <YYYY-MM-DD>
-```
-
-This is what Step 1's `pending-handovers` scan filters on, and it is **not optional**: leave it off and every future resume in this repo re-reads a brief you already own, forever. It has to live in the doc because the doc store is the only thing that scan can read — your claim is in a gitignored, machine-local state file and the worktree comment below is worktree-scoped, so neither can distinguish a brief that was picked up from one that fell on the floor. Commit the stamped brief; an uncommitted marker is one `git checkout` from being a dropped handover again.
-
-If the brief is untracked in the store (senders often write it without committing), commit it first — that is the same defect one step earlier.
-
-**5. Acknowledge on the worktree, so the transfer is visible.** Re-stamp the worktree comment from `handover: …` to something that says it was picked up (`taken over: <slug> · <state> · next: <next-step>`). The sender is not watching; this stamp, the brief's `**Taken-Over-By:**` line and your claim are the records that the handover completed rather than fell on the floor.
-
-**Do not** silently work a handed-over item without claiming it. That is the failure this step exists for: the sender let go, you started, and the state file says nobody owns it.
+Then return here and continue with Step 3.6. Nothing else about READ changes.
 
 ### Step 3.6: Resolve what is mechanically resolvable — and only that
 
@@ -794,6 +734,127 @@ the first half of the pane-ID candidate.
 - Don't paste the whole brief into the delivery prompt.
 - Don't use `orca orchestration task-create` here; a task row means supervised work, which is a different ask.
 - Don't keep watching the receiving lane. Handing over and hovering is the worst of both.
+
+---
+
+## TAKEOVER mode — adopt a handed-over brief WITHOUT ending the session
+
+READ owns resuming; TAKEOVER owns adopting. They were the same mode, and that was the defect: the
+adoption procedure lived only in READ Step 3.5, READ Step 0a **halts when the session is not fresh**,
+and the `pending-handovers` scan that discovers an inbound brief is READ Step 1. So the one operation
+you need precisely *because* you are already deep in a session was reachable only through a mode that
+refuses to run there — and you could not even discover a brief had arrived. Observed 2026-09-07: an
+inbound brief landed mid-session and every step below had to be hand-executed.
+
+**TAKEOVER does NOT halt on a loaded session, and the reason is not convenience.** READ's halt exists
+because a resume *replaces* context — the prior session's working assumptions would silently outrank
+the document just read. A takeover *adds* one owned item and replaces nothing, so that conflict cannot
+arise. READ keeps its Step 0a halt unchanged; this is an exception with a stated reason, not a
+weakening.
+
+### Step T1: Find what is addressed to this repo
+
+```bash
+HP="${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/handoff/scripts/handoff_paths.py"
+python3 "$HP" pending-handovers; RC=$?
+```
+
+`RC=0` one or more briefs are pending · `RC=1` none · `RC=2` at least one could not be read — **not an
+empty queue**: report the `UNREADABLE:` paths and handle any that did print. If the user named a brief,
+use that path and skip the scan.
+
+### Step T2: Adopt it
+
+<!-- SINGLE-SOURCE: READ Step 3.5 points here. Do not copy this body back into READ. -->
+
+
+Skip this unless the doc carries a `**Handover-From:**` line. If it does, the work arrived from another lane and READ's default behaviour is **half a protocol**: it restores the todos and never claims anything. The sender released ownership and stopped watching; if you do not take it, the feature is owned by nobody, and a third session can start the same work without either of you seeing a collision.
+
+**1. Claim it — this is the step with no other home.** If the brief names a feature, locate the
+state file the same way HANDOVER Step 2 does — canonical path first, then `find`; never a `**/`
+glob, never `2>/dev/null`, never `head -1`. All three fail-opens are documented there, and all
+three end in the same false "nothing is claimed":
+
+```bash
+STATE="./docs/.bkit-memory.json"
+if [ ! -f "$STATE" ]; then
+  ERR=$(mktemp)
+  HITS="$(command find . -name .bkit-memory.json -path '*/docs/*' -not -path '*/.git/*' 2>"$ERR")"
+  RC=$?
+  N=$(printf '%s' "$HITS" | grep -c .)
+  if [ "$RC" -ne 0 ] && [ "$N" -eq 0 ]; then
+    echo "SEARCH FAILED — NOT 'nothing is claimed':"; cat "$ERR"; exit 1
+  fi
+  case "$N" in
+    0) STATE="" ;;
+    1) STATE="$HITS" ;;
+    *) printf 'AMBIGUOUS — %s state files:\n%s\nPick the repo-root one by hand.\n' "$N" "$HITS"
+       exit 1 ;;
+  esac
+fi
+echo "${STATE:-no state file}"
+```
+
+A **failed** search is not an empty one, and more than one hit is not a reason to take the first —
+this repository has three. No state file means nothing is claimed: say so, skip to point 2, and do
+not invent one. Otherwise pass the path it printed:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_decision.py" \
+  --state "<the path the find printed>" \
+  --feature "<feature>" --session-id "<your-session-id>"
+```
+
+- `owned_elsewhere` → someone **live** holds it. Do not take it; surface the collision. The handover may have raced another session, and that is a real finding, not a formality.
+- anything else → claim it:
+
+```bash
+python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_state_write.py" \
+  "<the path the find printed>" --feature "<feature>" --claim "<your-session-id>"
+```
+
+A stale claim is takeable by plain `--claim` — reach for `--force` only against a **live** owner, which the oracle just told you there isn't. If the brief says a claim was left deliberately unreleased (a dead session's), that is the one it means; taking it is your decision to make and now is when you make it.
+
+**2. Verify the premises before adopting them.** A brief is a claim about the world made by a session that has stopped. Its reproduce commands are the cheap part — run them. Any premise that no longer holds becomes a divergence line, not a todo. A confident brief is not evidence.
+
+**3. Restore the todos with their ORIGIN, not yours.** Use READ Step 4's sink ladder and all of
+its rules (the `[<repo>@<branch>]` prefix, the dedupe, the named sink) — from READ continue into
+Step 4; from TAKEOVER restore only the brief's items. Either way prefix from the brief's `**Handover-From:**` and location block rather than the branch you are sitting on — the work belongs where the sender said it does.
+
+**4. Stamp the BRIEF, so the next resume does not re-adopt it.** Add a `**Taken-Over-By:**` line directly under the brief's `**Handover-From:**` line, in the doc itself:
+
+```markdown
+**Handover-From:** <sender-repo> · <sender-branch> · session <sender-session-id>
+**Taken-Over-By:** <this-repo> · <this-branch> · session <your-session-id> · <YYYY-MM-DD>
+```
+
+This is what Step 1's `pending-handovers` scan filters on, and it is **not optional**: leave it off and every future resume in this repo re-reads a brief you already own, forever. It has to live in the doc because the doc store is the only thing that scan can read — your claim is in a gitignored, machine-local state file and the worktree comment below is worktree-scoped, so neither can distinguish a brief that was picked up from one that fell on the floor. Commit the stamped brief; an uncommitted marker is one `git checkout` from being a dropped handover again.
+
+If the brief is untracked in the store (senders often write it without committing), commit it first — that is the same defect one step earlier.
+
+**5. Acknowledge on the worktree, so the transfer is visible.** Re-stamp the worktree comment from `handover: …` to something that says it was picked up (`taken over: <slug> · <state> · next: <next-step>`). The sender is not watching; this stamp, the brief's `**Taken-Over-By:**` line and your claim are the records that the handover completed rather than fell on the floor.
+
+**Do not** silently work a handed-over item without claiming it. That is the failure this step exists for: the sender let go, you started, and the state file says nobody owns it.
+
+### Step T3: Report, and go back to what you were doing
+
+Say what moved and what you now own, then resume the work the takeover interrupted:
+
+```
+**Taken over:** <slug> from <sender-repo>@<sender-branch> (session <id>) — claimed as <your-id>.
+**Premises re-verified:** N of M hold; <the ones that changed>.
+**Todos added:** N, prefixed `[<origin-repo>@<origin-branch>]`. **Sink:** <task tool | .omc/notepad.md | this report>.
+```
+
+**What TAKEOVER deliberately does NOT do** — all of it belongs to READ, and doing it here would make
+this a resume, which is what the halt exists to prevent:
+
+- It does **not** sync with the remote, locate this branch's newest handoff, or read it.
+- It does **not** reconcile the working tree, PRs, PIDs or worktrees against a doc (READ Step 3).
+- It does **not** resolve divergences (READ Step 3.6) or rebuild the whole todo list (READ Step 4) —
+  only the adopted brief's items are restored.
+
+If you actually want all of that, you want READ, and READ wants a fresh session.
 
 ---
 

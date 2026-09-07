@@ -130,15 +130,19 @@ def test_the_routing_phase_is_actually_wired_into_write() -> None:
     )
 
 
-def test_frontmatter_announces_four_modes() -> None:
-    # The description is the only thing in context before the skill triggers, so
-    # a HANDOVER section the description never mentions is a section that never
-    # runs. "three modes" left behind is the specific stale-count bug.
+def test_frontmatter_announces_five_modes() -> None:
+    # The description is the only thing in context before the skill triggers, so a
+    # section the description never mentions is a section that never runs. The stale
+    # COUNT is this test's whole subject, and it has now gone stale twice: "three"
+    # when HANDOVER landed, "four" when TAKEOVER landed 2026-09-07. Every retired
+    # value stays guarded below, because the bug is the leftover, not the number.
     text = _norm(SKILL)
-    assert "Use this skill in four modes." in text, (
-        "the mode count is stale — HANDOVER will not be discovered from the description"
+    assert "Use this skill in five modes." in text, (
+        "the mode count is stale — TAKEOVER will not be discovered from the description"
     )
-    assert "Use this skill in three modes." not in text, "stale mode count left behind"
+    for stale in ("three", "four"):
+        assert f"Use this skill in {stale} modes." not in text, (
+            f"stale mode count left behind: {stale}")
 
 
 def test_frontmatter_carries_handover_triggers_and_the_boundary() -> None:
