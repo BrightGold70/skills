@@ -1,0 +1,56 @@
+{
+  "_why": "#11/H5: two authors independently corrected one shared fact in the same cycle, one to 18 and one to 20. Each document was internally consistent, so no single-document reviewer could see it and three of the last five cycles' must-fixes were propagation gaps of that shape. Each row restores one way this check can report ADOPTED without having compared anything, or DIVERGED on documents that adopted the sentence perfectly — the two directions cost a missed defect and a switched-off gate respectively.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_adoption_check.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "whitespace-is-not-normalised",
+      "_mechanism": "A byte comparison reports DIVERGED on a document that adopted the sentence and merely hard-wrapped it. This repo has a measured case of a hard wrap hiding a retired count from every single-line grep for 92 cycles; a gate that fires on correct documents is the calibration error that gets it switched off.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "    return _WS.sub(\" \", text).strip()",
+      "replace": "    return text.strip()",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_a_hard_wrap_is_still_adoption"
+    },
+    {
+      "name": "an-empty-sentence-is-trivially-adopted-everywhere",
+      "_mechanism": "`\"\" in text` is True for every document, so the check returns ADOPTED on every input and reads as a passing gate while comparing nothing at all.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "    if not needle:\n        return {\"verdict\": \"UNREADABLE\", \"reason\": \"empty_sentence\"}",
+      "replace": "    if False:\n        return {\"verdict\": \"UNREADABLE\", \"reason\": \"empty_sentence\"}",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_an_empty_sentence_is_refused_not_trivially_adopted"
+    },
+    {
+      "name": "an-unreadable-document-is-reported-as-a-divergence",
+      "_mechanism": "'I could not read it' spelled the same way as 'it did not adopt' — opposite remedies. The reader is sent to edit a document that is not there, and a real divergence elsewhere is masked by the noise.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "            return {\"verdict\": \"UNREADABLE\",\n                    \"reason\": f\"doc:{exc.__class__.__name__.lower()}:{path.name}\"}",
+      "replace": "            missing.append(str(path)); continue",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_an_unreadable_document_is_UNREADABLE_never_DIVERGED"
+    },
+    {
+      "name": "one-document-counts-as-an-adoption-check",
+      "_mechanism": "Adoption is a relation between siblings. Run against the source document alone it trivially passes, so a cycle can satisfy the gate without ever comparing two documents.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "    if len(docs) < 2:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_one_document_is_not_an_adoption_check"
+    },
+    {
+      "name": "the-diverging-document-is-not-named",
+      "_mechanism": "A DIVERGED verdict with no path is a report that something is wrong somewhere among N documents — the reader then re-derives by hand exactly what the check exists to compute.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "    for path in result[\"missing\"]:\n        print(f\"  missing: {path}\")",
+      "replace": "    for path in []:\n        print(f\"  missing: {path}\")",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_a_sibling_that_did_not_adopt_is_DIVERGED_and_named"
+    },
+    {
+      "name": "DIVERGED-becomes-an-operational-error",
+      "_mechanism": "Every h-mad gate is read by TOKEN, never `$?`. A non-zero exit on a verdict makes a caller that checks the exit code treat a real answer as a crash, and the signal-discipline rule exists because this repo has been fooled by rc in both directions.",
+      "file": "scripts/h_mad_adoption_check.py",
+      "find": "    print(f\"[H-MAD] adoption {verdict}\")",
+      "replace": "    print(f\"[H-MAD] adoption {verdict}\")\n    if verdict == \"DIVERGED\":\n        return 3",
+      "test": "tests/test_h_mad_adoption_check.py::TestAdoption::test_the_verdict_is_a_token_not_an_exit_code"
+    }
+  ]
+}
