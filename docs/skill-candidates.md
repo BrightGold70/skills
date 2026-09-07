@@ -43,6 +43,23 @@ only `codex|agy` and returns 2 on anything else, so no verb addresses a raw hand
 `check for a live run before merging a shared skill change` (nothing reads `worktree-ps` comments
 against `.h-mad/telemetry.jsonl`; `h_mad_telemetry.py` is the only consumer and it writes).
 
+**Reconcile of 2026-09-07 — the first pass after FOUR consecutive skipped scouts; all 21 open `yes`
+rows re-verified against source, 4 closed.** The open backlog had grown from the 3 the line above
+records to **21 `yes` / 15 `maybe` of 193** while nobody ran the scout. Every `yes` row was probed at
+HEAD `8ade1e9` against the file, never against its own label and never against the task list or a
+commit message; the census now reads `candidates=193 OPEN(yes+maybe)=32 yes=17 maybe=15 LANDED=81
+DECLINED=36 no=36 SUPERSEDED=7` (+6 bump rows excluded, coverage 199/199). **Four flipped to
+LANDED** — `collect-report` marker near-miss, `carry-forward-sources`, the unscorable-report refusal,
+and the reopen value-sweep. **Five carry a new distinction and stay open**: the RULE landed and the
+MECHANISM the row actually asked for did not (suffixed re-dispatch paths, freeze closure predicates,
+`expect 0` screens at the freeze sha, the measured-value lint, the detector-calibration shape). The
+`2718d48` / `ce9ffe1` batches closed a dozen `#49x` items *as doctrine*, which is not the same thing
+as closing the row that asked for a verb — reading a rule's arrival as a row's completion is how this
+backlog would have shrunk on paper without a single check being built. The remaining twelve were
+confirmed absent by probing the tree. One measurement note for the next reader: the first probe pass
+of this reconciliation grepped `h-mad/bin/hmad-dispatch.sh` — the script is under `scripts/` — and a
+wrong-path zero reads exactly like "already landed".
+
 **Triage of 2026-08-25 — `DECLINED` here also means "not codable".** Every open row was sorted into
 useful/codable, useful/NOT-codable, or not-useful, and the two non-actionable buckets were closed with
 `DECLINED`, each note naming its bucket and its reason. Read those carefully: for a useful/not-codable
@@ -1086,6 +1103,10 @@ TodoList `#54` and nothing else; this heading is the durable home its Next Step 
   `worktree-ps` on this machine lists 4 worktrees, and one `main` carries a live sibling stamp
   (`nlm-pin-phase3-fifteen-audit-cycles · Phase 3 OPEN · next: audit cycle 16`) — i.e. the exact
   signal the warning would print was sitting there, readable, unread by anything.
+  — **RE-CHECKED 2026-09-07 (scout): still open, still hand-run, unchanged since 09-02.**
+  `grep -rln 'telemetry\.jsonl' h-mad/ handoff/` returns the writer (`h_mad_telemetry.py`), its tests
+  and prose only — no reader. `worktree-ps` appears in exactly one file (`h-mad/scripts/hmad-dispatch.sh`)
+  and nothing joins the two.
 - **section-bounded slicing for doc-rule tests**: `test_h_mad_context_budget_docs.py` sliced a fixed
   `s[i:i + 4000]` window from a heading to scope its assertions, and that window silently stopped
   covering the end of its own section the moment a paragraph was added — the pin failed for the wrong
@@ -1242,6 +1263,11 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   removes the authoring error but not the drift that a later edit causes.
   See the LANDED `re-anchor a mutation spec after editing the code it mutates` row above for the
   JSON half; this is the markdown half it does not reach.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `h_mad_mutation_harness.py` discovers siblings
+  with `spec_path.parent.glob("*.json")` (`:470`) — markdown is still invisible to `--check-anchors`
+  and to the pre-push sweep. Adjacent but NOT this: `h-mad/scripts/h_mad_doc_block_exec.py` (the
+  feature in flight on this branch) is a fence-aware Markdown block scanner, so it supplies the
+  scanner half a markdown anchor resolver would need. It resolves no `"find"` anchors.
 
 - **ask what a node asserts when NOTHING is implemented**: three nodes were classified `RED: FAIL`
   that the RED state itself makes pass (AC-1.5, T4's WIRE-PIN, AC-3.17) — a negative-only fixture
@@ -1253,6 +1279,9 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   actually-failing set against the rows classified `FAIL` — any row in the second set and not the
   first is this defect. That diff is exactly the 5d/5e gate's own input, so this is a check inside a
   step that already runs, not a new tool.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** No script diffs the RED suite's actually-failing
+  set against rows classified `RED: FAIL` — `grep -rln 'RED: FAIL|red_fail|unmodified tree' h-mad/scripts/`
+  is empty. The 5d/5e gate still reads the classification, never the tree.
 
 - **grep the body for a version-history entry's claim**: four times this session a `## Version
   History` entry announced a back-propagation the body never received (design live check v1.13, plan
@@ -1264,15 +1293,28 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   checks that what an entry claims is true of the document it sits in. Natural home is
   `h_mad_version_history.py` as a `--verify` mode, beside the writer that already parses these
   entries.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `h-mad/scripts/h_mad_version_history.py` exists
+  (11.0K) and has no `--verify` mode and no verify function; it remains a writer only.
 
 ## 2026-09-02 — phase5b-gated-task1-green (scout)
 
 - **AC bodies must name their test node (or the 5d assembler must carry the contract table)**: `h_mad_assemble_tdd.py` cuts §Task N only; 39 of 45 AC bodies named no node, so the first RED dispatch invented all six T1 names and would have orphaned every T1 mutation pin. Fixed by hand this session (`**Node:**` on every AC). Mechanical: the assembler appends the task's rows from the Test-name contract table, or the audit gate refuses an AC whose body lacks its node — recurrence: 1 (systemic: every task would have hit it) — candidate: yes
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `grep -c Node h-mad/scripts/h_mad_assemble_tdd.py`
+  = 0 — the assembler still cuts §Task N alone and appends no contract table, and no precheck detector
+  refuses an AC body that names no node.
 - **run prescribed test-helper blocks against the live module's guards before RED**: the impl-plan prescribed `tempfile.mkdtemp(` inside `test_hmad_dispatch.py`, whose own guard asserts that literal is absent; 53 audit cycles could not see it because the block was never executed in situ. Mechanical: extract every prescribed python block whose `file` is an existing test module, append it to a scratch copy, run the module's `*_guard` tests — recurrence: 1 — candidate: yes
+  — **RE-CHECKED 2026-09-07 (scout): still open.** Nothing extracts a prescribed python block and
+  runs it against the target module's `*_guard` tests. `h_mad_doc_block_exec.py` executes tagged SHELL
+  blocks from markdown — same scanner, different payload and no in-situ append — so it is adjacency,
+  not the fix.
 
 ## 2026-09-02 — pin-agents-tail-banner phase7
 
 - **live-shape-probe-before-the-gate**: a feature whose contract is "recognise X" must be shown a REAL X, captured from the running system, before any gate scores it clean — recurrence: 1 — candidate: yes — evidence: `pin-agents-tail-banner` passed 2663 tests, 49 mutations, 53 impl-plan audit cycles and two clean audit surfaces while `_agent_tail_re` matched 0 of 5 real agent banner lines; the 12 corpus positives were all idealised. Only the Phase-5f live check found it. The plan records four earlier revisions of the same rule, each falsified by a shape the corpus lacked.
+  — **RE-CHECKED 2026-09-07 (scout): still open, and unwritten anywhere.**
+  `grep -rn -i 'live shape|shown a REAL|live check' h-mad/SKILL.md h-mad/invariants.base.md h-mad/references/*.md`
+  returns nothing; the only hit in the tree is a mutation-spec fixture name. The rule that cost
+  `pin-agents-tail-banner` 53 audit cycles is recorded in this file and nowhere a dispatch reads.
 - **anchored-derivation-breaks-on-an-edited-key-column** (recurrence, not a new row): recurrence 1 → 2 — adding a citation after the AC id broke the per-task `^\| AC-N\.M \|` loop (T2 8/1 instead of 10/1) while the `.*` aggregate still read 45. Same shape as the two rows that briefly carried two AC labels. Cite in the proof column; re-run BOTH derivations after any table edit.
 - **concurrent-suite-runs-manufacture-phantom-failures**: two pytest runs over one working tree produced 6 failures and 3 failures in DIFFERENT sets, and 0 when the file ran alone — recurrence: 1 — candidate: maybe — the failures look like regressions and are not; run the repo suite alone before believing any of it.
 
@@ -1303,6 +1345,8 @@ skipped this phase rather than half-running it. Run here on resume, before dispa
   `grep -cE '^  - AC-[0-9]+\.[0-9]+:'` and assert per-FR contiguity. — recurrence: 3 — candidate:
   yes (a `h_mad_ac_census.py` reporting `ACS: OK count=N frs=6` or `ACS: DRIFT`, consumed by the
   audit gate the way `--verify-stamp` is)
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `h-mad/scripts/h_mad_ac_census.py` does not exist
+  and no `ACS: OK` token appears anywhere under `h-mad/`.
 - **a doc edit and its version-history bump are not atomic**: an edit heredoc's `assert` failed
   while the two following `h_mad_version_history.py` calls ran anyway, so two documents briefly
   carried `v1.15`/`v1.9` entries describing changes that had not landed. The helper refused
@@ -1336,6 +1380,11 @@ individually re-verified this pass; that is stated rather than left implied.
   re-measured to 383 s, and two agents disagreeing about a file because each measured it at a
   different instant. A lint over plan/design docs for a bare numeric claim with no adjacent command
   or commit would catch the first three — recurrence: 4 — candidate: yes
+  — **RE-CHECKED 2026-09-07 (scout): PARTIAL, stays open.** Case 1 of the four (stale line pins) IS
+  mechanical — `h_mad_precheck_doc.py:93` lists `PINDRIFT` among `HARD_KINDS` and emits it at `:371`;
+  it is live right now (`PRECHECK: FAIL issues=19`, 8 of them PINDRIFT). The doctrine landed too
+  (`measurement-discipline.md` §PROVENANCE). What the row actually asked for — a lint over plan/design
+  prose for a bare numeric claim with no adjacent command or commit — does not exist.
 - **a census without its command drifts unnoticed and cannot be adjudicated**: the plan's
   extractor-census control said "21 `.py` files contain a fence literal"; two readers measuring "the
   same" thing got 3 and 23 because they ran different commands, and the document named neither. The
@@ -1362,27 +1411,90 @@ individually re-verified this pass; that is stated rather than left implied.
   machine-local — recurrence: 1 — candidate: yes
   — **LANDED 2026-09-04** — the five agents are tracked at `h-mad/agents/` and registered by user-scope symlink (`6db8e50`), with the registration step added to §"Bootstrap action" and hardened after a review found it wrote five dangling links on a relative skills symlink (`2eece9f`). A project-scoped copy silently outranks the link, so bootstrap reports one rather than deleting it.
 - **verify a backlog reference resolves as a commit before trusting it**: two P3 items cited `cfc79129` and `45db0187` as commits; both are **session UUIDs** and resolve in neither repo, which is why both sat unreproduced for weeks and reached the backlog as vague one-liners — recurrence: 2 (both in one session) — candidate: yes — one command settles it (`git cat-file -t <sha>`) and it belongs at the front of any inherited defect that names a sha. Likely a rule for the handoff/h-mad docs rather than a new skill, since the fix is a habit.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `grep -rn 'cat-file -t' h-mad/ handoff/` returns
+  nothing. The row itself says the right home is a rule in the handoff/h-mad docs rather than a new
+  skill, so this is one sentence of debt, not a build.
 - **calibrate a new detector against artifacts that already passed, before wiring it**: every `h_mad_precheck_doc.py` detector written as a hard finding fired 104 / 49 / 48 times on the design and plan that had just passed 83 and 74 audit cycles, and every hit was correct usage — recurrence: 5 detectors in one session — candidate: yes — the reusable shape is: pick a real corpus with labelled defects, assert a noise floor on known-good artifacts, and demote anything that fires on them. Currently recorded only in one script's docstring plus a memory.
+  — **RE-CHECKED 2026-09-07 (scout): MECHANISM landed for ONE detector, the reusable shape still
+  owed.** `h-mad/tests/test_h_mad_precheck_doc.py` carries `test_noise_floor_on_documents_that_survived_eighty_cycles`
+  — the row's "assert a noise floor on known-good artifacts", mechanized for `h_mad_precheck_doc.py`
+  specifically. Nothing generalises it: `grep -rn calibrat h-mad/references/*.md h-mad/SKILL.md`
+  returns one unrelated hit (`inline-protocols.md:444`, FR match rate). Still only a docstring plus a
+  memory for the NEXT detector's author, which is the row's complaint.
 - **re-measure the audit-prompt size fixture on ANY template or invariants edit**: re-anchored three times in one session (2440 → 2389 → 2329 → 2320) and on two of those three the test PASSED without the re-anchor, sitting 883 B and then 1,381 B under the ceiling — recurrence: 3 — candidate: yes — the fixture's own comment predicted this ("a drift this close reads as a pass right up until it doesn't") and it came true on the very next edit. A check that prints the current margin would replace a judgement call with a number.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** No check prints the margin. The two `margin`/
+  `ceiling` hits under `h-mad/tests/` are the advisor context ceiling (`test_h_mad_advisor_warn.py`)
+  and prose in `test_h_mad_assemble_audit.py:212,242` — the size fixture is still a bare re-anchored
+  constant, which is the shape the row says reads as a pass right up until it does not.
 - **sweep EVERY mutation-spec directory, not the one you thought of**: `--check-anchors` over `tests/specs/` returned `ANCHORS_OK` while two anchors in `tests/mutation-specs/` were drifted and failing the suite — recurrence: 1 — candidate: maybe — `find h-mad -name '*.json' -path '*spec*'` is the whole fix, but nothing makes the two-directory layout discoverable to someone who checks one and stops.
 - **`hmad-dispatch probe <agent>` — a computed-answer liveness verb scored on `env`'s `last=`**: measured 2026-09-05, `hmad-dispatch read agy` sat frozen on a spinner for 20+ minutes while `hmad-dispatch env` already reported `state=done last="340997"`, the correct answer to an `8317 * 41` probe. A watcher grepping the pane loops forever; two other quirks make this worth wrapping — `ask` takes a prompt FILE not a string, and its own stdout returns the pane mid-render. `candidate: yes`
   — reinforced 2026-09-05: hand-rolled the probe twice; once the match literal was a transposed digit (24265159 vs 24264959) and the loop could never pass — a live agy would have been filed dead (#49l). The verb must derive expected and matcher from ONE expression.
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `hmad-dispatch` has no `probe` verb — the
+  dispatch table at `hmad-dispatch.sh:3815-3835` lists `ask`/`exec`/`read`/`audit-cycle`/`collect-report`
+  and no `probe)`; every `probe` hit in that file is a comment. Note for the next reader: the first
+  pass of THIS reconciliation grepped `h-mad/bin/hmad-dispatch.sh` (wrong path — the script is under
+  `scripts/`) and got a clean zero, which would have read as "landed, nothing to see".
 - **`collect-report` must name the file it actually waited for, or accept `<report-basename>.done`**: measured 2026-09-05, a complete 13.7K gating report returned `COLLECT: MISSING` because the doc-auditor wrote its marker as `..._teammate.report.done` instead of `..._teammate.report.md.done`. The agy leg on the same cycle wrote the correct form, so it fires per-instance and unpredictably. The error names the REPORT path while waiting on the MARKER path, so it points at the wrong object; and `COLLECT: MISSING` is indistinguishable from "the auditor produced nothing", which is already recorded in a committed Version History entry for `plan c83`. `candidate: yes`
+  — **LANDED 2026-09-07 (scout)** — `h-mad/scripts/h_mad_collect_report.py:37-44`. The marker is
+  `<report>.done`, and `:42-44` adds the near-miss form the doc-auditor emitted (`a.report.md` ->
+  `a.report.done`, `with_suffix('.done')`), with `:28` naming the incident in the docstring.
 - **`carry-forward-sources` must return the branch's newest NON-handover handoff in addition to pending briefs**: measured 2026-09-05, an inbound handover filed under this branch's slug (`2026-09-05-main__audit-loop-never-runs-repo-suite.md`) became `latest --branch main`, and the real branch predecessor was absent from the source list entirely. A WRITE that had not run READ first would have dropped the whole branch backlog with no error — a new shape of the chain-drops-backlogs defect the field was built to prevent. `candidate: yes`
+  — **LANDED 2026-09-07 (scout)** — `handoff/scripts/handoff_paths.py:204 carry_forward_sources`,
+  wired as the `carry-forward-sources` subcommand at `:325`/`:357`. Field evidence at HEAD `8ade1e9`:
+  this branch's newest handoff names its branch predecessor AND two taken-over briefs in one
+  `**Supersedes:**` line, which is the shape the row said was unreachable.
 - **a delta-self-review verb (`audit-cycle --delta` or equivalent)**: dispatched by hand six times across two rounds on 2026-09-04/05, identical shape each time — one `doc-auditor` per phase, ADVISORY, subject `git show <sha> -- <doc>` plus the reports that diff answered, reports named OUTSIDE the audit filename grammar so they cannot join the codex-leg ledger. Found fix-introduced musts in 3 of 3 passes at roughly a quarter of a gating round's cost. The naming constraint is the part a verb should enforce rather than leave to the caller. `candidate: yes`
+  — **RE-CHECKED 2026-09-07 (scout): still open.** `audit-cycle` takes `--phase` and `--passes` only
+  (`hmad-dispatch.sh:2969-2980`, with `_unknown_opt audit-cycle` as the fallthrough); there is no
+  `--delta`. Every `delta` hit in the wrapper is `text_delta` or `tree delta`. Still six-plus hand
+  dispatches per round, and the report-naming constraint the row wanted enforced is still the
+  caller's to remember.
 
 - **assembler HALTs on a prompt no surface can accept, and trims Version History with `--vh-tail N`**: candidate: yes · recurrence: 2 real prompts refused by codex (`input_too_large`, 1,123,643 / 1,053,882 chars) while `ASSEMBLE: PASS` was printed and the advisory said "no limit via exec" · VH was ~36% of each doc, embedded for target AND siblings
   — **LANDED 2026-09-05** at `af19d53`: `h_mad_assemble_audit.py --vh-tail N`, `MAX_PROMPT_CHARS=1048576`, `ASSEMBLE: HALT <phase>:oversize`; 5 tests, suite 2552. Owed: SKILL.md 5.5 mention.
 - **`hmad-dispatch exec` surfaces `input_too_large` / `turn/start failed` as a distinct token**: candidate: yes · recurrence: 2 codex refusals + 1 agy pytest-timeout all printed the identical `EMPTY final message — agent exited 1` / `tree delta: N` / `rc=1`, so four different causes had one output; the transcript tail carried the exact error each time (#71, #77)
   — **LANDED 2026-09-05** — `h-mad/scripts/hmad-dispatch.sh` `_codex_input_too_large` / `INPUT_TOO_LARGE` branch at `b39d9dc` (7 sites); verified by `git log -S'INPUT_TOO_LARGE'` this session.
 - **collect-report / the commit path refuse a report whose first line is `VERDICT: IN-PROGRESS` or whose evidence line reads `0 files opened`**: candidate: yes · recurrence: an early-write stub (`None` ×3, `0 files opened`) overwrote a completed gating report and would have scored CLEAN; the same stub was then committed and pushed under a message describing the real report (#49o, #49q)
+  — **LANDED 2026-09-07 (scout)** — the MECHANISM, not only its test:
+  `h-mad/scripts/h_mad_collect_report.py` imports `is_unscorable` (`:16`), gates the copy on it
+  (`:138`) and prints `COLLECT: INVALID reason=… path=…` (`:143`). Discrimination proven at
+  `h-mad/tests/test_h_mad_unscorable_report.py:129-134` — `in-progress-sentinel` and `zero-evidence`
+  against a good report AND a stub-describing decoy, so it is not a one-sided pass. Verdict token
+  specified at `h-mad/references/measurement-discipline.md:200` (`UNVERIFIED unscorable_report:pN`,
+  deliberately distinct from `no_report:pN`).
 - **a re-dispatched auditor gets a SUFFIXED report path, never the original's**: candidate: yes · recurrence: two re-dispatches handed the original legs' paths produced one clobber and one near-clobber; both originals were alive and slow, declared dead from a hook's `Running:` set (#49o)
+  — **RE-CHECKED 2026-09-07 (scout): rule landed, enforcement owed — stays open.** The rule is
+  verbatim at `h-mad/SKILL.md:1358` ("Never re-dispatch to a report path another agent was handed —
+  suffix it") and in `measurement-discipline.md` §COMPLETION SIGNAL (#49o). Nothing MAKES it happen:
+  `hmad-dispatch` has no re-dispatch path that suffixes, so the guard is an orchestrator's memory —
+  which is the state that produced the clobber and the near-clobber this row records.
 - **freeze-candidate check runs the documents' OWN closure predicates, not byte-identity**: candidate: yes · recurrence: `af19d53` (assembler only) named as r16 freeze expired a plan interval closure licensing ~70 readings, moved the suite floor 7→12, and moved an impl-plan AST sweep 22→23 — in a doc whose author had already said "no reading moved" (#81). Predicate: `git diff --name-only <base> <freeze> -- h-mad handoff` must be empty, plus each doc's `_SCANNED`-style corpora.
+  — **RE-CHECKED 2026-09-07 (scout): rule landed, predicate not executable — stays open.**
+  `h-mad/SKILL.md:1352-1355` states it ("Byte-identical documents is not the predicate") and
+  `measurement-discipline.md:160-163` gives the greppable enumeration command. The row's own
+  predicate — `git diff --name-only <base> <freeze> -- h-mad handoff` must be empty, plus each doc's
+  `_SCANNED`-style corpora — is run by hand every round; no script or verb takes a candidate sha.
 
 ## 2026-09-06 — doc-block-exec-5b-exit-and-hmad-class-gate
 
 - **run every published `expect 0` screen at the freeze sha before certifying "no census moved"**: three decision-sheet entries (C2 ii, C3 vi, C4 i) certified that a tooling commit moved no scoped census while the design's own published trip-wire read **8** at that commit; nobody ran it. The documents publish these screens with their commands, so a freeze-certification step can execute them. — recurrence: 3 sheet entries in one round, plus #49t/#81 in earlier rounds — candidate: yes
+  — **RE-CHECKED 2026-09-07 (scout): rule landed, freeze-certification step owed — stays open.**
+  `measurement-discipline.md:164-165` ("Run every published `expect 0` screen at the sha before
+  certifying a freeze") and `SKILL.md:1352-1353` both carry it, and #49w put it in
+  `audit-prompt.template.md` + `doc-auditor` 7a. The row asked for the EXECUTION half — "the documents
+  publish these screens with their commands, so a freeze-certification step can execute them" — and
+  no step does; every round still runs them by hand or skips them.
 - **merge tooling that lives under the audited roots only AFTER the last gating pass is collected**: any `h-mad/` commit moves the phase documents' trip-wires and `.py` censuses; the class-gate merge had to wait for r19's three codex legs to land, and the documents are deliberately not re-stamped afterwards. A merge-order check could read the feature's phase + open gating cycle. — recurrence: 2 (this session; `af19d53` at r16) — candidate: maybe
 - **value-grep every shared string across ALL FOUR documents after any REOPEN, not only at first collection**: wave 2's divergence prose became false when the design was reopened after the impl-plan finished; the impl-plan then asserted the opposite of its sibling at three body sites. Collection-time greps ran; reopen-time greps did not. — recurrence: 2 (r18 matrix 85→86, r19 killer name) — candidate: yes
+  — **LANDED 2026-09-07 (scout)** — `h-mad/references/measurement-discipline.md` §OWNERSHIP TABLES
+  (:263-268): "grep every shared VALUE ... across ALL FOUR documents ... And re-run the sweep after ANY
+  reopen, not only at first collection", carrying this row's own wave-2 divergence case as the
+  measured example. The row asked for a habit, not a verb, so the rule closes it.
 - **run the full project suite on the MERGED tree, not only on the feature branch**: `test_size_warning_fires_before_the_cliff_not_only_past_it` passed in the worktree and failed on merged main because the template it measures grew ~1 KB and is head-duplicated. — recurrence: 1 (measured) — candidate: maybe
 - **`${s}:path` not `$s:path` in any per-commit zsh loop**: `$s:h-mad/SKILL.md` parses as the `:h` dirname modifier, so every `git show` read a bogus path and printed 0 — a clean-looking false result that nearly shipped as a finding. — recurrence: 1 (caught) — candidate: maybe
+
+## 2026-09-07 — doc-block-exec task4-5e-gates (scout)
+
+Reconciliation pass only — this session is a handoff READ, a claim, and this scout. No new pattern
+recurred, so no candidate is appended; fabricating one to make the section look worked is the defect
+this file's own header warns about. The 21 `yes` rows re-verified above are the output.

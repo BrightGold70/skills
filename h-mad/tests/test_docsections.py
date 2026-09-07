@@ -92,3 +92,70 @@ def test_the_live_phase5_section_extends_past_its_fenced_blocks() -> None:
         "the Phase 5 section was truncated at a fenced comment: "
         f"{len(phase5)} chars extracted"
     )
+
+
+def test_docsections_delegates_to_the_authoritative_bounder() -> None:
+    """Pin the shared import and both callers, including start/level propagation."""
+    import importlib
+    import json
+    import os
+    import subprocess
+    import sys
+    import types
+
+    import docsections
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("HMAD_STUB_")}
+    env["HMAD_STUB_HOSTILE"] = "all"
+    result = subprocess.run(
+        ["bash", str(Path(__file__).with_name("stubs") / "orca"), "worktree", "set"],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)["result"]["worktree"]["comment"]
+    heading = "Section " + payload.splitlines()[0]
+    text = f"## {heading}\n```\n# not a heading\n{payload}\n```\nanchor\n## Next\n"
+    calls = []
+    # Sentinel results deliberately differ from the real heading/boundary. This
+    # proves propagation, not just that both callee names were mentioned.
+    start, level, end = text.index("anchor"), 4, text.index("## Next")
+
+    def rec_find(document, requested):
+        calls.append(("find_heading", document, requested))
+        return start, level
+
+    def rec_end(document, offset, requested_level):
+        calls.append(("fence_aware_end", document, offset, requested_level))
+        return end
+
+    fake = types.ModuleType("h_mad_doc_block_exec")
+    fake.find_heading = rec_find
+    fake.fence_aware_end = rec_end
+    saved = sys.modules.get(fake.__name__)
+    saved_path = sys.path[:]
+    sys.modules[fake.__name__] = fake
+    try:
+        importlib.reload(docsections)
+        titled = docsections.titled_section(text, heading)
+        offset = text.index("not a heading")
+        anchored = docsections.section_from(text, offset, 3)
+    finally:
+        if saved is None:
+            sys.modules.pop(fake.__name__, None)
+        else:
+            sys.modules[fake.__name__] = saved
+        try:
+            importlib.reload(docsections)
+        finally:
+            sys.path[:] = saved_path
+
+    assert [c[0] for c in calls] == [
+        "find_heading", "fence_aware_end", "fence_aware_end"
+    ], f"docsections did not delegate both the section start and its end: {calls!r}"
+    assert calls == [
+        ("find_heading", text, heading),
+        ("fence_aware_end", text, start, level),
+        ("fence_aware_end", text, offset, 3),
+    ], "docsections must propagate the returned start/level and its own offset"
+    assert titled == text[start:end], "titled_section must use both callee results"
+    assert anchored == text[offset:end], "section_from must use the callee boundary"

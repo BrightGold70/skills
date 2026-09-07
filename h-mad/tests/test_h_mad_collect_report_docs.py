@@ -22,6 +22,7 @@ SCRIPT_DIR = SKILL_DIR / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from h_mad_audit_gate import is_transport_path  # noqa: E402
+import h_mad_doc_block_exec as dbe  # noqa: E402
 
 
 SECOND_SURFACE_HEADING = "## Second surface — the codex leg"
@@ -264,14 +265,146 @@ def test_second_surface_gates_the_path_printed_by_collect_report() -> None:
     )
 
 
+def _gate_block() -> dbe.Block:
+    return dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))
+
+
 def _gate_bash_block() -> str:
-    """Return the fenced bash block of the Second surface section that gates."""
-    section = _second_surface()
-    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
-    gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
-    assert gating, "Second surface must contain a bash block that runs the gate"
-    assert len(gating) == 1, f"expected exactly one gating bash block, got {len(gating)}"
-    return gating[0]
+    return _gate_block().text
+
+
+def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:
+    collector = SCRIPT_DIR / "h_mad_collect_report.py"
+    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
+    block = _gate_block()
+    # the doc addresses the installed skill; point the snippet at this tree
+    subbed, _ = dbe.substitute(
+        block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))}
+    )
+    q = shlex.quote
+    preamble = (
+        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
+        f'--feature f --phase {phase} --cycle {cycle} '
+        f'--report {q(str(report))} --project-root {q(str(root))})\n'
+    )
+    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)
+
+
+def test_gate_block_resolves_through_doc_block_exec(monkeypatch) -> None:
+    """The gate consumer must delegate both extraction and cardinality policy."""
+    real_extract = dbe.extract
+    real_select = dbe.select
+    extract_calls = []
+    select_calls = []
+
+    def spy_extract(*args, **kwargs):
+        result = real_extract(*args, **kwargs)
+        extract_calls.append((args, kwargs, result))
+        return result
+
+    def spy_select(*args, **kwargs):
+        result = real_select(*args, **kwargs)
+        select_calls.append((args, kwargs, result))
+        return result
+
+    monkeypatch.setattr(dbe, "extract", spy_extract)
+    monkeypatch.setattr(dbe, "select", spy_select)
+
+    block = _gate_block()
+
+    assert len(extract_calls) == 1, "_gate_block must call dbe.extract exactly once"
+    args, kwargs, extracted = extract_calls[0]
+    assert args == (SKILL_MD, SECOND_SURFACE_HEADING) and kwargs == {}
+    assert len(select_calls) == 1, "_gate_block must call dbe.select exactly once"
+    args, kwargs, selected = select_calls[0]
+    assert args[0] is extracted and kwargs.get("index") is None, (
+        "dbe.select must receive dbe.extract's list with its no-index policy"
+    )
+    assert selected is block, "_gate_block must return the block dbe.select selected"
+
+
+def test_recipe_runs_through_run_block(monkeypatch, tmp_path: Path) -> None:
+    """The documented recipe must delegate substitution and execution together."""
+    real_substitute = dbe.substitute
+    substitute_calls = []
+    run_calls = []
+
+    def spy_substitute(*args, **kwargs):
+        result = real_substitute(*args, **kwargs)
+        substitute_calls.append((args, kwargs, result))
+        return result
+
+    def spy_run(block, **kwargs):
+        run_calls.append((block, kwargs))
+        return dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")
+
+    monkeypatch.setattr(dbe, "substitute", spy_substitute)
+    monkeypatch.setattr(dbe, "run_block", spy_run)
+
+    result = _run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)
+
+    assert len(substitute_calls) == 1, "_run_recipe must call dbe.substitute exactly once"
+    args, kwargs, subbed = substitute_calls[0]
+    assert args[0].text == _gate_bash_block() and kwargs == {}
+    assert args[1] == {
+        "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(
+            str(SCRIPT_DIR / "h_mad_audit_gate.py")
+        )
+    }
+    assert len(run_calls) == 1, "_run_recipe must call dbe.run_block exactly once"
+    block, kwargs = run_calls[0]
+    assert block is subbed[0], "dbe.run_block must receive dbe.substitute's returned Block"
+    assert "COLLECT_OUT=$(" in kwargs["preamble"] and kwargs["timeout"] == 60.0
+    assert result == dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")
+
+
+def test_gate_block_refuses_an_untagged_recipe(monkeypatch) -> None:
+    monkeypatch.setattr(dbe, "extract", lambda *_args, **_kwargs: [])
+
+    try:
+        _gate_block()
+    except dbe.BlockNotFound:
+        pass
+    else:
+        raise AssertionError("_gate_block must refuse an untagged recipe through dbe.BlockNotFound")
+
+
+def test_exec_block_scan_performs_no_execution(monkeypatch) -> None:
+    run_calls = []
+    subprocess_calls = []
+    real_subprocess_run = dbe.subprocess.run
+
+    def spy_run(block, **kwargs):
+        run_calls.append((block, kwargs))
+        return None
+
+    def spy_subprocess_run(*args, **kwargs):
+        subprocess_calls.append((args, kwargs))
+        return real_subprocess_run(*args, **kwargs)
+
+    monkeypatch.setattr(dbe, "run_block", spy_run)
+    monkeypatch.setattr(dbe.subprocess, "run", spy_subprocess_run)
+
+    test_exec_codex_dispatch_carries_out_log_and_timeout()
+
+    assert run_calls == [], "the exec-codex documentation scan must never execute its selected block"
+    assert subprocess_calls == [], "the documentation scan must not invoke subprocess.run"
+
+
+def test_consumer_calls_the_helper_module_qualified() -> None:
+    source = Path(__file__).read_text(encoding="utf-8")
+    forbidden = "from h_mad_doc_block_exec " + "import"
+    assert forbidden not in source, (
+        "the consumer must call the helper through the dbe module alias"
+    )
+
+
+def test_only_the_exec_scan_hand_rolls_extraction() -> None:
+    source = Path(__file__).read_text(encoding="utf-8")
+    needle = 're.findall(r"' + "```bash"
+    assert source.count(needle) == 1, (
+        "only test_exec_codex_dispatch_carries_out_log_and_timeout may hand-roll bash extraction"
+    )
 
 
 def test_gate_block_guards_on_the_collect_token_before_gating() -> None:
@@ -301,31 +434,6 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
     operational error and no halt marker, exactly the delivery failure the
     section says to halt on.
     """
-    import subprocess
-
-    collector = SCRIPT_DIR / "h_mad_collect_report.py"
-    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
-
-    def run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> subprocess.CompletedProcess[str]:
-        block = _gate_bash_block()
-        # the doc addresses the installed skill; point the snippet at this tree
-        script = block.replace(
-            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
-        )
-        # quote every interpolated path: the harness must not be the thing that
-        # breaks on whitespace, or it measures itself instead of the recipe
-        q = shlex.quote
-        preamble = (
-            f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
-            f'--feature f --phase {phase} --cycle {cycle} '
-            f'--report {q(str(report))} --project-root {q(str(root))})\n'
-        )
-        return subprocess.run(
-            ["bash", "-c", preamble + script],
-            capture_output=True,
-            text=True,
-        )
-
     # a root with a space: this machine's own codex home is under
     # "Application Support", so whitespace in a project root is ordinary.
     root = tmp_path / "pro j"
@@ -337,13 +445,13 @@ def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
     report.write_text("## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n", encoding="utf-8")
     report.with_suffix(report.suffix + ".done").write_text("", encoding="utf-8")
 
-    ok = run_recipe(phase="plan", cycle=3, report=report, root=root)
+    ok = _run_recipe(phase="plan", cycle=3, report=report, root=root)
     assert "GATE: PASS" in ok.stdout, (
         f"delivered report must reach the gate; stdout={ok.stdout!r} stderr={ok.stderr!r}"
     )
 
     # undelivered: MISSING must halt, never gate an empty path
-    missing = run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
+    missing = _run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
     combined = missing.stdout + missing.stderr
 
     assert "GATE:" not in combined, (

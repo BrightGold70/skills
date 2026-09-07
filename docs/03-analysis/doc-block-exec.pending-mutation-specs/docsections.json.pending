@@ -13,19 +13,13 @@
       "name": "fence-tracking-removed",
       "_mechanism": "Remove the authoritative scanner fence-state transition so a fenced column-zero heading ends the section. At GREEN anchor this in scripts/h_mad_doc_block_exec.py, not the removed local toggle.",
       "_killed_by": "tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section",
-      "test": "tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section",
-      "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "            fence = (marker, run)",
-      "replace": "            fence = None"
+      "test": "tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section"
     },
     {
       "name": "section-no-longer-owns-its-subsections",
       "_mechanism": "Remove the authoritative bounder level comparison so a section stops at a deeper subsection. At GREEN anchor this in scripts/h_mad_doc_block_exec.py, not the removed local regex.",
       "_killed_by": "tests/test_docsections.py::test_a_section_owns_its_subsections",
-      "test": "tests/test_docsections.py::test_a_section_owns_its_subsections",
-      "file": "scripts/h_mad_doc_block_exec.py",
-      "find": "and event.level <= level:",
-      "replace": ":"
+      "test": "tests/test_docsections.py::test_a_section_owns_its_subsections"
     },
     {
       "name": "offset-anchored-bound-runs-to-end-of-file",
@@ -87,5 +81,6 @@
     "-m",
     "pytest",
     "-q"
-  ]
+  ],
+  "_red_phase": "The first two rows move to the new scanner/bounder at 5e. Their file/find/replace are deliberately absent until source exists; remaining payloads are the prescribed Task 1 delta."
 }

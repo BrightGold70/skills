@@ -2899,8 +2899,26 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
       # `git status --short .` there was empty. The recovery protocol reads a non-zero
       # delta as "the work landed, only the report failed", so a false non-zero argues
       # against re-dispatching a task that in fact never ran.
-      delta="$(git -C "$cd_dir" status --porcelain -- . 2>/dev/null | grep -c . || true)"
-      echo "hmad-dispatch: exec: tree delta: ${delta} changed in $cd_dir" >&2
+      # J36: the delta excludes UNTRACKED `.done` AUDIT MARKERS and nothing else.
+      # `grep -c .` over the whole porcelain counted them, and this repo carries 88,
+      # so the baseline was never 0 and every recovery read "non-zero delta" as "the
+      # work landed, only the report failed" — a false positive arguing AGAINST
+      # re-dispatching a task that never ran.
+      #
+      # The exclusion is deliberately NARROW, and the first attempt at this fix was
+      # wrong in a way the suite caught: dropping ALL untracked entries also drops a
+      # brand-new source file, which IS work. That trades the false positive for a
+      # false NEGATIVE ("real work reads as nothing happened"), which argues FOR
+      # re-dispatching work that did run — the worse direction, since re-running a
+      # completed task can undo it. `test_codex_tree_delta_still_counts_changes_inside_
+      # the_cd_subdir` pins exactly that property and failed on the wider form.
+      #
+      # So the class is named by what it IS — h-mad's own audit markers, standing
+      # noise by construction — not by the accident that it happens to be untracked.
+      local markers
+      delta="$(git -C "$cd_dir" status --porcelain -- . 2>/dev/null | grep -vc '^?? .*\.done$' || true)"
+      markers="$(git -C "$cd_dir" status --porcelain -- . 2>/dev/null | grep -c '^?? .*\.done$' || true)"
+      echo "hmad-dispatch: exec: tree delta: ${delta} changed (${markers} .done markers excluded) in $cd_dir" >&2
     else
       echo "hmad-dispatch: exec: tree delta: n/a ($cd_dir not a git repo)" >&2
     fi

@@ -23,23 +23,13 @@ helpers already grew inside one test file because the first was not found.
 
 from __future__ import annotations
 
-import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import h_mad_doc_block_exec as _dbe  # noqa: E402
 
 __all__ = ["titled_section", "section_from"]
-
-
-def _fence_aware_end(text: str, start: int, level: int) -> int:
-    """Offset of the next heading at `level` or higher, ignoring fenced blocks."""
-    off = start
-    in_fence = False
-    for line in text[start:].splitlines(keepends=True):
-        stripped = line.lstrip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-        elif not in_fence and re.match(rf"^#{{1,{level}}} ", line):
-            return off
-        off += len(line)
-    return len(text)
 
 
 def titled_section(text: str, heading: str) -> str:
@@ -50,10 +40,10 @@ def titled_section(text: str, heading: str) -> str:
     `###` and every assertion about the later part would fail for the wrong
     reason.
     """
-    match = re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$", text)
-    assert match, f"missing section {heading!r}"
-    level = len(match.group("marks"))
-    return text[match.end():_fence_aware_end(text, match.end(), level)]
+    found = _dbe.find_heading(text, heading)
+    assert found, f"missing section {heading!r}"
+    start, level = found
+    return text[start:_dbe.fence_aware_end(text, start, level)]
 
 
 def section_from(text: str, offset: int, level: int = 2) -> str:
@@ -63,4 +53,4 @@ def section_from(text: str, offset: int, level: int = 2) -> str:
     is usually reached for, because the anchor is mid-section and there is no
     title to name.
     """
-    return text[offset:_fence_aware_end(text, offset, level)]
+    return text[offset:_dbe.fence_aware_end(text, offset, level)]

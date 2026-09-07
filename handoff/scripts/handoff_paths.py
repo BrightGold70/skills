@@ -94,16 +94,16 @@ SEP = "__"
 _DATE_LEN = len("YYYY-MM-DD-")  # 11: chars before the branch slug begins
 
 
-def find_latest(branch: str | None = None, start: Path | None = None) -> Path | None:
-    """Newest handoff in the canonical store, optionally filtered to a branch.
+def sorted_handoffs(branch: str | None = None, start: Path | None = None) -> list[Path]:
+    """Handoffs in the canonical store, oldest first, optionally branch-filtered.
 
-    Files are `YYYY-MM-DD-<branch-slug>-<slug>.md`; the ISO date prefix sorts
-    lexically, so the last match is the newest. A branch filter matches the
-    `-<branch>-` segment so a resume prefers its own branch's handoff.
+    Factored out of `find_latest` so that every caller which needs "the newest
+    N" rather than "the newest" orders by the SAME rule. Two definitions of
+    newest drift, and the one that drifts is the one nobody reads.
     """
     d = handoffs_dir(start)
     if not d.is_dir():
-        return None
+        return []
     files = [p for p in d.glob("*.md") if p.is_file()]
     if branch:
         # Exact branch match: the segment right after the ISO date must be
@@ -113,13 +113,22 @@ def find_latest(branch: str | None = None, start: Path | None = None) -> Path | 
         # simply don't match a branch filter, which is correct.
         pfx = f"{branch}{SEP}"
         files = [p for p in files if p.name[_DATE_LEN:].startswith(pfx)]
-    if not files:
-        return None
     # Primary sort = ISO date prefix (lexical). Secondary = mtime, so a same-day
     # concurrency-guard discriminant (`…-2.md`, added on collision) still orders
     # as newer even though `-` sorts before `.` lexically.
     files.sort(key=lambda p: (p.name[:10], p.stat().st_mtime))
-    return files[-1]
+    return files
+
+
+def find_latest(branch: str | None = None, start: Path | None = None) -> Path | None:
+    """Newest handoff in the canonical store, optionally filtered to a branch.
+
+    Files are `YYYY-MM-DD-<branch-slug>-<slug>.md`; the ISO date prefix sorts
+    lexically, so the last match is the newest. A branch filter matches the
+    `-<branch>-` segment so a resume prefers its own branch's handoff.
+    """
+    files = sorted_handoffs(branch, start)
+    return files[-1] if files else None
 
 
 # The bolded field forms, anchored to line start. Briefs discuss handovers in
@@ -197,13 +206,14 @@ def carry_forward_sources(
 ) -> tuple[list[Path], list[Path]]:
     """Docs a WRITE on this branch owes open items to. `(sources, unreadable)`.
 
-    Two kinds, because a handover is filed under the SENDER's branch slug and so
-    is invisible to a branch-scoped lookup -- the same construction as the READ
-    defect `pending_handovers` exists for:
+    Three kinds, because a handover is filed under a branch slug the receiver
+    did not choose -- the same construction as the READ defect
+    `pending_handovers` exists for:
 
     1. This branch's newest handoff, the ordinary predecessor.
     2. Any brief this lane already stamped `**Taken-Over-By:**` that no handoff
        yet names in its `**Supersedes:**` field.
+    3. The newest ordinary handoff DISPLACED when (1) lands on a brief.
 
     Without (2) a taken-over backlog can still evaporate in one hop: the taker
     stamps the brief, restores the todos into the session-scoped task tool, and
@@ -211,16 +221,32 @@ def carry_forward_sources(
     runs WRITE without READ, finds an empty task list and no branch predecessor,
     and writes a doc that owes nothing -- while the stamp has already removed the
     brief from `pending_handovers`, so nothing re-offers it either.
+
+    (3) is the displacement defect, and it is the mirror of the assumption (2)
+    corrects. A sender names the brief for the branch it is TOLD to target, so a
+    brief routinely lands under the RECEIVER's slug -- and `find_latest` returns
+    exactly one file. The newer brief then wins the branch lookup and the real
+    predecessor is silently never returned: not by (1), which the brief took,
+    and not by (2), which only re-adds briefs. Measured on this repo
+    2026-09-06: `carry-forward-sources --branch feature-doc-block-exec` did not
+    return the main-branch predecessor its own handoff had continued, and the
+    documented workaround was to run the command a second time under a
+    DIFFERENT branch -- a workaround is what a displaced source looks like from
+    the outside.
+
+    A source is dropped from (3) only when a handoff already `**Supersedes:**`
+    it, which is the same "the chain owns it now" rule (2) uses. Silence is
+    never a reason.
     """
     d = handoffs_dir(start)
     if not d.is_dir():
         return ([], [])
     sources: list[Path] = []
     unreadable: list[Path] = []
-    latest = find_latest(branch, start)
-    if latest is not None:
-        sources.append(latest)
 
+    # Scan FIRST: (3) has to know whether the newest file is a brief, and (2)
+    # needs `superseded`, so both need the texts before any source is chosen.
+    texts: dict[Path, str] = {}
     superseded: set[str] = set()
     taken: list[Path] = []
     for path in sorted(p for p in d.glob("*.md") if p.is_file()):
@@ -229,10 +255,27 @@ def carry_forward_sources(
         except (OSError, UnicodeDecodeError):
             unreadable.append(path)
             continue
+        texts[path] = text
         for match in _SUPERSEDES_RE.finditer(text):
             superseded.update(_superseded_names(match.group(1)))
         if _TAKEN_OVER_BY_RE.search(text):
             taken.append(path)
+
+    latest = find_latest(branch, start)
+    if latest is not None:
+        sources.append(latest)
+        # (3). An unreadable `latest` is NOT treated as an ordinary handoff --
+        # it is already in `unreadable`, and the caller halts on that rather
+        # than proceeding as though nothing were owed.
+        if latest not in texts or _HANDOVER_FROM_RE.search(texts[latest]):
+            for path in reversed(sorted_handoffs(branch, start)):
+                if path == latest or path in sources or path not in texts:
+                    continue
+                if _HANDOVER_FROM_RE.search(texts[path]):
+                    continue  # another brief; keep walking back
+                if path.name not in superseded:
+                    sources.append(path)
+                break
 
     for path in taken:
         if path.name not in superseded and path not in sources:
