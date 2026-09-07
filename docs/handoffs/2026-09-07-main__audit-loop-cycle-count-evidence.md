@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** orca/skills (h-mad)
 **Handover-From:** HemaSuite · main · session `6a09584b-3a59-4069-bae9-c8c902ff7247`
+**Taken-Over-By:** skills · main · session e07f76b9 · 2026-09-07
 **Supersedes:** none — first on this topic
 
 ## Session Summary
