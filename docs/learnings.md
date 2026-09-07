@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-07 · gotcha · [0.7] · `h-mad,review,mutation-anchors,session:2026-09-07` — A green batch (suite+mutations+anchors) is the INPUT to a fresh-context review, never its substitute: reviewer found 14 findings incl. a kwargs/CLI key collision, root derived against the file's own doctrine, and my own drifted anchor.
 - 2026-09-07 · gotcha · [0.9] · `measurement,controls,handoff:2026-09-07-feature-complete-through-phase7` — A control must vary the THING UNDER SUSPICION. Running an evidence gate on an agy log proved only that it works on agy logs, not that it can read the codex format I doubted. A control over the wrong axis reads as exoneration.
 - 2026-09-06 · pattern · [0.9] · `measurement,h-mad,handoff:2026-09-06-task4-green-91-rows` — Derive a count with the command the DOCUMENT defines, never one that reproduces its number. Three greps over one AC checklist gave 64, 61 and 62; only the document's own published awk gave the right one.
 - 2026-09-06 · gotcha · [0.7] · `measurement,git,handoff:2026-09-06-task4-green-91-rows` — A wrong path and a true zero are the same number: git show <sha>:<absent-path> fails to stderr, so grep -c scores an empty stream and returns 0. Assert the path resolved before believing a zero.
