@@ -9,6 +9,9 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-07 · gotcha · [0.7] · `pytest,measurement,handoff:2026-09-07-hmad-fold-and-takeover-mode` — A pytest count is only comparable at the same COLLECTION ROOT. The handoff suite read 155 from the repo root and 295 from handoff/ on one tree — the root run misses handoff/scripts/.
+- 2026-09-07 · gotcha · [0.7] · `skills,slash-commands,docs,handoff:2026-09-07-hmad-fold-and-takeover-mode` — A positional shell arg in a skill body is rewritten by the slash-command renderer before the agent sees it: the same line arrived as 'read' then 'takeover', matching the invocation. Never put one in documented commands.
+- 2026-09-07 · pattern · [0.9] · `h-mad,gates,enforcement,handoff:2026-09-07-hmad-fold-and-takeover-mode` — A rule that is correct, measured and documented is still skippable if nothing executes it. Five h-mad gates shipped as prose this way. Grep for the ENFORCEMENT, not for the rule.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,mutation,fixtures,safety` — shlex.split gives no shell, so a canary test for an executed redirect can never fire and proves nothing either way. Assert the command was NOT RUN (executed=0), not that its side effect is absent.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,detectors,calibration,tracer` — Tracer a new detector on REAL commits, not fixtures: v1 of the delta review called every backticked span a claim and returned 15 findings, all identifiers. An alert that is always wrong gets ignored.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,fixtures,gates,tracer,handoff:2026-09-07-main__tooling-backlog-drained-7f-and-91` — An instrument built around the happy path proves only the happy path. Offline fixtures and a live tracer both used distinct-by-construction cycles, so neither saw two legs of ONE cycle read as a two-cycle streak.
