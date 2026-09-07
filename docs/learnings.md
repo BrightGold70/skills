@@ -9,6 +9,8 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-07 · gotcha · [0.9] · `h-mad,measurement,session:2026-09-07` — Editing files while a mutation/pytest job runs invalidates that run: a REFUSED anchor measured my own torn tree, not the code. Wait for the tree to be quiet, then measure.
+- 2026-09-07 · gotcha · [0.7] · `h-mad,mutation,testing,session:2026-09-07` — A guard whose mutation SURVIVES may be a bad test, not a weak guard: an empty-selection stub printing only 'no tests ran' never reached the verdict logic, so the row it was meant to kill lived. Make the fixture reach the branch.
 - 2026-09-07 · gotcha · [0.7] · `handoff,review,regression,session:2026-09-07` — A fix for one defect can invert the fix for another: gating a comment signal to catch a sibling's stamp also caught the receiver's own, restoring a false NOT_YET. Re-read the rule's rationale comment before editing near it.
 - 2026-09-07 · gotcha · [0.7] · `h-mad,review,mutation-anchors,session:2026-09-07` — A green batch (suite+mutations+anchors) is the INPUT to a fresh-context review, never its substitute: reviewer found 14 findings incl. a kwargs/CLI key collision, root derived against the file's own doctrine, and my own drifted anchor.
 - 2026-09-07 · gotcha · [0.9] · `measurement,controls,handoff:2026-09-07-feature-complete-through-phase7` — A control must vary the THING UNDER SUSPICION. Running an evidence gate on an agy log proved only that it works on agy logs, not that it can read the codex format I doubted. A control over the wrong axis reads as exoneration.
