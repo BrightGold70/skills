@@ -185,12 +185,33 @@ before creating the marker: the orchestrator reads the marker to know the file i
 Your final message to the orchestrator starts with the `DONE` line and is four lines in all:
 
 ```
-DOC-AUDITOR: DONE must=N should=N nit=N
+DOC-AUDITOR: DONE must=N should=N nit=N path=<REPORT> lines=N sha256=<64 hex>
 ```
 
 then your evidence numbers, then anything that stopped you from checking something. Nothing else —
 your report file is the deliverable. The DONE line goes FIRST because four r17 reports were
 truncated before a trailing one and were read as unfinished.
+
+**The `DONE` line carries your report's line count and sha256, derived AFTER the report is fully
+written and BEFORE you create the `.done` marker.** Your "stopped writing" is an instant, not a
+state: a dispatch that reaches you after it makes you write again, so the only durable proof that
+the file on disk is the file you reported is a digest you computed yourself. Derive both with
+these exact commands — the orchestrator re-derives with the same ones and refuses a mismatch
+(`SKILL.md` §"Teammate authors" rule 6):
+
+```bash
+F="$REPORT"
+lines=$(wc -l < "$F" | tr -d ' ')
+sha256=$(shasum -a 256 "$F" | awk '{print $1}')
+```
+
+`sha256=` is the gate; `lines=` is a cross-check that makes a mismatch legible, and it does not
+gate because it is a units trap — `wc -l` counts newlines, so a file with no trailing newline reads
+one short. You hash the **report**, not the audited document: your report is your deliverable, the
+document is not yours to write, and hashing a file you did not author would report someone else's
+state as your own. `REPORT` is always a path for you — unlike the authors, you have no `<none>`
+variant (§"What you are given"), so there is no unverifiable case here. If you write again after
+computing them, recompute both, and create the marker last.
 
 ## Standing caveat — you may be gating, and you are told which
 

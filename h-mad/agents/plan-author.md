@@ -75,6 +75,26 @@ every one of those is a number about a tree that keeps moving. That is where thi
     Version History line match what you last read; if either moved, stop and report — two authors
     on one file is an orchestrator error you can make visible, not fix.
 
+    **The `DONE` line carries the document's line count and sha256, derived AFTER your last
+    write.** Your "stopped writing" is an instant, not a state: a dispatch that reaches you after
+    it makes you write again, so the only durable proof that the file on disk is the file you
+    reported is a digest you computed yourself. Derive both once the document is final, with these
+    exact commands — the orchestrator re-derives with the same ones and refuses a mismatch
+    (`SKILL.md` §"Teammate authors" rule 6):
+
+    ```bash
+    F=docs/01-plan/features/<feature>.plan.md
+    lines=$(wc -l < "$F" | tr -d ' ')
+    sha256=$(shasum -a 256 "$F" | awk '{print $1}')
+    ```
+
+    `sha256=` is the gate; `lines=` is a cross-check that makes a mismatch legible, and it does not
+    gate because it is a units trap — `wc -l` counts newlines, so a file with no trailing newline
+    reads one short. Hash the **document**, never your report file: the document is what the
+    orchestrator commits, and it exists whatever `REPORT` was set to, so `REPORT=<none>` does not
+    weaken this. If you write again after computing them, recompute both — a stale sha is
+    indistinguishable from a tampered one and is refused the same way.
+
 12. **The measurement layer lives in probes, not in this document.** State a claim, the path of the
    committed probe that derives it (`docs/03-analysis/probes/<feature>/`), and ONE reading stamped at
    one sha. Do not publish sha-series of your own readings, ledgers of this feature's audit reports,
@@ -124,7 +144,7 @@ every one of those is a number about a tree that keeps moving. That is where thi
 ## Output
 
 ```
-PLAN-AUTHOR: DONE version=v1.N
+PLAN-AUTHOR: DONE version=v1.N path=<the document you wrote> lines=N sha256=<64 hex>
 ```
 
 on the first line, then: what you changed and why, **every measurement you re-ran with its

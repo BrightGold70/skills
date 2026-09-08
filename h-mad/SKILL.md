@@ -1254,8 +1254,10 @@ read a 3,500-line document whole more than once, called `advisor()` — which fo
 transcript a second time — and died of context overflow (`failed: Prompt is too long`)
 mid-verification. The orchestrator then spawned a successor **without ruling ownership**; the
 original resumed from its transcript and kept writing, and two authors held one file for ~8
-minutes, colliding only because the successor asserted-before-write and stood down. Four rules
-follow, none of which an agent file can enforce for you:
+minutes, colliding only because the successor asserted-before-write and stood down. Six rules
+follow, none of which an agent file can enforce for you (the count read **four** beside five rules
+from the day rule 5 landed — a stale count in the sentence that introduces the list is the cheapest
+possible way to make a reader stop at rule 4):
 
 1. **A `failed: Prompt is too long` notification is recoverable, not death.** The author can
    resume from its transcript. Before concluding it is gone, read the working file's mtime and its
@@ -1280,6 +1282,46 @@ follow, none of which an agent file can enforce for you:
    a DONE is a cannot-judge, not an empty report. When the author declared `REPORT=<none>` on the
    line after DONE, the body is inline and may be truncated — treat a message that ends mid-word as
    incomplete rather than as a short report.
+
+6. **Re-derive the artifact's sha256 and refuse a mismatch, BEFORE you read `$RP` or commit.**
+   Every author's DONE line now carries `path=`, `lines=` and `sha256=` over the artifact it owns
+   (`agents/*.md`, the rule beside each DONE template). Verify it with the gate, never by eye:
+
+   ```bash
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_done_gate.py \
+     --repo <repo> --expect-path <the document you dispatched for> \
+     --message-file "$MSG" || exit 1
+   ```
+
+   Read the `DONEGATE:` token, never `$?` — and spell the call `|| exit 1` even so, because
+   **`set -e` is inert in the Bash tool's top-level shell** (§"Your own measurements"), so a bare
+   invocation that exits 1 falls through and you commit the artifact the gate just refused. `PASS`
+   exits 0, `FAIL` 1, and `UNREADABLE` exits 2 because it is a cannot-judge — the message file was
+   unreadable or the artifact could not be opened — and routing it like a refutation sends you to
+   re-ask the author about a problem that is yours.
+
+   **Two checks, not one, and `--expect-path` is the half that catches the likelier mistake.** An
+   author that hashes the WRONG file reports a digest that verifies perfectly against the file it
+   named; only comparing `path=` against the document you dispatched for can see that. A missing
+   artifact is `FAIL reason=artifact_absent`, not `UNREADABLE`: the author asserted a file with
+   that digest exists, and absence refutes the assertion rather than obstructing the gate.
+
+   **What a `sha_mismatch` MEANS** — say it in the halt, because the obvious reading is wrong. It
+   is almost never a lying author. A subagent's "stopped writing" is an **instant, not a state**:
+   your own post-DONE dispatch (a `SendMessage`, a successor spawned on a `Prompt is too long`
+   notification) can make the original resume from its transcript and write again. So a mismatch
+   most often means the file moved after the author hashed it, i.e. rules 1 and 2 were skipped.
+   Refuse, rule ownership, and re-ask for a DONE line derived after the last write.
+
+   `lines=` never gates and the token reports it as `lines_check=ok|disagree|absent`. `wc -l`
+   counts newlines, so an artifact with no trailing newline reads one short — a units trap, and a
+   matching `sha256` already proves the bytes are identical, which is the whole claim.
+   `lines_check=disagree` beside a `PASS` means the author miscounted, not that the file moved.
+
+   `REPORT=<none>` does not weaken this. The authors hash the **document**, which exists whatever
+   `REPORT` was set to; `doc-auditor` hashes its report, and it has no `<none>` variant
+   (`agents/doc-auditor.md` §"What you are given"), so there is no unverifiable case on either
+   side. The inline-body caveat in rule 5 is about the REPORT, and this gate is about the artifact.
 
 ### Run the delta self-review as a SCRIPT before re-dispatching (#11/H4)
 
@@ -2741,6 +2783,7 @@ findings with it; a leg whose hollow passes cannot certify keeps them.
 - `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
 - `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
 - `h_mad_collect_report.py` — collect-report surface collector: copies a delivered report-file or `--out` fallback into the docs audit path (the fallback reads a pane scrape past the dispatch boundary and an `exec` `--out` file from its end — see §6.6; conflating the two made it dead for `exec`), prints `COLLECT: OK|MISSING|CONFLICT` plus the collected path/delivery source, and performs readback before reporting success. `OK`/`MISSING`/`CONFLICT` exit 0 because they are measured outcomes; operational errors and readback failures exit 2. `--force` overwrites an existing collected report after a conflict.
+- `h_mad_done_gate.py` — author DONE-line gate (§"Teammate authors" rule 6): `find_done_line()` / `parse_fields()` / `digest()` / `run()` + CLI printing `DONEGATE: PASS path=<p> sha256=<hex> lines_check=ok|disagree|absent`, `DONEGATE: FAIL reason=<r>` (exit 1) or `DONEGATE: UNREADABLE reason=<r>` (exit 2). Re-derives the artifact's sha256 and refuses a mismatch, because a subagent's "stopped writing" is an **instant, not a state** — a post-DONE dispatch can make the author resume and write again, so the notification proves nothing about the bytes on disk. `--expect-path` is the half that catches the likelier mistake: an author that hashes the WRONG file reports a digest that verifies perfectly against the file it named. A missing artifact is `FAIL reason=artifact_absent`, not `UNREADABLE` — the author asserted the file exists, so absence refutes the claim rather than obstructing the gate. `lines=` never gates (`wc -l` counts newlines, so no trailing newline reads one short) and is reported as `lines_check=`. The protocol ran on five live author dispatches and matched five for five before anything required it. Stdlib-only.
 - `h_mad_offcontract_scan.py` — **where did the report actually go?** Locates an audit artifact written off-contract: `scan()` + CLI printing `OFFCONTRACT: NONE|FOUND|UNREADABLE`, exit 0 on `NONE` **and on `FOUND`** / 2 on `UNREADABLE reason=no_workspace`. `FOUND` exits 0 deliberately — this reports, it never decides. Reach for it when `h_mad_extract_report.py` exits 2: that exit is *correct* (silence must never score as a clean gate), but its remedy — `clear` and re-dispatch — is wrong when the audit already ran, and on a large prompt you pay a full cycle to reproduce a drop. **The defect it addresses is unfindability, not absence.** `exec agy` can honour neither the `--report-file` slot nor the sentinel pair while still doing the work and writing a real report at a path of its own choosing; two were observed eleven days apart — a workspace **dotfile** (`.design.audit.v14.md`, invisible to the `*audit.v14*` glob the orchestrator searches, which is exactly how one cycle concluded "no file was written" and re-dispatched over completed work) and `audit_report.md` in agy's own scratch directory while the run narrated "the current workspace". It therefore assumes **no** `audit.vN` stem — the whole failure is that the agent chose the name — and searches dotfiles too; `--cd <workspace>` plus agy's scratch dir by default, `--extra-dir` to widen, `--minutes`/`--since` to bound by mtime, `--expected` to exclude the path that was contracted for. **Its output does not feed the gate.** A report recovered this way has had NO schema enforcement applied, so it prints candidates with an explicit not-validated caution for a human to transcribe by hand, falsifying every premise against the source first; teaching `h_mad_extract_report.py` to glob these paths would score an unvalidated file as a clean gate, which is the opposite of the fix. `NONE` means nothing matched the search, **not** that the work was never done — it narrows a re-dispatch decision rather than making one. Closes J30. Stdlib-only.
 - `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report, no gateable sections, a non-zero dispatch rc, or — since #13 — too little evidence to certify anything. `--pass` takes an optional 5th field, `i:<report>:<out>:<rc>[:<log>]`; when a log is given the render carries an **`Effort:`** block — per pass `tools=/ok=/failed=/thinking=`, and `low-evidence` when `ok` is at or below the 2 successful calls the report-file contract itself costs, i.e. the pass cannot have read anything (J49). **Since #13 it decides, in ONE direction only**: a pass at or below the floor can no longer certify a clean (`UNVERIFIED reason=low_evidence:pN`), and a named-but-unreadable log fails closed as `low_evidence_unmeasurable:pN` — a distinct token because the remedy differs, find the log versus re-dispatch the pass. It still cannot manufacture a `FAIL`; it is checked AFTER the findings loop, so findings a hollow pass did write still count, and after the rc loop, so a timeout explains itself rather than being reported as hollowness. A pass with **no log named** is NOT scored as hollow — that is the ordinary shape of a codex leg and of every `Agent()` teammate pass, and absence of measurement is not measurement of absence. The counts still never appear inside the `AUDITCYCLE:` token, only as the `reason=` field, and the `Effort:` block now renders on `UNVERIFIED` too, because those counts are the evidence FOR the verdict. **This reverses the rule that stood until 2026-09-04** ("it reports; it never decides"), by operator decision on measured evidence: the second surface was hollow in 21 of 22 passes on one feature, and on another produced 6 fabricated must-fixes of 11 against codex's 0 of 25, while its low-evidence passes never found anything in either direction. Honouring the delivery contract is not evidence of having read the tree. A named-but-unreadable log still renders as `unreadable` rather than as zeros — `tools=0` is exactly what a genuinely hollow pass looks like.
 - `h_mad_precheck_doc.py` — phase-document pre-dispatch precheck (§"Precheck before you dispatch"): `scan()` + CLI printing `PRECHECK: PASS|FAIL issues=N|UNREADABLE`, exit 0 on a verdict / 2 on operational error. Refutes before the prompt is assembled what a cycle would otherwise spend two dispatches discovering. **Hard** findings are only the provably-wrong ones — `PLACEHOLDER` (an unfilled `key=…` or bare `<slot>`, impl-plan only, plus `TBD`/`TODO`/`FIXME` anywhere), `LINEPIN` past end-of-file, `PINDRIFT` (a pin into a file that changed since the document's own newest provenance commit — the c33 defect exactly, six `SKILL.md` pins stale by 93 lines), and `UNKNOWNSHA` (a provenance sha naming no commit here). **Advisory, verdict-neutral**: `PATH` and `SYMBOL` (a planning document names files and symbols the feature will CREATE), `STALESHA` (behind-HEAD is the normal condition of every written measurement), ordinary `LINEPIN`, and `COUNT`. Every one of those started as a hard finding and was demoted by measurement, not by taste: they fired 104, 49 and 48 times on the design and plan that had just passed 83 and 74 audit cycles, and the hits were correct usage. `--allow` is an input, never inferred. The residual it cannot close: a document that NARRATES a stale pin quotes the stale number, and no detector distinguishes that from the defect. Stdlib-only.

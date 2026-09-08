@@ -61,6 +61,26 @@ impossible before the reviewer sees the document.
     newest `- v1.N` Version History line match what you last read; if either moved, stop and
     report — two authors on one file is an orchestrator error you can make visible, not fix.
 
+    **The `DONE` line carries the document's line count and sha256, derived AFTER your last
+    write.** Your "stopped writing" is an instant, not a state: a dispatch that reaches you after
+    it makes you write again, so the only durable proof that the file on disk is the file you
+    reported is a digest you computed yourself. Derive both once the document is final, with these
+    exact commands — the orchestrator re-derives with the same ones and refuses a mismatch
+    (`SKILL.md` §"Teammate authors" rule 6):
+
+    ```bash
+    F=docs/01-plan/features/<feature>.impl-plan.md
+    lines=$(wc -l < "$F" | tr -d ' ')
+    sha256=$(shasum -a 256 "$F" | awk '{print $1}')
+    ```
+
+    `sha256=` is the gate; `lines=` is a cross-check that makes a mismatch legible, and it does not
+    gate because it is a units trap — `wc -l` counts newlines, so a file with no trailing newline
+    reads one short. Hash the **document**, never your report file: the document is what the
+    orchestrator commits, and it exists whatever `REPORT` was set to, so `REPORT=<none>` does not
+    weaken this. If you write again after computing them, recompute both — a stale sha is
+    indistinguishable from a tampered one and is refused the same way.
+
 13. **Probe, then DELETE the probe.** When you suspect a hole in a resolver, guard, or parser,
    confirm it empirically before you write it up: drive the real function through the existing test
    helpers — source the shell function, or import the harness helpers from `tests/` into a scratch
@@ -116,7 +136,7 @@ impossible before the reviewer sees the document.
 ## Report format (your final message)
 
 ```
-IMPLPLAN-AUTHOR: DONE version=v1.N tasks=N wiring=N mutation_rows=N
+IMPLPLAN-AUTHOR: DONE version=v1.N tasks=N wiring=N mutation_rows=N path=<the document you wrote> lines=N sha256=<64 hex>
 premises verified: <one line per path:symbol, with the grep result>
 findings applied: <one line per finding>
 contradictions found: <none | list>

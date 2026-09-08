@@ -1,0 +1,163 @@
+{
+  "_why": "h-mad's five author agents did not require a line count + sha256 on the DONE line, and nothing told the orchestrator to gate on it. The protocol ran on five live dispatches (spec-author x1, design-author x2, implplan-author x1, plan-author x1) and matched five for five, but it lived only in hand-written dispatch prompts: measured at 6f00f8c, grep -ciE 'sha256|line-count|lines=' over the five agent files returned 0 for all five and SKILL.md held zero. The failure it closes: a subagent's 'stopped writing' is an INSTANT, not a state — the orchestrator's own post-DONE dispatch can make the author resume and write again, so the only durable proof is a digest the author computed and the orchestrator re-derives. Rows split across the gate's code and each of the six documents that carry half the contract, so a per-file regression cannot hide behind a sibling. Every row names its own `test` key: a battery scored on the whole suite lets a wrong-catcher pass as a kill.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_done_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-sha-comparison-never-fires",
+      "_mechanism": "The gate's entire reason to exist. Every DONE line passes, including one whose digest describes a file the author overwrote after reporting it — which is exactly what a post-DONE dispatch produces.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "    if actual_sha != reported_sha:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_done_gate.py::test_a_wrong_sha_is_refused"
+    },
+    {
+      "name": "any-string-counts-as-a-sha",
+      "_mechanism": "A truncated or placeholder digest reaches the byte compare and fails there with `sha_mismatch`, which names the wrong cause — the report was malformed, the file did not move.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "SHA256_RE = re.compile(r\"^[0-9a-f]{64}$\")",
+      "replace": "SHA256_RE = re.compile(r\".*\")",
+      "test": "tests/test_h_mad_done_gate.py::test_a_sha_that_is_not_a_sha_is_refused"
+    },
+    {
+      "name": "a-missing-sha-field-falls-through",
+      "_mechanism": "The pre-fix DONE line — `version=v1.N` and nothing else — reads as a pass, so the whole contract is optional in practice while looking enforced.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "    if not reported_sha:\n        return f\"DONEGATE: FAIL reason=no_sha_field path={reported_path}\", 1",
+      "replace": "    if not reported_sha:\n        reported_sha = \"\" or None or \"\"\n    if False:\n        pass",
+      "test": "tests/test_h_mad_done_gate.py::test_a_missing_sha_field_is_refused"
+    },
+    {
+      "name": "the-expected-path-is-never-compared",
+      "_mechanism": "The likelier mistake survives: an author that hashed the WRONG file reports a digest that verifies perfectly against the file it named, so every byte-level check passes and the wrong document is committed.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "        if want != got:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_done_gate.py::test_a_valid_digest_of_the_WRONG_file_is_refused"
+    },
+    {
+      "name": "an-absent-artifact-becomes-a-cannot-judge",
+      "_mechanism": "Routes a refuted claim as the gate's own problem. The orchestrator goes to fix its inputs instead of re-asking the author, and `|| exit 1` does not fire on exit 2 the way a caller reading rc expects.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "        return f\"DONEGATE: FAIL reason=artifact_absent path={reported_path}\", 1",
+      "replace": "        return f\"DONEGATE: UNREADABLE reason=artifact_absent path={reported_path}\", 2",
+      "test": "tests/test_h_mad_done_gate.py::test_an_absent_artifact_is_FAIL_not_UNREADABLE"
+    },
+    {
+      "name": "a-done-line-anywhere-in-the-message-counts",
+      "_mechanism": "Re-opens r17: four author reports were truncated before a trailing DONE and read as unfinished. A trailing DONE that survived truncation once proves nothing about the next report.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "    if DONE_RE.match(first_nonblank or \"\") is None:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_done_gate.py::test_a_done_line_that_is_not_first_is_refused"
+    },
+    {
+      "name": "a-field-value-swallows-the-rest-of-the-line",
+      "_mechanism": "`path=` consumes `lines=` and `sha256=` too, so a malformed report becomes a confident wrong answer about a path that does not exist rather than a parse refusal.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "FIELD_RE = re.compile(r\"(?P<key>[A-Za-z0-9_]+)=(?P<value>\\S*)\")",
+      "replace": "FIELD_RE = re.compile(r\"(?P<key>[A-Za-z0-9_]+)=(?P<value>.*)\")",
+      "test": "tests/test_h_mad_done_gate.py::test_a_truthful_done_line_passes"
+    },
+    {
+      "name": "the-line-count-stops-matching-wc",
+      "_mechanism": "The units trap, installed: `splitlines()` counts a final unterminated line that `wc -l` does not, so the gate and the author disagree on a file neither of them touched.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "    return hashlib.sha256(data).hexdigest(), data.count(b\"\\n\")",
+      "replace": "    return hashlib.sha256(data).hexdigest(), len(data.splitlines())",
+      "test": "tests/test_h_mad_done_gate.py::test_a_file_with_no_trailing_newline_is_counted_the_way_wc_counts"
+    },
+    {
+      "name": "the-line-count-becomes-a-gate",
+      "_mechanism": "Turns the units trap into a build failure. A matching sha already proves the bytes are identical, so this refuses artifacts that are provably correct — the expensive direction of the same confusion.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "        lines_check = \"disagree\"",
+      "replace": "        return f\"DONEGATE: FAIL reason=lines_mismatch path={reported_path}\", 1",
+      "test": "tests/test_h_mad_done_gate.py::test_a_wrong_line_count_does_not_gate"
+    },
+    {
+      "name": "an-unmeasured-line-count-reads-as-agreement",
+      "_mechanism": "`absent` and `ok` spell the same thing, so a DONE line that never carried `lines=` is indistinguishable from one whose count was checked and matched.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "        lines_check = \"absent\"",
+      "replace": "        lines_check = \"ok\"",
+      "test": "tests/test_h_mad_done_gate.py::test_an_absent_line_count_is_reported_as_absent_not_as_agreement"
+    },
+    {
+      "name": "an-empty-message-becomes-a-refutation",
+      "_mechanism": "An empty message is a cannot-judge (rule 5's `empty $RP beside a DONE`). Reported as FAIL it sends the orchestrator to re-ask an author about a transport problem.",
+      "file": "scripts/h_mad_done_gate.py",
+      "find": "            return _emit(f\"DONEGATE: UNREADABLE reason=message_file_empty \"\n                         f\"path={args.message_file}\", 2)",
+      "replace": "            return _emit(f\"DONEGATE: FAIL reason=message_file_empty \"\n                         f\"path={args.message_file}\", 1)",
+      "test": "tests/test_h_mad_done_gate.py::test_an_empty_message_file_is_UNREADABLE_not_a_missing_done_line"
+    },
+    {
+      "name": "spec-author-loses-the-derivation-commands",
+      "_mechanism": "Without the exact commands the author picks its own — `md5`, a python one-liner, `gwc` — and the orchestrator re-derives with a different one, so a mismatch says nothing about whether the file moved.",
+      "file": "agents/spec-author.md",
+      "find": "    sha256=$(shasum -a 256 \"$F\" | awk '{print $1}')",
+      "replace": "    sha256=<compute a digest of the document>",
+      "test": "tests/test_h_mad_done_gate.py::test_the_agent_requires_the_digest_on_its_done_line[spec-author]"
+    },
+    {
+      "name": "plan-author-loses-the-fields-from-its-DONE-template",
+      "_mechanism": "The rule survives in prose while the TEMPLATE an author actually copies does not carry the fields — the same shape that let the REPORT= dispatch template be stripped while a bare `REPORT=` grep still passed.",
+      "file": "agents/plan-author.md",
+      "find": "PLAN-AUTHOR: DONE version=v1.N path=<the document you wrote> lines=N sha256=<64 hex>",
+      "replace": "PLAN-AUTHOR: DONE version=v1.N",
+      "test": "tests/test_h_mad_done_gate.py::test_the_done_template_carries_the_three_fields[plan-author-PLAN-AUTHOR: DONE version=v1.N path=<the document you wrote> lines=N sha256=<64 hex>]"
+    },
+    {
+      "name": "design-author-stops-saying-which-file-it-hashes",
+      "_mechanism": "The brief's open question re-opens: an author with `REPORT=<none>` has no report file, concludes the digest is unavailable, and drops it — when the DOCUMENT it hashes exists either way.",
+      "file": "agents/design-author.md",
+      "find": "Hash the **document**, never your report file",
+      "replace": "Hash whichever artifact you produced",
+      "test": "tests/test_h_mad_done_gate.py::test_an_author_hashes_the_document_so_REPORT_none_does_not_weaken_it[design-author]"
+    },
+    {
+      "name": "implplan-author-stops-saying-lines-is-not-the-gate",
+      "_mechanism": "An author reads `lines=` as gating, hand-tunes it to whatever it believes the orchestrator wants, and a units disagreement that should be a note becomes a fabricated number.",
+      "file": "agents/implplan-author.md",
+      "find": "`sha256=` is the gate; `lines=` is a cross-check",
+      "replace": "`sha256=` and `lines=` are both gates",
+      "test": "tests/test_h_mad_done_gate.py::test_the_agent_says_lines_is_a_cross_check_and_not_the_gate[implplan-author]"
+    },
+    {
+      "name": "doc-auditor-hashes-the-document-it-audited",
+      "_mechanism": "The auditor reports someone else's state as its own: the audited document is not its deliverable and it did not write it, so the digest proves nothing about whether the REPORT is complete.",
+      "file": "agents/doc-auditor.md",
+      "find": "You hash the **report**, not the audited document",
+      "replace": "You hash the audited document",
+      "test": "tests/test_h_mad_done_gate.py::test_the_auditor_hashes_its_report_and_has_no_none_variant"
+    },
+    {
+      "name": "the-orchestrator-loses-rule-6",
+      "_mechanism": "Back to the measured state: five agent files require the digest and nothing consumes it. The author computes a sha, echoes it into the log, and the orchestrator commits without comparing — echoing is not a gate.",
+      "file": "SKILL.md",
+      "find": "6. **Re-derive the artifact's sha256 and refuse a mismatch, BEFORE you read `$RP` or commit.**",
+      "replace": "6. **Note the artifact's sha256 when the author reports one.**",
+      "test": "tests/test_h_mad_done_gate.py::test_the_orchestrator_owns_rule_6_and_names_the_gate"
+    },
+    {
+      "name": "the-rule-count-goes-stale-again",
+      "_mechanism": "The sentence introducing the list said `Four` beside five rules from the day rule 5 landed, and nothing pinned it. A reader who counts stops at rule 4 and never reaches the gate.",
+      "file": "SKILL.md",
+      "find": "stood down. Six rules",
+      "replace": "stood down. Four rules",
+      "test": "tests/test_h_mad_done_gate.py::test_the_rule_count_matches_the_rules_that_follow"
+    }
+  ]
+}
