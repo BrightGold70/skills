@@ -1593,9 +1593,21 @@ def test_verb_writes_only_reports(tmp_path):
         f"01-plan/features/{feature}.plan.audit.v7.p2.md",
         f"01-plan/features/{feature}.plan.audit.v7.p1.md.effort.json",
         f"01-plan/features/{feature}.plan.audit.v7.p2.md.effort.json",
-    }, ("audit-cycle must add only the per-pass collected reports and their effort "
-        "sidecars under docs/ (#48: every tools=N in the permanent record used to be "
-        "hand-reconstructed from /tmp because the figures were never collected)")
+        # The GATE STAMPS, added by #18. This invocation passes no `--gated`, so
+        # their presence here is the end-to-end proof that the default derives the
+        # phase document and gates it through the ONLY supported entry point -- the
+        # live check the backlog kept asking for and never got. Before #18 a
+        # flagless cycle wrote no stamp, silently, and seven real cycles recorded
+        # `audit_cycles {plan:0, design:0, impl_plan:0}` while the two-round cap was
+        # honoured by hand. The set stays EXHAUSTIVE on purpose: a stamp is a new
+        # artifact under docs/, and this test is what refuses the next one nobody
+        # meant to write.
+        f"01-plan/features/{feature}.plan.audit.v7.p1.md.gated.json",
+        f"01-plan/features/{feature}.plan.audit.v7.p2.md.gated.json",
+    }, ("audit-cycle must add only the per-pass collected reports, their effort "
+        "sidecars and their gate stamps under docs/ (#48: every tools=N in the "
+        "permanent record used to be hand-reconstructed from /tmp because the "
+        "figures were never collected)")
     # UNVERIFIED, not PASS, since #13: the stub dispatch writes a log carrying a
     # single `result` event and no tool calls, so `ok=0` — below the delivery floor.
     # That is the correct verdict for what this fixture models. The stub is a fake
