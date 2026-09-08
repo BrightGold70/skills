@@ -1254,7 +1254,7 @@ read a 3,500-line document whole more than once, called `advisor()` — which fo
 transcript a second time — and died of context overflow (`failed: Prompt is too long`)
 mid-verification. The orchestrator then spawned a successor **without ruling ownership**; the
 original resumed from its transcript and kept writing, and two authors held one file for ~8
-minutes, colliding only because the successor asserted-before-write and stood down. Six rules
+minutes, colliding only because the successor asserted-before-write and stood down. Eight rules
 follow, none of which an agent file can enforce for you (the count read **four** beside five rules
 from the day rule 5 landed — a stale count in the sentence that introduces the list is the cheapest
 possible way to make a reader stop at rule 4):
@@ -1332,6 +1332,52 @@ possible way to make a reader stop at rule 4):
    `REPORT` was set to; `doc-auditor` hashes its report, and it has no `<none>` variant
    (`agents/doc-auditor.md` §"What you are given"), so there is no unverifiable case on either
    side. The inline-body caveat in rule 5 is about the REPORT, and this gate is about the artifact.
+
+7. **An author is not finished because it reported DONE — it is finished when you have told it to
+   stop, and you prove that by re-deriving the sha a SECOND time at commit.** Rule 6 runs the gate
+   when you collect; this rule runs the same gate again immediately before `git commit`, with the
+   staging in between. One run proves the artifact matched when you read it. **Two runs matching,
+   with your commit between them, is the only thing that proves the file did not move while you
+   were preparing it** — and the window between collect and commit is exactly where your own
+   post-DONE dispatch lands. Measured on another lane (HemaSuite-wsg, `24245ccc`): a spec v1.6 that
+   retracts v1.5 end-to-end, 246 insertions / 147 deletions, self-reported by that lane's
+   orchestrator as *"the FOURTH freeze violation on this feature, all mine: the author was still
+   live and mid-revision when I committed."* Four recurrences on one feature, with the rule written
+   down privately and broken again — which is why it is here and gated rather than stated.
+
+   ```bash
+   git add -- "$DOC"
+   python3 ~/.claude/skills/h-mad/scripts/h_mad_done_gate.py \
+     --repo "$REPO" --expect-path "$DOC" --done-line "$DONE_LINE" || exit 1
+   git commit -m "$MSG_TEXT"
+   ```
+
+   `$DOC`, `$REPO`, `$DONE_LINE` and `$MSG_TEXT` are yours to bind in the same shell — `$DONE_LINE`
+   is the verbatim first line of the author's final message, the same string rule 6 took. A `FAIL`
+   here is not the author's error and not a reason to re-ask: it means the artifact changed after
+   you read it, so **the commit you were about to make is of content nobody has reviewed.** Halt,
+   rule ownership (rule 2), and re-collect. `UNREADABLE` is a cannot-judge and must not be committed
+   through either — exit 2 is not a pass.
+
+   The cheap wrong version of this rule is "check the author is not running". You cannot: a
+   subagent's "stopped writing" is an **instant, not a state** (rule 6), a quiet agent is
+   indistinguishable from a finished one, and nothing you can run answers *absent*. The sha answers
+   a question that IS decidable — did these bytes change — and it is the same question.
+
+8. **Act on the DOCUMENT, not on the author's report — a correct sha is not a correct claim.**
+   Rules 5 and 6 make you read the report and prove the bytes are the author's. Neither one reads
+   the document. Verbatim from the same lane: *"The spec author reported DONE at v1.5 and I
+   committed on the strength of its report, verifying the two NEW findings while never re-reading
+   the FR whose premise I had already refuted."* v1.5's AC-11.2 asserted the exact claim two agents
+   had independently killed an hour earlier; the report was honest, the digest verified, and the
+   committed content was wrong.
+
+   So: **for every premise you refuted this round, re-read the section that carried it in the
+   revised document before you commit** — not the report's summary of it, and not the diff, which
+   shows you what moved and is silent about what an author left standing. An author revising for
+   findings A and B has no duty to revisit premise C, and will not; the refutation of C is yours and
+   only you know it happened. This is the exact inverse of rule 5's failure: there the report was
+   never read, here it was read and was trusted **in place of** the artifact it describes.
 
 ### Run the delta self-review as a SCRIPT before re-dispatching (#11/H4)
 

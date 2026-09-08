@@ -497,6 +497,20 @@ about this number somewhere I did not edit?"
   moment of commit — and the **commit message knew**: it names the repair the documents describe as
   pending. No author could have seen it; each read siblings being revised concurrently. Write the
   commit message from the post-landing reading, never from the decision sheet.
+- **A DONE is an instant, not a state — prove the freeze with a SECOND sha at commit.** The window
+  between collecting an author's DONE and committing its artifact is exactly where your own
+  post-DONE dispatch lands, and a subagent that "stopped writing" resumes from its transcript
+  without telling you. Re-run `h_mad_done_gate.py` with the same DONE line immediately before
+  `git commit`, gated `|| exit 1`: one run proves the bytes were the author's when you read them,
+  two runs with the commit between them prove they did not move while you prepared it. Measured on
+  another lane: four freeze violations on one feature, all the orchestrator's own, the last one
+  retracting a committed spec end-to-end. Full rule and command: `SKILL.md` §"Author dispatch rules
+  the ORCHESTRATOR owns" rule 7 — kept there rather than duplicated here, because a rule written
+  twice drifts in one place first.
+- **A verified digest is not a verified claim — re-read the DOCUMENT for every premise YOU
+  refuted.** The report is the author's account of what it changed; it is silent about what it left
+  standing, and so is the diff. An author revising for findings A and B has no duty to revisit
+  premise C, and the refutation of C was yours. `SKILL.md` rule 8.
 - **Do not mutate the shared decision sheet while authors are running.** A correction to it lands
   after the batch, not during — mutating shared input under running readers is orchestrator rule 4's
   staleness hazard, caused deliberately.

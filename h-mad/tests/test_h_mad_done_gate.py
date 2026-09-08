@@ -414,8 +414,16 @@ def test_the_rule_count_matches_the_rules_that_follow() -> None:
     section = section.split("\n### ", 1)[0]
     numbered = [ln for ln in section.splitlines()
                 if len(ln) > 2 and ln[0].isdigit() and ln[1] == "." and ln[2] == " "]
-    assert len(numbered) == 6, [ln[:40] for ln in numbered]
-    assert "Six rules" in section.split("\n1. ", 1)[0]
+    # DERIVE the expected count from the word the sentence spells, rather than
+    # hardcoding it. A hardcoded number reproduces the very defect this test was
+    # written to catch, one level up: the day rule 7 lands, the assertion goes
+    # red for the right reason and gets "fixed" by bumping the literal, and the
+    # sentence is free to stay stale again.
+    words = {"Four": 4, "Five": 5, "Six": 6, "Seven": 7, "Eight": 8, "Nine": 9, "Ten": 10}
+    intro = section.split("\n1. ", 1)[0]
+    spelled = [w for w in words if f"{w} rules" in intro]
+    assert len(spelled) == 1, f"the intro must spell exactly one rule count: {spelled}"
+    assert len(numbered) == words[spelled[0]], (spelled, [ln[:40] for ln in numbered])
 
 
 def test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN() -> None:
@@ -448,3 +456,56 @@ def test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN() -> None:
 def test_the_script_is_registered_in_the_skill_inventory() -> None:
     """An unlisted script is one nobody finds — the inventory is the index."""
     assert "- `h_mad_done_gate.py` —" in SKILL.read_text(encoding="utf-8")
+
+
+def test_rule_7_gates_the_freeze_with_a_SECOND_gate_run() -> None:
+    """"An author is not finished because it reported DONE."
+
+    Measured on another lane (HemaSuite-wsg `24245ccc`): a spec v1.6 retracting v1.5
+    end-to-end, self-reported as the FOURTH freeze violation on one feature, every one
+    the orchestrator's own. The rule existed privately and was broken again, so it is
+    written here with a command rather than as a sentence.
+
+    The gate is deliberately a SECOND run of the rule-6 gate, not a liveness probe: a
+    subagent's "stopped writing" is an instant and nothing can answer "no author is
+    running". "Did these bytes change" is decidable and is the same question.
+    """
+    text = SKILL.read_text(encoding="utf-8")
+    heading = "7. **An author is not finished because it reported DONE"
+    assert heading in text
+    section = text.split(heading, 1)[1].split("\n8. ", 1)[0]
+    block = section.split("```", 2)[1]
+    assert "h_mad_done_gate.py" in block, block
+    assert "|| exit 1" in block, block
+    assert "git commit" in block, block
+    # The commit must sit AFTER the gate: a gate that runs afterwards proves nothing
+    # about the content that was committed.
+    assert block.index("h_mad_done_gate.py") < block.index("git commit"), block
+    # Every `$name` in the prescribed command must be one the caller was told to bind.
+    bound = {"DOC", "REPO", "DONE_LINE", "MSG_TEXT"}
+    unbound = [v for v in re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", block) if v not in bound]
+    assert not unbound, f"rule 7's command uses unbound variables: {unbound}"
+    for name in sorted(bound):
+        assert f"`${name}`" in section, f"rule 7 never tells the caller to bind ${name}"
+    # UNREADABLE must not be routed as a pass.
+    assert "UNREADABLE" in section, section
+
+
+def test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated() -> None:
+    """Rule 5's failure is a report never read; rule 8's is a report read and TRUSTED.
+
+    The digest verified, the report was honest, and the committed content was wrong,
+    because the author had no duty to revisit a premise the ORCHESTRATOR refuted and
+    only the orchestrator knew the refutation had happened.
+    """
+    text = SKILL.read_text(encoding="utf-8")
+    heading = "8. **Act on the DOCUMENT, not on the author's report"
+    assert heading in text
+    section = text.split(heading, 1)[1].split("\n### ", 1)[0]
+    # It must prescribe re-reading the document, and say the diff does not substitute.
+    assert "re-read" in section.lower(), section
+    assert "diff" in section, section
+    # It must distinguish itself from rule 5 explicitly, or a reader folds the two.
+    assert "rule 5" in section, section
+    # A sha is named as insufficient — that is the whole point beside rule 6.
+    assert "sha" in heading.lower() or "sha" in section.lower(), section
