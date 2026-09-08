@@ -1,0 +1,67 @@
+{
+  "_why": "Rules 7 and 8 (#25) are prose that GATES, so the gate has to be shown to bite. Every mutation carries its own `test` key: a battery scored on the whole file cannot tell a kill from a wrong-catcher, and two of these were caught by the wrong assertion on the first pass -- see the-prescription-verb-goes-soft.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_done_gate.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "rule-7-gate-loses-its-exit",
+      "_mechanism": "`set -e` is inert in the Bash tool's top-level shell, so a bare call that exits 1 falls through and commits the artifact the gate just refused.",
+      "file": "SKILL.md",
+      "find": "--done-line \"$DONE_LINE\" || exit 1",
+      "replace": "--done-line \"$DONE_LINE\"",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_7_gates_the_freeze_with_a_SECOND_gate_run"
+    },
+    {
+      "name": "rule-7-gates-after-the-commit",
+      "_mechanism": "A second gate run proves the freeze only if the commit sits BETWEEN the two runs. Moved after, it certifies content already committed.",
+      "file": "SKILL.md",
+      "find": "     --repo \"$REPO\" --expect-path \"$DOC\" --done-line \"$DONE_LINE\" || exit 1\n   git commit -m \"$MSG_TEXT\"",
+      "replace": "     --repo \"$REPO\" --expect-path \"$DOC\" --done-line \"$DONE_LINE\" || exit 1\n   # (commit moved earlier)",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_7_gates_the_freeze_with_a_SECOND_gate_run"
+    },
+    {
+      "name": "rule-7-command-uses-an-unbound-var",
+      "_mechanism": "Rule 6's first draft prescribed `--message-file \"$MSG\"` with $MSG bound nowhere: a command that reads correctly and cannot be run. The same trap one rule later.",
+      "file": "SKILL.md",
+      "find": "     --repo \"$REPO\" --expect-path \"$DOC\" --done-line \"$DONE_LINE\" || exit 1",
+      "replace": "     --repo \"$REPO\" --expect-path \"$DOC\" --done-line \"$DONE_LINE\" --log \"$LOGFILE\" || exit 1",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_7_gates_the_freeze_with_a_SECOND_gate_run"
+    },
+    {
+      "name": "rule-8-stops-naming-rule-5",
+      "_mechanism": "Rule 5's failure is a report never read; rule 8's is a report read and TRUSTED. Without the explicit contrast a reader folds the two and thinks rule 5 already covers it.",
+      "file": "SKILL.md",
+      "find": "This is the exact inverse of rule 5's failure",
+      "replace": "This is the exact inverse of the earlier failure",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated"
+    },
+    {
+      "name": "the-prescription-verb-goes-soft",
+      "_mechanism": "SURVIVED TWICE before the guard was fixed. `\"re-read\" in section.lower()` matched the cited evidence -- the wsg orchestrator saying it 'never re-read the FR' -- so the string was present whatever the prescription said. Scoping to bold spans was still not enough while the section anchor was a PREFIX of the bold heading: the dangling `**` pairs with the next one and shifts every span by one, swallowing the italic quote into span 1. Fixed by anchoring on the complete heading.",
+      "file": "SKILL.md",
+      "find": "re-read the section that carried it in the\n   revised document",
+      "replace": "consult the section that carried it in the\n   revised document",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated"
+    },
+    {
+      "name": "two-spelled-counts-in-one-intro",
+      "_mechanism": "The count test derives the expected number from the spelled word. Two spelled counts must be AMBIGUOUS rather than silently first-wins, or the derivation reintroduces the staleness it replaced.",
+      "file": "SKILL.md",
+      "find": "Eight rules\nfollow, none of which",
+      "replace": "Eight rules\nfollow (Six rules before this change), none of which",
+      "test": "tests/test_h_mad_done_gate.py::test_the_rule_count_matches_the_rules_that_follow"
+    }
+  ]
+}

@@ -155,7 +155,7 @@
       "name": "the-rule-count-goes-stale-again",
       "_mechanism": "The sentence introducing the list said `Four` beside five rules from the day rule 5 landed, and nothing pinned it. A reader who counts stops at rule 4 and never reaches the gate.",
       "file": "SKILL.md",
-      "find": "stood down. Six rules",
+      "find": "stood down. Eight rules",
       "replace": "stood down. Four rules",
       "test": "tests/test_h_mad_done_gate.py::test_the_rule_count_matches_the_rules_that_follow"
     },
