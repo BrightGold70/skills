@@ -3060,8 +3060,9 @@ _cmd_audit_cycle() {
   local here feature="" phase="" cycle="" root="" ack_file="" report_grace="5" timeout="900"
   local passes="2"   # spec AC-3.1: default pass count is 2, so the flag is optional
   local surfaces=""  # csv, one agent per pass; empty = every pass on agy (legacy)
-  local -a prompt report out log asm tok rc pids pass_args agent
-  pass_args=()
+  local project_tests="" suite_cmd=""
+  local -a prompt report out log asm tok rc pids pass_args agent gated legs
+  pass_args=(); gated=(); legs=()
   here="${HMAD_AUDIT_CYCLE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)}"
 
   while [ $# -gt 0 ]; do case "$1" in
@@ -3074,6 +3075,19 @@ _cmd_audit_cycle() {
     --ack-file) ack_file="$2"; shift 2 ;;
     --report-grace) report_grace="$2"; shift 2 ;;
     --timeout) timeout="$2"; shift 2 ;;
+    # The gate flags. SKILL.md §"Drive the gate through `h_mad_audit_cycle.py`"
+    # says to pass these ON THE DRIVER, and until 2026-09-08 this verb — the only
+    # supported entry point — rejected all four at `_unknown_opt` and forwarded
+    # none. Measured on a live feature: seven audit cycles across three document
+    # types, every one emitting `AUDITCYCLE:` alone, and
+    # `audit_cycles {plan:0, design:0, impl_plan:0}` after all of them, so
+    # `--round-cap` and `--exit-check` had nothing to count at the moment the cap
+    # was supposed to bind. Five gates shipped, tested, and unreachable from the
+    # path that runs.
+    --gated) gated+=("$2"); shift 2 ;;
+    --legs) legs+=("$2"); shift 2 ;;
+    --project-tests) project_tests="$2"; shift 2 ;;
+    --suite-cmd) suite_cmd="$2"; shift 2 ;;
     *) _unknown_opt audit-cycle "$1"; return $? ;;
   esac; done
 
@@ -3252,6 +3266,14 @@ _cmd_audit_cycle() {
                ${pass_args[@]+"${pass_args[@]}"}
                --grace "$report_grace")
   [ -n "$ack_file" ] && helper_args+=(--ack-file "$ack_file")
+  # Repeatable flags expand only when non-empty: `${arr[@]+"${arr[@]}"}` is the
+  # bash-3.2-safe form, since a bare `"${arr[@]}"` on an empty array under `set -u`
+  # is an unbound reference rather than nothing.
+  local g l
+  for g in ${gated[@]+"${gated[@]}"}; do helper_args+=(--gated "$g"); done
+  for l in ${legs[@]+"${legs[@]}"};  do helper_args+=(--legs  "$l"); done
+  [ -n "$project_tests" ] && helper_args+=(--project-tests "$project_tests")
+  [ -n "$suite_cmd" ] && helper_args+=(--suite-cmd "$suite_cmd")
   python3 "$here/h_mad_audit_cycle.py" "${helper_args[@]}"
   # Propagate the helper rc either way; explicit exit prevents main() fall-through.
   exit $?

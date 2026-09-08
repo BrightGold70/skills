@@ -2481,3 +2481,63 @@ def test_a_log_that_merely_QUOTES_the_codex_banner_is_not_a_codex_log(tmp_path):
     (verdict, reason), effort = _combine_for_log(tmp_path, "quoted.log", body)
     assert effort["shape"] == "unparseable", effort
     assert (verdict, reason) == ("UNVERIFIED", "low_evidence_unmeasurable:p1")
+
+
+# --- #18: the wrapper verb must be ABLE to pass the gate flags ------------------
+
+import subprocess as _sp  # noqa: E402
+
+_WRAPPER = Path(__file__).resolve().parents[1] / "scripts" / "hmad-dispatch.sh"
+
+
+def _parse_probe(*extra: str) -> str:
+    """Run `audit-cycle` far enough to exercise ONLY the option loop.
+
+    `--phase bogus` cannot dispatch anything, so the run dies in validation. An
+    ACCEPTED flag reaches a later required-argument check; an UNKNOWN one dies at
+    `_unknown_opt` first. That difference is the whole discriminator, and it is
+    executed rather than asserted — the option loop is shell, so a source-level
+    grep would pin the text without proving the parse.
+    """
+    proc = _sp.run(
+        ["bash", str(_WRAPPER), "audit-cycle", "--feature", "f",
+         "--phase", "bogus", "--project-root", ".", *extra],
+        capture_output=True, text=True,
+    )
+    return (proc.stderr + proc.stdout).splitlines()[0] if (proc.stderr or proc.stdout) else ""
+
+
+@pytest.mark.parametrize("flag,value", [
+    ("--gated", "d.md"),
+    ("--legs", "codex"),
+    ("--project-tests", "."),
+    ("--suite-cmd", "true"),
+])
+def test_the_wrapper_accepts_every_gate_flag(flag: str, value: str) -> None:
+    """SKILL.md §"Drive the gate through `h_mad_audit_cycle.py`" says to pass these
+    ON THE DRIVER. Until 2026-09-08 this verb — the only supported entry point —
+    rejected all four and forwarded none.
+
+    Measured on a live feature: seven cycles across three document types, every one
+    emitting `AUDITCYCLE:` alone, with `audit_cycles {plan:0, design:0,
+    impl_plan:0}` after all seven. `--round-cap` and `--exit-check` count stamps,
+    so both were uncomputable at the moment the cap was meant to bind.
+    """
+    line = _parse_probe(flag, value)
+    assert "unknown option" not in line, f"{flag} rejected by the option loop: {line}"
+
+
+def test_an_unknown_flag_is_still_rejected() -> None:
+    """The control. Without it, a parse loop that swallowed everything would pass
+    the four tests above while accepting typos silently."""
+    assert "unknown option" in _parse_probe("--nope", "x")
+
+
+def test_the_wrapper_forwards_each_gate_flag_to_the_driver() -> None:
+    """Acceptance is not forwarding: an option loop can parse a flag into a local
+    and never build it into the command. Pin the forwarding lines too."""
+    body = " ".join(_WRAPPER.read_text(encoding="utf-8").split())
+    assert 'helper_args+=(--gated "$g")' in body
+    assert 'helper_args+=(--legs "$l")' in body
+    assert 'helper_args+=(--project-tests "$project_tests")' in body
+    assert 'helper_args+=(--suite-cmd "$suite_cmd")' in body

@@ -1,0 +1,48 @@
+{
+  "_why": "#18, measured live 2026-09-08. `SKILL.md` §\"Drive the gate through `h_mad_audit_cycle.py`\" instructs passing `--gated`/`--legs`/`--project-tests`/`--suite-cmd` on the DRIVER, and `_cmd_audit_cycle` — the only supported entry point — rejected all four at `_unknown_opt` and forwarded none. Seven cycles across three document types on one feature emitted `AUDITCYCLE:` alone, and `audit_cycles` read `{plan:0, design:0, impl_plan:0}` after all of them, so `--round-cap` and `--exit-check` had nothing to count at the exact moment the two-round cap was supposed to bind. Five gates shipped, fully tested, and unreachable from the path that runs. Each row restores one half of that: the flag is refused, or it is accepted and quietly dropped.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_audit_cycle.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-wrapper-rejects-gated-again",
+      "_mechanism": "`--gated` falls through to `_unknown_opt`, so no cycle can ever write a gate stamp. `audit_cycles` stays at 0 forever and `--round-cap`/`--exit-check` remain uncomputable — the precise state measured across seven live cycles.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    --gated) gated+=(\"$2\"); shift 2 ;;",
+      "replace": "",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_accepts_every_gate_flag[--gated-d.md]"
+    },
+    {
+      "name": "the-wrapper-rejects-project-tests-again",
+      "_mechanism": "No `SUITE:` line, so a red project suite cannot block an exit. The suite gate (#91) shipped and becomes unreachable.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    --project-tests) project_tests=\"$2\"; shift 2 ;;",
+      "replace": "",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_accepts_every_gate_flag[--project-tests-.]"
+    },
+    {
+      "name": "gated-is-parsed-and-then-dropped",
+      "_mechanism": "The nastier half: the option loop ACCEPTS `--gated`, so nothing errors and the caller believes the gate ran, while the driver never receives it. Acceptance is not forwarding, and a silently-dropped flag is worse than a rejected one because the rejection at least tells you.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  for g in ${gated[@]+\"${gated[@]}\"}; do helper_args+=(--gated \"$g\"); done",
+      "replace": "  :",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_forwards_each_gate_flag_to_the_driver"
+    },
+    {
+      "name": "legs-is-parsed-and-then-dropped",
+      "_mechanism": "Same shape for the leg set. `GATE-LEGS:` never renders, so a phase can exit on an incomplete leg set with nothing recording which surfaces ran — exactly the H3 case observed live, where a design phase exited on one surface and the owed codex leg later returned 12 musts and reopened it.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  for l in ${legs[@]+\"${legs[@]}\"};  do helper_args+=(--legs  \"$l\"); done",
+      "replace": "  :",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_wrapper_forwards_each_gate_flag_to_the_driver"
+    },
+    {
+      "name": "the-option-loop-swallows-everything",
+      "_mechanism": "The inverse direction, and it needs its own row because every other mutation here restores a REJECTION. If `_unknown_opt` stopped firing, a typo like `--getd` would be accepted in silence and the gate would go unrun with no error at all — the same failure wearing a friendlier face.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    *) _unknown_opt audit-cycle \"$1\"; return $? ;;",
+      "replace": "    *) shift 2 ;;",
+      "test": "tests/test_h_mad_audit_cycle.py::test_an_unknown_flag_is_still_rejected"
+    }
+  ]
+}
