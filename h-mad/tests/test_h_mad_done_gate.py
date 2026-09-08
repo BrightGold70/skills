@@ -499,11 +499,28 @@ def test_rule_8_is_about_the_DOCUMENT_and_is_not_rule_5_restated() -> None:
     only the orchestrator knew the refutation had happened.
     """
     text = SKILL.read_text(encoding="utf-8")
-    heading = "8. **Act on the DOCUMENT, not on the author's report"
+    # The anchor must be the COMPLETE bold heading, closing `**` included. A prefix
+    # anchor leaves a dangling `**` at the head of the section, which pairs with the
+    # NEXT `**` and shifts every span by one: measured, the first "bold span" then ran
+    # from the heading's tail through the italic evidence and into the prescription's
+    # opening marker, so it contained the quote's "re-reading" and the assertion below
+    # passed while the prescription said something else entirely. That is how mutation
+    # M6 survived twice.
+    heading = ("8. **Act on the DOCUMENT, not on the author's report"
+               " — a correct sha is not a correct claim.**")
     assert heading in text
     section = text.split(heading, 1)[1].split("\n### ", 1)[0]
-    # It must prescribe re-reading the document, and say the diff does not substitute.
-    assert "re-read" in section.lower(), section
+    # It must PRESCRIBE re-reading the document, and say the diff does not substitute.
+    #
+    # Scoped to the BOLD prescription, never the whole section. The first version of
+    # this assertion was `"re-read" in section.lower()` and a mutation replacing the
+    # prescription's verb SURVIVED it: the cited evidence quotes the wsg orchestrator
+    # saying it "never re-read the FR", so the section contains the string whatever the
+    # prescription says. The assertion fired on the quote and reported the prescription
+    # as present. Evidence is italic here and the prescription is bold, so the spans
+    # separate cleanly.
+    bold = re.findall(r"\*\*(.+?)\*\*", section, flags=re.S)
+    assert any("re-read" in b.lower() for b in bold), bold
     assert "diff" in section, section
     # It must distinguish itself from rule 5 explicitly, or a reader folds the two.
     assert "rule 5" in section, section
