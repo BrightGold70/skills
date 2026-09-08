@@ -1,0 +1,43 @@
+{
+  "_why": "#18 part 2. H3 closes the exit gate only over the SAME leg set, so a cycle that recorded no legs silently reset a streak nobody was counting. Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-legs-default-is-removed",
+      "_mechanism": "Back to opt-in: a cycle records no legs, H3 cannot fire, and the exit streak resets invisibly.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    legs=(\"${_surf[@]}\")",
+      "replace": "    :  # default removed",
+      "test": "tests/test_h_mad_audit_cycle.py::test_legs_defaults_to_the_surfaces_the_cycle_ran"
+    },
+    {
+      "name": "the-default-clobbers-an-explicit-legs",
+      "_mechanism": "An explicit --legs may name a leg the wrapper did not dispatch (a teammate or doc-auditor pass collected by hand). Clobbering it makes that leg unnameable.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if [ \"${#legs[@]}\" -eq 0 ]; then\n    legs=(\"${_surf[@]}\")",
+      "replace": "  if [ \"${#legs[@]}\" -ge 0 ]; then\n    legs=(\"${_surf[@]}\")",
+      "test": "tests/test_h_mad_audit_cycle.py::test_legs_defaults_to_the_surfaces_the_cycle_ran"
+    },
+    {
+      "name": "the-default-is-set-before-surfaces-resolve",
+      "_mechanism": "Set too early it copies an EMPTY array, so the wiring looks present and records nothing -- the defect wearing the fix's clothes.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  local -a _surf\n  if [ -n \"$surfaces\" ]; then",
+      "replace": "  local -a _surf\n  if [ \"${#legs[@]}\" -eq 0 ]; then legs=(\"${_surf[@]}\"); fi\n  if [ -n \"$surfaces\" ]; then",
+      "test": "tests/test_h_mad_audit_cycle.py::test_legs_defaults_to_the_surfaces_the_cycle_ran"
+    }
+  ]
+}

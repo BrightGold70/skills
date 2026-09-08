@@ -3132,6 +3132,16 @@ _cmd_audit_cycle() {
     local _i2=1
     while [ "$_i2" -le "$passes" ]; do _surf+=(agy); _i2=$((_i2 + 1)); done
   fi
+
+  # --legs DEFAULTS to the surfaces this cycle actually ran (#18). The leg set IS
+  # that list, so deriving it here is the only way a cycle cannot disagree with
+  # itself about which surfaces ran -- and H3 closes the exit gate only over the
+  # SAME leg set, so a cycle that recorded no legs silently reset a streak nobody
+  # was counting. An explicit --legs still wins: the caller may be naming a leg the
+  # wrapper did not dispatch (a teammate or doc-auditor pass collected by hand).
+  if [ "${#legs[@]}" -eq 0 ]; then
+    legs=("${_surf[@]}")
+  fi
   i=1
   while [ "$i" -le "$passes" ]; do agent[$i]="${_surf[$((i - 1))]}"; i=$((i + 1)); done
   if [ "$passes" -ge 2 ]; then

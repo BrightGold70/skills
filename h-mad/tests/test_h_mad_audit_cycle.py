@@ -2655,3 +2655,39 @@ class TestGatedDefaultsToThePhaseDocument:
         )
         assert 'docs/02-design/features' in src and 'docs/01-plan/features' in src
         del asm
+
+
+def test_legs_defaults_to_the_surfaces_the_cycle_ran() -> None:
+    """#18 part 2. The leg set IS the surfaces list, so anything else lets a cycle
+    disagree with itself about what ran.
+
+    H3 closes the exit gate only over the SAME leg set, so a cycle that recorded no
+    legs silently reset a streak nobody was counting -- which is what the live lane
+    did for seven cycles.
+    """
+    body = _WRAPPER.read_text(encoding="utf-8")
+    assert 'legs=("${_surf[@]}")' in body, "the default is not wired"
+    # ORDER is the property, not presence: the default must be set AFTER `_surf` is
+    # resolved (or it copies an empty array) and BEFORE the forwarding loop (or it
+    # is built into no command). Both are executable as index comparisons.
+    resolved = body.index('while [ "$_i2" -le "$passes" ]; do _surf+=(agy)')
+    default = body.index('legs=("${_surf[@]}")')
+    forward = body.index('helper_args+=(--legs  "$l")')
+    assert resolved < default < forward, (resolved, default, forward)
+    # An explicit --legs must still win, or a hand-collected teammate leg is unnameable.
+    guard = body[default - 400:default]
+    assert '[ "${#legs[@]}" -eq 0 ]' in guard, guard
+
+
+def test_the_surfaces_validation_still_refuses_a_miscount() -> None:
+    """The control for the edit above: the default was inserted INTO the `--surfaces`
+    resolution block, so the block's own refusals must still fire. Executed, because
+    a source-level pin cannot tell a live `case` from a commented-out one."""
+    line = _parse_probe("--surfaces", "agy,codex,agy")
+    # `--phase bogus` dies before surfaces are reached, so this asserts only that the
+    # flag is still ACCEPTED by the option loop -- the miscount refusal itself is
+    # reached only on a real phase and is pinned by the arity check below.
+    assert "unknown option" not in line, line
+    body = _WRAPPER.read_text(encoding="utf-8")
+    assert '[ "${#_surf[@]}" -eq "$passes" ] ||' in body
+    assert "unknown agent" in body

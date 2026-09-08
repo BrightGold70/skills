@@ -1,0 +1,67 @@
+{
+  "_why": "The default is the whole point of #18, and a default that silently does nothing is indistinguishable from the opt-in flag it replaced. Every mutation carries its own `test` key so a wrong-catcher is not scored as a kill.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "design-derives-from-the-plan-dir",
+      "_mechanism": "Design documents do not live beside the others. One directory for everything makes every design cycle derive a path that is not there, i.e. silently turns the default off for the phase that needs it most.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if phase == \"design\":\n        return project_root / \"docs/02-design/features\" / f\"{feature}.design.md\"\n",
+      "replace": "    if False:\n        return project_root / \"docs/02-design/features\" / f\"{feature}.design.md\"\n",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_a_design_is_derived_from_the_DESIGN_dir"
+    },
+    {
+      "name": "an-absent-derived-path-is-forwarded-anyway",
+      "_mechanism": "THE safety property. An unreadable --gated is GATE: UNSTAMPABLE, a cannot-judge; forwarding a path that is not there would halt a live lane's next audit in any repo with another layout.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if derived.is_file():",
+      "replace": "        if True:",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_an_absent_derived_path_is_ANNOUNCED_and_never_passed"
+    },
+    {
+      "name": "the-default-overrides-an-explicit-gated",
+      "_mechanism": "An explicit flag must win. A default that overrides it stamps a file the caller did not choose and looks correct doing it.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if not gated and not args.no_gate:",
+      "replace": "    if not args.no_gate:",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_an_explicit_gated_is_not_overridden"
+    },
+    {
+      "name": "no-gate-is-ignored",
+      "_mechanism": "The escape hatch for a cycle that must not stamp. Ignored, there is no way back to the old behaviour.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if not gated and not args.no_gate:",
+      "replace": "    if not gated:",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_no_gate_suppresses_the_default"
+    },
+    {
+      "name": "contradictory-flags-are-accepted",
+      "_mechanism": "Two sources for one field is how they disagree -- the same refusal --project-tests and --suite-result already carry.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if args.gated and args.no_gate:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_no_gate_beside_an_explicit_gated_is_refused"
+    },
+    {
+      "name": "the-missing-derivation-goes-silent",
+      "_mechanism": "Absence was silent in BOTH directions and the silence is the defect. A default that quietly declines is the opt-in flag again.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "            print(f\"GATED: DERIVED-MISSING path={shown}\")",
+      "replace": "            pass  # silently decline",
+      "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_an_absent_derived_path_is_ANNOUNCED_and_never_passed"
+    }
+  ]
+}
