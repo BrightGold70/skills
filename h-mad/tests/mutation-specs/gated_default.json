@@ -17,10 +17,10 @@
   "mutations": [
     {
       "name": "design-derives-from-the-plan-dir",
-      "_mechanism": "Design documents do not live beside the others. One directory for everything makes every design cycle derive a path that is not there, i.e. silently turns the default off for the phase that needs it most.",
+      "_mechanism": "Design documents do not live beside the others. Deriving every phase from the plan directory makes a design cycle point at a path that is not there, which silently turns the default OFF for the phase that needs it most -- and the stamp would then name a different file from the collected report.",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    if phase == \"design\":\n        return project_root / \"docs/02-design/features\" / f\"{feature}.design.md\"\n",
-      "replace": "    if False:\n        return project_root / \"docs/02-design/features\" / f\"{feature}.design.md\"\n",
+      "find": "    return project_root / _AUDIT_DIRS[phase] / f\"{feature}.{phase}.md\"",
+      "replace": "    return project_root / _AUDIT_DIRS[\"plan\"] / f\"{feature}.{phase}.md\"",
       "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_a_design_is_derived_from_the_DESIGN_dir"
     },
     {
@@ -62,6 +62,14 @@
       "find": "            print(f\"GATED: DERIVED-MISSING path={shown}\")",
       "replace": "            pass  # silently decline",
       "test": "tests/test_h_mad_audit_cycle.py::TestGatedDefaultsToThePhaseDocument::test_an_absent_derived_path_is_ANNOUNCED_and_never_passed"
+    },
+    {
+      "name": "the-shared-split-is-re-encoded",
+      "_mechanism": "A second literal copy of the phase->directory map is the drift this collapsed: the derived --gated target and the collected report path must resolve through ONE object, or a stamp can name a different file from the report it gated and look right.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    audit_dirs = _AUDIT_DIRS\n",
+      "replace": "    audit_dirs = {\n        \"plan\": Path(\"docs/01-plan/features\"),\n        \"design\": Path(\"docs/02-design/features\"),\n        \"impl-plan\": Path(\"docs/01-plan/features\"),\n    }\n",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_gated_default_and_the_collected_report_share_ONE_split"
     }
   ]
 }

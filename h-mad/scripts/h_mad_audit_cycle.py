@@ -124,6 +124,19 @@ def _script(name: str) -> Path:
     return Path(__file__).resolve().parent / name
 
 
+# The phase -> documents-directory split, in ONE place. Design documents do not
+# live beside the others: Phase 4 writes `docs/02-design/features/` (the bkit PDCA
+# layout the doc-template invariant requires) while spec/plan/impl-plan sit under
+# `docs/01-plan/features/`. Both the COLLECTED report path and the derived
+# `--gated` default read it here, because a stamp that named a different file from
+# the report it gated would be wrong in a way that looks entirely correct.
+_AUDIT_DIRS = {
+    "plan": Path("docs/01-plan/features"),
+    "design": Path("docs/02-design/features"),
+    "impl-plan": Path("docs/01-plan/features"),
+}
+
+
 def _collected_path(
     *,
     project_root: Path,
@@ -134,11 +147,7 @@ def _collected_path(
     surface: str | None = None,
 ) -> Path:
     """Return the collected audit report path for one audit pass."""
-    audit_dirs = {
-        "plan": Path("docs/01-plan/features"),
-        "design": Path("docs/02-design/features"),
-        "impl-plan": Path("docs/01-plan/features"),
-    }
+    audit_dirs = _AUDIT_DIRS
     suffix = f"p{index}" if surface is None else validate_surface(surface)
     return (
         project_root
@@ -955,9 +964,7 @@ def default_gated_path(project_root: Path, feature: str, phase: str) -> Path:
     same way here is the point — a default that disagreed with the document the
     prompt was assembled from would stamp the wrong file and look correct.
     """
-    if phase == "design":
-        return project_root / "docs/02-design/features" / f"{feature}.design.md"
-    return project_root / "docs/01-plan/features" / f"{feature}.{phase}.md"
+    return project_root / _AUDIT_DIRS[phase] / f"{feature}.{phase}.md"
 
 
 def _parse_pass_spec(value: str) -> PassSpec:
@@ -1126,6 +1133,39 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 write_effort_sidecar(collected_path, spec.index, spec.log_path,
                                      results[-1].effort)
+            # Did this cycle actually WRITE a stamp? (#18 part 4, #26.)
+            #
+            # Absence was silent in BOTH directions: a cycle that gated a document
+            # either wrote a stamp beside every passing leg or it did not, and nothing
+            # said which. Seven live cycles emitted `AUDITCYCLE:` alone while
+            # `audit_cycles {plan:0, design:0, impl_plan:0}` held throughout, the
+            # two-round cap bound twice and was honoured BY HAND because `--round-cap`
+            # counts stamps and had none, and H3's `legs_changed` refusal could not fire.
+            #
+            # This REPORTS and never halts, for the same reason `--gated` defaults
+            # conditionally and a red suite blocks the EXIT rather than the cycle: the
+            # audit has already run, and killing it here would make an operator hostage
+            # to a bookkeeping failure. `STAMP:` is its own token so `--exit-check`
+            # consumers can refuse a streak the driver was right not to abort.
+            from h_mad_audit_gate import stamp_path as _stamp_path
+            scored = [r for r in results if r.verdict == "PASS" and r.collected_path]
+            if not gated:
+                # NOT the same as a missing stamp, and must never print as one: no
+                # document was gated, so no stamp was ever owed. Naming the reason is
+                # the difference between "nothing to do" and "it did not happen".
+                print("STAMP: NOT-EXPECTED reason=no_gated_document")
+            elif not scored:
+                print("STAMP: NOT-EXPECTED reason=no_passing_leg")
+            else:
+                absent = [r.index for r in scored
+                          if not _stamp_path(r.collected_path).is_file()]
+                if absent:
+                    print("STAMP: ABSENT legs="
+                          + ",".join(f"p{i}" for i in absent)
+                          + f" expected={len(scored)}")
+                else:
+                    print(f"STAMP: WRITTEN n={len(scored)}")
+
             verdict, reason = combine(results)
             text = render(
                 results,

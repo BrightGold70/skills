@@ -2691,3 +2691,122 @@ def test_the_surfaces_validation_still_refuses_a_miscount() -> None:
     body = _WRAPPER.read_text(encoding="utf-8")
     assert '[ "${#_surf[@]}" -eq "$passes" ] ||' in body
     assert "unknown agent" in body
+
+
+class TestTheCycleSaysWhetherItWroteAStamp:
+    """#18 part 4 / #26. Absence was silent in BOTH directions.
+
+    Seven live cycles emitted `AUDITCYCLE:` alone with `audit_cycles {plan:0,
+    design:0, impl_plan:0}` throughout. `--round-cap` and `--exit-check` count
+    stamps, so both were uncomputable at the moment the cap was meant to bind, and
+    the cap was honoured by hand twice.
+    """
+
+    @staticmethod
+    def _run(ac, tmp_path, extra=(), body=None):
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, body or "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        ac.main(["--feature", "f", "--phase", "plan", "--cycle", "1",
+                 "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                 "--pass", f"1:{report}:{report.with_suffix('.out')}:0", *extra])
+
+    @staticmethod
+    def _doc(tmp_path):
+        d = tmp_path / "docs/01-plan/features/f.plan.md"
+        d.parent.mkdir(parents=True, exist_ok=True)
+        d.write_text("# doc\n", encoding="utf-8")
+        return d
+
+    def test_a_gated_passing_cycle_reports_the_stamp_it_wrote(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        self._run(ac, tmp_path)
+        out = capsys.readouterr().out
+        assert "STAMP: WRITTEN n=1" in out, out
+
+    def test_no_gated_document_is_NOT_EXPECTED_and_not_a_missing_stamp(self, tmp_path, capsys) -> None:
+        """The distinction that carries the whole fix: "no stamp was owed" and "a stamp
+        was owed and is not there" must not print the same way. Reported as the same
+        thing, the loud token is as useless as the silence it replaced."""
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        self._run(ac, tmp_path, ("--no-gate",))
+        out = capsys.readouterr().out
+        assert "STAMP: NOT-EXPECTED reason=no_gated_document" in out, out
+        assert "STAMP: ABSENT" not in out, out
+
+    def test_a_stamp_that_was_owed_and_is_absent_is_named(self, tmp_path, capsys, monkeypatch) -> None:
+        """The failing direction, forced: the gate is stubbed to report PASS without
+        writing its stamp, which is exactly the state seven live cycles were in."""
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        real_gate = ac.gate
+        monkeypatch.setattr(ac, "gate", lambda *a, **k: ("PASS", 0, 0, []))
+        self._run(ac, tmp_path)
+        out = capsys.readouterr().out
+        assert "STAMP: ABSENT legs=p1 expected=1" in out, out
+        assert "STAMP: WRITTEN" not in out, out
+        assert real_gate is not None
+
+    def test_a_failing_leg_owes_no_stamp_and_is_not_reported_absent(self, tmp_path, capsys) -> None:
+        """The discriminating test a SURVIVING mutation forced.
+
+        A stamp is written only on PASS -- one over a FAIL would let the readback
+        bless a verdict that blocked. So a cycle whose leg genuinely FAILS owes no
+        stamp, and reporting that as `ABSENT` makes the token fire on every real
+        must-fix. An alert that is always wrong is worse than no alert, and this is
+        the same file that refuses `low-evidence` misfiring on a strong surface.
+
+        Mutation `a-failing-leg-is-counted-as-owing-a-stamp` dropped the `PASS`
+        filter and every other test still passed -- the guard did not bite, because
+        nothing here had ever failed a leg.
+        """
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        self._run(ac, tmp_path,
+                  body="## Summary\nx\n\n## Must-fix\n- a real blocker\n\n## Should-fix\nNone\n")
+        out = capsys.readouterr().out
+        assert "STAMP: NOT-EXPECTED reason=no_passing_leg" in out, out
+        assert "STAMP: ABSENT" not in out, out
+
+    def test_the_stamp_line_is_not_inside_the_AUDITCYCLE_contract(self, tmp_path, capsys) -> None:
+        """`AUDITCYCLE:` is a machine contract parsed positionally. A new field inside
+        it breaks every consumer -- the same rule the Effort block already follows."""
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        self._run(ac, tmp_path)
+        out = capsys.readouterr().out
+        line = auditcycle_lines(out)[0]
+        assert "STAMP" not in line, line
+
+
+def test_the_gated_default_and_the_collected_report_share_ONE_split() -> None:
+    """A stamp that named a different file from the report it gated would be wrong
+    in a way that looks entirely correct.
+
+    `default_gated_path` originally re-encoded the phase->directory map that
+    `_collected_path` already carried, making a THIRD copy of a rule
+    `h_mad_assemble_audit.py` also states. Two copies can drift; this executes that
+    they are one object, rather than asserting that they agree today.
+    """
+    ac = audit_cycle()
+    assert ac._AUDIT_DIRS is not None
+    src = (SCRIPT_DIR / "h_mad_audit_cycle.py").read_text(encoding="utf-8")
+    # Exactly one literal map. A second one is the drift this collapsed.
+    assert src.count('"design": Path("docs/02-design/features")') == 1, (
+        "the phase->directory split is written more than once again"
+    )
+    assert "audit_dirs = _AUDIT_DIRS" in src
+    assert "_AUDIT_DIRS[phase]" in src
+
+
+@pytest.mark.parametrize("phase", ("plan", "design", "impl-plan"))
+def test_the_derived_gate_target_sits_beside_the_collected_report(phase, tmp_path) -> None:
+    """The property the shared map exists for, executed end to end: the document the
+    cycle stamps and the report it collects must land in the same directory."""
+    ac = audit_cycle()
+    derived = ac.default_gated_path(tmp_path, "f", phase)
+    collected = ac._collected_path(
+        project_root=tmp_path, feature="f", phase=phase, cycle=1, index=1
+    )
+    assert derived.parent == collected.parent, (derived, collected)
