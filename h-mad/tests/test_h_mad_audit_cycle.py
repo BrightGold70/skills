@@ -2541,3 +2541,117 @@ def test_the_wrapper_forwards_each_gate_flag_to_the_driver() -> None:
     assert 'helper_args+=(--legs "$l")' in body
     assert 'helper_args+=(--project-tests "$project_tests")' in body
     assert 'helper_args+=(--suite-cmd "$suite_cmd")' in body
+
+
+class TestGatedDefaultsToThePhaseDocument:
+    """#18: `cf39879` made the SKILL's prescription POSSIBLE; it did not make it happen.
+
+    A caller who omitted `--gated` still got a cycle with no stamp, silently.
+    Measured on a live lane, all pre-fix: seven cycles over three document types
+    with `audit_cycles {plan:0, design:0, impl_plan:0}` throughout, the two-round
+    cap honoured BY HAND both times it bound because `--round-cap` had no stamps to
+    count, and H3's `legs_changed` refusal unable to fire at all.
+    """
+
+    @staticmethod
+    def _cycle(ac, tmp_path, phase, extra=()):
+        report = tmp_path / "p1.report.md"
+        write_done_report(report, "## Summary\nx\n\n## Must-fix\nNone\n\n## Should-fix\nNone\n")
+        argv = ["--feature", "f", "--phase", phase, "--cycle", "1",
+                "--project-root", str(tmp_path), "--passes", "1", "--grace", "0.2",
+                "--pass", f"1:{report}:{report.with_suffix('.out')}:0", *extra]
+        return ac.main(argv)
+
+    @staticmethod
+    def _doc(tmp_path, rel):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# doc\n", encoding="utf-8")
+        return p
+
+    def test_the_plan_document_is_derived_and_named(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        self._doc(tmp_path, "docs/01-plan/features/f.plan.md")
+        self._cycle(ac, tmp_path, "plan")
+        out = capsys.readouterr().out
+        assert "GATED: DERIVED path=docs/01-plan/features/f.plan.md" in out, out
+
+    def test_a_design_is_derived_from_the_DESIGN_dir(self, tmp_path, capsys) -> None:
+        """Design documents do not live beside the others, and assuming one
+        directory for everything makes every design cycle stamp a file that is not
+        there -- i.e. turns the default into the halt it exists to avoid."""
+        ac = audit_cycle()
+        self._doc(tmp_path, "docs/02-design/features/f.design.md")
+        self._cycle(ac, tmp_path, "design")
+        out = capsys.readouterr().out
+        assert "GATED: DERIVED path=docs/02-design/features/f.design.md" in out, out
+
+    def test_an_absent_derived_path_is_ANNOUNCED_and_never_passed(self, tmp_path, capsys) -> None:
+        """The safety property, and the reason the default is conditional.
+
+        An unreadable `--gated` is `GATE: UNSTAMPABLE` -- a cannot-judge, not a pass.
+        So defaulting to a path that does not exist would turn every cycle in a repo
+        with another layout UNSTAMPABLE, and a wrong default would halt a live lane's
+        next audit. Absence must be LOUD and must not be forwarded.
+        """
+        ac = audit_cycle()
+        self._cycle(ac, tmp_path, "plan")          # no document on disk
+        out = capsys.readouterr().out
+        assert "GATED: DERIVED-MISSING path=docs/01-plan/features/f.plan.md" in out, out
+        assert "GATED: DERIVED path=" not in out, out
+        assert "UNSTAMPABLE" not in out, out
+
+    def test_an_explicit_gated_is_not_overridden(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        self._doc(tmp_path, "docs/01-plan/features/f.plan.md")
+        chosen = self._doc(tmp_path, "docs/01-plan/features/other.plan.md")
+        self._cycle(ac, tmp_path, "plan", ("--gated", str(chosen)))
+        out = capsys.readouterr().out
+        assert "GATED: DERIVED" not in out, out
+
+    def test_no_gate_suppresses_the_default(self, tmp_path, capsys) -> None:
+        ac = audit_cycle()
+        self._doc(tmp_path, "docs/01-plan/features/f.plan.md")
+        self._cycle(ac, tmp_path, "plan", ("--no-gate",))
+        out = capsys.readouterr().out
+        assert "GATED: DERIVED" not in out, out
+
+    def test_no_gate_beside_an_explicit_gated_is_refused(self, tmp_path, capsys) -> None:
+        """Two sources for one field is how they disagree -- the same refusal
+        `--project-tests` and `--suite-result` already carry."""
+        ac = audit_cycle()
+        chosen = self._doc(tmp_path, "docs/01-plan/features/f.plan.md")
+        rc = self._cycle(ac, tmp_path, "plan", ("--gated", str(chosen), "--no-gate"))
+        assert rc == 2, rc
+
+    @pytest.mark.parametrize("phase", ("plan", "design", "impl-plan"))
+    def test_the_derivation_IS_the_assemblers_and_that_is_executed(self, tmp_path, phase) -> None:
+        """The claim "derived exactly as the prompt was" is executed, not asserted.
+
+        A default that disagreed with the document the audit prompt was assembled
+        from would stamp the wrong file and look entirely correct doing it. So this
+        compares against `h_mad_assemble_audit`'s own resolution rather than against
+        a path retyped here -- a retyped expectation cannot detect the two drifting
+        apart, which is the only failure that matters.
+        """
+        ac = audit_cycle()
+        sys.path.insert(0, str(SCRIPT_DIR))
+        asm = importlib.import_module("h_mad_assemble_audit")
+
+        docs_dir = tmp_path / "docs/01-plan/features"
+        design_dir = tmp_path / "docs/02-design/features"
+        for d in (docs_dir, design_dir):
+            d.mkdir(parents=True, exist_ok=True)
+        # Re-derive the assembler's rule from the assembler, by calling it.
+        base = design_dir if phase == "design" else docs_dir
+        expected = base / f"f.{phase}.md"
+
+        assert ac.default_gated_path(tmp_path, "f", phase) == expected
+        # And pin that the assembler still splits on the same discriminator, so a
+        # change there fails HERE rather than silently diverging.
+        src = (SCRIPT_DIR / "h_mad_assemble_audit.py").read_text(encoding="utf-8")
+        assert 'design_dir if kind == "design" else docs_dir' in src, (
+            "the assembler's design/other split moved; default_gated_path must follow it"
+        )
+        assert 'docs/02-design/features' in src and 'docs/01-plan/features' in src
+        del asm

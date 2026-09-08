@@ -946,6 +946,20 @@ def render(
     return "\n".join(lines) + "\n"
 
 
+def default_gated_path(project_root: Path, feature: str, phase: str) -> Path:
+    """The document this phase's audit judges, derived exactly as the prompt was.
+
+    `h_mad_assemble_audit.py` splits on the same rule: a design lives under
+    `docs/02-design/features/` (the bkit PDCA layout the doc-template invariant
+    requires) and everything else under `docs/01-plan/features/`. Deriving it the
+    same way here is the point — a default that disagreed with the document the
+    prompt was assembled from would stamp the wrong file and look correct.
+    """
+    if phase == "design":
+        return project_root / "docs/02-design/features" / f"{feature}.design.md"
+    return project_root / "docs/01-plan/features" / f"{feature}.{phase}.md"
+
+
 def _parse_pass_spec(value: str) -> PassSpec:
     """Parse `i:<report>:<out>:<rc>[:<log>]`.
 
@@ -993,6 +1007,12 @@ def main(argv: list[str] | None = None) -> int:
              "call so each leg's stamp records it (#91)",
     )
     parser.add_argument(
+        "--no-gate", action="store_true",
+        help="suppress the derived --gated default for a cycle that must not stamp. "
+             "Refused beside an explicit --gated: two sources for one field is how "
+             "they disagree.",
+    )
+    parser.add_argument(
         "--legs", action="append", default=[], metavar="NAME",
         help="the reviewer legs this CYCLE ran; forwarded identically to every "
              "per-leg gate call, so the legs of one cycle cannot disagree about what "
@@ -1018,6 +1038,37 @@ def main(argv: list[str] | None = None) -> int:
     if bool(args.halt_reason) == bool(pass_specs):
         print("ERROR: exactly one audit-cycle mode is required", file=sys.stderr)
         return 2
+
+    if args.gated and args.no_gate:
+        print("ERROR: --no-gate is refused beside an explicit --gated", file=sys.stderr)
+        return 2
+
+    # `--gated` DEFAULTS to the document this phase audits (#18). `cf39879` taught the
+    # wrapper to forward the flag, which made the SKILL's prescription possible; it did
+    # not make it happen. A caller who omits `--gated` still got a cycle with no stamp,
+    # silently. Measured on a live lane, all pre-fix: seven cycles over three document
+    # types with `audit_cycles {plan:0, design:0, impl_plan:0}` throughout, the
+    # two-round cap honoured BY HAND both times it bound because `--round-cap` had no
+    # stamps to count, and H3's `legs_changed` refusal unable to fire.
+    gated = list(args.gated)
+    if not gated and not args.no_gate:
+        derived = default_gated_path(args.project_root, args.feature, args.phase)
+        try:
+            shown = str(derived.resolve().relative_to(args.project_root.resolve()))
+        except (ValueError, OSError):
+            shown = str(derived)
+        if derived.is_file():
+            gated = [derived]
+            print(f"GATED: DERIVED path={shown}")
+        else:
+            # NEVER halt on a derived path, and never pass one that is not there. An
+            # unreadable `--gated` is `GATE: UNSTAMPABLE` — a cannot-judge, not a pass
+            # — so defaulting to a path that does not exist would turn every cycle in
+            # a repo with another layout UNSTAMPABLE, and a wrong default would halt a
+            # live lane's next audit. The default engages only when it provably can.
+            # It says so out loud either way: absence was silent in BOTH directions,
+            # and that silence is the defect, not the missing flag.
+            print(f"GATED: DERIVED-MISSING path={shown}")
 
     # ONCE per cycle, before any leg is gated. Inside the per-leg loop this would be
     # minutes per leg and is the design `audit_suite_gate.json` rejects; after the loop
@@ -1054,7 +1105,7 @@ def main(argv: list[str] | None = None) -> int:
                     verdict, must, should, findings = gate(
                         collected_path,
                         ack_file=args.ack_file,
-                        gated=args.gated,
+                        gated=gated,
                         legs=args.legs,
                         suite_result=suite_result,
                     )
