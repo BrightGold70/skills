@@ -27,6 +27,7 @@ Three verdicts, and the partition is load-bearing rather than cosmetic:
 """
 
 import hashlib
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -415,6 +416,33 @@ def test_the_rule_count_matches_the_rules_that_follow() -> None:
                 if len(ln) > 2 and ln[0].isdigit() and ln[1] == "." and ln[2] == " "]
     assert len(numbered) == 6, [ln[:40] for ln in numbered]
     assert "Six rules" in section.split("\n1. ", 1)[0]
+
+
+def test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN() -> None:
+    """The first draft of rule 6 said `--message-file "$MSG"`, with `$MSG` bound nowhere.
+
+    The author's final message arrives in the Agent tool result, not on disk: `$RP`
+    holds the report BODY and the DONE line is in the message, so there is no file
+    to point at. The command read correctly and could not be run — this section's
+    own failure class ("a documented rule is not an enforced one") one level down,
+    reached through the rule written to close it. `--done-line` is what the five
+    live dispatches actually did.
+    """
+    # Scoped to the COMMAND BLOCK, never the whole file: the prose deliberately
+    # quotes `$MSG` to name the defect, and a file-wide ban would forbid recording
+    # what went wrong — the same trap as banning a value the document must discuss.
+    text = SKILL.read_text(encoding="utf-8")
+    heading = "6. **Re-derive the artifact's sha256 and refuse a mismatch"
+    assert heading in text
+    block = text.split(heading, 1)[1].split("```", 2)[1]
+    assert "h_mad_done_gate.py" in block
+    assert "--done-line" in block, block
+    assert "--expect-path" in block, block
+    assert "|| exit 1" in block, block
+    # Every `$name` in the prescribed command must be one the caller was told to set.
+    unbound = [v for v in re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", block)
+               if v not in {"RP"}]
+    assert not unbound, f"rule 6's command uses unbound variables: {unbound}"
 
 
 def test_the_script_is_registered_in_the_skill_inventory() -> None:

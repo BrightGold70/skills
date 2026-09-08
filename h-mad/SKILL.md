@@ -1290,8 +1290,18 @@ possible way to make a reader stop at rule 4):
    ```bash
    python3 ~/.claude/skills/h-mad/scripts/h_mad_done_gate.py \
      --repo <repo> --expect-path <the document you dispatched for> \
-     --message-file "$MSG" || exit 1
+     --done-line '<the first line of the author'"'"'s final message, verbatim>' || exit 1
    ```
+
+   **`--done-line` is the primary form, and that is not a preference.** The author's final message
+   arrives in the Agent tool result, not on disk: `$RP` holds the report BODY, and the DONE line is
+   in the message. So there is no file to point `--message-file` at unless you staged one yourself,
+   and a first draft of this rule prescribed `--message-file "$MSG"` with `$MSG` bound nowhere in
+   this skill — a command that reads correctly and cannot be run, which is this section's own
+   failure class one level down ("a documented rule is not an enforced one"). `--done-line` is also
+   what the five live dispatches actually did. Use `--message-file` only when you have written the
+   message to a path in this same shell; it additionally enforces DONE-first, which `--done-line`
+   cannot see because you have already selected the line.
 
    Read the `DONEGATE:` token, never `$?` — and spell the call `|| exit 1` even so, because
    **`set -e` is inert in the Bash tool's top-level shell** (§"Your own measurements"), so a bare

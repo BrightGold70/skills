@@ -158,6 +158,14 @@
       "find": "stood down. Six rules",
       "replace": "stood down. Four rules",
       "test": "tests/test_h_mad_done_gate.py::test_the_rule_count_matches_the_rules_that_follow"
+    },
+    {
+      "name": "rule-6-prescribes-an-unrunnable-command",
+      "_mechanism": "Restores the first draft: `--message-file \"$MSG\"` with `$MSG` bound nowhere in the skill. The author's final message arrives in the Agent tool result, not on disk, so the prescribed command reads correctly and cannot be run — the section's own failure class reached through the rule written to close it.",
+      "file": "SKILL.md",
+      "find": "     --done-line '<the first line of the author'\"'\"'s final message, verbatim>' || exit 1",
+      "replace": "     --message-file \"$MSG\" || exit 1",
+      "test": "tests/test_h_mad_done_gate.py::test_rule_6_prescribes_a_COMMAND_THAT_CAN_BE_RUN"
     }
   ]
 }
