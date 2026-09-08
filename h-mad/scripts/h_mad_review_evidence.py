@@ -34,11 +34,68 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 
 _AGY_EVENTS = frozenset({"init", "step_update", "result"})
+
+
+# --- codex text transcripts (#27) ---------------------------------------------
+#
+# `scan()` reads agy NDJSON and nothing else, so a codex leg's transcript yielded
+# no figures at all. #24 (`6f00f8c`) stopped that being reported as a FALSE ZERO;
+# it did not make the surface measurable. This does.
+#
+# The header is codex's own and is what makes the rest a measurement rather than a
+# guess about an unknown format.
+_CODEX_HEADER_RE = re.compile(r"^OpenAI Codex v", re.M)
+# A completed run prints its token total last. It is the COMPLETENESS ANCHOR: a
+# transcript without it was truncated (killed, still running, copied mid-write), and
+# a truncated transcript's zero is not a zero. This is #24's whole lesson kept
+# intact one level down -- "could not measure" and "measured zero" must never take
+# the same branch.
+_CODEX_TOKENS_RE = re.compile(r"^tokens used$", re.M)
+# The PRIMARY instrument. The leading space and the exact phrase make it
+# near-impossible in prose, which matters because a codex transcript echoes the
+# whole prompt -- and this repo's audit prompts are documents ABOUT running
+# commands. Measured on a real transcript: a naive `exited` sweep returned 8 hits,
+# every one of them prose from the prompt body.
+_CODEX_OUTCOME_RE = re.compile(r"^ (succeeded|failed) in \d+(?:\.\d+)?m?s:", re.M)
+# The CROSS-CHECK, deliberately a different instrument rather than a second reading
+# of the same one. `^exec$` is one prompt code block away from a false positive, so
+# it never overrides the outcome count -- a disagreement is REPORTED as its own
+# field. Pairing by adjacency was rejected: the wrapper interleaves `#hmad-beat`
+# heartbeat lines into the same file (measured: present in a real transcript), and
+# anything positional breaks on them while counting does not.
+_CODEX_EXEC_RE = re.compile(r"^exec$", re.M)
+
+
+def scan_codex_text(log_text: str) -> dict | None:
+    """Measure tool activity in a codex TEXT transcript.
+
+    Returns None when this is not a codex transcript at all -- the caller must not
+    read that as zero. Returns `complete=False` when the header is there but the
+    token-total anchor is not: the run was truncated, and its zero is unjudgeable.
+    """
+    if not _CODEX_HEADER_RE.search(log_text):
+        return None
+    complete = bool(_CODEX_TOKENS_RE.search(log_text))
+    outcomes = _CODEX_OUTCOME_RE.findall(log_text)
+    ok = sum(1 for kind in outcomes if kind == "succeeded")
+    failed = sum(1 for kind in outcomes if kind == "failed")
+    exec_lines = len(_CODEX_EXEC_RE.findall(log_text))
+    return {
+        "tools": len(outcomes),
+        "ok": ok,
+        "failed": failed,
+        "exec_lines": exec_lines,
+        # Reported, never reconciled by picking a winner. Two instruments that
+        # disagree are a fact about the transcript, not a number to average.
+        "agrees": exec_lines == len(outcomes),
+        "complete": complete,
+    }
 
 
 def scan(log_text: str) -> dict:
@@ -143,11 +200,34 @@ def main(argv: list[str] | None = None) -> int:
 
     counts = scan(text)
     if counts["agy_events"] == 0:
-        # #154. `EVIDENCE: NONE tools=0` once fired on a codex review that had
-        # verifiably read the tree: this gate parses agy NDJSON, codex transcripts
-        # are `codex-text`, and a zero from an instrument that cannot read its
-        # input is not a measurement. A codex review still does not satisfy the
-        # 6a-prime evidence gate — this says so, instead of reporting a false zero.
+        # #27. Publish the codex figures on their OWN token, and leave the
+        # `EVIDENCE:` line below byte-identical.
+        #
+        # They deliberately do NOT go on the EVIDENCE line. A consumer globbing
+        # `tools=` off that line would pick a codex number up as an agy one, and
+        # #24's whole point is that those two zeros mean different things -- the
+        # same reason the stamp token is spelled `GATESTAMP:` and not `GATE:`.
+        # #24's rule is untouched: a codex leg does not satisfy this gate, the
+        # verdict stays `UNREADABLE reason=unsupported_format`, and the rc stays 2.
+        # What changes is that the surface is no longer BLIND.
+        #
+        # Measured on the fixture this shipped with, a real `doc-block-exec`
+        # archreview: 0 tools over 196,184 tokens, with `ASSESSMENT: NO` emitted
+        # anyway -- its own output saying `The requested view_file tool is
+        # unavailable in this session, so I could not inspect the worktree`. A
+        # verdict over a tree the leg never read, and nothing could see it.
+        codex = scan_codex_text(text)
+        if codex is not None:
+            if codex["complete"]:
+                print(f"CODEXEVIDENCE: tools={codex['tools']} ok={codex['ok']} "
+                      f"failed={codex['failed']} exec_lines={codex['exec_lines']} "
+                      f"agrees={'yes' if codex['agrees'] else 'no'}")
+            else:
+                # No trailing token total: killed, still running, or copied
+                # mid-write. #24's lesson one level down -- "could not measure" and
+                # "measured zero" must never take the same branch, so this
+                # publishes NO count at all.
+                print("CODEXEVIDENCE: UNREADABLE reason=truncated_no_token_total")
         print(f"ERROR: {path} carries no agy NDJSON event (init/step_update/"
               "result); this gate reads agy transcripts only. Either a codex-text "
               "transcript, or an agy run that died before emitting `init` (the "

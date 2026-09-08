@@ -1,0 +1,1910 @@
+OpenAI Codex v0.151.0
+--------
+workdir: /Users/kimhawk/orca/skills
+model: gpt-5.6-terra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: high
+reasoning summaries: none
+session id: 01a065d4-7900-72d1-98a8-1476e0fb740d
+--------
+user
+[prompt elided for the fixture: 2929 lines]
+codex
+I’ll reconcile the current design against the supplied spec and inspect the repository’s referenced artifacts without altering them.
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "pwd && rg -l '"'^# Design: doc-block-exec$|''^# Spec: doc-block-exec$|''^# Plan: doc-block-exec$'"' ." in /Users/kimhawk/orca/skills
+ succeeded in 31ms:
+./docs/01-plan/features/doc-block-exec.plan.md
+./docs/01-plan/features/doc-block-exec.spec.md
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "rg -n '"'^  - AC-[0-9]+'"\\.[0-9]+:' docs/01-plan/features/doc-block-exec.spec.md && rg -n '"'^## (Implementation Order|Data Model|API / Interface|Error Handling|Test Strategy|Test Plan|Invariant Compliance)'"' docs/02-design/features/doc-block-exec.design.md && git status --short" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+25:  - AC-1.1: Given a document whose section `## H` contains one ` ```bash hmad:exec ` fence and one
+31:  - AC-1.2: Given a section containing only untagged ` ```bash ` fences, extraction yields zero
+33:  - AC-1.3: Given a section with two tagged blocks and no ordinal supplied, the CLI prints
+35:  - AC-1.4: With the same document, `--index 2` selects the second tagged block; `--index 3`
+37:  - AC-1.5: The section boundary is the next **ATX** heading (`#`-prefixed) at the same or
+44:  - AC-1.6: A tag appearing inside a fence body (a fence that quotes ` ```bash hmad:exec ` as
+61:  - AC-1.7: **Duplicate headings refuse.** If the document contains more than one heading whose
+68:  - AC-1.8: **One authoritative bounder, which `docsections` delegates to.** A differential test
+82:  - AC-1.9: **An ordinal below 1 refuses.** `--index 0` and `--index -1` print
+94:  - AC-2.1: Given a block containing `~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py` and a map
+97:  - AC-2.2: Given a map whose key does not occur in the block, nothing is executed, the CLI prints
+103:  - AC-2.3: The refusal names every offending key, one `missing_key: <k>` detail line each, in
+107:  - AC-2.4: Substitution is literal, not regex — a key containing regex metacharacters
+109:  - AC-2.5: A key occurring more than once in the block is replaced at **every** occurrence, and
+111:  - AC-2.6: **Substitution is simultaneous and counts are taken on the original text.** Every
+120:  - AC-2.7: Overlapping keys refuse rather than resolve by order — if any key is a substring of
+127:  - AC-2.8: **`--subst` has a parser contract.** Each value is split **once, on the first `=`**:
+149:  - AC-3.1: A block executing `pwd` reports a cwd that is neither the repository root nor the
+151:  - AC-3.2: A block that creates a file leaves no file in the repository working tree; `git status
+153:  - AC-3.3: A block tagged ` ```bash hmad:exec ` that references an unset variable returns a
+155:  - AC-3.4: A block tagged `shell=plain` whose body contains a bare `exit 3` returns rc 3, and the
+158:  - AC-3.5: A block whose pipeline fails mid-pipe returns non-zero under the strict default
+160:  - AC-3.6: The returned value carries `rc`, `stdout`, and `stderr` as separate fields; stdout and
+165:  - AC-3.7: An unrecognised info-string key (e.g. `shell=fish`, `mode=x`) on a fence that
+173:  - AC-3.8: `--stdout <path>` and `--stderr <path>` are **optional**; given, each receives that
+211:  - AC-3.9: `--stdout` and `--stderr` naming the **same path** refuses with
+220:  - AC-3.10: A `--stdout`/`--stderr` path that cannot be written refuses with
+223:  - AC-3.11: **Fixture preamble.** `run_block` accepts an optional `preamble` — shell text run in
+248:  - AC-3.12: A run with a preamble reports `rc`/`stdout`/`stderr` for the combined invocation —
+260:  - AC-3.13: The temp directory is created by `tempfile.mkdtemp()` **followed by
+273:  - AC-3.14: **Cleanup is verified, not assumed.** After every run — normal, timeout, or
+312:  - AC-4.1: A successful run prints `DOCBLOCK: RAN rc=<n> blocks=1 shell=<strict|plain>` and exits
+315:  - AC-4.2: **The exit-code partition is pinned.** `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`,
+320:  - AC-4.3: No cannot-judge line carries `rc=`, so a caller grepping `rc=` cannot read a
+322:  - AC-4.4: `AMBIGUOUS` carries `blocks=<n>`; no other cannot-judge carries `blocks=`.
+323:  - AC-4.5: Every detail line the script can emit has a matching remedy row in the Helper-scripts
+326:  - AC-4.6: **The helper's own failures are verdicts too, never tracebacks.** Every `OSError` the
+348:  - AC-5.1: A block that sleeps past the bound returns `DOCBLOCK: TIMEOUT seconds=<n>` and exits 0
+350:  - AC-5.2: After a timeout, **no descendant remaining in the launched process group** is alive —
+357:  - AC-5.3: The source contains no invocation of `timeout` or `gtimeout`.
+358:  - AC-5.4: The temp cwd is removed after a timeout, exactly as after a normal run.
+359:  - AC-5.6: **The bound is validated before anything is spawned.** `timeout` must be a finite
+369:  - AC-5.5: **The timeout path has no unhandled race.** Two windows, both specified and both
+401:  - AC-6.1: The Second-surface gate block in `h-mad/SKILL.md` carries the `hmad:exec` tag, **and
+405:  - AC-6.2: The **executing** path resolves its block through `h_mad_doc_block_exec`: `:270`'s
+410:  - AC-6.3: The four behaviours the existing tests pin — the `COLLECT: OK` guard before gating, the
+416:  - AC-6.4: The full suite passes, and the count is no lower than the pre-change count plus the
+435:  - AC-6.5: **Connection discrimination.** Reverting the connection alone — the import of
+440:  - AC-6.6: The opposite direction: making the migrated call site unconditional — resolving the
+437:## Implementation Order
+485:## Data Model / Schema Changes
+506:## API / Interface Changes
+786:## Error Handling Strategy
+821:## Test Strategy
+857:## Test Plan
+1038:## Invariant Compliance
+ M .h-mad/wires.jsonl
+?? docs/01-plan/features/doc-block-exec.impl-plan.md
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v16.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v17.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v18.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v19.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v20.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v21.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v22.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v23.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v24.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v25.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v26.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v27.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v28.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v29.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v30.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v31.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v32.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v33.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v34.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v35.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v36.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v36.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v37.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v37.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v38.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v38.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v39.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v39.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v40.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v40.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v41.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v41.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v42.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v42.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v43.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v44.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v44.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v45.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v45.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v46.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v46.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v47.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v47.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v48.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v48.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v49.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v49.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v50.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v50.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v51.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v51.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v52.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v52.codex.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v53.agy.md.done
+?? docs/01-plan/features/pin-agents-tail-banner.impl-plan.audit.v53.codex.md.done
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "sed -n '1,260p' docs/01-plan/features/doc-block-exec.impl-plan.md && rg -n 'TBD|TODO|FIXME|\\.\\.\\.|test_docsections_imports|test_fence_events|test_heading_lookalikes|docsections-syspath|wire-revert-select|wire-revert-substitute|62|AC-5\\.5|timeout|DRAIN|fence_aware_end|_fence_events' docs/01-plan/features/doc-block-exec.impl-plan.md" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+# Implementation Plan: doc-block-exec
+
+> Source: docs/02-design/features/doc-block-exec.design.md (post-audit, v1.56 — design cycle 51 / impl-plan cycle 6 back-propagation, commit 55c50b1)
+> Paired spec: docs/01-plan/features/doc-block-exec.spec.md (v1.38) · paired plan: docs/01-plan/features/doc-block-exec.plan.md (v1.57)
+> Branch target: feature/doc-block-exec
+
+## Executive Summary
+
+One new module, `h-mad/scripts/h_mad_doc_block_exec.py`, lands in five tasks. Task 1 (`wiring`)
+creates the scanner, the public bounder, extraction and selection **and, in the same task,
+re-points `docsections.py` at that bounder** (the design's author-together order; the
+single-source contract never has an intermediate commit with two bounders). Tasks 2–4
+(`new-behaviour`) add substitution; execution + bounding; CLI + registry. Task 5 (`wiring`) tags
+the Second-surface gate fence and migrates `test_h_mad_collect_report_docs.py`'s executing path.
+Every guard the design names carries a mutation row bound to one named test; the three specs
+(`doc_block_exec.json` 62 rows, `doc_block_exec_wire.json` 8, `docsections.json` 6) must report `ALL_CAUGHT`.
+
+## Conventions binding every task
+
+- **Interpreter**: `python3.11` (the pinned interpreter with pytest). Every command below runs
+  from `h-mad/` unless stated. Never invoke `timeout`/`gtimeout` anywhere (AC-5.3 scans the source).
+- **Test file for Tasks 1–4, plus Task 5's two tree-level tests**: `h-mad/tests/test_h_mad_doc_block_exec.py`
+  (new in Task 1, extended by later tasks). API tests import the module as
+  `import h_mad_doc_block_exec as dbe` with `h-mad/scripts` on `sys.path` (the same arrangement
+  `test_h_mad_collect_report_docs.py` uses at its `:22` `sys.path.insert(0, str(SCRIPT_DIR))`).
+- **CLI transport split** (design §Test Strategy, last paragraph): every verdict a **real input or
+  a real fault** can produce is exercised through
+  `subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True)` where
+  `REPO_ROOT = Path(__file__).resolve().parents[2]` and `SCRIPT = REPO_ROOT / "h-mad" / "scripts" / "h_mad_doc_block_exec.py"`,
+  so exit codes are the real process's — marked `(subprocess)` in the ACs. A verdict that needs
+  one of the six seam injections (`_final_write`, `_close_stream`, `tempfile.mkdtemp`, `os.chmod`,
+  `shutil.rmtree`, `os.killpg`) calls `dbe.main(argv)` **in-process** — its return value is the
+  exit code and `capsys` captures the `DOCBLOCK:` and detail lines — because a `monkeypatch`
+  cannot cross an exec boundary; marked `(in-process main)`. Two subprocess tests in Task 4
+  (`test_cli_exit_zero_propagates`, `test_cli_exit_two_propagates`) pin that `sys.exit(main())`
+  turns the return value into the process exit, so the in-process code is the real code.
+- **Fixtures are hostile**: markdown strings written to `tmp_path`, with mixed heading levels,
+  fences quoting fences, a path containing a space, a body with CRLF, and a key containing regex
+  metacharacters.
+- **Fault injections — exactly six, all via `monkeypatch`, `subprocess` never mocked**:
+  `os.killpg` (AC-4.6 reap only), `shutil.rmtree` (in the helper's namespace), `tempfile.mkdtemp`,
+  `os.chmod`, the module's `_final_write(handle, text)` seam, and the module's
+  `_close_stream(handle)` seam. Recording pass-throughs of `subprocess.Popen` and `os.open` are
+  observations, not injections, and are allowed.
+- **Mutation spec** `h-mad/tests/mutation-specs/doc_block_exec.json`: `root` is `../..`,
+  `command` is `["python3.11", "-m", "pytest", "tests/test_h_mad_doc_block_exec.py", "-q"]`,
+  `target_command` is `["python3.11", "-m", "pytest", "-q"]`, every mutation has a `test` key that is
+  the **full node ID** `tests/test_h_mad_doc_block_exec.py::<name>`, and every `find` anchor
+  matches the landed source exactly once (the harness applies one `find`/`replace` pair per row
+  via `str.replace` — `h_mad_mutation_harness.py:645` — so a multi-site revert must be expressed
+  as one replacement). Each task appends its rows; the file is created in Task 1. Run
+  `python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json`
+  and read the `MUTATION:` token — `ALL_CAUGHT` is required before the task is GREEN.
+- **Single source of the fence grammar**: marker-run **recognition** — the literals ```` ``` ```` and
+  `~~~`, the run-length regex, and any `in_fence` toggle — lives in exactly one function body,
+  `_fence_events`, and so does ATX heading recognition (the `heading` event kind); `extract` and
+  `fence_aware_end` are thin consumers that read only the event's
+  `kind`/`marker`/`run`/`indent`/`info`/`candidate`/`level`/`text` fields (Task 1, mutation `scanner-duplicated-in-consumer`).
+- **Exit-code partition** (AC-4.2): every verdict of readable input and `TIMEOUT` exit 0;
+  `UNREADABLE`, `CLEANUP_FAILED`, `LAUNCH_FAILED` exit 2; argparse usage errors are the only
+  non-`DOCBLOCK:` exit 2. No refusal line ever carries `rc=`.
+
+---
+
+## Task 1: scanner, selection, info-string grammar, and the bounder's second consumer
+
+**Production file**: `h-mad/scripts/h_mad_doc_block_exec.py` (new) and `h-mad/tests/docsections.py` (modified)
+**Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py` (new; includes the four docsections-side tests `test_docsections_has_no_second_bounder`, `test_docsections_unbalanced_four_backtick_fence`, `test_docsections_imports_when_collected_alone`, `test_docsections_imports_from_an_unrelated_cwd`) and `h-mad/tests/test_docsections.py` (gains exactly one test: the WIRE-PIN)
+**Mutation spec**: `h-mad/tests/mutation-specs/doc_block_exec.json` (new) and `h-mad/tests/mutation-specs/docsections.json` (modified)
+**Task shape**: `wiring`
+**WIRE**: `h-mad/tests/docsections.py:titled_section` and `h-mad/tests/docsections.py:section_from` → `_dbe.fence_aware_end(text, offset, level)` (imported as `import h_mad_doc_block_exec as _dbe`; `titled_section` passes `match.end()` as the offset, `section_from` passes its own `offset`)
+**WIRE-PIN**: `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`
+
+**Description — new behaviour**: Create the module with its **complete** exception hierarchy —
+`DocBlockError` and its 18 subclasses (19 exception classes) with their constructors, listed in the code structure, so
+`__all__` is complete and `from h_mad_doc_block_exec import *` works at Task 1 GREEN; Tasks 2–4
+only reference them — the frozen `Block`
+dataclass (`RunResult` is Task 3's, beside `run_block`, per the design's Implementation Order), the private fence scanner `_fence_events`, the public bounder `fence_aware_end`, the
+pure scan `extract`, and the ordinal policy `select`. `extract` reads a **path** as strict UTF-8
+(a `str` is converted with `Path`; `OSError` and `UnicodeDecodeError` both become
+`DocUnreadable`), locates the heading by exact text match (stripped of trailing whitespace)
+**only among the lines `_fence_events` reports as `heading`** — a line inside any fence is never a
+heading match, so a fenced example quoting the requested heading cannot become the section start
+(design v1.56 §Scanning); more than one matching heading event raises `AmbiguousHeading(n)`),
+bounds the section at the next `heading` event of the same or shallower level, and
+returns every **tagged** fence between those offsets — an event with `candidate` true (a backtick
+opener whose first info word is `bash`; `extract` never reads `marker`) whose info string carries the
+tag — possibly an empty list,
+never raising on candidate count. **A heading is recognised by the CommonMark ATX rule (§4.2) and
+nothing looser**: 0–3 leading spaces, a run of 1–6 `#`, then a space, a tab or end of line; an
+optional closing `#` run preceded by a space is stripped before the text is compared; so `#hashtag`,
+a seven-`#` run and a four-space-indented `## x` are prose; the level is the run length of the
+opening hashes. That predicate is implemented **once**, in `_fence_events`, which reports such a
+line (outside any fence) as a `heading` event carrying `level` and the compared text — both the
+heading match in `extract` and the section boundary in `fence_aware_end` consume the scanner's
+verdict rather than re-recognising headings, so the single-source rule holds for headings as it
+does for fences. The fence grammar lives once too, in `_fence_events(text)`, a
+generator yielding one event per line (`open` / `close` / `body` / `prose` / `heading`, with the
+opener's marker character, run length, indentation, raw info string, the derived `candidate` flag
+and, for a heading, its `level`): a backtick or tilde run of ≥ 3
+preceded by 0–3 spaces opens; a backtick opener whose info string contains a backtick is not a
+fence at all (inert prose); while open, only a line whose leading run is the same character, ≥
+the opening length, preceded by 0–3 spaces, and followed by nothing but spaces/tabs closes; a
+marker run at 4+ spaces inside a fence is body text; no line inside a fence is examined as a
+heading or opener. `fence_aware_end(text, start, level)` feeds the scanner **complete lines from
+the document start through the line containing `start`** (never `text[:start]`) and considers a
+boundary only at line starts strictly after `start`. `extract` de-indents each body line by up
+to the opener's indentation (a line indented less loses only what it has) and validates the info
+string **only on a tagged fence**: tokens after `bash` are whitespace-separated; `hmad:exec` is
+the tag; `shell=strict` (default) / `shell=plain`; any other token, any other `shell=` value, or
+a **duplicated** recognised token raises `BadInfoString(key)` with the offending/repeated token.
+An untagged fence's info string is never inspected. `select(blocks, index=None)` validates
+`index < 1` → `BadIndex(n)` **before any lookup**; then 0 candidates or index past the end →
+`BlockNotFound`; > 1 with no index → `AmbiguousBlock(n)`; else the block.
+
+**Description — the wire**: In the same task, delete the private `_fence_aware_end` from
+`h-mad/tests/docsections.py` (today at `docsections.py:31`, a `startswith("```")` toggle) and
+route both callers through `_dbe.fence_aware_end` with the arguments they pass today:
+`titled_section(text: str, heading: str)` passes `(text, match.end(), level)` and
+`section_from(text: str, offset: int, level: int = 2)` passes `(text, offset, level)`. The import
+must work when `test_docsections.py` is collected alone (nothing else puts `h-mad/scripts` on
+`sys.path`; `tests/conftest.py` does not) and when `docsections` is imported from an unrelated cwd
+with only the tests dir on `sys.path`, so `docsections.py` inserts the directory containing
+`docsections.py` joined with `../scripts` into `sys.path` itself (resolved from `__file__`) before
+the import. Re-point `docsections.json`: `fence-tracking-removed` and
+`section-no-longer-owns-its-subsections` anchor in `scripts/h_mad_doc_block_exec.py` (the
+scanner's state transition and the bounder's heading match); the other two anchors
+(`offset-anchored-bound-runs-to-end-of-file`, `missing-heading-returns-empty-instead-of-failing`)
+stay in `tests/docsections.py`; the spec gains `"target_command": ["python3.11", "-m", "pytest", "-q"]`
+and **all six** rows gain a `test` key (the full node ID, copied from `_killed_by`, which stays).
+Add a fifth row `docsections-delegation-reverted`: its single `find` is the line
+`import h_mad_doc_block_exec as _dbe` and its `replace` is a local `class _dbe` carrying a
+`@staticmethod fence_aware_end(text, start, level)` whose body is the old toggle — so the callers'
+`_dbe.fence_aware_end` spelling resolves locally, the real module is never imported, and the
+callee stays intact; killed by the WIRE-PIN with the helper's behaviour tests still green — the
+one designed exception being the source guard `test_docsections_has_no_second_bounder`, which goes
+red on exactly this mutant because restoring a local toggle IS the second bounder it exists to
+refuse (design v1.55 §Components); the row's `test` key stays the WIRE-PIN. Add a sixth row
+`docsections-syspath-setup-removed`: `find` is the `sys.path.insert` line shown in the delta below, `replace` is the
+comment `# sys.path setup removed`; killed by
+`tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` (the `import` then
+fails with `ModuleNotFoundError` in the subprocess). The killer must live in a file that still
+**collects** under the mutant: `test_docsections.py` imports `docsections` at module level, so
+there the mutant is a collection error, which the harness scores as a refusal, not a kill
+(`h_mad_mutation_harness.py:660–669`); `test_h_mad_doc_block_exec.py` imports only `dbe` and
+never imports `docsections` at module level (it reads that file's source as text), so its named
+test reaches its assertion.
+
+**Code structure**:
+```python
+# h-mad/scripts/h_mad_doc_block_exec.py
+from __future__ import annotations
+import argparse, dataclasses, io, math, os, re, shutil, signal, stat, subprocess, sys, tempfile
+# ^ complete for every module-level name used across the five tasks' module code: argparse (main),
+#   dataclasses.replace (substitute), io (handle annotations), math.isfinite, os, re, shutil.rmtree,
+#   signal.SIGKILL, stat.S_ISREG, subprocess.Popen/PIPE, sys.exit, tempfile.mkdtemp. The test-file
+#   deltas carry their own (`os, re, sys` in docsections.py; `importlib, sys, types` in the
+#   test_docsections.py scaffold; the consumer already imports `re, shlex, sys, Path` at its :10–:13).
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Iterator, Mapping, Sequence
+
+# `__all__` names only what is DEFINED at each task's GREEN, so a star-import works at every
+# task boundary: Task 1 lists Block, extract, select, fence_aware_end and the 19 exception
+# classes (23 names); Task 2 appends "substitute"; Task 3 appends "RunResult", "run_block";
+# Task 4 appends "main" — 27 names when complete (8 API entries + 19 exceptions).
+__all__ = [
+    "Block", "extract", "select", "fence_aware_end",
+    "DocBlockError", "DocUnreadable", "BadInfoString", "BlockNotFound", "AmbiguousBlock",
+    "AmbiguousHeading", "BadIndex",
+    "BadSubstArg", "MissingSubstitution", "OverlappingSubstitution",
+    "BadTimeout", "BlockTimeout", "CleanupFailed", "LaunchFailed",
+    "StreamPathUnwritable", "StreamPathsAlias", "PreambleUnreadable", "StreamWriteFailed",
+    "StreamCloseFailed",
+]
+
+DRAIN_SECONDS = 5.0            # Task 3 uses it; declared here so the constant has one home
+
+# The complete hierarchy: DocBlockError + 18 subclasses (6 + 3 + 4 + 5), every one defined HERE (Task 1).
+class DocBlockError(Exception): ...
+# raised by extract / select (Task 1)                                         — 6
+class DocUnreadable(DocBlockError): ...
+class BadInfoString(DocBlockError):
+    def __init__(self, key: str): ...
+class BlockNotFound(DocBlockError): ...
+class AmbiguousBlock(DocBlockError):
+    def __init__(self, n: int): ...
+class AmbiguousHeading(DocBlockError):
+    def __init__(self, n: int): ...
+class BadIndex(DocBlockError):
+    def __init__(self, n: object): ...
+# raised by substitute (Task 2) and the CLI's --subst parsing (Task 4)         — 3
+class BadSubstArg(DocBlockError):
+    def __init__(self, raw: str, duplicate_key: str | None = None): ...
+class MissingSubstitution(DocBlockError):
+    def __init__(self, keys: list[str]): ...                 # insertion order preserved
+class OverlappingSubstitution(DocBlockError):
+    def __init__(self, pairs: list[tuple[str, str]]): ...   # sorted (shorter, longer)
+# raised by run_block (Task 3)                                                 — 4
+class BadTimeout(DocBlockError):
+    def __init__(self, value: object): ...
+class BlockTimeout(DocBlockError):
+    def __init__(self, seconds: float): ...
+class CleanupFailed(DocBlockError):
+    def __init__(self, path: str, cleanup_error: OSError | None): ...
+class LaunchFailed(DocBlockError):
+    def __init__(self, stage: str, err: OSError, pgid: int | None = None): ...  # stage in {"mkdtemp","spawn","reap"}
+# raised by main's stream and preamble handling (Task 4)                       — 5
+class StreamPathUnwritable(DocBlockError): ...
+class StreamPathsAlias(DocBlockError): ...
+class PreambleUnreadable(DocBlockError): ...
+class StreamWriteFailed(DocBlockError):
+    def __init__(self, written: list[str], failed: str, skipped: list[str], verify: str | None = None): ...
+class StreamCloseFailed(DocBlockError):
+    def __init__(self, stream: str, close_error: OSError): ...
+
+@dataclass(frozen=True)
+class Block:
+    text: str        # de-indented fence body, no trailing-newline normalisation
+    shell: str       # "strict" | "plain"
+    lineno: int      # 1-based line of the opening fence
+    info: str        # raw info string after the language word
+
+@dataclass(frozen=True)
+class _FenceEvent:
+    lineno: int; kind: str            # "open" | "close" | "body" | "prose" | "heading"
+    marker: str | None; run: int; indent: int; info: str
+    level: int                        # heading events only (1–6, the opening-run length); 0 otherwise
+    text: str                         # heading events only: the compared text (closing-run stripped)
+    candidate: bool                   # scanner-derived: True only for a BACKTICK opener whose first
+                                      # info word is "bash" — extract never inspects `marker` itself
+
+def _fence_events(text: str) -> Iterator[_FenceEvent]:
+    """The ONLY function that inspects marker runs. Yields one event per line."""
+
+def fence_aware_end(text: str, start: int, level: int) -> int:
+    """Offset of the next `heading` event at `level` or shallower after `start`,
+    fence state built over complete lines through the line containing `start`;
+    heading recognition is the scanner's, never re-derived here."""
+
+def extract(doc: str | Path, heading: str) -> list[Block]: ...
+def select(blocks: Sequence[Block], index: int | None = None) -> Block: ...
+```
+
+```python
+# h-mad/tests/docsections.py  (delta)
+import os, re, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import h_mad_doc_block_exec as _dbe  # noqa: E402
+
+def titled_section(text: str, heading: str) -> str:
+    ...  # return text[match.end():_dbe.fence_aware_end(text, match.end(), level)]
+
+def section_from(text: str, offset: int, level: int = 2) -> str:
+    return text[offset:_dbe.fence_aware_end(text, offset, level)]
+# `_fence_aware_end` is deleted; `__all__ = ["titled_section", "section_from"]` is unchanged.
+```
+
+```python
+# h-mad/tests/test_docsections.py  (delta — the RED-safe WIRE-PIN scaffold)
+16:(`doc_block_exec.json` 62 rows, `doc_block_exec_wire.json` 8, `docsections.json` 6) must report `ALL_CAUGHT`.
+21:  from `h-mad/` unless stated. Never invoke `timeout`/`gtimeout` anywhere (AC-5.3 scans the source).
+56:  `_fence_events`, and so does ATX heading recognition (the `heading` event kind); `extract` and
+57:  `fence_aware_end` are thin consumers that read only the event's
+68:**Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py` (new; includes the four docsections-side tests `test_docsections_has_no_second_bounder`, `test_docsections_unbalanced_four_backtick_fence`, `test_docsections_imports_when_collected_alone`, `test_docsections_imports_from_an_unrelated_cwd`) and `h-mad/tests/test_docsections.py` (gains exactly one test: the WIRE-PIN)
+71:**WIRE**: `h-mad/tests/docsections.py:titled_section` and `h-mad/tests/docsections.py:section_from` → `_dbe.fence_aware_end(text, offset, level)` (imported as `import h_mad_doc_block_exec as _dbe`; `titled_section` passes `match.end()` as the offset, `section_from` passes its own `offset`)
+78:dataclass (`RunResult` is Task 3's, beside `run_block`, per the design's Implementation Order), the private fence scanner `_fence_events`, the public bounder `fence_aware_end`, the
+82:**only among the lines `_fence_events` reports as `heading`** — a line inside any fence is never a
+93:opening hashes. That predicate is implemented **once**, in `_fence_events`, which reports such a
+95:heading match in `extract` and the section boundary in `fence_aware_end` consume the scanner's
+97:does for fences. The fence grammar lives once too, in `_fence_events(text)`, a
+105:heading or opener. `fence_aware_end(text, start, level)` feeds the scanner **complete lines from
+116:**Description — the wire**: In the same task, delete the private `_fence_aware_end` from
+118:route both callers through `_dbe.fence_aware_end` with the arguments they pass today:
+133:`@staticmethod fence_aware_end(text, start, level)` whose body is the old toggle — so the callers'
+134:`_dbe.fence_aware_end` spelling resolves locally, the real module is never imported, and the
+139:`docsections-syspath-setup-removed`: `find` is the `sys.path.insert` line shown in the delta below, `replace` is the
+141:`tests/test_h_mad_doc_block_exec.py::test_docsections_imports_from_an_unrelated_cwd` (the `import` then
+164:# task boundary: Task 1 lists Block, extract, select, fence_aware_end and the 19 exception
+168:    "Block", "extract", "select", "fence_aware_end",
+177:DRAIN_SECONDS = 5.0            # Task 3 uses it; declared here so the constant has one home
+180:class DocBlockError(Exception): ...
+182:class DocUnreadable(DocBlockError): ...
+184:    def __init__(self, key: str): ...
+185:class BlockNotFound(DocBlockError): ...
+187:    def __init__(self, n: int): ...
+189:    def __init__(self, n: int): ...
+191:    def __init__(self, n: object): ...
+194:    def __init__(self, raw: str, duplicate_key: str | None = None): ...
+196:    def __init__(self, keys: list[str]): ...                 # insertion order preserved
+198:    def __init__(self, pairs: list[tuple[str, str]]): ...   # sorted (shorter, longer)
+201:    def __init__(self, value: object): ...
+203:    def __init__(self, seconds: float): ...
+205:    def __init__(self, path: str, cleanup_error: OSError | None): ...
+207:    def __init__(self, stage: str, err: OSError, pgid: int | None = None): ...  # stage in {"mkdtemp","spawn","reap"}
+209:class StreamPathUnwritable(DocBlockError): ...
+210:class StreamPathsAlias(DocBlockError): ...
+211:class PreambleUnreadable(DocBlockError): ...
+213:    def __init__(self, written: list[str], failed: str, skipped: list[str], verify: str | None = None): ...
+215:    def __init__(self, stream: str, close_error: OSError): ...
+233:def _fence_events(text: str) -> Iterator[_FenceEvent]:
+236:def fence_aware_end(text: str, start: int, level: int) -> int:
+241:def extract(doc: str | Path, heading: str) -> list[Block]: ...
+242:def select(blocks: Sequence[Block], index: int | None = None) -> Block: ...
+252:    ...  # return text[match.end():_dbe.fence_aware_end(text, match.end(), level)]
+255:    return text[offset:_dbe.fence_aware_end(text, offset, level)]
+256:# `_fence_aware_end` is deleted; `__all__ = ["titled_section", "section_from"]` is unchanged.
+274:        return _real.fence_aware_end(text, offset, level) if _real is not None else len(text)
+276:    fake.fence_aware_end = recording
+307:- [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `hashtag`, `x` or the seven-run text yields no heading match).
+311:- [ ] AC-1.8 (bounder's own contract) `test_bounder_ignores_a_heading_inside_a_tilde_fence`, `test_bounder_ignores_an_indented_literal_fence`, `test_bounder_from_an_offset_inside_a_fence` (`start` inside an open fence; a fenced `#` after it does not end the section), `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (`start` immediately after the three backticks of a ```` ```trailing ```` body line; the next fenced `#` still does not end the section), `test_fence_events_trace_on_every_hostile_fixture` (exact event trace over: balanced and unbalanced four-backtick, tilde-quoted backtick, backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence), `test_extract_has_no_fence_state_of_its_own` (source assertion on marker-run **recognition**: the literals ```` ``` ```` and `~~~`, the run-length regex, any `in_fence` toggle, and the ATX heading regex (a `#{1,6}` pattern or any `startswith("#")` test) appear in exactly one function body, `_fence_events`; consumers may read `_FenceEvent.kind`/`.marker`/`.run`/`.indent`/`.info`/`.candidate`, and `extract` selects on `.candidate`, never on `.marker`).
+312:- [ ] AC-1.8 (the wire) `test_docsections_delegates_to_the_authoritative_bounder` (WIRE-PIN, in `test_docsections.py`, scaffold above): `titled_section` and `section_from` on the fenced fixture each record exactly one call on the `sys.modules` fake's `fence_aware_end` with `(text, offset, level)`; its RED reason is the assertion on the call record, never an import error.
+313:- [ ] AC-1.8 `test_docsections_has_no_second_bounder`: the source of `docsections.py` defines no function named `_fence_aware_end` and contains no marker-run scanning (the same source predicate as `test_extract_has_no_fence_state_of_its_own`, applied to that file).
+314:- [ ] AC-1.8 `test_docsections_imports_when_collected_alone`: `subprocess.run([sys.executable, "-m", "pytest", "h-mad/tests/test_docsections.py", "-q"], cwd=REPO_ROOT)` exits 0 (nothing but `docsections.py` itself puts `h-mad/scripts` on `sys.path` in that run); `test_docsections_imports_from_an_unrelated_cwd`: `subprocess.run([sys.executable, "-c", "import docsections"], env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "h-mad" / "tests")}, cwd=tmp_path)` exits 0. Both live in `test_h_mad_doc_block_exec.py`, which never imports `docsections` at module level.
+331:`docsections-delegation-reverted` and `docsections-syspath-setup-removed` — 6 rows.
+336:- Every test in `test_h_mad_doc_block_exec.py` fails at RED — the module does not exist, so the file's own `import h_mad_doc_block_exec as dbe` raises `ModuleNotFoundError` at collection. That includes `test_docsections_has_no_second_bounder` (which would also fail on its source assertion), `test_docsections_unbalanced_four_backtick_fence` (which would also fail because the old toggle mis-bounds) and the two import tests, which are **insensitive to the docsections delta** (they pass against the unchanged, stdlib-only `docsections.py` as soon as their file collects) and are carried as **regression guards** for the import arrangement the delegating import introduces; their teeth are the `docsections-syspath-setup-removed` mutation, not RED.
+337:- In `test_docsections.py`: the WIRE-PIN — its only new test — fails on its call-record assertion (`len(calls) == 2`; the recorder was never called because the unchanged caller still calls its private `_fence_aware_end`).
+367:def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]: ...
+396:**Description**: `run_block(block, *, preamble=None, timeout=30.0)` calls the shared module-level
+397:`_validate_timeout(timeout)` first thing (`float()` conversion, `math.isfinite`, `> 0`; else
+400:`timeout-validation-removed`, covers both call sites); then `cwd = None`; inside a `try`: `cwd = tempfile.mkdtemp()`, `os.chmod(cwd, 0o700)`
+405:(a `Popen` `OSError` records `LaunchFailed("spawn", err)`). `communicate(timeout=timeout)`; on
+408:then a bounded drain `communicate(timeout=DRAIN_SECONDS)`, on whose own `TimeoutExpired` the helper
+410:signalled or already gone (never on the `reap` branch); the pending outcome is `BlockTimeout(timeout)`
+430:def _validate_timeout(value: object) -> float:
+434:def _compose(preamble: str | None, text: str) -> str: ...
+435:def run_block(block: Block, *, preamble: str | None = None, timeout: float = 30.0) -> RunResult: ...
+454:- [ ] AC-3.14 `test_cleanup_failure_is_reported` (`mkdir keep && chmod 000 keep` → `CleanupFailed` with `cleanup_error` a `PermissionError`; skipped when `euid == 0`; the test `chmod 700`s and removes the tree in its `finally`); `test_cleanup_failure_carries_the_os_error` (in-process, injected: `rmtree` injected to raise; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_readback_catches_silent_retention` (in-process, injected: `rmtree` injected as a no-op; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_error_after_successful_removal_is_still_a_failure` (in-process, injected: the fake calls `real_rmtree` — bound before the patch — then raises; `finally` calls `real_rmtree` under `ignore_errors=True` since the tree is already gone); `test_cleanup_failure_outranks_timeout_injected` (in-process, injected: `rmtree` raising under `sleep 300`, `timeout=1` → `CleanupFailed`, `__cause__` is the `BlockTimeout`, `cleanup_error` is the injected error, cwd read back present, removed in `finally` by `real_rmtree`, bound before the patch); `test_cleanup_failure_outranks_timeout` (real `chmod 000` fixture, skipped under root); `test_normal_run_reads_back_absent`.
+455:- [ ] AC-4.6 `test_mkdtemp_failure_is_a_verdict` (in-process, injected: `tempfile.mkdtemp` injected → `LaunchFailed("mkdtemp")`, nothing to clean); `test_spawn_failure_is_a_verdict` (`PATH` = empty dir → `LaunchFailed("spawn")`, cwd gone); `test_reap_failure_is_a_verdict_within_the_drain_bound` (in-process, injected: `os.killpg`): `real_killpg = os.killpg` bound **before** `monkeypatch.setattr(dbe.os, "killpg", fake)`; `fake` records the pgid and raises `PermissionError`; `Popen` wrapped in a recording pass-through; `sleep 300` under `timeout=1` → `LaunchFailed("reap", pgid=proc.pid)` raised within `1 + DRAIN_SECONDS + 2` s; teardown in `finally`: `real_killpg(pgid, SIGKILL)`, `recorded.wait()`, then assert `real_killpg(pgid, 0)` raises `ProcessLookupError`.
+456:- [ ] AC-5.1 `test_sleeping_block_times_out`: `sleep 300`, `timeout=1` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s.
+457:- [ ] AC-5.2 `test_in_group_descendant_is_reaped`: block text `sleep 300 & echo $! > PID_PATH; sleep 300`, run as `dbe.run_block(dbe.substitute(block, {"PID_PATH": str(pid_file)})[0], timeout=1)` where `pid_file` is under the test's `tmp_path` — the substitution map is how the absolute path reaches the block, because the child's cwd is a fresh private directory nothing can be placed in beforehand → after the timeout the pid read from `pid_file` is gone: `os.kill(pid, 0)` raises `ProcessLookupError`; `finally` reads the pid file if present and sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`.
+458:- [ ] AC-5.3 `test_no_timeout_invocation_in_source`: no argv token or shell command word `timeout`/`gtimeout` in the module source (a substring match on `timeout=`/`TimeoutExpired`/`BlockTimeout`/`--shell-timeout` must not trip it).
+459:- [ ] AC-5.4 `test_temp_cwd_removed_after_timeout`.
+460:- [ ] AC-5.5 both escapee tests share one fixture construction: the test writes `esc.py` under its own `tmp_path` (`os.setsid()`; write `os.getpid()` to the PID path given as `sys.argv[1]`; `time.sleep(300)` holding stdout) and passes BOTH absolute paths through the substitution map — `dbe.run_block(dbe.substitute(block, {"ESC_PATH": str(esc), "PID_PATH": str(pid_file)})[0], timeout=1)` — because the child's cwd is a fresh private directory, so `esc.py` cannot be placed there and only the substituted absolute paths make the block executable. `test_timeout_survives_a_group_that_already_emptied`: block text `python3 ESC_PATH PID_PATH & exit 0` (the leader exits at once; the group is empty when `killpg` runs) → `BlockTimeout`, no traceback, and the block's cwd is gone. `test_timeout_drain_is_bounded_against_an_escapee`: block text `python3 ESC_PATH PID_PATH & sleep 300` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, cwd gone. Teardown for both, in `finally`: read the pid file, `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`, then assert the block's cwd (captured through a recording `Popen` pass-through's `cwd` kwarg) no longer exists.
+461:- [ ] AC-5.6 `test_nonpositive_timeout_refuses_before_spawn`: `timeout=0`, `-1`, `math.nan`, `math.inf` → `BadTimeout` and the recording `Popen` pass-through was never called and no directory was created.
+465:`cleanup-errors-ignored`, `cleanup-readback-removed`, `precedence-timeout-raised-in-handler`,
+467:`killpg-esrch-uncaught`, `drain-unbounded`, `timeout-validation-removed`,
+469:`timeout-invocation-planted` — 18 rows.
+475:`_validate_timeout` absent; the four exceptions already exist from Task 1)
+476:except `test_no_timeout_invocation_in_source` and `test_no_mktemp_invocation_in_source`, which are
+490:`--preamble-file`, `--shell-timeout` (`type=str`, default `"30"`), `--stdout`, `--stderr`; no
+494:→ `substitute` → `_validate_timeout(args.shell_timeout)` (the shared validator from Task 3:
+497:existing `timeout-validation-removed` row covers both call sites — no new row) → `--preamble-file`
+554:_VERDICT_FOR: dict[type[DocBlockError], Callable[[DocBlockError], str]] = {...}   # class → head renderer (every DocBlockError subclass)
+555:DETAIL_KEYS: tuple[str, ...] = ("missing_key:", "overlap:", "duplicate_key:", "os_error:", "pgid:",
+561:def _verify(path: str, text: str) -> bool: ...
+562:def main(argv: Sequence[str] | None = None) -> int: ...
+570:- [ ] AC-3.8 (subprocess) `test_stream_paths_receive_the_streams` (two files differ for a block writing different text); `test_streams_optional`; `test_stream_paths_truncate_an_existing_file`; `test_streams_untouched_after_a_timeout`; (in-process main, each) `test_stream_write_failure_after_the_run_is_a_refusal` (`_final_write` injected to raise → `UNREADABLE reason=stream_write_failed`, exit 2, no `rc=`); `test_first_stream_write_failure_skips_the_second` (`_final_write` injected to raise on the first handle: `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_second_stream_write_failure_leaves_the_first_as_written` (`_final_write` injected to raise on the second handle: `written: stdout` / `failed: stderr`); `test_final_write_close_failure_is_mapped` (seam patched to call the real `_final_write` with a recording proxy whose `close` alone raises → `stream_write_failed`, `failed: stdout`, exit 2, no traceback); `test_final_write_failure_before_close_still_closes` (proxy's `flush` and `close` both raise → same verdict and the proxy's `close` was called); `test_final_write_readback_catches_a_silent_no_op` (`_final_write` injected as a no-op → `stream_write_failed` with `verify: stdout`, `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_backstop_close_failure_on_timeout_is_mapped` (`_close_stream` injected to raise under `sleep 300`, `--shell-timeout 1`, `--stdout` given → `UNREADABLE reason=stream_close_failed`, `os_error:` line, exit 2, no traceback, cwd gone); `test_backstop_close_failure_does_not_outrank_a_refusal` (same injection under an aliased pair → still `stream_paths_alias`, exit 2, no traceback); `test_stream_handles_are_closed_on_every_path` (recording `os.open` pass-through, `_final_write` injected for the first-write-failure leg; after `TIMEOUT` and after a first-write failure, `os.fstat` on each recorded fd raises `OSError`).
+572:- [ ] AC-3.10 (subprocess) `test_stream_path_under_a_regular_file_refuses` (parent is a regular file → `stream_path_unwritable`, exit 2, no traceback, side-effect block left nothing); `test_stream_path_fifo_without_reader_refuses_bounded` (`os.mkfifo` path, CLI run with `timeout=5` in the test's `subprocess.run`, refusal within 1 s); `test_stdout_survives_a_failed_stderr_reservation` (pre-existing stdout byte-identical; a created stdout unlinked).
+579:- [ ] AC-5.6 (subprocess) `test_cli_bad_timeout_values`: `0`, `-1`, `nan`, `inf`, `abc` → `BAD_TIMEOUT value=` followed by the argument verbatim, exit 0, no side effect, **and with `--stdout`/`--stderr` given: a path that did not exist is still absent afterwards, and a pre-existing file keeps its bytes** (validation ran before `_reserve`); `test_non_numeric_timeout_is_bad_timeout`.
+583:`index-nonint-unmapped`, `timeout-nonnumeric-unmapped`, `preamble-decode-error-unwrapped`,
+589:`detail-line-undocumented` — 19 rows. With Tasks 1, 2, 3 that is 20 + 5 + 18 + 19 = **62 rows**,
+596:regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 62 rows
+629:(a `COLLECT_OUT=$(` command substitution running the real collector with `--surface codex`, the phase, cycle, report and project root, every path through `shlex.quote`; shown verbatim in the code structure); `return dbe.run_block(subbed, preamble=preamble, timeout=60.0)`.
+631:`.stdout` and `.stderr` (grep over `:294–:362` finds no `.returncode`, `.args` or `.check` read),
+666:    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)
+674:- [ ] AC-6.1 `test_exactly_one_tagged_fence_in_the_tree` (in `test_h_mad_doc_block_exec.py`): opening fences carrying `hmad:exec` across `h-mad/` and `handoff/` excluding any `archive/` path, counted with the module's own `_fence_events`, equal exactly 1.
+678:- [ ] AC-6.5 WIRE-PIN 1 (`test_gate_block_resolves_through_doc_block_exec`): `monkeypatch.setattr(dbe, "extract", spy_extract)` and `monkeypatch.setattr(dbe, "select", spy_select)`, each a recording pass-through to the real function (bound before patching) — calling `_gate_block()` must record exactly one `extract` call with `(SKILL_MD, "## Second surface — the codex leg")` and exactly one `select` call whose first argument **is** the list `extract` returned (identity, `is`) and whose `index` is `None`; the returned block is the one `select` returned. WIRE-PIN 2 (`test_recipe_runs_through_run_block`): `monkeypatch.setattr(dbe, "substitute", spy_substitute)` (a recording pass-through to the real `substitute`) and `monkeypatch.setattr(dbe, "run_block", spy_run)` where `spy_run` records `(block, kwargs)` and returns `dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")` — calling `_run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)` must record exactly one `substitute` call with the gate block (`text` equal to `_gate_bash_block()`) and the one-key map `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(SCRIPT_DIR / "h_mad_audit_gate.py"))}`, and exactly one `run_block` call whose block **is** the block `substitute` returned, whose `preamble` contains `COLLECT_OUT=$(`, and whose `timeout == 60.0`. `test_consumer_calls_the_helper_module_qualified`: the consumer's source has no `from h_mad_doc_block_exec import`.
+680:- [ ] `doc_block_exec_wire.json` reports `ALL_CAUGHT` over eight rows: `wire-revert-extract` (`_gate_block` resolves with a local tag-tolerant `re.findall` instead of `dbe.extract`/`dbe.select`), `wire-revert-select` (`_gate_block` keeps `dbe.extract` but takes `blocks[0]` / raises locally instead of calling `dbe.select`, callee intact — killed by WIRE-PIN 1's `select` record), `wire-revert-run` (`_run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block`), `wire-revert-substitute` (`_run_recipe` rewrites the checkout path with `str.replace` instead of `dbe.substitute`, callee intact — killed by WIRE-PIN 2's `substitute` record), `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened` — and under each of the four reverts `test_h_mad_doc_block_exec.py` stays green. The eight rows bind to the same six named tests as before (both new rows re-use the two existing pins); no new test name is introduced, so the seven-node floor tuple in AC-6.4 is unchanged.
+698:`wire-revert-select` — keep `dbe.extract` in `_gate_block` but take `blocks[0]` / raise locally
+701:`wire-revert-substitute` — restore `str.replace` in `_run_recipe` (WIRE-PIN 2 fails on its
+712:python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=62
+721:- v1.1: Impl-plan audit v1 (codex must 5 should 1; agy must 2 should 1): docsections delegation merged into Task 1 as a wiring task with a sys.modules-fake WIRE-PIN scaffold; run_recipe hoisted to _run_recipe with dbe.substitute and timeout=60.0; section_from signature; __all__ exports the exceptions; docsections.json gains a syspath mutation (6 rows); counts corrected.
+723:- v1.3: Impl-plan audit v3 (codex must 1 should 1; agy clean): the two consumer pins also spy dbe.select and dbe.substitute, with wire-revert-select and wire-revert-substitute (eight wire mutations, design v1.53); the full exception hierarchy lands in Task 1 so __all__ is complete at its GREEN.
+724:- v1.4: Impl-plan audit v4 (codex must 2 should 1; agy must 1) + design audit v49 (codex must 1, about Task 4): RunResult lands in Task 3 per the design; real_rmtree bound before every rmtree injection; the single-source predicate names marker-run recognition and _FenceEvent gains candidate; argparse imported; _validate_timeout runs before reservation in main and first in run_block, with the artifact-absence assertion in the bad-timeout CLI test.
+726:- v1.6: Impl-plan audit v6 (codex should 2; agy clean): provenance header at design v1.56 / plan v1.57; the ATX heading grammar stated and recognised once in _fence_events as a heading event, with test_heading_lookalikes_are_not_headings and heading-lookalike-accepted (62 rows).
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "sed -n '610,735p' docs/01-plan/features/doc-block-exec.impl-plan.md && sed -n '620,690p' h-mad/scripts/h_mad_mutation_harness.py && sed -n '1,100p' h-mad/tests/mutation-specs/docsections.json && sed -n '1,130p' h-mad/tests/docsections.py && sed -n '1,120p' h-mad/tests/test_docsections.py" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+**WIRE-PIN 2**: `h-mad/tests/test_h_mad_collect_report_docs.py::test_recipe_runs_through_run_block`
+
+**Description**: Change the Second-surface gate fence opener in `h-mad/SKILL.md` from ` ```bash `
+to ` ```bash hmad:exec ` (the block containing `h_mad_audit_gate.py` under §"Second surface — the
+codex leg" — the heading is at `h-mad/SKILL.md:1804`; the section holds four ```bash fences, opening at `:1809`, `:1822`, `:1832` and `:1845`, and the gating one — the only block containing `h_mad_audit_gate.py` (its gate line is `:1850`) — opens at `:1845`; the `exec codex` block stays untagged). In the consumer, add
+`import h_mad_doc_block_exec as dbe` (module-qualified; never `from h_mad_doc_block_exec import`) after the existing
+`sys.path.insert(0, str(SCRIPT_DIR))` at `:22`; replace the `:270` `re.findall` inside
+`_gate_bash_block` with `_gate_block() -> dbe.Block` = `dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))`,
+reduce `_gate_bash_block() -> str` to `_gate_block().text` so its two text-pin callers (`:281`,
+`:368`) keep their string. **Hoist** the `run_recipe` closure — today nested at `:309` inside
+`test_documented_gate_recipe_halts_instead_of_gating_an_empty_path`, returning
+`subprocess.CompletedProcess[str]` from an inline `subprocess.run(["bash", "-c", preamble + script])`
+and rewriting the installed gate path with `str.replace` at `:312` — to a module-level
+`_run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult`. Its body:
+`collector = SCRIPT_DIR / "h_mad_collect_report.py"` and `gate = SCRIPT_DIR / "h_mad_audit_gate.py"`
+(the two locals the closure captured from the test, now derived from the module-level
+`SCRIPT_DIR`); `block = _gate_block()`;
+`subbed, _ = dbe.substitute(block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))})`
+(the checkout-path rewrite, now through the helper); the existing `preamble` f-string unchanged
+(a `COLLECT_OUT=$(` command substitution running the real collector with `--surface codex`, the phase, cycle, report and project root, every path through `shlex.quote`; shown verbatim in the code structure); `return dbe.run_block(subbed, preamble=preamble, timeout=60.0)`.
+The existing test's two callers (`:340`, `:346`) keep working unchanged: they read only
+`.stdout` and `.stderr` (grep over `:294–:362` finds no `.returncode`, `.args` or `.check` read),
+and `dbe.RunResult` carries both as `str`. The tagged fence defaults to `shell=strict`; the
+recipe survives `-euo pipefail` because `h_mad_collect_report.py` returns 0 on `MISSING`
+(`scripts/h_mad_collect_report.py:102–111`) and the gate block's own branch is `if ! printf '%s\n' "$COLLECT_OUT" | grep -q '^COLLECT: OK '`.
+The `:412` text scan is untouched. Write `doc_block_exec_wire.json` (`command` =
+`["python3.11", "-m", "pytest", "tests/test_h_mad_collect_report_docs.py", "-q"]`,
+`target_command` = `["python3.11", "-m", "pytest", "-q"]`, `root` = `../..`) with the eight rows below
+(design v1.53 §Test Plan wire table). The two pins each spy **both** callees of their wire, so a
+caller that keeps one callee and re-implements the other locally is a killed mutant, not a pass.
+
+**Code structure**:
+```python
+# h-mad/tests/test_h_mad_collect_report_docs.py  (delta)
+import h_mad_doc_block_exec as dbe  # noqa: E402  (after the existing sys.path.insert)
+
+def _gate_block() -> dbe.Block:
+    return dbe.select(dbe.extract(SKILL_MD, "## Second surface — the codex leg"))
+
+def _gate_bash_block() -> str:
+    return _gate_block().text
+
+def _run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> dbe.RunResult:
+    collector = SCRIPT_DIR / "h_mad_collect_report.py"
+    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
+    block = _gate_block()
+    # the doc addresses the installed skill; point the snippet at this tree
+    subbed, _ = dbe.substitute(
+        block, {"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(gate))}
+    )
+    q = shlex.quote
+    preamble = (
+        f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
+        f'--feature f --phase {phase} --cycle {cycle} '
+        f'--report {q(str(report))} --project-root {q(str(root))})\n'
+    )
+    return dbe.run_block(subbed, preamble=preamble, timeout=60.0)
+
+# test_documented_gate_recipe_halts_instead_of_gating_an_empty_path loses its nested
+# `run_recipe` and calls `_run_recipe` with the same keyword arguments at the two former call sites; its assertions
+# on `.stdout`/`.stderr` are unchanged.
+```
+
+**Acceptance Criteria**:
+- [ ] AC-6.1 `test_exactly_one_tagged_fence_in_the_tree` (in `test_h_mad_doc_block_exec.py`): opening fences carrying `hmad:exec` across `h-mad/` and `handoff/` excluding any `archive/` path, counted with the module's own `_fence_events`, equal exactly 1.
+- [ ] AC-6.2 `test_exec_block_scan_performs_no_execution` (a spy on `dbe.run_block` records no call while the `:412` assertions run) and `test_only_the_exec_scan_hand_rolls_extraction` (exactly one `re.findall(r"```bash` in the file's source, and it is not inside `_gate_block`/`_gate_bash_block`/`_run_recipe`).
+- [ ] AC-6.3 the four existing behaviours — `COLLECT: OK` guard before gating, delivered-report `GATE: PASS`, undelivered `report_not_collected` halt without reaching the gate, no shell-killing bare `exit` — still pass, driven through the preamble boundary.
+- [ ] AC-6.4 `test_suite_floor_holds` (in `test_h_mad_doc_block_exec.py`): `subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"], cwd=REPO_ROOT, env={**os.environ, "DOCBLOCK_FLOOR_INNER": "1"})` — **from the repository root**, the cwd the baseline was measured in (`python3.11 -m pytest --collect-only -q -p no:cacheprovider | tail -1` → `2747 tests collected`, re-measured 2026-09-03; the same command from `h-mad/` reports 2485, a different rootdir and a different number) — with `DOCBLOCK_FLOOR_INNER=1` making the inner instance of this test skip; asserts the collected count ≥ `2747` + the collected count of `h-mad/tests/test_h_mad_doc_block_exec.py` alone (a second `--collect-only` from the same cwd) + 7, and that each of the seven named node IDs is present: the six consumer tests in `h-mad/tests/test_h_mad_collect_report_docs.py` (`test_gate_block_resolves_through_doc_block_exec`, `test_recipe_runs_through_run_block`, `test_gate_block_refuses_an_untagged_recipe`, `test_exec_block_scan_performs_no_execution`, `test_consumer_calls_the_helper_module_qualified`, `test_only_the_exec_scan_hand_rolls_extraction`) plus `h-mad/tests/test_docsections.py::test_docsections_delegates_to_the_authoritative_bounder`. Seven is exact: those are the only node IDs this feature adds to pre-existing files — every other new test, including the docsections-side ones, lives in the new module and is counted by its own collect (plan §Measurements).
+- [ ] AC-6.5 WIRE-PIN 1 (`test_gate_block_resolves_through_doc_block_exec`): `monkeypatch.setattr(dbe, "extract", spy_extract)` and `monkeypatch.setattr(dbe, "select", spy_select)`, each a recording pass-through to the real function (bound before patching) — calling `_gate_block()` must record exactly one `extract` call with `(SKILL_MD, "## Second surface — the codex leg")` and exactly one `select` call whose first argument **is** the list `extract` returned (identity, `is`) and whose `index` is `None`; the returned block is the one `select` returned. WIRE-PIN 2 (`test_recipe_runs_through_run_block`): `monkeypatch.setattr(dbe, "substitute", spy_substitute)` (a recording pass-through to the real `substitute`) and `monkeypatch.setattr(dbe, "run_block", spy_run)` where `spy_run` records `(block, kwargs)` and returns `dbe.RunResult(rc=0, stdout="", stderr="", shell="strict")` — calling `_run_recipe(phase="plan", cycle=3, report=tmp_path / "r.md", root=tmp_path)` must record exactly one `substitute` call with the gate block (`text` equal to `_gate_bash_block()`) and the one-key map `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": shlex.quote(str(SCRIPT_DIR / "h_mad_audit_gate.py"))}`, and exactly one `run_block` call whose block **is** the block `substitute` returned, whose `preamble` contains `COLLECT_OUT=$(`, and whose `timeout == 60.0`. `test_consumer_calls_the_helper_module_qualified`: the consumer's source has no `from h_mad_doc_block_exec import`.
+- [ ] AC-6.6 `test_gate_block_refuses_an_untagged_recipe`: with `dbe.extract` monkeypatched to return `[]`, `_gate_block()` raises `dbe.BlockNotFound` (no legacy fallback).
+- [ ] `doc_block_exec_wire.json` reports `ALL_CAUGHT` over eight rows: `wire-revert-extract` (`_gate_block` resolves with a local tag-tolerant `re.findall` instead of `dbe.extract`/`dbe.select`), `wire-revert-select` (`_gate_block` keeps `dbe.extract` but takes `blocks[0]` / raises locally instead of calling `dbe.select`, callee intact — killed by WIRE-PIN 1's `select` record), `wire-revert-run` (`_run_recipe` runs `subprocess.run(["bash", "-c", preamble + script])` inline instead of `dbe.run_block`), `wire-revert-substitute` (`_run_recipe` rewrites the checkout path with `str.replace` instead of `dbe.substitute`, callee intact — killed by WIRE-PIN 2's `substitute` record), `wire-unconditional`, `exec-scan-executes`, `consumer-from-import`, `hand-rolled-extraction-widened` — and under each of the four reverts `test_h_mad_doc_block_exec.py` stays green. The eight rows bind to the same six named tests as before (both new rows re-use the two existing pins); no new test name is introduced, so the seven-node floor tuple in AC-6.4 is unchanged.
+
+**Dependencies on other tasks**: Tasks 1–4.
+
+**Expected RED split** (in prose): the RED commit adds `import h_mad_doc_block_exec as dbe` to the
+consumer (the six new tests need the alias; the import alone wires nothing). Both WIRE-PINs then
+fail with `NameError` — `_gate_block` and `_run_recipe` are new module-level names that do not
+exist until GREEN; the callee `dbe.run_block`/`dbe.extract` exists, so this is never an import
+error. `test_gate_block_refuses_an_untagged_recipe` fails the same way; `test_consumer_calls_the_helper_module_qualified`
+passes at RED only if the alias import was written module-qualified (it is a regression guard on
+the spelling); `test_only_the_exec_scan_hand_rolls_extraction` fails (two `re.findall(r"```bash`
+remain, `:270` and `:412`); `test_exactly_one_tagged_fence_in_the_tree` fails (zero tagged fences);
+`test_exec_block_scan_performs_no_execution` and `test_suite_floor_holds` are **regression guards**
+expected to pass at RED (the scan never executed, and the floor counts collected tests, which RED
+already adds); the four AC-6.3 behaviours are regression guards too. The call-record assertion
+of each WIRE-PIN is the failure mode of the 5e wire-scoped revert, not of RED. Four revert
+directions, applied one at a time with helper and tests intact: (1) `wire-revert-extract` —
+restore the `re.findall` in `_gate_block` (WIRE-PIN 1 fails on its `extract` record); (2)
+`wire-revert-select` — keep `dbe.extract` in `_gate_block` but take `blocks[0]` / raise locally
+(WIRE-PIN 1 fails on its `select` record); (3) `wire-revert-run` — restore the inline
+`subprocess.run` in `_run_recipe` (WIRE-PIN 2 fails on its `run_block` record); (4)
+`wire-revert-substitute` — restore `str.replace` in `_run_recipe` (WIRE-PIN 2 fails on its
+`substitute` record). Under every one of the four, `test_h_mad_doc_block_exec.py` stays green;
+then the opposite direction (`wire-unconditional`) must fail `test_gate_block_refuses_an_untagged_recipe`.
+
+---
+
+## Verification (Phase 5f)
+
+```bash
+cd h-mad
+python3.11 -m pytest tests/test_h_mad_doc_block_exec.py -q
+python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec.json        # MUTATION: ALL_CAUGHT mutations=62
+python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/doc_block_exec_wire.json   # MUTATION: ALL_CAUGHT mutations=8
+python3.11 scripts/h_mad_mutation_harness.py tests/mutation-specs/docsections.json           # MUTATION: ALL_CAUGHT mutations=6
+python3.11 -m pytest -q -p no:cacheprovider > /tmp/doc_block_exec_suite.log; RC=$?
+tail -1 /tmp/doc_block_exec_suite.log; echo "SUITE: rc=$RC"                                  # gate on both
+```
+
+## Version History
+- v1.0: Initial implementation plan draft from design v1.50 / plan v1.52 / spec v1.38.
+- v1.1: Impl-plan audit v1 (codex must 5 should 1; agy must 2 should 1): docsections delegation merged into Task 1 as a wiring task with a sys.modules-fake WIRE-PIN scaffold; run_recipe hoisted to _run_recipe with dbe.substitute and timeout=60.0; section_from signature; __all__ exports the exceptions; docsections.json gains a syspath mutation (6 rows); counts corrected.
+- v1.2: Impl-plan audit v2 (codex must 4; agy clean): transport split — seam-injected verdicts through main(argv) in-process, real-input verdicts through the subprocess, two exit-propagation tests; VERDICT_TABLE at emitted-head granularity (21 heads) plus _VERDICT_FOR by class; fence-aware heading match with its test and mutation (61 rows, design v1.51); suite floor measured from the repository root, the three collect-alone/unbalanced tests moved to the new module so the seven-node tuple stands.
+- v1.3: Impl-plan audit v3 (codex must 1 should 1; agy clean): the two consumer pins also spy dbe.select and dbe.substitute, with wire-revert-select and wire-revert-substitute (eight wire mutations, design v1.53); the full exception hierarchy lands in Task 1 so __all__ is complete at its GREEN.
+- v1.4: Impl-plan audit v4 (codex must 2 should 1; agy must 1) + design audit v49 (codex must 1, about Task 4): RunResult lands in Task 3 per the design; real_rmtree bound before every rmtree injection; the single-source predicate names marker-run recognition and _FenceEvent gains candidate; argparse imported; _validate_timeout runs before reservation in main and first in run_block, with the artifact-absence assertion in the bad-timeout CLI test.
+- v1.5: Impl-plan audit v5 (codex must 1 should 1; agy clean) + design audit v50 (codex must 1, about Task 3): the escapee and in-group fixtures reach esc.py and the pid file through the substitution map (ESC_PATH/PID_PATH), never the child's fresh cwd; the delegation-revert mutant is stated to trip the docsections source guard; the gate-fence locator re-measured.
+- v1.6: Impl-plan audit v6 (codex should 2; agy clean): provenance header at design v1.56 / plan v1.57; the ATX heading grammar stated and recognised once in _fence_events as a heading event, with test_heading_lookalikes_are_not_headings and heading-lookalike-accepted (62 rows).
+                # The verdict is correct and load-bearing either way; what was
+                # missing is the recovery, which was a manual re-grep for
+                # whatever the author's own edits turned the line into.
+                result["hints"][mutation["name"]] = hint_lines
+                continue
+
+            # L559: a mutant applied over a red pin scores a kill that means
+            # nothing. The whole-suite baseline above cannot see a single pin
+            # that is already failing, and a targeted run is cheap enough to
+            # check every time.
+            if scoring_command is not None and mutation.get("test"):
+                _, pin_output = _run(scoring_command, root)
+                counts = outcome(pin_output)
+                if not ran_and_passed(counts):
+                    why = ("was skipped" if counts.get("skipped")
+                           else "did not run" if not counts
+                           else "was already failing")
+                    result["refused"].append(
+                        f"{mutation['name']}: named test {mutation['test']} {why} "
+                        f"before the mutation ({counts or 'no summary'}), so a kill "
+                        f"would measure nothing"
+                    )
+                    continue
+
+            originals.setdefault(target, source)
+            mutated = source.replace(mutation["find"], mutation["replace"])
+            target.write_text(mutated, encoding="utf-8")
+
+            # Belt and braces: confirm the bytes on disk actually differ. A
+            # write that silently no-ops would otherwise score as a clean run.
+            if target.read_text(encoding="utf-8") == source:
+                result["refused"].append(
+                    f"{mutation['name']}: the mutation did not land on disk"
+                )
+                target.write_text(source, encoding="utf-8")
+                continue
+
+            if scoring_command is not None:
+                pin_green, pin_output = _run(scoring_command, root)
+                counts = outcome(pin_output)
+                if not pin_green and not ran_and_failed(counts):
+                    # Red, but the named test never reached its assertion: the
+                    # mutant broke collection. That proves the code breaks when
+                    # broken and nothing about the property, so it measured
+                    # NOTHING -- a refusal, not a kill.
+                    result["refused"].append(
+                        f"{mutation['name']}: the run went red without {mutation['test']} "
+                        f"failing ({counts or 'no summary'}) — the mutation broke collection "
+                        f"rather than the property"
+                    )
+                elif not pin_green:
+                    result["caught"] += 1
+                    result["mechanism"][mutation["name"]] = (
+                        f"killed by its named test {mutation['test']}"
+                    )
+                else:
+                    # The named test shrugged. Ask the whole suite what did
+                    # notice, because "something else bit" and "nothing bit"
+                    # are different findings and only one of them is a hole.
+                    suite_green, suite_output = _run(command, root)
+                    result["survived"].append(mutation["name"])
+                    others = [t for t in _failing_tests(suite_output) if mutation["test"] not in t]
+                    if suite_green:
+                        result["mechanism"][mutation["name"]] = (
+                            f"named test {mutation['test']} passed and so did the "
+                            f"whole suite — nothing bites"
+                        )
+                    else:
+                        result["mechanism"][mutation["name"]] = (
+                            f"named test {mutation['test']} PASSED but the suite went "
+                            f"red elsewhere ({', '.join(others[:3]) or 'unparsed'}) — the "
+{
+  "_why": "Every failure of a section bound is SILENT. A truncated section is still a plausible string, and a positive assertion that happens to land before the cut still passes — which is exactly how a fence-blind bound hid 24,270 characters of `## Phase 5 (Implementation) sub-steps` from three live pins without a single test going red. So the mutants here do not break behaviour a normal assertion would notice; each one shortens or lengthens the extract, and only a test that reaches for text on the far side of the boundary can tell.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_docsections.py",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "fence-tracking-removed",
+      "_mechanism": "Never enter a fence, so a `# comment` at column 0 inside a ``` block reads as a heading and ends the section inside its own example. This is the exact pre-fix behaviour of the local helper in `test_h_mad_wire_registry.py`, measured against the real SKILL.md: the section ended at 54555 instead of 78825. The fixture pin catches it, and so does the live-file pin — deliberately both, because a fixture written from the tight case is green on this bug.",
+      "file": "tests/docsections.py",
+      "find": "        if stripped.startswith(\"```\"):",
+      "replace": "        if False:",
+      "_killed_by": "tests/test_docsections.py::test_a_fenced_comment_does_not_end_the_section"
+    },
+    {
+      "name": "section-no-longer-owns-its-subsections",
+      "_mechanism": "Bound on ANY heading rather than same-or-higher, so a `##` section is cut at its first `###`. The extract is still non-empty and still starts correctly, so every assertion about the section's opening keeps passing while everything after the first subsection silently leaves the measured range.",
+      "file": "tests/docsections.py",
+      "find": "        elif not in_fence and re.match(rf\"^#{{1,{level}}} \", line):",
+      "replace": "        elif not in_fence and re.match(r\"^#+ \", line):",
+      "_killed_by": "tests/test_docsections.py::test_a_section_owns_its_subsections"
+    },
+    {
+      "name": "offset-anchored-bound-runs-to-end-of-file",
+      "_mechanism": "`section_from` returns the rest of the document. Nothing fails and every positive assertion still passes — it is a byte window with no ceiling, which is strictly worse than the fixed window it replaced, because the pin now measures the whole file and can never distinguish 'documented here' from 'documented anywhere'.",
+      "file": "tests/docsections.py",
+      "find": "    return text[offset:_fence_aware_end(text, offset, level)]",
+      "replace": "    return text[offset:]",
+      "_killed_by": "tests/test_docsections.py::test_section_from_bounds_an_offset_anchored_pin"
+    },
+    {
+      "name": "missing-heading-returns-empty-instead-of-failing",
+      "_mechanism": "A renamed or deleted heading yields '' and every `in` assertion over it becomes False — which reads as a doc regression rather than a broken pin — while every `not in` assertion becomes VACUOUSLY TRUE. The loud assert is what keeps a missing section from being reported as a passing guard.",
+      "file": "tests/docsections.py",
+      "find": "    assert match, f\"missing section {heading!r}\"",
+      "replace": "    if not match: return \"\"",
+      "_killed_by": "tests/test_docsections.py::test_a_missing_heading_fails_loudly"
+    }
+  ]
+}
+"""Bound a Markdown section on structure, never on a byte count.
+
+Two failures produced this module, both measured in this repo.
+
+**A fixed-width window goes vacuous as its section grows.** `s[i:i + 4000]`
+silently stopped covering the end of its own section the moment a paragraph was
+added: the `HALT`/`DENY` pin failed for the wrong reason ("the test lost sight of
+the text", not "the doc regressed"), and had the growth been elsewhere it would
+have PASSED while measuring nothing.
+
+**A level-aware bound that ignores fences truncates at a bash comment.** A
+`# comment` at column 0 inside a ``` block matches `^#{1,2} ` and ends the
+section inside its own example. Measured 2026-09-01 against `h-mad/SKILL.md`:
+the fence-blind bound ended `## Phase 5 (Implementation) sub-steps` at offset
+54555 where the fence-aware one ends at 78825 — **24,270 characters** of the
+section were invisible to the three tests reading it. No assertion was vacuous
+at the time only because all of them happened to be positive and landed early;
+a negative assertion over that range would have passed against text it never saw.
+
+So both callers are served here rather than re-derived per file. Two same-named
+helpers already grew inside one test file because the first was not found.
+"""
+
+from __future__ import annotations
+
+import re
+
+__all__ = ["titled_section", "section_from"]
+
+
+def _fence_aware_end(text: str, start: int, level: int) -> int:
+    """Offset of the next heading at `level` or higher, ignoring fenced blocks."""
+    off = start
+    in_fence = False
+    for line in text[start:].splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and re.match(rf"^#{{1,{level}}} ", line):
+            return off
+        off += len(line)
+    return len(text)
+
+
+def titled_section(text: str, heading: str) -> str:
+    """The named section's body, bounded by the next same-or-higher heading.
+
+    `heading` is the text after the `#`s. The section OWNS its subsections: a
+    bound that stopped at any heading would cut a `##` section short at its first
+    `###` and every assertion about the later part would fail for the wrong
+    reason.
+    """
+    match = re.search(rf"(?m)^(?P<marks>#+) {re.escape(heading)}\s*$", text)
+    assert match, f"missing section {heading!r}"
+    level = len(match.group("marks"))
+    return text[match.end():_fence_aware_end(text, match.end(), level)]
+
+
+def section_from(text: str, offset: int, level: int = 2) -> str:
+    """From an arbitrary offset to the next heading at `level` or higher.
+
+    For a pin anchored on a symbol rather than a heading — the case a byte window
+    is usually reached for, because the anchor is mid-section and there is no
+    title to name.
+    """
+    return text[offset:_fence_aware_end(text, offset, level)]
+"""The section bound is structural, and the fence is the part that gets dropped.
+
+Every mutant of this helper is silent: a section that ends early still returns a
+plausible string, and a positive assertion that happens to land before the cut
+still passes. So the pins here are (a) a fixture whose `# comment` sits at column
+zero inside a fenced block, and (b) the real document, because the 24k truncation
+was found in `h-mad/SKILL.md` and not in any fixture anyone had written.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from docsections import section_from, titled_section
+
+SKILL_MD = Path(__file__).resolve().parents[1] / "SKILL.md"
+
+FIXTURE = """\
+# Title
+
+## Alpha
+
+before the block
+
+```bash
+# this comment is a heading to a fence-blind bound
+echo hi
+```
+
+after the block
+
+### Alpha's own subsection
+
+still inside Alpha
+
+## Beta
+
+not Alpha
+"""
+
+
+def test_a_fenced_comment_does_not_end_the_section() -> None:
+    """The discriminating case. A fence-blind bound stops at the `# this comment`
+    line and returns a section that ends before `after the block`."""
+    alpha = titled_section(FIXTURE, "Alpha")
+    assert "before the block" in alpha
+    assert "after the block" in alpha, "the bound stopped inside a fenced block"
+
+
+def test_a_section_owns_its_subsections() -> None:
+    alpha = titled_section(FIXTURE, "Alpha")
+    assert "still inside Alpha" in alpha
+
+
+def test_the_section_stops_at_the_next_same_level_heading() -> None:
+    alpha = titled_section(FIXTURE, "Alpha")
+    assert "not Alpha" not in alpha
+
+
+def test_a_missing_heading_fails_loudly() -> None:
+    """Returning '' would make every later assertion vacuous."""
+    with pytest.raises(AssertionError):
+        titled_section(FIXTURE, "Gamma")
+
+
+def test_section_from_bounds_an_offset_anchored_pin() -> None:
+    body = section_from(FIXTURE, FIXTURE.index("before the block"))
+    assert "after the block" in body and "still inside Alpha" in body
+    assert "not Alpha" not in body
+
+
+# --- the regression that produced this module, pinned on the REAL file --------
+
+
+def test_the_live_phase5_section_extends_past_its_fenced_blocks() -> None:
+    """Measured 2026-09-01: a fence-blind bound ended this section 24,270
+    characters early, so three tests in `test_h_mad_wire_registry.py` were reading
+    roughly two thirds of what they believed they covered.
+
+    Pinned against the committed document rather than a fixture, because a
+    fixture written from the tight case is green on the bug — the same reason
+    `docs/skill-candidates.md` carries `pin-a-doc-lint-against-the-real-file`.
+    """
+    text = SKILL_MD.read_text(encoding="utf-8")
+    phase5 = titled_section(text, "Phase 5 (Implementation) sub-steps")
+    assert "```" in phase5, "the section must still contain the fenced blocks"
+    # A landmark from the far end of the section: present only if the bound did
+    # not stop at the first fenced `#` comment.
+    assert "Dispatch channels and their guarantees" in phase5, (
+        "the Phase 5 section was truncated at a fenced comment: "
+        f"{len(phase5)} chars extracted"
+    )
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "sed -n '250,360p' docs/01-plan/features/doc-block-exec.impl-plan.md && sed -n '360,610p' docs/01-plan/features/doc-block-exec.impl-plan.md" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+
+def titled_section(text: str, heading: str) -> str:
+    ...  # return text[match.end():_dbe.fence_aware_end(text, match.end(), level)]
+
+def section_from(text: str, offset: int, level: int = 2) -> str:
+    return text[offset:_dbe.fence_aware_end(text, offset, level)]
+# `_fence_aware_end` is deleted; `__all__ = ["titled_section", "section_from"]` is unchanged.
+```
+
+```python
+# h-mad/tests/test_docsections.py  (delta — the RED-safe WIRE-PIN scaffold)
+import importlib, sys, types
+import docsections
+
+FENCED = "## Section\n```\n# not a heading\n```\nanchor text\n## Next\n"
+
+def test_docsections_delegates_to_the_authoritative_bounder() -> None:
+    calls: list[tuple[str, int, int]] = []
+    try:
+        import h_mad_doc_block_exec as _real      # importable from GREEN on (docsections put scripts on sys.path)
+    except ImportError:
+        _real = None                              # RED: the module does not exist yet
+    def recording(text: str, offset: int, level: int) -> int:
+        calls.append((text, offset, level))
+        return _real.fence_aware_end(text, offset, level) if _real is not None else len(text)
+    fake = types.ModuleType("h_mad_doc_block_exec")
+    fake.fence_aware_end = recording
+    saved = sys.modules.get("h_mad_doc_block_exec")
+    sys.modules["h_mad_doc_block_exec"] = fake
+    try:
+        importlib.reload(docsections)             # re-runs the module-level import: binds the fake at GREEN; a no-op at RED
+        docsections.titled_section(FENCED, "Section")
+        docsections.section_from(FENCED, FENCED.index("anchor"), 2)
+    finally:
+        if saved is None:
+            sys.modules.pop("h_mad_doc_block_exec", None)
+        else:
+            sys.modules["h_mad_doc_block_exec"] = saved
+        importlib.reload(docsections)             # `_dbe` rebinds to the real module; no later test sees the fake
+    assert len(calls) == 2, f"docsections did not delegate to the authoritative bounder: {calls!r}"
+    assert calls[0][0] == FENCED and calls[0][2] == 2       # titled_section: (text, match.end(), level)
+    assert calls[1] == (FENCED, FENCED.index("anchor"), 2)  # section_from:   (text, offset, level)
+```
+`importlib.reload` is required because `docsections` is already imported by the time the test
+body runs (the test module's own `from docsections import section_from, titled_section`), so a plain `import` would not
+re-execute the module-level `import h_mad_doc_block_exec as _dbe` line. At RED (`docsections.py`
+unchanged, stdlib-only) the reload is harmless and the recorder is never called, so the test
+fails on `len(calls) == 2` — never an `ImportError`/`AttributeError`. At GREEN the reload
+re-executes the delegating import, which finds the fake in `sys.modules` first, so both callers
+hit the recorder.
+
+**Acceptance Criteria** (each is one named test; in `test_h_mad_doc_block_exec.py` unless stated):
+- [ ] AC-1.1 `test_tagged_fence_under_heading_is_extracted`: a section with one tagged and one untagged fence yields exactly the tagged block, `shell == "strict"`, `lineno` = the opener's 1-based line, `text` = the body verbatim.
+- [ ] AC-1.2 `test_untagged_fence_is_not_a_candidate`: a section with only untagged fences yields `[]`.
+- [ ] AC-1.3 `test_two_tagged_blocks_without_index_are_ambiguous`: `select` on two blocks with no index raises `AmbiguousBlock` with `n == 2`.
+- [ ] AC-1.4 `test_index_selects_and_past_end_is_not_found`: `select(blocks, 2)` returns the second; `select(blocks, 3)` on two raises `BlockNotFound`.
+- [ ] AC-1.5 `test_section_owns_deeper_headings`: a `##` section containing `###` sub-headings with a tagged fence under one of them yields that fence; the next `##` (and a `#`) ends it.
+- [ ] AC-1.5 `test_heading_lookalikes_are_not_headings`: a fixture placing `#hashtag`, `#######` (seven) and `    ## x` (four-space-indented) where each would end the requested section or start one — the block under the real heading is still the only candidate (the section owns the block past every lookalike), and a lookalike never matches the requested heading (asking for `hashtag`, `x` or the seven-run text yields no heading match).
+- [ ] AC-1.5/1.6 `test_requested_heading_quoted_inside_a_fence_is_not_a_section_start`: the requested heading appears first inside a ```` ```markdown ```` fence with a tagged block under that quoted copy, then for real with a tagged block under it; `extract` returns only the block under the real heading (the fenced copy is a `body` line, never a heading match, and the tagged block under it is never a candidate).
+- [ ] AC-1.6 `test_quoted_tag_inside_longer_fence_is_not_an_opener`: a four-backtick fence whose body contains ` ```bash hmad:exec ` yields no candidate from the quoted line; `test_tag_quoted_inside_a_tilde_fence_is_not_an_opener`: same inside `~~~`; `test_indented_literal_tag_is_not_a_candidate`: `    ```bash hmad:exec` (four spaces) is never a candidate; `test_backtick_in_info_string_is_not_an_opener`: ```` ```bash hmad:exec `x` ```` is inert — not a candidate, not `BadInfoString`, and the following ``` line opens a fence; `test_closer_with_trailing_text_does_not_close`: a ```` ```trailing ```` line inside a quoting fence does not close it; `test_indented_closer_does_not_close`: a ```` ``` ```` line at four spaces inside a bash fence stays in the body and the fence ends at the next 0–3-space closer; `test_indented_fence_body_is_deindented`: openers at 1, 2 and 3 spaces yield bodies with that indentation stripped, and a body line indented less than the opener loses only what it has.
+- [ ] AC-1.7 `test_duplicate_headings_refuse`: two identical `###` headings (fixture mirrors `h-mad/invariants.example.md`) → `AmbiguousHeading` with `n == 2`.
+- [ ] AC-1.8 (bounder's own contract) `test_bounder_ignores_a_heading_inside_a_tilde_fence`, `test_bounder_ignores_an_indented_literal_fence`, `test_bounder_from_an_offset_inside_a_fence` (`start` inside an open fence; a fenced `#` after it does not end the section), `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (`start` immediately after the three backticks of a ```` ```trailing ```` body line; the next fenced `#` still does not end the section), `test_fence_events_trace_on_every_hostile_fixture` (exact event trace over: balanced and unbalanced four-backtick, tilde-quoted backtick, backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence), `test_extract_has_no_fence_state_of_its_own` (source assertion on marker-run **recognition**: the literals ```` ``` ```` and `~~~`, the run-length regex, any `in_fence` toggle, and the ATX heading regex (a `#{1,6}` pattern or any `startswith("#")` test) appear in exactly one function body, `_fence_events`; consumers may read `_FenceEvent.kind`/`.marker`/`.run`/`.indent`/`.info`/`.candidate`, and `extract` selects on `.candidate`, never on `.marker`).
+- [ ] AC-1.8 (the wire) `test_docsections_delegates_to_the_authoritative_bounder` (WIRE-PIN, in `test_docsections.py`, scaffold above): `titled_section` and `section_from` on the fenced fixture each record exactly one call on the `sys.modules` fake's `fence_aware_end` with `(text, offset, level)`; its RED reason is the assertion on the call record, never an import error.
+- [ ] AC-1.8 `test_docsections_has_no_second_bounder`: the source of `docsections.py` defines no function named `_fence_aware_end` and contains no marker-run scanning (the same source predicate as `test_extract_has_no_fence_state_of_its_own`, applied to that file).
+- [ ] AC-1.8 `test_docsections_imports_when_collected_alone`: `subprocess.run([sys.executable, "-m", "pytest", "h-mad/tests/test_docsections.py", "-q"], cwd=REPO_ROOT)` exits 0 (nothing but `docsections.py` itself puts `h-mad/scripts` on `sys.path` in that run); `test_docsections_imports_from_an_unrelated_cwd`: `subprocess.run([sys.executable, "-c", "import docsections"], env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "h-mad" / "tests")}, cwd=tmp_path)` exits 0. Both live in `test_h_mad_doc_block_exec.py`, which never imports `docsections` at module level.
+- [ ] AC-1.8 the existing `test_docsections.py` tests pass unchanged, and the shared bounder handles the unbalanced four-backtick case the old toggle got wrong (`test_docsections_unbalanced_four_backtick_fence`, in `test_h_mad_doc_block_exec.py`, calling `docsections.titled_section` on the fixture through a function-local `import docsections`: a ```` ```` ```` opener followed by a ```` ``` ```` line and a `# comment` at column 0 — the toggle ends the section at the comment; the bounder does not).
+- [ ] AC-1.9 `test_index_zero_refuses`: `select(blocks, 0)` and `select(blocks, -1)` raise `BadIndex` carrying the value, and no lookup happened (the blocks list may be empty).
+- [ ] AC-3.7 `test_unknown_info_key_refuses` (`shell=fish`, `mode=x` → `BadInfoString` with that token) and `test_duplicate_info_tokens_refuse` (`hmad:exec hmad:exec`, `shell=strict shell=plain` → `BadInfoString` naming the repeated token); `test_untagged_fence_info_string_is_never_inspected` (` ```bash --frozen ` untagged raises nothing).
+- [ ] AC-3.12 `test_invalid_utf8_document_is_unreadable`: a document file containing byte `0xff` → `DocUnreadable` (and, once Task 4 lands, `UNREADABLE reason=doc_unreadable` on the CLI — the CLI half is added in Task 4).
+- [ ] `docsections.json` reports `ALL_CAUGHT` with six rows, each with a `test` key, under `target_command`; under `docsections-delegation-reverted` the WIRE-PIN fails and every test in `test_h_mad_doc_block_exec.py` stays green EXCEPT `test_docsections_has_no_second_bounder`, whose red is the source guard doing its job (the mutation's `test` key stays the WIRE-PIN).
+
+**Mutation rows added to `doc_block_exec.json`** (mechanism per the design's Test Plan table):
+`tag-check-removed`, `fence-run-length-ignored`, `section-bound-ignores-level`,
+`duplicate-heading-takes-first`, `select-first-on-ambiguous`, `index-below-one-accepted`,
+`duplicate-info-token-last-wins`, `unknown-info-key-ignored`, `scanner-duplicated-in-consumer`,
+`doc-decode-error-unwrapped`, `closer-trailing-text-accepted`, `body-indent-not-stripped`,
+`indented-opener-accepted`, `indented-closer-accepted`, `prefix-state-truncated-mid-line`,
+`prefix-fence-state-skipped`, `backtick-in-info-accepted`, `tilde-fence-not-tracked`,
+`heading-match-ignores-fence-state`, `heading-lookalike-accepted` (grammar loosened to
+`line.lstrip().startswith("#")`) — 20 rows.
+**Rows in `docsections.json`** after this task: the four existing (two re-anchored) plus
+`docsections-delegation-reverted` and `docsections-syspath-setup-removed` — 6 rows.
+
+**Dependencies on other tasks**: None.
+
+**Expected RED split** (stated in prose; the assembler does not require counts for a wiring task):
+- Every test in `test_h_mad_doc_block_exec.py` fails at RED — the module does not exist, so the file's own `import h_mad_doc_block_exec as dbe` raises `ModuleNotFoundError` at collection. That includes `test_docsections_has_no_second_bounder` (which would also fail on its source assertion), `test_docsections_unbalanced_four_backtick_fence` (which would also fail because the old toggle mis-bounds) and the two import tests, which are **insensitive to the docsections delta** (they pass against the unchanged, stdlib-only `docsections.py` as soon as their file collects) and are carried as **regression guards** for the import arrangement the delegating import introduces; their teeth are the `docsections-syspath-setup-removed` mutation, not RED.
+- In `test_docsections.py`: the WIRE-PIN — its only new test — fails on its call-record assertion (`len(calls) == 2`; the recorder was never called because the unchanged caller still calls its private `_fence_aware_end`).
+- All pre-existing `test_docsections.py` tests are regression guards and must pass at RED.
+Wire-scoped revert at 5e: apply `docsections-delegation-reverted` (the local `class _dbe` shim
+in place of the import), leave the helper and the tests intact — the WIRE-PIN must fail; every
+test in `test_h_mad_doc_block_exec.py` stays green EXCEPT `test_docsections_has_no_second_bounder`,
+whose red is the source guard doing its job (restoring a local toggle is a second bounder by
+definition); the mutation's `test` key stays the WIRE-PIN.
+
+---
+
+## Task 2: substitution
+
+**Production file**: `h-mad/scripts/h_mad_doc_block_exec.py`
+**Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py`
+**Task shape**: `new-behaviour`
+
+**Description**: `substitute(block, subs)` returns a **new** `Block` (`dataclasses.replace`) and a
+per-key count dict. An empty map short-circuits to `(dataclasses.replace(block), {})` before any
+regex is built. Otherwise: an empty key raises `BadSubstArg("")`; if any key is a substring of
+another, raise `OverlappingSubstitution(pairs)` where `pairs` is the sorted list of unordered
+`(shorter, longer)` tuples and the CLI's `keys=` counts **distinct keys implicated**; counts are
+taken on the original `block.text` (`text.count(key)` per key); every key with count 0 is
+collected **in the map's insertion order** and, if any, `MissingSubstitution(keys)` is raised;
+replacement is one simultaneous pass — `re.sub("|".join(map(re.escape, keys)), lambda m: subs[m.group(0)], text)` —
+replacement is one simultaneous pass — `re.sub("|".join(map(re.escape, keys)), lambda m: subs[m.group(0)], text)` —
+so replaced text is never re-scanned and the result is independent of map order.
+
+**Code structure**:
+```python
+# raises BadSubstArg, MissingSubstitution, OverlappingSubstitution — defined in Task 1
+# __all__ += ["substitute"]
+def substitute(block: Block, subs: Mapping[str, str]) -> tuple[Block, dict[str, int]]: ...
+```
+
+**Acceptance Criteria** (nine tests):
+- [ ] AC-2.1 `test_path_substitution_replaces_the_key`: `{"~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py": "/tmp/x y/gate.py"}` on a block containing the key yields text with the value (a path with a space) and count 1.
+- [ ] AC-2.2 `test_absent_key_refuses`: a key not in the block → `MissingSubstitution` with `keys == [key]`; `test_empty_substitution_map_is_a_no_op`: `substitute(block, {})` returns an equal `Block` that is not the same object and `{}`.
+- [ ] AC-2.3 `test_two_missing_keys_are_listed_in_map_order`: `{"B": "1", "A": "2"}` both absent → `keys == ["B", "A"]`.
+- [ ] AC-2.4 `test_metacharacter_key_is_literal`: key `a.[b]*` replaces only the literal occurrence.
+- [ ] AC-2.5 `test_multi_occurrence_count_equals_replacements`: a key occurring 3 times → count 3 and 3 replacements.
+- [ ] AC-2.6 `test_value_containing_another_key_is_not_rescanned`: `{"A": "B", "B": "C"}` and `{"B": "C", "A": "B"}` on `A B` both yield `B C` with counts `{"A": 1, "B": 1}`.
+- [ ] AC-2.7 `test_overlapping_keys_refuse`: keys `a`, `ab`, `abc` → `OverlappingSubstitution` with `pairs == [("a","ab"),("a","abc"),("ab","abc")]` and three distinct keys implicated.
+- [ ] AC-2.8 `test_empty_key_is_refused_by_the_api`: `substitute(block, {"": "v"})` → `BadSubstArg` with `raw == ""`.
+
+**Mutation rows added here**: `missing-key-silently-skipped`, `overlap-resolved-by-order`,
+`replacement-sequential`, `empty-map-not-short-circuited`, `empty-key-accepted-by-api` — 5 rows.
+
+**Dependencies on other tasks**: Task 1 (for `Block`).
+
+**Expected RED split**: all nine tests fail with `AttributeError` (`substitute` absent; its three
+exceptions already exist from Task 1); expected passing = 0; the Task 1 tests are regression guards and stay green.
+
+---
+
+## Task 3: execution and bounding
+
+**Production file**: `h-mad/scripts/h_mad_doc_block_exec.py`
+**Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py`
+**Task shape**: `new-behaviour`
+
+**Description**: `run_block(block, *, preamble=None, timeout=30.0)` calls the shared module-level
+`_validate_timeout(timeout)` first thing (`float()` conversion, `math.isfinite`, `> 0`; else
+`BadTimeout(value)` carrying the raw value — before `mkdtemp`, so nothing is created; the same
+validator is `main`'s pre-reservation check in Task 4, so one mutation row,
+`timeout-validation-removed`, covers both call sites); then `cwd = None`; inside a `try`: `cwd = tempfile.mkdtemp()`, `os.chmod(cwd, 0o700)`
+(a failure of either records `LaunchFailed("mkdtemp", err)` as the pending outcome — for `chmod`
+the cwd is set, so cleanup runs), composes the script as `preamble.rstrip("\n") + "\n" + block.text`
+when `preamble` is given else `block.text`, and launches **one** `bash` with
+`subprocess.Popen(["bash", "-euo", "pipefail", "-c", script] if block.shell == "strict" else ["bash", "-c", script], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", start_new_session=True)`
+(a `Popen` `OSError` records `LaunchFailed("spawn", err)`). `communicate(timeout=timeout)`; on
+`TimeoutExpired`: `proc.poll()` **then** `os.killpg(proc.pid, signal.SIGKILL)` — `ProcessLookupError`
+means already reaped; any other `OSError` records `LaunchFailed("reap", err, pgid=proc.pid)`;
+then a bounded drain `communicate(timeout=DRAIN_SECONDS)`, on whose own `TimeoutExpired` the helper
+closes `proc.stdout`/`proc.stderr` itself and calls `proc.wait()` **only** if the group was
+signalled or already gone (never on the `reap` branch); the pending outcome is `BlockTimeout(timeout)`
+unless a `LaunchFailed("reap")` was recorded. Nothing raises inside the handler. The `finally`
+runs `shutil.rmtree(cwd)` (no `ignore_errors`) when `cwd is not None`, recording an `OSError` as
+`cleanup_error` and never raising. **After** the `try`/`finally`, select: if `cwd is not None` and
+(`cleanup_error is not None` or `os.path.lexists(cwd)`) → raise `CleanupFailed(cwd, cleanup_error)`
+`from pending` (so `__cause__` is the pending `BlockTimeout`/`LaunchFailed` when there is one, else
+`cleanup_error`); elif `pending is not None` → raise it; else return
+`RunResult(rc=proc.returncode, stdout, stderr, shell=block.shell)`. `run_block` never substitutes.
+
+**Code structure**:
+```python
+# raises BadTimeout, BlockTimeout, CleanupFailed, LaunchFailed — defined in Task 1
+# __all__ += ["RunResult", "run_block"]
+@dataclass(frozen=True)
+class RunResult:     # lands here, beside run_block (design §Implementation Order, Task 3)
+    rc: int
+    stdout: str
+    stderr: str
+    shell: str
+
+def _validate_timeout(value: object) -> float:
+    """Shared by run_block (first thing) and main (before _reserve): float(value),
+    math.isfinite, > 0; else BadTimeout(value) carrying the raw value."""
+
+def _compose(preamble: str | None, text: str) -> str: ...
+def run_block(block: Block, *, preamble: str | None = None, timeout: float = 30.0) -> RunResult: ...
+```
+
+**Acceptance Criteria** (every test here calls `dbe.run_block` in-process at the API — none goes
+through the CLI; the eight that inject a seam are marked `(in-process, injected: ` + the seam`)` so the
+transport split in the Conventions is visible per test. **Every test that patches
+`dbe.shutil.rmtree` binds `real_rmtree = shutil.rmtree` BEFORE `monkeypatch.setattr(dbe.shutil, "rmtree", fake)`**
+— `dbe.shutil` is the process-global module, so without the binding the teardown would call the
+fake — **and removes a retained cwd with `real_rmtree(cwd)` in its `finally`**, the same pattern
+as AC-4.6's `real_killpg`; the five such tests are named with `real_rmtree` below):
+- [ ] AC-3.1 `test_block_runs_in_the_temp_cwd`: a `pwd` block reports a directory that is neither the repo root nor the document's directory and is gone afterwards.
+- [ ] AC-3.2 `test_block_leaves_the_working_tree_untouched`: a block that creates a file leaves `git status --porcelain` byte-identical.
+- [ ] AC-3.3 `test_unset_variable_fails_under_strict`: `echo $UNSET_X` → rc ≠ 0 strict, rc 0 plain.
+- [ ] AC-3.4 `test_bare_exit_in_plain_mode_returns_rc`: `exit 3` under `shell=plain` → `rc == 3`, and the test process is alive.
+- [ ] AC-3.5 `test_pipefail_strict_vs_plain`: `false | true` → rc ≠ 0 strict, 0 plain.
+- [ ] AC-3.6 `test_streams_are_separate_str`: stdout/stderr unmerged; `é` round-trips; `printf '\xff'` yields U+FFFD.
+- [ ] AC-3.11 `test_preamble_binds_a_variable_and_leaves_text_unchanged`; `test_preamble_and_substitution_compose` (preamble + a substituted key: the executed text carries the value); `test_preamble_without_trailing_newline_still_precedes_the_block`.
+- [ ] AC-3.12 `test_failing_preamble_is_visible_as_the_combined_rc`: preamble `false` under strict → rc ≠ 0 and its stderr.
+- [ ] AC-3.13 `test_cwd_mode_is_0700_under_hostile_umask`: with `os.umask(0o777)` around the call (restored in `finally`), a block running `stat -f %Lp .` (darwin) / `stat -c %a .` (GNU) prints `700`; `test_chmod_failure_is_a_verdict_and_removes_the_cwd` (in-process, injected: `os.chmod` injected to raise → `LaunchFailed("mkdtemp")` and the created directory is gone); `test_chmod_rollback_failure_is_cleanup_failed` (in-process, injected: `os.chmod` and `shutil.rmtree` both injected → `CleanupFailed` whose `__cause__` is the `LaunchFailed`; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_no_mktemp_invocation_in_source`.
+- [ ] AC-3.14 `test_cleanup_failure_is_reported` (`mkdir keep && chmod 000 keep` → `CleanupFailed` with `cleanup_error` a `PermissionError`; skipped when `euid == 0`; the test `chmod 700`s and removes the tree in its `finally`); `test_cleanup_failure_carries_the_os_error` (in-process, injected: `rmtree` injected to raise; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_readback_catches_silent_retention` (in-process, injected: `rmtree` injected as a no-op; `real_rmtree` bound before the patch removes the retained cwd in `finally`); `test_cleanup_error_after_successful_removal_is_still_a_failure` (in-process, injected: the fake calls `real_rmtree` — bound before the patch — then raises; `finally` calls `real_rmtree` under `ignore_errors=True` since the tree is already gone); `test_cleanup_failure_outranks_timeout_injected` (in-process, injected: `rmtree` raising under `sleep 300`, `timeout=1` → `CleanupFailed`, `__cause__` is the `BlockTimeout`, `cleanup_error` is the injected error, cwd read back present, removed in `finally` by `real_rmtree`, bound before the patch); `test_cleanup_failure_outranks_timeout` (real `chmod 000` fixture, skipped under root); `test_normal_run_reads_back_absent`.
+- [ ] AC-4.6 `test_mkdtemp_failure_is_a_verdict` (in-process, injected: `tempfile.mkdtemp` injected → `LaunchFailed("mkdtemp")`, nothing to clean); `test_spawn_failure_is_a_verdict` (`PATH` = empty dir → `LaunchFailed("spawn")`, cwd gone); `test_reap_failure_is_a_verdict_within_the_drain_bound` (in-process, injected: `os.killpg`): `real_killpg = os.killpg` bound **before** `monkeypatch.setattr(dbe.os, "killpg", fake)`; `fake` records the pgid and raises `PermissionError`; `Popen` wrapped in a recording pass-through; `sleep 300` under `timeout=1` → `LaunchFailed("reap", pgid=proc.pid)` raised within `1 + DRAIN_SECONDS + 2` s; teardown in `finally`: `real_killpg(pgid, SIGKILL)`, `recorded.wait()`, then assert `real_killpg(pgid, 0)` raises `ProcessLookupError`.
+- [ ] AC-5.1 `test_sleeping_block_times_out`: `sleep 300`, `timeout=1` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s.
+- [ ] AC-5.2 `test_in_group_descendant_is_reaped`: block text `sleep 300 & echo $! > PID_PATH; sleep 300`, run as `dbe.run_block(dbe.substitute(block, {"PID_PATH": str(pid_file)})[0], timeout=1)` where `pid_file` is under the test's `tmp_path` — the substitution map is how the absolute path reaches the block, because the child's cwd is a fresh private directory nothing can be placed in beforehand → after the timeout the pid read from `pid_file` is gone: `os.kill(pid, 0)` raises `ProcessLookupError`; `finally` reads the pid file if present and sends `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`.
+- [ ] AC-5.3 `test_no_timeout_invocation_in_source`: no argv token or shell command word `timeout`/`gtimeout` in the module source (a substring match on `timeout=`/`TimeoutExpired`/`BlockTimeout`/`--shell-timeout` must not trip it).
+- [ ] AC-5.4 `test_temp_cwd_removed_after_timeout`.
+- [ ] AC-5.5 both escapee tests share one fixture construction: the test writes `esc.py` under its own `tmp_path` (`os.setsid()`; write `os.getpid()` to the PID path given as `sys.argv[1]`; `time.sleep(300)` holding stdout) and passes BOTH absolute paths through the substitution map — `dbe.run_block(dbe.substitute(block, {"ESC_PATH": str(esc), "PID_PATH": str(pid_file)})[0], timeout=1)` — because the child's cwd is a fresh private directory, so `esc.py` cannot be placed there and only the substituted absolute paths make the block executable. `test_timeout_survives_a_group_that_already_emptied`: block text `python3 ESC_PATH PID_PATH & exit 0` (the leader exits at once; the group is empty when `killpg` runs) → `BlockTimeout`, no traceback, and the block's cwd is gone. `test_timeout_drain_is_bounded_against_an_escapee`: block text `python3 ESC_PATH PID_PATH & sleep 300` → `BlockTimeout` within `1 + DRAIN_SECONDS + 2` s wall time, cwd gone. Teardown for both, in `finally`: read the pid file, `os.kill(pid, signal.SIGKILL)` ignoring `ProcessLookupError`, then assert the block's cwd (captured through a recording `Popen` pass-through's `cwd` kwarg) no longer exists.
+- [ ] AC-5.6 `test_nonpositive_timeout_refuses_before_spawn`: `timeout=0`, `-1`, `math.nan`, `math.inf` → `BadTimeout` and the recording `Popen` pass-through was never called and no directory was created.
+
+**Mutation rows added here**: `strict-flags-dropped`, `preamble-separator-dropped`,
+`preamble-composed-with-unsubstituted-text`, `cwd-not-passed`, `chmod-0700-removed`,
+`cleanup-errors-ignored`, `cleanup-readback-removed`, `precedence-timeout-raised-in-handler`,
+`launch-oserror-unwrapped`, `killpg-replaced-by-kill`, `poll-before-killpg-removed`,
+`killpg-esrch-uncaught`, `drain-unbounded`, `timeout-validation-removed`,
+`chmod-failure-unwrapped`, `chmod-rollback-unguarded`, `cleanup-error-ignored-when-tree-gone`,
+`timeout-invocation-planted` — 18 rows.
+
+**Dependencies on other tasks**: Task 1 (`Block`); Task 2 only for the two
+compose-with-substitution tests, which call `substitute` first.
+
+**Expected RED split**: every test in this task fails (`run_block`, `RunResult` and
+`_validate_timeout` absent; the four exceptions already exist from Task 1)
+except `test_no_timeout_invocation_in_source` and `test_no_mktemp_invocation_in_source`, which are
+**regression guards** that pass from the first run (the source scan finds nothing in a module that
+does not yet spawn); expected passing = 2; Tasks 1–2 tests stay green.
+
+---
+
+## Task 4: CLI, stream artifacts, and the registry entry
+
+**Production file**: `h-mad/scripts/h_mad_doc_block_exec.py` and `h-mad/SKILL.md` (Helper-scripts registry entry)
+**Test file**: `h-mad/tests/test_h_mad_doc_block_exec.py`
+**Task shape**: `new-behaviour`
+
+**Description**: `main(argv)` parses with `argparse.ArgumentParser(allow_abbrev=False)`:
+positional `doc`, `--heading` (required), `--index` (`type=str`), `--subst` (`action="append"`),
+`--preamble-file`, `--shell-timeout` (`type=str`, default `"30"`), `--stdout`, `--stderr`; no
+`--all`/`--dir`/glob argument exists. Order: `extract` → `select` (a non-integer `--index` is
+`BadIndex(raw)`; parsed ints go to `select`) → build the map from `--subst` (split once on the
+first `=`; no `=` or empty key → `BadSubstArg(raw)`; repeated key → `BadSubstArg(raw, duplicate_key=k)`)
+→ `substitute` → `_validate_timeout(args.shell_timeout)` (the shared validator from Task 3:
+`float()` conversion, `math.isfinite`, `> 0`, else `BadTimeout(raw)` — **before** `_reserve`, so no
+artifact exists for any input-only refusal; `run_block` re-validates the float it receives, and the
+existing `timeout-validation-removed` row covers both call sites — no new row) → `--preamble-file`
+read as strict UTF-8 (`OSError`/`UnicodeDecodeError` → `PreambleUnreadable`) → **reserve** stdout
+then stderr → alias check → `run_block` → final writes.
+Reservation, per path, is a two-arm loop bounded to three round trips: `os.open(path, os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_EXCL, 0o644)`
+(created=True) else on `FileExistsError` `os.open(path, os.O_WRONLY|os.O_APPEND|os.O_NONBLOCK)`
+(created=False; `FileNotFoundError` here restarts the loop); the descriptor must `fstat` as
+`S_ISREG` else it is closed and refused; the handle is `os.fdopen(fd, "a", encoding="utf-8")`. If the
+second reservation fails, the first handle is closed and unlinked **only if** created. The whole
+stage — both loops, the `fstat` checks, the rollback — is one `try/except OSError` mapped to
+`StreamPathUnwritable`; loop exhaustion maps there too. Alias: `os.fstat` on both handles,
+equal `(st_dev, st_ino)` → close both, unlink created ones, `StreamPathsAlias`. Both handles are
+held in a `try`/`finally` spanning the alias check, `run_block` and the final writes. On the `RAN`
+path: for stdout then stderr, `_final_write(handle, text)` — `seek(0); truncate(); write(text); flush()`
+inside a `try` whose `finally` calls `_close_stream(handle)`, the whole thing inside the mapped
+region (first error wins; a close error is chained as `__context__`) — then **immediately** verify:
+`Path(path).read_bytes() == text.encode("utf-8", errors="replace")`; a mismatch, missing file or
+`OSError` on the read is `StreamWriteFailed(written, failed, skipped, verify=stream)`. A stdout
+failure (write or verify) skips stderr: `failed: stdout` / `skipped: stderr`; a stderr failure
+leaves stdout written: `written: stdout` / `failed: stderr`. The backstop `finally` calls
+`_close_stream` on each handle not already closed under `except OSError`, recording the first
+`(stream, error)` as `close_error` and never raising; after the `try`/`finally`, select: pending
+exit-2 `DocBlockError` → raise it with `close_error` attached as `__context__`; else if
+`close_error` → raise `StreamCloseFailed(stream, error)` `from pending` (pending is a
+`BlockTimeout` or `None`); else the pending outcome / the result. `main` catches `DocBlockError`
+and prints one `DOCBLOCK:` line per the verdict table plus detail lines, returning 0 or 2 per the
+partition; it never lets a `DocBlockError` or an `OSError` of its own escape. The verdict mapping
+is two module-level objects: `VERDICT_TABLE: dict[str, int]`, keyed by the **emitted line head at
+full granularity** (21 heads: `RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`,
+`BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`,
+`CLEANUP_FAILED`, `LAUNCH_FAILED stage=mkdtemp`, `LAUNCH_FAILED stage=spawn`,
+`LAUNCH_FAILED stage=reap`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`,
+`UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`,
+`UNREADABLE reason=stream_write_failed`, `UNREADABLE reason=stream_close_failed`) → exit code, and
+`_VERDICT_FOR: dict[type[DocBlockError], Callable[[DocBlockError], str]]`, mapping each exception
+class to the function that renders its head (so `LaunchFailed` renders `stage=` from its `stage`
+field and each `UNREADABLE` class its own `reason=`); `main` renders the head with `_VERDICT_FOR`,
+looks the exit code up in `VERDICT_TABLE`, and appends the verdict's variable fields
+(`rc=`/`blocks=`/`shell=`, `count=`, `index=`, `value=`, `keys=`, `heading=`) after the head. The
+emittable detail keys are a module-level tuple `DETAIL_KEYS`, so tests can enumerate all three.
+The `h-mad/SKILL.md` Helper-scripts entry for `h_mad_doc_block_exec.py` states the CLI contract
+and carries a table with one row per emittable line — every `DOCBLOCK:` token and every detail
+key — each with a remedy; the entry starts at the bullet ``- `h_mad_doc_block_exec.py` —`` and its
+table rows are the lines beginning `| \`` up to the next `- ` bullet.
+
+**Code structure**:
+```python
+# raises StreamPathUnwritable, StreamPathsAlias, PreambleUnreadable, StreamWriteFailed,
+# StreamCloseFailed — defined in Task 1
+# __all__ += ["main"]
+VERDICT_TABLE: dict[str, int] = {          # emitted line head → exit code; 21 entries, listed in the description
+    "RAN": 0, "NOT_FOUND": 0, "AMBIGUOUS": 0, "AMBIGUOUS_HEADING": 0, "BAD_INDEX": 0, "BAD_TIMEOUT": 0,
+    "BAD_SUBST": 0, "SUBST_MISSING": 0, "SUBST_OVERLAP": 0, "BAD_INFO": 0, "TIMEOUT": 0,
+    "CLEANUP_FAILED": 2, "LAUNCH_FAILED stage=mkdtemp": 2, "LAUNCH_FAILED stage=spawn": 2, "LAUNCH_FAILED stage=reap": 2,
+    "UNREADABLE reason=doc_unreadable": 2, "UNREADABLE reason=preamble_unreadable": 2,
+    "UNREADABLE reason=stream_paths_alias": 2, "UNREADABLE reason=stream_path_unwritable": 2,
+    "UNREADABLE reason=stream_write_failed": 2, "UNREADABLE reason=stream_close_failed": 2,
+}
+_VERDICT_FOR: dict[type[DocBlockError], Callable[[DocBlockError], str]] = {...}   # class → head renderer (every DocBlockError subclass)
+DETAIL_KEYS: tuple[str, ...] = ("missing_key:", "overlap:", "duplicate_key:", "os_error:", "pgid:",
+                                "written:", "failed:", "skipped:", "verify:")
+
+def _reserve(path: str) -> tuple[io.TextIOWrapper, bool]:       # (handle, created)
+def _final_write(handle: io.TextIOWrapper, text: str) -> None:  # seam: seek/truncate/write/flush, close in finally
+def _close_stream(handle: io.TextIOWrapper) -> None:            # seam: the one closure primitive
+def _verify(path: str, text: str) -> bool: ...
+def main(argv: Sequence[str] | None = None) -> int: ...
+if __name__ == "__main__": sys.exit(main())
+```
+
+**Acceptance Criteria**:
+- [ ] AC-1.3/1.4/1.7/1.9 CLI halves (subprocess): `test_cli_ambiguous_prints_blocks_and_heading` (`AMBIGUOUS blocks=2 heading=` followed by the `--heading` argument verbatim, exit 0), `test_cli_index_past_end_is_not_found`, `test_cli_duplicate_headings_refuse` (`AMBIGUOUS_HEADING count=2`, nothing executed), `test_cli_index_zero_and_negative_are_bad_index` (`BAD_INDEX index=0`/`-1`, exit 0, no side effect), `test_non_integer_index_is_bad_index`.
+- [ ] AC-2.2/2.3/2.7/2.8 CLI halves (subprocess): `test_cli_missing_keys_list_in_argument_order`, `test_cli_overlap_counts_distinct_keys`, `test_cli_no_subst_runs` (zero `--subst`), `test_subst_without_equals_is_bad_subst`, `test_subst_empty_key_is_bad_subst`, `test_duplicate_substitution_key_refuses` (`duplicate_key: K`), `test_subst_value_may_contain_equals` — each refusal executes nothing and reserves nothing (no artifact created).
+- [ ] AC-3.7 (subprocess) `test_cli_unknown_info_key_is_bad_info`; AC-3.12 (subprocess) `test_invalid_utf8_document_is_unreadable` CLI half (`UNREADABLE reason=doc_unreadable`, exit 2) and `test_invalid_utf8_preamble_is_unreadable`, `test_unreadable_preamble_path_refuses` (`preamble_unreadable`, exit 2, no side effect); `test_cli_preamble_file_reaches_the_block`.
+- [ ] AC-3.8 (subprocess) `test_stream_paths_receive_the_streams` (two files differ for a block writing different text); `test_streams_optional`; `test_stream_paths_truncate_an_existing_file`; `test_streams_untouched_after_a_timeout`; (in-process main, each) `test_stream_write_failure_after_the_run_is_a_refusal` (`_final_write` injected to raise → `UNREADABLE reason=stream_write_failed`, exit 2, no `rc=`); `test_first_stream_write_failure_skips_the_second` (`_final_write` injected to raise on the first handle: `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_second_stream_write_failure_leaves_the_first_as_written` (`_final_write` injected to raise on the second handle: `written: stdout` / `failed: stderr`); `test_final_write_close_failure_is_mapped` (seam patched to call the real `_final_write` with a recording proxy whose `close` alone raises → `stream_write_failed`, `failed: stdout`, exit 2, no traceback); `test_final_write_failure_before_close_still_closes` (proxy's `flush` and `close` both raise → same verdict and the proxy's `close` was called); `test_final_write_readback_catches_a_silent_no_op` (`_final_write` injected as a no-op → `stream_write_failed` with `verify: stdout`, `failed: stdout` / `skipped: stderr`, stderr bytes unchanged); `test_backstop_close_failure_on_timeout_is_mapped` (`_close_stream` injected to raise under `sleep 300`, `--shell-timeout 1`, `--stdout` given → `UNREADABLE reason=stream_close_failed`, `os_error:` line, exit 2, no traceback, cwd gone); `test_backstop_close_failure_does_not_outrank_a_refusal` (same injection under an aliased pair → still `stream_paths_alias`, exit 2, no traceback); `test_stream_handles_are_closed_on_every_path` (recording `os.open` pass-through, `_final_write` injected for the first-write-failure leg; after `TIMEOUT` and after a first-write failure, `os.fstat` on each recorded fd raises `OSError`).
+- [ ] AC-3.9 (subprocess) `test_symlinked_stream_paths_refuse`, `test_dot_slash_spelling_refuses`, `test_hard_linked_stream_paths_refuse` (`os.link`): `UNREADABLE reason=stream_paths_alias`, exit 2, block not run, both handles closed, a created file unlinked.
+- [ ] AC-3.10 (subprocess) `test_stream_path_under_a_regular_file_refuses` (parent is a regular file → `stream_path_unwritable`, exit 2, no traceback, side-effect block left nothing); `test_stream_path_fifo_without_reader_refuses_bounded` (`os.mkfifo` path, CLI run with `timeout=5` in the test's `subprocess.run`, refusal within 1 s); `test_stdout_survives_a_failed_stderr_reservation` (pre-existing stdout byte-identical; a created stdout unlinked).
+- [ ] AC-4.1 (subprocess) `test_ran_line_and_exit_zero_with_nonzero_rc`: `DOCBLOCK: RAN rc=3 blocks=1 shell=plain`, exit 0.
+- [ ] AC-4.2 `test_verdict_table_exit_codes`: parametrised over the 21 `VERDICT_TABLE` heads with one producer each — a subprocess producer for the 16 heads a real input or real fault yields (`RAN`, `NOT_FOUND`, `AMBIGUOUS`, `AMBIGUOUS_HEADING`, `BAD_INDEX`, `BAD_TIMEOUT`, `BAD_SUBST`, `SUBST_MISSING`, `SUBST_OVERLAP`, `BAD_INFO`, `TIMEOUT`, `LAUNCH_FAILED stage=spawn` via an empty `PATH`, `UNREADABLE reason=doc_unreadable`, `UNREADABLE reason=preamble_unreadable`, `UNREADABLE reason=stream_paths_alias`, `UNREADABLE reason=stream_path_unwritable`) and an in-process `main(argv)` producer for the 5 that need a seam injection (`CLEANUP_FAILED` via `shutil.rmtree` — `real_rmtree` bound first, retained cwd removed in `finally`, `LAUNCH_FAILED stage=mkdtemp` via `tempfile.mkdtemp`, `LAUNCH_FAILED stage=reap` via `os.killpg`, `UNREADABLE reason=stream_write_failed` via `_final_write`, `UNREADABLE reason=stream_close_failed` via `_close_stream`); either way the assertion compares the produced exit code (process exit or `main`'s return) with `VERDICT_TABLE[head]` and the emitted line starts with `DOCBLOCK: ` followed by the head; one assertion that `set(params) == set(VERDICT_TABLE)`; `test_every_docblockerror_subclass_has_a_verdict` (walk `DocBlockError.__subclasses__()` recursively; each is a `_VERDICT_FOR` key, and each renderer's head for a representative instance is a `VERDICT_TABLE` key).
+- [ ] AC-4.2 exit propagation (subprocess): `test_cli_exit_zero_propagates` (a document whose section has no tagged fence → `DOCBLOCK: NOT_FOUND`, process exit 0) and `test_cli_exit_two_propagates` (a document containing byte `0xff` → `DOCBLOCK: UNREADABLE reason=doc_unreadable`, process exit 2) — both compare the process exit with `VERDICT_TABLE[head]`, pinning that `sys.exit(main())` propagates `main`'s return value.
+- [ ] AC-4.3 (subprocess) `test_no_refusal_carries_rc`; AC-4.4 (subprocess) `test_only_ambiguous_carries_blocks`.
+- [ ] AC-4.5 `test_every_emittable_line_has_a_registry_row` (every `VERDICT_TABLE` key and every `DETAIL_KEYS` entry appears as the first backtick token of a row in the SKILL.md entry) and `test_registry_rows_cover_only_emittable_lines` (every row's first token is in that union).
+- [ ] AC-4.6 CLI halves: `test_cli_launch_failed_lines` — the `stage=spawn` leg (subprocess, empty `PATH`) and the `stage=mkdtemp` leg (in-process main, `tempfile.mkdtemp` injected), each its own `LAUNCH_FAILED stage=` head with an `os_error:` line, exit 2, no `rc=` — reap is covered in Task 3 at the API and here by the table test.
+- [ ] AC-5.6 (subprocess) `test_cli_bad_timeout_values`: `0`, `-1`, `nan`, `inf`, `abc` → `BAD_TIMEOUT value=` followed by the argument verbatim, exit 0, no side effect, **and with `--stdout`/`--stderr` given: a path that did not exist is still absent afterwards, and a pre-existing file keeps its bytes** (validation ran before `_reserve`); `test_non_numeric_timeout_is_bad_timeout`.
+- [ ] Parser (subprocess): `test_parser_rejects_all_dir_and_abbreviations` (`--all`, `--dir x`, `--shell-t 5` → argparse usage error, exit 2, no `DOCBLOCK:` line).
+
+**Mutation rows added here**: `subst-split-on-every-equals`, `subst-duplicate-key-last-wins`,
+`index-nonint-unmapped`, `timeout-nonnumeric-unmapped`, `preamble-decode-error-unwrapped`,
+`stream-reserved-with-truncation`, `final-write-close-not-in-finally`,
+`verify-deferred-past-second-write`, `final-write-not-verified`, `nonregular-stream-accepted`,
+`stream-open-blocking`, `stream-alias-check-removed`, `exit-partition-flipped`,
+`rc-leaked-into-refusal`, `stream-open-oserror-unwrapped`, `backstop-close-unmapped`,
+`backstop-close-outranks-error`, `registry-row-removed` (targets `h-mad/SKILL.md`),
+`detail-line-undocumented` — 19 rows. With Tasks 1, 2, 3 that is 20 + 5 + 18 + 19 = **62 rows**,
+60 of the helper's source and 2 of `SKILL.md`, matching design v1.56.
+
+**Dependencies on other tasks**: Tasks 1, 2, 3.
+
+**Expected RED split**: every test in this task fails (`main` absent → the subprocess tests see the
+CLI exit 1 with a traceback, the in-process `main` tests and the API tests raise `AttributeError`); expected passing = 0; Tasks 1–3 tests are
+regression guards and stay green. `doc_block_exec.json` must report `ALL_CAUGHT` over all 62 rows
+before this task is GREEN.
+
+---
+
+## Task 5: tag the gate fence and migrate the executing consumer
+
+**Production file**: `h-mad/SKILL.md` (Second-surface gate fence) and `h-mad/tests/test_h_mad_collect_report_docs.py`
+**Test file**: `h-mad/tests/test_h_mad_collect_report_docs.py` (gains six tests) and `h-mad/tests/test_h_mad_doc_block_exec.py` (gains two)
+**Mutation spec**: `h-mad/tests/mutation-specs/doc_block_exec_wire.json` (new)
+**Task shape**: `wiring`
+**WIRE 1**: `h-mad/tests/test_h_mad_collect_report_docs.py:_gate_block` → `dbe.extract` AND `dbe.select`
+**WIRE-PIN 1**: `h-mad/tests/test_h_mad_collect_report_docs.py::test_gate_block_resolves_through_doc_block_exec`
+**WIRE 2**: `h-mad/tests/test_h_mad_collect_report_docs.py:_run_recipe` → `dbe.substitute` AND `dbe.run_block`
+**WIRE-PIN 2**: `h-mad/tests/test_h_mad_collect_report_docs.py::test_recipe_runs_through_run_block`
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "sed -n '1788,1870p' h-mad/SKILL.md && sed -n '1,110p' h-mad/tests/test_h_mad_collect_report_docs.py && sed -n '250,430p' h-mad/tests/test_h_mad_collect_report_docs.py" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+asserting a disproven `exec` behaviour, a design cross-reference to a deleted plan clause, and an AC
+counter that went stale twice. A sweep has five surfaces — prose, code blocks, comments, ACs, and
+the PAIRED design — and numeral forms count. Closing a class in only one document of a pair
+RELOCATES it rather than fixing it.
+
+## Putting `hmad-dispatch` on PATH
+
+This file spells the wrapper as a bare `hmad-dispatch <verb>`. Put the skill's
+`bin/` on PATH once so those commands work verbatim instead of needing the
+absolute path to `scripts/hmad-dispatch.sh` (which differs per install and per
+checkout):
+
+```bash
+export PATH="$HOME/.claude/skills/h-mad/bin:$PATH"
+```
+
+## Second surface — the codex leg
+
+When an audit cycle needs a codex leg beside the primary reviewer, assemble a
+separate transport file for that surface and keep the staged report distinct:
+
+```bash
+RP=/tmp/audit_<feature>_<phase>_cycle<N>_codex.report.md
+rm -f "$RP" "$RP.done"
+python3 ~/.claude/skills/h-mad/scripts/h_mad_assemble_audit.py \
+  --feature <feature> --phase plan|design|impl-plan --cycle <N> \
+  --project-root <PROJECT_ROOT> \
+  --report-file "$RP" \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt
+```
+
+Dispatch it through the exec path so the codex process reads the assembled
+prompt directly and writes the contracted report file:
+
+```bash
+hmad-dispatch exec codex /tmp/audit_<feature>_<phase>_cycle<N>_codex.txt \
+  --cd <PROJECT_ROOT> \
+  --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
+  --log /tmp/audit_<feature>_<phase>_cycle<N>_codex.log --timeout 1800
+```
+
+After `exec codex` returns, collect the surface report into the docs audit path
+before running any gate:
+
+```bash
+COLLECT_OUT=$(hmad-dispatch collect-report --surface codex \
+  --feature <feature> --phase <phase> --cycle <N> \
+  --report "$RP" --out /tmp/audit_<feature>_<phase>_cycle<N>_codex.out.txt \
+  --project-root <PROJECT_ROOT>)
+printf '%s\n' "$COLLECT_OUT"
+```
+
+Read the `COLLECT:` token. Anything except `COLLECT: OK` is a delivery failure:
+halt `<phase>:report_not_collected` and print `[H-MAD] <feature> <phase> halted reason=report_not_collected`.
+Only the path printed on the `COLLECT: OK` line is gateable; the transport file
+is never the audit document.
+
+```bash
+if ! printf '%s\n' "$COLLECT_OUT" | grep -q '^COLLECT: OK '; then
+  printf '%s\n' '[H-MAD] <feature> <phase> halted reason=report_not_collected'
+else
+  DOCS=$(printf '%s\n' "$COLLECT_OUT" | sed -n 's/^COLLECT: OK path=\(.*\) delivered=.*/\1/p')
+  python3 ~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py "$DOCS"
+fi
+```
+
+## Helper scripts (all in `~/.claude/skills/h-mad/scripts/`)
+
+- `h_mad_extract_verdict.py` — read the last `STATUS:`/`VERDICT:`/`ASSESSMENT:` line off a scrape, validated against its contract; exit 2 (printing nothing) when absent, empty, or off-contract, so silence can never read as approval
+- `h_mad_extract_report.py` — pull the reviewer's report out of a pane scrape on the last `AUDIT-<feature>-<phase>-v<N>-BEGIN`/`-END` pair; exit 2 (writing nothing) when the pair is missing or empty
+- `h_mad_collect_report.py` — collect-report surface collector: copies a delivered report-file or `--out` fallback into the docs audit path, prints `COLLECT: OK|MISSING|CONFLICT` plus the collected path/delivery source, and performs readback before reporting success. `OK`/`MISSING`/`CONFLICT` exit 0 because they are measured outcomes; operational errors and readback failures exit 2. `--force` overwrites an existing collected report after a conflict.
+- `h_mad_offcontract_scan.py` — **where did the report actually go?** Locates an audit artifact written off-contract: `scan()` + CLI printing `OFFCONTRACT: NONE|FOUND|UNREADABLE`, exit 0 on `NONE` **and on `FOUND`** / 2 on `UNREADABLE reason=no_workspace`. `FOUND` exits 0 deliberately — this reports, it never decides. Reach for it when `h_mad_extract_report.py` exits 2: that exit is *correct* (silence must never score as a clean gate), but its remedy — `clear` and re-dispatch — is wrong when the audit already ran, and on a large prompt you pay a full cycle to reproduce a drop. **The defect it addresses is unfindability, not absence.** `exec agy` can honour neither the `--report-file` slot nor the sentinel pair while still doing the work and writing a real report at a path of its own choosing; two were observed eleven days apart — a workspace **dotfile** (`.design.audit.v14.md`, invisible to the `*audit.v14*` glob the orchestrator searches, which is exactly how one cycle concluded "no file was written" and re-dispatched over completed work) and `audit_report.md` in agy's own scratch directory while the run narrated "the current workspace". It therefore assumes **no** `audit.vN` stem — the whole failure is that the agent chose the name — and searches dotfiles too; `--cd <workspace>` plus agy's scratch dir by default, `--extra-dir` to widen, `--minutes`/`--since` to bound by mtime, `--expected` to exclude the path that was contracted for. **Its output does not feed the gate.** A report recovered this way has had NO schema enforcement applied, so it prints candidates with an explicit not-validated caution for a human to transcribe by hand, falsifying every premise against the source first; teaching `h_mad_extract_report.py` to glob these paths would score an unvalidated file as a clean gate, which is the opposite of the fix. `NONE` means nothing matched the search, **not** that the work was never done — it narrows a re-dispatch decision rather than making one. Closes J30. Stdlib-only.
+- `h_mad_audit_cycle.py` — audit-cycle verdict combiner: collects each pass from report-file transport or the always-armed `--out` fallback, gates delivered reports, and prints `AUDITCYCLE: PASS|FAIL|UNVERIFIED` + `[H-MAD]` marker, exit 0 on a verdict / 4 on operational error. `PASS` means all delivered passes gate cleanly; `FAIL` carries findings; `UNVERIFIED` means a pass produced no report or no gateable sections. `--pass` takes an optional 5th field, `i:<report>:<out>:<rc>[:<log>]`; when a log is given the render carries an **`Effort:`** block — per pass `tools=/ok=/failed=/thinking=`, and `low-evidence` when `ok` is at or below the 2 successful calls the report-file contract itself costs, i.e. the pass cannot have read anything (J49). **It reports; it never decides.** `combine()` cannot see it, the `AUDITCYCLE:` line is unchanged, and a named-but-unreadable log renders as `unreadable` rather than as zeros — `tools=0` is exactly what a genuinely hollow pass looks like.
+- `h_mad_audit_gate.py` — audit-gate verdict unit (single source of truth): `classify()` + CLI printing `GATE: PASS|FAIL` + `[H-MAD]` marker, exit 0 on verdict / 2 on operational error; `--must-only` for the `/h-mad do` precondition. Imported by `h_mad_do_preconditions.py`.
+- `h_mad_install_check.py` — verifies the install shape of this checkout's skills (the two symlinks §"First-run auto-bootstrap" depends on, plus every sibling skill the checkout ships): `check()` / `check_siblings()` + CLI printing `INSTALL: PASS|FAIL issues=N|UNREADABLE` followed by `SKILL_NOT_SYMLINK:`/`SKILL_NOT_INSTALLED:`/`SKILL_DANGLING:`/`SKILL_NOT_A_CHECKOUT:`/`HOOK_NOT_INSTALLED:`/`HOOK_DANGLING:`/`SPLIT_INSTALL:`/`SIBLING_NOT_SYMLINK:`/`SIBLING_DANGLING:`/`SIBLING_WRONG_CHECKOUT:` detail lines, exit 0 on a verdict / 2 only when no path was given. Read the token, never `$?`. Reads paths and repairs nothing — relinking `~/.claude` is an operator action.
+- `h_mad_resume_decision.py` — smart-resume decision
+- `h_mad_do_preconditions.py` — `/h-mad do` prereq verifier (uses `h_mad_audit_gate.classify` **and `has_gate_sections`**): `check()` + CLI printing `PRECONDITION: PASS|FAIL issues=N|UNREADABLE` followed by `MISSING:`/`INVALID:`/`DIRTY:` detail lines, exit 0 on a verdict / 2 only when `--repo-root` cannot be read. Read the token, never `$?`. **`INVALID:` is not `DIRTY:`** — it means the report carried no `## Must-fix`/`## Should-fix` sections at all, so it was refused rather than scored; there are no findings to go and fix, the report needs re-obtaining. This caller used to reach past `has_gate_sections` straight into `classify()`, so a heading-less report scored `must_count=0` and **cleared** the Phase-5 gate while the audit-gate CLI returned `GATE: INVALID` on the same file (#39). Route the check through the shared guard — re-deriving it is how the two drifted apart.
+- `h_mad_assemble_tdd.py` — Phase-5d/5e Codex dispatch assembler: `assemble()` / `task_body()` + CLI printing `ASSEMBLE-TDD: PASS <promptfile> <bytes>B phase=<red|green> task=<id> shape=<s>` followed by the verbatim command block (backgrounded `exec codex` with `--model`/`--effort`/`--out`/`--log`/`--timeout` → `progress` → `h_mad_extract_verdict.py --key STATUS` → an INDEPENDENT scoped pytest), exit 0 on PASS / 2 on `ASSEMBLE-TDD: HALT <reason>`. It stages the prompt and prints the commands; **it does not dispatch** — the dispatch/poll/wait loop is §"Exit-code dispatch for 5d/5e", and a driver that dispatches either blocks blind for the timeout or re-implements `progress`. Cuts §"Task N" out of the impl-plan using the wire-pin gate's own `_TASK_RE`/`_parse_tasks` rather than a second parser (#39), and stamps the phase into the task section because the template carries BOTH the RED and the GREEN instructions and nothing in it says which applies. Halt reasons: `task_not_found`, `impl_plan_unreadable`, `template_unreadable`, `residual_slots`, `no_wire_pin`, `counts_required`, `interpreter_has_no_pytest`, `sandbox_read_only`, `prompt_unwritable`. The defaults exist because hand-assembly produced five distinct mistakes, each an invocation default rather than a judgement: a model pinned in the assembler at all — it outranks the codex CLI's own `$CODEX_HOME/config.toml`, so the model the TUI shows and the model 5d/5e runs drift apart; `--model`/`--effort` are OVERRIDES, emitted only when given (effort reaches codex as `-c model_reasoning_effort=<e>`), and the escape hatch they provide is real because a configured `gpt-5.6-luna` cannot execute tools and fails as a well-formed `STATUS: BLOCKED`; a bare `python3` (3.14 here, no pytest) — so the chosen interpreter is PROBED for pytest and a failure names a working one; the prompt passed inline when `exec` takes a FILE PATH; `--sandbox read-only` on a run that executes pytest, which kills pytest's tempdir so the pass measures nothing — refused; and an unscoped pytest that collects the sibling project, so `--test-path` is required and the prompt tells the agent not to widen it. **What it refuses to guess is the judgement:** a 5d without `--expect-fail`/`--expect-pass` is `counts_required`, never defaulted, because "guard changed" and "test weakened" are otherwise indistinguishable. A `wiring` task needs no counts — the RED split is identical either way — but its `WIRE`/`WIRE-PIN` are carried automatically and a missing pin is `no_wire_pin`. Stdlib-only.
+- `h_mad_derive_test_path.sh` — production-path → test-path mapper
+- `h_mad_pane_janitor.py` — post-probe pane cleanup: `snapshot` / `plan` / `clean` + CLI printing `JANITOR: PLANNED|CLEANED|NOTHING|SNAPSHOT candidates=N settled=J closed=K skipped=S` or `JANITOR: REFUSED reason=<r>`, exit 0 on a verdict / 2 on a refusal. **Dry run unless `--apply`.** Refusal reasons: `cannot_identify_self`, `baseline_unreadable`, `baseline_malformed`, `too_many_candidates`, `orca_unavailable`, `orca_unparseable`, `orca_error`. The hard part is not closing panes, it is deciding which panes are the probe's: `worker-start` panes inherit the worktree name as their title, so they are indistinguishable from the operator's own agent pane, and each of the seven hand-runs re-typed the keep-list from memory. So take a `snapshot --worktree <path> --out <f>` BEFORE the probe and the keep-list is recorded rather than remembered; a candidate is then a pane in that worktree, absent from the baseline, and not the caller's own — the caller's handle is re-read live from `orca terminal show` (which with no `--terminal` returns the caller's pane) and the run REFUSES rather than proceeding when it cannot identify itself. **It settles before it closes**: an unsettled dispatch wedges its terminal permanently (`worker-abandon`/`worker-stop` both answer `dispatch_not_found` — upstream stablyai/orca#13005), so each candidate is looked up in `orchestration worker-list` (used rather than `task-list`, which needs a bound Run) and an unsettled one gets `task-update --status completed` first; a settle that FAILS leaves the pane open and says so, because a wedged terminal you can still see beats one you cannot. Every close carries an explicit `--terminal` — the CLI takes it optionally and a bare `terminal close` closes the CALLER'S pane. **Absence from the baseline is subtraction, and subtraction alone cannot tell the probe's panes from the operator's** — so a candidate is closed only when a `worker-list` row positively identifies it. One with no worker row is reported as `unidentified` and LEFT ALONE unless `--include-unidentified` is passed; an operator who opens a pane in the worktree after the snapshot (to tail a log while the probe runs) produces exactly that shape, and neither of the older guards saw it — `--max` only bounds how many get closed, and the self-handle protects the one shell the janitor runs in, not the operator's other tabs. Unidentified panes are always named, never silently skipped. `--max` (default 10) refuses a candidate set large enough to mean the baseline is wrong. A dry run reports `would_settle=`/`would_close=` rather than `settled=`/`closed=`, because a `PLANNED` line carrying `closed=1` reads as a pane that was closed. Live-verified 2026-08-25 on a real install: a freshly created pane came back with the title `~/orca/skills`, **byte-identical to a pre-existing pane in the same worktree** — the row's "indistinguishable by title" claim, confirmed, and the reason the baseline exists at all. Stdlib-only.
+- `h_mad_new_gate.py` — verdict-token gate scaffold: `scaffold()` + CLI printing `SCAFFOLD: WROTE name=<slug> token=<TOKEN> files=3` or `SCAFFOLD: REFUSED reason=<r>`, exit 0 on a write / 2 on a refusal. Refusal reasons: `bad_slug`, `bad_token`, `token_taken`, `would_overwrite`. Emits three files — `scripts/h_mad_<slug>.py`, `tests/test_h_mad_<slug>.py`, `tests/mutation-specs/<slug>.json` — and prints the registry line to paste here. **Counted 2026-08-25 from the scripts themselves: 20 distinct verdict tokens, 18 of them sharing one contract.** The code was never what cost time; three invariants were, and this emits them by construction with the tests that pin them: (1) a cannot-judge carries **no counts**, because a zero is byte-identical to "nothing was measured" and reads as clean — the shape that let a heading-less report score `must_count=0` and CLEAR the Phase-5 gate (#39); (2) **exit 0 on any verdict**, since a FAIL is a successful measurement and non-zero is reserved for operational failure, which is what lets a caller read the token rather than `$?`; (3) the docs table is **pinned bidirectionally** — every detail line the script can print has a remedy row here and vice versa. The generated suite is deliberately RED until the registry line is pasted, because the doc step is the one most easily skipped. The emitted mutation spec is ALL_CAUGHT out of the box; if it ever is not, the scaffold is shipping the appearance of coverage. Stdlib-only.
+- `h_mad_emit_marker.sh` — `[H-MAD]` marker writer
+- `h_mad_state_schema.json` — JSON Schema (Draft-07) for `orchestrator_state` (v2.2, strict tier). Validated by `jsonschema` when importable, otherwise by the stdlib validator bundled in `h_mad_state_validate.py`, so the state scripts run on a stock `python3` with no third-party packages (J4). The two are held to identical verdicts by a differential test.
+"""RED docs pins for the collect-report/codex-leg documentation.
+
+These tests intentionally pin the operator-facing docs only. Phase 5d must not
+modify the production docs; GREEN adds the section and registry entries these
+assertions describe.
+"""
+
+from __future__ import annotations
+
+import re
+import shlex
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILL_DIR = REPO_ROOT / "h-mad"
+SKILL_MD = SKILL_DIR / "SKILL.md"
+ORCHESTRATION_MODE = SKILL_DIR / "references" / "orchestration-mode.md"
+SCRIPT_DIR = SKILL_DIR / "scripts"
+
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from h_mad_audit_gate import is_transport_path  # noqa: E402
+
+
+SECOND_SURFACE_HEADING = "## Second surface — the codex leg"
+HELPER_HEADING = "## Helper scripts"
+PATH_HEADING = "## Putting `hmad-dispatch` on PATH"
+
+
+def _skill_doc() -> str:
+    return SKILL_MD.read_text(encoding="utf-8")
+
+
+def _orchestration_doc() -> str:
+    return ORCHESTRATION_MODE.read_text(encoding="utf-8")
+
+
+def _section(text: str, start: str, end: str) -> str:
+    """Return the section from heading ``start`` up to heading ``end``."""
+    start_index = text.find(start)
+    assert start_index != -1, f"document must contain section start `{start}`"
+    end_index = text.find(end, start_index + len(start))
+    assert end_index != -1, f"document must contain section end `{end}` after `{start}`"
+    return text[start_index:end_index]
+
+
+def _second_surface() -> str:
+    return _section(_skill_doc(), SECOND_SURFACE_HEADING, HELPER_HEADING)
+
+
+def _audit_prompt_assembly() -> str:
+    return _section(_skill_doc(), "## Audit prompt assembly", PATH_HEADING)
+
+
+def _report_capture_step() -> str:
+    section = _audit_prompt_assembly()
+    start = section.find("9. Capture the report.")
+    assert start != -1, "Audit prompt assembly must contain step 9 report capture"
+    end = section.find("\n10.", start)
+    assert end != -1, "Audit prompt assembly step 9 must end before step 10"
+    return section[start:end]
+
+
+def _helper_registry() -> str:
+    return _section(_skill_doc(), HELPER_HEADING, "## Working a `skill-monitoring` item")
+
+
+def _helper_entry(script_name: str) -> str:
+    registry = _helper_registry()
+    match = re.search(rf"^- `{re.escape(script_name)}`.*?(?=\n- `|\Z)", registry, re.M | re.S)
+    assert match, f"helper registry must list `{script_name}`"
+    return match.group(0)
+
+
+def _instantiate_rp_literal(literal: str) -> Path:
+    path_text = (
+        literal.removeprefix("RP=")
+        .replace("<feature>", "f")
+        .replace("<phase>", "plan")
+        .replace("<N>", "3")
+    )
+    return Path(path_text)
+
+
+def test_existing_6_6_report_file_literal_is_a_transport_path() -> None:
+    step = _section(_audit_prompt_assembly(), "6.6.", "\n7.")
+    match = re.search(r"RP=/tmp/audit_<feature>_<phase>_cycle<N>\.report\.md", step)
+
+    assert match, "SKILL.md step 6.6 must keep the existing report-file RP literal"
+    assert is_transport_path(_instantiate_rp_literal(match.group(0))), (
+        "step 6.6 RP literal must satisfy the audit transport filename grammar"
+    )
+
+
+def test_skill_mentions_collect_report_at_least_twice() -> None:
+    count = _skill_doc().count("collect-report")
+
+    assert count >= 2, (
+        "SKILL.md must mention `collect-report` at least twice for the codex-leg docs"
+    )
+
+
+def test_second_surface_section_is_between_path_setup_and_helper_registry_with_ordered_flow() -> None:
+    doc = _skill_doc()
+    path_index = doc.find(PATH_HEADING)
+    section_index = doc.find(SECOND_SURFACE_HEADING)
+    helper_index = doc.find(HELPER_HEADING)
+
+    assert "path=" in section, (
+        "Second surface must show that `COLLECT: OK` prints the collected path"
+    )
+
+    gate_line = next(
+        (line for line in section.splitlines() if "h_mad_audit_gate.py" in line),
+        "",
+    )
+    assert gate_line, "Second surface must include an h_mad_audit_gate.py gate line"
+
+    gated = gate_line.split("h_mad_audit_gate.py", 1)[1].strip()
+    assert gated.startswith('"$') or gated.startswith("$"), (
+        "the gate must run on a shell variable holding the path collect-report "
+        f"printed, not on a reconstructed literal; got: {gate_line!r}"
+    )
+
+
+def _gate_bash_block() -> str:
+    """Return the fenced bash block of the Second surface section that gates."""
+    section = _second_surface()
+    blocks = re.findall(r"```bash\n(.*?)```", section, re.S)
+    gating = [b for b in blocks if "h_mad_audit_gate.py" in b]
+    assert gating, "Second surface must contain a bash block that runs the gate"
+    assert len(gating) == 1, f"expected exactly one gating bash block, got {len(gating)}"
+    return gating[0]
+
+
+def test_gate_block_guards_on_the_collect_token_before_gating() -> None:
+    """The prose says anything but `COLLECT: OK` is a halt. The runnable example
+    must implement that, not merely sit beneath the sentence.
+    """
+    block = _gate_bash_block()
+
+    gate_index = block.index("h_mad_audit_gate.py")
+    before = block[:gate_index]
+
+    assert "COLLECT: OK" in before, (
+        "the gate block must test for the `COLLECT: OK` token before gating"
+    )
+    assert "report_not_collected" in before, (
+        "the gate block must name the report_not_collected halt before gating"
+    )
+
+
+def test_documented_gate_recipe_halts_instead_of_gating_an_empty_path(
+    tmp_path: Path,
+) -> None:
+    """Execute the documented snippet for real.
+
+    `COLLECT: MISSING` also prints a `path=` field, so a naive parse yields an
+    empty variable and the gate is then run on `""` — which fails with an
+    operational error and no halt marker, exactly the delivery failure the
+    section says to halt on.
+    """
+    import subprocess
+
+    collector = SCRIPT_DIR / "h_mad_collect_report.py"
+    gate = SCRIPT_DIR / "h_mad_audit_gate.py"
+
+    def run_recipe(*, phase: str, cycle: int, report: Path, root: Path) -> subprocess.CompletedProcess[str]:
+        block = _gate_bash_block()
+        # the doc addresses the installed skill; point the snippet at this tree
+        script = block.replace(
+            "~/.claude/skills/h-mad/scripts/h_mad_audit_gate.py", shlex.quote(str(gate))
+        )
+        # quote every interpolated path: the harness must not be the thing that
+        # breaks on whitespace, or it measures itself instead of the recipe
+        q = shlex.quote
+        preamble = (
+            f'COLLECT_OUT=$({q(sys.executable)} {q(str(collector))} --surface codex '
+            f'--feature f --phase {phase} --cycle {cycle} '
+            f'--report {q(str(report))} --project-root {q(str(root))})\n'
+        )
+        return subprocess.run(
+            ["bash", "-c", preamble + script],
+            capture_output=True,
+            text=True,
+        )
+
+    # a root with a space: this machine's own codex home is under
+    # "Application Support", so whitespace in a project root is ordinary.
+    root = tmp_path / "pro j"
+    (root / "docs/01-plan/features").mkdir(parents=True)
+    (root / "dispatch").mkdir()
+
+    # delivered: the gate must run on the collected path and pass
+    report = root / "dispatch" / "audit_f_plan_cycle3_codex.report.md"
+    report.write_text("## Must-fix\n\nNone\n\n## Should-fix\n\nNone\n", encoding="utf-8")
+    report.with_suffix(report.suffix + ".done").write_text("", encoding="utf-8")
+
+    ok = run_recipe(phase="plan", cycle=3, report=report, root=root)
+    assert "GATE: PASS" in ok.stdout, (
+        f"delivered report must reach the gate; stdout={ok.stdout!r} stderr={ok.stderr!r}"
+    )
+
+    # undelivered: MISSING must halt, never gate an empty path
+    missing = run_recipe(phase="plan", cycle=9, report=root / "absent.report.md", root=root)
+    combined = missing.stdout + missing.stderr
+
+    assert "GATE:" not in combined, (
+        "an undelivered report must not reach the gate at all; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+    assert "Is a directory" not in combined, (
+        "the recipe must not gate an empty path and crash; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+    assert "report_not_collected" in combined, (
+        "the recipe must emit the report_not_collected halt marker; "
+        f"stdout={missing.stdout!r} stderr={missing.stderr!r}"
+    )
+
+
+def test_gate_block_does_not_exit_the_operators_shell() -> None:
+    """The section is a paste-along recipe. A bare `exit` in it terminates an
+    interactive shell when the halt branch is taken, so the block must branch
+    around the gate instead of exiting.
+    """
+    block = _gate_bash_block()
+
+    offenders = [
+        line
+        for line in block.splitlines()
+        if re.match(r"\s*exit\b", line)
+    ]
+    assert not offenders, (
+        "the gate block must not `exit` — it would kill an interactive shell; "
+        f"offending lines: {offenders}"
+    )
+
+
+def test_second_surface_documents_the_out_fallback_rung() -> None:
+    """6a-prime cycle 2: the `--out` fallback is the recipe's recovery path.
+
+    The whole feature exists because report-file delivery sometimes fails —
+    measured 1 of 18 passes — and `collect-report` arms an `--out` rung for
+    exactly that case. A recipe that never mentions it leaves an operator with
+    no documented recovery when the marker never arrives.
+    """
+    section = _second_surface()
+
+    collect_line = next(
+        (line for line in section.splitlines() if "collect-report" in line and "--report" in line),
+        "",
+    )
+    assert collect_line or "--out" in section, "section must invoke collect-report"
+    assert "--out" in section, (
+        "the Second surface recipe must document collect-report's `--out` "
+        "fallback rung; without it the documented flow has no recovery when "
+        "report-file delivery fails"
+    )
+
+
+def test_exec_codex_dispatch_carries_out_log_and_timeout() -> None:
+    """6a-prime cycle 2: SKILL.md's own rule is 'pass --log on every exec dispatch'.
+
+    A bare `exec codex` is the blind-dispatch failure this skill documents at
+    length: no transcript to poll, no captured response, no watchdog bound.
+    """
+    section = _second_surface()
+
+    exec_block = next(
+        (b for b in re.findall(r"```bash\n(.*?)```", section, re.S) if "exec codex" in b),
+        "",
+    )
+    assert exec_block, "Second surface must dispatch the codex leg via exec"
+
+    for flag in ("--out", "--log", "--timeout"):
+        assert flag in exec_block, (
+            f"the exec codex dispatch must carry `{flag}` — SKILL.md requires "
+            "--log on every exec dispatch, and a verdict needs a captured --out"
+        )
+
+
+def test_codex_prompt_path_does_not_collide_with_the_agy_leg() -> None:
+    """6a-prime cycle 2: the two legs must not share one staged prompt file.
+
+    Step 7 stages the agy prompt at `/tmp/audit_<feature>_<phase>_cycle<N>.txt`,
+    which is also `h_mad_assemble_audit.py`'s default `--out`. A codex leg that
+    reads or writes that same path races the agy leg of the same cycle.
+    """
+
+hook: PostToolUse
+hook: PostToolUse Completed
+#hmad-beat 05:55:38Z codex running 121s
+codex
+I found one audit-gate concern in the scanner’s load-bearing grammar evidence; I’m checking whether it is already backed by a cited executable corpus before finalizing the report.
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "rg -n -i 'CommonMark|markdown-it|github|renderer|ATX|heading.*lookalike|trailing.*closer|indented.*closer|0–3|0-3' docs/02-design/features/doc-block-exec.design.md docs/01-plan/features/doc-block-exec.plan.md docs/01-plan/features/doc-block-exec.spec.md | head -180" in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+docs/01-plan/features/doc-block-exec.spec.md:37:  - AC-1.5: The section boundary is the next **ATX** heading (`#`-prefixed) at the same or
+docs/01-plan/features/doc-block-exec.spec.md:40:    recognised** — every document in these skills is ATX, `h-mad/tests/docsections.py` makes the
+docs/01-plan/features/doc-block-exec.spec.md:47:    including when the enclosing fence is a tilde fence** (`~~~`), which CommonMark defines as a
+docs/01-plan/features/doc-block-exec.spec.md:50:    **A backtick fence whose info string contains a backtick is not a fence** (CommonMark §4.5),
+docs/01-plan/features/doc-block-exec.spec.md:52:    measured on markdown-it-py and on GitHub's renderer, both of which emit it as a paragraph
+docs/01-plan/features/doc-block-exec.spec.md:53:    (tilde fences have no such rule). **Indentation follows CommonMark too**: a fence opener may be indented by at most three
+docs/01-plan/features/doc-block-exec.spec.md:56:    never a candidate — a hostile fixture pins it. A closer obeys the same 0–3 rule, and the
+docs/01-plan/features/doc-block-exec.spec.md:57:    opener's indentation is stripped from body lines only up to that count, as CommonMark
+docs/01-plan/features/doc-block-exec.spec.md:59:    Measured through GitHub's own renderer (`POST /markdown`, below): a `~~~` block quoting
+docs/01-plan/features/doc-block-exec.spec.md:473:- The `hmad:exec` info string is inert to the markdown renderers in use. **Specification-backed,
+docs/01-plan/features/doc-block-exec.spec.md:474:  measured on GitHub's real renderer and on the CommonMark reference port** — the repository
+docs/01-plan/features/doc-block-exec.spec.md:476:  excluding `archive/` → 0), so the renderers were probed directly. GitHub's `POST /markdown`
+docs/01-plan/features/doc-block-exec.spec.md:477:  endpoint is the renderer github.com uses:
+docs/01-plan/features/doc-block-exec.spec.md:481:  $ curl -s -X POST -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" --data @/tmp/gh_md.json https://api.github.com/markdown
+docs/01-plan/features/doc-block-exec.spec.md:492:  CommonMark reference port agrees (`markdown-it-py 4.2.0`, throwaway venv:
+docs/01-plan/features/doc-block-exec.spec.md:494:  Claude Code viewer has no headless renderer to probe; it is a CommonMark viewer and the one-line
+docs/01-plan/features/doc-block-exec.spec.md:524:- v1.5: Design audit v3: AC-1.1 reflects the extract/select split, AC-1.5 accepts ATX-only bounding explicitly, AC-3.7 scopes BAD_INFO to tagged fences only.
+docs/01-plan/features/doc-block-exec.spec.md:542:- v1.23: Design audit v14 (codex must 5; agy must 2): the renderer-inertness assumption is marked specification-backed but unmeasured (no multi-word fence in the tree, no local renderer) with a Phase-5 operator check; AC-5.5 names four permitted fault injections (os.chmod added); AC-3.13's chmod failure is tested and mutation-covered.
+docs/01-plan/features/doc-block-exec.spec.md:543:- v1.24: Design audit v15 (codex must 5 should 2; agy clean + 1 nit): AC-1.6 covers tilde fences; AC-3.14's failure rule is 'recorded error OR read-back present'; the renderer assumption is now MEASURED on GitHub's POST /markdown and on markdown-it-py, command and output cited; AC-3.8 orders the writes, reports partial state, and names the _final_write seam (fifth injection); AC-2.8's empty-key rule lives in substitute; AC-1.7 carries heading=.
+docs/01-plan/features/doc-block-exec.spec.md:545:- v1.26: Design audit v17 (codex must 1; agy pass UNVERIFIED, dispatch rc=1): AC-1.6 states the CommonMark 0-3 space indentation rule for openers and closers; a four-space-indented literal tag is never a candidate.
+docs/01-plan/features/doc-block-exec.spec.md:556:- v1.37: Design audit v38 (codex must 1; agy clean): AC-1.6 — a backtick fence whose info string contains a backtick is not a fence (CommonMark; measured on markdown-it-py and GitHub).
+docs/01-plan/features/doc-block-exec.plan.md:203:`fence_aware_end(text: str, start: int, level: int) -> int` — the offset of the next ATX heading
+docs/01-plan/features/doc-block-exec.plan.md:204:at `level` or shallower after `start`, ignoring fenced blocks with CommonMark backtick-run
+docs/01-plan/features/doc-block-exec.plan.md:271:| `extract` body normalisation | *(rule on `extract`, not a function)* | a selected fence's body is de-indented by **up to the opener's indentation** per line, as CommonMark specifies — an opener indented 1–3 spaces yields body text with those leading spaces removed and no more; recognising the fence correctly but returning un-normalised text is the gap this row closes. Test `test_indented_fence_body_is_deindented` (exact-text fixture at 1, 2 and 3 spaces, and a body line indented *less* than the opener, which is left as is); mutation `body-indent-not-stripped` |
+docs/01-plan/features/doc-block-exec.plan.md:272:| `fence_aware_end` | `(text: str, start: int, level: int) -> int` | offset of the next ATX heading at `level` or shallower, skipping fenced blocks under the full CommonMark fence rule — **backtick and tilde** runs of ≥3, closed only by the same character at ≥ the opening length **followed by nothing but spaces or tabs**, a backtick opener voided by any backtick in its info string (CommonMark; measured on both renderers — `backtick-in-info-accepted` / `test_backtick_in_info_string_is_not_an_opener`) (a ```` ```trailing ```` line is body text, not a closer — otherwise a quoting fence closes on paper and its quoted `hmad:exec` is read as executable; hostile fixture `test_closer_with_trailing_text_does_not_close`, mutation `closer-trailing-text-accepted`), opener and closer indented **0–3 spaces** (4+ is an indented code block, not a fence) — so a heading inside a `~~~` block never ends a section and an indented literal fence never opens one; **fence state is established over complete source lines through the line containing `start` — never a `text[:start]` slice, which can cut a line after its marker run and fake a closer — and boundaries are considered only at line starts after `start`**, so `start` may lie inside an open fence (the arbitrary offsets `docsections.section_from` passes) and a fenced `#` after it is never a boundary (`test_bounder_from_an_offset_inside_a_fence`, mutation `prefix-fence-state-skipped`); the bounder `extract` uses and `docsections` delegates to (AC-1.8). **The fence grammar has one home**: a private generator `_fence_events(text)` that both `extract` and `fence_aware_end` consume, so the two surfaces cannot diverge by construction; the fence-grammar mutations anchor in it, `test_fence_events_trace_on_every_hostile_fixture` asserts its exact event trace over every hostile fixture, and `scanner-duplicated-in-consumer` (a private fence toggle regrown inside `extract`) is killed by `test_extract_has_no_fence_state_of_its_own`, a source assertion. Bound to `test_bounder_ignores_a_heading_inside_a_tilde_fence` and `test_bounder_ignores_an_indented_literal_fence`, and to the design's `tilde-fence-not-tracked` and `indented-opener-accepted` mutations |
+docs/01-plan/features/doc-block-exec.plan.md:728:- v1.32: Plan re-audit v17 (codex must 2 should 1; agy clean) + design audit v21: fence_aware_end's contract names tilde runs and the 0-3 indentation rule with its tests and mutations; mutation-spec binding rule (root, command, target_command, full node IDs) for both new specs; extract's doc is a path; the naturally-emptied-group probe cited with poll()-first; five functions plus main; 37 mutations.
+docs/02-design/features/doc-block-exec.design.md:169:`indented-opener-accepted`, `indented-closer-accepted`, `closer-trailing-text-accepted`, `prefix-fence-state-skipped`), so
+docs/02-design/features/doc-block-exec.design.md:173:backtick-in-info, indented literal, trailing-text closer, offset-inside-a-fence) through
+docs/02-design/features/doc-block-exec.design.md:180:`in_fence`, **the opening fence's marker character (backtick or tilde) and its run length**. CommonMark fences come in both flavours, `~~~` closes only a `~~~`
+docs/02-design/features/doc-block-exec.design.md:181:fence, and a tilde fence can quote a backtick fence verbatim — measured through GitHub's renderer
+docs/02-design/features/doc-block-exec.design.md:186:feature must handle: CommonMark opens a fence with a run of *N* ≥ 3 backticks and closes it only
+docs/02-design/features/doc-block-exec.design.md:191:- a **backtick** opener whose info string contains a backtick is not a fence at all (CommonMark
+docs/02-design/features/doc-block-exec.design.md:194:  rather than closing one; tilde fences carry no such rule. Measured on both renderers used for
+docs/02-design/features/doc-block-exec.design.md:195:  AC-1.6 (markdown-it-py: `<p>```bash hmad:exec <code>x</code>…`; GitHub `POST /markdown`: the same
+docs/02-design/features/doc-block-exec.design.md:197:- an opener is recognised only when its marker run is preceded by **0–3 spaces** (CommonMark
+docs/02-design/features/doc-block-exec.design.md:200:  states, restated for indentation; the same 0–3 rule applies to a closer — a marker run preceded by
+docs/02-design/features/doc-block-exec.design.md:201:  four or more spaces inside a fence is body text, never the closer (`test_indented_closer_does_not_close`:
+docs/02-design/features/doc-block-exec.design.md:203:  next 0–3-space closer; mutation `indented-closer-accepted`) — and **`extract`
+docs/02-design/features/doc-block-exec.design.md:206:  CommonMark content of the fence, not its source bytes — recognising the fence but returning
+docs/02-design/features/doc-block-exec.design.md:210:  spaces or tabs (CommonMark: a closing fence carries no info string and no other text) closes
+docs/02-design/features/doc-block-exec.design.md:225:leading `#`. **A heading line is recognised by the CommonMark ATX rule (§4.2) and nothing looser**: 0–3 leading spaces, a run of 1–6 `#`, then a space, a tab or end of line, with an optional closing `#` run (preceded by a space) stripped before the text is compared — so `#hashtag`, a seven-`#` run, and a four-space-indented `## x` are prose, and the level is the run length of the opening hashes (`test_heading_lookalikes_are_not_headings`: each lookalike placed where it would end or start the section changes nothing; mutation `heading-lookalike-accepted`, the grammar loosened to `line.lstrip().startswith("#")`). **If more than one line matches, `extract`
+docs/02-design/features/doc-block-exec.design.md:228:from the wrong section. The opt-in tag guards *which block*; it cannot guard *which section*. **This is ATX-only by design and by
+docs/02-design/features/doc-block-exec.design.md:230:using them would bound wrongly rather than loudly. Every document in these skills is ATX, and the
+docs/02-design/features/doc-block-exec.design.md:535:    """Offset of the next ATX heading at `level` or shallower after `start`,
+docs/02-design/features/doc-block-exec.design.md:536:    skipping fenced blocks under the full CommonMark fence rule: backtick AND
+docs/02-design/features/doc-block-exec.design.md:538:    length, opener and closer indented 0-3 spaces (4+ is an indented code
+docs/02-design/features/doc-block-exec.design.md:921:| `heading-lookalike-accepted` | heading recognition is loosened to `line.lstrip().startswith("#")`, so `#hashtag`, a 7-`#` run or a 4-space-indented `## x` bounds or starts a section | `test_heading_lookalikes_are_not_headings` (AC-1.5 — the section under the real heading still owns the block past each lookalike, and a lookalike never matches the requested heading) |
+docs/02-design/features/doc-block-exec.design.md:947:| `closer-trailing-text-accepted` | a line whose marker run is followed by non-blank text closes the fence | `test_closer_with_trailing_text_does_not_close` (AC-1.6 — a ```` ```trailing ```` line inside a quoting fence must not close it) |
+docs/02-design/features/doc-block-exec.design.md:967:| `prefix-state-truncated-mid-line` | the prefix is fed as `text[:start]` instead of whole lines through the line containing `start`, so a ```` ```trailing ```` line cut after its run reads as a closer | `test_bounder_offset_after_a_marker_run_on_a_non_closing_line` (AC-1.8) |
+docs/02-design/features/doc-block-exec.design.md:973:| `indented-closer-accepted` | the scanner closes a fence on a marker run preceded by four or more spaces | `test_indented_closer_does_not_close` (AC-1.6 — the four-space ```` ```` ```` line stays body text and the fence ends at the next 0–3-space closer) |
+docs/02-design/features/doc-block-exec.design.md:1075:- v1.2: Design audit v2 (agy, 1 must + 2 should; codex clean): add the differential bounder test the Single-source contract requires, make substitution counting sequential and refuse overlapping keys, document the ATX-only heading assumption.
+docs/02-design/features/doc-block-exec.design.md:1098:- v1.25: Design audit v17 (codex must 1): 0-3 space indentation rule in the scanner, its hostile fixture and mutation (35 rows).
+docs/02-design/features/doc-block-exec.design.md:1117:- v1.44: Design audit v38 (codex must 1; agy clean): backtick-in-info prohibition in _fence_events, measured on both renderers, with its mutation (50 rows).
+docs/02-design/features/doc-block-exec.design.md:1122:- v1.49: Design audit v43 (codex must 1; agy must 1 should 1): _close_stream(handle) is the one closure primitive and the sixth named injection; main's backstop close records instead of raising and selects afterwards — StreamCloseFailed → UNREADABLE reason=stream_close_failed (exit 2, os_error:) outranks TIMEOUT, a pending exit-2 error outranks it (__context__); the three mapped OS-call regions of main stated as the class with its residual; indented-closer-accepted and stream-open-oserror-unwrapped mutations with their tests; 59 rows (57 + 2).
+docs/02-design/features/doc-block-exec.design.md:1129:- v1.56: Impl-plan audit v6 back-propagation (codex should): the ATX heading grammar is stated (CommonMark 4.2 — 0–3 spaces, 1–6 hashes, space/tab/EOL, optional closing run), with test_heading_lookalikes_are_not_headings and mutation heading-lookalike-accepted (62 rows: 60 + 2).
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+apply patch
+patch: completed
+/tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+diff --git a//tmp/audit_doc-block-exec_design_cycle53_codex.report.md b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1c12598b3e0efc3831f4311a45ec2613f42dd00
+--- /dev/null
++++ b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+@@ -0,0 +1,20 @@
++## Summary
++Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
++
++| Spec ACs | Classification |
++|---|---|
++| AC-1.1–AC-1.9 | implemented-as-written |
++| AC-2.1–AC-2.8 | implemented-as-written |
++| AC-3.1–AC-3.14 | implemented-as-written |
++| AC-4.1–AC-4.6 | implemented-as-written |
++| AC-5.1–AC-5.6 | implemented-as-written |
++| AC-6.1–AC-6.6 | implemented-as-written |
++
++## Must-fix
++- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
++
++## Should-fix
++- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
++
++## Nit
++None
+
+hook: PostToolUse
+hook: PostToolUse Completed
+diff --git a//tmp/audit_doc-block-exec_design_cycle53_codex.report.md b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1c12598b3e0efc3831f4311a45ec2613f42dd00
+--- /dev/null
++++ b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+@@ -0,0 +1,20 @@
++## Summary
++Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
++
++| Spec ACs | Classification |
++|---|---|
++| AC-1.1–AC-1.9 | implemented-as-written |
++| AC-2.1–AC-2.8 | implemented-as-written |
++| AC-3.1–AC-3.14 | implemented-as-written |
++| AC-4.1–AC-4.6 | implemented-as-written |
++| AC-5.1–AC-5.6 | implemented-as-written |
++| AC-6.1–AC-6.6 | implemented-as-written |
++
++## Must-fix
++- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
++
++## Should-fix
++- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
++
++## Nit
++None
+
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc ': > "/tmp/audit_doc-block-exec_design_cycle53_codex.report.md.done"' in /Users/kimhawk/orca/skills
+ succeeded in 0ms:
+hook: PostToolUse
+hook: PostToolUse Completed
+diff --git a//tmp/audit_doc-block-exec_design_cycle53_codex.report.md b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1c12598b3e0efc3831f4311a45ec2613f42dd00
+--- /dev/null
++++ b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+@@ -0,0 +1,20 @@
++## Summary
++Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
++
++| Spec ACs | Classification |
++|---|---|
++| AC-1.1–AC-1.9 | implemented-as-written |
++| AC-2.1–AC-2.8 | implemented-as-written |
++| AC-3.1–AC-3.14 | implemented-as-written |
++| AC-4.1–AC-4.6 | implemented-as-written |
++| AC-5.1–AC-5.6 | implemented-as-written |
++| AC-6.1–AC-6.6 | implemented-as-written |
++
++## Must-fix
++- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
++
++## Should-fix
++- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
++
++## Nit
++None
+
+codex
+AUDIT-doc-block-exec-design-v53-BEGIN
+## Summary
+Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
+
+| Spec ACs | Classification |
+|---|---|
+| AC-1.1–AC-1.9 | implemented-as-written |
+| AC-2.1–AC-2.8 | implemented-as-written |
+| AC-3.1–AC-3.14 | implemented-as-written |
+| AC-4.1–AC-4.6 | implemented-as-written |
+| AC-5.1–AC-5.6 | implemented-as-written |
+| AC-6.1–AC-6.6 | implemented-as-written |
+
+## Must-fix
+- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
+
+## Should-fix
+- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
+
+## Nit
+None
+AUDIT-doc-block-exec-design-v53-END
+diff --git a//tmp/audit_doc-block-exec_design_cycle53_codex.report.md b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1c12598b3e0efc3831f4311a45ec2613f42dd00
+--- /dev/null
++++ b//tmp/audit_doc-block-exec_design_cycle53_codex.report.md
+@@ -0,0 +1,20 @@
++## Summary
++Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
++
++| Spec ACs | Classification |
++|---|---|
++| AC-1.1–AC-1.9 | implemented-as-written |
++| AC-2.1–AC-2.8 | implemented-as-written |
++| AC-3.1–AC-3.14 | implemented-as-written |
++| AC-4.1–AC-4.6 | implemented-as-written |
++| AC-5.1–AC-5.6 | implemented-as-written |
++| AC-6.1–AC-6.6 | implemented-as-written |
++
++## Must-fix
++- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
++
++## Should-fix
++- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
++
++## Nit
++None
+
+hook: Stop
+hook: Stop Completed
+tokens used
+137,231
+AUDIT-doc-block-exec-design-v53-BEGIN
+## Summary
+Axis C reconciliation finds every spec acceptance criterion implemented as written; no AC is restated or absent. The design is otherwise internally consistent, but its scanner's load-bearing CommonMark grammar lacks the required executable evidence.
+
+| Spec ACs | Classification |
+|---|---|
+| AC-1.1–AC-1.9 | implemented-as-written |
+| AC-2.1–AC-2.8 | implemented-as-written |
+| AC-3.1–AC-3.14 | implemented-as-written |
+| AC-4.1–AC-4.6 | implemented-as-written |
+| AC-5.1–AC-5.6 | implemented-as-written |
+| AC-6.1–AC-6.6 | implemented-as-written |
+
+## Must-fix
+- The full CommonMark scanner grammar is asserted without a cited executable corpus — the design cites renderer output only for tagged-info-string inertness, tilde quoting, and backticks in a backtick-fence info string. It nevertheless makes the 0–3-space opener/closer limit, same-marker/minimum-run close rule, blank-tail closer rule, body de-indentation, and full ATX heading grammar load-bearing selection boundaries. Future unit fixtures share the proposed scanner model and do not verify that model against a renderer. Add a throwaway renderer corpus with observed output covering each rule (including the ATX lookalikes and closing-fence cases), and cite it in the design/spec; otherwise this violates the base Assumption verification invariant.
+
+## Should-fix
+- The implementation plan's provenance header says its source design is v1.56 / cycle 51 even though the audited design is v1.57, so the handoff leaves the latest design-cycle changes ambiguous. Update the header to the actual paired design revision.
+
+## Nit
+None
+AUDIT-doc-block-exec-design-v53-END

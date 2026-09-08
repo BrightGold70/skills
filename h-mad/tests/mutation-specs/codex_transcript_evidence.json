@@ -1,0 +1,51 @@
+{
+  "_why": "#27. The gate was single-surface on a feature where codex carried 25 of 27 disagreements. Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_review_evidence.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-truncated-transcript-counts-as-complete",
+      "_mechanism": "#24's lesson one level down. A transcript with no trailing token total was killed or copied mid-write; calling it complete republishes the false zero #24 removed.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    complete = bool(_CODEX_TOKENS_RE.search(log_text))",
+      "replace": "    complete = True",
+      "test": "tests/test_h_mad_review_evidence.py::test_a_truncated_codex_transcript_is_NOT_tools_zero"
+    },
+    {
+      "name": "a-non-codex-file-gets-a-zero-row",
+      "_mechanism": "The mode-15 trap: a dict of zeros is a MEASUREMENT of a file this instrument cannot read. None is refusal and must stay refusal.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "    if not _CODEX_HEADER_RE.search(log_text):\n        return None",
+      "replace": "    if False:\n        return None",
+      "test": "tests/test_h_mad_review_evidence.py::test_a_non_codex_transcript_returns_None_not_a_zero_row"
+    },
+    {
+      "name": "the-outcome-anchor-loses-its-leading-space",
+      "_mechanism": "The leading space is what keeps the primary instrument out of the echoed prompt. Dropped, it matches nothing real -- the control transcript that DID read the tree scores 0 and reads as hollow.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "_CODEX_OUTCOME_RE = re.compile(r\"^ (succeeded|failed) in \\d+(?:\\.\\d+)?m?s:\", re.M)",
+      "replace": "_CODEX_OUTCOME_RE = re.compile(r\"^(succeeded|failed) in \\d+(?:\\.\\d+)?m?s:\", re.M)",
+      "test": "tests/test_h_mad_review_evidence.py::test_a_codex_transcript_that_ran_tools_is_measured"
+    },
+    {
+      "name": "the-cross-check-always-agrees",
+      "_mechanism": "Two instruments that disagree are a fact about the transcript. Hardcoding agreement turns the cross-check into decoration and hides a format change.",
+      "file": "scripts/h_mad_review_evidence.py",
+      "find": "        \"agrees\": exec_lines == len(outcomes),",
+      "replace": "        \"agrees\": True,",
+      "test": "tests/test_h_mad_review_evidence.py::test_a_truncated_codex_transcript_is_NOT_tools_zero"
+    }
+  ]
+}

@@ -371,3 +371,120 @@ class TestEffortIsReported:
 
         assert _token(_run(str(no_think)).stdout).startswith("EVIDENCE: PASS ")
         assert _token(_run(str(all_think)).stdout).startswith("EVIDENCE: NONE ")
+
+
+# --- codex text transcripts (#27) --------------------------------------------
+#
+# #24 (`6f00f8c`) stopped this gate reporting a FALSE ZERO for a codex leg. It did
+# not make the surface measurable -- `scan()` reads agy NDJSON only, so a codex
+# leg's transcript yielded no figures at all and the gate was single-surface on a
+# feature where codex carried 25 of 27 disagreements.
+#
+# The fixtures are REAL transcripts from live runs, not hand-built: a hand-built
+# one does not have the shape the CLI emits, which is the whole reason H7's
+# prototype was copied rather than written. Only the echoed prompt is elided, and
+# the elision was accepted only after `scan_codex_text(full) == scan_codex_text(elided)`
+# was executed on the originals.
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+CODEX_8 = FIXTURES / "codex-text-8-exec.log"
+CODEX_0 = FIXTURES / "codex-text-0-exec.log"
+
+
+def _evidence():
+    sys.path.insert(0, str(SCRIPT.parent))
+    import importlib
+    return importlib.import_module("h_mad_review_evidence")
+
+
+def test_a_codex_transcript_that_ran_tools_is_measured() -> None:
+    """The CONTROL, and it must not read as hollow.
+
+    Calibrating a new instrument only against the artifact that motivated it is how
+    a detector that fires on everything ships. This is a real design-audit leg that
+    did read the tree.
+    """
+    m = _evidence()
+    got = m.scan_codex_text(CODEX_8.read_text(encoding="utf-8", errors="replace"))
+    assert got["tools"] == 8 and got["ok"] == 8 and got["failed"] == 0, got
+    assert got["complete"] is True
+    assert got["agrees"] is True, "the two instruments disagree on a clean transcript"
+
+
+def test_a_codex_leg_that_ran_NOTHING_is_now_visible() -> None:
+    """The finding this closes, from a real `doc-block-exec` archreview.
+
+    That leg made zero tool calls -- its own output says `The requested view_file
+    tool is unavailable in this session, so I could not inspect the worktree` --
+    and it emitted `ASSESSMENT: NO` anyway, a verdict over a tree it never read.
+    196,184 tokens consumed. Before this, the gate could not see any of it.
+
+    This is a MEASURED zero, which is exactly what #24 said a codex zero was not
+    allowed to be until it could be measured. The difference is `complete`.
+    """
+    m = _evidence()
+    got = m.scan_codex_text(CODEX_0.read_text(encoding="utf-8", errors="replace"))
+    assert got["tools"] == 0 and got["complete"] is True, got
+
+
+def test_a_truncated_codex_transcript_is_NOT_tools_zero() -> None:
+    """#24's lesson, one level down: "could not measure" and "measured zero" must
+    never take the same branch. A transcript without the trailing token total was
+    killed, is still running, or was copied mid-write."""
+    m = _evidence()
+    got = m.scan_codex_text("OpenAI Codex v0.151.0\n exec\n succeeded in 3ms:\n")
+    assert got["complete"] is False, got
+    # This sample also exercises the cross-check: `exec` is indented here, so the
+    # two instruments DISAGREE and that must be reported rather than reconciled by
+    # silently preferring one of them.
+    assert got["exec_lines"] == 0 and got["tools"] == 1, got
+    assert got["agrees"] is False, got
+
+
+def test_a_non_codex_transcript_returns_None_not_a_zero_row() -> None:
+    """None is refusal. A dict of zeros would be a measurement of a file this
+    instrument cannot read -- the mode-15 trap."""
+    m = _evidence()
+    assert m.scan_codex_text('{"event":"init"}\n') is None
+    assert m.scan_codex_text("") is None
+
+
+def test_the_gate_reports_codex_figures_but_still_refuses_the_leg(tmp_path) -> None:
+    """A codex leg does not SATISFY the 6a-prime gate -- #24's rule, unchanged, so
+    the rc stays 2 and the verdict stays a cannot-judge. What changes is that the
+    numbers are printed, so a leg that read nothing is visible rather than merely
+    unjudged."""
+    log = tmp_path / "codex.log"
+    log.write_text(CODEX_0.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(SCRIPT), str(log)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2, r.stdout + r.stderr
+    # The codex numbers ride their OWN token. On the EVIDENCE line they would be
+    # globbed as agy counts, and #24's whole point is that those two zeros differ.
+    assert "CODEXEVIDENCE: tools=0 ok=0 failed=0" in r.stdout, r.stdout
+    assert "EVIDENCE: UNREADABLE reason=unsupported_format" in r.stdout, r.stdout
+    assert "EVIDENCE: NONE" not in r.stdout, "a codex leg must never render as a measured agy NONE"
+
+
+def test_a_truncated_codex_transcript_gets_its_own_reason(tmp_path) -> None:
+    log = tmp_path / "codex.log"
+    log.write_text("OpenAI Codex v0.151.0\nexec\n succeeded in 3ms:\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, str(SCRIPT), str(log)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2
+    assert "CODEXEVIDENCE: UNREADABLE reason=truncated_no_token_total" in r.stdout, r.stdout
+    assert "CODEXEVIDENCE: tools=" not in r.stdout, "a truncated transcript must publish no count"
+
+
+def test_the_agy_path_is_untouched_by_the_codex_branch() -> None:
+    """The codex branch is reached only when there are no agy events, so an agy
+    transcript must measure exactly as before."""
+    m = _evidence()
+    agy = "\n".join([
+        json.dumps({"event": "init"}),
+        json.dumps({"event": "step_update", "tool": "read", "status": "OK"}),
+        json.dumps({"event": "result"}),
+    ])
+    counts = m.scan(agy)
+    assert counts["agy_events"] >= 1
+    assert m.scan_codex_text(agy) is None
