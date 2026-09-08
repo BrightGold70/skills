@@ -1,0 +1,67 @@
+{
+  "_why": "#24, measured live 2026-09-08. The evidence gate scored a codex leg `tools=0 ok=0 low-evidence (... possibly no reads)` while that pass filed three class-tagged must-fixes citing real seams. Its 522,203 B transcript held 1,554 tool references and exactly ONE brace-leading line out of 6,935 — enough for the old `any line starts with {` test to call it `parsed` and drop it to the delivery floor. Since #13 the gate DECIDES in one direction (a pass at or below the floor cannot certify a clean), and `hmad-surface-disagreement-second-mechanism.md` measures codex as the surface carrying 25 of 27 disagreements — so the misfire lands on the strongest surface, and only on its CLEAN verdicts. Each row restores one way this returns a confident zero where a cannot-judge belongs.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "one-brace-line-makes-a-text-log-parsed-again",
+      "_mechanism": "Restores the exact defect. `agy_events` is ignored and a single JSON-ish line anywhere in a plain-text codex transcript scores it `parsed`, after which `ok=0` trips the delivery floor and the render says 'possibly no reads' about a pass that read 1,554 times.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    if counts.get(\"agy_events\", 0) > 0:\n        counts[\"shape\"] = \"parsed\"",
+      "replace": "    if any(l.lstrip().startswith(\"{\") for l in text.splitlines()):\n        counts[\"shape\"] = \"parsed\"",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_single_brace_line_no_longer_makes_a_text_log_parsed"
+    },
+    {
+      "name": "a-codex-log-is-scored-against-the-delivery-floor",
+      "_mechanism": "The shape is identified correctly and then ignored at the decision, so the codex leg falls through to `ok <= DELIVERY_FLOOR` and a clean codex verdict becomes UNVERIFIED on a measurement that was never made. This is the half that actually gates.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if shape == \"codex-text\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_codex_transcript_is_identified_and_not_scored_hollow"
+    },
+    {
+      "name": "the-render-prints-tools-zero-for-an-unmeasured-log",
+      "_mechanism": "The verdict is right and the OUTPUT still says `tools=0 ok=0`. A reader takes that as a measurement — it is the number that started this whole finding — and concludes the pass read nothing. A figure this parser did not compute must not be printed as if it had.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if effort.get(\"shape\") == \"codex-text\":",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_cycle.py::test_the_render_refuses_to_print_tools_zero_for_a_codex_log"
+    },
+    {
+      "name": "absence-of-agy-events-is-taken-as-proof-of-codex",
+      "_mechanism": "The skip stops requiring the banner and fires on ANY non-agy log. A stray `--log`, a wrapper's stdout or the wrong path then inherits the skip and escapes the evidence check entirely — trading a false low-evidence for a false PASS, which is the worse direction. Positive identification is the whole point: absence of agy events is not evidence that a log is a codex transcript.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    elif _CODEX_BANNER.search(text[:4096]):",
+      "replace": "    elif True:",
+      "test": "tests/test_h_mad_audit_cycle.py::test_junk_that_does_NOT_announce_itself_still_blocks"
+    },
+    {
+      "name": "the-banner-is-matched-anywhere-in-the-file",
+      "_mechanism": "Dropping the head-of-file bound lets a transcript that merely QUOTES the codex banner — an audit report discussing a codex run, a pasted log excerpt — be classified as a codex transcript and skip the evidence check. Same substring-versus-anchor class as the allowlist row in the delta-review spec.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "_CODEX_BANNER.search(text[:4096])",
+      "replace": "_CODEX_BANNER.search(text)",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_log_that_merely_QUOTES_the_codex_banner_is_not_a_codex_log"
+    },
+    {
+      "name": "a-hollow-agy-leg-stops-being-scored",
+      "_mechanism": "The inverse direction, and it needs its own row because every other mutation here loosens toward NOT scoring. If the agy path also stopped being scored, a genuinely hollow agy leg — the case #13 built this gate for — would certify a clean again.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "        if result.effort.get(\"ok\", 0) <= DELIVERY_FLOOR:",
+      "replace": "        if False:",
+      "test": "tests/test_h_mad_audit_cycle.py::test_a_real_agy_transcript_is_still_parsed_and_still_scored"
+    }
+  ]
+}

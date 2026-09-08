@@ -2396,3 +2396,88 @@ def test_a_gated_GATE_line_still_parses(capsys: pytest.CaptureFixture, tmp_path:
     assert ac.GATE_RE.match("GATE: PASS must=0 should=0 gated=1")
     assert ac.GATE_RE.match("GATE: PASS must=0 should=0")
     assert not ac.GATE_RE.match("GATE: PASS must=0")
+
+
+# --- #24: a codex transcript is NOT MEASURED, never "measured as zero" ---------
+
+_CODEX_LOG = (
+    "OpenAI Codex v0.153.2\n"
+    "--------\n"
+    "workdir: /repo\nmodel: gpt-5.6-terra\nprovider: openai\n"
+    "--------\n"
+    "thinking about the plan\n"
+    'tool call: shell {"cmd": "grep -n foo bar.py"}\n'   # the ONE brace line
+    "reading tools/references/guid.py\n"
+) + "more transcript\n" * 200
+
+
+def test_a_codex_transcript_is_identified_and_not_scored_hollow(tmp_path):
+    """The live defect, 2026-09-08. A 522,203 B codex log with 1,554 tool
+    references contained exactly ONE brace-leading line out of 6,935 — enough for
+    the old `any line starts with "{"` test to call it `parsed`. It then hit the
+    delivery floor at ok=0 and rendered "possibly no reads" about a pass that had
+    just filed three class-tagged must-fixes.
+
+    A codex log yields exactly as much measurement as no log at all, which the
+    combiner already declines to score.
+    """
+    (verdict, reason), effort = _combine_for_log(tmp_path, "codex.log", _CODEX_LOG)
+    assert effort["shape"] == "codex-text", effort
+    assert effort["agy_events"] == 0
+    assert (verdict, reason) == ("PASS", None), (verdict, reason)
+
+
+def test_the_render_refuses_to_print_tools_zero_for_a_codex_log(tmp_path, capsys):
+    """`tools=0` would be a measurement this parser did not make."""
+    ac = audit_cycle()
+    (tmp_path / "codex.log").write_text(_CODEX_LOG)
+    effort = ac.measure_effort(tmp_path / "codex.log")
+    line, = ac._effort_items([pass_result(index=1, effort=effort)])
+    assert "not measured" in line, line
+    assert "codex-text" in line, line
+    assert "tools=0" not in line, line
+
+
+def test_a_single_brace_line_no_longer_makes_a_text_log_parsed(tmp_path):
+    """The exact mechanism: one JSON-ish line in a sea of prose."""
+    (_, _), effort = _combine_for_log(
+        tmp_path, "codex.log", "OpenAI Codex v1\nprose\n" + '{"x": 1}\n' + "prose\n")
+    assert effort["shape"] == "codex-text", effort
+
+
+def test_junk_that_does_NOT_announce_itself_still_blocks(tmp_path):
+    """The skip requires POSITIVE identification. A stray --log or a wrapper's
+    stdout must keep routing to 'find the right file' — absence of agy events is
+    not evidence that a log is a codex transcript."""
+    (verdict, reason), effort = _combine_for_log(
+        tmp_path, "junk.log", "this is not json\nnor is this\n")
+    assert effort["shape"] == "unparseable", effort
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence_unmeasurable:p1")
+
+
+def test_a_real_agy_transcript_is_still_parsed_and_still_scored(tmp_path):
+    """The fix must not loosen the agy path: a genuinely hollow agy leg still
+    scores hollow."""
+    (verdict, reason), effort = _combine_for_log(
+        tmp_path, "agy.ndjson", '{"event":"result"}\n')
+    assert effort["shape"] == "parsed"
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence:p1")
+
+
+def test_a_log_that_merely_QUOTES_the_codex_banner_is_not_a_codex_log(tmp_path):
+    """The banner is matched only in the head of the file.
+
+    A report discussing a codex run, or a pasted excerpt, legitimately contains
+    the line `OpenAI Codex v…` somewhere in its body. Matching it anywhere would
+    let such a file inherit the codex skip and escape the evidence check —
+    trading a false low-evidence for a false PASS, the worse direction.
+
+    Caught by the mutation battery, not by design: the first test set used junk
+    with no banner at all, so dropping the `[:4096]` bound changed nothing and the
+    row SURVIVED.
+    """
+    body = ("not this pass's transcript\n" * 400) + "OpenAI Codex v0.153.2\n"
+    assert len(body.encode()) > 4096
+    (verdict, reason), effort = _combine_for_log(tmp_path, "quoted.log", body)
+    assert effort["shape"] == "unparseable", effort
+    assert (verdict, reason) == ("UNVERIFIED", "low_evidence_unmeasurable:p1")
