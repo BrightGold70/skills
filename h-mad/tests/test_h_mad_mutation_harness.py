@@ -2155,3 +2155,78 @@ def test_strip_jsonc_leaves_comment_markers_inside_strings(tmp_path: Path) -> No
     mod = h_mad_mutation_harness
     text = '{"url": "https://example.com/a//b", "path": "/*not*/a comment"}'
     assert mod._strip_jsonc(text) == text
+
+
+# ── A provenance LEDGER is not a runnable spec ────────────────────────────────
+#
+# A feature's closing task may commit a ledger mapping every mutation id to the
+# node id that killed it. Its rows carry `name` + `test` and no `file`/`find`,
+# because the mutations were applied per task by their own specs. Such a file
+# landing in tests/mutation-specs/ used to classify as `spec`, fail `_load_spec`
+# for having no `command`, and take the whole sweep to ANCHORS_UNREADABLE --
+# which the pre-push hook blocks on, for every commit in the repository.
+
+
+def test_ledger_without_file_or_find_rows_is_not_a_spec(tmp_path: Path) -> None:
+    path = tmp_path / "feature-ledger.json"
+    path.write_text(
+        json.dumps(
+            {
+                "root": "../..",
+                "kind": "ledger",
+                "mutations": [
+                    {"name": "M1: restore the getpgid kill", "test": "tests/t.py::test_a"},
+                    {"name": "M2: widen the argv matcher", "test": "tests/t.py::test_b"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    kind, detail = classify_spec_file(path)
+    assert kind == "not-a-spec", f"a ledger must not be swept as a spec (got {kind}: {detail})"
+    assert "ledger" in detail
+
+
+def test_partial_spec_with_some_file_rows_stays_a_spec(tmp_path: Path) -> None:
+    """The fail-closed control, and the reason the marker is READ not guessed.
+
+    A spec whose rows are half filled in is broken, not a ledger, and carries no
+    `kind`. It must stay classified as a spec so `_load_spec` rejects it loudly.
+    An earlier cut of this fix inferred "ledger" from the ABSENCE of
+    `file`/`find`, which reclassified AC-6.3's `{"mutations": [{"name": ...}]}`
+    fixture too -- a real corrupted spec vanishing from the sweep, the exact hole
+    the classifier's fail-closed default exists to keep shut.
+    """
+    path = tmp_path / "half-written.json"
+    path.write_text(
+        json.dumps(
+            {
+                "root": "../..",
+                "command": ["pytest"],
+                "mutations": [
+                    {"name": "M1", "file": "a.py", "find": "x", "replace": "y"},
+                    {"name": "M2", "test": "tests/t.py::test_b"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    kind, _ = classify_spec_file(path)
+    assert kind == "spec", "a half-written spec must stay a spec so the loader refuses it"
+
+
+def test_ordinary_spec_is_unaffected(tmp_path: Path) -> None:
+    """The other control: the change must not reclassify a real spec."""
+    path = tmp_path / "real.json"
+    path.write_text(
+        json.dumps(
+            {
+                "root": "../..",
+                "command": ["pytest"],
+                "mutations": [{"name": "M1", "file": "a.py", "find": "x", "replace": "y"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    kind, _ = classify_spec_file(path)
+    assert kind == "spec"

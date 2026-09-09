@@ -168,6 +168,28 @@ def classify_spec_file(path: Path) -> tuple[str, str | None]:
 
     if not isinstance(data, dict):
         return "not-a-spec", "JSON object has no non-empty `mutations` list"
+    # A provenance LEDGER maps every mutation id to the node id that killed it.
+    # A feature's closing task legitimately commits one beside the specs, and its
+    # rows carry `name` + `test` and no `file`/`find`, because the mutations were
+    # applied per task by their own specs. Swept as a spec it fails `_load_spec`
+    # for having no `command`, taking the whole sweep to ANCHORS_UNREADABLE --
+    # which the pre-push hook blocks on, for every commit in the repository.
+    #
+    # The ledger must DECLARE itself, and inferring it is not an option that was
+    # passed over -- it was tried and is provably wrong. A ledger row and a row
+    # of a half-written spec are the same shape, and AC-6.3 pins exactly that
+    # case: `{"mutations": [{"name": "has no command"}]}` must classify `spec` so
+    # the loader refuses it loudly. A predicate keying on the ABSENCE of
+    # `file`/`find` reclassifies that fixture too, which is how a real corrupted
+    # spec vanishes from the sweep -- the hole this classifier's fail-closed
+    # default exists to keep shut.
+    #
+    # So the marker is read, never guessed. A `kind` that lies is a visible lie
+    # in a committed file, the same standard `codex_status` is held to, rather
+    # than an invisible shortcut.
+    if data.get("kind") == "ledger":
+        return "not-a-spec", "declares `kind: ledger`, not a runnable spec"
+
     mutations = data.get("mutations")
     if isinstance(mutations, list) and mutations:
         return "spec", None
