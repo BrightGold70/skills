@@ -104,13 +104,48 @@ def _extract_assessment(text: str) -> str | None:
     return None
 
 
+def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
+    """Return `(text, channel)` for the report-file channel, or `(None, reason)`.
+
+    The file EXISTING is not evidence it was written: an agent that created it and
+    then produced nothing is the commonest partial failure, and an empty file read
+    as authoritative turns that into `NO_VERDICT` while a perfectly good verdict sat
+    in the last message. So empty routes to the fallback, exactly as absent does.
+    """
+    if report_path is None:
+        return None, "not_requested"
+    try:
+        text = report_path.read_text(encoding="utf-8")
+    except OSError:
+        return None, "unreadable"
+    if not text.strip():
+        return None, "empty"
+    return text, "report-file"
+
+
 def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
-          session_id: str | None = None) -> int:
+          session_id: str | None = None, report_path: Path | None = None) -> int:
     try:
         review = review_path.read_text(encoding="utf-8")
     except OSError as exc:
         _emit(f"UNREADABLE reason=review:{exc.__class__.__name__}")
         return 2
+
+    # The report-file channel (#31). 6a-prime was the only `exec agy` path whose
+    # deliverable rode the agent's LAST MESSAGE alone, and every observed failure
+    # was a last-message failure — four dispatches, four NO_VERDICT, all four
+    # having demonstrably read the tree.
+    #
+    # The file WINS when it has content: if the two disagree, the last message is
+    # the unreliable surface and preferring it would buy nothing. The fallback is
+    # NAMED in the emitted token rather than taken silently, because a verdict
+    # recovered from the last message and one read from the file are different
+    # evidence and must not print the same way.
+    report_text, channel = _read_report_channel(report_path)
+    if report_text is not None:
+        review = report_text
+    else:
+        channel = "last-message"
     if not log_path.is_file():
         _emit("UNREADABLE reason=no_log")
         print("  no dispatch log, so whether the review read anything is unknown — "
@@ -177,7 +212,7 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
               "land. Strict validation cannot see this.")
         return 2
 
-    _emit(f"{verdict} tools={tools} recorded=yes")
+    _emit(f"{verdict} tools={tools} recorded=yes channel={channel}")
     if verdict != "READY_TO_MERGE":
         print("  halt `step6a-prime:architectural_review_failed` — surface the "
               "findings, fix, and re-run ONE more cycle.")
@@ -219,7 +254,8 @@ def _resolve_summary(summary: str) -> "tuple[str, str | None]":
 
 
 def stage(feature: str, template: Path, base: str, head: str, design: Path,
-          diff_files: str, summary: str, prompt: Path) -> int:
+          diff_files: str, summary: str, prompt: Path,
+          report_file: str | None = None) -> int:
     if base == head:
         _emit(f"DEGENERATE_RANGE base={base}")
         print("  BASE and HEAD are the same commit, so the diff is empty and the "
@@ -254,6 +290,20 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
         ("<INLINE_PHASE_5_SUMMARY>", summary_text),
     )
 
+    # `<INLINE_REPORT_FILE>`, NOT `<REPORT_FILE_PATH>`: `_PLACEHOLDER` matches
+    # `<INLINE_[A-Z_0-9]+>` only, so a slot outside that grammar inherits NEITHER
+    # the UNSUBSTITUTED nor the MISSING_SLOTS guard, and a template that failed to
+    # substitute it would ship a live placeholder reading as real prose.
+    #
+    # OPTIONAL rather than required, and the two existing guards then cover both
+    # directions without a third rule: a template carrying the slot with no
+    # --report-file leaves it unfilled and trips UNSUBSTITUTED, while --report-file
+    # against a template without the slot trips MISSING_SLOTS. Making it required
+    # instead would have broken every caller staged against a pre-slot template
+    # and bought nothing the guards do not already give.
+    if report_file is not None:
+        pairs = pairs + (("<INLINE_REPORT_FILE>", report_file),)
+
     # J31: the UNSUBSTITUTED guard below catches a slot left unfilled. The
     # inverse — a required value whose slot the template does not carry — left
     # nothing behind and passed silently, so the value reached nobody. Both are
@@ -287,7 +337,11 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     print(f"# then: {Path(__file__).name} score --feature {feature} "
           f"--state docs/.bkit-memory.json \\")
     print(f"#         --log /tmp/archreview_{feature}.log "
-          f"--review /tmp/archreview_{feature}.md")
+          f"--review /tmp/archreview_{feature}.md \\")
+    # The operator copies this line. Omitting --report-file here would build the
+    # channel and then not use it, which looks identical to never having built it.
+    if report_file is not None:
+        print(f"#         --report-file {report_file}")
     print("[H-MAD] archreview STAGED")
     return 0
 
@@ -306,12 +360,20 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--diff-files", required=True)
     s.add_argument("--summary", required=True)
     s.add_argument("--prompt", type=Path, required=True)
+    s.add_argument("--report-file", default=None, metavar="PATH",
+                   help="where the reviewer must WRITE its report. Required: the "
+                        "template carries the slot, and an unfilled slot ships to "
+                        "the reviewer as live prose.")
 
     c = sub.add_parser("score", help="evidence gate, verdict, record, read back")
     c.add_argument("--feature", required=True)
     c.add_argument("--state", type=Path, required=True)
     c.add_argument("--log", type=Path, required=True)
     c.add_argument("--review", type=Path, required=True)
+    c.add_argument("--report-file", type=Path, default=None, metavar="PATH",
+                   help="the file the reviewer was told to write. Preferred over "
+                        "--review when it has content; the fallback is named in "
+                        "the emitted token, never taken silently.")
     c.add_argument("--session-id", default=None,
                    help="this session's id; the owner's archreview write also beats "
                         "the claim heartbeat (#126)")
@@ -319,9 +381,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.verb == "stage":
         return stage(args.feature, args.template, args.base, args.head, args.design,
-                     args.diff_files, args.summary, args.prompt)
+                     args.diff_files, args.summary, args.prompt, args.report_file)
     return score(args.feature, args.state, args.log, args.review,
-                     session_id=args.session_id)
+                 session_id=args.session_id, report_path=args.report_file)
 
 
 if __name__ == "__main__":

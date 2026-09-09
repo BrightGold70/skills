@@ -98,6 +98,24 @@ The orchestrator halts with `step6a-prime:architectural_review_failed` and surfa
 
 Do NOT issue OVERRIDE prompts. Use only `view_file` for code inspection.
 
+## Where to write your report
+
+Write your full report to this file, creating it if it does not exist:
+
+<INLINE_REPORT_FILE>
+
+Write it there FIRST, before you compose your reply. The file is the channel the
+orchestrator prefers; your reply is the fallback. The verdict line goes in BOTH —
+the file's last line and your reply's last line, identical, character for character.
+
+This exists because your reply is the least reliable part of this exchange. Four
+dispatches of this prompt read the tree, produced substantive reviews, and were
+discarded whole because the last line of the reply did not carry the verdict. The
+review work was done and unrecoverable. A file you wrote cannot be lost that way.
+
+Writing the file is not a substitute for the verdict line in your reply, and a file
+you create but leave empty is treated as if it were never written.
+
 ## Report Format (REQUIRED — orchestrator parses this)
 
 Write your findings first. Then the **very last line of your reply** must be the verdict line,

@@ -477,3 +477,151 @@ class TestTheVerdictLineIsTheLastThingTheTemplateSays:
         after = text.split("## Report Format", 1)[1]
         assert "## " not in after, "a section after Report Format pushes the verdict off the tail"
         assert "If READY_TO_MERGE" not in after, "verdict meanings belong ABOVE the format section"
+
+
+class TestTheReportFileChannel:
+    """6a-prime was the only `exec agy` path with no report-file channel, so its
+    deliverable rode the agent's last message alone — and every observed failure
+    was a last-message failure: four dispatches, four `NO_VERDICT`, all four having
+    demonstrably read the tree.
+
+    The slot is `<INLINE_REPORT_FILE>` and NOT the `<REPORT_FILE_PATH>` the handover
+    brief proposed. `_PLACEHOLDER` matches `<INLINE_[A-Z_0-9]+>` only, so a slot
+    named outside that grammar inherits NEITHER existing guard: a template that
+    failed to substitute it would ship a live placeholder that reads as real prose
+    to the reviewer, which is exactly what `UNSUBSTITUTED` exists to prevent.
+    """
+
+    def _tpl(self, tmp_path, with_slot=True, name="tpl.md"):
+        t = tmp_path / name
+        body = ("feature <INLINE_FEATURE>\nbase <INLINE_BASE_SHA>\nhead <INLINE_HEAD_SHA>\n"
+                "files <INLINE_DIFF_FILES>\ndesign <INLINE_AUDITED_DESIGN>\n"
+                "summary <INLINE_PHASE_5_SUMMARY>\n")
+        if with_slot:
+            body += "report <INLINE_REPORT_FILE>\n"
+        t.write_text(body, encoding="utf-8")
+        return t
+
+    def _stage(self, tmp_path, *, with_slot=True, report_file="/tmp/r.md", prompt_name="p.txt"):
+        design = tmp_path / "d.md"
+        design.write_text("the design\n", encoding="utf-8")
+        prompt = tmp_path / prompt_name
+        argv = ["stage", "--feature", "feat",
+                "--template", str(self._tpl(tmp_path, with_slot, prompt_name + ".tpl")),
+                "--base", "aaa1111", "--head", "bbb2222",
+                "--design", str(design), "--diff-files", "a.py",
+                "--summary", "did things", "--prompt", str(prompt)]
+        if report_file is not None:
+            argv += ["--report-file", report_file]
+        return _run(*argv), prompt
+
+    # --- stage ---------------------------------------------------------------
+
+    def test_the_report_path_reaches_the_prompt(self, tmp_path):
+        result, prompt = self._stage(tmp_path, report_file="/tmp/archreview_feat.report.md")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "/tmp/archreview_feat.report.md" in prompt.read_text(encoding="utf-8")
+
+    def test_a_template_without_the_slot_is_MISSING_SLOTS(self, tmp_path):
+        """The value would otherwise reach the reviewer nowhere while staging still
+        reported success — the J31 failure, which this slot must not reintroduce."""
+        result, _p = self._stage(tmp_path, with_slot=False)
+        assert result.returncode == 2, result.stdout
+        assert "MISSING_SLOTS" in result.stdout and "<INLINE_REPORT_FILE>" in result.stdout
+
+    def test_the_slot_is_covered_by_the_placeholder_guard(self, tmp_path):
+        """EXECUTED, not asserted: the guard's own regex must match this slot name.
+
+        `<REPORT_FILE_PATH>` — the name the brief proposed — does not, and a slot
+        outside that grammar ships as live prose if substitution ever misses it.
+        """
+        import re as _re
+        src = (SCRIPTS / "h_mad_archreview_cycle.py").read_text(encoding="utf-8")
+        pat = _re.search(r'_PLACEHOLDER = re\.compile\(r"([^"]+)"\)', src).group(1)
+        assert _re.fullmatch(pat, "<INLINE_REPORT_FILE>"), pat
+        assert not _re.fullmatch(pat, "<REPORT_FILE_PATH>"), (
+            "the brief's proposed name would evade the UNSUBSTITUTED guard")
+
+    def test_the_printed_followup_names_the_report_file(self, tmp_path):
+        """The operator copies that line. If it omits --report-file the channel is
+        built and then not used, which looks identical to not having built it."""
+        result, _p = self._stage(tmp_path, report_file="/tmp/rep.md")
+        assert "--report-file /tmp/rep.md" in result.stdout, result.stdout
+
+    # --- score ---------------------------------------------------------------
+
+    def test_the_report_file_carries_the_verdict(self, tmp_path):
+        state = _state(tmp_path)
+        rep = tmp_path / "rep.md"
+        rep.write_text("full review\nASSESSMENT: WITH_FIXES\n", encoding="utf-8")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 9)),
+                      "--review", str(_review(tmp_path, "conversational tail, no verdict\n")),
+                      "--report-file", str(rep))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ARCHREVIEW: WITH_FIXES" in result.stdout
+        assert "channel=report-file" in result.stdout, result.stdout
+
+    def test_the_report_file_BEATS_a_conflicting_last_message(self, tmp_path):
+        """The whole point: the last message is the unreliable surface. If the two
+        disagree the file wins, or the channel has bought nothing."""
+        state = _state(tmp_path)
+        rep = tmp_path / "rep.md"
+        rep.write_text("ASSESSMENT: NO\n", encoding="utf-8")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 5)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")),
+                      "--report-file", str(rep))
+        assert "ARCHREVIEW: NO" in result.stdout, result.stdout
+        assert json.loads(state.read_text())["orchestrator_state"]["feat"]["archreview"] == "NO"
+
+    def test_an_absent_report_file_falls_back_and_SAYS_SO(self, tmp_path):
+        """A silent fallback is the defect one level down: the operator would read a
+        verdict recorded from the last message as one recorded from the file."""
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 7)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")),
+                      "--report-file", str(tmp_path / "never_written.md"))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ARCHREVIEW: READY_TO_MERGE" in result.stdout
+        assert "channel=last-message" in result.stdout, result.stdout
+
+    def test_score_without_the_flag_is_unchanged(self, tmp_path):
+        """Back-compat: every existing caller passes no --report-file."""
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 3)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "channel=last-message" in result.stdout, result.stdout
+
+    def test_an_empty_report_file_falls_back_rather_than_reading_as_no_verdict(self, tmp_path):
+        """An agent that created the file and wrote nothing is the commonest partial
+        failure. Empty must route to the fallback, not to NO_VERDICT — the file
+        existing is not evidence it was written."""
+        state = _state(tmp_path)
+        rep = tmp_path / "rep.md"
+        rep.write_text("   \n", encoding="utf-8")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 6)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")),
+                      "--report-file", str(rep))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ARCHREVIEW: WITH_FIXES" in result.stdout
+        assert "channel=last-message" in result.stdout, result.stdout
+
+    def test_the_SHIPPED_template_carries_the_slot_above_report_format(self, tmp_path):
+        """The machinery is worthless if the real template has no slot, and the
+        position is a hard constraint, not a preference:
+        `test_no_instruction_follows_the_report_format_heading_except_the_verdict`
+        forbids any `## ` heading after `## Report Format`, so the section must
+        precede it. Both facts are executed against the shipped file."""
+        tpl = (SCRIPTS.parent / "references" / "agy-architectural-reviewer-prompt.md"
+               ).read_text(encoding="utf-8")
+        assert "<INLINE_REPORT_FILE>" in tpl
+        assert tpl.index("<INLINE_REPORT_FILE>") < tpl.index("## Report Format"), (
+            "the slot must sit ABOVE `## Report Format` or the heading guard refuses it")
+        assert "fallback" in tpl.lower(), (
+            "the template must say the reply is the fallback, or the agent has no "
+            "reason to write both")

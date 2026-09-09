@@ -1,0 +1,67 @@
+{
+  "_why": "6a-prime was the only `exec agy` path whose deliverable rode the agent's last message alone; four dispatches read the tree and were discarded for the last line. Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archreview_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-report-file-is-never-preferred",
+      "_mechanism": "The channel is built and then unused — indistinguishable from never having built it, and the last message stays the only surface.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if report_text is not None:\n        review = report_text",
+      "replace": "    if False:\n        review = report_text",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_the_report_file_carries_the_verdict"
+    },
+    {
+      "name": "an-empty-report-file-is-authoritative",
+      "_mechanism": "An agent that creates the file and writes nothing is the commonest partial failure. Treating empty as authoritative turns a recoverable verdict in the last message into NO_VERDICT.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if not text.strip():\n        return None, \"empty\"",
+      "replace": "    if False:\n        return None, \"empty\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_empty_report_file_falls_back_rather_than_reading_as_no_verdict"
+    },
+    {
+      "name": "the-fallback-claims-the-file-channel",
+      "_mechanism": "A verdict recovered from the last message and one read from the file are different evidence. Printing the same channel for both makes the fallback silent, which is the defect one level down.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    else:\n        channel = \"last-message\"",
+      "replace": "    else:\n        channel = \"report-file\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_absent_report_file_falls_back_and_SAYS_SO"
+    },
+    {
+      "name": "the-channel-is-not-reported-at-all",
+      "_mechanism": "Without it a reader cannot tell which surface carried the verdict, and the whole point of the change becomes unobservable.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    _emit(f\"{verdict} tools={tools} recorded=yes channel={channel}\")",
+      "replace": "    _emit(f\"{verdict} tools={tools} recorded=yes\")",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_score_without_the_flag_is_unchanged"
+    },
+    {
+      "name": "the-slot-leaves-the-shipped-template",
+      "_mechanism": "The machinery is worthless if the real template never tells the agent where to write.",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "<INLINE_REPORT_FILE>",
+      "replace": "the report file",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_the_SHIPPED_template_carries_the_slot_above_report_format"
+    },
+    {
+      "name": "the-slot-is-substituted-unconditionally",
+      "_mechanism": "Back-compat: a caller staging a pre-slot template with no --report-file would get the literal string None pasted in, or MISSING_SLOTS on a template that never asked for it.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if report_file is not None:\n        pairs = pairs + ((\"<INLINE_REPORT_FILE>\", report_file),)",
+      "replace": "    pairs = pairs + ((\"<INLINE_REPORT_FILE>\", str(report_file)),)",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestSummaryReachesTheReviewer::test_a_summary_file_is_read_not_pasted_as_a_path"
+    }
+  ]
+}
