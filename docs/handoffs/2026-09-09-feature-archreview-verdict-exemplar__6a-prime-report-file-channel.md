@@ -4,6 +4,7 @@
 **Branch:** `feature/archreview-verdict-exemplar`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/18-gateway-consolidation · session 3954e098-067e-4136-98cc-6dfcb2b71484
+**Taken-Over-By:** skills · main · session 4417a49b-c9e5-4989-bf36-cd4f73e9351a · 2026-09-09
 **Supersedes:** none — first on this branch
 
 ## Session Summary
