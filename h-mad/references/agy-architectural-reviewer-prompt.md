@@ -104,11 +104,27 @@ Write your findings first. Then the **very last line of your reply** must be the
 alone on its own line, with nothing after it — no closing sentence, no signature, no blank
 summary, no code fence around it. The orchestrator reads the LAST line that begins with
 `ASSESSMENT:` and refuses a reply that has none; a reply whose verdict is buried mid-text, or that
-ends with anything else, is re-dispatched at the cost of a full cycle. Three real dispatches
-omitted this line entirely while writing fluent prose above it.
+ends with anything else, is re-dispatched at the cost of a full cycle. Five real dispatches
+omitted this line entirely while writing fluent prose above it. Two of them — 2026-09-09, the
+same prompt twice — instead opened their report with `**Assessment**: YES, with minor
+non-blocking drift`. That is not a verdict this can read: `YES` is not one of the three words,
+it was not alone on its line, it was not last, and it carried a qualifier. Both reviews were
+discarded whole, having read 11 and 19 files respectively.
 
-The line is exactly one of these three, and nothing else:
+Your reply ends with exactly one of the three lines below, copied character for character.
+Do not bold it, do not fence it, do not prefix it with `#`/`##`/`###`, do not add a qualifier
+after the word, and do not write your own wording of it — these are literals, not a template to
+fill in. Nothing follows it.
 
-```
-ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>
-```
+**The three words are a CLOSED set.** Any other word is discarded, and the whole review with it,
+however well-argued. Real replies to this prompt that were thrown away for the word alone:
+`YES`, twice; and `DRIFTED`, once, written under a markdown heading marker. That last reply
+borrowed its word from a DIFFERENT h-mad prompt — the 5e spec reviewer, whose contract is
+`VERDICT: COMPLIANT | DRIFT` and is not this one. `DRIFT`, `DRIFTED`, `COMPLIANT`, `YES`,
+`NO_GO` and `PASS` are all wrong here. If your finding is "it works, but something has to be
+fixed first", the word is `WITH_FIXES` — which is what every one of those refused replies was
+reaching for.
+
+ASSESSMENT: READY_TO_MERGE
+ASSESSMENT: WITH_FIXES
+ASSESSMENT: NO

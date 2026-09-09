@@ -1,0 +1,77 @@
+{
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_verdict_exemplar.py",
+    "tests/test_h_mad_prompt_tails.py",
+    "-q",
+    "--no-header"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q",
+    "--no-header"
+  ],
+  "mutations": [
+    {
+      "name": "restore the angle-bracket schema form",
+      "_mechanism": "the exact pre-fix shape; if this survives, the guard bites nothing",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "ASSESSMENT: READY_TO_MERGE\nASSESSMENT: WITH_FIXES\nASSESSMENT: NO\n",
+      "replace": "ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>\n",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_no_angle_bracket_schema_form_of_the_verdict_survives"
+    },
+    {
+      "name": "re-wrap the exemplars in a code fence",
+      "_mechanism": "the second half of the pre-fix shape, independent of the schema form",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "\nASSESSMENT: READY_TO_MERGE\n",
+      "replace": "\n```\nASSESSMENT: READY_TO_MERGE\n",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_the_final_exemplar_is_not_inside_a_code_fence"
+    },
+    {
+      "name": "append a closing sentence after the verdict",
+      "_mechanism": "the reply-shape the template forbids, applied to the template itself; this is what a well-meaning editor adds back",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "ASSESSMENT: NO\n",
+      "replace": "ASSESSMENT: NO\n\nThank you for your review.\n",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_the_last_line_is_a_literal_verdict_not_a_schema"
+    },
+    {
+      "name": "drop one of the three literal exemplars",
+      "_mechanism": "a reviewer that must construct the missing word is back to transforming a schema",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "ASSESSMENT: WITH_FIXES\n",
+      "replace": "",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_every_allowed_word_appears_as_a_complete_copyable_line"
+    },
+    {
+      "name": "move a section after the verdict block",
+      "_mechanism": "the #153 position property; the form fix must not cost the position fix",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "ASSESSMENT: NO\n",
+      "replace": "ASSESSMENT: NO\n\n## Notes\n\nAnything at all.\n",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_the_position_guarantee_from_153_still_holds"
+    },
+    {
+      "name": "delete the no-code-fence instruction from the prose",
+      "_mechanism": "the prose and the exemplar must agree; dropping either half re-opens the contradiction",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "no code fence around it",
+      "replace": "no unusual formatting",
+      "test": "tests/test_h_mad_prompt_tails.py::test_the_template_says_last_line_of_your_reply_and_nothing_after"
+    },
+    {
+      "name": "delete the closed-set declaration",
+      "_mechanism": "a literal exemplar alone was measured insufficient; removing the closing reverts to that state",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "**The three words are a CLOSED set.**",
+      "replace": "The three words are the usual ones.",
+      "test": "tests/test_h_mad_verdict_exemplar.py::test_the_word_set_is_declared_closed_and_the_observed_wrong_words_are_named"
+    }
+  ]
+}

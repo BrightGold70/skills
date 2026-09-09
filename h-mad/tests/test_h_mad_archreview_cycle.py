@@ -436,6 +436,9 @@ class TestSummaryReachesTheReviewer:
 class TestTheVerdictLineIsTheLastThingTheTemplateSays:
     """#153 — three dispatches, three replies with no ASSESSMENT line.
 
+    Then two more after the position was fixed, because the exemplar's FORM was
+    not — see tests/test_h_mad_verdict_exemplar.py.
+
     The template asked for "a final line" and then kept talking for three more
     paragraphs, so the reviewer's own final line was whatever it chose. `stage()`
     writes the template verbatim, so the template's tail IS the prompt's tail: the
@@ -446,8 +449,22 @@ class TestTheVerdictLineIsTheLastThingTheTemplateSays:
     TEMPLATE = SCRIPTS.parent / "references" / "agy-architectural-reviewer-prompt.md"
 
     def test_the_template_ends_with_the_verdict_line(self):
+        """2026-09-09: the expected tail changed, and this assertion is why.
+
+        #153 fixed the verdict's POSITION and this assertion then froze its FORM
+        as a fenced schema — `<A | B | C>`, in the same angle-bracket grammar the
+        template uses for orchestrator-filled slots, wrapped in the very code
+        fence the next test requires the prose to forbid. Two further dispatches
+        died on it (`ARCHREVIEW: NO_VERDICT`, after reading 11 and 19 files).
+        So this pinned the defect; replacing it is the fix, and the replacement
+        is stricter. See tests/test_h_mad_verdict_exemplar.py.
+        """
         tail = self.TEMPLATE.read_text(encoding="utf-8").rstrip().splitlines()[-3:]
-        assert tail == ["```", "ASSESSMENT: <READY_TO_MERGE | WITH_FIXES | NO>", "```"], tail
+        assert tail == [
+            "ASSESSMENT: READY_TO_MERGE",
+            "ASSESSMENT: WITH_FIXES",
+            "ASSESSMENT: NO",
+        ], tail
 
     def test_the_template_says_last_line_and_nothing_after(self):
         text = self.TEMPLATE.read_text(encoding="utf-8")
