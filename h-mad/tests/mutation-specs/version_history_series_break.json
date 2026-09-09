@@ -1,0 +1,51 @@
+{
+  "_why": "#29, taken over from HemaSuite feature/18-gateway-consolidation. A gate that validates the resulting STATE rather than the incoming WRITE gives the caller no signal at the only moment the caller can act. Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_version_history.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-write-time-check-is-removed",
+      "_mechanism": "Back to the original defect: the disordering write returns OK and the refusal lands on the NEXT caller, who did not cause it.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "        classify_order(post)   # raises Refusal(\"mixed_order\")",
+      "replace": "        pass  # check removed",
+      "test": "tests/test_h_mad_version_history.py::TestSeriesBreakIsRefusedAtTheWrite::test_a_version_that_sorts_into_the_middle_is_refused"
+    },
+    {
+      "name": "the-check-reads-the-found-sequence-not-the-produced-one",
+      "_mechanism": "Re-checking `versions` is a no-op -- `classify_order` already passed on it above. This is the defect wearing the fix's clothes: the call is present, the predicate runs, and nothing is discriminated.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "        classify_order(post)   # raises Refusal(\"mixed_order\")",
+      "replace": "        classify_order(versions)   # raises Refusal(\"mixed_order\")",
+      "test": "tests/test_h_mad_version_history.py::TestSeriesBreakIsRefusedAtTheWrite::test_a_version_that_sorts_into_the_middle_is_refused"
+    },
+    {
+      "name": "the-new-version-is-always-spliced-at-the-front",
+      "_mechanism": "The position must match the PLACEMENT the write will use, or a correct ascending append is evaluated as a prepend and refused. A guard that refuses valid writes is worse than no guard.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "        post.insert(0 if placement == \"prepend\" else len(post), new_version)",
+      "replace": "        post.insert(0, new_version)",
+      "test": "tests/test_h_mad_version_history.py::TestSeriesBreakIsRefusedAtTheWrite::test_a_clean_ascending_bump_still_lands"
+    },
+    {
+      "name": "the-new-version-is-always-appended",
+      "_mechanism": "The mirror of the above, and the reason the descending control exists: a correct prepend evaluated as an append misreads a valid descending document.",
+      "file": "scripts/h_mad_version_history.py",
+      "find": "        post.insert(0 if placement == \"prepend\" else len(post), new_version)",
+      "replace": "        post.append(new_version)",
+      "test": "tests/test_h_mad_version_history.py::TestSeriesBreakIsRefusedAtTheWrite::test_a_descending_document_still_prepends"
+    }
+  ]
+}

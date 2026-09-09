@@ -417,3 +417,88 @@ class TestEntryBoundaries:
 
         assert raw == b"## Version History\r\n- v1.0: First.\r\n- v1.1: Second.\r\n", raw
         assert b"\n" not in raw.replace(b"\r\n", b"")
+
+
+class TestSeriesBreakIsRefusedAtTheWrite:
+    """#29, handed over from HemaSuite `feature/18-gateway-consolidation`.
+
+    `classify_order` read the versions it FOUND, so a version that appends cleanly
+    but sorts into the middle was accepted and the document left disordered; the
+    refusal then fired on the NEXT caller, who had not caused it. A gate that
+    validates the resulting STATE rather than the incoming WRITE gives the caller no
+    signal at the only moment the caller can act on it.
+
+    Measured cost before the fix: a `design-author` scoped its "newest version" grep
+    to `^- v1\\.`, could not see four `v2.xx` entries, wrote `v1.100`, and got
+    `OK ... placement=append`. A later round re-labelled it to `v2.04` by hand.
+    """
+
+    ASC = "# D\n\n## Version History\n\n- v1.00: first\n- v2.00: second\n- v2.03: newest\n"
+    DESC = "# D\n\n## Version History\n\n- v2.03: newest\n- v2.00: older\n- v1.00: oldest\n"
+
+    def _doc(self, tmp_path, body, name="d.md"):
+        p = tmp_path / name
+        p.write_text(body, encoding="utf-8")
+        return p
+
+    def test_a_version_that_sorts_into_the_middle_is_refused(self, tmp_path) -> None:
+        """The exact reproduction from the brief."""
+        d = self._doc(tmp_path, self.ASC)
+        before = d.read_text(encoding="utf-8")
+        r = run_cli(str(d), "--version", "v1.100", "--text", "probe")
+        assert "reason=mixed_order" in r.stdout, r.stdout
+        assert d.read_text(encoding="utf-8") == before, "a refusal must not write"
+
+    def test_the_refusal_names_the_SAME_reason_as_the_post_read_one(self, tmp_path) -> None:
+        """Two spellings of one defect would make the write-time and read-time
+        refusals look like different problems to whoever hits them."""
+        d = self._doc(tmp_path, self.ASC)
+        r = run_cli(str(d), "--version", "v1.100", "--text", "probe")
+        assert "VERSION-HISTORY: REFUSED" in r.stdout
+        assert "reason=mixed_order" in r.stdout, r.stdout
+
+    def test_a_clean_ascending_bump_still_lands(self, tmp_path) -> None:
+        """The control. A guard that refuses everything kills every mutant and
+        protects nothing."""
+        d = self._doc(tmp_path, self.ASC)
+        r = run_cli(str(d), "--version", "v2.05", "--text", "probe")
+        assert "VERSION-HISTORY: OK" in r.stdout, r.stdout
+        assert "placement=append" in r.stdout, r.stdout
+        assert "- v2.05: probe" in d.read_text(encoding="utf-8")
+
+    def test_a_descending_document_still_prepends(self, tmp_path) -> None:
+        """The other control: the check must not read a correct prepend as a break."""
+        d = self._doc(tmp_path, self.DESC)
+        r = run_cli(str(d), "--version", "v2.04", "--text", "probe")
+        assert "VERSION-HISTORY: OK" in r.stdout, r.stdout
+        assert "placement=prepend" in r.stdout, r.stdout
+
+    def test_a_descending_document_refuses_a_version_that_breaks_ITS_series(self, tmp_path) -> None:
+        """Symmetry: the predicate is direction-agnostic, so a prepend that is not
+        the new maximum must refuse just as an append that is not the new maximum
+        does. Without this the fix would only ever have been tested one way round."""
+        d = self._doc(tmp_path, self.DESC)
+        before = d.read_text(encoding="utf-8")
+        r = run_cli(str(d), "--version", "v1.50", "--text", "probe")
+        assert "reason=mixed_order" in r.stdout, r.stdout
+        assert d.read_text(encoding="utf-8") == before
+
+    def test_the_pre_existing_post_read_refusal_is_UNCHANGED(self, tmp_path) -> None:
+        """This ADDS a check. A document already disordered must still refuse on
+        read, or the fix would have replaced the guard instead of extending it."""
+        d = self._doc(tmp_path, "# D\n\n## Version History\n\n- v1.00: a\n- v2.00: b\n- v1.50: c\n")
+        r = run_cli(str(d), "--version", "v2.05", "--text", "probe")
+        assert "reason=mixed_order" in r.stdout, r.stdout
+
+    def test_a_single_entry_section_cannot_observe_an_order(self, tmp_path) -> None:
+        """The BLIND SPOT, pinned so it is a known limit rather than a surprise.
+
+        With fewer than two prior entries the document's direction is unobservable,
+        so appending a lower version produces a self-consistent DESCENDING pair and
+        nothing is disordered. The check cannot fire here and must not pretend to:
+        the series-extension warning the brief suggests as a separate signal is what
+        would cover this, and it is not built.
+        """
+        d = self._doc(tmp_path, "# D\n\n## Version History\n\n- v2.03: only\n")
+        r = run_cli(str(d), "--version", "v1.100", "--text", "probe")
+        assert "VERSION-HISTORY: OK" in r.stdout, r.stdout

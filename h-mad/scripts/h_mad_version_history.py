@@ -191,6 +191,29 @@ def plan_insertion(text: str, version: str, entry_text: str) -> tuple[list[str],
             insert_at += 1
         placement = "append"
 
+    # The `mixed_order` predicate, evaluated against the sequence this write WOULD
+    # PRODUCE rather than the one it found (#29).
+    #
+    # `classify_order` above reads the EXISTING entries, so a version that appends
+    # cleanly but sorts into the middle was accepted and left the document
+    # disordered; the refusal then fired on the NEXT caller, who had not caused it.
+    # A gate that validates the resulting STATE rather than the incoming WRITE gives
+    # the caller no signal at the only moment the caller can act, and both authors
+    # who hit this read the `OK` as validation of the label they passed — which is
+    # what an OK on a write means everywhere else in h-mad.
+    #
+    # Measured cost: a `design-author` scoped its "newest version" grep to `^- v1\.`,
+    # could not see four `v2.xx` entries, wrote `v1.100`, and got
+    # `OK ... placement=append`. A later round re-labelled it to `v2.04` by hand.
+    #
+    # This ADDS a check; the post-read refusal above is correct and stays. The two
+    # cannot disagree, because both call `classify_order` — re-implementing the
+    # predicate here is how they would drift apart.
+    if versions:
+        post = list(versions)
+        post.insert(0 if placement == "prepend" else len(post), new_version)
+        classify_order(post)   # raises Refusal("mixed_order")
+
     new_lines = lines[:insert_at] + [new_line] + lines[insert_at:]
     return new_lines, insert_at, placement
 
