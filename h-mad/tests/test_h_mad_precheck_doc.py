@@ -442,3 +442,88 @@ def test_json_output_carries_the_same_verdict_as_the_token(tmp_path):
     payload = json.loads(r.stdout)
     assert payload["verdict"] == "FAIL"
     assert payload["issues"] == len(payload["findings"])
+
+
+def _root_commit() -> str:
+    """A commit everything has changed since, so PINDRIFT fires on any real pin."""
+    return subprocess.run(
+        ["git", "rev-list", "--max-parents=0", "HEAD"],
+        cwd=str(REPO), capture_output=True, text=True,
+    ).stdout.strip().splitlines()[0][:7]
+
+
+_TWO_PINS = (
+    "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the scanner.\n"
+    "See `h-mad/scripts/h_mad_version_history.py:1` for the bumper.\n"
+)
+
+
+def test_allow_historical_demotes_ONE_pin_and_leaves_the_other_hard(tmp_path):
+    """#30 option (c), and the test that makes it different from option (a).
+
+    Raising the document's provenance sha silences EVERY PINDRIFT at once without
+    repairing a single pin — measured on `gateway-consolidation.design.md`: v1.15 at
+    its own tree `FAIL issues=41`, v1.16 `PASS issues=0` purely because it named
+    HEAD, 26 findings gone advisory and zero pins repaired. So the detector's green
+    got strongest exactly as the document rotted.
+
+    A declared-historical pin must therefore be demoted ALONE. If the flag demoted
+    everything it would be provenance-raising with extra steps.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS)
+
+    both = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert len(details(both.stdout, "PINDRIFT")) == 2, both.stdout
+
+    one = run(doc, "--phase", "impl-plan", "--root", REPO,
+              "--allow-historical", "h_mad_precheck_doc.py:1")
+    hits = details(one.stdout, "PINDRIFT")
+    assert len(hits) == 1, hits
+    assert "h_mad_version_history.py" in "\n".join(hits), hits
+    assert token(one.stdout).startswith("PRECHECK: FAIL"), one.stdout
+
+
+def test_allow_historical_clears_the_verdict_when_every_drifted_pin_is_declared(tmp_path):
+    """Declaring all of them is legitimate and must reach PASS — otherwise the flag
+    is unusable and authors go back to raising provenance, which is the defect."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py",
+            "--allow-historical", "h_mad_version_history.py")
+    assert not details(r.stdout, "PINDRIFT"), r.stdout
+
+
+def test_a_declared_historical_pin_is_REPORTED_not_silently_dropped(tmp_path):
+    """`allowed` exists so a suppression is visible. A demotion nobody can see is
+    indistinguishable from a detector that never fired."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py:1")
+    assert "PINDRIFT" in r.stdout and "declared historical" in r.stdout, r.stdout
+
+
+def test_a_non_matching_allow_historical_demotes_nothing(tmp_path):
+    """The control. A substring that matches no pin must leave the verdict alone, or
+    the flag would be a blanket switch wearing a per-pin costume."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "no_such_file.py")
+    assert len(details(r.stdout, "PINDRIFT")) == 2, r.stdout
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_allow_historical_does_not_touch_the_other_hard_kinds(tmp_path):
+    """Scoped to PINDRIFT. A pin past end-of-file is provably wrong whatever the
+    provenance says, and no declaration should reach it."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:999999` for the scanner.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py")
+    assert details(r.stdout, "LINEPIN"), r.stdout
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout

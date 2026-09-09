@@ -267,12 +267,14 @@ def _list_length_after(lines: list[str], idx: int) -> int | None:
     return n
 
 
-def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None):
+def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
+         allow_historical: list[str] | None = None):
     """Return `(findings, advisories, allowed)`.
 
     `findings` move the verdict; `advisories` never do.
     """
     allow = list(allow or [])
+    allow_historical = list(allow_historical or [])
     try:
         text = doc.read_text(errors="replace")
     except OSError as exc:
@@ -285,6 +287,16 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None):
 
     def allowed_by(span: str) -> bool:
         return any(a in span for a in allow)
+
+    def historical_by(span: str) -> bool:
+        """A pin the caller has DECLARED knowingly historical (#30, option c).
+
+        An INPUT, never inferred, exactly as `--allow` is — and deliberately a CLI
+        flag rather than a marker in the document, because a document that can mark
+        its own pins historical can silence its own gate permanently and silently,
+        which is the masking this was raised to fix rather than a cure for it.
+        """
+        return any(a in span for a in allow_historical)
 
     head = _head_sha(root)
 
@@ -367,10 +379,22 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None):
                     # since the commit the document says it measured at. This is the
                     # c33 defect exactly — six SKILL.md pins, stale by 93 lines,
                     # measured at a commit that had moved.
-                    findings.append(
-                        ("PINDRIFT", lineno,
-                         f"`{rel}:{tail}` — `{rel}` changed since the document's provenance `{prov[:7]}`")
-                    )
+                    #
+                    # …UNLESS the caller declared this pin knowingly historical
+                    # (#30, option c). PINDRIFT stays HARD for everything else, which
+                    # is the point: raising the document's provenance sha silences
+                    # EVERY finding at once without repairing a single pin, so the
+                    # detector's green got stronger exactly as the document rotted.
+                    # Measured on `gateway-consolidation.design.md`: v1.15 at its own
+                    # tree FAIL issues=41; v1.16 PASS issues=0 purely because it named
+                    # HEAD — 26 findings went advisory, zero pins repaired.
+                    if historical_by(f"{rel}:{tail}") or historical_by(rel):
+                        allowed.append(f"PINDRIFT {rel}:{tail} L{lineno} (declared historical)")
+                    else:
+                        findings.append(
+                            ("PINDRIFT", lineno,
+                             f"`{rel}:{tail}` — `{rel}` changed since the document's provenance `{prov[:7]}`")
+                        )
                 else:
                     # Cannot judge: no provenance sha to measure drift against.
                     # Reported, never scored — "I could not check" is not "it is fine".
@@ -441,6 +465,12 @@ def main(argv=None) -> int:
     ap.add_argument("--root", default=".", help="repository root; cited paths resolve here")
     ap.add_argument("--allow", action="append", default=[],
                     help="a substring whose hits are deliberate. An INPUT, never inferred. Repeatable.")
+    ap.add_argument("--allow-historical", action="append", default=[], metavar="SUBSTR",
+                    help="a pin (`path:line` or just `path`) that is KNOWINGLY historical: it "
+                         "measures an older tree on purpose. Demotes PINDRIFT to `allowed` for "
+                         "that pin only. An INPUT, never inferred, and never a document marker — "
+                         "a document that can silence its own gate is the masking this exists to "
+                         "fix. Repeatable.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
@@ -448,7 +478,8 @@ def main(argv=None) -> int:
     root = Path(args.root).resolve()
 
     try:
-        findings, advisories, allowed = scan(doc, args.phase, root, args.allow)
+        findings, advisories, allowed = scan(doc, args.phase, root, args.allow,
+                                             args.allow_historical)
     except Unreadable as exc:
         print(f"PRECHECK: UNREADABLE reason={exc.reason}")
         print(f"[H-MAD] precheck {doc} unreadable")

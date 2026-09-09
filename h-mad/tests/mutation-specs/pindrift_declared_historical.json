@@ -1,0 +1,51 @@
+{
+  "_why": "#30 option (c), taken over from HemaSuite feature/18-gateway-consolidation. The whole value is that the demotion is PER-PIN: a blanket demotion is provenance-raising with extra steps, which is the masking this was raised to fix. Each mutation has its own `test`.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "any-declaration-demotes-every-pin",
+      "_mechanism": "THE defect this option exists to avoid. Demoting all pins because one was declared is exactly what raising the provenance sha already did -- 26 findings gone, zero pins repaired.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                    if historical_by(f\"{rel}:{tail}\") or historical_by(rel):",
+      "replace": "                    if allow_historical:",
+      "test": "tests/test_h_mad_precheck_doc.py::test_allow_historical_demotes_ONE_pin_and_leaves_the_other_hard"
+    },
+    {
+      "name": "the-declaration-predicate-always-matches",
+      "_mechanism": "A substring that matches no pin must demote nothing, or the flag is a blanket switch wearing a per-pin costume.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        return any(a in span for a in allow_historical)",
+      "replace": "        return True",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_non_matching_allow_historical_demotes_nothing"
+    },
+    {
+      "name": "the-demotion-is-silent",
+      "_mechanism": "A suppression nobody can see is indistinguishable from a detector that never fired. `allowed` is what makes it auditable.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                        allowed.append(f\"PINDRIFT {rel}:{tail} L{lineno} (declared historical)\")",
+      "replace": "                        pass  # silently dropped",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_declared_historical_pin_is_REPORTED_not_silently_dropped"
+    },
+    {
+      "name": "a-declaration-never-clears-the-verdict",
+      "_mechanism": "If declaring every drifted pin cannot reach PASS the flag is unusable, and authors go back to raising provenance -- the defect restored by the tool built to fix it.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                    if historical_by(f\"{rel}:{tail}\") or historical_by(rel):",
+      "replace": "                    if False:",
+      "test": "tests/test_h_mad_precheck_doc.py::test_allow_historical_clears_the_verdict_when_every_drifted_pin_is_declared"
+    }
+  ]
+}

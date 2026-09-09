@@ -1,8 +1,19 @@
 {
   "_why": "PINDRIFT is one of the four HARD kinds and had NO test of its own until 2026-09-07. Its only exercise was being COUNTED by the noise-floor test, and the c33 pin test accepts a hit under either LINEPIN or PINDRIFT, so neither discriminated it. When the floor stopped counting PINDRIFT — it measures tree drift against a frozen archived document, not document quality — the detector would have been left with zero behavioural coverage. These rows are what make the two new tests real: an unmutated pair of tests proves only that the code passes itself.",
   "root": "../..",
-  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_precheck_doc.py", "-q"],
-  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
   "mutations": [
     {
       "name": "pindrift-never-fires",
@@ -24,8 +35,8 @@
       "name": "pindrift-is-downgraded-to-advisory",
       "_mechanism": "The detail line still prints — a reader skimming output sees it — while the verdict becomes PASS, because hardness here is decided ONLY by which list the hit is appended to. A finding that is printed and does not move the verdict is the shape that lets a stale pin ship past a gate that reads the token.\n\nThis row first mutated `HARD_KINDS` instead, and SURVIVED. The stated mechanism was wrong: `HARD_KINDS` is defined at :93 and never read — the verdict is `\"FAIL\" if findings else \"PASS\"`, and the two test-side filters spell the set out as literals rather than importing it. I had asserted a mechanism without executing it, which is the class this repo files under `execute property claims, never assert them`. The dead constant is filed separately.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                    findings.append(\n                        (\"PINDRIFT\", lineno,",
-      "replace": "                    advisories.append(\n                        (\"PINDRIFT\", lineno,",
+      "find": "                        findings.append(\n                            (\"PINDRIFT\", lineno,",
+      "replace": "                        advisories.append(\n                            (\"PINDRIFT\", lineno,",
       "test": "tests/test_h_mad_precheck_doc.py::test_PINDRIFT_fires_when_a_pinned_file_changed_since_the_provenance"
     },
     {
