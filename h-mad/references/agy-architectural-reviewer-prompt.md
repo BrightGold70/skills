@@ -96,11 +96,18 @@ If WITH_FIXES or NO: list Critical + Important issues with:
 
 The orchestrator halts with `step6a-prime:architectural_review_failed` and surfaces findings. Operator either fixes and re-runs, or authors `.archreview.override.md` with justifications + commits `[archreview-override]` to bypass.
 
-Do NOT issue OVERRIDE prompts. Use only `view_file` for code inspection.
+Do NOT issue OVERRIDE prompts. Use `view_file` for code inspection.
+
+**One exception, and it is not optional:** you must also WRITE your report file
+(next section) with `run_command`. That is the only write you may make. An earlier
+revision of this prompt said "use only `view_file`" and then asked for the file in
+the next breath; the reviewer obeyed the restriction, wrote nothing, and its review
+was discarded for the fifth time in a row.
 
 ## Where to write your report
 
-Write your full report to this file, creating it if it does not exist:
+Write your full report to this file with `run_command`, creating it if it does
+not exist:
 
 <INLINE_REPORT_FILE>
 

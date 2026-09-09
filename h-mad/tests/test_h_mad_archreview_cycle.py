@@ -625,3 +625,52 @@ class TestTheReportFileChannel:
         assert "fallback" in tpl.lower(), (
             "the template must say the reply is the fallback, or the agent has no "
             "reason to write both")
+
+    def test_the_template_PERMITS_the_write_it_demands(self, tmp_path):
+        """The defect a live dispatch caught, pinned so it cannot return.
+
+        The first build of this channel added "write your report to this file" to a
+        template whose tool rules said "Use only `view_file` for code inspection".
+        The reviewer obeyed the restriction: 40 `run_command` calls for inspection,
+        zero writes, and a fifth consecutive NO_VERDICT. A prompt that forbids the
+        action it requires is worse than one that never asked.
+        """
+        tpl = (SCRIPTS.parent / "references" / "agy-architectural-reviewer-prompt.md"
+               ).read_text(encoding="utf-8")
+        assert "Use only `view_file`" not in tpl, (
+            "the tool restriction still forbids the write this template demands")
+        i_rule = tpl.index("`view_file` for code inspection")
+        i_slot = tpl.index("<INLINE_REPORT_FILE>")
+        assert "run_command" in tpl[i_rule:i_slot], (
+            "the write permission must be stated between the tool rule and the slot, "
+            "or the reviewer reads the restriction and never reaches the exception")
+
+    def test_the_report_instruction_is_near_the_HEAD_not_only_the_tail(self, tmp_path):
+        """The defect the SECOND live dispatch exposed, and the reason the first fix
+        was insufficient.
+
+        The template's own text is ~7 KB; the substituted design and file list make
+        the prompt ~690 KB. Measured on the real staged prompt, the report-file
+        instruction sat at char 686,590 of 689,456 — 99.6% through — and the
+        transcript never mentioned the path at all. `prepend_output_contract` in
+        `h_mad_assemble_audit.py` already takes `report_file` for exactly this
+        reason; this mirrors it instead of inventing a second mechanism.
+        """
+        design = tmp_path / "d.md"
+        design.write_text("PADDING LINE\n" * 20000, encoding="utf-8")   # a realistic bulk
+        prompt = tmp_path / "big.txt"
+        r = _run("stage", "--feature", "feat",
+                 "--template", str(self._tpl(tmp_path, True, "big.tpl")),
+                 "--base", "aaa1111", "--head", "bbb2222",
+                 "--design", str(design), "--diff-files", "a.py",
+                 "--summary", "did things", "--prompt", str(prompt),
+                 "--report-file", "/tmp/rep_head.md")
+        assert r.returncode == 0, r.stdout + r.stderr
+        body = prompt.read_text(encoding="utf-8")
+        first = body.index("/tmp/rep_head.md")
+        assert first / len(body) < 0.05, (
+            f"the report path first appears {100*first/len(body):.1f}% into the prompt; "
+            "an instruction behind hundreds of KB of context is not an instruction")
+        assert "ASSESSMENT: READY_TO_MERGE" in body[:first + 2000], (
+            "the head contract must carry the verdict literals too — the verdict line "
+            "has the identical burial problem")

@@ -328,6 +328,35 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
               "reviewer nowhere, and the staging otherwise looks successful.")
         return 2
 
+    # HEAD CONTRACT. Measured, not guessed: with the design and the 62-path file
+    # list substituted in, the template's own text is ~7 KB of a ~690 KB prompt, so
+    # every instruction it carries — the report file AND the verdict line — sits in
+    # the last 0.4%. Two live dispatches wrote no report file; the transcript of the
+    # second never mentions the path at all, and the instruction was at char 686,590
+    # of 689,456.
+    #
+    # `h_mad_assemble_audit.prepend_output_contract` already solved this for the
+    # audit path, and takes `report_file` for the same reason. This mirrors it
+    # rather than inventing a second mechanism.
+    if report_file is not None:
+        head = (
+            "!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!\n"
+            "OUTPUT CONTRACT — repeated at the very end of this prompt.\n\n"
+            "1. WRITE your full report with `run_command` to this exact path:\n"
+            f"       {report_file}\n"
+            "   Do this BEFORE you compose your reply. A file you create and leave\n"
+            "   empty counts as not written.\n"
+            "2. The LAST line of that file AND the LAST line of your reply must both\n"
+            "   be exactly one of these three, character for character, alone on the\n"
+            "   line, with nothing after it:\n"
+            "       ASSESSMENT: READY_TO_MERGE\n"
+            "       ASSESSMENT: WITH_FIXES\n"
+            "       ASSESSMENT: NO\n\n"
+            "Everything between here and the contract at the end is context.\n"
+            "----------------------------------------------------------------\n\n"
+        )
+        body = head + body
+
     prompt.write_text(body, encoding="utf-8")
     _emit(f"STAGED prompt={prompt} base={base} head={head} "
           f"bytes={len(body.encode('utf-8'))}")
