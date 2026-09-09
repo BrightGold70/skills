@@ -4,6 +4,7 @@
 **Branch:** `main`
 **Project:** skills (`/Users/kimhawk/orca/skills`)
 **Handover-From:** HemaSuite · feature/18-gateway-consolidation · session 7fa8b629-4146-41a1-8585-3a7d0a2d22c6
+**Taken-Over-By:** skills · main · session 4417a49b-c9e5-4989-bf36-cd4f73e9351a · 2026-09-09
 **Supersedes:** none — first on this branch for these two items
 
 ## Session Summary
