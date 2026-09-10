@@ -2783,9 +2783,24 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   # the rule this follows -- an unproven heuristic never blocks an operator.
   #
   # Promote to a refusal only with a corpus behind it.
-  if grep -qE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' "$promptfile" 2>/dev/null; then
+  # The token set MATCHES the assembled paths, and both widenings are load-bearing.
+  # `<AUDIT_SENTINEL>` is guarded by `h_mad_assemble_audit.py:147` alongside
+  # `<REPORT_FILE_PATH>`, and it is the token that matters MOST on the cmux and
+  # unpinned transports: there `<REPORT_FILE_PATH>` is deliberately left empty and
+  # the sentinel scrape is the only channel, so the sentinel is the sole live-slot
+  # risk — and it was the one this check missed. A prompt shipping the literal
+  # dispatches silently, the scrape then hunts a sentinel value that was never
+  # substituted, and the run lands in `no_verdict`.
+  #
+  # `<INLINE[^>]*>` not `<INLINE_[A-Z_0-9]+>`, matching `h_mad_assemble_tdd.py:77`
+  # exactly. That grammar is deliberately loose there because a TYPO'd slot
+  # (`<INLINE_MODULE-NAME>`, `<INLINE_feature>`) evaded a strict `[A-Z_]+` pattern
+  # and reached the agent as a broken prompt with no refusal. A narrower rule here
+  # would warn on the well-formed slots and stay silent on exactly the malformed
+  # ones the assembler learned to catch.
+  if grep -qE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" 2>/dev/null; then
     local _slots
-    _slots=$(grep -oE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' "$promptfile" \
+    _slots=$(grep -oE '<INLINE[^>]*>|<REPORT_FILE_PATH>|<AUDIT_SENTINEL>' "$promptfile" \
              | sort -u | tr '\n' ' ')
     echo "hmad-dispatch: WARNING: prompt carries live template slots: ${_slots}" >&2
     echo "  a slot reaching the agent reads as real prose, and the reply reviews the placeholder." >&2

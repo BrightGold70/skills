@@ -614,6 +614,34 @@ class TestTheReportFileChannel:
         assert "channel=report-file" in result.stdout, result.stdout
         assert json.loads(state.read_text())["orchestrator_state"]["feat"]["archreview"] == "READY_TO_MERGE"
 
+    def test_a_report_file_with_NO_VERDICT_loses_to_a_last_message_that_has_one(self, tmp_path):
+        """Non-empty is not complete. A write killed part-way leaves real prose and
+        no verdict line, and once the file started winning over the last message,
+        preferring it DISCARDED a verdict that had survived.
+
+        The audit path's own completeness gate is three-part
+        (`h_mad_audit_cycle._has_complete_report`: exists, non-empty, `.done`
+        marker). That third part is NOT copied here and must not be: neither the
+        agy template nor the head contract `stage()` injects asks the reviewer to
+        create a `.done` marker — only the codex VERIFIER template does — so
+        requiring one would send every report to the fallback and undo the channel.
+        The usable gate on this surface is whether the file carries a verdict.
+        """
+        state = _state(tmp_path)
+        rep = tmp_path / "truncated.md"
+        rep.write_text("## Findings\n\nThe module is sound, and the wiring is\n",
+                       encoding="utf-8")   # cut mid-sentence, no ASSESSMENT
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 6)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")),
+                      "--report-file", str(rep))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ARCHREVIEW: WITH_FIXES" in result.stdout, result.stdout
+        assert "channel=last-message" in result.stdout, (
+            "a verdictless file must not win — the last message is what this "
+            "channel exists to rescue", result.stdout)
+        assert json.loads(state.read_text())["orchestrator_state"]["feat"]["archreview"] == "WITH_FIXES"
+
     def test_an_unreadable_review_is_STILL_fatal_when_no_report_file_can_serve(self, tmp_path):
         """The other half, and the reason the fix is an ordering change rather than
         a softened guard: with nothing readable on EITHER channel there is no review

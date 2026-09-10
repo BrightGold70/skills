@@ -534,6 +534,26 @@ def test_allow_historical_still_matches_a_bare_filename_not_only_the_full_path(t
         "a bare filename must still demote the whole file", r.stdout)
 
 
+def test_allow_historical_accepts_a_token_written_with_a_LEADING_SLASH(tmp_path):
+    """A declaration that is ignored without an error is worse than one refused.
+
+    Under the old `in` a token written `/h_mad_precheck_doc.py:1` matched; the
+    anchor silently stopped it, because the span cannot end with `//…`. The
+    operator sees the pin still reported as a finding and concludes the flag is
+    broken — which is exactly the silent-ignore this spec's own
+    `the-anchor-tightens-to-equality` mutation describes, reintroduced by the fix
+    for the opposite defect.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the head.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "/h_mad_precheck_doc.py:1")
+    assert not details(r.stdout, "PINDRIFT"), (
+        "a leading slash must not silently disable the declaration", r.stdout)
+
+
 def test_allow_historical_does_not_match_a_bare_filename_SUFFIX_of_another(tmp_path):
     """The `/` in the anchor, and the only test that can see it.
 

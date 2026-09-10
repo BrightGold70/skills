@@ -111,6 +111,19 @@ def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
     then produced nothing is the commonest partial failure, and an empty file read
     as authoritative turns that into `NO_VERDICT` while a perfectly good verdict sat
     in the last message. So empty routes to the fallback, exactly as absent does.
+
+    NON-EMPTY is not evidence either, and that gap widened the moment the file
+    started winning over an unreadable review: a write killed part-way leaves real
+    prose with no verdict line, and preferring it DISCARDS a last message that may
+    carry one. So the file wins on carrying a usable verdict, not on carrying bytes
+    — which is what "the file WINS when it has content" was always reaching for.
+
+    Deliberately NOT the audit path's third gate. `h_mad_audit_cycle._has_complete_report`
+    adds `_done_path(...).exists()`, and copying it here would break this channel
+    outright: neither `agy-architectural-reviewer-prompt.md` nor the head contract
+    `stage()` injects ever asks the reviewer to create a `.done` marker (only the
+    codex VERIFIER template does). Requiring one would send every report to the
+    fallback and undo the channel. Same concern, different surface, different gate.
     """
     if report_path is None:
         return None, "not_requested"
@@ -120,6 +133,10 @@ def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
         return None, "unreadable"
     if not text.strip():
         return None, "empty"
+    if _extract_assessment(text) is None:
+        # Falls back rather than failing: the last message is the channel this
+        # exists to rescue, and it may hold the verdict this file lost.
+        return None, "no_verdict_in_file"
     return text, "report-file"
 
 

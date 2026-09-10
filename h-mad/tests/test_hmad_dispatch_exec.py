@@ -151,8 +151,33 @@ def test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict(t
     clean = tmp_path / "clean.txt"
     clean.write_text("Verify this. Everything is substituted.\n")
 
+    # `<AUDIT_SENTINEL>` is guarded by the assembler alongside `<REPORT_FILE_PATH>`
+    # (h_mad_assemble_audit.py:147) and is the token that matters MOST on cmux and
+    # unpinned transports, where `<REPORT_FILE_PATH>` is deliberately left empty and
+    # the sentinel scrape is the only channel. A first cut of this advisory checked
+    # the other two and missed it, so the one transport with a single point of
+    # failure was the one left unguarded.
+    sentinel = tmp_path / "sentinel.txt"
+    sentinel.write_text("Audit this.\n\n<AUDIT_SENTINEL>-BEGIN\n")
+    # A TYPO'd slot. The assembler's grammar is `<INLINE[^>]*>` precisely because
+    # `<INLINE_MODULE-NAME>` evaded a strict `[A-Z_]+` pattern and reached the agent
+    # as a broken prompt with no refusal; a narrower rule here would warn on the
+    # well-formed slots and stay silent on the malformed ones.
+    typo = tmp_path / "typo.txt"
+    typo.write_text("Do the task for <INLINE_MODULE-NAME>.\n")
+
     r_dirty = run(["exec", "codex", str(dirty), "--cd", str(tmp_path)], env=_env(b))
     r_clean = run(["exec", "codex", str(clean), "--cd", str(tmp_path)], env=_env(b))
+    r_sent = run(["exec", "codex", str(sentinel), "--cd", str(tmp_path)], env=_env(b))
+    r_typo = run(["exec", "codex", str(typo), "--cd", str(tmp_path)], env=_env(b))
+
+    assert "<AUDIT_SENTINEL>" in r_sent.stderr, (
+        "the sentinel is the ONLY live-slot risk on cmux/unpinned", r_sent.stderr)
+    assert "<INLINE_MODULE-NAME>" in r_typo.stderr, (
+        "a typo'd slot is the case the assembler's loose grammar exists for",
+        r_typo.stderr)
+    assert r_sent.returncode == r_clean.returncode, (r_sent.returncode, r_clean.returncode)
+    assert r_typo.returncode == r_clean.returncode, (r_typo.returncode, r_clean.returncode)
 
     assert "WARNING: prompt carries live template slots" in r_dirty.stderr, r_dirty.stderr
     assert "<INLINE_PROPERTIES>" in r_dirty.stderr, r_dirty.stderr

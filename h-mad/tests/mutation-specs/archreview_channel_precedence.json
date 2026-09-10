@@ -30,6 +30,14 @@
       "find": "        except OSError as exc:\n            _emit(f\"UNREADABLE reason=review:{exc.__class__.__name__}\")\n            return 2",
       "replace": "        except OSError:\n            review = \"\"",
       "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_unreadable_review_is_STILL_fatal_when_no_report_file_can_serve"
+    },
+    {
+      "name": "a-verdictless-report-file-still-wins",
+      "_mechanism": "Non-empty becomes sufficient again. A write killed part-way leaves real prose and no verdict line; preferring it DISCARDS a last message that carried one, and the cycle reports NO_VERDICT about a review that in fact returned one. This gap only became reachable when the file started winning over an unreadable review -- the same commit that made the channel work made an incomplete file authoritative.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if _extract_assessment(text) is None:",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_a_report_file_with_NO_VERDICT_loses_to_a_last_message_that_has_one"
     }
   ]
 }

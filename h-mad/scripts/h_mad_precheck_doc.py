@@ -313,7 +313,13 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
         `…/foo.py:12` cannot end with `/foo.py:1`. The `/` boundary is what stops
         the token `foo.py:1` matching `…/bar_foo.py:1`.
         """
-        return any(span == a or span.endswith("/" + a) for a in allow_historical)
+        # `lstrip("/")` so a token written with a leading slash still matches.
+        # Under the old `in` it did; the anchor silently stopped it, and a
+        # declaration that is ignored WITHOUT AN ERROR is the failure this spec's
+        # own `the-anchor-tightens-to-equality` mutation exists to describe — the
+        # operator sees their pin still reported and concludes the flag is broken.
+        return any(span == a.lstrip("/") or span.endswith("/" + a.lstrip("/"))
+                   for a in allow_historical)
 
     head = _head_sha(root)
 
