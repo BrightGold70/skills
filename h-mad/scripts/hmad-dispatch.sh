@@ -2762,6 +2762,36 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
   esac
   [ -f "$promptfile" ] || { echo "hmad-dispatch: no such prompt file: $promptfile" >&2; return 2; }
 
+  # ADVISORY: a live template slot in a prompt about to be dispatched.
+  #
+  # The ASSEMBLED paths already refuse this -- `h_mad_assemble_tdd.py` halts
+  # `residual_slots`, `h_mad_assemble_audit.py` and `h_mad_archreview_cycle.py`
+  # halt `UNSUBSTITUTED`. The HAND-WRITTEN path has no refusal at all, and
+  # `exec` passes the file through verbatim, so every path converges here with
+  # only some of them guarded. The 5e anti-gaming verifier is the live example:
+  # SKILL.md says the assembler does not stage it, and pointing the assembler at
+  # it halts on seven unfilled slots -- so the only shipping route is by hand.
+  #
+  # WARNS, never blocks, and the distinction is load-bearing rather than timid.
+  # A hard finding here has NOT been calibrated: the prompts that would form the
+  # corpus were written to /tmp and are gone, so there is no way to measure the
+  # false-positive rate on prompts that dispatched correctly -- and a prompt may
+  # legitimately quote a slot (this repo audits its own templates). Shipping an
+  # uncalibrated detector as a blocker is the documented failure here: every
+  # `h_mad_precheck_doc.py` detector filed hard on first cut fired 104/49/48
+  # times on documents that had passed 74 and 83 audit cycles. `COUNT:` states
+  # the rule this follows -- an unproven heuristic never blocks an operator.
+  #
+  # Promote to a refusal only with a corpus behind it.
+  if grep -qE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' "$promptfile" 2>/dev/null; then
+    local _slots
+    _slots=$(grep -oE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' "$promptfile" \
+             | sort -u | tr '\n' ' ')
+    echo "hmad-dispatch: WARNING: prompt carries live template slots: ${_slots}" >&2
+    echo "  a slot reaching the agent reads as real prose, and the reply reviews the placeholder." >&2
+    echo "  advisory only -- dispatching anyway. Assembled prompts refuse this; hand-written ones cannot." >&2
+  fi
+
   local cd_dir="" model="" out="" timeout="" sandbox="" effort="" log=""
   [ "$agent" = codex ] && sandbox="workspace-write"   # codex default; agy has none
   while [ $# -gt 0 ]; do case "$1" in

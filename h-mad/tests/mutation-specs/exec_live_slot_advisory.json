@@ -1,0 +1,43 @@
+{
+  "_why": "`exec` is where every dispatch path converges and it passes the prompt through verbatim, so the ASSEMBLED paths refuse a live slot (assemble_tdd `residual_slots`, assemble_audit and archreview `UNSUBSTITUTED`) while the HAND-WRITTEN path has no refusal at all. The 5e anti-gaming verifier is the live example: SKILL.md says the assembler does not stage it, and pointing the assembler at it halts on seven unfilled slots, so hand assembly is the only shipping route. The advisory closes that asymmetry WITHOUT blocking, and the mutations attack all three ways it can rot: stop warning, warn on everything, and -- the one that matters -- quietly become a refusal. No shipped miss has ever been observed and no corpus of dispatched hand-written prompts survives (they were written to /tmp), which is precisely why this must not be promoted to a blocker without one.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_hmad_dispatch_exec.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-advisory-never-fires",
+      "_mechanism": "Dead detector. A hand-written prompt ships its placeholder to the agent, which reads it as real prose and returns a review OF THE PLACEHOLDER -- a wasted dispatch that looks like a completed one, and the state is restored to exactly what it was before this guard existed.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if grep -qE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' \"$promptfile\" 2>/dev/null; then",
+      "replace": "  if false; then",
+      "test": "tests/test_hmad_dispatch_exec.py::test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict"
+    },
+    {
+      "name": "the-advisory-fires-on-every-prompt",
+      "_mechanism": "The other way a warning dies: fire unconditionally and it stops carrying information. An operator who sees it on every correctly substituted dispatch learns to scroll past it, and the one real occurrence is indistinguishable from the noise -- an alarm that is always on is the same as no alarm, reached from the opposite direction.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "  if grep -qE '<INLINE_[A-Z_0-9]+>|<REPORT_FILE_PATH>' \"$promptfile\" 2>/dev/null; then",
+      "replace": "  if true; then",
+      "test": "tests/test_hmad_dispatch_exec.py::test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict"
+    },
+    {
+      "name": "the-advisory-becomes-a-refusal",
+      "_mechanism": "The most tempting edit in the file, and the reason the exit-code assertion is in the test rather than only in a comment. Returning 2 here looks like a strict improvement -- assembled prompts refuse, why not this one -- but this detector has NO calibration corpus: the prompts that would supply it went to /tmp and are gone, and a prompt may legitimately quote a slot, which this repo's own template audits do. Shipping an uncalibrated detector as a blocker is the documented failure: every precheck_doc detector filed hard on first cut fired 104/49/48 times on documents that had already passed 74 and 83 audit cycles. This mutation turns a warning into a halt on a lane that was working.",
+      "file": "scripts/hmad-dispatch.sh",
+      "find": "    echo \"  advisory only -- dispatching anyway. Assembled prompts refuse this; hand-written ones cannot.\" >&2",
+      "replace": "    echo \"  refusing.\" >&2; return 2",
+      "test": "tests/test_hmad_dispatch_exec.py::test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict"
+    }
+  ]
+}

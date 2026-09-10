@@ -124,6 +124,49 @@ def test_codex_exec_runs_headless_with_the_right_flags(tmp_path):
     assert "--skip-git-repo-check" in argv
 
 
+def test_a_live_template_slot_in_the_prompt_WARNS_without_changing_the_verdict(tmp_path):
+    """`exec` passes the prompt through verbatim, so it is where every dispatch
+    path converges — and only some of them are guarded.
+
+    The ASSEMBLED paths refuse a live slot: `h_mad_assemble_tdd.py` halts
+    `residual_slots`, `h_mad_assemble_audit.py` and `h_mad_archreview_cycle.py`
+    halt `UNSUBSTITUTED`. The HAND-WRITTEN path has no refusal at all, and the 5e
+    anti-gaming verifier is the live example — SKILL.md says the assembler does
+    not stage it, and pointing the assembler at it halts on seven unfilled slots,
+    so the only shipping route is by hand.
+
+    Both halves are asserted, and the SECOND is the one that matters. This is an
+    UNCALIBRATED detector: the prompts that would form its corpus were written to
+    /tmp and are gone, so its false-positive rate on prompts that dispatched
+    correctly cannot be measured, and a prompt may legitimately quote a slot (this
+    repo audits its own templates). An uncalibrated detector that blocks is the
+    documented failure — every `h_mad_precheck_doc.py` detector filed hard on
+    first cut fired 104/49/48 times on documents that had passed 74 and 83 audit
+    cycles. So it warns, and the exit code must be untouched.
+    """
+    b = _bindir(tmp_path, ["codex"])
+    dirty = tmp_path / "dirty.txt"
+    dirty.write_text("Verify this.\n\nProperties: <INLINE_PROPERTIES>\n"
+                     "Report to <REPORT_FILE_PATH>\n")
+    clean = tmp_path / "clean.txt"
+    clean.write_text("Verify this. Everything is substituted.\n")
+
+    r_dirty = run(["exec", "codex", str(dirty), "--cd", str(tmp_path)], env=_env(b))
+    r_clean = run(["exec", "codex", str(clean), "--cd", str(tmp_path)], env=_env(b))
+
+    assert "WARNING: prompt carries live template slots" in r_dirty.stderr, r_dirty.stderr
+    assert "<INLINE_PROPERTIES>" in r_dirty.stderr, r_dirty.stderr
+    assert "<REPORT_FILE_PATH>" in r_dirty.stderr, r_dirty.stderr
+
+    assert "WARNING: prompt carries live template slots" not in r_clean.stderr, (
+        "a substituted prompt must dispatch silently, or the warning is noise")
+
+    assert r_dirty.returncode == r_clean.returncode, (
+        "the advisory changed the verdict — it must be exit-code-neutral until a "
+        "corpus exists to calibrate it as a refusal",
+        r_dirty.returncode, r_clean.returncode)
+
+
 def test_codex_exec_stdout_is_last_message_not_transcript(tmp_path):
     b = _bindir(tmp_path, ["codex"])
     r = run(["exec", "codex", str(_prompt(tmp_path)), "--cd", str(tmp_path)],
