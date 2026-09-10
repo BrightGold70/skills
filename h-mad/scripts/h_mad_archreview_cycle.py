@@ -125,12 +125,6 @@ def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
 
 def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
           session_id: str | None = None, report_path: Path | None = None) -> int:
-    try:
-        review = review_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        _emit(f"UNREADABLE reason=review:{exc.__class__.__name__}")
-        return 2
-
     # The report-file channel (#31). 6a-prime was the only `exec agy` path whose
     # deliverable rode the agent's LAST MESSAGE alone, and every observed failure
     # was a last-message failure — four dispatches, four NO_VERDICT, all four
@@ -141,11 +135,28 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
     # NAMED in the emitted token rather than taken silently, because a verdict
     # recovered from the last message and one read from the file are different
     # evidence and must not print the same way.
+    #
+    # READ FIRST, and the order is the whole point. This used to read `--review`
+    # up front and `return 2` on OSError, so an ABSENT `--out` refused the cycle
+    # while a good report file sat unread — and an EMPTY `--out` succeeded on the
+    # same report. Two spellings of "the last message carried nothing", opposite
+    # outcomes. The absent case is not exotic: `exec` writes `--out` atomically
+    # and the J29 clobber guard PRESERVES a stale file rather than removing it, so
+    # reaching it takes a dispatch killed before `_write_out_atomic` ran — a
+    # timeout — with the agent's report already on disk. That is precisely the
+    # last-message failure this channel exists to rescue, refused at the door.
     report_text, channel = _read_report_channel(report_path)
     if report_text is not None:
         review = report_text
     else:
+        # No usable file, so the last message is all there is — and only NOW is it
+        # fatal that it cannot be read.
         channel = "last-message"
+        try:
+            review = review_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            _emit(f"UNREADABLE reason=review:{exc.__class__.__name__}")
+            return 2
     if not log_path.is_file():
         _emit("UNREADABLE reason=no_log")
         print("  no dispatch log, so whether the review read anything is unknown — "

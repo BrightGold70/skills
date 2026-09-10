@@ -1,0 +1,35 @@
+{
+  "_why": "The report-file channel exists to rescue a review whose verdict rode the agent's LAST MESSAGE and was lost. `score` then read `--review` FIRST and returned 2 on OSError, so the rescue was refused at the door in the one case it was built for: an ABSENT `--out` (a dispatch killed before `_write_out_atomic` ran, report already on disk) failed the cycle while an EMPTY `--out` scored the same report fine. Two spellings of the same fact, opposite branches. The mutations attack the ORDER and both of its failure directions -- reading the review first again, and softening the refusal so a cycle with nothing readable on either channel scores anyway. Every one leaves a run that still prints a verdict-shaped ARCHREVIEW line. (The empty-file-is-authoritative direction is NOT duplicated here: archreview_report_file_channel.json::an-empty-report-file-is-authoritative already owns that exact find/replace/test, and two specs mutating one line is a false count of coverage, not more of it.)",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archreview_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-review-is-read-before-the-report-channel",
+      "_mechanism": "The defect restored, as an early read that still returns 2. A complete report file sits unread and the cycle is refused with `UNREADABLE reason=review:FileNotFoundError` -- and because that IS a real token with a real reason, the operator reads it as a finding about the dispatch rather than as this gate declining to look at the channel it was given.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    report_text, channel = _read_report_channel(report_path)",
+      "replace": "    try:\n        review_path.read_text(encoding=\"utf-8\")\n    except OSError as _exc:\n        _emit(f\"UNREADABLE reason=review:{_exc.__class__.__name__}\")\n        return 2\n    report_text, channel = _read_report_channel(report_path)",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_a_good_report_file_WINS_over_a_review_that_cannot_be_READ"
+    },
+    {
+      "name": "an-unreadable-review-stops-being-fatal",
+      "_mechanism": "The over-correction, and the reason the fix had to be an ordering change rather than a softened guard. Swallow the OSError and a cycle with NOTHING readable on either channel scores anyway: `review` is empty string, no ASSESSMENT is found, and the run reports NO_VERDICT -- a statement about what the reviewer said, when the truth is that this gate never managed to read it. A cannot-judge rendered as a judgement.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "        except OSError as exc:\n            _emit(f\"UNREADABLE reason=review:{exc.__class__.__name__}\")\n            return 2",
+      "replace": "        except OSError:\n            review = \"\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_unreadable_review_is_STILL_fatal_when_no_report_file_can_serve"
+    }
+  ]
+}

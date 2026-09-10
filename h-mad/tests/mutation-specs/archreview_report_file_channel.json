@@ -35,8 +35,8 @@
       "name": "the-fallback-claims-the-file-channel",
       "_mechanism": "A verdict recovered from the last message and one read from the file are different evidence. Printing the same channel for both makes the fallback silent, which is the defect one level down.",
       "file": "scripts/h_mad_archreview_cycle.py",
-      "find": "    else:\n        channel = \"last-message\"",
-      "replace": "    else:\n        channel = \"report-file\"",
+      "find": "        channel = \"last-message\"",
+      "replace": "        channel = \"report-file\"",
       "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_absent_report_file_falls_back_and_SAYS_SO"
     },
     {

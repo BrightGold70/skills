@@ -587,6 +587,51 @@ class TestTheReportFileChannel:
         assert "ARCHREVIEW: READY_TO_MERGE" in result.stdout
         assert "channel=last-message" in result.stdout, result.stdout
 
+    def test_a_good_report_file_WINS_over_a_review_that_cannot_be_READ(self, tmp_path):
+        """The file must win over an ABSENT `--out`, not only over an empty one.
+
+        `score` read `--review` first and `return 2`'d on OSError, so two spellings
+        of "the last message carried nothing" took opposite branches: an EMPTY
+        `--out` scored the report fine, an ABSENT one refused the whole cycle with
+        `UNREADABLE reason=review:FileNotFoundError` while a complete report sat
+        unread beside it.
+
+        Not an exotic path. `exec` writes `--out` atomically and the J29 clobber
+        guard PRESERVES a stale file rather than removing it, so reaching the absent
+        case takes a dispatch killed before `_write_out_atomic` ran — a timeout —
+        with the agent's report already on disk. That is exactly the last-message
+        failure this channel exists to rescue, refused at the door.
+        """
+        state = _state(tmp_path)
+        rep = tmp_path / "report.md"
+        rep.write_text("Full review body.\n\nASSESSMENT: READY_TO_MERGE\n", encoding="utf-8")
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 5)),
+                      "--review", str(tmp_path / "never_written_by_exec.md"),
+                      "--report-file", str(rep))
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "ARCHREVIEW: READY_TO_MERGE" in result.stdout, result.stdout
+        assert "channel=report-file" in result.stdout, result.stdout
+        assert json.loads(state.read_text())["orchestrator_state"]["feat"]["archreview"] == "READY_TO_MERGE"
+
+    def test_an_unreadable_review_is_STILL_fatal_when_no_report_file_can_serve(self, tmp_path):
+        """The other half, and the reason the fix is an ordering change rather than
+        a softened guard: with nothing readable on EITHER channel there is no review
+        to judge, and `UNREADABLE` must still refuse. Asserted for both ways a report
+        file can fail to serve — never written, and written empty — because a fix
+        that merely stopped returning 2 would pass the test above and silently score
+        a cycle that read nothing at all."""
+        state = _state(tmp_path)
+        empty = tmp_path / "empty_report.md"
+        empty.write_text("", encoding="utf-8")
+        for report_args in ([], ["--report-file", str(empty)],
+                            ["--report-file", str(tmp_path / "never.md")]):
+            result = _run("score", "--feature", "feat", "--state", str(state),
+                          "--log", str(_log(tmp_path, 5)),
+                          "--review", str(tmp_path / "absent_review.md"), *report_args)
+            assert result.returncode == 2, (report_args, result.stdout)
+            assert "UNREADABLE reason=review:" in result.stdout, (report_args, result.stdout)
+
     def test_score_without_the_flag_is_unchanged(self, tmp_path):
         """Back-compat: every existing caller passes no --report-file."""
         state = _state(tmp_path)
