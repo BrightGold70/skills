@@ -339,7 +339,12 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     # audit path, and takes `report_file` for the same reason. This mirrors it
     # rather than inventing a second mechanism.
     if report_file is not None:
-        head = (
+        # NOT `head` — that is the git HEAD sha (param, substituted above and
+        # emitted in the STAGED token below). Binding the contract to it put a
+        # 16-line blob where the sha goes in every `--report-file` staging, which
+        # is the one artifact SKILL.md §"archreview" says exists to catch a stale
+        # sha. The prompt body was unaffected; only the audit trail was.
+        contract_head = (
             "!!! READ THIS BLOCK FIRST AND OBEY IT LAST !!!\n"
             "OUTPUT CONTRACT — repeated at the very end of this prompt.\n\n"
             "1. WRITE your full report with `run_command` to this exact path:\n"
@@ -355,7 +360,7 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
             "Everything between here and the contract at the end is context.\n"
             "----------------------------------------------------------------\n\n"
         )
-        body = head + body
+        body = contract_head + body
 
     prompt.write_text(body, encoding="utf-8")
     _emit(f"STAGED prompt={prompt} base={base} head={head} "

@@ -674,3 +674,53 @@ class TestTheReportFileChannel:
         assert "ASSESSMENT: READY_TO_MERGE" in body[:first + 2000], (
             "the head contract must carry the verdict literals too — the verdict line "
             "has the identical burial problem")
+
+    def test_the_STAGED_token_carries_the_SHAS_not_the_contract_block(self, tmp_path):
+        """The BASE/HEAD stamp is one of the two steps this module's own docstring
+        says "have no other home and are the two that get skipped" — and until this
+        test, nothing asserted the token that carries it. `grep -c 'head=' ` and
+        `grep -c 'base=' ` over this file both returned 0 while 216 test lines and a
+        67-line mutation spec shipped alongside the report-file channel.
+
+        The defect that gap admitted: the head-contract block was bound to the name
+        `head`, shadowing the git HEAD sha parameter, so every `--report-file`
+        staging emitted a 16-line blob where the sha goes. The prompt body was
+        correct throughout — only the audit trail was destroyed, which is why a
+        green suite, the mutation battery and a live dispatch all missed it.
+
+        Asserted for BOTH invocations, because the bug fired only on the
+        `--report-file` path and a single-arm test would have passed on the
+        control while the shipped path was broken.
+        """
+        design = tmp_path / "tok_design.md"
+        design.write_text("# Design\nbody\n", encoding="utf-8")
+        # Each arm gets the template that matches it. A slot-carrying template
+        # with no `--report-file` is a DIFFERENT defect (the slot goes
+        # unsubstituted and stage halts rc=2), and pairing them wrongly would
+        # make this test fail for a reason that has nothing to do with the token.
+        for report_file in (None, "/tmp/rep_token.md"):
+            slot = report_file is not None
+            args = ["stage", "--feature", "feat",
+                    "--template", str(self._tpl(tmp_path, slot, f"tok{slot}.tpl")),
+                    "--base", "aaa1111", "--head", "bbb2222",
+                    "--design", str(design),
+                    "--diff-files", "a.py", "--summary", "did things",
+                    "--prompt", str(tmp_path / f"tok_{slot}.txt")]
+            if report_file is not None:
+                args += ["--report-file", report_file]
+            r = _run(*args)
+            assert r.returncode == 0, r.stdout + r.stderr
+            # Anchored on the token PREFIX, not a bare `"STAGED" in l`: stage()
+            # also prints a follow-up command block that mentions the word, so a
+            # substring filter matches two lines and the count assertion below
+            # fails for a reason unrelated to what is being tested.
+            staged = [l for l in r.stdout.splitlines()
+                      if l.startswith("ARCHREVIEW: STAGED ")]
+            assert len(staged) == 1, (report_file, r.stdout)
+            line = staged[0]
+            # The whole point is that the token is ONE line: a multi-line value
+            # would satisfy a naive `in` check while destroying the artifact.
+            assert "base=aaa1111 head=bbb2222 " in line, (report_file, line)
+            assert "READ THIS BLOCK FIRST" not in line, (
+                "the contract block leaked into the STAGED token — `head` is the git "
+                f"HEAD sha, not the prompt preamble (report_file={report_file!r})")

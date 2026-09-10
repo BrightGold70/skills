@@ -1638,6 +1638,15 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   can never be detected by a grep-shaped assertion), and refuse a `find` that does not occur in the
   named file at all. The other two need the run. `-s` on a file read is an optimisation, not a guard,
   and this row is the reason to say so in the spec schema rather than in a session's memory.
+  — **RE-CHECKED 2026-09-10 (scout): one of the two spec lints has LANDED, the other has not — row
+  stays open for the missing half.** The absent-`find` lint is live: `h_mad_mutation_harness.py:402`
+  computes `hits = source.count(find)` and `:632` refuses on `hits != 1`, so a `find` that occurs
+  zero times (or ambiguously, more than once) is `MUTATION: REFUSED`, exit 2 — strictly stronger than
+  the row asked for, since it catches ambiguity as well as absence. The **self-matching** lint is
+  still absent: three independent patterns (`find … in … replace`, the reverse, `self[-_ ]?match`)
+  return NONE across the whole harness, so a mutation whose `find` string occurs inside its own
+  `replace` text is still accepted and still reads as caught to a grep-shaped assertion. That is the
+  half that produced the `names no feature` survivor this row was opened for.
 - **a count is comparable only at the same COLLECTION ROOT**: the handoff suite read **155** from the
   repo root and **295** from `handoff/` — same commit, same tree, two numbers, because the root-level
   run never collects `handoff/scripts/`, where a real test lives. A floor or a regression check
@@ -1722,6 +1731,15 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   scored without a human reading it. This is the PREREQUISITE the code-phase ledger row was blocked
   on, and it is worth more than the ledger: a 2 KB free-prose report is the input no later instrument
   can use.
+  — **LANDED 2026-09-10** — `h-mad/references/agy-architectural-reviewer-prompt.md` §"Report Format
+  (REQUIRED — orchestrator parses this)" now carries the required token line and the refusal ("reads
+  the LAST line that begins with `ASSESSMENT:` and refuses a reply that has none"), with the three
+  words as a stated CLOSED set and three unfenced literals as the tail (`322a179`, form fixed at
+  `84d4677`). The report is scoreable without a human: `h_mad_archreview_cycle.py:94-100` extracts the
+  LAST `ASSESSMENT:` whose value is in the allowed set, and `d5d1763`/`e30e54f` gave 6a-prime a
+  report-file channel (`<INLINE_REPORT_FILE>`) whose head-prepended contract repeats the three
+  literals — so the surface the row called "not parseable" now is. Verified against source, not the
+  label. The row's own dependant (the code-phase ledger, below) stays DECLINED on its own measurement.
 - **the code-phase ledger itself**: the same origin-tagging instrument applied to Phase 5–6
   artifacts. — candidate: **DECLINED 2026-09-07 (triage: useful, not codable)** — measured out
   rather than deferred: **2 of 136** archived features ever ran a second Phase-6 analysis, so the
@@ -1730,3 +1748,56 @@ and flipping one on that basis is how this file's statuses decayed before. They 
   against **3** Phase-6 analyses and **0** archreviews — about 24:1. A rate computed over
   single-digit events spread across months moves by whole percentage points on one record. Revisit
   only if 6b iterate rounds become routine; the row above is the prerequisite either way.
+
+## 2026-09-10 — hmad-gates-and-6a-prime-channel (resume session)
+
+**Reconcile of 2026-09-10 — census read `candidates=209 OPEN(yes+maybe)=45 yes=28 maybe=17` before
+this pass; 28 open `yes` rows, of which 8 were probed against source.** Probed the subset the nine
+commits `cf39879..e30e54f` could plausibly have closed, since those touched
+`h_mad_version_history.py`, `h_mad_precheck_doc.py`, `h_mad_review_evidence.py`,
+`h_mad_archreview_cycle.py` and the agy archreview prompt. Result: **one flipped to LANDED**
+(`structure the 6a-prime archreview reports`), **one annotated half-landed** (`a mutation that can
+never fire` — the absent-`find` lint shipped, the self-matching lint did not), and **six re-verified
+still open against source rather than against their labels**: `grep the body for a version-history
+entry's claim` (`h_mad_version_history.py` still has no `--verify`, only `--dry-run`, which verifies
+the WRITE not the entry's claim); `calibrate a new detector against artifacts that already passed`
+(the noise-floor test exists for `h_mad_precheck_doc.py` alone; nothing generalises it);
+`grep the ENFORCEMENT, not the rule` (no lint script); `a positional shell arg in a skill body is
+REWRITTEN` (fix applied to `handoff/SKILL.md`, regression lint never written);
+`the evidence gate counts tool CALLS, not their TARGETS` (`h_mad_review_evidence.py:240` still prints
+`tools=`/`ok=` only, no distinct-path split); `HARD_KINDS is defined and read by nothing`
+(`h_mad_precheck_doc.py:93` still unread by any code path — only the tests import it). The remaining
+20 open `yes` rows were NOT probed this pass and keep their prior status; do not read this block as a
+full reconcile of the 28.
+
+- **a census of REAL agent verdict tokens across the archived report corpus**: closing #34 required
+  answering "does codex actually emit a literal `STATUS:` against this template, or does it echo the
+  fenced schema?" — and the only evidence was two report files buried in `docs/archive/**`
+  (`audit-report-docs-copy.5e-verify.tasks1-4.codex.md` → `STATUS: DONE`,
+  `doc-block-exec.task3-red.report.md` → `STATUS: DONE_WITH_CONCERNS`, both extracting rc=0, and zero
+  reports anywhere echoing `STATUS: <DONE | …>`). Nothing indexes that corpus, so a question about a
+  surface's real-world reliability costs a `find`+`grep` excavation every time it is asked, and the
+  deferral it settles had stood since the sender parked it — recurrence: 1 (but the corpus is the
+  standing answer to a recurring class of question) — candidate: yes — mechanical: walk
+  `docs/archive/**` + `docs/04-report/**` for report files, run each through
+  `h_mad_extract_verdict.py`, and print a per-surface table of token / value / extraction-rc. It is
+  the empirical half of every "is this prompt shape safe for agent X" argument, which this repo
+  currently settles from shape and memory.
+- **a backlog row should name the test that would REFUSE its proposed edit**: #34 proposed rewriting
+  the two codex templates' fenced-schema exemplar. `h-mad/tests/test_h_mad_prompt_tails.py:36-50`
+  PINS that exact tail for both templates, and its docstring already argues the deferral's reasoning
+  ("NOT measured to fail on codex … Rewriting a prompt that demonstrably works, because it shares a
+  shape with one that does not, is the failure mode this repo documents elsewhere"). So the suite
+  would have refused the edit, and the argument against it was already committed — but nothing links
+  the row to either — recurrence: 1 — candidate: maybe — a general "find the test that pins this
+  file" lint is the noise-floor trap (`calibrate a new detector…` measured 104/49/48); the cheap
+  version is a convention, not a script: when a row proposes editing a file under `references/`,
+  grep `tests/` for that filename and cite what it finds in the row.
+- **measure an instruction's position with the extractor's own rule, not `find`**: measuring how far
+  from the end the 6a-prime/codex verdict line sits, I used first-match and reported 90.6% when the
+  contract line was at 99.9% (tail-distance 66 chars) — a 4 KB error in the direction that made the
+  prompt look safer than it is. Every h-mad contract is explicitly "the LAST line that begins with
+  X", so first-match is measuring a different thing than the parser reads — recurrence: 1 — candidate:
+  maybe — too small for a script and it names no recurring surface; the reusable half is a line in
+  `measurement-discipline.md`, which already carries this class ("a count is evidence only at the same
+  COMMIT, CORPUS and GRAMMAR" — this is the GRAMMAR case, applied to a position rather than a count).

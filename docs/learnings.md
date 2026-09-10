@@ -9,6 +9,7 @@ Confidence: 0.3=tentative  0.5=moderate  0.7=strong  0.9=near-certain
 
 Search via `grep <term> docs/learnings.md` or
 `python3 ~/.claude/skills/handoff/scripts/learn.py search <term>`.
+- 2026-09-10 · gotcha · [0.7] · `h-mad,codex,prompt-assembly,verdict-extraction,handoff:2026-09-10-hmad-gates-and-6a-prime-channel` — #34: codex emitted a literal STATUS token 2/2 in real 5d/5e runs against the SAME fenced-schema exemplar that broke agy, never echoing the schema. Mechanism is SIZE not shape: worst-case assembled TDD prompt 45KB vs agy's 690KB.
 - 2026-09-10 · gotcha · [0.7] · `h-mad,tests,doc-lint,handoff:2026-09-10-hmad-gates-and-6a-prime-channel` — A guard killed by the WRONG assertion is not killed. Scope a doc-lint to the BOLD prescription, and anchor on the COMPLETE heading: a prefix anchor leaves a dangling ** that shifts every span pairing by one.
 - 2026-09-10 · gotcha · [0.7] · `h-mad,prompts,6a-prime,handoff:2026-09-10-hmad-gates-and-6a-prime-channel` — An instruction at 99.6% of a 690KB prompt is not an instruction. Template text was ~7KB; substituted design+file-list were 680KB. Fix: prepend a head contract (see h_mad_assemble_audit.prepend_output_contract).
 - 2026-09-10 · gotcha · [0.9] · `h-mad,mutation-specs,drift,handoff:2026-09-10-hmad-gates-and-6a-prime-channel` — A rename or comment rewrite silently invalidates committed mutation specs: 5 in one session, across TWO live spec dirs (h-mad/tests/mutation-specs AND tests/specs). Every one caught by a sweep, none by the targeted run before it.
