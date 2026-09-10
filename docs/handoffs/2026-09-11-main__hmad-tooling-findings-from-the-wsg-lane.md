@@ -5,6 +5,7 @@
 **Project:** orca/skills (`/Users/kimhawk/orca/skills`)
 **Supersedes:** none — first on this branch from the WSG lane
 **Handover-From:** HemaSuite-wsg · feature/website-source-grounding · session 8574638e-b72b-4367-b00c-c774f69c9839
+**Taken-Over-By:** orca/skills · main · session 0392c2be-3d8e-4fbf-9c33-0a3320fb90e8 · 2026-09-11
 
 ## Session Summary
 
