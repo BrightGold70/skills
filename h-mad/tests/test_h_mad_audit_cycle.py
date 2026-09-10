@@ -2748,6 +2748,73 @@ class TestTheCycleSaysWhetherItWroteAStamp:
         assert "STAMP: WRITTEN" not in out, out
         assert real_gate is not None
 
+    def test_a_STALE_stamp_does_not_make_a_non_writing_run_claim_WRITTEN(
+            self, tmp_path, capsys, monkeypatch) -> None:
+        """`STAMP:` must report what THIS run did, not what is on disk.
+
+        The check was `_stamp_path(r.collected_path).is_file()`, which cannot tell
+        a stamp this cycle wrote from one an earlier cycle left at the same path —
+        and the paths ARE the same across re-runs, `_collected_path` being a pure
+        function of feature/phase/cycle/index. So the token that exists to catch
+        the seven-live-cycles bookkeeping failure printed WRITTEN straight over it.
+
+        Identical to `test_a_stamp_that_was_owed_and_is_absent_is_named` except
+        that a stale stamp is planted first — which is the whole point: that test
+        passed throughout, because with no file present existence and authorship
+        agree. Only the stale case separates them.
+
+        The stamp is planted at the COLLECTED path, measured off a passing run
+        rather than assumed: a first probe of this defect wrote to
+        `stamp_path(report)`, got ABSENT, and read as a refutation.
+        """
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        stale = tmp_path / "docs/01-plan/features/f.plan.audit.v1.p1.md.gated.json"
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_text('{"verdict": "PASS", "from": "AN EARLIER RUN"}\n', encoding="utf-8")
+        before = stale.read_text(encoding="utf-8")
+
+        monkeypatch.setattr(ac, "gate", lambda *a, **k: ("PASS", 0, 0, []))
+        self._run(ac, tmp_path)
+        out = capsys.readouterr().out
+
+        assert stale.read_text(encoding="utf-8") == before, (
+            "the run rewrote the stamp, so this fixture no longer isolates the defect")
+        assert "STAMP: ABSENT legs=p1 expected=1" in out, out
+        assert "STAMP: WRITTEN" not in out, out
+
+    def test_a_RE_RUN_that_really_re_stamps_still_reports_WRITTEN(
+            self, tmp_path, capsys) -> None:
+        """The other edge of the same fix, and the one the stale-stamp test cannot
+        reach: run twice for real, so the second run OVERWRITES an existing stamp.
+
+        A re-run whose verdict and leg set are unchanged writes the same number of
+        bytes, so a signature made of size alone compares equal across the two and
+        the second run reports ABSENT for a stamp it genuinely wrote. Measured: the
+        `the-signature-ignores-the-clock` mutation SURVIVED the whole suite until
+        this existed, because every other test starts with no stamp on disk, where
+        `_before is None` makes even a size-only signature look correct.
+
+        This is why the signature carries `st_mtime_ns` and not just `st_size`.
+        """
+        ac = audit_cycle()
+        self._doc(tmp_path)
+        stamp = tmp_path / "docs/01-plan/features/f.plan.audit.v1.p1.md.gated.json"
+
+        self._run(ac, tmp_path)
+        first = capsys.readouterr().out
+        assert "STAMP: WRITTEN n=1" in first, first
+        assert stamp.is_file(), "first run wrote no stamp; fixture is wrong"
+        size_before = stamp.stat().st_size
+
+        self._run(ac, tmp_path)
+        second = capsys.readouterr().out
+        assert stamp.stat().st_size == size_before, (
+            "the re-stamp changed size, so this fixture no longer exercises the "
+            "identical-size case it exists for")
+        assert "STAMP: WRITTEN n=1" in second, second
+        assert "STAMP: ABSENT" not in second, second
+
     def test_a_failing_leg_owes_no_stamp_and_is_not_reported_absent(self, tmp_path, capsys) -> None:
         """The discriminating test a SURVIVING mutation forced.
 

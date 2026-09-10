@@ -1,0 +1,43 @@
+{
+  "_why": "`STAMP:` exists because seven live cycles emitted `AUDITCYCLE:` while their stamps were never written -- the two-round cap counted stamps and had none, and H3's `legs_changed` refusal could not fire. The token built to catch that decided with `is_file()`, which answers 'a stamp is there', not 'this run wrote one'. `_collected_path` is a pure function of feature/phase/cycle/index, so a re-run of the same cycle reads the PREVIOUS run's stamp: reproduced with a planted stale file, the run printed WRITTEN n=1 while the content stayed byte-identical and still named the earlier run. The mutations attack both directions -- back to existence, and over-corrected so nothing is ever WRITTEN -- because a guard that always cries ABSENT passes the stale-stamp test while making the token useless.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-check-goes-back-to-mere-existence",
+      "_mechanism": "The defect restored. A re-run whose gate passed without stamping reports WRITTEN over the previous run's file, so the one instrument that can see the seven-live-cycles failure certifies it instead -- and every downstream consumer (`--round-cap`, `--exit-check`) reads a stamp count it did not earn.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                absent = [r.index for r in scored\n                          if not stamped_now.get(r.index, False)]",
+      "replace": "                from h_mad_audit_gate import stamp_path as _sp2\n                absent = [r.index for r in scored\n                          if not _sp2(r.collected_path).is_file()]",
+      "test": "tests/test_h_mad_audit_cycle.py::TestTheCycleSaysWhetherItWroteAStamp::test_a_STALE_stamp_does_not_make_a_non_writing_run_claim_WRITTEN"
+    },
+    {
+      "name": "no-run-ever-counts-as-having-stamped",
+      "_mechanism": "The over-correction, and the reason the stale-stamp test alone is not enough. Record every leg as unstamped and the token is permanently ABSENT: it stops distinguishing anything, an operator learns to ignore it, and the real bookkeeping failure it was built for becomes invisible again -- this time behind an alarm that is always on rather than one that never fires.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "                    stamped_now[spec.index] = (\n                        _after is not None and _after != _before\n                    )",
+      "replace": "                    stamped_now[spec.index] = False",
+      "test": "tests/test_h_mad_audit_cycle.py::TestTheCycleSaysWhetherItWroteAStamp::test_a_gated_passing_cycle_reports_the_stamp_it_wrote"
+    },
+    {
+      "name": "the-signature-ignores-the-clock",
+      "_mechanism": "Keep the shape but compare only size. A re-stamp of a cycle whose verdict and leg set are unchanged writes the SAME number of bytes, so an identical-size rewrite reads as no write at all and a correctly stamped re-run reports ABSENT. Scored separately because it is the signature's contract, not the call site's, and a size-only tuple looks entirely reasonable in review.",
+      "file": "scripts/h_mad_audit_cycle.py",
+      "find": "    return (st.st_mtime_ns, st.st_size)",
+      "replace": "    return (0, st.st_size)",
+      "test": "tests/test_h_mad_audit_cycle.py::TestTheCycleSaysWhetherItWroteAStamp::test_a_RE_RUN_that_really_re_stamps_still_reports_WRITTEN"
+    }
+  ]
+}

@@ -160,6 +160,30 @@ def _done_path(report_path: Path) -> Path:
     return Path(str(report_path) + ".done")
 
 
+def _stamp_signature(stamp: Path) -> tuple[int, int] | None:
+    """`(mtime_ns, size)` for a stamp file, or None when it is not there.
+
+    Exists so `STAMP:` can report what THIS run did rather than what is on disk.
+    `is_file()` alone cannot tell a stamp this cycle wrote from one left by an
+    earlier cycle at the same path — and the paths ARE the same across re-runs,
+    since `_collected_path` is a pure function of feature/phase/cycle/index. So a
+    re-run whose gate passed without stamping printed `STAMP: WRITTEN` over a
+    stale file (measured: content unchanged, still naming the earlier run). The
+    stamp's own JSON carries no timestamp and no run id, so there is nothing
+    inside it to compare; the signature has to come from the filesystem.
+
+    Fails toward the alarm: were a rewrite ever to land identical bytes within
+    one mtime tick, this reports ABSENT for a stamp that was in fact written —
+    a false alarm about bookkeeping, not a cycle wrongly certified. That is the
+    right direction for a token whose whole purpose is to be doubted.
+    """
+    try:
+        st = stamp.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
 def _unscorable_reason(report_path: Path) -> str | None:
     """Return why a complete-looking report must not be SCORED, or None.
 
@@ -1095,6 +1119,10 @@ def main(argv: list[str] | None = None) -> int:
     if pass_specs:
         try:
             results: list[PassResult] = []
+            # index -> did THIS run's gate call write that leg's stamp. Keyed by
+            # index rather than carried on PassResult so the namedtuple's shape,
+            # which several other readers unpack, stays untouched.
+            stamped_now: dict[int, bool] = {}
             for spec in pass_specs:
                 delivered, collected_path = collect(
                     spec,
@@ -1109,12 +1137,21 @@ def main(argv: list[str] | None = None) -> int:
                         raise OperationalError(
                             f"missing collected path after delivered output for p{spec.index}"
                         )
+                    # Bracket the gate call, so `STAMP:` below reports what THIS
+                    # call did. Taken here rather than once before the loop because
+                    # this is the only window that isolates one leg's write.
+                    from h_mad_audit_gate import stamp_path as _sp
+                    _before = _stamp_signature(_sp(collected_path))
                     verdict, must, should, findings = gate(
                         collected_path,
                         ack_file=args.ack_file,
                         gated=gated,
                         legs=args.legs,
                         suite_result=suite_result,
+                    )
+                    _after = _stamp_signature(_sp(collected_path))
+                    stamped_now[spec.index] = (
+                        _after is not None and _after != _before
                     )
                 else:
                     verdict, must, should, findings = None, 0, 0, []
@@ -1147,7 +1184,6 @@ def main(argv: list[str] | None = None) -> int:
             # audit has already run, and killing it here would make an operator hostage
             # to a bookkeeping failure. `STAMP:` is its own token so `--exit-check`
             # consumers can refuse a streak the driver was right not to abort.
-            from h_mad_audit_gate import stamp_path as _stamp_path
             scored = [r for r in results if r.verdict == "PASS" and r.collected_path]
             if not gated:
                 # NOT the same as a missing stamp, and must never print as one: no
@@ -1157,8 +1193,17 @@ def main(argv: list[str] | None = None) -> int:
             elif not scored:
                 print("STAMP: NOT-EXPECTED reason=no_passing_leg")
             else:
+                # `stamped_now`, NOT `is_file()`. Existence answers "a stamp is
+                # there", which is not the question — the collected path is a pure
+                # function of feature/phase/cycle/index, so a re-run of the same
+                # cycle reads the PREVIOUS run's stamp and reported WRITTEN over
+                # it while writing nothing (reproduced: content unchanged, still
+                # naming the earlier run). The PASS-without-stamp state that makes
+                # that reachable is not hypothetical — it is the one seven live
+                # cycles were in. `.get(..., False)` so a leg whose gate never ran
+                # counts as unstamped rather than raising.
                 absent = [r.index for r in scored
-                          if not _stamp_path(r.collected_path).is_file()]
+                          if not stamped_now.get(r.index, False)]
                 if absent:
                     print("STAMP: ABSENT legs="
                           + ",".join(f"p{i}" for i in absent)

@@ -27,7 +27,7 @@
       "name": "an-owed-stamp-can-never-be-absent",
       "_mechanism": "The failing direction. If absence can never be detected the token is decoration -- it says WRITTEN whether or not anything was.",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "                absent = [r.index for r in scored\n                          if not _stamp_path(r.collected_path).is_file()]",
+      "find": "                absent = [r.index for r in scored\n                          if not stamped_now.get(r.index, False)]",
       "replace": "                absent = []",
       "test": "tests/test_h_mad_audit_cycle.py::TestTheCycleSaysWhetherItWroteAStamp::test_a_stamp_that_was_owed_and_is_absent_is_named"
     },
