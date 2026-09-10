@@ -1,0 +1,35 @@
+{
+  "_why": "Commit 0f7ad05 claimed \"Guard mutation-tested\" for the ledger classifier and shipped NO spec in either store, which a fresh-context review found on 2026-09-10. The guard does bite -- deleting the branch fails its named test -- but a guard verified only by a session that has ended is invisible to the anchor sweep, and the sweep is what catches the ordinary edit that silently invalidates a spec. This makes the verification durable. Both mutations leave a file that still classifies and still prints a verdict-shaped line. The second is the more valuable: it restores the wrong alternative the source comment says was TRIED and rejected, so the spec pins the reasoning and not just the branch.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-ledger-marker-is-not-read",
+      "_mechanism": "Drop the declaration check and a committed provenance ledger is swept as a spec. It has no `command`, so `_load_spec` raises and the WHOLE sweep goes ANCHORS_UNREADABLE -- which the pre-push hook blocks on, for every commit in the repository. The failure is not local to the ledger: one file takes out the gate for everyone.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if data.get(\"kind\") == \"ledger\":",
+      "replace": "    if False:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_ledger_without_file_or_find_rows_is_not_a_spec"
+    },
+    {
+      "name": "the-ledger-is-INFERRED-instead-of-declared",
+      "_mechanism": "The wrong alternative, restored -- the source comment says this was tried and is provably wrong, and without a mutation nothing stops a future editor trying it again. Keying on the ABSENCE of `file`/`find` looks like it identifies a ledger, but a HALF-WRITTEN SPEC has the same shape: AC-6.3's `{\"mutations\": [{\"name\": \"has no command\"}]}` is reclassified as not-a-spec and vanishes from the sweep silently. That is the exact hole the fail-closed default exists to keep shut, so this mutation must be killed by the AC-6.3 test rather than by the ledger's own.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    if data.get(\"kind\") == \"ledger\":",
+      "replace": "    if all(not m.get(\"file\") and not m.get(\"find\") for m in (data.get(\"mutations\") or [{}])):",
+      "test": "tests/test_h_mad_mutation_harness.py::test_spec_classification_does_not_skip_a_spec_that_fails_deeper_validation"
+    }
+  ]
+}

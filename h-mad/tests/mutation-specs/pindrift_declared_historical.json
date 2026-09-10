@@ -27,7 +27,7 @@
       "name": "the-declaration-predicate-always-matches",
       "_mechanism": "A substring that matches no pin must demote nothing, or the flag is a blanket switch wearing a per-pin costume.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "        return any(a in span for a in allow_historical)",
+      "find": "        return any(span == a or span.endswith(\"/\" + a) for a in allow_historical)",
       "replace": "        return True",
       "test": "tests/test_h_mad_precheck_doc.py::test_a_non_matching_allow_historical_demotes_nothing"
     },

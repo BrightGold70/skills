@@ -295,8 +295,25 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
         flag rather than a marker in the document, because a document that can mark
         its own pins historical can silence its own gate permanently and silently,
         which is the masking this was raised to fix rather than a cure for it.
+
+        ANCHORED at the end, not `in` anywhere — the one place the two flags
+        diverge. `--allow` is documented as "a substring whose hits are deliberate"
+        and is called on whole source lines and shas, where substring is the only
+        workable semantics. This flag promises something narrower: "Demotes
+        PINDRIFT … for that pin only". Under `in`, that promise was FALSE for any
+        pin whose `path:line` is a PREFIX of another's — declaring `foo.py:1`
+        silenced `foo.py:12`, `foo.py:150` and every other `foo.py:1*` in one
+        stroke. That is precisely the mass-silencing this flag was added to replace
+        (raise the provenance sha: 26 findings go advisory, zero pins repaired).
+
+        Not equality either, which would be too strict: the caller passes the
+        repo-relative `f"{rel}:{tail}"`, while the documented and tested input is a
+        bare filename (`h_mad_precheck_doc.py:1`). A `/`-anchored suffix serves that
+        without the collision, because the pin is always the TAIL of the span — so
+        `…/foo.py:12` cannot end with `/foo.py:1`. The `/` boundary is what stops
+        the token `foo.py:1` matching `…/bar_foo.py:1`.
         """
-        return any(a in span for a in allow_historical)
+        return any(span == a or span.endswith("/" + a) for a in allow_historical)
 
     head = _head_sha(root)
 

@@ -1,0 +1,43 @@
+{
+  "_why": "`--allow-historical` exists to REPLACE mass-silencing: raising a document's provenance sha demotes every PINDRIFT at once without repairing a pin (measured on gateway-consolidation.design.md -- v1.15 FAIL issues=41, v1.16 PASS issues=0, 26 findings advisory, zero pins repaired). Under `in` the replacement reintroduced the disease at smaller scale: declaring `foo.py:1` also silenced `foo.py:12`, `foo.py:150` and every other `foo.py:1*`. The shipped test could not see it -- `_TWO_PINS` uses two DIFFERENT files, so no same-file interaction was ever exercised. Both mutations below leave a run that still prints a verdict-shaped PRECHECK line, and both directions are attacked: matching too WIDELY silences undeclared pins, matching too NARROWLY silently stops demoting anything and every caller's declarations are ignored with no error.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-declared-pin-silences-every-pin-it-is-a-prefix-of",
+      "_mechanism": "The original defect, restored. `in` matches anywhere in the span, and the span ENDS with the pin -- so `\u2026py:1` is a substring of `\u2026py:12`. One declaration takes out a whole family of undeclared pins and the verdict flips FAIL issues=2 -> PASS issues=0, which is exactly the provenance-raising this flag was added to replace.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        return any(span == a or span.endswith(\"/\" + a) for a in allow_historical)",
+      "replace": "        return any(a in span for a in allow_historical)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_allow_historical_does_not_silence_a_pin_whose_line_is_a_PREFIX"
+    },
+    {
+      "name": "the-anchor-tightens-to-equality-and-demotes-nothing",
+      "_mechanism": "The over-correction, and the reason the fix is not `==`. The caller builds a repo-relative span (`h-mad/scripts/h_mad_precheck_doc.py:1`) while the documented and tested input is a BARE filename (`h_mad_precheck_doc.py:1`). Under equality nothing matches, every declaration is ignored, and there is no error to say so -- the operator sees their pin still reported as a finding and concludes the flag is broken rather than that they spelled it short.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        return any(span == a or span.endswith(\"/\" + a) for a in allow_historical)",
+      "replace": "        return any(span == a for a in allow_historical)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_allow_historical_still_matches_a_bare_filename_not_only_the_full_path"
+    },
+    {
+      "name": "the-path-boundary-is-dropped",
+      "_mechanism": "Without the leading `/`, a bare suffix match returns. The token `foo.py:1` then matches `\u2026/bar_foo.py:1` -- a DIFFERENT file whose name merely ends the same way. Narrower than the `in` defect and invisible to a test that uses only one filename stem, which is why it is scored separately rather than folded into mutation 1.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        return any(span == a or span.endswith(\"/\" + a) for a in allow_historical)",
+      "replace": "        return any(span == a or span.endswith(a) for a in allow_historical)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_allow_historical_does_not_match_a_bare_filename_SUFFIX_of_another"
+    }
+  ]
+}

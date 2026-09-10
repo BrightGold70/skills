@@ -484,6 +484,83 @@ def test_allow_historical_demotes_ONE_pin_and_leaves_the_other_hard(tmp_path):
     assert token(one.stdout).startswith("PRECHECK: FAIL"), one.stdout
 
 
+_TWO_PINS_ONE_FILE = (
+    "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the head.\n"
+    "See `h-mad/scripts/h_mad_precheck_doc.py:12` for the rest.\n"
+)
+
+
+def test_allow_historical_does_not_silence_a_pin_whose_line_is_a_PREFIX(tmp_path):
+    """The collision `_TWO_PINS` structurally cannot express, because it uses two
+    DIFFERENT files — so every same-file interaction was untested.
+
+    `historical_by` matched with `in`, and the span it is handed ends with the pin.
+    So declaring `…py:1` also matched `…py:12`, `…py:150`, and every other
+    `…py:1*`: one declaration silenced a whole family of undeclared pins and the
+    verdict flipped FAIL issues=2 -> PASS issues=0. That is the mass-silencing this
+    flag exists to REPLACE, reappearing inside the replacement.
+
+    Both halves are asserted, because a fix that merely stopped demoting would pass
+    the first and break the feature: the declared pin must still go, and only it.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS_ONE_FILE)
+
+    both = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert len(details(both.stdout, "PINDRIFT")) == 2, both.stdout
+
+    one = run(doc, "--phase", "impl-plan", "--root", REPO,
+              "--allow-historical", "h_mad_precheck_doc.py:1")
+    hits = details(one.stdout, "PINDRIFT")
+    assert len(hits) == 1, (
+        "declaring `:1` historical must not also silence `:12` — that is "
+        f"provenance-raising with extra steps: {hits}")
+    assert ":12" in "\n".join(hits), hits
+    assert token(one.stdout).startswith("PRECHECK: FAIL"), one.stdout
+
+
+def test_allow_historical_still_matches_a_bare_filename_not_only_the_full_path(tmp_path):
+    """The anchoring must not become equality. The documented and tested input is a
+    BARE filename, while the span the caller builds is repo-relative — so a strict
+    `==` would silently stop demoting anything and every existing caller would find
+    its declarations ignored, with no error to say so."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n" + _TWO_PINS_ONE_FILE)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py")
+    assert not details(r.stdout, "PINDRIFT"), (
+        "a bare filename must still demote the whole file", r.stdout)
+
+
+def test_allow_historical_does_not_match_a_bare_filename_SUFFIX_of_another(tmp_path):
+    """The `/` in the anchor, and the only test that can see it.
+
+    A suffix match with no path boundary is nearly right: it fixes the `:1`/`:12`
+    prefix collision, so every other test here passes under it. What it still gets
+    wrong is a DIFFERENT file whose name merely ends the same way — `precheck_doc.py`
+    is a suffix of `h_mad_precheck_doc.py`, so declaring the former would silence a
+    pin into the latter.
+
+    Verified to discriminate: the `the-path-boundary-is-dropped` mutation SURVIVED
+    the whole suite before this test existed, including
+    `test_allow_historical_demotes_ONE_pin_and_leaves_the_other_hard` — that one uses
+    two unrelated filename stems, so no suffix collision is reachable through it.
+    A mutation the suite does not notice is a guard that does not bite.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the head.\n")
+
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "precheck_doc.py:1")
+    assert len(details(r.stdout, "PINDRIFT")) == 1, (
+        "`precheck_doc.py:1` is a bare SUFFIX of `h_mad_precheck_doc.py:1`, a "
+        "different file — declaring it must silence nothing", r.stdout)
+
+
 def test_allow_historical_clears_the_verdict_when_every_drifted_pin_is_declared(tmp_path):
     """Declaring all of them is legitimate and must reach PASS — otherwise the flag
     is unusable and authors go back to raising provenance, which is the defect."""
