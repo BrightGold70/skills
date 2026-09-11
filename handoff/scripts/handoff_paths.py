@@ -120,15 +120,61 @@ def sorted_handoffs(branch: str | None = None, start: Path | None = None) -> lis
     return files
 
 
+def _retired_names(start: Path | None = None) -> set[str]:
+    """Every filename some handoff in the store already `**Supersedes:**`.
+
+    Scanned over the WHOLE store, never the branch-filtered slice: a doc is
+    routinely retired by a handoff written on a different branch (a `main`
+    closeout absorbing a feature lane's last doc is the common shape), and a
+    branch-scoped scan cannot see that.
+    """
+    d = handoffs_dir(start)
+    if not d.is_dir():
+        return set()
+    retired: set[str] = set()
+    for path in d.glob("*.md"):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue  # unreadable: contributes no retirements, never a halt
+        for match in _SUPERSEDES_RE.finditer(text):
+            retired.update(_superseded_names(match.group(1)))
+    return retired
+
+
 def find_latest(branch: str | None = None, start: Path | None = None) -> Path | None:
     """Newest handoff in the canonical store, optionally filtered to a branch.
 
-    Files are `YYYY-MM-DD-<branch-slug>-<slug>.md`; the ISO date prefix sorts
-    lexically, so the last match is the newest. A branch filter matches the
-    `-<branch>-` segment so a resume prefers its own branch's handoff.
+    Files are `YYYY-MM-DD-<branch-slug>__<slug>.md`; the ISO date prefix sorts
+    lexically. A branch filter matches the `<branch>__` segment so a resume
+    prefers its own branch's handoff.
+
+    Among files sharing a date the ORDER IS NOT TRUSTWORTHY, so the `Supersedes`
+    chain decides instead: the newest file that no other handoff has retired.
+    `sorted_handoffs` tie-breaks same-date files on mtime, and mtime is not a
+    recency signal for anything git materialised -- a clone, a checkout or a
+    merge stamps every file it writes within the same instant, in INDEX order,
+    which is alphabetical. Measured 2026-09-11 in the HemaSuite-wsg clone: four
+    `2026-09-09-feature-18-gateway-consolidation__*.md` docs all carried mtime
+    18:10:30 from one merge, separated by ~0.1 ms in filename order, so
+    `latest --branch` returned `tasks-19-20-…`, which `task22-shipped-…`
+    supersedes and `phase5-complete-…` supersedes in turn -- two hops stale, and
+    the resume read a document describing work that had since shipped.
+
+    Falling back to the last file when every candidate is retired is deliberate:
+    a supersedes cycle or a corrupt field must not make a store with handoffs in
+    it answer "there are none".
     """
     files = sorted_handoffs(branch, start)
-    return files[-1] if files else None
+    if not files:
+        return None
+    retired = _retired_names(start)
+    for path in reversed(files):
+        if path.name not in retired:
+            return path
+    return files[-1]
 
 
 # The bolded field forms, anchored to line start. Briefs discuss handovers in
