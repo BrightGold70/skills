@@ -1801,3 +1801,36 @@ full reconcile of the 28.
   maybe — too small for a script and it names no recurring surface; the reusable half is a line in
   `measurement-discipline.md`, which already carries this class ("a count is evidence only at the same
   COMMIT, CORPUS and GRAMMAR" — this is the GRAMMAR case, applied to a position rather than a count).
+
+## 2026-09-13 — fresh-review-lanes-and-the-wsg-takeover (second pass, same session)
+
+**Second scout block for one session, deliberately.** The first ran mid-session and reconciled the
+open rows (209→212, one flipped LANDED, one annotated half-landed, six re-verified, 20 unprobed).
+Everything below came from work done AFTER it, so it appends only — the reconcile above still
+stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 maybe=19`.
+
+- **a per-mutation kill CLASSIFIER in the harness**: the harness cannot distinguish a mutant that
+  died on a crash or timeout from one a guard caught — its own docstring says so (`:58-61`, `:625`,
+  `:934`) — and the sole mitigation is the spec author remembering a `test` key. TWICE this session
+  a battery reported `ALL_CAUGHT` while carrying a mutation nothing detected, both found only by
+  re-scoring against the named key — recurrence: 2 this session plus the inherited WSG-4 finding
+  and the older "6 of 11 guards bit nothing" measurement — candidate: yes — mechanical: classify
+  the kill (assertion / crash / timeout / unrelated-failure) and report it, so a spec WITHOUT a
+  `test` key is visibly untrusted rather than silently trusted. This is the same row the inbound
+  WSG brief files as its item 4; recording it here so the candidate store carries it independently
+  of that brief's lifetime.
+- **a "starting state the suite never reaches" prompt when a mutation SURVIVES**: both surviving
+  mutations this session shared one shape — every existing test began from a state where the weak
+  mutation still looked caught (no stamp on disk makes a size-only signature look correct; one
+  filename stem makes a missing path-boundary look correct) — recurrence: 2 — candidate: maybe —
+  not a script: the mechanical half is already the harness telling you which mutation survived. The
+  reusable half is a QUESTION to put in the survivor's output ("what starting state does no current
+  test reach?"), which is a one-line change to the `survived:` message rather than a new instrument.
+- **measure a gate instead of inferring it from commit prose**: a lane-watcher built on commit
+  subjects produced four false readings (`close` matching "closeout"; non-monotonic progress; `HEAD`
+  standing in for a branch ref; stall on a finished branch), while the correct signal was one
+  read-only command — `h_mad_phase7_integrate.py` without `--apply` returns the real INTEGRATE
+  verdict and touches nothing — recurrence: 4 failures against 1 correct instrument, one session —
+  candidate: maybe — too situational for a script, but the rule generalises: when a phase tool has a
+  plan-only mode, the plan-only mode IS the state query, and inferring the same state from prose is
+  strictly worse. Belongs in `measurement-discipline.md` rather than as a new skill.
