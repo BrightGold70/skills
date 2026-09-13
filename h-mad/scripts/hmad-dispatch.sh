@@ -2950,6 +2950,41 @@ _cmd_exec() {  # <codex|agy> <promptfile> [--cd <dir>] [--model <m>] [--effort <
     # the prompt silently ate the following flag as its prompt and dropped the real
     # one; agy then just greeted. Verified live.)
     local prompt; prompt="$(cat "$bounded_prompt")"
+    # ARG_MAX, checked HERE because this is the convergence point (#26). agy takes
+    # the prompt as one argv element, so an oversize one never reaches agy at all:
+    # `execve` refuses with E2BIG and the shell returns 126.
+    #
+    # Measured 2026-09-13 against agy 1.2.2 on this machine (ARG_MAX 1,048,576): a
+    # 1,100,047 B prompt raises `OSError 7 Argument list too long` at the syscall.
+    # agy does NOT truncate it, and does NOT report a limit of its own — which is
+    # what makes the assembler's halt message ("no surface accepts a prompt this
+    # large") true rather than merely plausible.
+    #
+    # Without this check the operator was told something ELSE, and it was wrong:
+    # the exec redirects the child's stderr to /dev/null, so the kernel's message
+    # vanished and the wrapper reported `EMPTY final message — agent exited 126
+    # with no final message`. That asserts the agent RAN and said nothing, when it
+    # was never entered. Exactly the wrong-diagnosis class the oversize halt exists
+    # to prevent, one layer down and on the path that has no assembler gate: `exec`
+    # takes any file, and the comment claiming it relies on the assembler's gate
+    # was load-bearing and unchecked.
+    #
+    # A refusal, not an advisory, and the distinction is not a judgement call here:
+    # the dispatch cannot succeed either way. The only choice is whether the
+    # operator is told why.
+    local _argv_bytes _arg_max _argv_reserve
+    _argv_bytes=$(printf '%s' "$prompt" | wc -c | tr -d ' ')
+    _arg_max="$(getconf ARG_MAX 2>/dev/null || echo 0)"
+    if [ "$_arg_max" -gt 0 ] 2>/dev/null; then
+      # envp shares the budget, plus the other argv elements and their NULs.
+      _argv_reserve=$(( $(env | wc -c | tr -d ' ') + 4096 ))
+      if [ "$_argv_bytes" -gt $(( _arg_max - _argv_reserve )) ]; then
+        echo "hmad-dispatch: exec: OVERSIZE prompt bytes=${_argv_bytes} budget=$(( _arg_max - _argv_reserve )) arg_max=${_arg_max} reserve=${_argv_reserve}" >&2
+        echo "  agy receives the prompt as ONE argv element, so the kernel refuses this before agy starts (E2BIG, rc 126) — the agent never runs and writes nothing." >&2
+        echo "  Not a hang and not an empty reply — the prompt never left this machine. Re-assemble smaller: --vh-tail N is the first remedy." >&2
+        return 2
+      fi
+    fi
     local args=(--dangerously-skip-permissions)
     [ -n "$model" ] && args+=(--model "$model")
     [ -n "$effort" ] && args+=(--effort "$effort")

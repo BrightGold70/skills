@@ -1180,3 +1180,61 @@ def test_a_BACKTICKED_live_slot_is_still_detected(tmp_path):
                  "<INLINE_WIRE_PIN>", "<INLINE_PROPERTIES>"):
         assert slot in r.stderr, (f"{slot} is backticked in the template and must "
                                   f"still be detected", r.stderr)
+
+
+# ---------------------------------------------------------------------------
+# #26 — an oversize prompt is refused with its own reason, not misreported
+# ---------------------------------------------------------------------------
+#
+# agy receives the prompt as ONE argv element, so an oversize one never reaches
+# agy: `execve` refuses with E2BIG and the shell returns 126. Measured against
+# agy 1.2.2 (ARG_MAX 1,048,576): a 1,100,047 B prompt raises `OSError 7 Argument
+# list too long` at the syscall. agy does NOT truncate and does NOT report a
+# limit of its own — which is what makes the assembler's halt message ("no
+# surface accepts a prompt this large") true rather than merely plausible.
+#
+# The defect was the REPORTING. `exec` redirects the child's stderr to /dev/null,
+# so the kernel's message vanished and the wrapper said `EMPTY final message —
+# agent exited 126 with no final message`, asserting the agent ran and said
+# nothing when it was never entered. And `exec` has no assembler gate — it takes
+# any file — so the comment claiming it relies on that gate was load-bearing and
+# unchecked.
+
+
+def _oversize_prompt(tmp_path):
+    p = tmp_path / "huge.txt"
+    p.write_text("Reply with exactly: OK\n" + ("x" * 1_100_000) + "\n")
+    return p
+
+
+def test_an_oversize_agy_prompt_is_refused_with_its_own_reason(tmp_path):
+    b = _bindir(tmp_path, ["agy"])
+    r = run(["exec", "agy", str(_oversize_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b))
+    assert "OVERSIZE" in r.stderr, r.stderr
+    assert "bytes=" in r.stderr and "budget=" in r.stderr and "arg_max=" in r.stderr, r.stderr
+    assert r.returncode == 2, (r.returncode, r.stderr)
+
+
+def test_the_oversize_refusal_does_not_claim_the_agent_ran(tmp_path):
+    """The whole point. `EMPTY final message — agent exited 126` is a statement
+    about an agent that was never entered, and it sends the operator hunting a
+    timeout or an empty reply instead of re-assembling smaller."""
+    b = _bindir(tmp_path, ["agy"])
+    r = run(["exec", "agy", str(_oversize_prompt(tmp_path)), "--cd", str(tmp_path)],
+            env=_env(b))
+    assert "EMPTY final message" not in r.stderr, r.stderr
+    assert "never runs" in r.stderr or "never entered" in r.stderr, r.stderr
+    assert "--vh-tail" in r.stderr, ("the remedy must be named, not just the refusal",
+                                     r.stderr)
+
+
+def test_an_ordinary_prompt_is_NOT_refused_by_the_size_guard(tmp_path):
+    """The over-correction. A guard that fires on real prompts would block every
+    audit — they run 16-90 KB, three orders of magnitude under the budget."""
+    b = _bindir(tmp_path, ["agy"])
+    p = tmp_path / "ok.txt"
+    p.write_text("Reply with exactly: OK\n")
+    r = run(["exec", "agy", str(p), "--cd", str(tmp_path)], env=_env(b))
+    assert "OVERSIZE" not in r.stderr, r.stderr
+    assert r.returncode != 2, (r.returncode, r.stderr)

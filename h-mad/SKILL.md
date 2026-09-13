@@ -881,7 +881,7 @@ impl-plan audits — and re-measured the same day with a 1,111,089-char probe: r
 an empty last message, one `Error: turn/start … "input_error_code":"input_too_large"`
 transcript line). agy runs `--print --dangerously-skip-permissions` (headless must
 auto-approve or a tool request blocks); its prompt is an arg, bounded by `ARG_MAX` —
-the same 1,048,576 figure. Audit prompts run 16–90 KB (a large design audit
+the same 1,048,576 figure. **That bound is the KERNEL's, and agy never sees an oversize prompt at all**: measured 2026-09-13 against agy 1.2.2, a 1,100,047 B argv raises `OSError 7 Argument list too long` at `execve`. agy does not truncate it and reports no limit of its own, which is what makes the assembler's halt message true rather than merely plausible. `exec` now refuses such a prompt ITSELF — `hmad-dispatch: exec: OVERSIZE prompt bytes=N budget=M arg_max=A reserve=R` at rc 2 — because `exec` takes any file and has no assembler gate, and because the exec redirects the child's stderr to `/dev/null`, so the kernel's reason used to vanish and the wrapper reported `EMPTY final message — agent exited 126`: a statement about an agent that was never entered, sending the operator after a timeout or an empty reply instead of a smaller prompt. Audit prompts run 16–90 KB (a large design audit
 assembles to ~88 KB), and **266,342 B (260.1 KB) was confirmed answered 8 of 8 on
 2026-08-22** (agy 1.1.18), every run honouring both the report-file slot and the
 sentinel pair — so at the sizes audits reach, the `exec` path has no transport
