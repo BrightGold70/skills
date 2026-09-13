@@ -1,0 +1,67 @@
+{
+  "_why": "`stage()` measured nothing while `h_mad_assemble_audit` held seven size guards one file over, so a ~690 KB 6a-prime prompt was written, said STAGED, and was then refused by the surface -- read as \"6a-prime failed\" rather than \"the prompt was never delivered\". Each mutation carries its own `test` key: a battery that scores ALL_CAUGHT while one mutation bit nothing has happened twice in this file's history, and only the per-mutation re-score separates them.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archreview_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-size-gate-never-fires",
+      "_mechanism": "The state before this change: a prompt no surface accepts is written to disk and reported STAGED. The operator dispatches it and reads the refusal as a failed review.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if oversize:\n        _emit(f\"OVERSIZE chars={len(body)} limit={limit} headroom={headroom}\")",
+      "replace": "    if False:\n        _emit(f\"OVERSIZE chars={len(body)} limit={limit} headroom={headroom}\")",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_a_prompt_no_surface_accepts_is_refused_and_not_written"
+    },
+    {
+      "name": "the-gate-measures-the-body-before-the-contract-prepend",
+      "_mechanism": "The placement, isolated from the gate's existence. Discounting the contract's ~800 chars passes a prompt that is deliverable only until the contract is added -- the surface then refuses it, which is the original defect with a size check bolted on that cannot see the last thing written.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    oversize, limit, headroom = _size_gate(len(body))",
+      "replace": "    oversize, limit, headroom = _size_gate(len(body) - (len(contract_head) if report_file is not None else 0))",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_the_gate_measures_the_body_the_contract_prepend_produced"
+    },
+    {
+      "name": "the-oversize-prompt-is-written-anyway",
+      "_mechanism": "Halting but leaving the file is worse than not halting: the next copy-pasted dispatch line finds a prompt on disk and sends it. The refusal and the absent file are two claims, and a test asserting only the token would pass here.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "              \"`git show <sha>:<doc>`.\")\n        return 2\n\n    prompt.write_text(body, encoding=\"utf-8\")",
+      "replace": "              \"`git show <sha>:<doc>`.\")\n\n    prompt.write_text(body, encoding=\"utf-8\")",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_a_prompt_no_surface_accepts_is_refused_and_not_written"
+    },
+    {
+      "name": "the-halt-does-not-name-its-escape-hatch",
+      "_mechanism": "A halt whose remedy is unstated is a wall. The operator's only visible options become shrinking the design by hand or abandoning 6a-prime, and --vh-tail -- which exists for exactly this -- goes unused.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "              \"Re-run with --vh-tail N to inline only the last N Version History \"",
+      "replace": "              \"Shrink the design and try again. \"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_a_prompt_no_surface_accepts_is_refused_and_not_written"
+    },
+    {
+      "name": "vh-tail-is-parsed-but-never-reaches-stage",
+      "_mechanism": "The flag appears in --help, argparse accepts it, and it silently does nothing -- the shape of failure where a documented remedy looks implemented. The prompt comes back the same size and the operator concludes the design is irreducible.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "                     vh_tail=args.vh_tail)",
+      "replace": "                     vh_tail=None)",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_vh_tail_trims_the_inlined_design"
+    },
+    {
+      "name": "the-trim-keeps-every-entry",
+      "_mechanism": "The delegation itself. Returning the text untouched makes --vh-tail inert at the other end from the wiring mutation above; both produce an unchanged prompt, so each needs its own kill.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    return _trim_version_history(text, keep, ref=ref)",
+      "replace": "    return text",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_vh_tail_trims_the_inlined_design"
+    }
+  ]
+}

@@ -338,6 +338,157 @@ def test_it_refuses_to_decide_whether_to_run_another_cycle():
     ), "no while-loop: one cycle per invocation, the operator decides on another"
 
 
+class TestTheStagedPromptMustBeDeliverable:
+    """This channel had ZERO size guards while the audit path had several.
+
+    `h_mad_assemble_audit` halts on `oversize` and offers `--vh-tail`; `stage()`
+    measured nothing, so a ~690 KB 6a-prime prompt was written, said STAGED, and was
+    then refused by the surface -- which reads as "6a-prime failed" rather than "the
+    prompt was never delivered". The figures are the assembler's, imported rather
+    than restated, so the two cannot drift apart.
+    """
+
+    # The assembler owns these. Read them from it for the same reason the code does:
+    # a hardcoded 1048576 here would keep passing after the measured figure moved.
+    def _limits(self):
+        sys.path.insert(0, str(SCRIPTS))
+        from h_mad_assemble_audit import DISPATCH_OVERHEAD_CHARS, MAX_PROMPT_CHARS
+        return MAX_PROMPT_CHARS, DISPATCH_OVERHEAD_CHARS
+
+    def _tpl(self, tmp_path, *, with_report_slot: bool):
+        t = tmp_path / ("tpl_r.md" if with_report_slot else "tpl.md")
+        body = ("feature <INLINE_FEATURE>\nbase <INLINE_BASE_SHA>\n"
+                "head <INLINE_HEAD_SHA>\nfiles <INLINE_DIFF_FILES>\n"
+                "design <INLINE_AUDITED_DESIGN>\nsummary <INLINE_PHASE_5_SUMMARY>\n")
+        if with_report_slot:
+            body += "report <INLINE_REPORT_FILE>\n"
+        t.write_text(body, encoding="utf-8")
+        return t
+
+    def _stage(self, tmp_path, design_text, *, report_file=None, vh_tail=None,
+               slot=None, prompt_name="p.txt"):
+        design = tmp_path / "d.md"
+        design.write_text(design_text, encoding="utf-8")
+        prompt = tmp_path / prompt_name
+        tpl = self._tpl(tmp_path, with_report_slot=(report_file is not None
+                                                   if slot is None else slot))
+        argv = ["stage", "--feature", "feat", "--template", str(tpl),
+                "--base", "aaa1111", "--head", "bbb2222", "--design", str(design),
+                "--diff-files", "a.py", "--summary", "did things",
+                "--prompt", str(prompt)]
+        if report_file is not None:
+            argv += ["--report-file", report_file]
+        if vh_tail is not None:
+            argv += ["--vh-tail", str(vh_tail)]
+        return _run(*argv), prompt
+
+    def _pad_to(self, tmp_path, target_chars, *, report_file=None, slot=None):
+        """A design whose staged prompt is exactly `target_chars` long.
+
+        Measured by staging once, not computed from the template -- the substitution
+        and the contract both change the length, and a guessed figure would test the
+        guess rather than the gate.
+        """
+        probe, prompt = self._stage(tmp_path, "x", report_file=report_file, slot=slot,
+                                    prompt_name="probe.txt")
+        assert probe.returncode == 0, probe.stdout + probe.stderr
+        base_len = len(prompt.read_text(encoding="utf-8"))
+        return "x" * (1 + target_chars - base_len)
+
+    def test_a_prompt_no_surface_accepts_is_refused_and_not_written(self, tmp_path):
+        """Both halves matter. The refusal is the point; the ABSENT file is what makes
+        it safe -- an oversize prompt left on disk is one that gets dispatched anyway
+        by the next copy-pasted command line."""
+        limit, headroom = self._limits()
+        design = self._pad_to(tmp_path, limit - headroom + 1)
+        result, prompt = self._stage(tmp_path, design, prompt_name="over.txt")
+
+        assert result.returncode == 2, result.stdout[:400]
+        assert "ARCHREVIEW: OVERSIZE" in result.stdout
+        assert f"limit={limit}" in result.stdout
+        assert f"headroom={headroom}" in result.stdout
+        assert not prompt.exists(), "an oversize prompt must not be left on disk"
+        assert "--vh-tail" in result.stdout, "a halt must name its escape hatch"
+
+    def test_the_largest_deliverable_prompt_still_stages(self, tmp_path):
+        """One character under the refusal. Without this the gate could be an
+        off-by-one that refuses every real prompt and the suite would not notice."""
+        limit, headroom = self._limits()
+        design = self._pad_to(tmp_path, limit - headroom)
+        result, prompt = self._stage(tmp_path, design, prompt_name="edge.txt")
+
+        assert result.returncode == 0, result.stdout[:400]
+        assert "ARCHREVIEW: STAGED" in result.stdout
+        assert len(prompt.read_text(encoding="utf-8")) == limit - headroom
+
+    def test_the_gate_measures_the_body_the_contract_prepend_produced(self, tmp_path):
+        """The discriminating case, and the reason the gate sits after the prepend.
+
+        A body exactly deliverable BEFORE the output contract is prepended is NOT
+        deliverable after it. A gate placed before the prepend passes this prompt and
+        the surface then refuses it -- the original defect with a size check bolted on
+        that cannot see the last thing written.
+
+        The sizing has to isolate the CONTRACT and nothing else. A first version sized
+        against a slot-less template and staged against a slot-carrying one, and the
+        extra `report <INLINE_REPORT_FILE>` line was itself enough to trip the gate --
+        so the test passed with the contract discounted, and the mutation that
+        discounts it SURVIVED. Same template, same flags, both times; only the design
+        length moves.
+        """
+        limit, headroom = self._limits()
+        report = "/tmp/r.md"
+
+        # Measure this exact staging's contract length rather than restating it: the
+        # substituted template begins at the template's own first line, so everything
+        # before that is the prepend.
+        probe, probe_prompt = self._stage(tmp_path, "x", report_file=report,
+                                          prompt_name="probe_c.txt")
+        assert probe.returncode == 0, probe.stdout + probe.stderr
+        text = probe_prompt.read_text(encoding="utf-8")
+        contract_len = text.index("feature feat\n")
+        assert contract_len > 0, "no contract was prepended; this test would be vacuous"
+        pre_contract_len = len(text) - contract_len
+
+        # A design that makes the PRE-contract body exactly the largest deliverable
+        # size. With the contract it is over; without it, it is not.
+        design = "x" * (limit - headroom - pre_contract_len + 1)
+        result, prompt = self._stage(tmp_path, design, report_file=report,
+                                     prompt_name="contract.txt")
+
+        assert result.returncode == 2, (
+            "the gate passed a body that is only deliverable without its own contract; "
+            f"contract={contract_len} chars\n" + result.stdout[:400])
+        assert "ARCHREVIEW: OVERSIZE" in result.stdout
+        assert not prompt.exists()
+
+    def test_vh_tail_trims_the_inlined_design(self, tmp_path):
+        """The remedy OVERSIZE prescribes has to exist in the channel that halts.
+        A halt whose escape hatch is unimplemented here is a wall."""
+        design = ("the design body\n"
+                  "\n## Version History\n"
+                  "- v1 first\n- v2 second\n- v3 third\n- v4 fourth\n")
+        result, prompt = self._stage(tmp_path, design, vh_tail=1)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        body = prompt.read_text(encoding="utf-8")
+        assert "the design body" in body, "the body is never the trim's subject"
+        assert "- v4 fourth" in body, "the LAST entry is the one kept"
+        assert "- v1 first" not in body
+        assert "3 of 4 Version History entries omitted" in body
+        assert "git show" in body, "the omitted entries must stay reachable"
+
+    def test_vh_tail_omitted_is_a_strict_no_op(self, tmp_path):
+        """Existing callers and their prompt hashes must be unaffected: the default
+        has to be byte-identical to the code before the flag existed."""
+        design = ("body\n\n## Version History\n- v1 a\n- v2 b\n- v3 c\n")
+        with_flag, p1 = self._stage(tmp_path, design, prompt_name="a.txt")
+        assert with_flag.returncode == 0, with_flag.stdout
+
+        assert "- v1 a" in p1.read_text(encoding="utf-8")
+        assert "omitted" not in p1.read_text(encoding="utf-8")
+
+
 class TestSummaryReachesTheReviewer:
     """#31 — `--summary` took a literal string while `--design` read a file.
 

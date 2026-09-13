@@ -90,6 +90,61 @@ def _evidence_counts(log_text: str) -> dict:
     return scan(log_text)
 
 
+def _size_gate(chars: int) -> "tuple[bool, int, int]":
+    """Delegate the deliverable-size limit to the assembler that owns it.
+
+    Imported rather than re-derived, on the same rule as `_evidence_counts`: a
+    second copy of "how large is too large" is a second thing to drift, and the
+    figure it would drift from was MEASURED on two real gating prompts -- codex
+    `exec` answers `input_too_large max_chars=1048576`, agy's `--print` arg is
+    bounded at the same number, and the dispatch wrapper's boundary marker counts
+    toward it. `h_mad_assemble_audit` already holds all three facts and reserves
+    the overhead; this channel had none of them.
+
+    Returns `(oversize, limit, headroom)` so the caller can name the figures in
+    the token rather than printing a bare refusal.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    from h_mad_assemble_audit import (DISPATCH_OVERHEAD_CHARS, MAX_PROMPT_CHARS,
+                                      prompt_oversize)
+
+    return prompt_oversize(chars), MAX_PROMPT_CHARS, DISPATCH_OVERHEAD_CHARS
+
+
+def _size_notes(size: int, text: str) -> list[str]:
+    """The WARN tier below the refusal: an Agent-tool leg dies well before a CLI does.
+
+    Same delegation, same reason. A 740 KB prompt killed an in-process Opus leg
+    with "Prompt is too long" while both CLIs took it, so this is advice printed
+    beside a PASS, never a blocker -- and it carries the prompt's region layout so
+    a windowed leg can be briefed by line range instead of by feel.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    from h_mad_assemble_audit import size_notes
+
+    return size_notes(size, text)
+
+
+def _trim_vh(text: str, keep: int | None, *, ref: str) -> str:
+    """Keep only the last `keep` `## Version History` entries of an inlined doc.
+
+    The remedy the oversize halt points at, so it has to exist HERE too: a halt
+    whose prescribed escape hatch is unimplemented in the channel that halts is a
+    wall. Version History measured ~36% of every doc-block-exec document, it is a
+    dated record rather than the review's subject, and `keep=None` is a strict
+    no-op so existing callers and prompt hashes are unaffected.
+
+    Reaches for the assembler's private helper deliberately: copying 20 lines of
+    entry-splitting here is the "fix one member of the class" failure -- the note
+    it writes tells the reviewer how to get the omitted entries back, and two
+    copies of that sentence drift apart silently.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    from h_mad_assemble_audit import _trim_version_history
+
+    return _trim_version_history(text, keep, ref=ref)
+
+
 def _extract_assessment(text: str) -> str | None:
     """The LAST `ASSESSMENT:` whose value is one of the allowed words.
 
@@ -283,7 +338,7 @@ def _resolve_summary(summary: str) -> "tuple[str, str | None]":
 
 def stage(feature: str, template: Path, base: str, head: str, design: Path,
           diff_files: str, summary: str, prompt: Path,
-          report_file: str | None = None) -> int:
+          report_file: str | None = None, vh_tail: int | None = None) -> int:
     if base == head:
         _emit(f"DEGENERATE_RANGE base={base}")
         print("  BASE and HEAD are the same commit, so the diff is empty and the "
@@ -295,6 +350,16 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     except OSError as exc:
         _emit(f"UNREADABLE reason={exc.__class__.__name__}")
         return 2
+
+    # Before substitution, so the size gate below measures what the reviewer will
+    # actually receive. `ref` is what the omission note tells the reviewer to run
+    # `git show <sha>:<ref>` on, so it must be the design's path as the repo knows
+    # it, not a temp path -- relative to the repo root when it is inside one.
+    try:
+        ref = str(design.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        ref = design.name
+    design_text = _trim_vh(design_text, vh_tail, ref=ref)
 
     # J31: --summary took a literal string while --design read a file, so an
     # operator who wrote the Phase-5 summary to a file and passed its path got
@@ -390,9 +455,32 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
         )
         body = contract_head + body
 
+    # AFTER the contract prepend, because that is the body a surface receives --
+    # measuring before it passes a prompt whose last ~800 chars are the thing that
+    # tips it over. Characters, not bytes: codex counts chars, and the STAGED token
+    # below reports bytes for a different purpose (the audit trail).
+    #
+    # A verdict, not a process failure, and NO file is written: an unwritten prompt
+    # cannot be dispatched by mistake. This channel had ZERO size guards against the
+    # audit path's several, which is how a ~690 KB 6a-prime prompt was staged, said
+    # STAGED, and was then refused or silently truncated by the surface -- read as
+    # "6a-prime failed" rather than "the prompt was never delivered".
+    oversize, limit, headroom = _size_gate(len(body))
+    if oversize:
+        _emit(f"OVERSIZE chars={len(body)} limit={limit} headroom={headroom}")
+        print("  - no known surface accepts a prompt this large: codex exec refuses it "
+              "(input_too_large) and agy's arg path is capped at the same figure. "
+              "Re-run with --vh-tail N to inline only the last N Version History "
+              "entries of the design; the omitted entries stay reachable via "
+              "`git show <sha>:<doc>`.")
+        return 2
+
     prompt.write_text(body, encoding="utf-8")
     _emit(f"STAGED prompt={prompt} base={base} head={head} "
           f"bytes={len(body.encode('utf-8'))}")
+    # Advisory, printed after the verdict so nothing reads it as a blocker.
+    for note in _size_notes(len(body.encode("utf-8")), body):
+        print(note)
     print(f"hmad-dispatch exec agy {prompt} \\")
     print(f"  --out /tmp/archreview_{feature}.md \\")
     print(f"  --log /tmp/archreview_{feature}.log --timeout 900")
@@ -423,9 +511,15 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--summary", required=True)
     s.add_argument("--prompt", type=Path, required=True)
     s.add_argument("--report-file", default=None, metavar="PATH",
-                   help="where the reviewer must WRITE its report. Required: the "
-                        "template carries the slot, and an unfilled slot ships to "
-                        "the reviewer as live prose.")
+                   help="where the reviewer must WRITE its report. Optional to "
+                        "argparse, but pass it whenever the template carries "
+                        "<INLINE_REPORT_FILE>: an unfilled slot trips "
+                        "UNSUBSTITUTED, and passing it against a template without "
+                        "the slot trips MISSING_SLOTS. Both directions fail closed.")
+    s.add_argument("--vh-tail", type=int, default=None, metavar="N",
+                   help="inline only the last N `## Version History` entries of the "
+                        "design. The remedy OVERSIZE prescribes; omitted entries stay "
+                        "reachable with `git show <sha>:<doc>`. Default: inline all.")
 
     c = sub.add_parser("score", help="evidence gate, verdict, record, read back")
     c.add_argument("--feature", required=True)
@@ -443,7 +537,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.verb == "stage":
         return stage(args.feature, args.template, args.base, args.head, args.design,
-                     args.diff_files, args.summary, args.prompt, args.report_file)
+                     args.diff_files, args.summary, args.prompt, args.report_file,
+                     vh_tail=args.vh_tail)
     return score(args.feature, args.state, args.log, args.review,
                  session_id=args.session_id, report_path=args.report_file)
 
