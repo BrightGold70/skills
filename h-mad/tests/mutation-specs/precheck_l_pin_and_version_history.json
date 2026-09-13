@@ -1,0 +1,75 @@
+{
+  "_why": "#29 \u2014 two silent demotions of a HARD finding, closed together because both are 'the detector fired on the wrong axis'. (a) `path.py:L2` parsed as a SYMBOL, so one stale pin scored FAIL written `:2` and PASS written `:L2`; six of seven spellings escaped entirely (probe `wsg7-carried-claims.probe.v1.md` \u00a71 Reading A). (b) pins inside `## Version History` were scored live, failing a document on text the assembler already omits from the audit prompt (\u00a73). Each mutation carries its own `test` \u2014 ALL_CAUGHT without per-mutation keys is a wrong-catcher hole.\n\nNOT MUTATED, deliberately and reported rather than faked: the over-correction on the L-branch (every `L\u2026` tail read as a line). It is prevented REDUNDANTLY \u2014 both `_PATHISH`'s branch and `_LINE_TAIL` require a digit after the `L` \u2014 so no single find/replace expresses it: dropping the requirement from either one alone leaves the other gating and the mutation survives honestly, and dropping it from `_LINE_TAIL` in a way that DOES change behaviour crashes `int()` instead, which is a crash-kill and reads as a false clean kill. `test_a_symbol_whose_name_begins_with_L_is_still_a_symbol` is therefore a regression guard over a structural property, not a mutated guard. The demotion covers EVERY hard kind, not just pins: scoping it to pins was the first cut and the corpus refuted it (`gate-blindness-hardening.impl-plan.md` FAILED on two hard findings, both inside its history, both NARRATION of fixes already made). All six hard emit sites now route through scan()'s `hard()` router, so two mutations \u2014 the boundary never found, and the boundary covering everything \u2014 cover all six rather than needing one per site.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-line-predicate-rejects-the-L-spelling",
+      "_mechanism": "THE defect, and where it actually lived: `tail.isdigit()` said `L2` was not a line, so a stale pin fell through to the SYMBOL branch -- FAIL written `:2`, PASS written `:L2`. Restoring the old predicate restores exactly that.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "_LINE_TAIL = re.compile(r\"^L?\\d+(?:-L?\\d+)?$\")",
+      "replace": "_LINE_TAIL = re.compile(r\"^\\d+(?:-\\d+)?$\")",
+      "test": "tests/test_h_mad_precheck_doc.py::test_an_L_spelled_line_pin_is_scored_exactly_like_the_colon_spelling"
+    },
+    {
+      "name": "the-L-spelled-RANGE-does-not-parse-as-a-tail",
+      "_mechanism": "The `_PATHISH` L-branch exists for ranges only. Removed, `:L2-L9` matches neither pre-existing branch, so the pin parses as nothing and is invisible to EVERY detector -- worse than misfiled.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    r\"(?::(?P<tail>L\\d+(?:-L?\\d+)?|\\d+(?:-\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
+      "replace": "    r\"(?::(?P<tail>\\d+(?:-\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
+      "test": "tests/test_h_mad_precheck_doc.py::test_an_L_spelled_RANGE_pin_parses_as_a_line_pin"
+    },
+    {
+      "name": "the-finding-prints-the-normalized-tail",
+      "_mechanism": "Reading B reintroduced by the fix for Reading A: the operator cannot grep the printed token back to the document, nor paste it into --allow-historical.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                             f\"`{rel}:{tail}` \u2014 `{rel}` changed since the document's provenance `{prov[:7]}`\",",
+      "replace": "                             f\"`{rel}:{digits}` \u2014 `{rel}` changed since the document's provenance `{prov[:7]}`\",",
+      "test": "tests/test_h_mad_precheck_doc.py::test_an_L_spelled_pin_is_reported_in_the_spelling_the_document_used"
+    },
+    {
+      "name": "only-the-written-spelling-declares-a-pin",
+      "_mechanism": "A declaration typed `:1` against a document that says `:L1` is then ignored WITHOUT AN ERROR \u2014 the operator sees the pin still reported and concludes the flag is broken.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                            or historical_by(f\"{rel}:{digits}\")\n",
+      "replace": "",
+      "test": "tests/test_h_mad_precheck_doc.py::test_either_line_spelling_declares_the_same_historical_pin"
+    },
+    {
+      "name": "the-version-history-boundary-is-never-found",
+      "_mechanism": "Restores the pre-#29 behaviour: a document whose body carries no pin at all FAILs on a dated history entry that is correct as history and must not be edited.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    return version_history_start(text)",
+      "replace": "    return None",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_pin_inside_the_version_history_does_not_fail_the_document"
+    },
+    {
+      "name": "the-version-history-demotion-covers-the-whole-document",
+      "_mechanism": "The over-correction, and the one that matters: 40 of this repo's 44 phase documents carry a Version History, so a boundary that leaks upward silences PINDRIFT corpus-wide while every verdict still prints.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "        return vh_start is not None and lineno >= vh_start",
+      "replace": "        return True",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_body_pin_still_fails_when_the_document_has_a_version_history"
+    },
+    {
+      "name": "the-version-history-demotion-is-silent",
+      "_mechanism": "A suppression nobody can see is indistinguishable from a detector that never fired \u2014 the same bar `--allow-historical`'s demotion is held to. Anchored on the `hard()` router, so this one row covers all six hard kinds.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "            allowed.append(f\"{kind} {token} L{lineno} (in `## Version History`)\")",
+      "replace": "            pass  # silently dropped",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_pin_inside_the_version_history_does_not_fail_the_document"
+    }
+  ]
+}

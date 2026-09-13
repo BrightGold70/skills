@@ -706,3 +706,178 @@ class TestTheLinePinAdvisoryTellsTheTruthAboutWhatItChecked:
         assert out.count("LINEPIN") == 1, out
         assert "advisory — does not move the verdict" in [
             ln for ln in out.splitlines() if "LINEPIN" in ln][0]
+
+
+# --------------------------------------------------------------------------
+# #29 — the `L`-spelled line pin, and the Version History section
+# --------------------------------------------------------------------------
+
+_L_PIN = "See `h-mad/scripts/h_mad_precheck_doc.py:L1` for the scanner.\n"
+_COLON_PIN = "See `h-mad/scripts/h_mad_precheck_doc.py:1` for the scanner.\n"
+
+
+def test_an_L_spelled_line_pin_is_scored_exactly_like_the_colon_spelling(tmp_path):
+    """The defect: one character turned `FAIL` into `PASS` on the SAME stale pin.
+
+    `_PATHISH`'s tail alternation admitted `[A-Za-z_][A-Za-z0-9_]*`, so `L1` parsed
+    as a symbol and reached the SYMBOL branch — advisory, verdict-neutral — while
+    `:1` reached PINDRIFT and failed the document. A hard finding silently demoted
+    by a spelling. Measured in `docs/04-report/features/wsg7-carried-claims.probe.v1.md`
+    §1 Reading A, where six of seven spellings of one stale pin escaped entirely.
+
+    Asserted as EQUALITY against the colon form rather than as "L fails", so the
+    test cannot pass by both spellings breaking in the same new way.
+    """
+    older = _root_commit()
+    head = f"Anchors verified at HEAD `{older}`.\n\n"
+    colon = run(write(tmp_path, "c.impl-plan.md", head + _COLON_PIN),
+                "--phase", "impl-plan", "--root", REPO)
+    ell = run(write(tmp_path, "l.impl-plan.md", head + _L_PIN),
+              "--phase", "impl-plan", "--root", REPO)
+
+    assert token(colon.stdout).startswith("PRECHECK: FAIL"), colon.stdout
+    assert token(ell.stdout) == token(colon.stdout), (ell.stdout, colon.stdout)
+    assert len(details(ell.stdout, "PINDRIFT")) == 1, ell.stdout
+
+
+def test_an_L_spelled_pin_is_reported_in_the_spelling_the_document_used(tmp_path):
+    """Normalising the tail for arithmetic must not rewrite it for the message.
+
+    The operator greps the finding's token back into the document and pastes it
+    into `--allow-historical`. Printing `:1` for a document that says `:L1` is the
+    probe's Reading B — the tool's own output not accepted back as its own input —
+    reintroduced by the fix for Reading A.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _L_PIN)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    hit = details(r.stdout, "PINDRIFT")[0]
+    assert "h_mad_precheck_doc.py:L1" in hit, hit
+
+
+def test_a_symbol_whose_name_begins_with_L_is_still_a_symbol(tmp_path):
+    """The over-correction. Making every `L…` tail a line pin manufactures hard
+    findings out of ordinary symbol citations, which is strictly worse than the
+    defect: the L-branch requires a DIGIT after the `L`."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:Loader` for it.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert details(r.stdout, "SYMBOL"), r.stdout
+    assert not details(r.stdout, "PINDRIFT"), r.stdout
+
+
+def test_either_line_spelling_declares_the_same_historical_pin(tmp_path):
+    """A declaration written `:1` must cover a document that writes `:L1`.
+
+    The operator's two sources disagree by construction — the flag was typed once
+    against an older revision, the document was rewritten since — and a declaration
+    that is ignored WITHOUT AN ERROR is the failure `historical_by`'s own anchor
+    comment already names.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md", f"Anchors verified at HEAD `{older}`.\n\n" + _L_PIN)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py:1")
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert "declared historical" in r.stdout, r.stdout
+
+
+_VH = "\n## Version History\n\n- v1.0 — "
+
+
+def test_a_pin_inside_the_version_history_does_not_fail_the_document(tmp_path):
+    """The assembler omits the Version History from the audit prompt, so a hard
+    finding drawn only from it fails the document on text no reviewer will see.
+
+    The probe's minimum case (§3): a body with no pin at all returned `FAIL
+    issues=1`, driven entirely by a dated entry that was correct as history and
+    must not be edited. Demoted, never dropped — `ALLOWED:` is what keeps it
+    auditable, the same discipline `--allow-historical` is held to.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nBody is clean.\n"
+                + _VH + "moved it to `h-mad/scripts/h_mad_precheck_doc.py:1`.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert "Version History" in r.stdout, r.stdout
+    assert not details(r.stdout, "PINDRIFT"), r.stdout
+
+
+def test_a_body_pin_still_fails_when_the_document_has_a_version_history(tmp_path):
+    """The over-correction, and the one that matters: demoting the SECTION must not
+    demote the DOCUMENT. 40 of this repo's 44 phase documents carry a Version
+    History, so a boundary that leaks upward would silence the detector corpus-wide
+    while every verdict still printed."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n" + _COLON_PIN
+                + _VH + "moved it to `h-mad/scripts/h_mad_version_history.py:1`.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    hits = details(r.stdout, "PINDRIFT")
+    assert len(hits) == 1, hits
+    assert "h_mad_precheck_doc.py:1" in hits[0], hits
+
+
+def test_a_placeholder_inside_the_version_history_is_demoted_too(tmp_path):
+    """This test asserted the OPPOSITE first, and the corpus refuted it.
+
+    Scoping the demotion to pin kinds reasons from the KIND's semantics — a
+    `TODO` is unresolved wherever it sits. What the section actually holds is
+    prose ABOUT changes, which the slot detectors read as the changes themselves.
+    Measured over this repo's 44 phase documents:
+    `gate-blindness-hardening.impl-plan.md` FAILED on exactly two hard findings,
+    both inside its Version History, and both narration of fixes already made —
+    "**TBD placeholders removed.** Every `"detail": ...` is now the exact string"
+    and "**`<v>` placeholder** … replaced with `${HMAD_STUB_HOSTILE}`". A document
+    failing entirely on its own changelog describing the removal of the very
+    things being detected.
+
+    So every hard kind is demoted inside the section, not just the pin kinds.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nBody is clean.\n"
+                + _VH + "TODO placeholders removed from Task 5.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert not details(r.stdout, "PLACEHOLDER"), r.stdout
+    assert "Version History" in r.stdout, r.stdout
+
+
+def test_a_body_placeholder_still_fails_when_the_document_has_a_version_history(tmp_path):
+    """The over-correction, per kind. Demoting the SECTION must not demote the
+    DOCUMENT for PLACEHOLDER any more than it does for PINDRIFT — and PLACEHOLDER
+    reaches `hard()` from three separate emit sites, so the router is the only
+    thing making the rule uniform across them."""
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nStill TODO in the body.\n"
+                + _VH + "TODO placeholders removed from Task 5.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    hits = details(r.stdout, "PLACEHOLDER")
+    assert len(hits) == 1 and hits[0].startswith("PLACEHOLDER: L3 "), hits
+
+
+def test_an_L_spelled_RANGE_pin_parses_as_a_line_pin(tmp_path):
+    """What the `_PATHISH` L-branch is actually for.
+
+    A plain `:L2` is caught by `_LINE_TAIL` alone — the symbol branch already
+    delivers `L2` as the tail. Ranges are different: `[A-Za-z_][A-Za-z0-9_]*`
+    admits no `-` and `\\d+(?:-\\d+)?` admits no `L`, so `:L2-L9` matches NEITHER
+    pre-existing branch and does not parse as a tail at all. Without the added
+    branch the pin is invisible to every detector rather than merely misfiled.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "x.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:L1-L9` for the scanner.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    hits = details(r.stdout, "PINDRIFT")
+    assert len(hits) == 1 and "h_mad_precheck_doc.py:L1-L9" in hits[0], hits

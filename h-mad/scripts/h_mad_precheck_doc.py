@@ -112,8 +112,42 @@ def _spans(line: str) -> list[str]:
 # `some/path.py`, `docs/x.md`, optionally followed by `:<line>` or `:<symbol>`.
 _PATHISH = re.compile(
     r"^(?P<path>[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+\.[A-Za-z0-9]{1,6})"
-    r"(?::(?P<tail>\d+(?:-\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$"
+    r"(?::(?P<tail>L\d+(?:-L?\d+)?|\d+(?:-\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$"
 )
+
+# `path.py:L2` is the SAME line pin as `path.py:2`. Measured (#29, probe
+# `wsg7-carried-claims.probe.v1.md` §1 Reading A): one stale pin scored `FAIL`
+# written `:2` and `PASS` written `:L2` — a hard PINDRIFT silently demoted to a
+# verdict-neutral SYMBOL advisory by one character.
+#
+# WHERE THE FIX ACTUALLY LIVES, because the obvious reading is wrong and a
+# mutation caught it: for a PLAIN `L2` the regex above was never the problem. The
+# symbol branch `[A-Za-z_][A-Za-z0-9_]*` already matched `L2` and handed it over as
+# the tail; what misread it was the PREDICATE downstream — `tail.isdigit()` — which
+# said "not a line" and fell through to the symbol check. `_LINE_TAIL` is that
+# predicate, and it is the guard. The `L\d+(?:-L?\d+)?` branch added to `_PATHISH`
+# is load-bearing for RANGES only (`L2-L9`, `L2-9`): the symbol branch admits no
+# `-`, and the digit branch admits no `L`, so without it those two spellings do not
+# parse as a tail at all. Reverting the regex alone leaves `:L2` still caught —
+# which is exactly how that mutation SURVIVED and exposed this comment's first
+# draft as a false account of its own mechanism.
+#
+# Both patterns require a digit after the `L`, redundantly, so a symbol named `L`
+# or `Loader` still reads as a symbol under either one alone.
+_LINE_TAIL = re.compile(r"^L?\d+(?:-L?\d+)?$")
+
+
+def _line_digits(tail: str) -> str:
+    """`L2-L9` -> `2-9`. Arithmetic only.
+
+    The tail is never REWRITTEN: every message and every `--allow-historical`
+    comparison keeps the spelling the document actually used, so a finding names
+    a token the operator can grep back to and can paste into the flag. Printing
+    `:2` for a document that says `:L2` would be Reading B's defect — the tool's
+    own output not accepted back as its own input — reintroduced by the fix for
+    Reading A.
+    """
+    return re.sub(r"L(?=\d)", "", tail)
 
 # A bare `:1809` — five of the c33 corpus's six stale pins were written this way,
 # attached to a path named earlier in the sentence.
@@ -224,6 +258,29 @@ def _newest_commit(root: Path, shas: list[str]) -> str | None:
     return best
 
 
+def _version_history_start(text: str) -> int | None:
+    """1-based line of the `## Version History` heading — the ASSEMBLER's anchor.
+
+    Reaches for a sibling script deliberately: the same call
+    `h_mad_archreview_cycle._trim_vh` makes, for the reason recorded there. A
+    second copy of the marker literal here is exactly how the assembler and this
+    precheck come to disagree about where the history starts, and that
+    disagreement IS the defect (#29 §3), not a risk of it.
+
+    An import failure returns `None`, which loses the demotion and restores the
+    pre-#29 behaviour. That direction is deliberate: the demotion NARROWS what
+    this gate fails on, so losing it fails CLOSED — a document that should have
+    passed gets a finding an operator can read, never a document that should
+    have failed getting a silent PASS.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from h_mad_assemble_audit import version_history_start
+    except ImportError:
+        return None
+    return version_history_start(text)
+
+
 def _line_count(p: Path) -> int | None:
     try:
         with p.open("rb") as fh:
@@ -281,9 +338,57 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
         raise Unreadable(f"document_unreadable") from exc
 
     lines = text.splitlines()
+
+    # Everything from the `## Version History` heading to the end of the document
+    # is a DATED RECORD, and a hard finding drawn from it is nearly always the
+    # record being READ AS THE THING IT DESCRIBES.
+    #
+    # The basis is the assembler's recorded position on the same section —
+    # `_trim_version_history`: "The omitted entries are dated records, not the
+    # audit's subject" — NOT a claim that no reviewer sees the text. That stronger
+    # claim is false and an earlier draft of this comment made it: `--vh-tail`
+    # defaults to `None`, which is a strict no-op, so by default the history IS
+    # inlined. It is omitted only when an operator asks.
+    #
+    # What settles it is the measurement. Over this repo's 44 phase documents
+    # (#29): `gate-blindness-hardening.impl-plan.md` FAILED on exactly two hard
+    # findings, both inside its history, and both NARRATION of fixes already made
+    # — "**TBD placeholders removed.** Every `"detail": ...` is now the exact
+    # string" trips the TBD detector, and "**`<v>` placeholder** … replaced with
+    # `${HMAD_STUB_HOSTILE}`" trips the slot detector. A document failing entirely
+    # on its own changelog describing the removal of the things being detected.
+    #
+    # So the demotion covers EVERY hard kind, not just the pin kinds. Scoping it
+    # to pins was the first cut and it was wrong for a reason worth keeping: the
+    # kind's semantics are not what matters, the section's CONTENT is, and what
+    # this section contains is prose about changes. Demoted, never dropped — every
+    # one still prints under `ALLOWED:`.
+    #
+    # This is NOT the document-side marker `historical_by` refuses. That refusal is
+    # about an author granting THEMSELVES a silencer; here the precheck follows a
+    # decision the ASSEMBLER already made about the same section, and the two
+    # agreeing is the whole point.
+    vh_start = _version_history_start(text)
+
+    def in_vh(lineno: int) -> bool:
+        return vh_start is not None and lineno >= vh_start
+
     findings: list[tuple[str, int, str]] = []
     advisories: list[tuple[str, int, str]] = []
     allowed: list[str] = []
+
+    def hard(kind: str, lineno: int, detail: str, token: str) -> None:
+        """The ONE place a hard finding is emitted, so the Version History rule
+        cannot be applied to five of six sites and forgotten at the sixth.
+
+        `token` is the bare pin/slot for the `ALLOWED:` echo, which is a grammar
+        the operator pastes back into `--allow` / `--allow-historical`; `detail`
+        is the prose for the finding line. They differ deliberately.
+        """
+        if in_vh(lineno):
+            allowed.append(f"{kind} {token} L{lineno} (in `## Version History`)")
+        else:
+            findings.append((kind, lineno, detail))
 
     def allowed_by(span: str) -> bool:
         return any(a in span for a in allow)
@@ -344,7 +449,7 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
             if allowed_by(line) or allowed_by(span):
                 allowed.append(f"PLACEHOLDER {span} L{lineno}")
                 continue
-            findings.append(("PLACEHOLDER", lineno, f"{span} — unresolved slot"))
+            hard("PLACEHOLDER", lineno, f"{span} — unresolved slot", span)
 
         for span in _spans(line):
             if allowed_by(span):
@@ -352,12 +457,12 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                 continue
 
             if phase == "impl-plan" and _SLOT_IN_CODE.search(span):
-                findings.append(("PLACEHOLDER", lineno, f"`{span}` — unresolved slot"))
+                hard("PLACEHOLDER", lineno, f"`{span}` — unresolved slot", span)
                 continue
 
             # --- angle slots ---------------------------------------------
             if phase == "impl-plan" and _ANGLE_SLOT.search(span) and not _GRAMMAR.search(span):
-                findings.append(("PLACEHOLDER", lineno, f"`{span}` — unfilled slot"))
+                hard("PLACEHOLDER", lineno, f"`{span}` — unfilled slot", span)
                 continue
 
             # --- bare `:NNNN` line pins ----------------------------------
@@ -389,14 +494,18 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
             if tail is None:
                 continue
 
-            if tail.isdigit() or "-" in tail:
-                first = int(tail.split("-")[0])
+            if _LINE_TAIL.match(tail):
+                digits = _line_digits(tail)
+                first = int(digits.split("-")[0])
                 n = _line_count(target)
                 if n is not None and first > n:
-                    # HARD: provably wrong, no judgement involved.
-                    findings.append(
-                        ("LINEPIN", lineno, f"`{rel}:{tail}` past_eof — the file has {n} lines")
-                    )
+                    # HARD: provably wrong, no judgement involved — unless it sits
+                    # in the Version History, where a pin past today's end-of-file
+                    # is the ordinary shape of a true record of an older tree.
+                    # `hard()` applies that rule; see its definition.
+                    hard("LINEPIN", lineno,
+                         f"`{rel}:{tail}` past_eof — the file has {n} lines",
+                         f"{rel}:{tail}")
                 elif prov and _changed_since(root, prov, rel):
                     # HARD: the document pins a line in a file that has been edited
                     # since the commit the document says it measured at. This is the
@@ -411,13 +520,20 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                     # Measured on `gateway-consolidation.design.md`: v1.15 at its own
                     # tree FAIL issues=41; v1.16 PASS issues=0 purely because it named
                     # HEAD — 26 findings went advisory, zero pins repaired.
-                    if historical_by(f"{rel}:{tail}") or historical_by(rel):
+                    # BOTH spellings of the declaration are honoured. The
+                    # operator copies the token out of the document, which may say
+                    # `:L2` where an earlier declaration said `:2`; a flag that
+                    # accepts only the form the document did not use is ignored
+                    # WITHOUT AN ERROR, which is the failure the anchor comment
+                    # above already names.
+                    if (historical_by(f"{rel}:{tail}")
+                            or historical_by(f"{rel}:{digits}")
+                            or historical_by(rel)):
                         allowed.append(f"PINDRIFT {rel}:{tail} L{lineno} (declared historical)")
                     else:
-                        findings.append(
-                            ("PINDRIFT", lineno,
-                             f"`{rel}:{tail}` — `{rel}` changed since the document's provenance `{prov[:7]}`")
-                        )
+                        hard("PINDRIFT", lineno,
+                             f"`{rel}:{tail}` — `{rel}` changed since the document's provenance `{prov[:7]}`",
+                             f"{rel}:{tail}")
                 elif prov:
                     # CHECKED, and clean: `prov` exists and `_changed_since` said no.
                     # This arm used to fall through to the cannot-judge message below,
@@ -479,9 +595,8 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
             if not _is_commit(root, sha):
                 # HARD. A sha that names no commit in this repository cannot have
                 # been measured at. Mistyped, or from another checkout.
-                findings.append(
-                    ("UNKNOWNSHA", lineno, f"`{sha}` is not a commit in this repository")
-                )
+                hard("UNKNOWNSHA", lineno,
+                     f"`{sha}` is not a commit in this repository", sha)
             else:
                 # ADVISORY. Older-than-HEAD is the NORMAL condition of every written
                 # measurement — the document was written at some commit and HEAD moved.
@@ -506,11 +621,15 @@ def main(argv=None) -> int:
     ap.add_argument("--allow", action="append", default=[],
                     help="a substring whose hits are deliberate. An INPUT, never inferred. Repeatable.")
     ap.add_argument("--allow-historical", action="append", default=[], metavar="SUBSTR",
-                    help="a pin (`path:line` or just `path`) that is KNOWINGLY historical: it "
-                         "measures an older tree on purpose. Demotes PINDRIFT to `allowed` for "
-                         "that pin only. An INPUT, never inferred, and never a document marker — "
-                         "a document that can silence its own gate is the masking this exists to "
-                         "fix. Repeatable.")
+                    help="a pin that is KNOWINGLY historical: it measures an older tree on "
+                         "purpose. Write it exactly as the document writes it — `path:line`, "
+                         "`path:Lline`, `path:first-last` for a range, or bare `path` for every "
+                         "pin into that file. A RANGE is declared by the whole range: "
+                         "`foo.py:10` does NOT cover `foo.py:10-40`. The two line spellings are "
+                         "interchangeable — `:12` and `:L12` declare the same pin. Demotes "
+                         "PINDRIFT to `allowed` for that pin only. An INPUT, never inferred, and "
+                         "never a document marker — a document that can silence its own gate is "
+                         "the masking this exists to fix. Repeatable.")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 

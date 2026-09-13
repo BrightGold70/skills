@@ -1,5 +1,5 @@
 {
-  "_why": "PINDRIFT is one of the four HARD kinds and had NO test of its own until 2026-09-07. Its only exercise was being COUNTED by the noise-floor test, and the c33 pin test accepts a hit under either LINEPIN or PINDRIFT, so neither discriminated it. When the floor stopped counting PINDRIFT — it measures tree drift against a frozen archived document, not document quality — the detector would have been left with zero behavioural coverage. These rows are what make the two new tests real: an unmutated pair of tests proves only that the code passes itself.",
+  "_why": "PINDRIFT is one of the four HARD kinds and had NO test of its own until 2026-09-07. Its only exercise was being COUNTED by the noise-floor test, and the c33 pin test accepts a hit under either LINEPIN or PINDRIFT, so neither discriminated it. When the floor stopped counting PINDRIFT \u2014 it measures tree drift against a frozen archived document, not document quality \u2014 the detector would have been left with zero behavioural coverage. These rows are what make the two new tests real: an unmutated pair of tests proves only that the code passes itself.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -17,7 +17,7 @@
   "mutations": [
     {
       "name": "pindrift-never-fires",
-      "_mechanism": "The drift branch is dead, so a document pinning a line in a file edited since its own provenance commit is reported as fine. This is the c33 defect restored — six SKILL.md pins stale by 93 lines, all measured at a commit that had already moved — and it is the exact defect this detector was written for.",
+      "_mechanism": "The drift branch is dead, so a document pinning a line in a file edited since its own provenance commit is reported as fine. This is the c33 defect restored \u2014 six SKILL.md pins stale by 93 lines, all measured at a commit that had already moved \u2014 and it is the exact defect this detector was written for.",
       "file": "scripts/h_mad_precheck_doc.py",
       "find": "                elif prov and _changed_since(root, prov, rel):",
       "replace": "                elif False:",
@@ -25,7 +25,7 @@
     },
     {
       "name": "pindrift-fires-unconditionally",
-      "_mechanism": "The opposite direction, and it needs its own row: with only the fires-when-changed test, a detector that fires on EVERY pin passes. That is a criterion that cannot discriminate — the class `invariants.base.md` §Test discrimination now names as vacuous — and it would make every correctly-pinned document a hard FAIL, which is how a gate gets switched off.",
+      "_mechanism": "The opposite direction, and it needs its own row: with only the fires-when-changed test, a detector that fires on EVERY pin passes. That is a criterion that cannot discriminate \u2014 the class `invariants.base.md` \u00a7Test discrimination now names as vacuous \u2014 and it would make every correctly-pinned document a hard FAIL, which is how a gate gets switched off.",
       "file": "scripts/h_mad_precheck_doc.py",
       "find": "                elif prov and _changed_since(root, prov, rel):",
       "replace": "                elif prov:",
@@ -33,18 +33,18 @@
     },
     {
       "name": "pindrift-is-downgraded-to-advisory",
-      "_mechanism": "The detail line still prints — a reader skimming output sees it — while the verdict becomes PASS, because hardness here is decided ONLY by which list the hit is appended to. A finding that is printed and does not move the verdict is the shape that lets a stale pin ship past a gate that reads the token.\n\nThis row first mutated `HARD_KINDS` instead, and SURVIVED. The stated mechanism was wrong: `HARD_KINDS` is defined at :93 and never read — the verdict is `\"FAIL\" if findings else \"PASS\"`, and the two test-side filters spell the set out as literals rather than importing it. I had asserted a mechanism without executing it, which is the class this repo files under `execute property claims, never assert them`. The dead constant is filed separately.",
+      "_mechanism": "The detail line still prints \u2014 a reader skimming output sees it \u2014 while the verdict becomes PASS, because hardness here is decided ONLY by which list the hit is appended to. A finding that is printed and does not move the verdict is the shape that lets a stale pin ship past a gate that reads the token.\n\nThis row first mutated `HARD_KINDS` instead, and SURVIVED. The stated mechanism was wrong: `HARD_KINDS` is defined at :93 and never read \u2014 the verdict is `\"FAIL\" if findings else \"PASS\"`, and the two test-side filters spell the set out as literals rather than importing it. I had asserted a mechanism without executing it, which is the class this repo files under `execute property claims, never assert them`. The dead constant is filed separately.\n\nRe-anchored at #29: the emit now goes through scan()'s `hard()` router, which applies the Version History rule uniformly across all six hard emit sites. The mutation is unchanged in meaning \u2014 it still routes PINDRIFT to `advisories` so the line prints and the verdict does not move.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                        findings.append(\n                            (\"PINDRIFT\", lineno,",
-      "replace": "                        advisories.append(\n                            (\"PINDRIFT\", lineno,",
+      "find": "                        hard(\"PINDRIFT\", lineno,\n                             f\"`{rel}:{tail}` \u2014 `{rel}` changed since the document's provenance `{prov[:7]}`\",\n                             f\"{rel}:{tail}\")",
+      "replace": "                        advisories.append((\"PINDRIFT\", lineno,\n                             f\"`{rel}:{tail}` \u2014 `{rel}` changed since the document's provenance `{prov[:7]}`\"))",
       "test": "tests/test_h_mad_precheck_doc.py::test_PINDRIFT_fires_when_a_pinned_file_changed_since_the_provenance"
     },
     {
       "name": "an-unprovenanced-pin-is-scored-instead-of-reported",
-      "_mechanism": "The cannot-judge branch becomes a hard finding. `I could not check` and `it is broken` are opposite answers, and this repo's fail-closed rule is that they must not be spelled the same way — here the collapse runs in the permissive-looking direction for the reader and the punitive one for the document, firing on every pin in a document that carries no provenance sha at all.",
+      "_mechanism": "The cannot-judge branch becomes a hard finding. `I could not check` and `it is broken` are opposite answers, and this repo's fail-closed rule is that they must not be spelled the same way \u2014 here the collapse runs in the permissive-looking direction for the reader and the punitive one for the document, firing on every pin in a document that carries no provenance sha at all.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                    advisories.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` — line pin with no provenance commit to check it against\")\n                    )",
-      "replace": "                    findings.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` — line pin with no provenance commit to check it against\")\n                    )",
+      "find": "                    advisories.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` \u2014 line pin with no provenance commit to check it against\")\n                    )",
+      "replace": "                    findings.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` \u2014 line pin with no provenance commit to check it against\")\n                    )",
       "test": "tests/test_h_mad_precheck_doc.py::test_LINEPIN_is_reported_for_every_phase"
     }
   ]

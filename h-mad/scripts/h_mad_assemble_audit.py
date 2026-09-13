@@ -324,6 +324,41 @@ def _vh_noop(ref: str, why: str) -> None:
     print(f"[h-mad] vh-tail: nothing trimmed from {ref}: {why}", file=sys.stderr)
 
 
+#: The ONE anchor for "where the Version History section begins".
+#: `_trim_version_history` omits everything from here on from the audit prompt;
+#: `h_mad_precheck_doc.py` demotes EVERY hard finding from here on, because this
+#: section holds prose ABOUT changes and the detectors read it as the changes
+#: themselves -- measured, #29: one document failed entirely on its own changelog
+#: saying "TBD placeholders removed". (Not because the reviewer never sees the
+#: text: `--vh-tail` defaults to `None`, a strict no-op, so by default it is
+#: inlined.) Two copies of this literal
+#: would let the two disagree about what the audit's subject is, silently, which
+#: is the defect rather than a risk of it.
+VH_MARKER = "\n## Version History"
+
+
+def version_history_start(text: str) -> int | None:
+    """1-based line number of the `## Version History` heading, or `None`.
+
+    Deliberately IDENTICAL to `_trim_version_history`'s own lookup: first
+    occurrence, section runs to end of text, no fence awareness. Agreement
+    between the assembler and the precheck is the property being bought here, so
+    a shared limitation is one bug in one place rather than two that drift apart
+    -- the same reasoning `h_mad_archreview_cycle._trim_vh` records for reaching
+    into this module rather than copying its twenty lines.
+
+    A document whose very FIRST line is the heading returns `None`, because the
+    marker carries a leading newline. That is the assembler's behaviour too, and
+    a phase document that opens with its own Version History does not occur.
+    """
+    i = text.find(VH_MARKER)
+    if i < 0:
+        return None
+    # `text[:i]` stops BEFORE the marker's leading newline, so the heading sits
+    # one line past the count: `"a\n## Version History"` -> i=1, 0 newlines, L2.
+    return text.count("\n", 0, i) + 2
+
+
 def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
     """Keep the body verbatim and only the LAST `keep` `## Version History`
     entries; replace the omitted ones with a single line that states the count
@@ -350,8 +385,7 @@ def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
     # the prompt bigger, silently. Measured: keep=1 -> 228 chars, keep=0 -> 249.
     keep = max(keep, 0)
 
-    marker = "\n## Version History"
-    i = text.find(marker)
+    i = text.find(VH_MARKER)
     if i < 0:
         _vh_noop(ref, "no `## Version History` heading")
         return text
