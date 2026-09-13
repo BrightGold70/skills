@@ -624,3 +624,85 @@ def test_allow_historical_does_not_touch_the_other_hard_kinds(tmp_path):
             "--allow-historical", "h_mad_precheck_doc.py")
     assert details(r.stdout, "LINEPIN"), r.stdout
     assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+class TestTheLinePinAdvisoryTellsTheTruthAboutWhatItChecked:
+    """The arm reported a VERIFIED-CLEAN pin as one it could not judge.
+
+    `else` was reached in two cases: `prov is None` (genuinely unjudgeable) and `prov`
+    present with `_changed_since` False (checked, clean). Both printed "line pin with
+    no provenance commit to check it against" — while a PINDRIFT finding on the next
+    line of the same output named that very sha. The arm destroyed exactly the
+    distinction its own comment exists to preserve: "I could not check" is not "it is
+    fine", and here "it is fine" was printed as "I could not check".
+    """
+
+    def _repo(self, tmp_path):
+        import subprocess as sp
+        r = tmp_path / "r"
+        (r / "sub").mkdir(parents=True)
+        sp.run(["git", "init", "-q", "-b", "main", str(r)], check=True, capture_output=True)
+        (r / "sub" / "f.py").write_text("a\nb\nc\nd\n", encoding="utf-8")
+        (r / "sub" / "other.py").write_text("x\ny\n", encoding="utf-8")
+        g = lambda *a: sp.run(["git", "-C", str(r), *a], check=True, capture_output=True, text=True)
+        g("add", "-A"); g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one")
+        prov = g("rev-parse", "HEAD").stdout.strip()
+        (r / "sub" / "other.py").write_text("x\ny\nz-CHANGED\n", encoding="utf-8")
+        g("add", "-A"); g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "two")
+        doc = r / "doc.md"
+        doc.write_text(
+            f"# D\n\nMeasured at `{prov}`.\n\n"
+            "UNCHANGED file pin `sub/f.py:3`.\nCHANGED file pin `sub/other.py:2`.\n",
+            encoding="utf-8")
+        return r, doc, prov
+
+    def test_a_checked_and_clean_pin_names_the_sha_it_was_checked_against(self, tmp_path):
+        r, doc, prov = self._repo(tmp_path)
+
+        out = run(doc, "--phase", "design", "--root", r).stdout
+        linepin = [ln for ln in out.splitlines() if "LINEPIN" in ln]
+        assert len(linepin) == 1, out
+
+        assert "no provenance commit" not in linepin[0], (
+            "a pin checked against a real provenance sha is reported as having none:\n"
+            + out)
+        assert "unchanged since" in linepin[0], linepin[0]
+        assert prov[:7] in linepin[0], (
+            "the advisory must name the sha it measured against\n" + linepin[0])
+
+    def test_the_two_advisories_cannot_contradict_the_same_output(self, tmp_path):
+        """The tell that made this findable: PINDRIFT and LINEPIN in ONE run disagreed
+        about whether a provenance commit existed."""
+        r, doc, prov = self._repo(tmp_path)
+
+        out = run(doc, "--phase", "design", "--root", r).stdout
+        assert "PINDRIFT" in out and prov[:7] in out, out
+        pindrift = [ln for ln in out.splitlines() if "PINDRIFT" in ln][0]
+        linepin = [ln for ln in out.splitlines() if "LINEPIN" in ln][0]
+        assert prov[:7] in pindrift and prov[:7] in linepin, (
+            "one run, two lines, disagreeing about whether a provenance sha exists:\n"
+            f"{pindrift}\n{linepin}")
+
+    def test_with_NO_provenance_the_cannot_judge_message_is_kept(self, tmp_path):
+        """The honest case must keep its honest wording — the fix splits the arm, it
+        does not relabel everything as checked."""
+        r, doc, _prov = self._repo(tmp_path)
+        doc.write_text("# D\n\nNo provenance here.\n\nPin `sub/f.py:3`.\n",
+                       encoding="utf-8")
+
+        out = run(doc, "--phase", "design", "--root", r).stdout
+        linepin = [ln for ln in out.splitlines() if "LINEPIN" in ln]
+        assert len(linepin) == 1, out
+        assert "no provenance commit to check it against" in linepin[0], linepin[0]
+        assert "unchanged since" not in linepin[0], linepin[0]
+
+    def test_the_verdict_and_the_advisory_count_do_not_move(self, tmp_path):
+        """Same kind, same count, advisory either way — only the sentence changed. A
+        verdict shift here would be a different change needing its own argument."""
+        r, doc, _prov = self._repo(tmp_path)
+
+        out = run(doc, "--phase", "design", "--root", r).stdout
+        assert "PRECHECK: FAIL issues=1" in out, out
+        assert out.count("LINEPIN") == 1, out
+        assert "advisory — does not move the verdict" in [
+            ln for ln in out.splitlines() if "LINEPIN" in ln][0]

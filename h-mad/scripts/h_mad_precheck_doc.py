@@ -418,6 +418,23 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                             ("PINDRIFT", lineno,
                              f"`{rel}:{tail}` — `{rel}` changed since the document's provenance `{prov[:7]}`")
                         )
+                elif prov:
+                    # CHECKED, and clean: `prov` exists and `_changed_since` said no.
+                    # This arm used to fall through to the cannot-judge message below,
+                    # so a pin that had been verified against a real provenance sha was
+                    # reported as having none — while a PINDRIFT finding on the next
+                    # line of the SAME output named that very sha. The arm destroyed
+                    # exactly the distinction its own comment exists to preserve: "I
+                    # could not check" is not "it is fine", and here "it is fine" was
+                    # printed as "I could not check".
+                    #
+                    # Still an advisory and still LINEPIN, so counts and verdicts do
+                    # not move — only the sentence becomes true.
+                    advisories.append(
+                        ("LINEPIN", lineno,
+                         f"`{rel}:{tail}` — line pin; `{rel}` unchanged since the "
+                         f"document's provenance `{prov[:7]}`")
+                    )
                 else:
                     # Cannot judge: no provenance sha to measure drift against.
                     # Reported, never scored — "I could not check" is not "it is fine".

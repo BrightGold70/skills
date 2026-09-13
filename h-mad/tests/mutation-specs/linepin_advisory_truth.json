@@ -1,0 +1,24 @@
+{
+  "_why": "The LINEPIN else-arm was reached in two cases -- `prov is None` (genuinely unjudgeable) and `prov` present with `_changed_since` False (checked, clean) -- and printed the same cannot-judge sentence for both, while a PINDRIFT finding on the next line of the SAME output named that very sha. The arm destroyed exactly the distinction its own comment exists to preserve. Both directions are mutated: collapsing the arms back, and relabelling the honest case as checked.",
+  "root": "../..",
+  "command": ["python3.11", "-m", "pytest", "tests/test_h_mad_precheck_doc.py", "-q"],
+  "target_command": ["python3.11", "-m", "pytest", "-q"],
+  "mutations": [
+    {
+      "name": "the-arms-are-collapsed-again",
+      "_mechanism": "The defect. A pin verified against a real provenance sha is reported as having none, in an output that names that sha three lines earlier.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                elif prov:",
+      "replace": "                elif False:",
+      "test": "tests/test_h_mad_precheck_doc.py::TestTheLinePinAdvisoryTellsTheTruthAboutWhatItChecked::test_a_checked_and_clean_pin_names_the_sha_it_was_checked_against"
+    },
+    {
+      "name": "the-honest-case-is-relabelled-as-checked",
+      "_mechanism": "The opposite error, and the tempting one: making every LINEPIN claim it was checked. A pin with NO provenance sha would then assert it was measured against one, which is the same lie pointing the other way -- and strictly worse, because it manufactures confidence instead of withholding it.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` — line pin with no provenance commit to check it against\")",
+      "replace": "                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` — line pin; `{rel}` unchanged since the document's provenance\")",
+      "test": "tests/test_h_mad_precheck_doc.py::TestTheLinePinAdvisoryTellsTheTruthAboutWhatItChecked::test_with_NO_provenance_the_cannot_judge_message_is_kept"
+    }
+  ]
+}
