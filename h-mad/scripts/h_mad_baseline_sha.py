@@ -19,6 +19,7 @@ Verdicts, printed as a canonical token:
 
     BASELINE: OK sha=<40-hex> branch=<b> trunk=<t>            exit 0
     BASELINE: UNVERIFIED reason=no_impl_plan candidate=<sha>  exit 0
+    BASELINE: UNVERIFIED reason=impl_plan_not_first candidate=<sha> preceded_by=N
     BASELINE: NONE reason=no_commits_on_branch branch=<b>     exit 0
     BASELINE: UNREADABLE reason=<r>                           exit 2
 
@@ -66,15 +67,15 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _first_commit_on_branch(repo: Path, branch: str, trunk: str) -> str | None:
-    """The oldest commit reachable from `branch` and not from `trunk`.
+def _branch_commits_oldest_first(repo: Path, branch: str, trunk: str) -> list[str]:
+    """Commits reachable from `branch` and not from `trunk`, oldest first.
 
     `--first-parent` so a merged-in side branch cannot supply an older commit than
     the one that started this branch.
     """
     out = _git(repo, "rev-list", "--first-parent", branch, "--not", trunk)
-    lines = [line for line in out.splitlines() if line.strip()]
-    return lines[-1] if lines else None
+    return [line for line in reversed(out.splitlines()) if line.strip()]
+
 
 
 def _touches_impl_plan(repo: Path, sha: str) -> bool:
@@ -98,14 +99,40 @@ def derive(repo: Path, branch: str, trunk: str) -> dict:
         except BaselineError:
             raise BaselineError(f"unknown_ref:{ref}") from None
 
-    sha = _first_commit_on_branch(repo, branch, trunk)
-    if sha is None:
+    commits = _branch_commits_oldest_first(repo, branch, trunk)
+    if not commits:
         return {"verdict": "NONE", "sha": None, "candidate": None,
-                "reason": "no_commits_on_branch"}
-    if not _touches_impl_plan(repo, sha):
-        return {"verdict": "UNVERIFIED", "sha": None, "candidate": sha,
-                "reason": "no_impl_plan"}
-    return {"verdict": "OK", "sha": sha, "candidate": None, "reason": None}
+                "reason": "no_commits_on_branch", "preceded_by": None}
+    sha = commits[0]
+    if _touches_impl_plan(repo, sha):
+        return {"verdict": "OK", "sha": sha, "candidate": None, "reason": None,
+                "preceded_by": None}
+
+    # The invariant is violated: something was committed before the impl-plan. The
+    # verdict stays UNVERIFIED -- that is what checking it is for -- but the
+    # CANDIDATE no longer has to be a commit already known not to be 5c.
+    #
+    # It used to be `commits[0]`: the very commit whose failure produced this
+    # verdict, and so the least useful sha on the branch. The operator was told the
+    # first commit is not 5c and then handed the first commit, and had to find the
+    # real one by hand -- which is the manual step this script exists to remove.
+    # Scanning for the OLDEST commit that touches an impl-plan costs one `git show`
+    # per commit and names a sha that at least satisfies the invariant's observable
+    # consequence.
+    #
+    # Still UNVERIFIED and still `candidate=`, never `sha=`: a commit that touches
+    # an impl-plan but is not the branch's first is consistent with several
+    # histories -- a stray commit landed before 5c, the branch was started early, or
+    # the impl-plan was revised on a branch whose real 5c is elsewhere -- and this
+    # cannot tell them apart. `preceded_by` is how far off the assumption was, which
+    # is what says whether one stray commit slipped in or the branch has a different
+    # shape entirely.
+    for index, candidate in enumerate(commits[1:], start=1):
+        if _touches_impl_plan(repo, candidate):
+            return {"verdict": "UNVERIFIED", "sha": None, "candidate": candidate,
+                    "reason": "impl_plan_not_first", "preceded_by": index}
+    return {"verdict": "UNVERIFIED", "sha": None, "candidate": sha,
+            "reason": "no_impl_plan", "preceded_by": None}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -130,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"BASELINE: UNVERIFIED reason={result['reason']} "
             f"candidate={result['candidate']} branch={args.branch}"
+            + ("" if result.get("preceded_by") is None
+               else f" preceded_by={result['preceded_by']}")
         )
         print(
             "  the branch's first commit does not touch an impl-plan, so something was "

@@ -186,6 +186,84 @@ class TestSelfVerification:
         assert f"candidate={first}" in result.stdout
 
 
+class TestTheCandidateIsWorthHaving:
+    """WSG-5. The verdict discipline was right; the CANDIDATE was useless.
+
+    When the branch's first commit is not the impl-plan the answer is `UNVERIFIED`,
+    and that is correct — the protocol invariant is violated and this cannot know
+    which history produced it. But the candidate it offered was `commits[0]`: the
+    very commit whose failure produced the verdict. The operator was told the first
+    commit is not 5c and then handed the first commit, and had to go find the real
+    one by hand — which is precisely the manual step this script exists to remove.
+    """
+
+    def _branch_with_impl_plan_second(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-q", "-b", "main")
+        _commit(repo, "src/mod.py", "x = 1\n", "trunk 1")
+        _git(repo, "checkout", "-q", "-b", "feature/1-thing")
+        stray = _commit(repo, "src/other.py", "y = 1\n", "chore: something before 5c")
+        five_c = _commit(
+            repo, "docs/01-plan/features/thing.impl-plan.md", "# plan\n",
+            "docs: Phase 5a/5b impl-plan for thing")
+        _commit(repo, "src/mod.py", "x = 3\n", "feat: task 1 GREEN")
+        # A LATER commit that also touches the impl-plan — a revision, which is
+        # ordinary. Without it oldest and newest impl-plan commit are the same sha and
+        # nothing here can tell a scan that takes the oldest from one that takes the
+        # newest: the mutation for that SURVIVED until this commit existed.
+        revision = _commit(
+            repo, "docs/01-plan/features/thing.impl-plan.md", "# plan\n\n- task 2\n",
+            "docs: revise the impl-plan mid-branch")
+        return repo, stray, five_c, revision
+
+    def test_the_candidate_is_the_oldest_impl_plan_commit_not_the_first_commit(self, tmp_path):
+        repo, stray, five_c, revision = self._branch_with_impl_plan_second(tmp_path)
+
+        result = _run(repo, "--branch", "feature/1-thing", "--trunk", "main")
+
+        assert result.returncode == 0, "a checked-and-failed assumption is a verdict"
+        assert "BASELINE: UNVERIFIED" in result.stdout
+        assert "reason=impl_plan_not_first" in result.stdout, result.stdout
+        assert f"candidate={five_c}" in result.stdout, (
+            "the candidate must be the commit that touches an impl-plan, not the "
+            "commit already known not to be 5c\n" + result.stdout)
+        assert stray not in result.stdout, (
+            "offering the stray commit is the defect — it is the one sha on this "
+            "branch already proven not to be 5c")
+        assert revision not in result.stdout, (
+            "the OLDEST impl-plan commit is 5c; a later revision of the same document "
+            "is a plausible-looking wrong answer, which is the J41 shape")
+
+    def test_it_says_how_far_off_the_assumption_was(self, tmp_path):
+        """One stray commit and a branch of a different shape need different
+        responses, and `preceded_by` is the only thing that separates them."""
+        repo, _stray, _five_c, _revision = self._branch_with_impl_plan_second(tmp_path)
+        result = _run(repo, "--branch", "feature/1-thing", "--trunk", "main")
+        assert "preceded_by=1" in result.stdout, result.stdout
+
+    def test_a_recovered_candidate_is_STILL_never_reported_as_a_sha(self, tmp_path):
+        """The discipline this whole script is about, on the new path too. A recovered
+        candidate is more plausible than the old one and still not vouched for: it is
+        consistent with a stray commit before 5c, a branch started early, or an
+        impl-plan revised on a branch whose real 5c is elsewhere."""
+        repo, _stray, _five_c, _revision = self._branch_with_impl_plan_second(tmp_path)
+        result = _run(repo, "--branch", "feature/1-thing", "--trunk", "main")
+        assert "sha=" not in result.stdout, result.stdout
+
+    def test_a_branch_with_no_impl_plan_at_all_keeps_the_old_reason(self, tmp_path):
+        """The scan must not turn 'nothing on this branch touches an impl-plan' into
+        the new reason — they prescribe different things, and only one of them hands
+        the operator a sha worth looking at."""
+        repo, _fork, first = _repo_with_feature_branch(
+            tmp_path, first_commit_is_impl_plan=False)
+        result = _run(repo, "--branch", "feature/1-thing", "--trunk", "main")
+        assert "reason=no_impl_plan" in result.stdout
+        assert "impl_plan_not_first" not in result.stdout
+        assert f"candidate={first}" in result.stdout
+        assert "preceded_by" not in result.stdout
+
+
 class TestCannotJudge:
     def test_a_branch_with_no_commits_beyond_trunk_is_none(self, tmp_path):
         repo, _fork, _five_c = _repo_with_feature_branch(tmp_path)
