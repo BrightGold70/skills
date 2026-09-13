@@ -91,22 +91,68 @@ def _touches_impl_plan(repo: Path, sha: str) -> bool:
     return any("impl-plan" in line for line in names.splitlines() if line.strip())
 
 
+def _resolves(repo: Path, ref: str) -> bool:
+    try:
+        _git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+        return True
+    except BaselineError:
+        return False
+
+
+def resolve_trunk(repo: Path, trunk: str) -> str:
+    """`main` on a checkout that only has `origin/main` -> `origin/main` (#38).
+
+    A clone made with `--single-branch`, a CI checkout, or any worktree that has
+    never checked the trunk out locally has the trunk ONLY as a remote-tracking
+    ref. The default was the literal string `main`, so the preflight raised
+    `unknown_ref:main` and 5f/6a-prime were unrunnable there without the operator
+    discovering `--trunk origin/main` for themselves.
+
+    Safe here, and NOT safe one phase along, which is the whole reason 7f keeps
+    refusing the same input. The trunk is only ever READ — `rev-list
+    --first-parent <branch> --not <trunk>` and the preflight — so any ref that
+    names the right commit answers the question. 7f's `--base` is a merge TARGET:
+    `git checkout origin/main` DETACHES, and `h_mad_phase7_integrate`'s
+    `local_branch_exists` records a measured run where that reported MERGED at
+    exit 0 with the merge commit unreferenced. Same trigger, opposite correct
+    response, so neither should be "fixed" into the other.
+
+    A LOCAL ref always wins. Falling back when the local one exists would silently
+    measure a different commit whenever the local trunk is ahead of or behind its
+    remote, which is the ordinary state of a checkout between fetches.
+    """
+    if _resolves(repo, trunk):
+        return trunk
+    remote = f"origin/{trunk}"
+    if not trunk.startswith("origin/") and _resolves(repo, remote):
+        return remote
+    raise BaselineError(f"unknown_ref:{trunk}")
+
+
 def derive(repo: Path, branch: str, trunk: str) -> dict:
-    """-> {'verdict', 'sha'|None, 'candidate'|None, 'reason'|None}. Raises BaselineError."""
-    for ref in (branch, trunk):
-        try:
-            _git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
-        except BaselineError:
-            raise BaselineError(f"unknown_ref:{ref}") from None
+    """-> {'verdict', 'sha'|None, 'candidate'|None, 'reason'|None, 'trunk'}.
+
+    Raises BaselineError. `trunk` in the result is the ref actually MEASURED
+    against, which is not always the one asked for -- see `resolve_trunk`. The
+    caller prints that rather than its own argument, or the verdict line names a
+    ref the derivation did not use.
+    """
+    # The branch is deliberately NOT given the same fallback. A 5c baseline is a
+    # statement about a branch in THIS checkout; resolving `feature/x` to
+    # `origin/feature/x` would derive a baseline for a branch the operator is not
+    # on and cannot see, and report it as theirs.
+    if not _resolves(repo, branch):
+        raise BaselineError(f"unknown_ref:{branch}")
+    trunk = resolve_trunk(repo, trunk)
 
     commits = _branch_commits_oldest_first(repo, branch, trunk)
     if not commits:
         return {"verdict": "NONE", "sha": None, "candidate": None,
-                "reason": "no_commits_on_branch", "preceded_by": None}
+                "reason": "no_commits_on_branch", "preceded_by": None, "trunk": trunk}
     sha = commits[0]
     if _touches_impl_plan(repo, sha):
         return {"verdict": "OK", "sha": sha, "candidate": None, "reason": None,
-                "preceded_by": None}
+                "preceded_by": None, "trunk": trunk}
 
     # The invariant is violated: something was committed before the impl-plan. The
     # verdict stays UNVERIFIED -- that is what checking it is for -- but the
@@ -130,15 +176,20 @@ def derive(repo: Path, branch: str, trunk: str) -> dict:
     for index, candidate in enumerate(commits[1:], start=1):
         if _touches_impl_plan(repo, candidate):
             return {"verdict": "UNVERIFIED", "sha": None, "candidate": candidate,
-                    "reason": "impl_plan_not_first", "preceded_by": index}
+                    "reason": "impl_plan_not_first", "preceded_by": index, "trunk": trunk}
     return {"verdict": "UNVERIFIED", "sha": None, "candidate": sha,
-            "reason": "no_impl_plan", "preceded_by": None}
+            "reason": "no_impl_plan", "preceded_by": None, "trunk": trunk}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Derive and verify the Phase-5c baseline sha")
     parser.add_argument("--branch", required=True, help="the feature branch")
-    parser.add_argument("--trunk", default="main", help="the branch it forked from (default: main)")
+    parser.add_argument("--trunk", default="main",
+                        help="the branch it forked from (default: main). Falls back to "
+                             "`origin/<name>` when no local ref of that name exists, so a "
+                             "single-branch or CI checkout works without a flag; a LOCAL ref "
+                             "always wins. The verdict line reports the ref actually measured "
+                             "against.")
     parser.add_argument("--repo", type=Path, default=Path("."), help="repository root")
     args = parser.parse_args(argv)
 
@@ -148,11 +199,17 @@ def main(argv: list[str] | None = None) -> int:
         # No verdict exists. Carries no sha and no candidate, so a cannot-judge can
         # never be read as a value.
         print(f"BASELINE: UNREADABLE reason={exc}")
+        if str(exc) == f"unknown_ref:{args.trunk}":
+            # Say what was TRIED. Without this the operator reads "unknown_ref:main"
+            # on a checkout that plainly has a main, and has no way to learn that a
+            # remote-tracking ref was already considered and did not resolve either.
+            print(f"  tried `{args.trunk}` and `origin/{args.trunk}`; neither names a "
+                  f"commit here — fetch, or pass --trunk <ref> explicitly.")
         print("[H-MAD] baseline UNREADABLE")
         return 2
 
     if result["verdict"] == "OK":
-        print(f"BASELINE: OK sha={result['sha']} branch={args.branch} trunk={args.trunk}")
+        print(f"BASELINE: OK sha={result['sha']} branch={args.branch} trunk={result['trunk']}")
     elif result["verdict"] == "UNVERIFIED":
         print(
             f"BASELINE: UNVERIFIED reason={result['reason']} "

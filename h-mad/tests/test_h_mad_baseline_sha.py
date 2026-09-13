@@ -327,3 +327,89 @@ def test_skill_documents_the_derivation_and_forbids_merge_base():
     assert skill.count("never `git merge-base`") >= 2, (
         "the wrong command must be named as wrong at BOTH 5f and 6a-prime"
     )
+
+
+# ---------------------------------------------------------------------------
+# #38 — the trunk on a checkout that only has it as a remote-tracking ref
+# ---------------------------------------------------------------------------
+
+
+def _repo_whose_trunk_is_remote_only(tmp_path: Path):
+    """A clone whose `main` exists ONLY as `origin/main`.
+
+    The ordinary shape of a `--single-branch` clone, a CI checkout, or any
+    worktree that has never checked the trunk out. `--trunk` defaulted to the
+    literal string `main`, so the preflight raised `unknown_ref:main` and 5f and
+    6a-prime were both unrunnable there.
+    """
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", str(origin))
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(origin), str(work)], check=True,
+                   capture_output=True)
+    _commit(work, "src/mod.py", "x = 1\n", "trunk 1")
+    _git(work, "branch", "-M", "main")
+    _git(work, "push", "-q", "-u", "origin", "main")
+    _git(work, "checkout", "-q", "-b", "feature/1-thing")
+    five_c = _commit(work, "docs/01-plan/features/f.impl-plan.md", "# plan\n", "5c")
+    _commit(work, "src/mod.py", "x = 2\n", "work")
+    _git(work, "branch", "-D", "main")
+    return work, five_c
+
+
+def test_a_remote_only_trunk_resolves_instead_of_halting(tmp_path):
+    repo, five_c = _repo_whose_trunk_is_remote_only(tmp_path)
+    result = _run(repo, "--branch", "feature/1-thing")
+    assert f"BASELINE: OK sha={five_c}" in result.stdout, result.stdout
+    assert result.returncode == 0
+
+
+def test_the_verdict_names_the_ref_it_actually_measured_against(tmp_path):
+    """The line echoed `--trunk`'s argument, so a resolved fallback would print
+    `trunk=main` on a derivation made against `origin/main` — a verdict naming a
+    ref it did not use, which is the same class of wrongness as the merge-base
+    sha this whole script exists to replace."""
+    repo, _five_c = _repo_whose_trunk_is_remote_only(tmp_path)
+    result = _run(repo, "--branch", "feature/1-thing")
+    assert "trunk=origin/main" in result.stdout, result.stdout
+
+
+def test_a_local_trunk_always_wins_over_the_remote_tracking_one(tmp_path):
+    """The over-correction, and it is silent. Between fetches a local trunk is
+    routinely ahead of or behind its remote; preferring `origin/main` there would
+    measure a different commit and still print `OK`."""
+    repo, five_c = _repo_whose_trunk_is_remote_only(tmp_path)
+    _git(repo, "branch", "main", "origin/main")
+    _git(repo, "checkout", "-q", "main")
+    _commit(repo, "src/local_only.py", "y = 1\n", "local main moves ahead")
+    _git(repo, "checkout", "-q", "feature/1-thing")
+    assert _git(repo, "rev-parse", "main") != _git(repo, "rev-parse", "origin/main")
+
+    result = _run(repo, "--branch", "feature/1-thing")
+    assert "trunk=main" in result.stdout, result.stdout
+    assert "trunk=origin/main" not in result.stdout, result.stdout
+    assert f"sha={five_c}" in result.stdout, result.stdout
+
+
+def test_a_trunk_that_resolves_nowhere_says_what_it_tried(tmp_path):
+    """`unknown_ref:main` on a checkout that plainly has a main reads as a bug in
+    the tool. Naming both refs is what tells the operator the remote form was
+    already considered."""
+    repo, _fork, _five_c = _repo_with_feature_branch(tmp_path)
+    result = _run(repo, "--branch", "feature/1-thing", "--trunk", "nosuchtrunk")
+    assert "BASELINE: UNREADABLE reason=unknown_ref:nosuchtrunk" in result.stdout
+    assert "tried `nosuchtrunk` and `origin/nosuchtrunk`" in result.stdout, result.stdout
+    assert result.returncode == 2
+
+
+def test_the_branch_is_NOT_given_the_remote_fallback(tmp_path):
+    """Scope. A 5c baseline is a statement about a branch in THIS checkout —
+    resolving `feature/x` to `origin/feature/x` would derive a baseline for a
+    branch the operator is not on and report it as theirs."""
+    repo, _five_c = _repo_whose_trunk_is_remote_only(tmp_path)
+    _git(repo, "push", "-q", "origin", "feature/1-thing")
+    _git(repo, "checkout", "-q", "-b", "tmp")
+    _git(repo, "branch", "-D", "feature/1-thing")
+    result = _run(repo, "--branch", "feature/1-thing")
+    assert "BASELINE: UNREADABLE reason=unknown_ref:feature/1-thing" in result.stdout
+    assert result.returncode == 2

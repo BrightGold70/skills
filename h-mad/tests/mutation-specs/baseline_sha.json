@@ -59,8 +59,8 @@
       "name": "an-empty-branch-reports-a-sha",
       "_mechanism": "A branch with no commits beyond trunk has no 5c at all. Returning the trunk tip as the answer is the most believable wrong value available, since it is a real commit the branch really does contain.",
       "file": "scripts/h_mad_baseline_sha.py",
-      "find": "        return {\"verdict\": \"NONE\", \"sha\": None, \"candidate\": None,\n                \"reason\": \"no_commits_on_branch\", \"preceded_by\": None}",
-      "replace": "        return {\"verdict\": \"OK\", \"sha\": _git(repo, \"rev-parse\", trunk), \"candidate\": None,\n                \"reason\": None, \"preceded_by\": None}",
+      "find": "        return {\"verdict\": \"NONE\", \"sha\": None, \"candidate\": None,\n                \"reason\": \"no_commits_on_branch\", \"preceded_by\": None, \"trunk\": trunk}",
+      "replace": "        return {\"verdict\": \"OK\", \"sha\": _git(repo, \"rev-parse\", trunk), \"candidate\": None,\n                \"reason\": None, \"preceded_by\": None, \"trunk\": trunk}",
       "test": "tests/test_h_mad_baseline_sha.py::TestCannotJudge::test_a_branch_with_no_commits_beyond_trunk_is_none"
     },
     {
@@ -75,8 +75,8 @@
       "name": "the-candidate-is-the-first-commit-again",
       "_mechanism": "The state WSG-5 filed: UNVERIFIED hands back `commits[0]`, the very commit whose failure produced the verdict and so the one sha on the branch already proven not to be 5c. The operator is told the first commit is not 5c and then handed the first commit.",
       "file": "scripts/h_mad_baseline_sha.py",
-      "find": "        if _touches_impl_plan(repo, candidate):\n            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index}",
-      "replace": "        if False:\n            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index}",
+      "find": "        if _touches_impl_plan(repo, candidate):\n            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index, \"trunk\": trunk}",
+      "replace": "        if False:\n            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index, \"trunk\": trunk}",
       "test": "tests/test_h_mad_baseline_sha.py::TestTheCandidateIsWorthHaving::test_the_candidate_is_the_oldest_impl_plan_commit_not_the_first_commit"
     },
     {
@@ -91,16 +91,16 @@
       "name": "the-recovered-candidate-is-promoted-to-a-vouched-sha",
       "_mechanism": "The discipline this script exists for, on the new path. A recovered candidate is more plausible than the old one and still not vouched for -- it is consistent with a stray commit before 5c, a branch started early, or an impl-plan revised on a branch whose real 5c is elsewhere. Emitting it as `sha=` lets a caller scraping for `sha=` receive it.",
       "file": "scripts/h_mad_baseline_sha.py",
-      "find": "            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index}",
-      "replace": "            return {\"verdict\": \"OK\", \"sha\": candidate, \"candidate\": None,\n                    \"reason\": None, \"preceded_by\": index}",
+      "find": "            return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": candidate,\n                    \"reason\": \"impl_plan_not_first\", \"preceded_by\": index, \"trunk\": trunk}",
+      "replace": "            return {\"verdict\": \"OK\", \"sha\": candidate, \"candidate\": None,\n                    \"reason\": None, \"preceded_by\": index, \"trunk\": trunk}",
       "test": "tests/test_h_mad_baseline_sha.py::TestTheCandidateIsWorthHaving::test_a_recovered_candidate_is_STILL_never_reported_as_a_sha"
     },
     {
       "name": "no-impl-plan-anywhere-is-relabelled-as-not-first",
       "_mechanism": "The two reasons prescribe different things: one hands the operator a sha worth inspecting, the other says nothing on this branch touches an impl-plan at all. Collapsing them sends the operator after a commit that does not exist.",
       "file": "scripts/h_mad_baseline_sha.py",
-      "find": "    return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": sha,\n            \"reason\": \"no_impl_plan\", \"preceded_by\": None}",
-      "replace": "    return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": sha,\n            \"reason\": \"impl_plan_not_first\", \"preceded_by\": None}",
+      "find": "    return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": sha,\n            \"reason\": \"no_impl_plan\", \"preceded_by\": None, \"trunk\": trunk}",
+      "replace": "    return {\"verdict\": \"UNVERIFIED\", \"sha\": None, \"candidate\": sha,\n            \"reason\": \"impl_plan_not_first\", \"preceded_by\": None, \"trunk\": trunk}",
       "test": "tests/test_h_mad_baseline_sha.py::TestTheCandidateIsWorthHaving::test_a_branch_with_no_impl_plan_at_all_keeps_the_old_reason"
     }
   ]
