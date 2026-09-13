@@ -334,9 +334,12 @@ def _vh_noop(ref: str, why: str) -> None:
 #: all survive. For a TABLE-shaped history, which the docstring below calls the
 #: real shape in this repo, it omits nothing at all. `--vh-tail` defaults to None,
 #: a strict no-op, so by default no decision is made here. And a third, stricter
-#: notion already existed in `h_mad_version_history.ANCHOR` — case-insensitive,
+#: notion already existed in `h_mad_version_history.find_anchor` — case-insensitive,
 #: full-line, refusing multiplicity, header/rule-bounded, fence-aware — which is
-#: the one the precheck now uses.
+#: the one the precheck now uses. It is named for the FUNCTION on purpose: the
+#: `ANCHOR` constant this line used to name was a bare `^##` regex and was never
+#: fence-aware; the property described here only became true when that module was
+#: ported onto `_fence_events`.
 VH_MARKER = "\n## Version History"
 
 

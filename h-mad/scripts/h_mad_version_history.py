@@ -43,9 +43,12 @@ from pathlib import Path
 
 TOKEN = "VERSION-HISTORY"
 
-# All 713 corpus headers are `##`; trailing whitespace only.
-ANCHOR = re.compile(r"^##[ \t]*Version History[ \t]*$", re.IGNORECASE)
-HEADER = re.compile(r"^#{1,6} ")
+# All 713 corpus headers are `##`; the heading itself is now matched by
+# `_fence_events`, not by a local regex — see `find_anchor`. The `ANCHOR` and
+# `HEADER` patterns that used to live here are deliberately GONE rather than
+# kept unused: re-wiring `find_anchor` to a module-local `^##` regex is exactly
+# the bug the port removed, and an unused constant of that shape is an
+# invitation to it. `RULE` stays because a thematic break is not fence grammar.
 RULE = re.compile(r"^[ \t]*---+[ \t]*$")
 # Anchored at column 0 on purpose: an INDENTED bullet is a sub-bullet of the
 # entry above it, not an entry. Four exist in this corpus, and one of them
@@ -67,15 +70,58 @@ class Refusal(Exception):
         self.detail = detail
 
 
-def find_anchor(lines: list[str]) -> int:
+def _events(text: str) -> list:
+    """Fence and ATX events from the repo's ONE grammar, or refuse loudly.
+
+    `h_mad_doc_block_exec._fence_events` is that home — `doc-block-exec.design.md`
+    says so in those words, and ships mutation rows named `tilde-fence-not-tracked`,
+    `closer-trailing-text-accepted` and `indented-opener-accepted`.
+
+    An unimportable grammar REFUSES rather than falling back to the naive rule it
+    replaced. A fallback would be a silent downgrade at exactly the moment nothing
+    is watching, and this module writes to documents: a wrong boundary splices an
+    entry into a code block or past a real heading, which is worse than not writing
+    at all. Refusing is loud, exits 2, and leaves the document untouched.
+    """
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        from h_mad_doc_block_exec import _fence_events
+    except ImportError as exc:  # pragma: no cover - import wiring
+        raise Refusal("fence_grammar_unavailable", str(exc)) from exc
+    return list(_fence_events(text))
+
+
+def find_anchor(text: str) -> int:
     """Index of the sole `## Version History`, or refuse.
 
     Zero matches is the drifted-anchor case the hand-rolled substitution
     performs as a no-op. More than one is worse: a substitution picks the
     first, which for `references/inline-protocols.md` (7 headers, the only
     such file in the corpus) is a template example rather than the live log.
+
+    Resolved over `_fence_events` rather than a bare regex, which closes two
+    holes the regex could not see. A ``` block containing `## Version History`
+    was an anchor: this repo quotes its own templates, so the entry went into
+    the quoted block while the live log below went unbumped — the precheck tests
+    name the asymmetry in those words, "`section_bounds` tracks fences for the
+    section's END; `find_anchor` does not for its START". And `ANCHOR` made the
+    space after `##` optional while `HEADER` required it, so `##Version History`
+    could START a section that an identical spelling could not END, running it
+    to EOF. Neither is an ATX heading under CommonMark, and here neither starts
+    nor ends one.
+
+    `references/inline-protocols.md` is the measured case and it changed answer:
+    its seventh heading is unindented, so the old `^##` regex took it as the one
+    live section — but a ```` ```markdown ```` fence opens at L477 and closes at
+    L511, so L509 sits inside the `### 7b — Report` template. All seven are
+    examples; the file has no live section, and the old code planned a real
+    insertion into a template.
     """
-    hits = [i for i, ln in enumerate(lines) if ANCHOR.match(ln)]
+    hits = [e.lineno - 1 for e in _events(text)
+            if e.kind == "heading" and e.level == 2
+            and e.text.strip().casefold() == "version history"]
     if not hits:
         raise Refusal("anchor_missing")
     if len(hits) > 1:
@@ -83,23 +129,35 @@ def find_anchor(lines: list[str]) -> int:
     return hits[0]
 
 
-def section_bounds(lines: list[str], anchor: int) -> tuple[int, int]:
+def section_bounds(text: str, lines: list[str], anchor: int) -> tuple[int, int]:
     """Half-open body range after `anchor`, stopping at header, `---`, or EOF.
 
     Fenced blocks are tracked because a ``` block inside the section can contain
     a `# heading` line, and treating that as the section boundary truncates the
     section and splices the new entry into the middle of the code block.
+
+    The tracking is `_fence_events`' and not a local counter. `line.lstrip()
+    .startswith("```")` was the counter, and three shapes defeat it in the
+    truncating direction — a ```` ```` ```` wrapper (the only way to quote a
+    fenced template, which is exactly what these documents do), a ```` ```trailing ````
+    line CommonMark does not accept as a closer, and `~~~`, which it did not
+    recognise at all. It also ran the other way: a four-space indented ```` ``` ````
+    is an indented code block, not an opener, and reading it as one swallowed a
+    REAL `## ` heading as fence body and extended the section past it — fail-open,
+    reachable by one line.
+
+    A `---` rule still ends the section (20 of the 713 corpus sections end that
+    way). That is a thematic break rather than fence grammar, so it is matched
+    here, against the source line, exactly as `h_mad_precheck_doc` matches it.
     """
-    end = anchor + 1
-    fenced = False
-    while end < len(lines):
-        line = lines[end]
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-        elif not fenced and (HEADER.match(line) or RULE.match(line)):
-            break
-        end += 1
-    return anchor + 1, end
+    for event in _events(text):
+        if event.lineno <= anchor + 1:
+            continue
+        if event.kind == "heading" and event.level <= 2:
+            return anchor + 1, event.lineno - 1
+        if event.kind == "prose" and RULE.match(lines[event.lineno - 1]):
+            return anchor + 1, event.lineno - 1
+    return anchor + 1, len(lines)
 
 
 def entry_lines(lines: list[str], start: int, end: int) -> list[int]:
@@ -160,8 +218,8 @@ def plan_insertion(text: str, version: str, entry_text: str) -> tuple[list[str],
         raise Refusal("multiline_text")
 
     lines = text.split("\n")
-    anchor = find_anchor(lines)
-    start, end = section_bounds(lines, anchor)
+    anchor = find_anchor(text)
+    start, end = section_bounds(text, lines, anchor)
     shape = classify_shape(lines, start, end)
     indices = entry_lines(lines, start, end)
     versions = parse_versions(lines, indices)

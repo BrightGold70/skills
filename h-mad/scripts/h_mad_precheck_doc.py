@@ -348,10 +348,12 @@ def _version_history_bounds(text: str, lines: list[str]) -> tuple[int, int] | No
     is the F2 defect this boundary exists to prevent, reachable by one line.
 
     `_fence_events` also settles an asymmetry that was inherited rather than
-    chosen: `h_mad_version_history.ANCHOR` makes the space after `##` optional
-    while its `HEADER` requires it, so `##Version History` could START a section
+    chosen: `h_mad_version_history.ANCHOR` made the space after `##` optional
+    while its `HEADER` required it, so `##Version History` could START a section
     that an identical spelling could not END. Neither is an ATX heading under
-    CommonMark, and here neither starts nor ends one.
+    CommonMark, and here neither starts nor ends one. That module has since been
+    ported onto `_fence_events` too and both regexes are gone, so the asymmetry
+    is settled on BOTH sides rather than worked around on this one.
 
     Returns None — no demotion, every finding stays hard — when the section is
     missing OR ambiguous. Both fail closed, ambiguity especially: a document

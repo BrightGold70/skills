@@ -173,15 +173,36 @@ class TestAnchorRefusals:
         A looser anchor that stripped leading whitespace would find seven here
         and refuse a doc that is not actually ambiguous -- so this pins the
         strictness, not just the count.
+
+        **This test's original premise was FALSE, and the code agreed with it.**
+        It asserted "the one unindented header is a real section, so this parses
+        cleanly", and the seventh header IS unindented -- at L509. But measured
+        2026-09-14 over `_fence_events`: a ```` ```markdown ```` fence opens at
+        L477 and closes at L511, so L509 is inside the `### 7b -- Report`
+        TEMPLATE, between `# Report: <feature>` and `- v1.0: Initial report
+        draft.`. All SEVEN are template examples; this file has no live section
+        at all. The six indented ones were skipped only by the accident that they
+        carry three spaces and the seventh does not -- `find_anchor` tracked no
+        fences whatsoever, so `^##` was doing the work that fence grammar should.
+
+        The old code therefore planned a real insertion into a fenced template,
+        and this test asserted that as correct. Both halves are fixed here: the
+        refusal must be `anchor_missing` (there is no live section), and it must
+        NOT be `anchor_ambiguous`, which is what counting the six fenced headers
+        would produce. The second assertion is the one that preserves this test's
+        original intent -- strictness, no manufactured ambiguity.
         """
         source = REFERENCES / "inline-protocols.md"
         assert source.exists(), "the multi-header reference doc moved"
         text = source.read_text()
         assert text.count("## Version History") >= 7, "fixture premise moved"
 
-        # The one unindented header is a real section, so this parses cleanly.
-        _, _, placement = plan_insertion(text, "v9.9", "Probe only, never written.")
-        assert placement in {"append", "prepend"}
+        with pytest.raises(Refusal) as exc:
+            plan_insertion(text, "v9.9", "Probe only, never written.")
+        assert exc.value.reason == "anchor_missing", (
+            f"expected no live section; got {exc.value.reason!r}. "
+            "`anchor_ambiguous` here means the fenced template headers were counted."
+        )
 
 
 class TestShapeRefusals:
@@ -502,3 +523,101 @@ class TestSeriesBreakIsRefusedAtTheWrite:
         d = self._doc(tmp_path, "# D\n\n## Version History\n\n- v2.03: only\n")
         r = run_cli(str(d), "--version", "v1.100", "--text", "probe")
         assert "VERSION-HISTORY: OK" in r.stdout, r.stdout
+
+
+class TestFenceGrammarIsTheSharedOne:
+    """The boundary is resolved by the repo's ONE fence/ATX grammar, not a private copy.
+
+    `section_bounds` used to hand-roll `line.lstrip().startswith("```")` and
+    `find_anchor` used a bare `^##[ \t]*Version History` regex. The same naive
+    rule was reviewed out of `h_mad_precheck_doc._version_history_bounds`, whose
+    docstring names the shapes that defeat it and points at
+    `h_mad_doc_block_exec._fence_events` as the single home for this grammar.
+    `precheck_doc` was then rebuilt on `_fence_events` and this module was not —
+    so the two disagreed about exotic fences while both claimed the same rule.
+
+    Each test below is one of the shapes that docstring names. They are the
+    reason to port rather than to patch: every one of them is already solved in
+    `_fence_events`, and re-deriving them here would produce a third grammar.
+    """
+
+    BODY = "## Version History\n\n- v1.0: first.\n"
+
+    def _bump(self, tmp_path: Path, text: str, version: str = "v1.1"):
+        doc = tmp_path / "x.impl-plan.md"
+        doc.write_text(text)
+        return run_cli(str(doc), "--version", version, "--text", "ported."), doc
+
+    def test_a_tilde_fence_hides_a_heading_from_the_section_end(self, tmp_path: Path) -> None:
+        """`~~~` is a fence under CommonMark; the naive rule saw only backticks.
+
+        With `~~~` untracked the quoted `## Next` reads as a real heading, the
+        section ends early, and the entry lands ABOVE content that belongs to
+        the section — inside the quoted block in the worst case.
+        """
+        text = self.BODY + "\n~~~\n## Next\n~~~\n\n- v1.2: later.\n"
+        r, doc = self._bump(tmp_path, text, "v1.3")
+        assert r.returncode == 0, r.stdout + r.stderr
+        after = doc.read_text()
+        assert after.index("- v1.3: ported.") > after.index("~~~\n## Next"), (
+            "the entry landed before the tilde-fenced block — the fence was not tracked"
+        )
+
+    def test_a_four_backtick_wrapper_is_tracked(self, tmp_path: Path) -> None:
+        """The only way to quote a fenced template is to wrap it in more backticks.
+
+        A 3-backtick counter toggles twice on the INNER fence and ends up
+        inverted, so the quoted heading escapes the mask.
+        """
+        text = self.BODY + "\n````\n```\n## Next\n```\n````\n\n- v1.2: later.\n"
+        r, doc = self._bump(tmp_path, text, "v1.3")
+        assert r.returncode == 0, r.stdout + r.stderr
+        after = doc.read_text()
+        assert after.index("- v1.3: ported.") > after.index("## Next"), (
+            "the entry landed before the quoted template — the wrapper was not tracked"
+        )
+
+    def test_an_indented_backtick_run_does_not_open_a_fence(self, tmp_path: Path) -> None:
+        """Four-space-indented ``` is an indented code block, not an opener.
+
+        Reading it as an opener runs the mask the OTHER way: everything after it
+        is swallowed as fence body, so a REAL `## ` heading no longer ends the
+        section and the write extends past it — fail-open, reachable by one line.
+        """
+        text = self.BODY + "\n    ```\n\n## Real Heading\n\n- v9.9: a bullet that is NOT an entry\n"
+        r, doc = self._bump(tmp_path, text, "v1.1")
+        assert r.returncode == 0, r.stdout + r.stderr
+        after = doc.read_text()
+        assert after.index("- v1.1: ported.") < after.index("## Real Heading"), (
+            "the entry landed past a real heading — the indented run opened a fence"
+        )
+
+    def test_a_FENCED_version_history_heading_is_not_the_anchor(self, tmp_path: Path) -> None:
+        """The asymmetry the precheck tests name in those words.
+
+        "`section_bounds` tracks fences for the section's END; `find_anchor` does
+        not for its START." This repo quotes its own templates, so a ``` block
+        containing `## Version History` is ordinary content — and taking it as
+        the anchor writes the entry into the quoted template while the live log
+        below goes unbumped.
+        """
+        text = ("```\n## Version History\n\n- v0.0: template.\n```\n\n"
+                "## Version History\n\n- v1.0: live.\n")
+        r, doc = self._bump(tmp_path, text, "v1.1")
+        assert r.returncode == 0, r.stdout + r.stderr
+        after = doc.read_text()
+        assert after.index("- v1.1: ported.") > after.index("- v1.0: live."), (
+            "the entry landed in the fenced template block"
+        )
+
+    def test_a_headingish_line_with_no_space_is_not_an_anchor(self, tmp_path: Path) -> None:
+        """`##Version History` is not an ATX heading, and must not start a section.
+
+        The inherited asymmetry: `ANCHOR` made the space optional while `HEADER`
+        required it, so this spelling could START a section that an identical
+        spelling could not END — the section then ran to EOF.
+        """
+        text = "##Version History\n\n- v1.0: not a heading.\n"
+        r, _ = self._bump(tmp_path, text, "v1.1")
+        assert r.returncode == 2, r.stdout + r.stderr
+        assert "anchor_missing" in r.stdout + r.stderr, r.stdout + r.stderr
