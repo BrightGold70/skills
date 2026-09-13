@@ -83,10 +83,10 @@
     },
     {
       "name": "effort-sidecar-never-written",
-      "_mechanism": "#48 restored: the figures exist only on stdout and in /tmp; every tools=N in the permanent record is hand-reconstructed again.",
+      "_mechanism": "#48 restored: the figures exist only on stdout and in /tmp; every tools=N in the permanent record is hand-reconstructed again. REWRITTEN, not deleted: the previous replacement wrapped the `try` in `if False:` without re-indenting the `except`, so the file did not parse and the row REFUSED \u2014 it measured nothing while reading like a guarded property. Dropping the write alone keeps the try/except valid and expresses the same defect.",
       "file": "scripts/h_mad_audit_cycle.py",
-      "find": "    try:\n        sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + \"\\n\",\n                           encoding=\"utf-8\")\n    except OSError:",
-      "replace": "    if False:\n     try:\n        sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + \"\\n\",\n                           encoding=\"utf-8\")\n    except OSError:",
+      "find": "        sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + \"\\n\",\n                           encoding=\"utf-8\")",
+      "replace": "        pass",
       "test": "tests/test_h_mad_audit_cycle.py::TestEffortSidecar::test_writes_the_figures_beside_the_collected_report"
     },
     {

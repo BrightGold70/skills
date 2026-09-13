@@ -328,7 +328,24 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
     else:
         # No usable file, so the last message is all there is — and only NOW is it
         # fatal that it cannot be read.
-        channel = "last-message"
+        #
+        # The REASON rides along. `_read_report_channel` distinguishes four ways a
+        # report file can fail to carry the verdict — `not_requested`, `unreadable`,
+        # `empty` (the agent created it and wrote nothing, the commonest partial
+        # failure) and `no_verdict_in_file` — and this line used to overwrite all
+        # four with a bare `last-message`, so they printed identically and an
+        # operator could not tell which remedy applied. The comment below already
+        # says a recovered verdict and a read one "must not print the same way";
+        # that naming was half-done, stopping at file-vs-last-message.
+        #
+        # It also made the `empty` branch unobservable, which is why its mutation
+        # SURVIVED: with the branch removed an empty file merely falls through to
+        # `_extract_assessment`, which also returns None, so both paths produced
+        # the same token. A guard whose only output is discarded cannot be tested.
+        #
+        # Appended with `:` so every existing `"channel=last-message" in out`
+        # assertion still holds.
+        channel = f"last-message:{channel}"
         try:
             review = review_path.read_text(encoding="utf-8")
         except OSError as exc:

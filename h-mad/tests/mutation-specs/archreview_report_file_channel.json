@@ -17,7 +17,7 @@
   "mutations": [
     {
       "name": "the-report-file-is-never-preferred",
-      "_mechanism": "The channel is built and then unused — indistinguishable from never having built it, and the last message stays the only surface.",
+      "_mechanism": "The channel is built and then unused \u2014 indistinguishable from never having built it, and the last message stays the only surface.",
       "file": "scripts/h_mad_archreview_cycle.py",
       "find": "    if report_text is not None:\n        review = report_text",
       "replace": "    if False:\n        review = report_text",
@@ -25,17 +25,17 @@
     },
     {
       "name": "an-empty-report-file-is-authoritative",
-      "_mechanism": "An agent that creates the file and writes nothing is the commonest partial failure. Treating empty as authoritative turns a recoverable verdict in the last message into NO_VERDICT.",
+      "_mechanism": "An agent that creates the file and writes nothing is the commonest partial failure. Treating empty as authoritative turns a recoverable verdict in the last message into NO_VERDICT. This row SURVIVED until the reason was made observable: with the branch removed an empty file merely falls through to `_extract_assessment`, which also returns None, so both paths emitted the identical `channel=last-message` and nothing could tell them apart. The guard's only output was being discarded by `score`.",
       "file": "scripts/h_mad_archreview_cycle.py",
       "find": "    if not text.strip():\n        return None, \"empty\"",
       "replace": "    if False:\n        return None, \"empty\"",
-      "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_empty_report_file_falls_back_rather_than_reading_as_no_verdict"
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheFallbackNamesWhyTheReportFileLost::test_an_empty_report_file_is_named_as_empty"
     },
     {
       "name": "the-fallback-claims-the-file-channel",
-      "_mechanism": "A verdict recovered from the last message and one read from the file are different evidence. Printing the same channel for both makes the fallback silent, which is the defect one level down.",
+      "_mechanism": "A verdict recovered from the last message and one read from the file are different evidence. Printing the same channel for both makes the fallback silent, which is the defect one level down. Re-anchored: the fallback line now carries the reason, so the mutation names that line instead. The mechanism is unchanged \u2014 a verdict recovered from the last message must not print as one read from the file.",
       "file": "scripts/h_mad_archreview_cycle.py",
-      "find": "        channel = \"last-message\"",
+      "find": "        channel = f\"last-message:{channel}\"",
       "replace": "        channel = \"report-file\"",
       "test": "tests/test_h_mad_archreview_cycle.py::TestTheReportFileChannel::test_an_absent_report_file_falls_back_and_SAYS_SO"
     },
@@ -62,6 +62,14 @@
       "find": "    if report_file is not None:\n        pairs = pairs + ((\"<INLINE_REPORT_FILE>\", report_file),)",
       "replace": "    pairs = pairs + ((\"<INLINE_REPORT_FILE>\", str(report_file)),)",
       "test": "tests/test_h_mad_archreview_cycle.py::TestSummaryReachesTheReviewer::test_a_summary_file_is_read_not_pasted_as_a_path"
+    },
+    {
+      "name": "the-fallback-reason-is-discarded-again",
+      "_mechanism": "Four ways a report file fails to carry the verdict \u2014 not_requested / unreadable / empty / no_verdict_in_file \u2014 collapse to one token, so an agent that wrote NOTHING and one that wrote prose without a verdict print identically and the operator cannot tell which remedy applies. It also re-hides the `empty` branch, making its own guard untestable.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "        channel = f\"last-message:{channel}\"",
+      "replace": "        channel = \"last-message\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheFallbackNamesWhyTheReportFileLost::test_a_file_with_content_but_no_verdict_is_named_differently"
     }
   ]
 }

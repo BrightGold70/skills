@@ -142,9 +142,19 @@ def test_author_handles_an_absent_report_path_explicitly(name: str) -> None:
     Fail-open is right -- an older dispatch that passes no path must still work --
     but a silent fall-back reproduces the defect the next time someone forgets the
     flag, and the reader cannot tell a short report from a truncated one.
+
+    HALF OF THAT DOCSTRING WAS NEVER ASSERTED. The test checked only that
+    `REPORT=<none>` is mentioned — and each of these files mentions it TWICE, so a
+    mutation deleting the sentence that carries the "AND declared" half left one
+    occurrence standing and SURVIVED. The `say so` clause is the entire difference
+    between a declared fall-back and a silent one, which is what this test is named
+    for.
     """
     body = _norm(AGENTS / f"{name}.md")
     assert "REPORT=<none>" in body, name
+    assert "say so on the line after DONE" in body, (
+        f"{name}: the fall-back must be DECLARED, not merely permitted — without "
+        f"this the reader cannot tell a trimmed report from a truncated one")
 
 
 @pytest.mark.parametrize("name", sorted(AUTHOR_DONE))

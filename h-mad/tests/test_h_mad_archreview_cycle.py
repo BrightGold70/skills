@@ -1277,3 +1277,57 @@ class TestTheReportFileChannel:
             assert "READ THIS BLOCK FIRST" not in line, (
                 "the contract block leaked into the STAGED token — `head` is the git "
                 f"HEAD sha, not the prompt preamble (report_file={report_file!r})")
+
+
+class TestTheFallbackNamesWhyTheReportFileLost:
+    """Four ways a report file fails to carry the verdict, four remedies.
+
+    `_read_report_channel` computes `not_requested` / `unreadable` / `empty` /
+    `no_verdict_in_file`, and `score` overwrote all four with a bare
+    `last-message`. They printed identically, so the operator could not tell an
+    agent that wrote nothing from one that wrote prose without a verdict.
+
+    It also made the `empty` branch UNOBSERVABLE: removing it lets an empty file
+    fall through to `_extract_assessment`, which returns None too, so both paths
+    emitted the same token — which is exactly why that mutation survived.
+    """
+
+    def test_an_empty_report_file_is_named_as_empty(self, tmp_path):
+        state = _state(tmp_path)
+        rep = tmp_path / "rep.md"
+        rep.write_text("   \n", encoding="utf-8")
+        r = _run("score", "--feature", "feat", "--state", str(state),
+                 "--log", str(_log(tmp_path, 6)),
+                 "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")),
+                 "--report-file", str(rep))
+        assert "channel=last-message:empty" in r.stdout, r.stdout
+
+    def test_a_file_with_content_but_no_verdict_is_named_differently(self, tmp_path):
+        """The discriminating pair. Same fallback, different diagnosis — and if
+        these two printed the same the `empty` guard would be untestable again."""
+        state = _state(tmp_path)
+        rep = tmp_path / "rep.md"
+        rep.write_text("The review ran and found things, but named no verdict.\n",
+                       encoding="utf-8")
+        r = _run("score", "--feature", "feat", "--state", str(state),
+                 "--log", str(_log(tmp_path, 6)),
+                 "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")),
+                 "--report-file", str(rep))
+        assert "channel=last-message:no_verdict_in_file" in r.stdout, r.stdout
+
+    def test_no_report_file_requested_is_named_too(self, tmp_path):
+        state = _state(tmp_path)
+        r = _run("score", "--feature", "feat", "--state", str(state),
+                 "--log", str(_log(tmp_path, 6)),
+                 "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")))
+        assert "channel=last-message:not_requested" in r.stdout, r.stdout
+
+    def test_the_existing_channel_assertions_still_hold(self, tmp_path):
+        """Appended with `:` on purpose — six assertions across this file read
+        `"channel=last-message" in out`, and a reason that broke them would be a
+        different change needing its own argument."""
+        state = _state(tmp_path)
+        r = _run("score", "--feature", "feat", "--state", str(state),
+                 "--log", str(_log(tmp_path, 6)),
+                 "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")))
+        assert "channel=last-message" in r.stdout, r.stdout
