@@ -114,7 +114,7 @@ against the tree at dispatch time. On `feature/193` all three were stale:
 
 | Plan claim | Reality |
 |---|---|
-| decision sites at `:1583`/`:2066` | `:1575`/`:2055` (drifted by Task 2's own deletions) |
+| two named decision sites | both drifted — by 8 and 11 lines respectively, from Task 2's own deletions |
 | FR-5 has three log sites | two; the adapter emits no decision line |
 | AC-2.1 is a live defect | not live — all 80 strategy ids already citable |
 

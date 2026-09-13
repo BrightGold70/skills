@@ -54,7 +54,7 @@ Strengthen the existing "if a test looks wrong, STOP and report" with:
 > **When authoring a source-level assertion, assert the call form, not an occurrence count over a whole method.** A count over a method policing one call site over-constrains it and recruits the implementer into damaging unrelated code; assert the specific call/argument shape at the one site the contract concerns.
 
 ### FR-4 — re-verify plan pins against the tree (SKILL.md, prompt-authoring guidance / 5a)
-> **Re-verify every impl-plan pin against the tree at dispatch time.** Every line number, site count, and "live defect" claim must be confirmed against the current tree before it is passed to an implementer — a stale pin produces a wrong edit or a fabricated failure (measured on `feature/193`: `:1583`→`:1575`, "three log sites"→two, "live defect"→already-citable).
+> **Re-verify every impl-plan pin against the tree at dispatch time.** Every line number, site count, and "live defect" claim must be confirmed against the current tree before it is passed to an implementer — a stale pin produces a wrong edit or a fabricated failure (measured on `feature/193`: two decision-site pins drifted by 8 and 11 lines, "three log sites"→two, "live defect"→already-citable).
 
 ## Components Changed / Added
 | Component | File path | Change | Satisfies |

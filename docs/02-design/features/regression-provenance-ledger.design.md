@@ -243,8 +243,8 @@ pin it, per `invariants.base.md:107`:
 
 ### Shape challenge mechanism (FR-5) — AST, at 5f, not 5b
 
-**The challenge runs at 5f, not 5b.** 5b audits the *impl-plan* (`SKILL.md:271`); 5c branches, 5d
-writes RED tests and 5e writes production (`:276`, `:277`, `:282`). At 5b there is no production
+**The challenge runs at 5f, not 5b.** 5b audits the *impl-plan* (`h-mad/SKILL.md`, the phase-5b
+step); 5c branches, 5d writes RED tests and 5e writes production. At 5b there is no production
 diff at all — HEAD equals BASE — so an AST comparison there would see zero changes and could never
 fire. Placing it at 5b would have shipped a guard that is structurally incapable of firing while
 reporting `challenges=0` as though it had looked, which is the precise class of silent no-op this
