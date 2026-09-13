@@ -7,15 +7,14 @@
 
 ## Session Summary
 
-Resumed the WSG backlog and closed **WSG-1, WSG-2 and WSG-3** — six commits,
-`54a4067..201f716`. A fresh-context review lane then found **7 findings (2 Major, 5 Minor,
-0 Critical, all CONFIRMED)**, two of which were defects in *this session's own fixes*, and
-one of those was a test that actively defended a false boundary. Findings 1, 3 and 6 are
-fixed; finding 2 is filed unfixed; **findings 4, 5 and 7 have never been read** because the
-agent report channel truncated three deliveries — the full report is now committed at
-`201f716` and reading it is the top Next Step. **WSG-4 is mid-flight in a subagent whose
-work is verified-green in the tree but UNCOMMITTED** (see Open Items — this is the most
-perishable state here).
+Resumed the WSG backlog and closed **WSG-1 through WSG-4** — eleven commits,
+`54a4067..cee5aea`. A fresh-context review lane found **7 findings (2 Major, 5 Minor,
+0 Critical, all CONFIRMED)**; **three of them were defects in this session's own fixes**,
+including a test that actively defended a false boundary and a guard test that failed open.
+**Six are fixed (1, 3, 4, 5, 6, 7); only finding 2 remains open**, with its fix location
+already determined. WSG-4 was delivered by a subagent (`66cb2e7`) with the per-spec
+measurement its brief required — and that measurement immediately surfaced two genuine
+crash kills in an existing spec, now filed. Nothing is left uncommitted.
 
 ## Key Learnings
 
@@ -54,44 +53,29 @@ perishable state here).
 
 ## Next Steps
 
-1. **Read review findings 4, 5 and 7** — `docs/04-report/features/archreview-oversize-and-floor.review.v1.md`
-   lines 126, 173, 247. Finding 4's heading is `Minor — CONFIRMED; the property is unmutated
-   and untested`, which names a guard that bites nothing. Also read `## Follow-up (a)`
-   (line 289) and `## Assessment of 86b6149's two constants` (line 354) before touching the
-   ARG_MAX reserves, and `### Negatives` (line 412) so you do not re-probe what was cleared.
-   Task #24.
-2. **Collect `wsg4-crashkill`'s WSG-4 work and commit it** — see Open Items. Verify with
-   `cd h-mad && python3.11 -m pytest tests/ -q` and
-   `python3.11 scripts/h_mad_mutation_harness.py --check-anchors tests/mutation-specs/*.json tests/specs/*.json`
-   before committing anything you did not author. Task #15.
-3. **Fix `--vh-tail 0`** — `h_mad_assemble_audit.py:343`, `entry_idx[-0] == entry_idx[0]`
+1. **Fix `--vh-tail 0`** — `h_mad_assemble_audit.py:343`, `entry_idx[-0] == entry_idx[0]`
    keeps every entry while claiming omission, making the prompt LARGER. Guard belongs inside
    `_trim_version_history` (both argparse surfaces are equally reachable; no caller passes
    0). Same task covers the table-formatted Version History silent no-op. Task #22.
-4. **One-line cite fix in `references/failure-recovery.md`** — it still credits the codex
-   implementer/verifier templates for phases 3/4/5b's `.done`; the real producer is
-   `h-mad/audit-prompt.template.md:252`. Blocked only on the subagent releasing that file.
-   Task #24B.
-5. **WSG-5+6 and WSG-7** — the last untouched WSG items. Tasks #16, #17.
-6. `[suggested]` **`#7` bkit `hooks.json`** (task #7) and **`#18` 7f remote-tracking-ref
-   blocker** — both untouched for two sessions.
+2. **Judge the two crash kills in `state_undeclared_keys.json`** — `StateWriteError` and
+   `TypeError` out of `h_mad_state_write.py`, surfaced by the new classifier over 74
+   mutations. Either the exception IS the guard doing its job (real kill) or it fires before
+   the guard runs (hollow kill, and that guard is unverified). The harness cannot tell; the
+   judgement was explicitly left to an author. Task #25.
+3. **WSG-5+6 and WSG-7** — the last untouched WSG items. Tasks #16, #17.
+4. `[suggested]` **`#7` bkit `hooks.json`** (task #7), **`#18` 7f remote-tracking-ref
+   blocker**, and **#26** (prove the ARG_MAX halt against the real agy binary, not just the
+   syscall) — none touched.
 
 ## Open / Blocked Items
 
-**MOST PERISHABLE — `wsg4-crashkill` subagent work is UNCOMMITTED in this tree.** It was
-still `running` at 02:10Z after ~40 min. Its WSG-4 crash-kill classification is verified
-green (`tests/test_h_mad_mutation_harness.py` → 115 passed; full tree 3221 passed; anchors
-`ANCHORS_OK specs=87 mutations=844 drifted=0`) and its classifier is already live enough to
-score my batteries (`crash_kills=0`, `(assertion: no traceback from …)`). Files it holds:
-`h-mad/SKILL.md`, `h-mad/references/codex-verifier-prompt.md`,
-`h-mad/references/failure-recovery.md`, `h-mad/scripts/h_mad_mutation_harness.py`,
-`h-mad/tests/mutation-specs/mutation_harness.json`,
-`h-mad/tests/test_h_mad_mutation_harness.py`, plus untracked
-`h-mad/tests/mutation-specs/mutation_crash_kill_classification.json`.
-`repo: /Users/kimhawk/orca/skills · branch: main · worktree: none (main worktree)`.
-**If that agent is gone, this work is one `git checkout` from being lost.** Its brief
-required a per-spec `crash_kills` measurement table which has NOT been reported — do not
-mark #15 done without it. Status: in progress, ownership ambiguous.
+**RESOLVED since this doc was first written — nothing is uncommitted.** The
+`wsg4-crashkill` subagent landed WSG-4 itself as `66cb2e7` and released every file; the
+tree is clean apart from the standing `.done` markers and `lanestate/`. Its brief's
+measurement WAS delivered, in the commit message rather than to me: 74 mutations across
+eleven committed specs, all still ALL_CAUGHT, no new refusals, and two genuine crash kills
+in `state_undeclared_keys.json` — now task #25. It also handled three output shapes I had
+not specified, and correctly refused to promote tier 2 to a refusal on that evidence.
 
 **Inherited from the WSG brief (origin preserved).**
 **Handover-From:** HemaSuite-wsg · feature/website-source-grounding · session `8574638e`.
@@ -115,8 +99,12 @@ Claimed as `hmad-tooling-findings-from-the-wsg-lane`, owner re-claimed this sess
 
 **From this session:**
 
-- **Review findings 4, 5, 7 never read** — status: blocked on reading the committed report.
-  The review is NOT discharged. Task #24.
+- **Review findings 4, 5, 7** — status: READ and FIXED (`1c92f5e`, `cee5aea`). Finding 4 was
+  the serious one: the omission `ref` was computed against cwd while its comment claimed the
+  repo root, and the value was UNMUTATED — the reviewer substituted a literal wrong path and
+  3202 tests passed. Finding 7: my own guard test failed OPEN on a row attaching
+  `--no-done-marker` to a different leg. Both now carry mutations.
+- **The review never dispatched a live `exec agy`** — status: open. Task #26.
 - **Finding 2 `--vh-tail 0` + table-format no-op** — status: open, CONFIRMED, not fixed.
   Deferred because `h_mad_assemble_audit.py` is shared and was held. Task #22.
 - **Concurrent-writer anchor hazard** — status: open, documented. Task #23.
