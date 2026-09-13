@@ -123,6 +123,89 @@ class TestPendingHandoversAreFound:
 
         assert hp.pending_handovers(start=tmp_path) == ([], [])
 
+    def test_a_closeout_that_PRESERVES_an_inherited_origin_is_not_pending(
+        self, tmp_path: Path
+    ) -> None:
+        """The bolded-field check was still not enough, because the SKILL mandates the
+        bolded field in the BODY.
+
+        §"Carry the predecessor's open items forward" requires an inherited item to
+        keep its `**Handover-From:**` attribution as it moves down the chain —
+        "stripping the origin makes it unresolvable two hops later". So a CORRECT
+        closeout re-emits the marker at line start, in bold, inside
+        `## Open / Blocked Items`, and every such handoff reported itself as an
+        unadopted brief on every future resume, forever. Two rules in one skill
+        contradicting each other, and the scan was the wrong one.
+
+        Measured on this repo's own store before the fix: two closeouts offered as
+        pending briefs, one of them the very document describing the defect.
+        """
+        store(
+            tmp_path,
+            {
+                "2026-09-13-main__closeout.md": (
+                    "# Handoff — closeout\n\n"
+                    "**Date:** 2026-09-13\n**Branch:** `main`\n\n"
+                    "## Session Summary\n\nDid work.\n\n"
+                    "## Open / Blocked Items\n\n"
+                    "**Inherited from the WSG brief (origin preserved).**\n"
+                    "**Handover-From:** other-repo · other-branch · session abc\n"
+                    "- item — status: open\n"
+                ),
+            },
+        )
+
+        assert hp.pending_handovers(start=tmp_path) == ([], [])
+
+    def test_a_REAL_brief_with_sections_is_still_pending(self, tmp_path: Path) -> None:
+        """The control, and the one that matters: scoping to the header must not turn
+        the scan off. A scan that reports nothing 'fixes' every false positive."""
+        store(
+            tmp_path,
+            {
+                "2026-09-01-other__inbound.md": (
+                    "# Handoff — inbound\n\n"
+                    "**Date:** 2026-09-01\n**Branch:** `feat`\n"
+                    "**Handover-From:** other-repo · feat · session abc\n\n"
+                    "## Session Summary\n\nWork that moved here.\n\n"
+                    "## Next Steps\n\n1. thing\n"
+                ),
+            },
+        )
+
+        pending, unreadable = hp.pending_handovers(start=tmp_path)
+        assert [p.name for p in pending] == ["2026-09-01-other__inbound.md"]
+        assert unreadable == []
+
+    def test_a_stamped_brief_with_sections_is_still_excluded(self, tmp_path: Path) -> None:
+        """Both markers are header fields, so scoping must not lose the discriminator
+        and start re-offering work somebody already owns."""
+        store(
+            tmp_path,
+            {
+                "2026-09-01-other__inbound.md": (
+                    "# Handoff — inbound\n\n"
+                    "**Handover-From:** other-repo · feat · session abc\n"
+                    "**Taken-Over-By:** skills · main · session def · 2026-09-01\n\n"
+                    "## Session Summary\n\nAdopted.\n"
+                ),
+            },
+        )
+
+        assert hp.pending_handovers(start=tmp_path) == ([], [])
+
+    def test_a_doc_with_no_section_heading_is_treated_as_all_header(
+        self, tmp_path: Path
+    ) -> None:
+        """The fallback direction is deliberate. A malformed or very short brief has no
+        `## ` heading, and erring toward REPORTING it keeps the failure on the noisy
+        side: a brief wrongly offered costs a glance, a brief wrongly hidden is the
+        defect this scan exists to prevent."""
+        store(tmp_path, {"2026-08-30-other__bare.md": HANDOVER})
+
+        pending, _ = hp.pending_handovers(start=tmp_path)
+        assert [p.name for p in pending] == ["2026-08-30-other__bare.md"]
+
     def test_a_missing_store_is_empty_not_an_error(self, tmp_path: Path) -> None:
         assert hp.pending_handovers(start=tmp_path) == ([], [])
 

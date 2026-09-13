@@ -19,8 +19,8 @@
       "name": "an-unreadable-brief-is-skipped-like-an-absent-one",
       "_mechanism": "The exact asymmetry this whole feature is about. A brief that cannot be decoded and a store with no handovers produce the same empty list and lead to opposite correct actions -- take it over, or carry on. Skipping is the branch that looks like it worked.",
       "file": "scripts/handoff_paths.py",
-      "find": "            unreadable.append(path)\n            continue\n        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):",
-      "replace": "            continue\n        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):",
+      "find": "            unreadable.append(path)\n            continue\n        header = _header_block(text)",
+      "replace": "            continue\n        header = _header_block(text)",
       "test": "tests/test_handoff_pending_handovers.py::TestAnUnreadableBriefIsNotAnAbsence::test_undecodable_bytes_are_reported_not_skipped"
     },
     {
@@ -35,8 +35,8 @@
       "name": "an-already-taken-brief-is-offered-again",
       "_mechanism": "Without the discriminator every resume in the repo re-adopts briefs it already owns, forever. The failure is loud enough to notice once and then trained away as noise, which is worse than silence: the scan stops being believed.",
       "file": "scripts/handoff_paths.py",
-      "find": "        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):",
-      "replace": "        if _HANDOVER_FROM_RE.search(text):",
+      "find": "        if _HANDOVER_FROM_RE.search(header) and not _TAKEN_OVER_BY_RE.search(header):",
+      "replace": "        if _HANDOVER_FROM_RE.search(header):",
       "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_a_stamped_brief_is_not_pending"
     },
     {
@@ -78,11 +78,35 @@
       "find": "    return {Path(token.strip(_MARKUP)).name for token in _MD_TOKEN_RE.findall(text)}",
       "replace": "    return {Path(token.strip(_MARKUP)).name for token in _MD_TOKEN_RE.findall(text)[:1]}",
       "test": "tests/test_handoff_carry_forward.py::TestSupersedesNamesEverySourceConsumed::test_one_handoff_retires_several_sources"
+    },
+    {
+      "name": "the-scan-reads-the-whole-document-again",
+      "_mechanism": "The defect. This skill MANDATES a line-start bold `**Handover-From:**` in the BODY of any closeout carrying an inherited item forward, so scanning the whole document makes every such handoff report ITSELF as an unadopted brief on every future resume, forever. Measured on this repo's store: two closeouts offered as pending, one of them the document describing the defect.",
+      "file": "scripts/handoff_paths.py",
+      "find": "        header = _header_block(text)",
+      "replace": "        header = text",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_a_closeout_that_PRESERVES_an_inherited_origin_is_not_pending"
+    },
+    {
+      "name": "the-header-block-stops-at-the-title",
+      "_mechanism": "The over-scoping direction, which turns the scan OFF rather than fixing it -- and a scan that reports nothing satisfies every false-positive test there is. A real inbound brief carries its marker a few lines below the title.",
+      "file": "scripts/handoff_paths.py",
+      "find": "    match = _FIRST_SECTION_RE.search(text)\n    return text[: match.start()] if match else text",
+      "replace": "    match = _FIRST_SECTION_RE.search(text)\n    return text.splitlines()[0] if match else text",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_a_REAL_brief_with_sections_is_still_pending"
+    },
+    {
+      "name": "a-doc-with-no-sections-yields-no-header",
+      "_mechanism": "Flips the fallback to the quiet side. A malformed or very short brief has no `## ` heading; returning an empty header hides it, and a brief wrongly hidden is the defect this scan exists to prevent while one wrongly offered costs a glance.",
+      "file": "scripts/handoff_paths.py",
+      "find": "    return text[: match.start()] if match else text",
+      "replace": "    return text[: match.start()] if match else \"\"",
+      "test": "tests/test_handoff_pending_handovers.py::TestPendingHandoversAreFound::test_a_doc_with_no_section_heading_is_treated_as_all_header"
     }
   ],
   "_not_mutated": {
     "pending_handovers is_dir guard": "DEGENERATE, not a gap. `Path.glob` on a missing directory returns [] without raising (verified 2026-09-01), so disabling the `if not d.is_dir()` early return lands on identical behaviour and scores `survived` for a reason that has nothing to do with test coverage. The guard stays -- it states the intent and mirrors `find_latest` -- but claiming mutation coverage for a line with no behavioural effect would be a false green. `test_a_missing_store_is_empty_not_an_error` still pins the contract.",
     "_superseded_names .md filter": "DEGENERATE, not a gap. The store glob is `*.md`, so every discovered filename ends in .md (verified 2026-09-01) and the filter can only ever drop tokens that could not have matched a real name anyway. Removing it leaves behaviour identical, so the mutant scores `survived` for a reason unrelated to coverage. The filter stays because it states the grammar the field accepts, but claiming mutation coverage for a behaviourally inert line would be a false green. The documented `none - first on this branch` sentinel is safe by CONSTRUCTION rather than by this filter, and `test_the_none_sentinel_retires_nothing` pins that."
   },
-  "_why": " RETIRED 2026-09-07: `a-backticked-filename-fails-to-match` SURVIVED and could not be made to bite. A backticked name is now handled by two independent mechanisms — the token class excludes '`' so the match never contains one, and `_MARKUP` strips it if it ever did — so no single find/replace can reach the behaviour, and a row that cannot bite measures nothing. The behaviour is pinned instead by tests/test_handoff_carry_forward.py::TestSupersedesNamesTheChainActuallyWrites::test_each_mechanism_handles_a_backticked_name_alone, which exercises each mechanism on its own."
+  "_why": " RETIRED 2026-09-07: `a-backticked-filename-fails-to-match` SURVIVED and could not be made to bite. A backticked name is now handled by two independent mechanisms \u2014 the token class excludes '`' so the match never contains one, and `_MARKUP` strips it if it ever did \u2014 so no single find/replace can reach the behaviour, and a row that cannot bite measures nothing. The behaviour is pinned instead by tests/test_handoff_carry_forward.py::TestSupersedesNamesTheChainActuallyWrites::test_each_mechanism_handles_a_backticked_name_alone, which exercises each mechanism on its own."
 }

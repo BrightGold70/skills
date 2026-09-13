@@ -164,6 +164,8 @@ This was placed in check 3 as an exception once, gated "use when this branch has
 
 Do **not** skip the triage and learn to ignore a long queue instead — an alert that is always wrong is worse than no alert, and this scan exists precisely because a real brief sat unread among ordinary docs. Equally, do not bulk-stamp briefs you have not checked: a brief wrongly marked taken over is invisible again, which is the original defect restored by the tool built to fix it. If the queue is long and you cannot triage it now, say so to the user and record it as an open item.
 
+The scan reads only the doc's HEADER block — the field run above the first `## ` section — because both markers are header fields while this skill's own carry-forward rule requires a line-start bold `**Handover-From:**` in the BODY of any closeout that inherits an item. Scanning the whole document made every such handoff report itself as an unadopted brief forever; two of this repo's own closeouts were offered that way, one of them the document describing the defect. Do not widen it back — a doc with no `## ` heading is treated as all-header on purpose, erring toward offering rather than hiding.
+
 The scan filters on `**Taken-Over-By:**`, which Step 3.5 stamps into the brief. That marker lives in the doc because the doc store is what this scan reads: the `taken over:` worktree comment is worktree-scoped and the advisory claim lives in a gitignored, machine-local state file, so neither survives into the store and neither can tell a taken-over brief from an abandoned one.
 
 ### Step 2: Read it

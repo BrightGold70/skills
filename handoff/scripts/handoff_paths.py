@@ -183,6 +183,33 @@ def find_latest(branch: str | None = None, start: Path | None = None) -> Path | 
 _HANDOVER_FROM_RE = re.compile(r"^\*\*Handover-From:\*\*", re.MULTILINE)
 _TAKEN_OVER_BY_RE = re.compile(r"^\*\*Taken-Over-By:\*\*", re.MULTILINE)
 
+# ...and line-start bold was still not enough, because the SKILL ITSELF mandates a
+# line-start bold `**Handover-From:**` in the body. §"Carry the predecessor's open
+# items forward" requires that an inherited item keep its origin attribution as it
+# moves down the chain ("stripping the origin makes it unresolvable two hops
+# later"), so a correct WRITE closeout re-emits the marker inside
+# `## Open / Blocked Items`. Every such handoff then reported ITSELF as an
+# unadopted brief, on every future resume, forever -- two rules in one skill
+# contradicting each other, and the scan was the one that was wrong.
+#
+# Both markers are HEADER fields by definition (§"The header fields": HANDOVER
+# Step 3 writes Handover-From, READ Step 3.5 stamps Taken-Over-By directly under
+# it), so the search is scoped to the header block and a body mention is correctly
+# ignored.
+_FIRST_SECTION_RE = re.compile(r"^## ", re.MULTILINE)
+
+
+def _header_block(text: str) -> str:
+    """The field run at the top of a handoff, above its first `## ` section.
+
+    A doc with no section heading yields the whole text. That direction is
+    deliberate: it errs toward REPORTING a brief as pending, and a brief wrongly
+    offered is noise while a brief wrongly hidden is the defect this scan exists to
+    prevent.
+    """
+    match = _FIRST_SECTION_RE.search(text)
+    return text[: match.start()] if match else text
+
 
 def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]]:
     """Briefs addressed to this repo that nobody has taken over yet.
@@ -217,7 +244,8 @@ def pending_handovers(start: Path | None = None) -> tuple[list[Path], list[Path]
         except (OSError, UnicodeDecodeError):
             unreadable.append(path)
             continue
-        if _HANDOVER_FROM_RE.search(text) and not _TAKEN_OVER_BY_RE.search(text):
+        header = _header_block(text)
+        if _HANDOVER_FROM_RE.search(header) and not _TAKEN_OVER_BY_RE.search(header):
             pending.append(path)
     return (pending, unreadable)
 
