@@ -1819,6 +1819,11 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   `test` key is visibly untrusted rather than silently trusted. This is the same row the inbound
   WSG brief files as its item 4; recording it here so the candidate store carries it independently
   of that brief's lifetime.
+  — **LANDED 2026-09-14** — `h-mad/scripts/h_mad_mutation_harness.py` §"crash-kill classification"
+  (`66cb2e7`), corrected in `5289fc1` after a full 92-spec sweep found the classifier failing the
+  OTHER way: pytest's `<file>.py:N: AssertionError` footer read as a crash whenever the mutated
+  file is a test file, manufacturing 12 of the corpus's 25. Both directions are now guarded and
+  both blind spots are documented in the function's own docstring.
 - **a "starting state the suite never reaches" prompt when a mutation SURVIVES**: both surviving
   mutations this session shared one shape — every existing test began from a state where the weak
   mutation still looked caught (no stamp on disk makes a size-only signature look correct; one
@@ -1834,3 +1839,24 @@ stands and was not re-done. Census unchanged at `candidates=212 OPEN=47 yes=28 m
   candidate: maybe — too situational for a script, but the rule generalises: when a phase tool has a
   plan-only mode, the plan-only mode IS the state query, and inferring the same state from prose is
   strictly worse. Belongs in `measurement-discipline.md` rather than as a new skill.
+
+- **a hollow-kill detector — "did the mutant REACH the property?"**: the crash-kill classifier says
+  a mutant died on an exception; it cannot say whether the exception was the guard firing or the
+  mutant failing to run at all. Measured 2026-09-14 over all 92 specs: of 12 genuine crash kills,
+  **4 were HOLLOW** — a kwarg that does not exist (`TypeError`), a function never written
+  (`NameError`), a deleted regex group (`IndexError: no such group`), a half-applied stringification
+  (`TypeError: '<=' not supported between int and str`). Each guard asserted a property its mutant
+  never reached, and each read as `caught`. Recurrence: 4 in one sweep, plus the WSG-4 finding and
+  the older "6 of 11 guards bit nothing" — candidate: yes — mechanical: after applying a mutation,
+  import/compile the mutated module and execute the named test's target path once; report
+  `REFUSED reason=mutant_does_not_execute` when the exception's traceback never enters the guard.
+  The four here were all distinguishable by reading the message the test dies on, which is a
+  mechanical string check, not a judgement.
+- **a corpus-wide mutation sweep verb (`--sweep`)**: the harness scores one spec per invocation, so
+  "what does the whole corpus report?" is a hand-rolled shell loop nobody runs. It had covered 11
+  of 92 specs; completing it on 2026-09-14 found 25 crash kills (12 of them an artifact), 2 SURVIVED
+  and 1 REFUSED — three guards that did not bite, invisible for as long as the sweep was partial.
+  Recurrence: 2 (this session's loop, plus the 11-spec sample it replaced) — candidate: yes —
+  mechanical: iterate the spec set, print one token line per spec plus a corpus summary, and REFUSE
+  to run concurrently with another harness process in the same worktree (see the tree-lock row
+  above — false anchor drift was self-inflicted three times on 2026-09-14 for exactly that reason).
