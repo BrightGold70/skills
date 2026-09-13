@@ -342,6 +342,35 @@ def test_it_refuses_to_decide_whether_to_run_another_cycle():
     ), "no while-loop: one cycle per invocation, the operator decides on another"
 
 
+def test_the_6a_prime_recovery_step_does_not_prescribe_a_wait_that_cannot_succeed():
+    """WSG-3, and the defect is in the DOCS, not in agy.
+
+    `.done` is never written by a 6a-prime `exec agy` dispatch because nothing ever
+    asks for it — `_read_report_channel` records that deliberately, since requiring
+    the marker would send every report to the fallback and undo the channel. So the
+    observation "the marker was never written on 5 of 5 cycles" is correct AND
+    expected, and the fix is not to make agy write one.
+
+    What IS broken is `failure-recovery.md`'s recovery row, which covers 6a-prime and
+    prescribes `report-wait "$RP"`. That poller treats `<path>.done` as the completion
+    signal, so it blocks for the full timeout and exits 1 on a complete report.
+    Measured: rc=1 after the timeout, rc=0 immediately with `--no-done-marker`.
+
+    Asserted here rather than trusted as prose because a documented rule is not an
+    enforced one, and this one is a single clause inside a very long table cell.
+    """
+    doc = (SCRIPTS.parent / "references" / "failure-recovery.md").read_text(
+        encoding="utf-8")
+    rows = [ln for ln in doc.splitlines()
+            if "6a-prime" in ln and "report-wait" in ln]
+    assert rows, "the 6a-prime recovery row no longer mentions report-wait — re-check this"
+    for row in rows:
+        assert "--no-done-marker" in row, (
+            "a 6a-prime recovery row prescribing `report-wait` without "
+            "`--no-done-marker` sends the operator into a wait for a marker this "
+            "channel never writes:\n" + row[:300])
+
+
 class TestACleanVerdictMustRestOnMoreThanTheDeliveryContract:
     """J49 in the 6a-prime channel: the gate was `tools == 0`, a floor of ZERO.
 
