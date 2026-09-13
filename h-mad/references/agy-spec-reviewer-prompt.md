@@ -76,4 +76,22 @@ If DRIFT: list each issue with:
 
 The orchestrator parses the VERDICT line. On COMPLIANT it commits the module. On DRIFT it halts with `step5e-review:spec_drift:<module>` and surfaces the findings.
 
-Do NOT issue OVERRIDE prompts or escape phrases. Do NOT invoke any tool other than `view_file` for the target paths.
+Do NOT issue OVERRIDE prompts or escape phrases.
+
+**This review is read-only.** Do not modify any file in the target tree — not the
+implementation, not its tests, not a Version History, and not "just to get the suite
+green". If something is broken, report it as a finding and leave it broken. An auditor
+that edits destroys its own evidence: the next cycle measures a tree this one changed,
+so a finding can be repaired into invisibility without ever having been reported.
+Measured 2026-08-28 on the audit channel this template is the Phase-5e sibling of — a
+dispatched reviewer rewrote two Version Histories and added a `monkeypatch.setattr`
+stubbing out the call a failing test existed to exercise, then described the result as
+having "restored a green test suite".
+
+For the target paths, read with `view_file`. **Two writes are permitted**, and neither
+is an exception to the rule above, because both are how your review LEAVES this terminal
+rather than changes to what you are reviewing: your own report file, and the
+`orca orchestration send` line in "Orchestration mode" when that section applies. Both
+need `run_command`. This is stated explicitly because the sibling architectural-reviewer
+prompt once said "use only `view_file`" and then asked for a report file in the next
+breath — the reviewer obeyed the restriction, wrote nothing, and its review was lost.

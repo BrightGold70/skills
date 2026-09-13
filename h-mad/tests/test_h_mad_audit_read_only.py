@@ -84,3 +84,53 @@ def test_skill_md_tells_the_orchestrator_to_check_the_tree_after_an_audit() -> N
     text = SKILL_MD.read_text().casefold()
     assert "check the working tree after every audit dispatch" in text
     assert "git status --short" in text
+
+
+# ---------------------------------------------------------------------------
+# The Phase-5e spec reviewer (#57)
+# ---------------------------------------------------------------------------
+#
+# Filed as a gap-by-comparison, and the comparison is the whole evidence: no 5e
+# reviewer is recorded to have written anything. What the template carried was a
+# tool restriction SCOPED to the diff — "Do NOT invoke any tool other than
+# `view_file` for the target paths" — which says how to read the diff, not that
+# the tree is off limits. Both siblings restrain the whole tree. The incident in
+# this module's docstring is what that buys, and it happened on the audit channel
+# this template is the 5e sibling of.
+
+SPEC_REVIEWER = REPO_ROOT / "h-mad" / "references" / "agy-spec-reviewer-prompt.md"
+
+
+def test_the_spec_reviewer_is_told_the_review_is_read_only() -> None:
+    body = SPEC_REVIEWER.read_text().casefold()
+    assert "read-only" in body
+    assert "do not modify any file in the target tree" in body
+
+
+def test_the_spec_reviewer_is_told_to_report_rather_than_fix() -> None:
+    """Same reason as the audit template's: a prohibition with no alternative
+    reads as an obstacle to route around when the reviewer thinks it has a
+    one-line fix."""
+    body = SPEC_REVIEWER.read_text().casefold()
+    assert "report it as a finding" in body
+    assert "leave it broken" in body
+
+
+def test_the_spec_reviewer_read_only_clause_still_permits_its_own_two_writes() -> None:
+    """The over-correction, and it has already happened once on the sibling.
+
+    A blanket "invoke no tool other than `view_file`" contradicts this template's
+    own instructions: "Orchestration mode" tells the reviewer to emit an
+    `orca orchestration send …` command, and that section names
+    `--report-path <your-report-file>`. The architectural-reviewer prompt carried
+    exactly that contradiction, and the reviewer resolved it the obedient way —
+    it wrote nothing and the review was lost. So the strengthening must name the
+    permitted writes, not just forbid writing.
+    """
+    text = SPEC_REVIEWER.read_text()
+    assert "Two writes are permitted" in text
+    assert "report file" in text and "orca orchestration send" in text
+    assert "Do NOT invoke any tool other than `view_file` for the target paths." not in text, (
+        "the blanket restriction is back; it forbids the report file this same "
+        "template asks for"
+    )

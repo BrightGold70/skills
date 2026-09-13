@@ -1,0 +1,43 @@
+{
+  "_why": "#57 \u2014 the Phase-5e spec-reviewer template carried a tool restriction SCOPED to the diff (\"Do NOT invoke any tool other than `view_file` for the target paths\") where both siblings restrain the whole tree. Filed as a gap-by-comparison with no incident of its own; the incident that justifies it happened on the audit channel this template is the 5e sibling of (2026-08-28, see test_h_mad_audit_read_only.py's module docstring).\n\nThe third mutation is the one worth having. Strengthening a read-only clause has an over-correction that HAS already shipped once: the architectural-reviewer prompt said \"use only `view_file`\" and then asked for a report file in the next breath, so the reviewer obeyed, wrote nothing, and its review was lost. This template is more exposed, not less \u2014 its \"Orchestration mode\" section tells the reviewer to run `orca orchestration send` and names `--report-path <your-report-file>`.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_audit_read_only.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-prohibition-is-softened-to-a-preference",
+      "_mechanism": "A reviewer weighing 'prefer not to' against 'the suite is red and I can see the fix' routes around it. The audit template's own history is that the strong form was still not enough on its own -- SKILL.md carries a tree check as the backstop.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "Do not modify any file in the target tree",
+      "replace": "Prefer not to modify files in the target tree",
+      "test": "tests/test_h_mad_audit_read_only.py::test_the_spec_reviewer_is_told_the_review_is_read_only"
+    },
+    {
+      "name": "the-prohibition-names-no-alternative",
+      "_mechanism": "\"Do not edit\" with nothing to do instead reads as an obstacle. The sibling rule already requires saying what to do -- report the finding and leave the breakage standing so the next cycle still measures it.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "report it as a finding and leave it broken",
+      "replace": "fix it",
+      "test": "tests/test_h_mad_audit_read_only.py::test_the_spec_reviewer_is_told_to_report_rather_than_fix"
+    },
+    {
+      "name": "the-blanket-restriction-returns-and-forbids-the-report-file",
+      "_mechanism": "THE over-correction, already shipped once on the sibling. A global 'no tool but view_file' contradicts this template's own Orchestration mode, which requires run_command for `orca orchestration send` and names --report-path. The obedient reviewer writes nothing and the review is lost -- silently, because a missing report looks like a reviewer that had nothing to say.",
+      "file": "references/agy-spec-reviewer-prompt.md",
+      "find": "For the target paths, read with `view_file`. **Two writes are permitted**",
+      "replace": "Do NOT invoke any tool other than `view_file` for the target paths. **No writes are permitted**",
+      "test": "tests/test_h_mad_audit_read_only.py::test_the_spec_reviewer_read_only_clause_still_permits_its_own_two_writes"
+    }
+  ]
+}
