@@ -1,0 +1,35 @@
+{
+  "_why": "#27 \u2014 the two \u00a7Incident replay tests read only `docs/.bkit-memory.json`, which is gitignored h-mad orchestrator state, and skipped when it was absent. So in a fresh clone, a linked worktree, a CI runner, or any subagent given `isolation: \"worktree\"` the only two tests in that file validating against records NOT authored beside the validator did not run \u2014 permanently, silently, reporting success.\n\nWHAT THIS SPEC CAN AND CANNOT MEASURE, stated rather than papered over. The defect manifests only where the live store is ABSENT, and the harness runs in this checkout, where it is present. So no mutation here can reproduce the original skip: reverting the fix would leave the tests reading the live file and passing. The discriminating evidence is environmental and was taken separately \u2014 same commit, two environments: `3222 passed` here versus `3219 passed, 2 skipped` in a clean worktree (and an independent fresh-context reviewer measured `3249 passed, 2 skipped` in its own worktree at `a8b9e4e`, arriving at the same two skips without being told about them).\n\nWhat these mutations DO guard is the half that can rot inside one checkout: the committed fixture's existence and its shape coverage. A fixture trimmed to one tidy record leaves the replay running and measuring nothing \u2014 this row's defect wearing a fixture.\n\nTWO GUARDS HERE CANNOT BE SINGLE-EDIT MUTATED, and that is reported rather than faked. (a) The fixture's shape coverage: every union arm is carried by at least two records (autonomous_entry_ts int=3 str=5 null=4; owner_session_id str=2), because the covering set was chosen by SHAPE and shapes overlap on these keys. No single edit removes an arm \u2014 the redundancy is why the coverage is robust, so the property is real and the mutation is not available. (b) `assert ran`: its trigger is an empty source list, which in a checkout that HAS the fixture cannot occur. It is a fail-closed guard for the clean-checkout case, and the clean-checkout case is exactly what this harness cannot stand in.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_state_validate_fallback.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-committed-fixture-goes-missing",
+      "_mechanism": "Restores the pre-#27 world in every clean checkout: no committed records, so the replay has nothing that survives a fresh clone and falls back to whatever the environment happens to provide.",
+      "file": "tests/test_h_mad_state_validate_fallback.py",
+      "find": "REPLAY_FIXTURE = Path(__file__).resolve().parent / \"fixtures\" / \"state_incident_replay.json\"",
+      "replace": "REPLAY_FIXTURE = Path(__file__).resolve().parent / \"fixtures\" / \"no_such_fixture.json\"",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_the_replay_fixture_is_committed_and_still_covers_the_awkward_shapes"
+    },
+    {
+      "name": "the-fixture-is-present-but-gitignored",
+      "_mechanism": "#27's ROOT CAUSE, not merely its symptom. Pointed at `docs/.bkit-memory.json` the fixture is a real file that loads and validates in the author's checkout and is absent from every clone, worktree and CI runner \u2014 which is precisely how two tests reported green here while running nowhere else. `is_file()` alone cannot tell the two apart; only `git ls-files` can.",
+      "file": "tests/test_h_mad_state_validate_fallback.py",
+      "find": "REPLAY_FIXTURE = Path(__file__).resolve().parent / \"fixtures\" / \"state_incident_replay.json\"",
+      "replace": "REPLAY_FIXTURE = REPO_ROOT / \"docs\" / \".bkit-memory.json\"",
+      "test": "tests/test_h_mad_state_validate_fallback.py::test_the_replay_fixture_is_committed_and_still_covers_the_awkward_shapes"
+    }
+  ]
+}

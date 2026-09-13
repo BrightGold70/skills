@@ -108,21 +108,90 @@ def test_fallback_agrees_with_jsonschema_on_every_construct(schema, label):
         )
 
 
+#: A committed, redacted snapshot of real orchestrator records (#27).
+#:
+#: The replay used to read `docs/.bkit-memory.json` alone, which is gitignored
+#: h-mad orchestrator state. So in a fresh clone, a linked worktree, a CI runner,
+#: or any subagent given `isolation: "worktree"` it did not exist and BOTH replay
+#: tests skipped — permanently, silently, and reporting success. Measured
+#: 2026-09-13 by reconciling two agents' counts on the SAME commit: `3222 passed`
+#: here, `3219 passed, 2 skipped` in a clean worktree. Those two are the only
+#: tests in this file validating against records that were NOT authored beside
+#: the validator, so the highest-value tests were exactly the ones that vanished
+#: in the environment where the suite most often runs unattended.
+#:
+#: Identifiers are redacted; TYPES, FORMATS and enum values are verbatim, because
+#: the validators check structure and structure is the entire payload. Selected
+#: to cover every distinct shape in the live store — key-set AND the type of each
+#: value — so the union-typed keys survive: `autonomous_entry_ts` occurs as int,
+#: str and null, and `owner_session_id` in both a uuid and a short form. The
+#: `1970-01-01T00:00:00Z` epoch-zero `started_ts` is kept deliberately; it is the
+#: kind of artifact a hand-authored corpus never contains.
+REPLAY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "state_incident_replay.json"
+
+
+def _replay_sources():
+    """The committed fixture ALWAYS, and the live store too when it exists.
+
+    Both, not either. The fixture guarantees the replay runs everywhere; the live
+    store is what catches a shape written since the fixture was taken. Dropping
+    the live half would make this a frozen corpus — the thing §"Incident replay"
+    exists NOT to be.
+    """
+    sources = [("fixture", REPLAY_FIXTURE)]
+    live = REPO_ROOT / "docs" / ".bkit-memory.json"
+    if live.is_file():
+        sources.append(("live", live))
+    return sources
+
+
+def test_the_replay_fixture_is_committed_and_still_covers_the_awkward_shapes():
+    """The guard on the guard.
+
+    A fixture trimmed to one tidy record would leave the replay running and
+    measuring nothing, which is this row's defect wearing a fixture. Pins the
+    union-typed keys by name rather than asserting a record count, because the
+    count is allowed to change and the unions are not.
+    """
+    assert REPLAY_FIXTURE.is_file(), f"{REPLAY_FIXTURE} is missing — the replay is back to skipping"
+    # TRACKED, not merely present. Being present in the author's checkout and
+    # absent everywhere else is the whole of #27: `docs/.bkit-memory.json` is a
+    # real file here and gitignored, so it existed for every run that reported
+    # this file green and for none of the runs that mattered.
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", str(REPLAY_FIXTURE)],
+        capture_output=True, text=True)
+    assert tracked.returncode == 0, (
+        f"{REPLAY_FIXTURE} is not tracked by git — it will not exist in a clone, "
+        f"a linked worktree, or CI, which is the defect this fixture closes")
+    records = json.loads(REPLAY_FIXTURE.read_text())["orchestrator_state"]
+    assert len(records) >= 5, len(records)
+    for key, wanted in (("autonomous_entry_ts", {"int", "str", "NoneType"}),
+                        ("owner_session_id", {"str", "NoneType"})):
+        got = {type(r[key]).__name__ for r in records.values() if key in r}
+        assert wanted <= got, (f"{key} lost a shape: have {sorted(got)}, "
+                               f"need {sorted(wanted)}")
+    assert any(str(r.get("started_ts", "")).startswith("1970") for r in records.values()), (
+        "the epoch-zero started_ts is gone — a hand-authored corpus never has one"
+    )
+
+
 def test_fallback_agrees_on_the_real_records_on_disk():
     # §"Incident replay": the corpus above was authored beside the fallback and
     # therefore shares its assumptions. These records were not.
-    state = REPO_ROOT / "docs" / ".bkit-memory.json"
-    if not state.is_file():
-        pytest.skip("no live state file")
-    records = json.loads(state.read_text()).get("orchestrator_state", {})
-    assert records, "live state file has no records to replay"
-    for schema in (STRICT, HISTORICAL):
-        real = jsonschema.Draft7Validator(schema)
-        mini = SV._MiniDraft7(schema)
-        for feature, rec in records.items():
-            assert mini.is_valid(rec) == real.is_valid(rec), (
-                f"disagreement on live record {feature!r}"
-            )
+    ran = 0
+    for label, state in _replay_sources():
+        records = json.loads(state.read_text()).get("orchestrator_state", {})
+        assert records, f"{label} state file has no records to replay"
+        for schema in (STRICT, HISTORICAL):
+            real = jsonschema.Draft7Validator(schema)
+            mini = SV._MiniDraft7(schema)
+            for feature, rec in records.items():
+                assert mini.is_valid(rec) == real.is_valid(rec), (
+                    f"disagreement on {label} record {feature!r}"
+                )
+                ran += 1
+    assert ran, "no records replayed — the replay measured nothing"
 
 
 def test_classify_matches_between_backends_on_the_corpus():
@@ -146,9 +215,9 @@ def test_state_scripts_run_without_jsonschema():
     Simulated by blocking the import, which is what the operator's interpreter
     does for real.
     """
-    state = REPO_ROOT / "docs" / ".bkit-memory.json"
-    if not state.is_file():
-        pytest.skip("no live state file")
+    # The committed fixture, so this runs in a clean checkout too (#27). It is a
+    # real state file in every respect the script cares about.
+    state = REPLAY_FIXTURE
     blocker = (
         "import sys;"
         "sys.modules['jsonschema']=None;"
