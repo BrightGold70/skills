@@ -345,9 +345,12 @@ def test_it_refuses_to_decide_whether_to_run_another_cycle():
 def test_the_6a_prime_recovery_step_does_not_prescribe_a_wait_that_cannot_succeed():
     """WSG-3, and the defect is in the DOCS, not in agy.
 
-    `.done` is never written by a 6a-prime `exec agy` dispatch because nothing ever
-    asks for it — `_read_report_channel` records that deliberately, since requiring
-    the marker would send every report to the fallback and undo the channel. So the
+    `.done` is never written by a 6a-prime `exec agy` dispatch because nothing in
+    THIS channel asks for it — `_read_report_channel` records that deliberately, since
+    requiring the marker would send every report to the fallback and undo the channel.
+    It IS asked for on the audit path, by `audit-prompt.template.md:252` (not, as an
+    earlier revision of this said, only by the codex verifier template — those cover
+    5d/5e), which is why the recovery row's phase split is a split and not a blanket. So the
     observation "the marker was never written on 5 of 5 cycles" is correct AND
     expected, and the fix is not to make agy write one.
 
@@ -369,6 +372,25 @@ def test_the_6a_prime_recovery_step_does_not_prescribe_a_wait_that_cannot_succee
             "a 6a-prime recovery row prescribing `report-wait` without "
             "`--no-done-marker` sends the operator into a wait for a marker this "
             "channel never writes:\n" + row[:300])
+
+
+def test_the_audit_path_still_ASKS_for_the_done_marker():
+    """The load-bearing sentence behind `failure-recovery.md`'s "must NOT have it" half.
+
+    `report-wait` is correct WITHOUT `--no-done-marker` for phases 3/4/5b only because
+    `audit-prompt.template.md` instructs the agy audit leg to create the marker. That
+    sentence was identified as load-bearing and left unpinned; if it is ever edited
+    out, those phases' bare `report-wait` hangs exactly as 6a-prime's did, and nothing
+    would have said so.
+
+    Pinned on the PRODUCER here. `h_mad_audit_cycle._has_complete_report` is the
+    consumer and is pinned by its own tests; a contract needs both ends.
+    """
+    tpl = (SCRIPTS.parent / "audit-prompt.template.md").read_text(encoding="utf-8")
+    assert "create the marker" in tpl and ".done" in tpl, (
+        "audit-prompt.template.md no longer asks the audit leg to create its `.done` "
+        "marker. Phases 3/4/5b now need `--no-done-marker` too, and "
+        "`references/failure-recovery.md`'s phase split must change with it.")
 
 
 class TestACleanVerdictMustRestOnMoreThanTheDeliveryContract:
@@ -580,6 +602,48 @@ class TestTheStagedPromptMustBeDeliverable:
                 f"argv: {exc}. The budget is too permissive — this is the defect "
                 f"the char-count version of this gate had."
             ) from exc
+
+    def test_OVERSIZE_removes_a_STALE_prompt_at_the_same_path(self, tmp_path):
+        """Writing no file is not the same as leaving no file.
+
+        6a-prime iterates against ONE `--prompt` path, and cycle N's
+        `hmad-dispatch exec agy <prompt>` line stays in the operator's scrollback. A
+        halt that merely declines to write leaves the previous cycle's prompt there,
+        dispatchable — so re-running that line reviews the superseded prompt and comes
+        back clean. The first version of this gate had exactly that hole: its comment
+        claimed "an unwritten prompt cannot be dispatched by mistake" while a stale one
+        survived untouched.
+        """
+        budget, _ = self._budget(tmp_path)
+        prompt = tmp_path / "iter.txt"
+
+        first, _ = self._stage(tmp_path, "the first cycle", prompt_name="iter.txt")
+        assert first.returncode == 0, first.stdout
+        assert prompt.exists()
+        stale = prompt.read_bytes()
+        assert b"the first cycle" in stale
+
+        design = self._pad_to_bytes(tmp_path, budget + 1)
+        second, _ = self._stage(tmp_path, design, prompt_name="iter.txt")
+
+        assert second.returncode == 2, second.stdout[:300]
+        assert "ARCHREVIEW: OVERSIZE" in second.stdout
+        assert "stale_removed=1" in second.stdout, (
+            "the halt must SAY it removed the superseded prompt; a file vanishing "
+            "without a word is worse than one that stays\n" + second.stdout[:300])
+        assert not prompt.exists(), (
+            "the previous cycle's prompt is still on disk and still dispatchable — "
+            "the halt's stated safety property does not hold on a re-stage")
+
+    def test_OVERSIZE_on_a_clear_path_reports_that_it_removed_nothing(self, tmp_path):
+        """The other direction, so `stale_removed` is a measurement and not a constant."""
+        budget, _ = self._budget(tmp_path)
+        design = self._pad_to_bytes(tmp_path, budget + 1)
+        result, prompt = self._stage(tmp_path, design, prompt_name="fresh.txt")
+
+        assert result.returncode == 2, result.stdout[:300]
+        assert "stale_removed=0" in result.stdout, result.stdout[:300]
+        assert not prompt.exists()
 
     def test_the_gate_measures_the_body_the_contract_prepend_produced(self, tmp_path):
         """The discriminating case, and the reason the gate sits after the prepend.

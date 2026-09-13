@@ -250,9 +250,18 @@ def _read_report_channel(report_path: Path | None) -> "tuple[str | None, str]":
     Deliberately NOT the audit path's third gate. `h_mad_audit_cycle._has_complete_report`
     adds `_done_path(...).exists()`, and copying it here would break this channel
     outright: neither `agy-architectural-reviewer-prompt.md` nor the head contract
-    `stage()` injects ever asks the reviewer to create a `.done` marker (only the
-    codex VERIFIER template does). Requiring one would send every report to the
-    fallback and undo the channel. Same concern, different surface, different gate.
+    `stage()` injects ever asks the reviewer to create a `.done` marker. Requiring one
+    would send every report to the fallback and undo the channel. Same concern,
+    different surface, different gate.
+
+    The marker IS asked for on the audit path, and by `audit-prompt.template.md:252`
+    ("Then (2) create the marker `<that-path>.done`"), which is the default template
+    for `h_mad_assemble_audit` (`:420`) and therefore covers the agy DOCUMENT audits
+    at phases 3/4/5b. An earlier revision of this comment named "the codex VERIFIER
+    template" as the only producer. That was wrong in a way that mattered: the codex
+    implementer/verifier prompts cover 5d/5e, so the cite implied the agy audit legs
+    had no marker either, which is the opposite of true and would have argued for
+    widening `--no-done-marker` to phases that do carry the contract.
     """
     if report_path is None:
         return None, "not_requested"
@@ -561,7 +570,28 @@ def stage(feature: str, template: Path, base: str, head: str, design: Path,
     # "6a-prime failed" rather than "the prompt was never delivered".
     oversize, size, budget, reserve = _size_gate(body)
     if oversize:
-        _emit(f"OVERSIZE bytes={size} budget={budget} reserve={reserve}")
+        # Writing no file is not the same as leaving no file. 6a-prime iterates
+        # against the SAME `--prompt` path, and cycle N's `hmad-dispatch exec agy
+        # <prompt>` line is still in the operator's scrollback -- so a halt that
+        # merely declines to write leaves the PREVIOUS cycle's prompt sitting there,
+        # dispatchable, and re-running that line reviews the superseded prompt and
+        # reports cleanly. That is the stale-artifact failure this channel already
+        # guards at the sha level with DEGENERATE_RANGE, one level down.
+        #
+        # `stage` owns this path -- it overwrites it on every success -- so removing
+        # it is the same authority, and the only thing lost is a prompt that is
+        # superseded anyway. Reported on the token rather than done silently: a file
+        # disappearing without a word is worse than one that stays.
+        stale_removed = 0
+        try:
+            if prompt.exists():
+                prompt.unlink()
+                stale_removed = 1
+        except OSError:
+            # Could not remove it: say so instead of implying the path is clear.
+            stale_removed = -1
+        _emit(f"OVERSIZE bytes={size} budget={budget} reserve={reserve} "
+              f"stale_removed={stale_removed}")
         print("  - this prompt cannot be delivered: `exec agy` passes it as a single "
               "argv element, so it must fit ARG_MAX minus the environment the kernel "
               "shares that budget with. Measured on this machine, an argv payload at "

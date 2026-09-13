@@ -35,8 +35,8 @@
       "name": "the-size-gate-never-fires",
       "_mechanism": "The state before any of this. A prompt no surface accepts is written to disk and reported STAGED; the operator dispatches it and reads the refusal as a failed review.",
       "file": "scripts/h_mad_archreview_cycle.py",
-      "find": "    if oversize:\n        _emit(f\"OVERSIZE bytes={size} budget={budget} reserve={reserve}\")",
-      "replace": "    if False:\n        _emit(f\"OVERSIZE bytes={size} budget={budget} reserve={reserve}\")",
+      "find": "    if oversize:\n        # Writing no file is not the same as leaving no file.",
+      "replace": "    if False:\n        # Writing no file is not the same as leaving no file.",
       "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_a_prompt_no_surface_accepts_is_refused_and_not_written"
     },
     {
@@ -78,6 +78,38 @@
       "find": "    return _trim_version_history(text, keep, ref=ref)",
       "replace": "    return text",
       "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_vh_tail_trims_the_inlined_design"
+    },
+    {
+      "name": "the-stale-prompt-survives-the-halt",
+      "_mechanism": "The hole the first version of this gate had. 6a-prime iterates against ONE --prompt path and cycle N's dispatch line stays in scrollback, so leaving the superseded prompt on disk means re-running that line reviews the OLD prompt and comes back clean -- while the comment claims an unwritten prompt cannot be dispatched by mistake.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "            if prompt.exists():\n                prompt.unlink()\n                stale_removed = 1",
+      "replace": "            if prompt.exists():\n                stale_removed = 1",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_OVERSIZE_removes_a_STALE_prompt_at_the_same_path"
+    },
+    {
+      "name": "the-halt-removes-the-prompt-silently",
+      "_mechanism": "A file disappearing without a word is worse than one that stays: the operator cannot tell a halt that cleared a superseded prompt from one that never wrote anything, and will not know the scrollback command is now dead.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "        _emit(f\"OVERSIZE bytes={size} budget={budget} reserve={reserve} \"\n              f\"stale_removed={stale_removed}\")",
+      "replace": "        _emit(f\"OVERSIZE bytes={size} budget={budget} reserve={reserve}\")",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_OVERSIZE_removes_a_STALE_prompt_at_the_same_path"
+    },
+    {
+      "name": "stale_removed-is-a-constant-not-a-measurement",
+      "_mechanism": "Reporting 1 unconditionally makes the field decorative: it would claim a removal on a path that was already clear, and a reader who trusts it stops checking.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "        stale_removed = 0\n        try:",
+      "replace": "        stale_removed = 1\n        try:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestTheStagedPromptMustBeDeliverable::test_OVERSIZE_on_a_clear_path_reports_that_it_removed_nothing"
+    },
+    {
+      "name": "the-audit-template-stops-asking-for-the-done-marker",
+      "_mechanism": "The producer half of the contract that makes `failure-recovery.md`'s phase split correct. Edit this sentence out and phases 3/4/5b's bare `report-wait` hangs exactly as 6a-prime's did, with nothing to say so -- the review that found this called the sentence load-bearing and unpinned.",
+      "file": "audit-prompt.template.md",
+      "find": "create the marker",
+      "replace": "mention in your reply",
+      "test": "tests/test_h_mad_archreview_cycle.py::test_the_audit_path_still_ASKS_for_the_done_marker"
     }
   ]
 }
