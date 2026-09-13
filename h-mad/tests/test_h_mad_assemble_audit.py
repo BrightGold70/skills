@@ -623,6 +623,85 @@ def test_vh_tail_applies_to_the_paired_documents_too(tmp_path):
     assert text.count("4 of 5 Version History entries omitted") == 3
 
 
+_VH_DOC = ("body here\n\n## Version History\n"
+           "- v1 a\n- v2 b\n- v3 c\n- v4 d\n")
+
+
+def test_vh_tail_zero_inlines_NO_entries_and_is_not_longer_than_one():
+    """`--vh-tail 0` is the natural escalation when 1 is still too large, and it was
+    the one value that made things WORSE.
+
+    `lines[entry_idx[-keep]:]` with keep=0 is `entry_idx[-0]` == `entry_idx[0]` — the
+    FIRST entry — so every entry survived while the note claimed they were omitted,
+    and the result was LONGER than trimming to 1. Measured before the fix: keep=1 ->
+    228 chars, keep=0 -> 249.
+
+    The property asserted here is MONOTONICITY, not absolute size: on a toy document
+    the explanatory note outweighs four short entries either way, so "shorter than
+    untrimmed" would be a false claim. What must hold is that asking for fewer
+    entries never yields more text.
+    """
+    one = aa._trim_version_history(_VH_DOC, 1, ref="docs/x.md")
+    zero = aa._trim_version_history(_VH_DOC, 0, ref="docs/x.md")
+
+    assert [ln for ln in zero.split("\n") if ln.startswith("- v")] == [], (
+        "keep=0 must inline NO entries")
+    assert "- v4 d" in one and "- v1 a" not in one
+    assert len(zero) <= len(one), (
+        f"asking for fewer entries produced MORE text ({len(zero)} vs {len(one)}) — "
+        "this is the negative-zero bug")
+    assert "4 of 4 Version History entries omitted" in zero
+    assert "body here" in zero, "the body is never the trim's subject"
+
+
+def test_a_negative_vh_tail_is_treated_as_zero_not_as_an_index():
+    """`-1` indexed from the END of the entry list, keeping the last N-1 entries while
+    the note claimed N+1 were omitted — a count that was not merely wrong but
+    impossible (5 of 4)."""
+    neg = aa._trim_version_history(_VH_DOC, -1, ref="docs/x.md")
+    zero = aa._trim_version_history(_VH_DOC, 0, ref="docs/x.md")
+    assert neg == zero
+    assert "5 of 4" not in neg
+
+
+def test_keep_zero_preserves_whatever_FOLLOWS_the_history():
+    """Dropping every entry must not swallow a section that comes after them. A bare
+    `kept = []` would have."""
+    doc = _VH_DOC + "\n## Appendix\nkeep me\n"
+    out = aa._trim_version_history(doc, 0, ref="docs/x.md")
+    assert "## Appendix" in out and "keep me" in out
+    assert [ln for ln in out.split("\n") if ln.startswith("- v")] == []
+
+
+def test_a_table_formatted_history_says_it_could_not_be_trimmed(capsys):
+    """The remedy the oversize halt prescribes BY NAME silently did nothing on a real
+    document in this repo.
+
+    `docs/02-design/features/hpw-csa-unified-ui.design.md` renders its history as a
+    markdown table, so `entry_idx` is empty and the text returns byte-identical. The
+    operator re-runs with a smaller N and loops, because a trim that freed nothing
+    and a trim that was never applied print the same thing: nothing.
+
+    Trimming a table is a different feature; guessing at its row grammar would be
+    worse than saying so. Announcing it is the fix available here.
+    """
+    tbl = ("body\n\n## Version History\n\n"
+           "| Version | Date | Changes |\n|---|---|---|\n| v1 | x | y |\n")
+    out = aa._trim_version_history(tbl, 1, ref="docs/tbl.md")
+
+    assert out == tbl, "a table history is returned unchanged — that part is correct"
+    err = capsys.readouterr().err
+    assert "vh-tail" in err and "docs/tbl.md" in err, err
+    assert "no `- v` entries" in err, err
+
+
+def test_an_absent_history_heading_also_says_so(capsys):
+    out = aa._trim_version_history("just a body\n", 1, ref="docs/none.md")
+    assert out == "just a body\n"
+    err = capsys.readouterr().err
+    assert "no `## Version History` heading" in err, err
+
+
 def test_vh_tail_larger_than_the_history_is_a_no_op(tmp_path):
     root = _project_with_history(tmp_path, n=3)
     text, _ = _assemble_tail(root, "plan", 10)

@@ -313,6 +313,17 @@ def prompt_oversize(chars: int) -> bool:
     return chars + DISPATCH_OVERHEAD_CHARS > MAX_PROMPT_CHARS
 
 
+def _vh_noop(ref: str, why: str) -> None:
+    """Say when a requested Version History trim removed nothing.
+
+    To stderr, so it cannot be mistaken for part of the assembled prompt or
+    corrupt the `ASSEMBLE:`/`ARCHREVIEW:` token on stdout. A trim that silently
+    no-ops is indistinguishable from one that worked and freed nothing, which is
+    how an operator following the oversize halt's own advice loops.
+    """
+    print(f"[h-mad] vh-tail: nothing trimmed from {ref}: {why}", file=sys.stderr)
+
+
 def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
     """Keep the body verbatim and only the LAST `keep` `## Version History`
     entries; replace the omitted ones with a single line that states the count
@@ -329,18 +340,45 @@ def _trim_version_history(text: str, keep: int | None, *, ref: str) -> str:
     """
     if keep is None:
         return text
+
+    # A negative tail is not a tail, and 0 means "inline none" -- a legitimate
+    # maximum-trim request and the natural escalation when `--vh-tail 1` is still
+    # too large. Both used to land on `entry_idx[-keep]`, where Python's -0 == 0
+    # selects the FIRST entry: every entry survived while the note below claimed
+    # they had been omitted, so the result was LONGER than the untrimmed text. The
+    # one value an operator reaches for when the halt fires was the one that made
+    # the prompt bigger, silently. Measured: keep=1 -> 228 chars, keep=0 -> 249.
+    keep = max(keep, 0)
+
     marker = "\n## Version History"
     i = text.find(marker)
     if i < 0:
+        _vh_noop(ref, "no `## Version History` heading")
         return text
     body, vh = text[:i], text[i:]
     lines = vh.split("\n")
     entry_idx = [k for k, ln in enumerate(lines) if ln.startswith("- v")]
+    if not entry_idx:
+        # The heading is there and nothing matched `- v`. Real documents in this
+        # repo render their history as a markdown TABLE, and for those this
+        # function returns byte-identical text -- so `--vh-tail`, the remedy the
+        # oversize halt prescribes by name, does nothing and says nothing, and the
+        # operator re-runs it with a smaller N and loops. Announcing it is the
+        # whole fix available here: trimming a table is a different feature, and
+        # guessing at its row grammar would be worse than saying so.
+        _vh_noop(ref, "the `## Version History` section has no `- v` entries "
+                      "(a table-formatted history is not trimmable)")
+        return text
     if len(entry_idx) <= keep:
+        _vh_noop(ref, f"only {len(entry_idx)} entries, which is not more than "
+                      f"--vh-tail {keep}")
         return text
     omitted = len(entry_idx) - keep
     head = lines[:entry_idx[0]]            # "" + heading + any preamble
-    kept = lines[entry_idx[-keep]:]
+    # `keep == 0` drops every entry but preserves whatever follows the last one --
+    # `lines[entry_idx[-0]:]` would have kept them all, and a bare `[]` would
+    # silently swallow any section that comes after the history.
+    kept = lines[entry_idx[-keep]:] if keep else lines[entry_idx[-1] + 1:]
     note = (f"<!-- h-mad assembler: {omitted} of {len(entry_idx)} Version History "
             f"entries omitted from this inline copy (--vh-tail {keep}); they are dated "
             f"records, not this audit's subject -- read them with `git show <sha>:{ref}` -->")
