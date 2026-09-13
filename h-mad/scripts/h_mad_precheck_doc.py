@@ -137,6 +137,19 @@ _PATHISH = re.compile(
 _LINE_TAIL = re.compile(r"^L?\d+(?:-L?\d+)?$")
 
 
+def _norm_pin(pin: str) -> str:
+    """`path:L2-L9` -> `path:2-9`; anything that is not a line pin is untouched.
+
+    Scoped to the tail after the LAST colon, and only when that tail is a line
+    tail. Normalising the whole string would rewrite a path — `src/L1.py:2` would
+    become `src/1.py:2` — and silence a pin into a file that does not exist.
+    """
+    head, sep, tail = pin.rpartition(":")
+    if not sep or not _LINE_TAIL.match(tail):
+        return pin
+    return f"{head}:{_line_digits(tail)}"
+
+
 def _line_digits(tail: str) -> str:
     """`L2-L9` -> `2-9`. Arithmetic only.
 
@@ -274,63 +287,65 @@ def _line_of(text: str, pos: int) -> int:
     return len((text[:pos] + "\x00").splitlines())
 
 
-def _version_history_bounds(lines: list[str]) -> tuple[int, int] | None:
+#: A thematic break also closes the section. Not fence grammar, so it does not
+#: belong to `_fence_events`; kept here beside the only rule that consults it.
+_SECTION_RULE = re.compile(r"^[ \t]*---+[ \t]*$")
+
+
+def _version_history_bounds(text: str, lines: list[str]) -> tuple[int, int] | None:
     """1-based inclusive `(first, last)` of the Version History section, or None.
 
-    Delegates to `h_mad_version_history`, which OWNS this notion and is far more
-    careful than either of the two loose ones this used to straddle (#29 review
-    F2/F3): its `ANCHOR` is case-insensitive and full-line-anchored, `find_anchor`
-    REFUSES when there is more than one heading, and `section_bounds` stops at the
-    next header or `---` rule and tracks fences.
+    Resolved over `h_mad_doc_block_exec._fence_events`, which is the repo's ONE
+    home for fence and ATX grammar — `doc-block-exec.design.md` says so in those
+    words, and ships mutation rows named `tilde-fence-not-tracked`,
+    `closer-trailing-text-accepted` and `indented-opener-accepted`.
 
-    The first version of this shared the ASSEMBLER's marker instead, on the stated
-    grounds that the two agreeing was the point. That justification was false and
-    the review falsified it four ways: `_trim_version_history` omits the ENTRIES,
-    not everything from the heading on; for a table-shaped history — the shape its
-    own comment calls the real one — it omits nothing at all; `--vh-tail` defaults
-    to a strict no-op, so by default the assembler makes no decision here; and
-    there was never one anchor, because this stricter third one already existed.
+    The first cut hand-rolled `line.lstrip().startswith("```")` instead, and a
+    second review found three shapes that defeat it, each letting a QUOTED
+    heading silence the whole document body: a ```` ```` ```` wrapper (the only
+    way to quote a fenced template in markdown, and quoting its own templates is
+    the very reason the mask exists), a ```` ```trailing ```` line that
+    CommonMark does not accept as a closer, and a `~~~` fence it did not
+    recognise at all. The same naive rule ran the other way too: a four-space
+    indented ```` ``` ```` is an indented code block, not an opener, and reading
+    it as one extended the section PAST a real `## ` heading — fail-OPEN, which
+    is the F2 defect this boundary exists to prevent, reachable by one line.
+
+    `_fence_events` also settles an asymmetry that was inherited rather than
+    chosen: `h_mad_version_history.ANCHOR` makes the space after `##` optional
+    while its `HEADER` requires it, so `##Version History` could START a section
+    that an identical spelling could not END. Neither is an ATX heading under
+    CommonMark, and here neither starts nor ends one.
 
     Returns None — no demotion, every finding stays hard — when the section is
-    missing OR ambiguous. Both are fail-closed, and ambiguity especially: a
-    document with a template history above a live one would otherwise have the
-    span between them silenced.
+    missing OR ambiguous. Both fail closed, ambiguity especially: a document
+    carrying a template history above its live one would otherwise have the span
+    between them silenced, which is the body.
     """
     here = str(Path(__file__).resolve().parent)
-    # Guarded and de-duplicated. `scan()` is an in-process API, so an
-    # unconditional insert grew `sys.path` by one entry PER DOCUMENT and left
-    # this directory at position 0 for every later import in the process,
-    # shadowing any module with a colliding name (#29 review F7).
     if here not in sys.path:
         sys.path.insert(0, here)
     try:
-        from h_mad_version_history import Refusal, find_anchor, section_bounds
+        from h_mad_doc_block_exec import _fence_events
     except ImportError:
         return None
-    # A ``` fence can CONTAIN a `## Version History` line — a template being
-    # quoted, which this repo does to its own templates. `section_bounds` tracks
-    # fences for the section's END; `find_anchor` does not for its START, so a
-    # quoted heading near the top silenced the whole real body beneath it
-    # (#29 review F6). Masked here rather than upstream because
-    # `h_mad_version_history` is a live document mutator with its own contract;
-    # the asymmetry in it is filed rather than changed under this row.
-    masked, fenced = [], False
-    for line in lines:
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-            masked.append("")
-            continue
-        masked.append("" if fenced else line)
-    try:
-        anchor = find_anchor(masked)
-    except Refusal:
+
+    events = list(_fence_events(text))
+    anchors = [e for e in events
+               if e.kind == "heading" and e.level == 2
+               and e.text.strip().casefold() == "version history"]
+    if len(anchors) != 1:
         return None
-    _body_start, end = section_bounds(lines, anchor)
-    # `anchor` is a 0-based index; `end` is a 0-based half-open bound. The section
-    # for demotion purposes is the heading line plus its body, so 1-based the
-    # first line is `anchor + 1` and the last is `end` — which collapses to the
-    # heading alone when the body is empty.
-    return anchor + 1, end
+    first = anchors[0].lineno
+
+    for event in events:
+        if event.lineno <= first:
+            continue
+        if event.kind == "heading" and event.level <= 2:
+            return first, event.lineno - 1
+        if event.kind == "prose" and _SECTION_RULE.match(lines[event.lineno - 1]):
+            return first, event.lineno - 1
+    return first, len(lines)
 
 
 def _line_count(p: Path) -> int | None:
@@ -391,36 +406,36 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
 
     lines = text.splitlines()
 
-    # Everything from the `## Version History` heading to the end of the document
-    # is a DATED RECORD, and a hard finding drawn from it is nearly always the
-    # record being READ AS THE THING IT DESCRIBES.
+    # A Version History entry is a DATED RECORD, and the detectors read the prose
+    # ABOUT a change as the change itself. Measured (#29): one impl-plan failed
+    # entirely on two findings inside its own changelog, both narration of fixes
+    # already made — "**TBD placeholders removed.**" tripping the TBD detector and
+    # "**`<v>` placeholder** … replaced with `${HMAD_STUB_HOSTILE}`" tripping the
+    # slot detector. So every hard kind is demoted inside the section, not just the
+    # pin kinds; scoping it to pins was the first cut and the corpus refuted it.
+    # Demoted, never dropped — each still prints under `ALLOWED:`.
     #
-    # The basis is the assembler's recorded position on the same section —
-    # `_trim_version_history`: "The omitted entries are dated records, not the
-    # audit's subject" — NOT a claim that no reviewer sees the text. That stronger
-    # claim is false and an earlier draft of this comment made it: `--vh-tail`
-    # defaults to `None`, which is a strict no-op, so by default the history IS
-    # inlined. It is omitted only when an operator asks.
+    # THE SECTION IS BOUNDED. It ends at the next `## ` heading or a `---` rule,
+    # and two Version History headings demote nothing at all. See
+    # `_version_history_bounds`.
     #
-    # What settles it is the measurement. Over this repo's 44 phase documents
-    # (#29): `gate-blindness-hardening.impl-plan.md` FAILED on exactly two hard
-    # findings, both inside its history, and both NARRATION of fixes already made
-    # — "**TBD placeholders removed.** Every `"detail": ...` is now the exact
-    # string" trips the TBD detector, and "**`<v>` placeholder** … replaced with
-    # `${HMAD_STUB_HOSTILE}`" trips the slot detector. A document failing entirely
-    # on its own changelog describing the removal of the things being detected.
+    # WHY THIS IS ALLOWED WHEN `historical_by` REFUSES A DOCUMENT-SIDE MARKER, which
+    # is a fair question and the previous answer to it was withdrawn. It rested on
+    # the assembler having "already made this decision about the same section", and
+    # that is false: `_trim_version_history` omits the ENTRIES rather than the
+    # section, omits nothing at all from a table-shaped history, and does nothing
+    # whatever by default (`--vh-tail` is `None`).
     #
-    # So the demotion covers EVERY hard kind, not just the pin kinds. Scoping it
-    # to pins was the first cut and it was wrong for a reason worth keeping: the
-    # kind's semantics are not what matters, the section's CONTENT is, and what
-    # this section contains is prose about changes. Demoted, never dropped — every
-    # one still prints under `ALLOWED:`.
-    #
-    # This is NOT the document-side marker `historical_by` refuses. That refusal is
-    # about an author granting THEMSELVES a silencer; here the precheck follows a
-    # decision the ASSEMBLER already made about the same section, and the two
-    # agreeing is the whole point.
-    vh_bounds = _version_history_bounds(lines)
+    # The answer that survives is narrower and is about REACH, not about authority.
+    # `historical_by` refuses a marker that would let an author silence an arbitrary
+    # pin anywhere in a document by writing something next to it. This rule cannot
+    # do that: it silences one syntactically delimited section, whose contents are
+    # by construction a dated log rather than the document's claims about the tree,
+    # it silences nothing outside it, and everything it touches is printed. An
+    # author who wants to hide a live pin cannot move it into the history without
+    # also moving it out of the document's body, which is the edit the gate wanted
+    # from them anyway.
+    vh_bounds = _version_history_bounds(text, lines)
 
     def in_vh(lineno: int) -> bool:
         return vh_bounds is not None and vh_bounds[0] <= lineno <= vh_bounds[1]
@@ -469,14 +484,27 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
         without the collision, because the pin is always the TAIL of the span — so
         `…/foo.py:12` cannot end with `/foo.py:1`. The `/` boundary is what stops
         the token `foo.py:1` matching `…/bar_foo.py:1`.
+        Both sides are normalised through `_norm_pin`, so every spelling of a
+        line pin declares every other — `:12`, `:L12`, and for a range `:2-3`,
+        `:L2-3`, `:L2-L3`. Enumerating spellings at the CALL SITE was the first
+        cut and it enumerated three of four: `_line_digits` was applied to the
+        document's tail only, so a declaration written `foo.py:L2-L3` against a
+        document writing `:2-3` was ignored WITHOUT AN ERROR — the precise failure
+        this docstring's last paragraph says the anchor exists to prevent, and the
+        reason the shipped help's "the two line spellings are interchangeable" was
+        a false claim for ranges.
         """
         # `lstrip("/")` so a token written with a leading slash still matches.
         # Under the old `in` it did; the anchor silently stopped it, and a
         # declaration that is ignored WITHOUT AN ERROR is the failure this spec's
         # own `the-anchor-tightens-to-equality` mutation exists to describe — the
         # operator sees their pin still reported and concludes the flag is broken.
-        return any(span == a.lstrip("/") or span.endswith("/" + a.lstrip("/"))
-                   for a in allow_historical)
+        target = _norm_pin(span)
+        for raw in allow_historical:
+            a = _norm_pin(raw.lstrip("/"))
+            if target == a or target.endswith("/" + a):
+                return True
+        return False
 
     head = _head_sha(root)
 
@@ -578,10 +606,7 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                     # accepts only the form the document did not use is ignored
                     # WITHOUT AN ERROR, which is the failure the anchor comment
                     # above already names.
-                    if (historical_by(f"{rel}:{tail}")
-                            or historical_by(f"{rel}:{digits}")
-                            or historical_by(f"{rel}:L{digits}")
-                            or historical_by(rel)):
+                    if historical_by(f"{rel}:{tail}") or historical_by(rel):
                         allowed.append(f"PINDRIFT {rel}:{tail} L{lineno} (declared historical)")
                     else:
                         hard("PINDRIFT", lineno,

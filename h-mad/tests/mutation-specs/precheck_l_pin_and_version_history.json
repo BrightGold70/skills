@@ -33,17 +33,17 @@
     },
     {
       "name": "only-the-written-spelling-declares-a-pin",
-      "_mechanism": "A declaration typed `:1` against a document that says `:L1` is then ignored WITHOUT AN ERROR \u2014 the operator sees the pin still reported and concludes the flag is broken.",
+      "_mechanism": "The OPERATOR's side un-normalised. A declaration typed `:L1-L9` against a document writing `:1-9` is then ignored without an error \u2014 the case the call-site enumeration missed, which is why normalisation moved inside the predicate. Un-normalising the OPERATOR's flag breaks the direction where the declaration is written `:L1` and the document `:1` \u2014 the mirror of the row above, and the reason both keys had to be swapped.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                            or historical_by(f\"{rel}:{digits}\")\n",
-      "replace": "",
-      "test": "tests/test_h_mad_precheck_doc.py::test_either_line_spelling_declares_the_same_historical_pin"
+      "find": "            a = _norm_pin(raw.lstrip(\"/\"))",
+      "replace": "            a = raw.lstrip(\"/\")",
+      "test": "tests/test_h_mad_precheck_doc.py::test_a_declaration_written_with_L_covers_a_document_written_without"
     },
     {
       "name": "the-version-history-boundary-is-never-found",
       "_mechanism": "Restores the pre-#29 behaviour: a document whose body carries no pin at all FAILs on a dated history entry that is correct as history and must not be edited. Re-anchored at the #29 review: the boundary is now a RANGE from `h_mad_version_history`, not a single start line.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "    vh_bounds = _version_history_bounds(lines)",
+      "find": "    vh_bounds = _version_history_bounds(text, lines)",
       "replace": "    vh_bounds = None",
       "test": "tests/test_h_mad_precheck_doc.py::test_a_pin_inside_the_version_history_does_not_fail_the_document"
     },

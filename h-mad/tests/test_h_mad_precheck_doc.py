@@ -1059,3 +1059,118 @@ def test_an_UNKNOWNSHA_below_the_heading_is_placed_by_the_same_line_numbering(tm
     assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
     assert not details(r.stdout, "UNKNOWNSHA"), r.stdout
     assert "UNKNOWNSHA" in r.stdout and "Version History" in r.stdout, r.stdout
+
+
+# --------------------------------------------------------------------------
+# Second review of the boundary fix — the fence grammar has ONE home
+# --------------------------------------------------------------------------
+#
+# The first fix hand-rolled `line.lstrip().startswith("```")`. Three shapes defeat
+# that and each lets a QUOTED heading silence the whole body; a fourth runs the
+# other way and extends the section past a real heading. The repo already owns the
+# correct scanner and `doc-block-exec.design.md` says so in those words, so the
+# boundary is resolved over `_fence_events` rather than over a private copy.
+
+
+def _vh_case(tmp_path, name, middle):
+    older = _root_commit()
+    return write(tmp_path, name,
+                 f"Anchors verified at HEAD `{older}`.\n\n" + middle
+                 + "TODO real body.\n" + _COLON_PIN)
+
+
+def test_a_heading_quoted_inside_a_FOUR_backtick_wrapper_demotes_nothing(tmp_path):
+    """The likeliest instance of the case the mask exists for, and the one it
+    missed: a ```` wrapper around a ``` block is the only way to quote a fenced
+    template in markdown, and quoting its own templates is why this repo needs
+    fence awareness at all."""
+    doc = _vh_case(tmp_path, "a.impl-plan.md",
+                   "````markdown\n```\n## Version History\n```\n````\n\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    assert details(r.stdout, "PLACEHOLDER") and details(r.stdout, "PINDRIFT"), r.stdout
+
+
+def test_a_TILDE_fence_is_recognised(tmp_path):
+    """`~~~` is a fence under CommonMark and the naive rule did not know it."""
+    doc = _vh_case(tmp_path, "b.impl-plan.md", "~~~\n## Version History\n~~~\n\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_a_closer_with_trailing_text_does_not_close_the_fence(tmp_path):
+    """CommonMark does not accept ```` ```trailing ```` as a closer. The naive rule
+    closed on it, un-masked the quoted heading below, and read it as the start."""
+    doc = _vh_case(tmp_path, "c.impl-plan.md",
+                   "```\n## Version History\n```trailing\n\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+
+
+def test_an_INDENTED_literal_fence_inside_the_history_does_not_swallow_the_next_heading(tmp_path):
+    """The fail-OPEN direction, and the cheaper defect of the two.
+
+    A four-space-indented ```` ``` ```` is an indented code block, not an opener —
+    it is how this repo's markdown shows an opener without opening one. Read as a
+    fence it left the section unterminated, so a real `## ` heading never closed
+    it and the whole tail of the document was demoted. One line, and it re-opens
+    exactly what `test_the_section_ENDS_at_the_next_heading` exists to prevent.
+    """
+    older = _root_commit()
+    doc = write(tmp_path, "d.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\nclean\n\n"
+                "## Version History\n\n- v1.0 shows an opener:\n\n"
+                "    ```bash\n    echo hi\n\n"
+                "## Open Questions\n\nTODO decide.\n" + _COLON_PIN)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    assert details(r.stdout, "PLACEHOLDER") and details(r.stdout, "PINDRIFT"), r.stdout
+
+
+def test_a_heading_missing_its_space_neither_starts_nor_ends_a_section(tmp_path):
+    """The inherited asymmetry, settled. `h_mad_version_history.ANCHOR` made the
+    space optional while its `HEADER` required it, so `##Version History` could
+    START a section that an identical spelling could not END. Neither is an ATX
+    heading under CommonMark; now neither does either."""
+    doc = _vh_case(tmp_path, "e.impl-plan.md", "##Version History\n\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert token(r.stdout).startswith("PRECHECK: FAIL"), r.stdout
+    assert "Version History" not in r.stdout, ("it anchored a section", r.stdout)
+
+
+def test_every_spelling_of_a_RANGE_declares_every_other(tmp_path):
+    """The help promises the two line spellings are interchangeable, beside a
+    sentence saying a range is declared by the whole range. Enumerating spellings
+    at the call site covered three of four: normalisation was applied to the
+    DOCUMENT's tail only, so `--allow-historical foo.py:L1-L9` against a document
+    writing `:1-9` was ignored WITHOUT AN ERROR."""
+    older = _root_commit()
+    doc = write(tmp_path, "f.impl-plan.md",
+                f"Anchors verified at HEAD `{older}`.\n\n"
+                "See `h-mad/scripts/h_mad_precheck_doc.py:1-9` for the scanner.\n")
+    r = run(doc, "--phase", "impl-plan", "--root", REPO,
+            "--allow-historical", "h_mad_precheck_doc.py:L1-L9")
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
+    assert "declared historical" in r.stdout, r.stdout
+
+
+def test_norm_pin_never_rewrites_the_path():
+    """The over-correction inside `_norm_pin`, tested where it can bite.
+
+    The first version of this drove the CLI without `--allow-historical`, so
+    `_norm_pin` — which is only ever called from `historical_by` — never ran, and
+    the mutation that rewrites the whole token SURVIVED while the test passed.
+
+    Applied to the whole string the normaliser turns `src/L1.py:2` into
+    `src/1.py:2`, which is worse than cosmetic: a declaration naming the real file
+    `src/1.py` would then silence a pin into the different file `src/L1.py`. It is
+    scoped to the tail after the last colon, and only when that tail is a line
+    tail.
+    """
+    from h_mad_precheck_doc import _norm_pin
+    assert _norm_pin("src/L1.py:2") == "src/L1.py:2"      # path untouched
+    assert _norm_pin("src/L1.py:L2") == "src/L1.py:2"     # tail normalised, path not
+    assert _norm_pin("a/b.py:L2-L9") == "a/b.py:2-9"
+    assert _norm_pin("a/b.py:2-9") == "a/b.py:2-9"
+    assert _norm_pin("a/b.py:Loader") == "a/b.py:Loader"  # not a line tail
+    assert _norm_pin("a/b.py") == "a/b.py"                # no tail at all

@@ -1,5 +1,5 @@
 {
-  "_why": "The #29 review's F5: the first cut of the Version History rule had NO test that bit. Scored at the whole suite, three single-edit boundary mutations were green \u2014 `version_history_start` returning +1 instead of +2 (the demotion starts one line ABOVE the heading, i.e. F1 shipped as a permanent off-by-one), the same returning +3, and `VH_MARKER` losing its `##` prefix (any document merely MENTIONING the words silences everything from there, and the shared literal corrupts the assembler at the same time). The spec's only boundary row replaced `in_vh` with `return True`, and a maximal mutation tests that a boundary EXISTS, never where it is.\n\nThe boundary now delegates to `h_mad_version_history` \u2014 `find_anchor` (refuses more than one heading) and `section_bounds` (stops at the next header or `---`, tracks fences) \u2014 so these mutations target that delegation rather than a private arithmetic.",
+  "_why": "The #29 review's F5: the first cut of the Version History rule had NO test that bit. Scored at the whole suite, three single-edit boundary mutations were green \u2014 `version_history_start` returning +1 instead of +2 (the demotion starts one line ABOVE the heading, i.e. F1 shipped as a permanent off-by-one), the same returning +3, and `VH_MARKER` losing its `##` prefix (any document merely MENTIONING the words silences everything from there, and the shared literal corrupts the assembler at the same time). The spec's only boundary row replaced `in_vh` with `return True`, and a maximal mutation tests that a boundary EXISTS, never where it is.\n\nThe boundary now delegates to `h_mad_version_history` \u2014 `find_anchor` (refuses more than one heading) and `section_bounds` (stops at the next header or `---`, tracks fences) \u2014 so these mutations target that delegation rather than a private arithmetic.\n\nREVISED again after a SECOND fresh review, of the fix itself. It found the boundary's fence mask was a hand-rolled copy of `_fence_events` \u2014 the scanner `doc-block-exec.design.md` names as the one home for this grammar \u2014 missing a ```` wrapper, a `~~~` fence and a trailing-text closer, and reading a four-space-indented literal fence as an opener (which extended the section PAST a real heading, fail-OPEN). Both ends now resolve over `_fence_events`.\n\nTWO PROPERTIES HERE ARE NOT SINGLE-EDIT MUTATABLE and are reported rather than faked: the indented-fence case and the `##Version History` heading-spelling case are both inherent to `_fence_events`' grammar, not to a predicate in this file. Reverting to the naive scanner (the `the-fence-grammar-is-hand-rolled-again` row) does not reproduce either, because a naive line scan also treats an indented fence as prose and also requires the `#` prefix. Their tests are regression guards over a delegation, which is the property that actually matters: if someone re-implements the grammar here, those tests fail.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -19,32 +19,32 @@
       "name": "the-boundary-starts-one-line-above-the-heading",
       "_mechanism": "F1 shipped as a permanent off-by-one: the last hard finding before the history is demoted on EVERY document. This is the mutation that was green across the full suite before the adjacency test existed.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "    return anchor + 1, end",
-      "replace": "    return anchor, end",
+      "find": "    first = anchors[0].lineno",
+      "replace": "    first = anchors[0].lineno - 1",
       "test": "tests/test_h_mad_precheck_doc.py::test_a_hard_finding_on_the_line_IMMEDIATELY_above_the_heading_still_fails"
     },
     {
       "name": "the-section-runs-to-end-of-file-again",
       "_mechanism": "F2: every `##` section appended after the history \u2014 `## Open Questions`, `## Verification` \u2014 is silenced wholesale. One heading covering an unbounded tail is a far wider silencer than `--allow-historical`, which names one pin.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "    _body_start, end = section_bounds(lines, anchor)",
-      "replace": "    _body_start, end = anchor + 1, len(lines)",
+      "find": "    for event in events:\n        if event.lineno <= first:",
+      "replace": "    for event in []:\n        if event.lineno <= first:",
       "test": "tests/test_h_mad_precheck_doc.py::test_the_section_ENDS_at_the_next_heading"
     },
     {
       "name": "ambiguity-is-resolved-by-taking-the-first-heading",
       "_mechanism": "F2: `find_anchor` refuses two headings because for a document carrying a TEMPLATE history above its live one, first-match is the template \u2014 and everything between them is the document body. Taking the first silences exactly that span.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "    try:\n        anchor = find_anchor(masked)\n    except Refusal:\n        return None",
-      "replace": "    _hits = [i for i, l in enumerate(masked) if l.strip().lower() == \"## version history\"]\n    if not _hits:\n        return None\n    anchor = _hits[0]",
+      "find": "    if len(anchors) != 1:",
+      "replace": "    if not anchors:",
       "test": "tests/test_h_mad_precheck_doc.py::test_TWO_version_history_headings_demote_NOTHING"
     },
     {
-      "name": "the-fence-mask-is-removed",
-      "_mechanism": "F6: a ``` block quoting `## Version History` \u2014 which this repo does to its own templates \u2014 is read as document structure and silences the whole real body below it. Unlike the other boundary cases this one is not author intent at all.",
+      "name": "the-fence-grammar-is-hand-rolled-again",
+      "_mechanism": "The pre-fix scanner, restored: no fence grammar at all, so a `## Version History` QUOTED inside any fence anchors a section and silences the body below it. The shipped fix delegates to `_fence_events`, which `doc-block-exec.design.md` names as the one home for this grammar; a hand-rolled copy missed a ```` wrapper, a `~~~` fence and a trailing-text closer.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "        masked.append(\"\" if fenced else line)",
-      "replace": "        masked.append(line)",
+      "find": "    events = list(_fence_events(text))",
+      "replace": "    class _E:  # naive: no fence grammar at all, the pre-fix behaviour\n        def __init__(self, n, k, lv=0, tx=\"\"):\n            self.lineno, self.kind, self.level, self.text = n, k, lv, tx\n    events = [(_E(i, \"heading\", len(l) - len(l.lstrip(\"#\")), l.lstrip(\"#\").strip())\n               if l.startswith(\"#\") else _E(i, \"prose\"))\n              for i, l in enumerate(text.splitlines(), 1)]",
       "test": "tests/test_h_mad_precheck_doc.py::test_a_FENCED_version_history_heading_demotes_nothing"
     },
     {
@@ -57,11 +57,11 @@
     },
     {
       "name": "the-operators-L-spelling-is-not-normalised",
-      "_mechanism": "F4: the shipped help promised the two spellings are interchangeable while normalisation was applied to the DOCUMENT's tail only. A declaration written `:L1` against a document writing `:1` is ignored WITHOUT AN ERROR \u2014 verbatim the failure the comment beside it claims to close.",
+      "_mechanism": "Normalisation now lives INSIDE `historical_by` and applies to both sides. Dropping it from the document's span restores the asymmetry: a declaration written one way is ignored WITHOUT AN ERROR against a document written the other. Un-normalising the DOCUMENT's span breaks the direction where the document writes `:L1` and the declaration `:1` \u2014 normalising one side still covers the mirror case, which is why the first `test` key here was caught by the wrong assertion.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                            or historical_by(f\"{rel}:L{digits}\")\n",
-      "replace": "",
-      "test": "tests/test_h_mad_precheck_doc.py::test_a_declaration_written_with_L_covers_a_document_written_without"
+      "find": "        target = _norm_pin(span)",
+      "replace": "        target = span",
+      "test": "tests/test_h_mad_precheck_doc.py::test_either_line_spelling_declares_the_same_historical_pin"
     },
     {
       "name": "a-mixed-spelling-range-parses-as-nothing-again",
@@ -70,6 +70,14 @@
       "find": "    r\"(?::(?P<tail>L?\\d+(?:-L?\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
       "replace": "    r\"(?::(?P<tail>L\\d+(?:-L?\\d+)?|\\d+(?:-\\d+)?|[A-Za-z_][A-Za-z0-9_]*))?$\"",
       "test": "tests/test_h_mad_precheck_doc.py::test_a_mixed_spelling_range_parses_rather_than_vanishing"
+    },
+    {
+      "name": "the-normaliser-rewrites-the-whole-token",
+      "_mechanism": "The over-correction inside `_norm_pin`. Applied to the whole token rather than the tail after the last colon, it turns `src/L1.py:2` into `src/1.py:2` \u2014 silencing a pin into a file that does not exist, and doing it to the PATH, which no spelling rule should ever touch.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    head, sep, tail = pin.rpartition(\":\")\n    if not sep or not _LINE_TAIL.match(tail):\n        return pin\n    return f\"{head}:{_line_digits(tail)}\"",
+      "replace": "    return _line_digits(pin)",
+      "test": "tests/test_h_mad_precheck_doc.py::test_norm_pin_never_rewrites_the_path"
     }
   ]
 }
