@@ -560,7 +560,21 @@ python3 "${CLAUDE_SKILLS_ROOT:-$HOME/.claude/skills}/h-mad/scripts/h_mad_resume_
 
 - **`owned_elsewhere`** → the owner is **LIVE**. The work is not yours to hand over. Stop and surface it — releasing here would yank a feature out from under a running session.
 - **`cannot_judge`** → the state file exists and could not be READ. Not a live owner and not a free claim: it is the absence of evidence either way, so treat it exactly as the predicate rule says and STOP. Releasing or claiming against a file you cannot parse is how a second session takes a feature the first is working.
-- **one of `enter_autonomous`, `resume_manual`, `halted`, `start_fresh`** → no live owner. Safe to proceed.
+- **one of `enter_autonomous`, `resume_manual`, `halted`, `start_fresh`, `complete`** → no live owner. Safe to proceed.
+
+  `complete` was **missing from this list for the life of the file**, and the omission was not
+  cosmetic: the oracle returns it whenever `last_completed_phase >= 7`, so a feature that had
+  simply *finished* took the `anything else` branch below and **halted both HANDOVER and
+  TAKEOVER**. The failure mode is the exact inverse of the one that closed the list — not a
+  stale token treated as permission, but a live token treated as danger, which stops a handover
+  on the work most likely to be ready to move. Reported by a resume on 2026-09-14.
+
+  It is safe *because of an ordering the oracle states explicitly*, not because "complete sounds
+  done": `_owned_elsewhere` is evaluated **before** every `complete` return, so the token cannot
+  be reached while a live session holds the feature. Verify that ordering still holds before
+  trusting this bullet — if a future edit moves the liveness check below the phase checks,
+  `complete` becomes exactly the fail-open this list exists to prevent and belongs back with the
+  STOP bullets.
 - **anything else** → STOP and surface the token. This list is deliberately CLOSED. It previously ended with a catch-all bullet that granted the unknown case permission to proceed, which is fail-open: every token added to the oracle after that bullet was written would have been auto-classified as safe. `cannot_judge` was added FOR safety and would have been read as permission. The retired wording is not reproduced here on purpose — a hazardous instruction quoted verbatim is still copyable, and the test that guards this cannot tell a live instruction from prose quoting it.
 
 Read the owner and heartbeat for the brief — the receiver needs to know a claim existed and what happened to it:
