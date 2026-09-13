@@ -1,0 +1,107 @@
+{
+  "_why": "WSG-4. A named-test kill was scored on `that test failed`, which still covers two events wearing one `1 failed`: the guard's assertion bit, or the mutant CRASHED before the property was reached. The module docstring named two measured cases (an unbound-variable crash tripping `assert r.returncode == 0`, and a 60-second TimeoutExpired) and presented the gap as unfixable. Tier 1 -- a mutated file that did not PARSE -- is now refused, because a file that did not parse cannot have exercised a guard. Tier 2 -- every other exception -- is annotated and counted, never refused, because a mutation that strips a None-check makes the code raise and the test asserting the graceful message then fails, where the crash IS the property violation. These mutations cover BOTH directions: the permissive one (the classifier never fires, so crash kills read as clean) and the over-firing ones (an ordinary assertion kill misreported as a crash). Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_mutation_harness.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-classifier-never-fires",
+      "_mechanism": "The permissive direction, and the state before this change: every crash kill reads as an ordinary assertion kill, `crash_kills` stays 0 forever, and the token line says the same thing whether the guard bit or the mutant crashed. Indistinguishable from a suite with no crash kills in it.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if target in files:\n            return exception",
+      "replace": "        if target in files:\n            return None",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_crash_kill_is_counted_but_annotated_as_a_crash"
+    },
+    {
+      "name": "the-attribution-check-is-dropped",
+      "_mechanism": "The over-firing direction. Any traceback anywhere in the run's output is credited to the mutated file, so an ordinary assertion failure -- whose pytest footer attributes it to the TEST file -- is reported as `(crash: AssertionError in <target>)` and inflates crash_kills. A gate reading the count would then see crash kills everywhere and the number would mean nothing.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if target in files:",
+      "replace": "        if files:",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_ordinary_assertion_kill_is_not_counted_as_a_crash"
+    },
+    {
+      "name": "the-structured-scan-becomes-a-bare-word-search",
+      "_mechanism": "The loose design this one was written against, expressed as a mutation. A bare `Traceback` search plus the basename anywhere in the output fires on the ECHOED SOURCE of any test whose subject is a crash -- this suite has one (`test_a_non_utf8_log_does_not_crash` asserts `\"Traceback\" not in stderr`) -- so the classification would be loudest exactly on the tests written about crashes.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "    target = Path(mutated_file).name\n    for exception, files in crash_reports(output):\n        if target in files:\n            return exception\n    return None",
+      "replace": "    target = Path(mutated_file).name\n    if \"Traceback\" in output and target in output:\n        return \"RuntimeError\"\n    return None",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_classifier_does_not_fire_on_a_test_about_tracebacks"
+    },
+    {
+      "name": "tier-1-is-demoted-to-tier-2",
+      "_mechanism": "A file that did not parse is counted as a kill instead of refused. That is the whole defect back again in its most confident form: the mutation broke the file, the named test failed, and ALL_CAUGHT is printed -- a green mutation report over a guard that was never executed.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "DID_NOT_PARSE = (\"SyntaxError\", \"IndentationError\", \"TabError\")",
+      "replace": "DID_NOT_PARSE = ()",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_mutation_that_stops_the_file_parsing_is_refused_not_caught"
+    },
+    {
+      "name": "the-count-never-reaches-the-token-line",
+      "_mechanism": "The annotation stays on the detail line and the summary line reads crash_kills=0. Anything that scores a run by its token -- which is the contract, since callers read the token and never $? -- goes blind while the per-mutation detail still looks right to a human reading the whole report.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "f\"crash_kills={result.get('crash_kills', 0)}\"",
+      "replace": "f\"crash_kills=0\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_summary_line_carries_the_crash_kill_count"
+    },
+    {
+      "name": "the-counter-is-never-incremented",
+      "_mechanism": "Separable from the token-line mutation above: here the mechanism line is annotated correctly and only the COUNT is lost, so a report that reads right per-mutation still totals to zero.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "                            result[\"crash_kills\"] += 1\n                            detail = f\" (crash: {crash} in {basename})\"",
+      "replace": "                            detail = f\" (crash: {crash} in {basename})\"",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_crash_kill_is_counted_but_annotated_as_a_crash"
+    },
+    {
+      "name": "the-pytest-marker-swallows-exception-names-beginning-with-e",
+      "_mechanism": "`^\\s*E\\s+` with the whitespace made optional strips the `E` from `EOFError`, `Exception` and `EnvironmentError` on an UNMARKED line -- which is what pytest's captured-stdout sections carry -- so those crashes classify as nothing and read as ordinary assertion kills. Silent, and only for some exception types.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "_PYTEST_MARKER = re.compile(r\"^\\s*E\\s+\")",
+      "replace": "_PYTEST_MARKER = re.compile(r\"^\\s*E\\s*\")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_an_exception_whose_name_starts_with_e_is_not_eaten_by_the_prefix"
+    },
+    {
+      "name": "dotted-exception-names-stop-matching",
+      "_mechanism": "`json.decoder.JSONDecodeError` is a real terminal line in this suite's subprocess tests. A bare `\\w+` misses every qualified name, so an entire family of crashes reads as clean assertion kills.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "_TERMINAL_LINE = re.compile(r\"^([\\w.]+(?:Error|Exception)): \")",
+      "replace": "_TERMINAL_LINE = re.compile(r\"^(\\w+(?:Error|Exception)): \")",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_dotted_exception_name_is_classified"
+    },
+    {
+      "name": "the-direct-import-shape-loses-its-only-attribution",
+      "_mechanism": "pytest prints no `Traceback` header and no `File \"...\"` frames of its own, so the footer line is the ONLY thing tying a direct-import crash to the mutated file. Drop it and every directly-imported module's crash kills classify as assertions.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        footer = _PYTEST_FOOTER.match(line)",
+      "replace": "        footer = None",
+      "test": "tests/test_h_mad_mutation_harness.py::test_the_direct_import_shape_is_classified_from_pytests_own_footer"
+    },
+    {
+      "name": "the-headerless-compile-error-is-never-seen",
+      "_mechanism": "CPython reports a compile-time SyntaxError with NO `Traceback` header, and when the child's stderr is embedded in an assertion message the `File \"...\"` arrives on the SAME line as `AssertionError:`. Stop scanning the rest of that line and tier 1 -- the only tier that refuses -- becomes unreachable through the shape it exists for.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "            line = line[terminal.end():].lstrip()",
+      "replace": "            continue",
+      "test": "tests/test_h_mad_mutation_harness.py::test_a_headerless_compile_error_is_still_classified"
+    },
+    {
+      "name": "frames-leak-across-reports",
+      "_mechanism": "Captured output is routinely truncated mid-traceback. Without the reset at each header the surviving frames ride forward, and the next exception is attributed to a file that had nothing to do with it -- a false crash attribution that looks exactly like a true one.",
+      "file": "scripts/h_mad_mutation_harness.py",
+      "find": "        if _TRACEBACK_HEADER in line:\n            frames = []",
+      "replace": "        if False:\n            frames = []",
+      "test": "tests/test_h_mad_mutation_harness.py::test_frames_do_not_leak_from_a_truncated_report_into_the_next"
+    }
+  ]
+}

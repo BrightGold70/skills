@@ -25,10 +25,10 @@
     },
     {
       "name": "a-wrong-catcher-counts-as-a-kill",
-      "_mechanism": "The named test PASSING is scored as caught anyway, so suite-red is treated as proof the property was exercised. Re-anchored on the `elif` after the collection-error branch was added: anchoring on the branch condition made this a DUPLICATE of `credit-a-collection-error-as-a-kill` and it survived its own pinned test.",
+      "_mechanism": "The named test PASSING is scored as caught anyway, so suite-red is treated as proof the property was exercised. Re-anchored on the `elif` after the collection-error branch was added: anchoring on the branch condition made this a DUPLICATE of `credit-a-collection-error-as-a-kill` and it survived its own pinned test. Re-anchored a second time onto the branch's first comment line when crash-kill classification moved `result[\"caught\"] += 1` inside a tier-2 else.",
       "file": "scripts/h_mad_mutation_harness.py",
-      "find": "                elif not pin_green:\n                    result[\"caught\"] += 1",
-      "replace": "                elif True:\n                    result[\"caught\"] += 1",
+      "find": "                elif not pin_green:\n                    # The named test ran and failed.",
+      "replace": "                elif True:\n                    # The named test ran and failed.",
       "test": "tests/test_h_mad_mutation_harness.py::test_a_mutant_caught_by_the_wrong_test_is_a_survivor"
     },
     {

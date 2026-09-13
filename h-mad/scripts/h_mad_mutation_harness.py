@@ -12,9 +12,9 @@ This is that harness, once.
 
 Verdicts, printed as a canonical token:
 
-    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0     exit 0
-    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0     exit 0
-    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 exit 2
+    MUTATION: ALL_CAUGHT mutations=7 caught=7 survived=0 refused=0 unreadable=0 crash_kills=0 exit 0
+    MUTATION: SURVIVED   mutations=7 caught=5 survived=2 refused=0 unreadable=0 crash_kills=1 exit 0
+    MUTATION: REFUSED    mutations=7 caught=6 survived=0 refused=1 unreadable=0 crash_kills=0 exit 2
     MUTATION: PRECHECK_FAILED specs=3 drifted=1 unreadable=0               exit 2
     MUTATION: BASELINE_NOT_GREEN                                       exit 2
     MUTATION: RESTORE_FAILED                                           exit 2
@@ -68,6 +68,41 @@ red, the mutation is a SURVIVOR and the detail line names what actually bit —
 required green before the mutation is applied, because a kill credited against
 a pin that was already failing measures nothing and the whole-suite baseline
 cannot see one red pin.
+
+A named-test kill is still two events wearing one `1 failed`, and the two
+measured cases above are exactly that shape: the guard's assertion bit, or the
+mutant CRASHED before the property was reached. `crash_reports` classifies the
+scoring run's output structurally — frame lines attributed by basename to the
+mutated file, then a terminal exception line — because a bare `Traceback` search
+fires on the source of any test whose SUBJECT is a crash (this suite has one:
+`test_a_non_utf8_log_does_not_crash` asserts `"Traceback" not in stderr`). Then:
+
+  * **Tier 1 — `SyntaxError` / `IndentationError` / `TabError` in the mutated
+    file: REFUSED.** A file that did not parse cannot have exercised a guard, so
+    it measured NOTHING. Same reasoning and same category as the collection
+    break; the difference is that a script consumed by `subprocess.run` can be
+    syntax-broken with pytest's collection fully intact, so the named test RUNS,
+    fails on the child's crash, and the collection-break branch never sees it.
+  * **Tier 2 — every other exception: ANNOTATED and COUNTED, never refused.**
+    The `mechanism:` line carries `(crash: NameError in h_mad_foo.py)` and the
+    token line carries `crash_kills=N`. This is deliberately not a refusal: a
+    mutation that strips a None-check makes the code raise `AttributeError`, and
+    the test asserting the graceful message then fails — there the crash IS the
+    property violation. The harness cannot distinguish that from a pre-property
+    crash, so it prints the classification and leaves the judgement where the
+    `caught:` detail lines already put it — with the author.
+
+Two things stay unclassified, and saying so is the point of writing it down. The
+second measured case — a kill by 60-second `TimeoutExpired` — is not reachable
+by this design: it prints as `subprocess.TimeoutExpired`, which carries neither
+`Error` nor `Exception` in its name, and pytest attributes it to the test file
+rather than to the mutated one. Widening the pattern to chase it would cost more
+in false attribution than the one case is worth. And the untargeted branch (no
+`test` key) is not classified at all, because its kill is scored against the
+whole suite, where a traceback may belong to any file. Nor can the classifier
+see a crash the failing test never SURFACED: `assert r.returncode == 0` with no
+message discards the child's stderr, so `crash_kills=0` means "none found",
+never "none there".
 
 What stays with the author: whether the mechanism that fired is the mechanism
 the spec claims. The harness reports; it never judges that. `_mechanism` on a
@@ -357,6 +392,103 @@ def _failing_tests(output: str) -> list[str]:
     return FAILED_LINE.findall(output)
 
 
+# --- crash-kill classification -------------------------------------------
+#
+# A named-test kill is scored on "THAT test failed", which still covers two
+# different events wearing one `1 failed`: the guard's assertion bit, or the
+# mutant CRASHED before the property was ever reached.
+_TRACEBACK_HEADER = "Traceback (most recent call last):"
+# pytest prefixes every line of a failure block with `E` plus padding. The
+# whitespace is REQUIRED in this pattern: `EOFError:`, `Exception:` and
+# `EnvironmentError:` are terminal lines, not markers, and `^\s*E\s*` would eat
+# their first letter and classify them as `OFError`.
+_PYTEST_MARKER = re.compile(r"^\s*E\s+")
+_FRAME_LINE = re.compile(r'^File "([^"]+)", line \d+')
+# Dotted names are as real a terminal line as the bare ones:
+# `json.decoder.JSONDecodeError: Expecting value` is what this suite's
+# subprocess tests actually surface.
+_TERMINAL_LINE = re.compile(r"^([\w.]+(?:Error|Exception)): ")
+# pytest's own failure footer — `guard.py:9: NameError` — which is the ONLY
+# attribution a direct-import failure carries: pytest prints no `Traceback`
+# header of its own, so there are no `File "…"` frames to read.
+_PYTEST_FOOTER = re.compile(r"^(.+?\.py):\d+: ([\w.]+(?:Error|Exception))$")
+
+# Tier 1. `IndentationError` and `TabError` subclass `SyntaxError` but print
+# their own names, so all three are listed rather than inferred.
+DID_NOT_PARSE = ("SyntaxError", "IndentationError", "TabError")
+
+
+def crash_reports(output: str) -> list[tuple[str, list[str]]]:
+    """Every crash report in a run's output, as (exception type, file basenames).
+
+    A bare `Traceback` search is far too loose to build a verdict on: at least
+    one test in this suite asserts on crash-related WORDS as its subject matter
+    (`test_a_non_utf8_log_does_not_crash` asserts `"Traceback" not in stderr`),
+    and pytest echoes that source line into the failure block. So a report is
+    recognised structurally — frame lines, then a terminal exception line — and
+    attributed to the files its frames name.
+
+    Three output shapes are handled, all three measured rather than assumed:
+
+      * **subprocess tests** (this suite's dominant shape). The child's stderr
+        is embedded in an assertion message, so the `Traceback` header shares a
+        line with `AssertionError:` and every line carries pytest's `E ` marker.
+      * **a compile-time `SyntaxError`**, which CPython reports with NO
+        `Traceback` header at all — just `File "…", line N`, a caret, and the
+        terminal line. Requiring a header would leave tier 1, the only tier that
+        refuses, unreachable through the shape it exists for.
+      * **direct-import tests**, where pytest prints its own `E NameError: …`
+        and attributes it only in the footer line.
+
+    What this CANNOT see is a crash the failing test never surfaced. A test
+    written `assert r.returncode == 0` with no message discards the child's
+    stderr, and its crash kill is indistinguishable from an ordinary assertion
+    failure. `crash_kills=0` therefore means "none found", never "none there".
+    """
+    reports: list[tuple[str, list[str]]] = []
+    frames: list[str] = []
+    for raw in output.splitlines():
+        line = _PYTEST_MARKER.sub("", raw, count=1).strip()
+
+        footer = _PYTEST_FOOTER.match(line)
+        if footer:
+            reports.append((footer.group(2), [Path(footer.group(1)).name]))
+            frames = []
+            continue
+
+        terminal = _TERMINAL_LINE.match(line)
+        if terminal:
+            if frames:
+                reports.append((terminal.group(1), frames))
+            frames = []
+            # The rest of the line may still open the next report: the headerless
+            # SyntaxError arrives as `AssertionError:   File "…", line N`.
+            line = line[terminal.end():].lstrip()
+
+        if _TRACEBACK_HEADER in line:
+            frames = []
+            line = line.split(_TRACEBACK_HEADER, 1)[1].lstrip()
+
+        frame = _FRAME_LINE.match(line)
+        if frame:
+            frames.append(Path(frame.group(1)).name)
+    return reports
+
+
+def crash_kill(output: str, mutated_file: str) -> str | None:
+    """The exception a run crashed with INSIDE `mutated_file`, else None.
+
+    Attribution by basename is the whole difference between a finding and noise:
+    a traceback through some other file says nothing about whether this mutation
+    reached the property it names.
+    """
+    target = Path(mutated_file).name
+    for exception, files in crash_reports(output):
+        if target in files:
+            return exception
+    return None
+
+
 def _near_misses(source: str, find: str, limit: int = 3) -> list[str]:
     """Lines closest to the anchor's FIRST line, for an anchor that matched 0 times.
 
@@ -523,6 +655,10 @@ def run_spec(spec_path: Path) -> dict:
         "caught": 0,
         "survived": [],
         "refused": [],
+        # A SUBSET of `caught`, never a verdict of its own: a caught mutation
+        # whose named test failed on a traceback out of the mutated file. Tier 2
+        # is printed for the author, not acted on.
+        "crash_kills": 0,
         "restore_verified": True,
         "baseline_green_after": None,
         # Reporting only. `mechanism` answers "which test bit, and was it the
@@ -690,10 +826,39 @@ def run_spec(spec_path: Path) -> dict:
                         f"rather than the property"
                     )
                 elif not pin_green:
-                    result["caught"] += 1
-                    result["mechanism"][mutation["name"]] = (
-                        f"killed by its named test {mutation['test']}"
-                    )
+                    # The named test ran and failed. That is still two different
+                    # events wearing one `1 failed`: the guard's assertion bit,
+                    # or the MUTANT CRASHED before the property was reached.
+                    crash = crash_kill(pin_output, mutation["file"])
+                    basename = Path(mutation["file"]).name
+                    if crash in DID_NOT_PARSE:
+                        # Tier 1, and the same reasoning as the collection break
+                        # above: a file that did not PARSE cannot have exercised
+                        # any guard, so it measured NOTHING rather than the
+                        # property. Certainty is total here, so this refuses.
+                        result["refused"].append(
+                            f"{mutation['name']}: {mutation['test']} failed on a "
+                            f"{crash} in {basename} — the mutated file did not parse, "
+                            f"so it cannot have exercised the guard; like a broken "
+                            f"collection this measured NOTHING rather than the property"
+                        )
+                    else:
+                        # Tier 2: annotate and count, never refuse. A mutation
+                        # that strips a None-check makes the code raise
+                        # `AttributeError`, and the test asserting the graceful
+                        # message then fails — there the crash IS the property
+                        # violation. The harness cannot tell that from a
+                        # pre-property crash, and the author is already the one
+                        # who settles that.
+                        result["caught"] += 1
+                        if crash:
+                            result["crash_kills"] += 1
+                            detail = f" (crash: {crash} in {basename})"
+                        else:
+                            detail = f" (assertion: no traceback from {basename})"
+                        result["mechanism"][mutation["name"]] = (
+                            f"killed by its named test {mutation['test']}{detail}"
+                        )
                 else:
                     # The named test shrugged. Ask the whole suite what did
                     # notice, because "something else bit" and "nothing bit"
@@ -905,7 +1070,12 @@ def main(argv: list[str] | None = None) -> int:
             # would be worse than the disease; what the operator lacked is which
             # cause, and an unreadable target is the one whose next action differs
             # — restore a file, not re-anchor a spec (J37).
-            f"unreadable={sum(1 for e in result['refused'] if 'cannot read' in e)}"
+            f"unreadable={sum(1 for e in result['refused'] if 'cannot read' in e)} "
+            # Appended LAST on purpose: `crash_kills` is a subset of `caught`,
+            # not a new outcome, and every existing consumer parses this line by
+            # substring from the left. Growing it at the end leaves those reads
+            # intact; inserting anywhere earlier would break them silently.
+            f"crash_kills={result.get('crash_kills', 0)}"
         )
     _print_skipped_precheck_entries(result)
     mechanism = result.get("mechanism") or {}

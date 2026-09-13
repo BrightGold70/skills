@@ -2230,3 +2230,338 @@ def test_ordinary_spec_is_unaffected(tmp_path: Path) -> None:
     )
     kind, _ = classify_spec_file(path)
     assert kind == "spec"
+
+
+# --- crash-kill classification -------------------------------------------
+#
+# A kill scored on "the named test failed" cannot tell the guard's assertion
+# biting from the mutant CRASHING before the property was ever reached. Both
+# print `1 failed`. Two measured cases are in the module docstring: a mutant
+# that tripped `assert r.returncode == 0` on an unbound-variable crash, and one
+# killed by a `TimeoutExpired`. These pin the classification: a mutated file
+# that did not PARSE is refused (it measured nothing, like a broken
+# collection), every other crash is annotated and counted but NOT refused,
+# because a mutation that strips a None-check makes the code raise and the test
+# asserting the graceful message then fails — there the crash IS the property
+# violation, and only the author can tell the two apart.
+
+CRASH_GUARD = '''\
+import sys
+
+LIMIT = 5
+
+
+def main():
+    try:
+        value = int(sys.argv[1])
+    except ValueError:
+        print("BAD")
+        return 3
+    if value > LIMIT:
+        print("OVER")
+        return 1
+    print("OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+CRASH_TESTS = '''\
+import subprocess
+import sys
+from pathlib import Path
+
+GUARD = str(Path(__file__).resolve().parent / "guard.py")
+
+
+def _run(arg):
+    return subprocess.run([sys.executable, GUARD, arg], capture_output=True, text=True)
+
+
+def test_the_property_under_test():
+    over = _run("6")
+    assert over.returncode == 1, over.stdout + over.stderr
+    assert "OVER" in over.stdout, over.stdout + over.stderr
+
+
+def test_a_bad_argument_is_reported_without_a_traceback():
+    # This test's own SUBJECT is the word "Traceback", and its failure message
+    # names the guard's path. A classifier that searched for the bare word plus
+    # the mutated basename fires here on an ordinary assertion failure.
+    bad = _run("not-a-number")
+    assert "Traceback" not in bad.stderr, bad.stderr
+    assert "BAD" in bad.stdout, f"{GUARD} printed {bad.stdout!r}"
+'''
+
+CRASH_PIN = "test_guard.py::test_the_property_under_test"
+CRASH_WORD_PIN = "test_guard.py::test_a_bad_argument_is_reported_without_a_traceback"
+
+
+def _crash_project(tmp_path: Path, mutations: list[dict]) -> Path:
+    """A project whose tests drive `guard.py` as a SUBPROCESS.
+
+    That is this suite's own dominant shape, and the shape the classification
+    exists for: a script consumed by `subprocess.run` can be syntax-broken
+    without breaking pytest's collection, so the existing collection-break
+    refusal never sees it and the crash scores as a clean kill.
+    """
+    (tmp_path / "guard.py").write_text(CRASH_GUARD, encoding="utf-8")
+    (tmp_path / "test_guard.py").write_text(CRASH_TESTS, encoding="utf-8")
+    spec_path = tmp_path / "mutations.json"
+    spec_path.write_text(json.dumps({
+        "root": str(tmp_path),
+        "command": [sys.executable, "-m", "pytest", "-q", "test_guard.py"],
+        "target_command": [sys.executable, "-m", "pytest", "-q"],
+        "mutations": mutations,
+    }), encoding="utf-8")
+    return spec_path
+
+
+def test_a_mutation_that_stops_the_file_parsing_is_refused_not_caught(
+    tmp_path: Path
+) -> None:
+    """Tier 1. A file that did not parse cannot have exercised a guard.
+
+    pytest never imports `guard.py`, so collection is intact and the existing
+    collection-break refusal does not fire: the named test RUNS, its
+    `"OVER" in stdout` assertion fails on the child's `SyntaxError`, and the run
+    prints `1 failed`. Byte-identical to the guard biting.
+    """
+    spec = _crash_project(tmp_path, [
+        {"name": "stop the file parsing", "file": "guard.py",
+         "find": "LIMIT = 5", "replace": "LIMIT =", "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "REFUSED", result
+    assert result["caught"] == 0, result
+    assert result["crash_kills"] == 0, result
+    assert "SyntaxError" in result["refused"][0], result["refused"]
+    assert "did not parse" in result["refused"][0], result["refused"]
+
+
+def test_a_crash_kill_is_counted_but_annotated_as_a_crash(tmp_path: Path) -> None:
+    """Tier 2. Counted caught — the author decides, not the harness.
+
+    A mutation that strips a None-check makes the code raise, and the test
+    asserting the graceful message then fails: there the crash IS the property
+    violation. The harness cannot tell that from a pre-property crash, so it
+    prints the classification and leaves the judgement where the file already
+    says it belongs.
+    """
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["caught"] == 1, result
+    assert result["crash_kills"] == 1, result
+    mechanism = result["mechanism"]["unbind the printed name"]
+    assert "killed by its named test" in mechanism, mechanism
+    assert "(crash: NameError in guard.py)" in mechanism, mechanism
+
+
+def test_an_ordinary_assertion_kill_is_not_counted_as_a_crash(tmp_path: Path) -> None:
+    """The control. Without it the classifier could fire on every kill.
+
+    The failing run's pytest footer reads `test_guard.py:15: AssertionError` —
+    a crash report attributable to the TEST file, not to the mutated one. A
+    classifier that dropped the attribution check reports this as a crash.
+    """
+    spec = _crash_project(tmp_path, [
+        {"name": "raise the limit", "file": "guard.py",
+         "find": "LIMIT = 5", "replace": "LIMIT = 9", "test": CRASH_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["caught"] == 1, result
+    assert result["crash_kills"] == 0, result
+    mechanism = result["mechanism"]["raise the limit"]
+    assert "killed by its named test" in mechanism, mechanism
+    assert "crash:" not in mechanism, mechanism
+    assert "no traceback from guard.py" in mechanism, mechanism
+
+
+def test_the_classifier_does_not_fire_on_a_test_about_tracebacks(
+    tmp_path: Path
+) -> None:
+    """The loose-match guard, and the reason a bare `Traceback` search is wrong.
+
+    `test_a_bad_argument_is_reported_without_a_traceback` asserts on the WORD as
+    its subject matter, so pytest echoes `assert "Traceback" not in bad.stderr`
+    into the failure block, and its own message names `guard.py`. Both halves of
+    a naive search are present; there is no traceback.
+    """
+    spec = _crash_project(tmp_path, [
+        {"name": "change the bad-argument word", "file": "guard.py",
+         "find": 'print("BAD")', "replace": 'print("bad")',
+         "test": CRASH_WORD_PIN},
+    ])
+    result = run_spec(spec)
+
+    assert result["verdict"] == "ALL_CAUGHT", result
+    assert result["crash_kills"] == 0, result
+    mechanism = result["mechanism"]["change the bad-argument word"]
+    assert "crash:" not in mechanism, mechanism
+
+
+def test_the_summary_line_carries_the_crash_kill_count(tmp_path: Path) -> None:
+    """`crash_kills=` rides the token line, appended so existing parses survive."""
+    spec = _crash_project(tmp_path, [
+        {"name": "unbind the printed name", "file": "guard.py",
+         "find": 'print("OVER")', "replace": "print(OVER)", "test": CRASH_PIN},
+    ])
+    proc = _run_cli(spec)
+
+    summary = [l for l in proc.stdout.splitlines() if l.startswith("MUTATION:")]
+    assert summary == [
+        "MUTATION: ALL_CAUGHT mutations=1 caught=1 survived=0 refused=0 "
+        "unreadable=0 crash_kills=1"
+    ], proc.stdout
+    assert "    mechanism: killed by its named test" in proc.stdout, proc.stdout
+    assert "(crash: NameError in guard.py)" in proc.stdout, proc.stdout
+
+
+# The classifier's two conditions, unit-tested on captured output. The shapes
+# below are VERBATIM from measured pytest runs, not invented: the subprocess
+# form carries the traceback inside an assertion message with pytest's `E `
+# prefix on every line and the `Traceback` header sharing a line with
+# `AssertionError:`, and a compile-time SyntaxError has NO header at all.
+
+SUBPROCESS_NAMEERROR = '''\
+    def test_the_property_under_test():
+        over = _run("6")
+>       assert "OVER" in over.stdout, over.stdout + over.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "/tmp/proj/guard.py", line 20, in <module>
+E             sys.exit(main())
+E           File "/tmp/proj/guard.py", line 13, in main
+E             print(OVER)
+E         NameError: name 'OVER' is not defined
+E         
+E       assert 'OVER' in ''
+
+test_guard.py:15: AssertionError
+'''
+
+SUBPROCESS_SYNTAXERROR = '''\
+>       assert "OVER" in over.stdout, over.stdout + over.stderr
+E       AssertionError:   File "/tmp/proj/guard.py", line 3
+E             LIMIT =
+E                    ^
+E         SyntaxError: invalid syntax
+
+test_guard.py:15: AssertionError
+'''
+
+DIRECT_IMPORT_NAMEERROR = '''\
+    def label(n):
+>       return NAMES[n]
+E       NameError: name 'NAMES' is not defined
+
+guard.py:9: NameError
+'''
+
+
+def test_a_subprocess_traceback_is_attributed_to_the_mutated_file() -> None:
+    assert h_mad_mutation_harness.crash_kill(
+        SUBPROCESS_NAMEERROR, "guard.py") == "NameError"
+
+
+def test_a_headerless_compile_error_is_still_classified() -> None:
+    """CPython prints NO `Traceback` header for a compile-time SyntaxError.
+
+    Measured: the child's report is `File "...", line N` / caret /
+    `SyntaxError: invalid syntax`. Requiring a header would leave tier 1 — the
+    only tier that refuses — unreachable through this suite's dominant shape.
+    """
+    assert h_mad_mutation_harness.crash_kill(
+        SUBPROCESS_SYNTAXERROR, "guard.py") == "SyntaxError"
+
+
+def test_the_direct_import_shape_is_classified_from_pytests_own_footer() -> None:
+    """pytest prints no `Traceback` header either; the footer carries the file."""
+    assert h_mad_mutation_harness.crash_kill(
+        DIRECT_IMPORT_NAMEERROR, "guard.py") == "NameError"
+
+
+def test_a_traceback_from_another_file_is_not_attributed_here() -> None:
+    """Attribution is the whole difference between a finding and noise."""
+    assert h_mad_mutation_harness.crash_kill(
+        SUBPROCESS_NAMEERROR, "other.py") is None
+    assert h_mad_mutation_harness.crash_kill(
+        DIRECT_IMPORT_NAMEERROR, "other.py") is None
+
+
+def test_the_word_traceback_alone_is_not_a_crash() -> None:
+    """The echoed source of a test whose subject IS the word."""
+    word_only = (
+        '>       assert "Traceback" not in bad.stderr, bad.stderr\n'
+        "E       AssertionError: /tmp/proj/guard.py printed 'bad'\n"
+        "\n"
+        "test_guard.py:19: AssertionError\n"
+    )
+    assert h_mad_mutation_harness.crash_kill(word_only, "guard.py") is None
+
+
+def test_an_ordinary_assertion_in_the_test_file_is_not_a_crash_in_the_target() -> None:
+    ordinary = (
+        '>       assert over.returncode == 1, over.stdout + over.stderr\n'
+        "E       AssertionError: OK\n"
+        "E       assert 0 == 1\n"
+        "\n"
+        "test_guard.py:14: AssertionError\n"
+    )
+    assert h_mad_mutation_harness.crash_kill(ordinary, "guard.py") is None
+
+
+def test_a_dotted_exception_name_is_classified() -> None:
+    """`json.decoder.JSONDecodeError` is a real terminal line in this suite."""
+    dotted = (
+        "E       AssertionError: Traceback (most recent call last):\n"
+        'E           File "/tmp/proj/guard.py", line 7, in main\n'
+        "E             json.loads(raw)\n"
+        "E         json.decoder.JSONDecodeError: Expecting value\n"
+    )
+    assert h_mad_mutation_harness.crash_kill(
+        dotted, "guard.py") == "json.decoder.JSONDecodeError"
+
+
+def test_an_exception_whose_name_starts_with_e_is_not_eaten_by_the_prefix() -> None:
+    """`E` + WHITESPACE is pytest's marker; `EOFError:` is a terminal line.
+
+    Unmarked is the discriminating shape: pytest's own `----- Captured stdout
+    -----` sections carry a child's traceback with no `E ` prefix at all, and a
+    marker pattern whose trailing whitespace is optional strips the `E` off
+    `EOFError`, `Exception` and `EnvironmentError` and classifies nothing.
+    """
+    eof = (
+        "Traceback (most recent call last):\n"
+        '  File "/tmp/proj/guard.py", line 7, in main\n'
+        "    raise EOFError('ran out of input')\n"
+        "EOFError: ran out of input\n"
+    )
+    assert h_mad_mutation_harness.crash_kill(eof, "guard.py") == "EOFError"
+
+
+def test_frames_do_not_leak_from_a_truncated_report_into_the_next() -> None:
+    """A report with no terminal line must not lend its frames to the next one.
+
+    Captured output is routinely truncated mid-traceback. Without the reset at
+    each `Traceback` header, the surviving frames ride forward and the next
+    exception is attributed to a file that had nothing to do with it.
+    """
+    two = (
+        "Traceback (most recent call last):\n"
+        '  File "/tmp/proj/other.py", line 1, in <module>\n'
+        "Traceback (most recent call last):\n"
+        '  File "/tmp/proj/guard.py", line 2, in <module>\n'
+        "NameError: name 'x' is not defined\n"
+    )
+    assert h_mad_mutation_harness.crash_kill(two, "guard.py") == "NameError"
+    assert h_mad_mutation_harness.crash_kill(two, "other.py") is None

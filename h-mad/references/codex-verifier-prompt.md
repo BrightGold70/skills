@@ -58,7 +58,11 @@ Perform the revert test defined in SKILL.md §5e.
    path, and re-runs the suite to prove the restore landed — the bookkeeping that decides whether
    this pass measured anything. Read the `MUTATION:` token. `SURVIVED` names the guards that do not
    bite; `REFUSED` / `BASELINE_NOT_GREEN` mean nothing was measured, which is NOT a pass and must not
-   be reported as one.
+   be reported as one. `crash_kills=N` on that same line is a subset of `caught`: mutations whose
+   named test failed on a traceback out of the mutated file rather than on the guard's own assertion.
+   It is a prompt for you, not a verdict — sometimes the crash IS the property violation (a stripped
+   None-check raises, and the test asserting the graceful message fails) and sometimes the mutant
+   died before the property was reached. Read each `(crash: …)` detail line and say which it was.
 
 2. **Anti-gaming audit of the module tests.** Report any test that CANNOT FAIL: an assertion true
    by construction, a mock asserted against itself, a test that never reaches the code path it
