@@ -621,3 +621,26 @@ class TestFenceGrammarIsTheSharedOne:
         r, _ = self._bump(tmp_path, text, "v1.1")
         assert r.returncode == 2, r.stdout + r.stderr
         assert "anchor_missing" in r.stdout + r.stderr, r.stdout + r.stderr
+
+    def test_a_neighbouring_version_heading_is_not_the_anchor(self, tmp_path: Path) -> None:
+        """The heading text is matched WHOLE, not by prefix.
+
+        Added because a mutation survived: relaxing the comparison to
+        `startswith("version")` killed no test, and phase docs really do carry
+        sibling headings like `## Version Notes` or `## Versioning`. Under the
+        loose match this document has TWO anchors, so it refuses as
+        `anchor_ambiguous` and a legitimate bump becomes impossible — the
+        opposite failure from the fenced-template one, and equally silent to a
+        caller who only sees a non-zero exit.
+        """
+        text = ("## Version Notes\n\n- not the log.\n\n"
+                "## Version History\n\n- v1.0: the real log.\n")
+        r, doc = self._bump(tmp_path, text, "v1.1")
+        assert r.returncode == 0, (
+            "a sibling `## Version Notes` heading was counted as an anchor\n"
+            + r.stdout + r.stderr
+        )
+        after = doc.read_text()
+        assert after.index("- v1.1: ported.") > after.index("- v1.0: the real log."), (
+            "the entry landed in `## Version Notes`"
+        )
