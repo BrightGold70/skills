@@ -41,11 +41,11 @@
     },
     {
       "name": "an-unprovenanced-pin-is-scored-instead-of-reported",
-      "_mechanism": "The cannot-judge branch becomes a hard finding. `I could not check` and `it is broken` are opposite answers, and this repo's fail-closed rule is that they must not be spelled the same way \u2014 here the collapse runs in the permissive-looking direction for the reader and the punitive one for the document, firing on every pin in a document that carries no provenance sha at all.",
+      "_mechanism": "The cannot-judge branch becomes a hard finding. `I could not check` and `it is broken` are opposite answers, and this repo's fail-closed rule is that they must not be spelled the same way \u2014 here the collapse runs in the permissive-looking direction for the reader and the punitive one for the document, firing on every pin in a document that carries no provenance sha at all. Re-anchored at #31: the arm is now conditional on the phase's author contract, and the property this row guards \u2014 an unprovenanced pin is REPORTED, not scored \u2014 survives for phases outside `NO_LINE_PINS`, which is the half the named test still asserts.",
       "file": "scripts/h_mad_precheck_doc.py",
-      "find": "                    advisories.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` \u2014 line pin with no provenance commit to check it against\")\n                    )",
-      "replace": "                    findings.append(\n                        (\"LINEPIN\", lineno, f\"`{rel}:{tail}` \u2014 line pin with no provenance commit to check it against\")\n                    )",
-      "test": "tests/test_h_mad_precheck_doc.py::test_LINEPIN_is_reported_for_every_phase"
+      "find": "                        advisories.append((\"LINEPIN\", lineno, detail))\n                continue",
+      "replace": "                        findings.append((\"LINEPIN\", lineno, detail))\n                continue",
+      "test": "tests/test_h_mad_precheck_doc.py::test_LINEPIN_is_hard_where_the_author_contract_forbids_it_and_advisory_elsewhere"
     }
   ]
 }

@@ -50,12 +50,18 @@ and a gate that fails a clean document is not a gate.
                  ``DOCBLOCK: <VERDICT>``), so scored there it produced 48 hits on a
                  design document that had passed 83 cycles and every one was a
                  declaration.
-``LINEPIN:``     a line number written into a document. For ``design`` and ``plan``
-                 this is a hard finding outright — both author contracts say never
-                 write one, because they go stale silently (measured three times in
-                 one session on one file: ``:1804`` → ``:1887`` → ``:1897``). For
-                 ``impl-plan``, where pins are permitted, only a pin past end-of-file
-                 is hard.
+``LINEPIN:``     a line number written into a document. For ``design``, ``plan``
+                 and ``spec`` — see ``NO_LINE_PINS`` — this is a hard finding
+                 outright, because those author contracts say never write one and
+                 pins go stale silently (measured three times in one session on one
+                 file: ``:1804`` → ``:1887`` → ``:1897``). For ``impl-plan``, where
+                 pins are permitted, only a pin past end-of-file is hard.
+                 ARCHIVED documents (``docs/archive/**``) keep the advisory in every
+                 phase: they cannot be repaired, so their pins rot by definition and
+                 a hard rule there would measure elapsed time rather than authorship.
+                 This rule was declared and unenforced until #31; wiring it turned 6
+                 live documents carrying 17 pins from PASS to FAIL, which is why it
+                 was an operator decision rather than a two-line fix.
 ``UNKNOWNSHA:``  a provenance commit that names no commit in this repository —
                  mistyped, or carried in from another checkout. Hard: it cannot
                  have been measured at.
@@ -89,6 +95,36 @@ PHASES = ("plan", "design", "impl-plan", "spec")
 
 #: Phases whose author contract forbids writing a line number at all.
 NO_LINE_PINS = ("design", "plan", "spec")
+
+
+def _line_pins_are_hard(phase: str, doc: Path) -> bool:
+    """Whether a line pin is a FINDING in this document, not just an advisory.
+
+    `NO_LINE_PINS` was declared here and read by NOTHING for the life of the file
+    — the module docstring above and `SKILL.md` both promised the rule, the
+    `HARD_KINDS` machinery already listed `LINEPIN`, and the arm simply appended
+    to `advisories` instead. A `design` document carrying a line pin passed. Three
+    sources said different things and the code was the quietest of them (#31).
+
+    ARCHIVED DOCUMENTS ARE EXEMPT, and that is the whole reason this was a
+    migration rather than a two-line fix. An archived document cannot be repaired
+    — its pins rot by definition as the tree moves under it — so a hard rule there
+    measures elapsed time, not authorship. `docs/archive/**` also holds this
+    repo's noise-floor calibration corpus, whose hard-finding count is asserted
+    against a ceiling precisely to catch a detector becoming too noisy to gate;
+    the alternative of raising that ceiling is rejected by the test's own comment,
+    which records it breaking three times and says raising it "would buy a few
+    commits and recur".
+
+    Measured before wiring (2026-09-13): 6 live documents across `plan`, `design`
+    and `spec` carry 17 line pins and PASS today. They become FAIL. That is the
+    intended effect — the contract they violate is the one two documents already
+    promise — and it is the operator's decision, taken deliberately rather than
+    discovered.
+    """
+    if phase not in NO_LINE_PINS:
+        return False
+    return not any(part == "archive" for part in doc.resolve().parts)
 
 HARD_KINDS = ("PLACEHOLDER", "LINEPIN", "PINDRIFT", "UNKNOWNSHA")
 
@@ -435,6 +471,10 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
     # author who wants to hide a live pin cannot move it into the history without
     # also moving it out of the document's body, which is the edit the gate wanted
     # from them anyway.
+    # #31: the phase's author contract, finally consulted. Computed once — it is a
+    # property of the DOCUMENT, not of any line in it.
+    pins_are_hard = _line_pins_are_hard(phase, doc)
+
     vh_bounds = _version_history_bounds(text, lines)
 
     def in_vh(lineno: int) -> bool:
@@ -548,9 +588,11 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
             # --- bare `:NNNN` line pins ----------------------------------
             bare = _BARE_PIN.match(span)
             if bare:
-                advisories.append(
-                    ("LINEPIN", lineno, f"`{span}` — bare line pin, unanchored to any file")
-                )
+                detail = f"`{span}` — bare line pin, unanchored to any file"
+                if pins_are_hard:
+                    hard("LINEPIN", lineno, detail, span)
+                else:
+                    advisories.append(("LINEPIN", lineno, detail))
                 continue
 
             m = _PATHISH.match(span)
@@ -624,17 +666,25 @@ def scan(doc: Path, phase: str, root: Path, allow: list[str] | None = None,
                     #
                     # Still an advisory and still LINEPIN, so counts and verdicts do
                     # not move — only the sentence becomes true.
-                    advisories.append(
-                        ("LINEPIN", lineno,
-                         f"`{rel}:{tail}` — line pin; `{rel}` unchanged since the "
-                         f"document's provenance `{prov[:7]}`")
-                    )
+                    detail = (f"`{rel}:{tail}` — line pin; `{rel}` unchanged since the "
+                              f"document's provenance `{prov[:7]}`")
+                    if pins_are_hard:
+                        hard("LINEPIN", lineno,
+                             detail + " — and this phase's author contract forbids a line pin",
+                             f"{rel}:{tail}")
+                    else:
+                        advisories.append(("LINEPIN", lineno, detail))
                 else:
                     # Cannot judge: no provenance sha to measure drift against.
                     # Reported, never scored — "I could not check" is not "it is fine".
-                    advisories.append(
-                        ("LINEPIN", lineno, f"`{rel}:{tail}` — line pin with no provenance commit to check it against")
-                    )
+                    detail = (f"`{rel}:{tail}` — line pin with no provenance commit "
+                              f"to check it against")
+                    if pins_are_hard:
+                        hard("LINEPIN", lineno,
+                             detail + " — and this phase's author contract forbids a line pin",
+                             f"{rel}:{tail}")
+                    else:
+                        advisories.append(("LINEPIN", lineno, detail))
                 continue
 
             if target.suffix == ".py" and not _defines(target, tail):

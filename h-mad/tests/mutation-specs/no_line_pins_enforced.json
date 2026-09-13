@@ -1,0 +1,43 @@
+{
+  "_why": "#31 \u2014 `NO_LINE_PINS = (\"design\", \"plan\", \"spec\")` was declared at :91 and read by NOTHING for the life of the file, while the module docstring and `SKILL.md:2846` both promised the rule and `HARD_KINDS` already listed `LINEPIN`. The arm simply appended to `advisories`, so a `design` document carrying a line pin PASSED. Three sources disagreed and the code was the quietest of them \u2014 the documented-rule-not-enforced class.\n\nIt looked like a two-line fix and was a MIGRATION. Measured before wiring: 6 live documents carrying 17 line pins pass today and fail after (`exec-path-hardening` plan+design, `pin-agents-tail-banner.design`, `regression-provenance-ledger.design`, `tdd-dispatch-verification-discipline` spec+design). The operator chose to enforce it and exempt `docs/archive/**` rather than repair the documents, narrow the constant, or raise the noise-floor ceiling \u2014 that last option being rejected by the noise-floor test's own comment, which records it breaking three times and says raising it 'would buy a few commits and recur'.\n\nTwo tests here asserted the OPPOSITE and were deliberately moved, not quietly edited: one argued 'a gate that fails every real document is not a gate', which is exactly the cost the operator weighed.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_precheck_doc.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-constant-goes-dead-again",
+      "_mechanism": "Restores the defect exactly: `NO_LINE_PINS` declared, promised by two documents, and consulted by nothing \u2014 a `design` document carrying a line pin passes.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    if phase not in NO_LINE_PINS:\n        return False",
+      "replace": "    return False\n    if phase not in NO_LINE_PINS:\n        return False",
+      "test": "tests/test_h_mad_precheck_doc.py::test_LINEPIN_is_hard_where_the_author_contract_forbids_it_and_advisory_elsewhere"
+    },
+    {
+      "name": "the-archive-exemption-is-removed",
+      "_mechanism": "THE reason this row was a policy question. An archived document cannot be repaired \u2014 its pins rot as the tree moves under it \u2014 so a hard rule there measures elapsed time, not authorship. `docs/archive/**` also holds the noise-floor calibration corpus whose hard-finding count is ceiling-asserted.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    return not any(part == \"archive\" for part in doc.resolve().parts)",
+      "replace": "    return True",
+      "test": "tests/test_h_mad_precheck_doc.py::test_an_ARCHIVED_document_keeps_the_line_pin_advisory"
+    },
+    {
+      "name": "every-phase-forbids-a-line-pin",
+      "_mechanism": "The over-correction. `impl-plan` is deliberately NOT in NO_LINE_PINS \u2014 its author contract permits a pin \u2014 and making every phase hard would fail the corpus wholesale while looking like stricter enforcement. It also re-scores the cannot-judge direction, where 'I could not check' would be reported as 'it is broken'.",
+      "file": "scripts/h_mad_precheck_doc.py",
+      "find": "    if phase not in NO_LINE_PINS:\n        return False",
+      "replace": "    if False:\n        return False",
+      "test": "tests/test_h_mad_precheck_doc.py::test_LINEPIN_is_hard_where_the_author_contract_forbids_it_and_advisory_elsewhere"
+    }
+  ]
+}

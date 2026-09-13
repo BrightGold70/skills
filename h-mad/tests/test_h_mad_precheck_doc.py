@@ -161,29 +161,58 @@ def test_PLACEHOLDER_flags_TBD_and_TODO(tmp_path):
     assert len(details(r.stdout, "PLACEHOLDER")) == 2, r.stdout
 
 
-def test_LINEPIN_is_reported_for_every_phase(tmp_path):
-    """Reported, not blocking.
+def test_LINEPIN_is_hard_where_the_author_contract_forbids_it_and_advisory_elsewhere(tmp_path):
+    """This test asserted the OPPOSITE and the boundary was deliberately moved (#31).
 
-    The author contracts say never write a line number, but the documents in this
-    tree carry them by the dozen — 49 on a plan that had passed 74 cycles. A gate
-    that fails every real document is not a gate, so an ordinary pin is surfaced
-    for triage and only a PROVABLY wrong one (past end-of-file, or drifted since
-    the document's own provenance commit) moves the verdict.
+    It used to assert `PASS` for every phase, on the argument that "the documents
+    in this tree carry them by the dozen — 49 on a plan that had passed 74 cycles.
+    A gate that fails every real document is not a gate." That argument is real,
+    and it is exactly what made wiring `NO_LINE_PINS` a migration rather than a
+    two-line fix: 6 live documents carrying 17 pins pass today and fail after.
+
+    The constant was declared and read by NOTHING, while the module docstring and
+    `SKILL.md` both promised the rule — three sources disagreeing, with the code
+    the quietest. The operator chose to enforce it and exempt `docs/archive/**`.
+
+    What survives unchanged is the half that was never about the contract: for a
+    phase NOT in `NO_LINE_PINS`, an ordinary pin is still surfaced for triage and
+    still does not move the verdict — "I could not check" is not "it is broken".
     """
     body = "The heading is at `h-mad/SKILL.md:1897`.\n"
-    for phase in ("design", "plan", "impl-plan"):
+    for phase in ("design", "plan", "spec"):
         doc = write(tmp_path, f"x.{phase}.md", body)
         r = run(doc, "--phase", phase, "--root", REPO)
         assert details(r.stdout, "LINEPIN"), f"{phase}: {r.stdout}"
-        # "Reported, not blocking" is half this test's own docstring and was never
-        # asserted: `details()` matches the printed line, which looks identical
-        # whether the hit landed in `findings` or `advisories`. Promoting this
-        # branch to a hard finding therefore survived the mutation battery — and it
-        # is the cannot-judge direction, where the document carries no provenance
-        # sha to measure drift against. "I could not check" must not be scored as
-        # "it is broken".
-        assert token(r.stdout).startswith("PRECHECK: PASS"), (
-            f"{phase}: an unprovenanced pin must not move the verdict\n{r.stdout}")
+        assert token(r.stdout).startswith("PRECHECK: FAIL"), (
+            f"{phase} forbids a line pin and must score one\n{r.stdout}")
+
+    # `impl-plan` is NOT in NO_LINE_PINS: its author contract permits a pin, so the
+    # original "reported, not blocking" property is unchanged there, including the
+    # cannot-judge direction this document carries (no provenance sha at all).
+    doc = write(tmp_path, "x.impl-plan.md", body)
+    r = run(doc, "--phase", "impl-plan", "--root", REPO)
+    assert details(r.stdout, "LINEPIN"), r.stdout
+    assert token(r.stdout).startswith("PRECHECK: PASS"), (
+        f"an unprovenanced pin must not move the verdict here\n{r.stdout}")
+
+
+def test_an_ARCHIVED_document_keeps_the_line_pin_advisory(tmp_path):
+    """The exemption, and the reason this was a policy question.
+
+    An archived document cannot be repaired — its pins rot by definition as the
+    tree moves under it — so a hard rule there measures elapsed time rather than
+    authorship. `docs/archive/**` also holds the noise-floor calibration corpus,
+    whose hard-finding count is asserted against a ceiling to catch a detector
+    becoming too noisy to gate; that test's own comment records the ceiling
+    breaking three times and rejects raising it.
+    """
+    archived = tmp_path / "docs" / "archive" / "2026-09" / "f"
+    archived.mkdir(parents=True)
+    doc = archived / "x.design.md"
+    doc.write_text("The heading is at `h-mad/SKILL.md:1897`.\n")
+    r = run(doc, "--phase", "design", "--root", REPO)
+    assert details(r.stdout, "LINEPIN"), r.stdout
+    assert token(r.stdout).startswith("PRECHECK: PASS"), r.stdout
 
 
 def test_LINEPIN_catches_the_bare_colon_form_the_c33_corpus_used(tmp_path):
@@ -701,11 +730,22 @@ class TestTheLinePinAdvisoryTellsTheTruthAboutWhatItChecked:
         verdict shift here would be a different change needing its own argument."""
         r, doc, _prov = self._repo(tmp_path)
 
+        # `design` is in NO_LINE_PINS, so since #31 the pin is HARD here and the
+        # advisory assertion moved to the `impl-plan` case below. What this test is
+        # actually about is unchanged: the SENTENCE must say it was checked, rather
+        # than reporting a verified-clean pin as one it could not judge.
         out = run(doc, "--phase", "design", "--root", r).stdout
-        assert "PRECHECK: FAIL issues=1" in out, out
         assert out.count("LINEPIN") == 1, out
-        assert "advisory — does not move the verdict" in [
-            ln for ln in out.splitlines() if "LINEPIN" in ln][0]
+        line = [ln for ln in out.splitlines() if "LINEPIN" in ln][0]
+        assert "unchanged since the" in line, line
+        assert "no provenance commit" not in line, line
+
+        # The same document under a phase whose contract permits pins: same
+        # sentence, and still advisory.
+        out = run(doc, "--phase", "impl-plan", "--root", r).stdout
+        line = [ln for ln in out.splitlines() if "LINEPIN" in ln][0]
+        assert "unchanged since the" in line, line
+        assert "advisory — does not move the verdict" in line, line
 
 
 # --------------------------------------------------------------------------
