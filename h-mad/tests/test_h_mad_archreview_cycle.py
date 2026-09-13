@@ -159,9 +159,13 @@ class TestScoreRecordsOnlyAProvenReview:
     def test_a_non_utf8_log_does_not_crash(self, tmp_path):
         state = _state(tmp_path)
         log = tmp_path / "run.log"
+        # TWO tool steps, not one: this test's subject is that undecodable bytes do
+        # not abort the scan, and a single call now trips the delivery floor -- which
+        # would make it pass or fail for a reason that has nothing to do with UTF-8.
+        step = json.dumps({"event": "step_update", "step_update": {
+            "step_type": "tool", "state": "DONE"}}).encode()
         log.write_bytes(b"\xff\xfe not utf-8 \n" + json.dumps({"event": "init"}).encode()
-                        + b"\n" + json.dumps({"event": "step_update", "step_update": {
-                            "step_type": "tool", "state": "DONE"}}).encode() + b"\n")
+                        + b"\n" + step + b"\n" + step + b"\n")
         result = _run("score", "--feature", "feat", "--state", str(state),
                       "--log", str(log),
                       "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
@@ -336,6 +340,93 @@ def test_it_refuses_to_decide_whether_to_run_another_cycle():
     assert loops == [] or all(
         not isinstance(n, ast.While) for n in loops
     ), "no while-loop: one cycle per invocation, the operator decides on another"
+
+
+class TestACleanVerdictMustRestOnMoreThanTheDeliveryContract:
+    """J49 in the 6a-prime channel: the gate was `tools == 0`, a floor of ZERO.
+
+    This channel's own contract says "you must also WRITE your report file with
+    `run_command`. That is the only write you may make", and asks for no `.done`
+    marker -- so a reviewer that read nothing and merely obeyed the delivery
+    instruction scores exactly `tools=1` and passed. `h_mad_audit_cycle` has carried
+    `DELIVERY_FLOOR = 2` against the same failure (cycle 24 double-cleaned on
+    delivery calls alone); one channel was guarded and the other was not.
+
+    The asymmetry is the point and it is deliberate: findings are evidence of
+    reading, a clean is not. Only READY_TO_MERGE is held to the floor.
+    """
+
+    def _stored(self, state):
+        return json.loads(state.read_text(encoding="utf-8"))[
+            "orchestrator_state"]["feat"].get("archreview")
+
+    def test_a_clean_on_the_delivery_contract_alone_is_refused(self, tmp_path):
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 1)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+
+        assert result.returncode == 2, result.stdout
+        assert "ARCHREVIEW: LOW_EVIDENCE_CLEAN tools=1 floor=1" in result.stdout
+        assert "step6a-prime:review_read_nothing" in result.stdout
+        assert self._stored(state) is None, (
+            "a refused verdict must not be recorded — a recorded READY_TO_MERGE is "
+            "what the Phase-7 gate reads")
+
+    def test_one_call_above_the_floor_is_recorded(self, tmp_path):
+        """The floor must not be an off-by-one that refuses every real review."""
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 2)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: READY_TO_MERGE\n")))
+
+        assert result.returncode == 0, result.stdout
+        assert "ARCHREVIEW: READY_TO_MERGE tools=2" in result.stdout
+        assert self._stored(state) == "READY_TO_MERGE"
+
+    def test_findings_at_the_same_count_are_still_recorded(self, tmp_path):
+        """The asymmetry. A pass in this repo with 2 tool calls returned a REAL
+        finding, so a low-evidence pass that found something is scored on what it
+        found. Refusing these too would discard review work that was actually done --
+        the failure the report-file channel exists to prevent."""
+        for verdict in ("WITH_FIXES", "NO"):
+            state = _state(tmp_path)   # re-created per verdict: `--set` is a write
+            result = _run("score", "--feature", "feat", "--state", str(state),
+                          "--log", str(_log(tmp_path, 1)),
+                          "--review", str(_review(tmp_path, f"ASSESSMENT: {verdict}\n")))
+
+            assert result.returncode == 0, (verdict, result.stdout)
+            assert f"ARCHREVIEW: {verdict} tools=1" in result.stdout, verdict
+            assert "LOW_EVIDENCE_CLEAN" not in result.stdout, verdict
+            assert self._stored(state) == verdict, verdict
+
+    def test_zero_calls_is_still_the_older_and_stronger_token(self, tmp_path):
+        """`NO_EVIDENCE` must keep firing at zero rather than being absorbed into the
+        new token: it is the stronger claim (nothing ran at all, for ANY verdict),
+        and its halt is what SKILL.md and the existing spec assert on."""
+        state = _state(tmp_path)
+        result = _run("score", "--feature", "feat", "--state", str(state),
+                      "--log", str(_log(tmp_path, 0)),
+                      "--review", str(_review(tmp_path, "ASSESSMENT: WITH_FIXES\n")))
+
+        assert result.returncode == 2, result.stdout
+        assert "ARCHREVIEW: NO_EVIDENCE tools=0" in result.stdout
+        assert "LOW_EVIDENCE_CLEAN" not in result.stdout
+
+    def test_the_floor_is_derived_from_the_shipped_template_not_guessed(self, tmp_path):
+        """The number has one source: the contract. If the template ever asks for a
+        second write (a `.done` marker, as the audit path's does), the floor moves and
+        this assertion is what says so out loud instead of the gate silently going
+        one call too permissive."""
+        tpl = (SCRIPTS.parent / "references" / "agy-architectural-reviewer-prompt.md"
+               ).read_text(encoding="utf-8")
+        assert "That is the only write you may make" in tpl, (
+            "the floor of 1 rests on this sentence; if the contract now asks for more "
+            "than one write, raise DELIVERY_FLOOR to match it")
+
+        sys.path.insert(0, str(SCRIPTS))
+        import h_mad_archreview_cycle as arc
+        assert arc.DELIVERY_FLOOR == 1, arc.DELIVERY_FLOOR
 
 
 class TestTheStagedPromptMustBeDeliverable:

@@ -1,0 +1,67 @@
+{
+  "_why": "WSG-1. The 6a-prime evidence gate was `tools == 0` -- a floor of ZERO -- while this channel's own contract costs one successful call ('you must also WRITE your report file with run_command. That is the only write you may make'). A reviewer that read nothing and merely obeyed the delivery instruction scored tools=1 and its READY_TO_MERGE was recorded for the Phase-7 gate to read. `h_mad_audit_cycle` has carried DELIVERY_FLOOR = 2 against the same J49 failure; one channel was guarded and the other was not. Each mutation carries its own `test` key.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_archreview_cycle.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "the-floor-is-zero-again",
+      "_mechanism": "The state before this change. A clean verdict resting on the delivery call alone is recorded, and nothing downstream can tell it from a review that read the tree.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if verdict == \"READY_TO_MERGE\" and tools <= DELIVERY_FLOOR:",
+      "replace": "    if verdict == \"READY_TO_MERGE\" and tools <= 0:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_a_clean_on_the_delivery_contract_alone_is_refused"
+    },
+    {
+      "name": "the-floor-is-off-by-one-and-refuses-real-reviews",
+      "_mechanism": "The opposite failure, and the one a test asserting only the refusal would miss: a gate that rejects every review is abandoned within a day, and 6a-prime goes back to being run by hand with no gate at all.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if verdict == \"READY_TO_MERGE\" and tools <= DELIVERY_FLOOR:",
+      "replace": "    if verdict == \"READY_TO_MERGE\" and tools <= DELIVERY_FLOOR + 1:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_one_call_above_the_floor_is_recorded"
+    },
+    {
+      "name": "the-floor-is-applied-to-every-verdict",
+      "_mechanism": "Drops the asymmetry. Findings are evidence of reading and a clean is not; refusing a WITH_FIXES or NO at the same count discards review work that was actually done -- the exact failure the report-file channel was built to stop, reintroduced by the gate meant to protect it.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if verdict == \"READY_TO_MERGE\" and tools <= DELIVERY_FLOOR:",
+      "replace": "    if tools <= DELIVERY_FLOOR:",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_findings_at_the_same_count_are_still_recorded"
+    },
+    {
+      "name": "the-refused-clean-is-recorded-anyway",
+      "_mechanism": "Halting but recording is worse than not halting: the operator sees a refusal while the Phase-7 gate reads READY_TO_MERGE out of the state file. A test asserting only the token and the exit code would pass here.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "              \"is not.\")\n        return 2\n\n    writer = SCRIPTS / \"h_mad_state_write.py\"",
+      "replace": "              \"is not.\")\n\n    writer = SCRIPTS / \"h_mad_state_write.py\"",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_a_clean_on_the_delivery_contract_alone_is_refused"
+    },
+    {
+      "name": "the-floor-swallows-the-zero-case",
+      "_mechanism": "NO_EVIDENCE is the stronger claim -- nothing ran at all, for ANY verdict -- and its halt is what SKILL.md asserts on. Letting the new gate absorb it makes a zero-call WITH_FIXES pass.",
+      "file": "scripts/h_mad_archreview_cycle.py",
+      "find": "    if tools == 0:\n        _emit(\"NO_EVIDENCE tools=0\")",
+      "replace": "    if False:\n        _emit(\"NO_EVIDENCE tools=0\")",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_zero_calls_is_still_the_older_and_stronger_token"
+    },
+    {
+      "name": "the-contract-stops-bounding-the-write-count",
+      "_mechanism": "The floor of 1 rests on one sentence in the shipped template. If the contract grows a second required write and the constant does not follow, the gate silently goes one call too permissive -- which is the original defect at a higher number.",
+      "file": "references/agy-architectural-reviewer-prompt.md",
+      "find": "That is the only write you may make.",
+      "replace": "You may also write a .done marker beside it.",
+      "test": "tests/test_h_mad_archreview_cycle.py::TestACleanVerdictMustRestOnMoreThanTheDeliveryContract::test_the_floor_is_derived_from_the_shipped_template_not_guessed"
+    }
+  ]
+}

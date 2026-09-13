@@ -39,7 +39,9 @@ Verdicts, printed as a canonical token:
 
     ARCHREVIEW: STAGED prompt=<p> base=<b> head=<h> bytes=N          exit 0
     ARCHREVIEW: READY_TO_MERGE|WITH_FIXES|NO tools=N recorded=yes    exit 0
+    ARCHREVIEW: OVERSIZE chars=N limit=M headroom=K                  exit 2
     ARCHREVIEW: NO_EVIDENCE tools=0                                  exit 2
+    ARCHREVIEW: LOW_EVIDENCE_CLEAN tools=N floor=M                   exit 2
     ARCHREVIEW: NO_VERDICT tools=N                                   exit 2
     ARCHREVIEW: NOT_RECORDED verdict=<v>                             exit 2
     ARCHREVIEW: UNSUBSTITUTED slots=<a,b>                            exit 2
@@ -50,8 +52,15 @@ Verdicts, printed as a canonical token:
 
 The gate ORDER is the contract: evidence before verdict, always. A review that
 read nothing has no verdict to record, whatever its last line says — recording it
-is precisely what let the 1510-byte defect survive. So `NO_EVIDENCE` and
-`NO_VERDICT` write nothing, and neither carries a verdict word.
+is precisely what let the 1510-byte defect survive. So `NO_EVIDENCE`,
+`LOW_EVIDENCE_CLEAN` and `NO_VERDICT` write nothing, and none carries a verdict
+word.
+
+`LOW_EVIDENCE_CLEAN` is `NO_EVIDENCE` at the floor this channel's contract sets
+rather than at zero (`DELIVERY_FLOOR`), and it is asymmetric on purpose: only
+READY_TO_MERGE is held to it, because findings are evidence of reading and a clean
+is not. `OVERSIZE` is the staging-side sibling — a prompt no delivery surface
+accepts, refused before it is written rather than after a surface rejects it.
 
 `NOT_RECORDED` exists because `archreview` is **not** in the schema's `required`
 array: strict validation passes over a write that never landed, so the read-back
@@ -69,6 +78,25 @@ from pathlib import Path
 TOKEN = "ARCHREVIEW:"
 SCRIPTS = Path(__file__).resolve().parent
 ALLOWED = ("READY_TO_MERGE", "WITH_FIXES", "NO")
+
+# What this channel's own output contract costs in successful tool calls. ONE, not
+# the audit path's two: `agy-architectural-reviewer-prompt.md` says "you must also
+# WRITE your report file with `run_command`. That is the only write you may make",
+# and it asks for no `.done` marker -- so a 6a-prime reviewer that read nothing and
+# merely obeyed the delivery instruction scores exactly `tools=1`.
+#
+# The gate here was `tools == 0`, i.e. a floor of zero, while `h_mad_audit_cycle`
+# has carried `DELIVERY_FLOOR = 2` for the same J49 failure -- cycle 24
+# double-cleaned on delivery calls alone with no reads. Same defect, one channel
+# guarded and the other not; this closes the asymmetry rather than re-deriving it.
+#
+# Derived from the CONTRACT, never from tool names, and NOT by discounting the
+# report path inside `h_mad_review_evidence.scan`. That scanner knows no tool names
+# on purpose: the first probe of this defect hardcoded `view_file|grep_search` and
+# reported a false zero the moment agy switched to `run_command`. Classifying calls
+# as reads-vs-writes there would re-create it, which is why the fix lives here --
+# beside the contract that sets the number -- and not one file over.
+DELIVERY_FLOOR = 1
 _PLACEHOLDER = re.compile(r"<INLINE_[A-Z_0-9]+>")
 
 
@@ -271,6 +299,26 @@ def score(feature: str, state_file: Path, log_path: Path, review_path: Path,
         print("  no ASSESSMENT: line carrying an allowed word → halt "
               "`step6a-prime:no_verdict`. An empty review must never read as "
               "READY_TO_MERGE.")
+        return 2
+
+    # Checked AFTER the verdict is extracted, and only against the CLEAN one. The
+    # asymmetry is the whole point and it is `h_mad_audit_cycle.combine`'s: findings
+    # are evidence of reading, a clean is not. A reviewer that made one call and
+    # still came back with WITH_FIXES or NO is scored on what it found, exactly as
+    # before -- a pass in this repo with 2 tool calls returned a real finding. Only
+    # a READY_TO_MERGE resting on no more calls than the delivery contract itself
+    # costs is refused, because that is indistinguishable from a hollow pass and it
+    # is the one direction that lets a defect through the Phase-7 gate.
+    if verdict == "READY_TO_MERGE" and tools <= DELIVERY_FLOOR:
+        _emit(f"LOW_EVIDENCE_CLEAN tools={tools} floor={DELIVERY_FLOOR}")
+        print(f"  READY_TO_MERGE on {tools} successful call(s) — at or below the "
+              f"{DELIVERY_FLOOR} this channel's report-file contract costs by itself, "
+              "so the reviewer may have read nothing and a clean verdict cannot be "
+              "distinguished from a hollow one → halt "
+              "`step6a-prime:review_read_nothing`. Do NOT record the ASSESSMENT; "
+              "fix the prompt and re-dispatch. A WITH_FIXES or NO at the same count "
+              "is recorded, because findings are evidence of reading and a clean "
+              "is not.")
         return 2
 
     writer = SCRIPTS / "h_mad_state_write.py"
