@@ -1,0 +1,51 @@
+{
+  "_why": "#18, and its filed premise is FALSE. 7f is not 'unrunnable' when the base exists only as a remote-tracking ref \u2014 it refuses, correctly, because `git checkout origin/main` DETACHES and `local_branch_exists`'s docstring records a measured run where that produced MERGED at exit 0 with the merge commit unreferenced. The defect is the DOCUMENTATION: SKILL.md named five of ten blockers, and both tokens an operator hits in this exact scenario (`no_default_base`, `base_not_a_local_branch`) were among the five omitted.\n\nThe fourth mutation is the one that matters. A test that only reads SKILL.md would pass forever once the list is written out; this one extracts the blockers from the SCRIPT, so adding or renaming one without documenting it fails. That is the drift this row IS.",
+  "root": "../..",
+  "command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "tests/test_h_mad_phase7_integrate_docs.py",
+    "-q"
+  ],
+  "target_command": [
+    "python3.11",
+    "-m",
+    "pytest",
+    "-q"
+  ],
+  "mutations": [
+    {
+      "name": "a-blocker-drops-out-of-the-documented-list",
+      "_mechanism": "Exactly the pre-#18 state for this token: an operator hits `unknown_branch:<b>` and finds it nowhere in the skill. Targets `unknown_branch` rather than `base_not_a_local_branch` deliberately \u2014 the latter is named TWICE in the paragraph (once in the list, once in the prose remedy), so deleting the list entry leaves it documented and the mutation SURVIVED. The test's property is 'named anywhere an operator would grep', which is the right property; the first mutation was measuring something narrower than the guard.",
+      "file": "SKILL.md",
+      "find": "`unknown_branch:<b>`, ",
+      "replace": "",
+      "test": "tests/test_h_mad_phase7_integrate_docs.py::test_every_blocker_the_script_emits_is_documented"
+    },
+    {
+      "name": "the-documented-token-shape-drifts-from-the-emitted-one",
+      "_mechanism": "The pre-#18 state: SKILL.md said `nothing_to_integrate:<branch>` while the script emits `nothing_to_integrate:<branch>_is_not_ahead_of_<base>`. A documented token an operator cannot match against real output reads as a different blocker.",
+      "file": "SKILL.md",
+      "find": "`nothing_to_integrate:<branch>_is_not_ahead_of_<base>`",
+      "replace": "`nothing_to_integrate:<branch>`",
+      "test": "tests/test_h_mad_phase7_integrate_docs.py::test_the_documented_nothing_to_integrate_token_matches_the_emitted_one"
+    },
+    {
+      "name": "the-local-branch-requirement-is-dropped",
+      "_mechanism": "The whole of #18. Without it an operator whose trunk is remote-only is told `base_not_a_local_branch` and has no documented route forward; the remedy `git branch main origin/main` is the actionable half.",
+      "file": "SKILL.md",
+      "find": "**`--base` must name a LOCAL branch.**",
+      "replace": "`--base` takes a branch.",
+      "test": "tests/test_h_mad_phase7_integrate_docs.py::test_the_local_branch_requirement_on_base_is_stated"
+    },
+    {
+      "name": "a-blocker-is-renamed-in-the-script-and-the-doc-is-not-updated",
+      "_mechanism": "THE drift-protection property, and the reason this test reads the script rather than only the prose. A test that merely asserted SKILL.md contains ten strings would pass forever while the script grew an eleventh blocker. This mutation renames an existing one; the doc still names the old spelling, so the new one is undocumented and must fail.",
+      "file": "scripts/h_mad_phase7_integrate.py",
+      "find": "blockers.append(\"detached_head\")",
+      "replace": "blockers.append(\"head_is_detached\")",
+      "test": "tests/test_h_mad_phase7_integrate_docs.py::test_every_blocker_the_script_emits_is_documented"
+    }
+  ]
+}
