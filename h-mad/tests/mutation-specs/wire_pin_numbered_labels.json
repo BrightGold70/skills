@@ -17,10 +17,10 @@
   "mutations": [
     {
       "name": "label-suffix-group-removed",
-      "_mechanism": "Drop the optional suffix from the field regex \u2014 the original defect exactly. Numbered labels stop matching, so a two-wire task reports `missing WIRE, WIRE-PIN` and 5b blocks correct work.",
+      "_mechanism": "Drop the optional suffix from the field regex \u2014 the original defect exactly. Numbered labels stop matching, so a two-wire task reports `missing WIRE, WIRE-PIN` and 5b blocks correct work. REWRITTEN: deleting the named group made `field.group(\"suffix\")` raise `IndexError: no such group`, so the code broke before 'are numbered labels seen?' was ever evaluated \u2014 a hollow kill. A never-matching `(?!)` keeps the group present and always unmatched, which is the defect the row describes: numbered labels stop matching and a two-wire task reports them missing.",
       "file": "scripts/h_mad_wire_pin_gate.py",
       "find": "    r\"(?:\\s*(?P<suffix>[0-9][\\w.]*))?\\s*\\*{0,2}\"",
-      "replace": "    r\"\\s*\\*{0,2}\"",
+      "replace": "    r\"(?:\\s*(?P<suffix>(?!)[0-9][\\w.]*))?\\s*\\*{0,2}\"",
       "test": "tests/test_h_mad_wire_pin_gate.py::TestNumberedWireLabels::test_numbered_labels_are_seen_at_all"
     },
     {

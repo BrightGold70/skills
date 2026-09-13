@@ -1,5 +1,5 @@
 {
-  "_why": "The base path is the one input to `verify` that nothing downstream can sanity-check. Every record it loads is well-formed, every sha it reads is real, and `compare` does its job perfectly on the wrong file — so a mis-resolved path does not degrade the verdict, it replaces it with a confident verdict about two unrelated registries. That is why it survived: the output is FAIL-shaped and names real feature ids, so the reflex is to go investigate the feature it names. Each mutation here restores a spelling of the same mistake — resolving against something other than the git root — and every one of them is invisible in a single-project repo, where cwd and the root coincide. The nested fixture is therefore not an edge case in these tests; it is the only configuration in which the guard can be observed at all.",
+  "_why": "The base path is the one input to `verify` that nothing downstream can sanity-check. Every record it loads is well-formed, every sha it reads is real, and `compare` does its job perfectly on the wrong file \u2014 so a mis-resolved path does not degrade the verdict, it replaces it with a confident verdict about two unrelated registries. That is why it survived: the output is FAIL-shaped and names real feature ids, so the reflex is to go investigate the feature it names. Each mutation here restores a spelling of the same mistake \u2014 resolving against something other than the git root \u2014 and every one of them is invisible in a single-project repo, where cwd and the root coincide. The nested fixture is therefore not an edge case in these tests; it is the only configuration in which the guard can be observed at all.",
   "root": "../..",
   "command": [
     "python3.11",
@@ -17,7 +17,7 @@
   "mutations": [
     {
       "name": "base-path-resolves-against-repo-again",
-      "_mechanism": "J49 restored verbatim. `git show <sha>:<path>` reads from the work tree root regardless of its cwd, so a `--repo`-relative path in a nested project names a real file at the ROOT — a different project's registry. The comparison then reports every record of that registry as an undeclared removal of this one, naming features with zero records in the file it claims to be comparing.",
+      "_mechanism": "J49 restored verbatim. `git show <sha>:<path>` reads from the work tree root regardless of its cwd, so a `--repo`-relative path in a nested project names a real file at the ROOT \u2014 a different project's registry. The comparison then reports every record of that registry as an undeclared removal of this one, naming features with zero records in the file it claims to be comparing.",
       "file": "scripts/h_mad_wire_registry.py",
       "find": "    base = root if root is not None else repo",
       "replace": "    base = repo",
@@ -33,7 +33,7 @@
     },
     {
       "name": "an-outside-registry-is-compared-against-the-default-again",
-      "_mechanism": "The pre-fix fallback: when the registry is not under the root, silently substitute `.h-mad/wires.jsonl`. This is the same defect by a shorter route — an unrelated file compared with a straight face — and it is worse than the nested case because there is no relationship whatever between the two files. A cannot-judge is the only honest answer, and the fallback converts it into a verdict.",
+      "_mechanism": "The pre-fix fallback: when the registry is not under the root, silently substitute `.h-mad/wires.jsonl`. This is the same defect by a shorter route \u2014 an unrelated file compared with a straight face \u2014 and it is worse than the nested case because there is no relationship whatever between the two files. A cannot-judge is the only honest answer, and the fallback converts it into a verdict.",
       "file": "scripts/h_mad_wire_registry.py",
       "find": "        if root is None:\n            return DEFAULT_REGISTRY\n        raise RegistryError(",
       "replace": "        return DEFAULT_REGISTRY\n        raise RegistryError(",
@@ -41,10 +41,10 @@
     },
     {
       "name": "no-work-tree-raises-instead-of-deferring",
-      "_mechanism": "The over-tightening direction, which matters because the accept case here is load-bearing. Raising in `_registry_base_path` when there is no root moves git's own refusal earlier under a second, competing message, and turns every caller that stubs the base read into a hard failure — the shape of change that gets a guard reverted rather than fixed.",
+      "_mechanism": "The over-tightening direction, which matters because the accept case here is load-bearing. Raising in `_registry_base_path` when there is no root moves git's own refusal earlier under a second, competing message, and turns every caller that stubs the base read into a hard failure \u2014 the shape of change that gets a guard reverted rather than fixed. REWRITTEN: the previous replacement called `_raise_no_root`, a function that was never written, so the mutant died on `NameError` before reaching the property \u2014 a hollow kill. Raising a real `RegistryError` is the over-tightening this row means.",
       "file": "scripts/h_mad_wire_registry.py",
       "find": "    base = root if root is not None else repo",
-      "replace": "    base = root if root is not None else _raise_no_root(repo)",
+      "replace": "    if root is None:\n        raise RegistryError(\"no work tree\")\n    base = root",
       "test": "tests/test_h_mad_wire_registry.py::test_load_base_refuses_a_directory_that_is_not_a_work_tree"
     }
   ]

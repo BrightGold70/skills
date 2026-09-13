@@ -73,10 +73,10 @@
     },
     {
       "name": "compare-versions-as-strings",
-      "_mechanism": "v1.10 < v1.9 lexically, so a correctly ascending section reads as unsorted and is refused. Caught by test_ten_sorts_after_nine_not_before -- a false-POSITIVE guard, the direction mutation testing usually misses.",
+      "_mechanism": "v1.10 < v1.9 lexically, so a correctly ascending section reads as unsorted and is refused. Caught by test_ten_sorts_after_nine_not_before -- a false-POSITIVE guard, the direction mutation testing usually misses. REWRITTEN: stringifying only `parse_versions`' output left the comparison mixing int and str, so the mutant died on `TypeError: '<=' not supported` and the ORDERING property was never exercised \u2014 a hollow kill. Comparing the tuples as strings is the stated mechanism and cannot crash: `str((1,10)) < str((1,9))`, so v1.10 sorts before v1.9 exactly as the lexical defect does.",
       "file": "scripts/h_mad_version_history.py",
-      "find": "            out.append((int(m.group(1)), int(m.group(2))))",
-      "replace": "            out.append((m.group(1), m.group(2)))",
+      "find": "    asc = all(versions[i] <= versions[i + 1] for i in range(len(versions) - 1))\n    desc = all(versions[i] >= versions[i + 1] for i in range(len(versions) - 1))",
+      "replace": "    asc = all(str(versions[i]) <= str(versions[i + 1]) for i in range(len(versions) - 1))\n    desc = all(str(versions[i]) >= str(versions[i + 1]) for i in range(len(versions) - 1))",
       "test": "tests/test_h_mad_version_history.py::TestOrderRefusals::test_ten_sorts_after_nine_not_before"
     },
     {
